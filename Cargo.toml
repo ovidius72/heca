@@ -1,0 +1,16 @@
+[workspace]
+members = ["heca-core", "heca-renderer", "heca-config", "heca"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["heca contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourname/heca"
+rust-version = "1.85"
+
+[workspace.dependencies]
+winit = "0.30"
+wgpu = "25"
+pollster = "0.4"

@@ -1,0 +1,12 @@
+[package]
+name = "heca-renderer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+heca-core = { path = "../heca-core" }
+heca-config = { path = "../heca-config" }
+wgpu = { workspace = true }
+cosmic-text = "0.14"
+bytemuck = { version = "1", features = ["derive"] }
