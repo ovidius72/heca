@@ -11,11 +11,11 @@
 | # | Phase | Goal | Requirements | Success Criteria |
 | --- | --- | --- | --- | --- |
 | 1 | The Shell | Open a native window and render styled text and shapes via GPU | 7 | 4 |
-| 2 | The Workspace | Tiling layout engine with full mouse and keyboard control | 26 | 7 |
+| 2 | The Workspace | Tiling layout engine with full mouse and keyboard control | 28 | 7 |
 | 3 | The Content | Terminal and Neovim render as first-class panes | 13 | 6 |
-| 4 | The Platform | Session persistence, remote control, and dynamic plugins | 13 | 7 |
+| 4 | The Platform | Session persistence, remote control, and dynamic plugins | 14 | 7 |
 
-**Total:** 4 phases | 55 v1 requirements | 24 success criteria
+**Total:** 4 phases | 58 v1 requirements | 24 success criteria
 
 ---
 
@@ -74,6 +74,8 @@
 - INP-09: Mouse scroll forwarded to focused pane
 - INP-10: Cursor icon changes on hover (resize, move, default)
 - CONF-02: Keybindings configurable in config
+- COMP-11: Left sidebar chrome — collapsible panel for session/agent list
+- COMP-12: Right sidebar chrome — collapsible panel for secondary information
 - PANE-10: Placeholder pane for empty slots
 
 **Success Criteria:**
@@ -140,6 +142,7 @@
 - RPC-07: `layout.apply`, `layout.save_current`
 - RPC-08: External CLI can connect to socket and invoke methods
 - PLUG-03: Third-party plugins loaded dynamically via `libloading`
+- SESS-07: Left sidebar displays list of all saved sessions
 - COMP-08: Command palette overlay (keyboard-triggered, fuzzy search)
 - COMP-09: Damage tracking — only redraw regions that changed
 - CONF-05: Hot-reload config without restart

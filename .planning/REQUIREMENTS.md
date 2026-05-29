@@ -17,6 +17,8 @@
 - [ ] **COMP-08**: Command palette overlay (keyboard-triggered, fuzzy search)
 - [ ] **COMP-09**: Damage tracking — only redraw regions that changed
 - [ ] **COMP-10**: Cross-platform: Linux, macOS, Windows
+- [ ] **COMP-11**: Left sidebar chrome — collapsible panel for session/agent list
+- [ ] **COMP-12**: Right sidebar chrome — collapsible panel for secondary information
 
 ### Layout (LAY)
 
@@ -67,6 +69,7 @@
 - [ ] **SESS-04**: Session restore rebuilds layout trees, float registry, scratchpad registry
 - [ ] **SESS-05**: Auto-save on quit (configurable)
 - [ ] **SESS-06**: Auto-restore last session on start (configurable)
+- [ ] **SESS-07**: Left sidebar displays list of all saved sessions
 
 ### Config & Theming (CONF)
 
@@ -140,6 +143,8 @@
 | COMP-08 | Phase 5 | Pending |
 | COMP-09 | Phase 5 | Pending |
 | COMP-10 | Phase 1 | Pending |
+| COMP-11 | Phase 2 | Pending |
+| COMP-12 | Phase 2 | Pending |
 | LAY-01 | Phase 2 | Pending |
 | LAY-02 | Phase 2 | Pending |
 | LAY-03 | Phase 2 | Pending |
@@ -178,6 +183,7 @@
 | SESS-04 | Phase 6 | Pending |
 | SESS-05 | Phase 6 | Pending |
 | SESS-06 | Phase 6 | Pending |
+| SESS-07 | Phase 4 | Pending |
 | CONF-01 | Phase 1 | Pending |
 | CONF-02 | Phase 3 | Pending |
 | CONF-03 | Phase 1 | Pending |
@@ -198,8 +204,8 @@
 | PLUG-05 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 55 total
-- Mapped to phases: 55
+- v1 requirements: 58 total
+- Mapped to phases: 58
 - Unmapped: 0 ✓
 
 ---
