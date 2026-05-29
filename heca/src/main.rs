@@ -1,42 +1,41 @@
+mod app_state;
+mod chrome;
+mod input;
+
+use app_state::{AppState, SidebarState, DragState, InputMode};
+use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
-use heca_core::layout::MockLayout;
+use heca_core::pane::{PaneTree, SplitDirection};
+
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
+use input::{KeyBindings, WmAction};
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{WindowEvent, MouseButton, ElementState};
+
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+
 use winit::window::{Window, WindowId};
 
-struct AppState {
-    window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    primitive_renderer: PrimitiveRenderer,
-    text_renderer: TextRenderer,
-    mock_layout: MockLayout,
-    theme: heca_config::theme::Theme,
-    scale_factor: f64,
-    needs_redraw: bool,
-}
-
 struct HecaApp {
-    state: Option<AppState>,
+    state: Option<Box<AppState>>,
     app_config: AppConfig,
+    bindings: KeyBindings,
 }
 
 impl HecaApp {
     fn new() -> Self {
         let app_config = AppConfig::load();
+        let bindings = KeyBindings::load(&app_config);
         Self {
             state: None,
             app_config,
+            bindings,
         }
     }
 
-    async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> AppState {
+    async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
         let window_attrs = Window::default_attributes()
             .with_title("heca")
             .with_inner_size(winit::dpi::LogicalSize::new(
@@ -102,21 +101,39 @@ impl HecaApp {
         text_renderer.set_screen_size(&queue, size.width as f32, size.height as f32);
         primitive_renderer.set_screen_size(&queue, size.width as f32, size.height as f32);
 
-        let mock_layout = MockLayout::default_demo();
+        // Initialize PaneTree with default demo layout
+        let mut panetree = PaneTree::new();
+        let editor_id = panetree.add_pane("Editor", [0.118, 0.118, 0.180, 1.0]);
+        let term_id = panetree.split(editor_id, SplitDirection::Vertical).unwrap();
+        panetree.split(editor_id, SplitDirection::Horizontal).unwrap();
+        panetree.toggle_float(term_id, None);
 
-        AppState {
+        Box::new(AppState {
             window,
             surface,
             device,
             queue,
-            config,
+            surface_config: config,
             primitive_renderer,
             text_renderer,
-            mock_layout,
+            panetree,
             theme: self.app_config.theme.clone(),
             scale_factor,
             needs_redraw: true,
-        }
+            focused_pane: Some(editor_id),
+            input_mode: InputMode::Normal,
+            drag_state: DragState::None,
+            sidebar: SidebarState {
+                left_visible: true,
+                left_width: 200.0,
+                right_visible: true,
+                right_width: 200.0,
+            },
+            active_tab: 0,
+            tab_names: vec!["Main".to_string()],
+            mouse_pos: (0.0, 0.0),
+            modifiers: winit::keyboard::ModifiersState::default(),
+        })
     }
 
     fn render(&mut self) {
@@ -129,12 +146,10 @@ impl HecaApp {
         let surface_texture = match state.surface.get_current_texture() {
             Ok(t) => t,
             Err(wgpu::SurfaceError::Lost) => {
-                state.surface.configure(&state.device, &state.config);
+                state.surface.configure(&state.device, &state.surface_config);
                 return;
             }
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                std::process::exit(1);
-            }
+            Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(1),
             Err(e) => {
                 eprintln!("Surface error: {:?}", e);
                 return;
@@ -145,87 +160,151 @@ impl HecaApp {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let theme_bg = state.theme.background.to_f32x4();
-        let theme_fg = state.theme.foreground.to_f32x4();
-        let theme_border = state.theme.border.to_f32x4();
-        let border_width = state.theme.border_width;
+        let win_size = state.window.inner_size();
+        let w = win_size.width as f32;
+        let h = win_size.height as f32;
+        let theme = &state.theme;
 
-        let size = state.window.inner_size();
-        let (pane_rects, float_rect) = state
-            .mock_layout
-            .compute_rects(size.width as f32, size.height as f32);
+        let chrome = ChromeConfig {
+            tab_bar_height: 32.0,
+            status_bar_height: 24.0,
+            left_sidebar_width: if state.sidebar.left_visible {
+                state.sidebar.left_width
+            } else {
+                32.0
+            },
+            right_sidebar_width: if state.sidebar.right_visible {
+                state.sidebar.right_width
+            } else {
+                32.0
+            },
+        };
+        let pane_area = chrome.content_rect(w, h);
 
         let mut encoder = state
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("render_encoder"),
-            });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render") });
 
         // Clear background
-        {
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: theme_bg[0] as f64,
-                            g: theme_bg[1] as f64,
-                            b: theme_bg[2] as f64,
-                            a: theme_bg[3] as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
+        let bg = theme.background.to_f32x4();
+        encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("clear"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: bg[0] as f64,
+                        g: bg[1] as f64,
+                        b: bg[2] as f64,
+                        a: bg[3] as f64,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        // ── LEFT SIDEBAR ──
+        let side_bg = if theme.name == "Catppuccin Mocha" {
+            [0.067, 0.067, 0.106, 1.0]
+        } else {
+            [0.953, 0.957, 0.973, 1.0]
+        };
+        state.primitive_renderer.draw_rect(0.0, 0.0, chrome.left_sidebar_width, h, side_bg);
+        state.primitive_renderer.draw_border(
+            chrome.left_sidebar_width - 1.0, 0.0, 1.0, h,
+            theme.border.to_f32x4(), 1.0,
+        );
+        state.text_renderer.queue_text(
+            "Sessions", 8.0, 8.0, 14.0, theme.foreground.to_f32x4(),
+        );
+        state.text_renderer.queue_text(
+            "  (empty — Phase 4)", 8.0, 30.0, 12.0,
+            [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
+        );
+
+        // ── RIGHT SIDEBAR ──
+        let rsx = w - chrome.right_sidebar_width;
+        state.primitive_renderer.draw_rect(rsx, 0.0, chrome.right_sidebar_width, h, side_bg);
+        state.primitive_renderer.draw_border(
+            rsx, 0.0, 1.0, h,
+            theme.border.to_f32x4(), 1.0,
+        );
+        state.text_renderer.queue_text(
+            "Details", rsx + 8.0, 8.0, 14.0, theme.foreground.to_f32x4(),
+        );
+
+        // ── TAB BAR ──
+        let tb = &chrome;
+        state.primitive_renderer.draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
+        for (i, tab_name) in state.tab_names.iter().enumerate() {
+            let tab_x = 4.0 + i as f32 * 120.0;
+            let tab_color = if i == state.active_tab {
+                theme.accent.to_f32x4()
+            } else {
+                theme.border.to_f32x4()
+            };
+            state.primitive_renderer.draw_rect(tab_x, 2.0, 116.0, tb.tab_bar_height - 4.0, tab_color);
+            state.text_renderer.queue_text(
+                tab_name, tab_x + 4.0, 6.0, 13.0, theme.foreground.to_f32x4(),
+            );
         }
 
-        // Draw panes
-        for (rect, pane) in &pane_rects {
-            state.primitive_renderer.draw_rect(
-                rect.x, rect.y, rect.w, rect.h,
-                pane.background,
-            );
-            state.primitive_renderer.draw_border(
-                rect.x, rect.y, rect.w, rect.h,
-                theme_border, border_width,
-            );
+        // ── STATUS BAR ──
+        let sb_y = h - tb.status_bar_height;
+        state.primitive_renderer.draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
+        let pane_count = state.panetree.visible_pane_count();
+        let focus_title = state
+            .focused_pane
+            .and_then(|id| state.panetree.panes.iter().find(|p| p.id == id))
+            .map(|p| p.title.as_str())
+            .unwrap_or("—");
+        let mode_str = match state.input_mode {
+            InputMode::Normal => "NORMAL",
+            InputMode::Prefix => "PREFIX",
+        };
+        let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
+        state.text_renderer.queue_text(
+            &status, 8.0, sb_y + 4.0, 12.0, theme.foreground.to_f32x4(),
+        );
+
+        // ── PANE CONTENT AREA ──
+        let theme_border = theme.border.to_f32x4();
+        let border_width = theme.border_width;
+        let accent_color = theme.accent.to_f32x4();
+
+        let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+
+        for (rect, pane) in &embedded {
+            let px = pane_area.x + rect.x;
+            let py = pane_area.y + rect.y;
+            state.primitive_renderer.draw_rect(px, py, rect.w, rect.h, pane.background);
+            let is_active = state.focused_pane == Some(pane.id);
+            let bcolor = if is_active { accent_color } else {
+                [theme_border[0], theme_border[1], theme_border[2], 0.5]
+            };
+            state.primitive_renderer.draw_border(px, py, rect.w, rect.h, bcolor, border_width);
             state.text_renderer.queue_text(
-                &pane.title,
-                rect.x + 8.0,
-                rect.y + 4.0,
-                state.theme.font_size,
-                theme_fg,
+                &pane.title, px + 4.0, py + 4.0, 13.0, theme.foreground.to_f32x4(),
             );
         }
 
-        // Draw float pane
-        if let Some((rect, pane)) = float_rect {
-            state.primitive_renderer.draw_rect(
-                rect.x, rect.y, rect.w, rect.h,
-                pane.background,
-            );
-            state.primitive_renderer.draw_border(
-                rect.x, rect.y, rect.w, rect.h,
-                theme_border, border_width * 2.0,
-            );
+        for (pane, rect) in &floats {
+            let fbg = [0.192, 0.196, 0.267, 1.0];
+            state.primitive_renderer.draw_rect(rect.x, rect.y, rect.w, rect.h, fbg);
+            state.primitive_renderer.draw_border(rect.x, rect.y, rect.w, rect.h, accent_color, border_width * 2.0);
+            // Title bar for float
+            state.primitive_renderer.draw_rect(rect.x, rect.y, rect.w, 24.0, accent_color);
             state.text_renderer.queue_text(
-                &pane.title,
-                rect.x + 8.0,
-                rect.y + 4.0,
-                state.theme.font_size,
-                theme_fg,
+                &pane.title, rect.x + 4.0, rect.y + 4.0, 13.0, [1.0, 1.0, 1.0, 1.0],
             );
         }
 
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(
-            &state.device, &state.queue, &view, &mut encoder,
-        );
+        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
         state.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
@@ -252,14 +331,12 @@ impl ApplicationHandler for HecaApp {
         };
 
         match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-            }
+            WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {
-                    state.config.width = new_size.width;
-                    state.config.height = new_size.height;
-                    state.surface.configure(&state.device, &state.config);
+                    state.surface_config.width = new_size.width;
+                    state.surface_config.height = new_size.height;
+                    state.surface.configure(&state.device, &state.surface_config);
                     state.primitive_renderer.set_screen_size(
                         &state.queue, new_size.width as f32, new_size.height as f32,
                     );
@@ -269,26 +346,218 @@ impl ApplicationHandler for HecaApp {
                     state.needs_redraw = true;
                 }
             }
+            WindowEvent::RedrawRequested => {
+                state.needs_redraw = true;
+                self.render();
+            }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 state.scale_factor = scale_factor;
                 state.text_renderer.set_scale_factor(scale_factor);
                 state.needs_redraw = true;
             }
-            WindowEvent::RedrawRequested => {
+            WindowEvent::KeyboardInput {
+                event,
+                ..
+            } if event.state == ElementState::Pressed => {
                 state.needs_redraw = true;
-                self.render();
+
+                let is_ctrl = state.modifiers.control_key();
+                let is_alt = state.modifiers.alt_key();
+                let is_shift = state.modifiers.shift_key();
+
+                let key_text = event.logical_key.to_text().unwrap_or("").to_string();
+                let named_key = event.logical_key;
+
+
+                // Check for prefix key (Ctrl+B)
+                let is_prefix = is_ctrl && (key_text == "\u{2}" || matches!(named_key, winit::keyboard::Key::Named(winit::keyboard::NamedKey::F1)));
+
+                match state.input_mode {
+                    InputMode::Normal => {
+                        if is_prefix {
+                            state.input_mode = InputMode::Prefix;
+                            return;
+                        }
+                        // Forward to pane (no-op for now — placeholder)
+                    }
+                    InputMode::Prefix => {
+                        state.input_mode = InputMode::Normal;
+
+                        // Handle Ctrl+B Ctrl+B (send literal Ctrl+B)
+                        if is_prefix {
+                            // Would send to pane in Phase 3
+                            return;
+                        }
+
+                        let action = self.bindings.resolve(&key_text, is_ctrl, is_alt, is_shift, &named_key);
+
+                        let current = state.focused_pane;
+                        match action {
+                            Some(WmAction::FocusLeft) => {
+                                if let Some(id) = current {
+                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
+                                }
+                            }
+                            Some(WmAction::FocusRight) => {
+                                if let Some(id) = current {
+                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
+                                }
+                            }
+                            Some(WmAction::FocusUp) => {
+                                if let Some(id) = current {
+                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
+                                }
+                            }
+                            Some(WmAction::FocusDown) => {
+                                if let Some(id) = current {
+                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
+                                }
+                            }
+                            Some(WmAction::SplitHorizontal) => {
+                                if let Some(id) = current {
+                                    if let Some(new_id) = state.panetree.split(id, SplitDirection::Horizontal) {
+                                        state.focused_pane = Some(new_id);
+                                    }
+                                }
+                            }
+                            Some(WmAction::SplitVertical) => {
+                                if let Some(id) = current {
+                                    if let Some(new_id) = state.panetree.split(id, SplitDirection::Vertical) {
+                                        state.focused_pane = Some(new_id);
+                                    }
+                                }
+                            }
+                            Some(WmAction::Float) => {
+                                if let Some(id) = current {
+                                    state.panetree.toggle_float(id, None);
+                                }
+                            }
+                            Some(WmAction::Scratchpad) => {
+                                if let Some(id) = current {
+                                    state.panetree.toggle_scratchpad(id);
+                                }
+                            }
+                            Some(WmAction::Hide) => {
+                                if let Some(id) = current {
+                                    state.panetree.hide(id);
+                                    state.focused_pane = None;
+                                }
+                            }
+                            Some(WmAction::ClosePane) => {
+                                if let Some(id) = current {
+                                    state.panetree.remove(id);
+                                    state.focused_pane = None;
+                                }
+                            }
+                            Some(WmAction::TabNext) => {
+                                if !state.tab_names.is_empty() {
+                                    state.active_tab = (state.active_tab + 1) % state.tab_names.len();
+                                }
+                            }
+                            Some(WmAction::TabPrev) => {
+                                if !state.tab_names.is_empty() {
+                                    state.active_tab = (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
+                                }
+                            }
+                            Some(WmAction::ResizeLeft) => {
+                                if let Some(id) = current {
+                                    state.panetree.resize(id, -0.05);
+                                }
+                            }
+                            Some(WmAction::ResizeRight) => {
+                                if let Some(id) = current {
+                                    state.panetree.resize(id, 0.05);
+                                }
+                            }
+                            Some(WmAction::ResizeUp) => {
+                                if let Some(id) = current {
+                                    state.panetree.resize(id, -0.05);
+                                }
+                            }
+                            Some(WmAction::ResizeDown) => {
+                                if let Some(id) = current {
+                                    state.panetree.resize(id, 0.05);
+                                }
+                            }
+                            Some(WmAction::SidebarLeft) => {
+                                state.sidebar.left_visible = !state.sidebar.left_visible;
+                            }
+                            Some(WmAction::SidebarRight) => {
+                                state.sidebar.right_visible = !state.sidebar.right_visible;
+                            }
+                            None => {} // Unbound key — cancel silently
+                        }
+                    }
+                }
             }
-            WindowEvent::CursorMoved { .. }
-            | WindowEvent::MouseInput { .. }
-            | WindowEvent::KeyboardInput { .. } => {
+            WindowEvent::ModifiersChanged(new_mods) => {
+                state.modifiers = new_mods.state();
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                state.mouse_pos = (position.x as f32, position.y as f32);
                 state.needs_redraw = true;
+
+                // Handle ongoing drag
+                if let DragState::Resizing { pane_id, dir, start_pos } = &state.drag_state {
+                    let win_w = state.window.inner_size().width as f32;
+                    let win_h = state.window.inner_size().height as f32;
+                    let px = position.x as f32;
+                    let py = position.y as f32;
+
+                    if state.panetree.panes.iter().any(|p| p.id == *pane_id) {
+                        let delta = match dir {
+                            SplitDirection::Horizontal => (px - start_pos.0) / win_w,
+                            SplitDirection::Vertical => (py - start_pos.1) / win_h,
+                        };
+                        state.panetree.resize(*pane_id, delta * 0.1);
+                        state.drag_state = DragState::Resizing {
+                            pane_id: *pane_id,
+                            dir: *dir,
+                            start_pos: (px, py),
+                        };
+                    }
+                }
+            }
+            WindowEvent::MouseInput { state: button_state, button, .. } => {
+                state.needs_redraw = true;
+                let mouse_pos = state.mouse_pos;
+                let win_w = state.window.inner_size().width as f32;
+                let win_h = state.window.inner_size().height as f32;
+
+                let chrome = ChromeConfig {
+                    tab_bar_height: 32.0,
+                    status_bar_height: 24.0,
+                    left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
+                    right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
+                };
+                let pane_area = chrome.content_rect(win_w, win_h);
+
+                if button == MouseButton::Left && button_state == ElementState::Pressed {
+                    let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+
+                    // Hit test for pane clicks
+                    for (rect, pane) in &embedded {
+                        let px = pane_area.x + rect.x;
+                        let py = pane_area.y + rect.y;
+                        if mouse_pos.0 >= px && mouse_pos.0 <= px + rect.w
+                            && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
+                        {
+                            state.focused_pane = Some(pane.id);
+                            break;
+                        }
+                    }
+                }
+
+                if button == MouseButton::Left && button_state == ElementState::Released {
+                    state.drag_state = DragState::None;
+                }
             }
             _ => {}
         }
     }
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(state) = self.state.as_ref() {
+        if let Some(ref state) = self.state {
             if state.needs_redraw {
                 state.window.request_redraw();
             }
