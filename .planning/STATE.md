@@ -1,8 +1,8 @@
 # State: heca
 
 **Current Phase:** 1 — The Shell
-**Status:** Planning
-**Last Action:** Roadmap approved
+**Status:** Context gathered, ready for planning
+**Last Action:** Phase 1 context captured
 
 ## Progress
 
@@ -24,6 +24,13 @@ See: `.planning/PROJECT.md` (updated 2026-05-29)
 ## Blockers
 
 None.
+
+## Phase 1 Decisions
+
+- **Visual target:** Mock tiling layout (colored rectangles + text labels)
+- **Config:** `config.toml` + `themes/` directory
+- **Default theme:** Catppuccin Mocha
+- **Frame loop:** Event-driven redraw only
 
 ## Notes
 
