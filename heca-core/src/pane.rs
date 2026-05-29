@@ -56,6 +56,7 @@ pub enum LayoutNode {
     Empty,
 }
 
+#[allow(dead_code)]
 impl LayoutNode {
     /// Count leaf panes (ignore Empty).
     fn leaf_count(&self) -> usize {

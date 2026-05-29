@@ -82,12 +82,12 @@ impl HecaApp {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
-        let size = window.inner_size();
+        let physical = window.inner_size();
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: size.width.max(1),
-            height: size.height.max(1),
+            width: physical.width.max(1),
+            height: physical.height.max(1),
             present_mode: wgpu::PresentMode::AutoVsync,
             desired_maximum_frame_latency: 2,
             alpha_mode: surface_caps.alpha_modes[0],
@@ -98,8 +98,8 @@ impl HecaApp {
         let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
         let mut text_renderer = TextRenderer::new(&device, surface_format);
         text_renderer.set_scale_factor(scale_factor);
-        text_renderer.set_screen_size(&queue, size.width as f32, size.height as f32);
-        primitive_renderer.set_screen_size(&queue, size.width as f32, size.height as f32);
+        text_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
+        primitive_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
 
         // Initialize PaneTree with default demo layout
         let mut panetree = PaneTree::new();
@@ -160,9 +160,11 @@ impl HecaApp {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let win_size = state.window.inner_size();
-        let w = win_size.width as f32;
-        let h = win_size.height as f32;
+        let phys_size = state.window.inner_size();
+        let scale = state.scale_factor as f32;
+        let w = phys_size.width as f32 / scale;
+        let h = phys_size.height as f32 / scale;
+
         let theme = &state.theme;
 
         let chrome = ChromeConfig {
@@ -332,17 +334,15 @@ impl ApplicationHandler for HecaApp {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(new_size) => {
-                if new_size.width > 0 && new_size.height > 0 {
-                    state.surface_config.width = new_size.width;
-                    state.surface_config.height = new_size.height;
+            WindowEvent::Resized(phys) => {
+                if phys.width > 0 && phys.height > 0 {
+                    state.surface_config.width = phys.width;
+                    state.surface_config.height = phys.height;
                     state.surface.configure(&state.device, &state.surface_config);
-                    state.primitive_renderer.set_screen_size(
-                        &state.queue, new_size.width as f32, new_size.height as f32,
-                    );
-                    state.text_renderer.set_screen_size(
-                        &state.queue, new_size.width as f32, new_size.height as f32,
-                    );
+                    let log_w = phys.width as f32 / state.scale_factor as f32;
+                    let log_h = phys.height as f32 / state.scale_factor as f32;
+                    state.primitive_renderer.set_screen_size(&state.queue, log_w, log_h);
+                    state.text_renderer.set_screen_size(&state.queue, log_w, log_h);
                     state.needs_redraw = true;
                 }
             }
@@ -494,36 +494,62 @@ impl ApplicationHandler for HecaApp {
                 state.modifiers = new_mods.state();
             }
             WindowEvent::CursorMoved { position, .. } => {
-                state.mouse_pos = (position.x as f32, position.y as f32);
+                state.mouse_pos = (
+                    position.x as f32 / state.scale_factor as f32,
+                    position.y as f32 / state.scale_factor as f32,
+                );
                 state.needs_redraw = true;
 
-                // Handle ongoing drag
-                if let DragState::Resizing { pane_id, dir, start_pos } = &state.drag_state {
-                    let win_w = state.window.inner_size().width as f32;
-                    let win_h = state.window.inner_size().height as f32;
-                    let px = position.x as f32;
-                    let py = position.y as f32;
-
-                    if state.panetree.panes.iter().any(|p| p.id == *pane_id) {
-                        let delta = match dir {
-                            SplitDirection::Horizontal => (px - start_pos.0) / win_w,
-                            SplitDirection::Vertical => (py - start_pos.1) / win_h,
-                        };
-                        state.panetree.resize(*pane_id, delta * 0.1);
-                        state.drag_state = DragState::Resizing {
-                            pane_id: *pane_id,
-                            dir: *dir,
-                            start_pos: (px, py),
+                match state.drag_state {
+                    DragState::Resizing { pane_id, dir, start_pos } => {
+                        let phys = state.window.inner_size();
+                        let win_w = phys.width as f32 / state.scale_factor as f32;
+                        let win_h = phys.height as f32 / state.scale_factor as f32;
+                        let px = position.x as f32;
+                        let py = position.y as f32;
+                        if state.panetree.panes.iter().any(|p| p.id == pane_id) {
+                            let delta = match dir {
+                                SplitDirection::Horizontal => (px - start_pos.0) / win_w,
+                                SplitDirection::Vertical => (py - start_pos.1) / win_h,
+                            };
+                            state.panetree.resize(pane_id, delta * 0.1);
+                            state.drag_state = DragState::Resizing {
+                                pane_id,
+                                dir,
+                                start_pos: (px, py),
+                            };
+                        }
+                    }
+                    DragState::MovingFloat { pane_id, start_mouse, start_rect } => {
+                        let px = position.x as f32;
+                        let py = position.y as f32;
+                        let dx = px - start_mouse.0;
+                        let dy = py - start_mouse.1;
+                        let new_rect = heca_core::types::Rect::new(
+                            start_rect.x + dx,
+                            start_rect.y + dy,
+                            start_rect.w,
+                            start_rect.h,
+                        );
+                        // Update float position
+                        if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
+                            entry.1 = new_rect;
+                        }
+                        state.drag_state = DragState::MovingFloat {
+                            pane_id,
+                            start_mouse: (px, py),
+                            start_rect: new_rect,
                         };
                     }
+                    DragState::None => {}
                 }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 state.needs_redraw = true;
                 let mouse_pos = state.mouse_pos;
-                let win_w = state.window.inner_size().width as f32;
-                let win_h = state.window.inner_size().height as f32;
-
+                let phys = state.window.inner_size();
+                let win_w = phys.width as f32 / state.scale_factor as f32;
+                let win_h = phys.height as f32 / state.scale_factor as f32;
                 let chrome = ChromeConfig {
                     tab_bar_height: 32.0,
                     status_bar_height: 24.0,
@@ -533,17 +559,65 @@ impl ApplicationHandler for HecaApp {
                 let pane_area = chrome.content_rect(win_w, win_h);
 
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
-                    let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+                    let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
 
-                    // Hit test for pane clicks
-                    for (rect, pane) in &embedded {
-                        let px = pane_area.x + rect.x;
-                        let py = pane_area.y + rect.y;
-                        if mouse_pos.0 >= px && mouse_pos.0 <= px + rect.w
-                            && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
-                        {
+                    // Hit test floating panes first (front-to-back)
+                    for (pane, rect) in floats.iter().rev() {
+                        let abs_x = pane_area.x + rect.x;
+                        let abs_y = pane_area.y + rect.y;
+                        // Check if click is on title bar (top 24px)
+                        let on_title = mouse_pos.1 >= abs_y
+                            && mouse_pos.1 <= abs_y + 24.0
+                            && mouse_pos.0 >= abs_x
+                            && mouse_pos.0 <= abs_x + rect.w;
+                        let on_body = mouse_pos.1 >= abs_y
+                            && mouse_pos.1 <= abs_y + rect.h
+                            && mouse_pos.0 >= abs_x
+                            && mouse_pos.0 <= abs_x + rect.w;
+
+                        if on_title {
+                            state.focused_pane = Some(pane.id);
+                            state.drag_state = DragState::MovingFloat {
+                                pane_id: pane.id,
+                                start_mouse: mouse_pos,
+                                start_rect: *rect,
+                            };
+                            break;
+                        } else if on_body {
                             state.focused_pane = Some(pane.id);
                             break;
+                        }
+                    }
+
+                    // Hit test embedded panes
+                    if !matches!(state.drag_state, DragState::MovingFloat { .. }) {
+                        for (rect, pane) in &embedded {
+                            let px = pane_area.x + rect.x;
+                            let py = pane_area.y + rect.y;
+                            if mouse_pos.0 >= px && mouse_pos.0 <= px + rect.w
+                                && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
+                            {
+                                state.focused_pane = Some(pane.id);
+                                // Check if click is near a border to start resize
+                                let near_left = (mouse_pos.0 - px).abs() < 4.0;
+                                let near_right = (mouse_pos.0 - (px + rect.w)).abs() < 4.0;
+                                let near_top = (mouse_pos.1 - py).abs() < 4.0;
+                                let near_bottom = (mouse_pos.1 - (py + rect.h)).abs() < 4.0;
+                                if near_left || near_right {
+                                    state.drag_state = DragState::Resizing {
+                                        pane_id: pane.id,
+                                        dir: SplitDirection::Horizontal,
+                                        start_pos: mouse_pos,
+                                    };
+                                } else if near_top || near_bottom {
+                                    state.drag_state = DragState::Resizing {
+                                        pane_id: pane.id,
+                                        dir: SplitDirection::Vertical,
+                                        start_pos: mouse_pos,
+                                    };
+                                }
+                                break;
+                            }
                         }
                     }
                 }
