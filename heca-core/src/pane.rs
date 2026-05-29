@@ -380,14 +380,27 @@ impl PaneTree {
         }
     }
 
-    /// Collapse empty Split nodes (a Split with both children Empty becomes Empty).
+    /// Collapse empty Split nodes. Handles three cases:
+    /// - Both children Empty → this node becomes Empty
+    /// - One child Empty, other non-Empty → hoist the non-Empty child
+    /// - Both non-Empty → nothing to do
     fn collapse_tree_node(node: &mut LayoutNode) {
         match node {
             LayoutNode::Split { left, right, .. } => {
                 PaneTree::collapse_tree_node(left);
                 PaneTree::collapse_tree_node(right);
-                if matches!(left.as_ref(), LayoutNode::Empty) && matches!(right.as_ref(), LayoutNode::Empty) {
+
+                let left_is_empty = matches!(left.as_ref(), LayoutNode::Empty);
+                let right_is_empty = matches!(right.as_ref(), LayoutNode::Empty);
+
+                if left_is_empty && right_is_empty {
                     *node = LayoutNode::Empty;
+                } else if right_is_empty {
+                    // Hoist the non-empty left child up
+                    *node = (**left).clone();
+                } else if left_is_empty {
+                    // Hoist the non-empty right child up
+                    *node = (**right).clone();
                 }
             }
             _ => {}

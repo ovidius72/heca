@@ -101,12 +101,19 @@ impl HecaApp {
         text_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
         primitive_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
 
-        // Initialize PaneTree with default demo layout
+        // Initialize PaneTree: one editor pane and one floating terminal
         let mut panetree = PaneTree::new();
         let editor_id = panetree.add_pane("Editor", [0.118, 0.118, 0.180, 1.0]);
-        let term_id = panetree.split(editor_id, SplitDirection::Vertical).unwrap();
-        panetree.split(editor_id, SplitDirection::Horizontal).unwrap();
-        panetree.toggle_float(term_id, None);
+        let term_id = panetree.add_pane("Terminal", [0.094, 0.094, 0.145, 1.0]);
+        // Float the terminal at a centered-ish position
+        let phys_w = physical.width as f32;
+        let phys_h = physical.height as f32;
+        panetree.toggle_float(term_id, Some(heca_core::types::Rect::new(
+            phys_w / 4.0 / scale_factor as f32,
+            phys_h / 4.0 / scale_factor as f32,
+            phys_w / 2.0 / scale_factor as f32,
+            phys_h / 2.0 / scale_factor as f32,
+        )));
 
         Box::new(AppState {
             window,
@@ -366,31 +373,31 @@ impl ApplicationHandler for HecaApp {
                 let is_shift = state.modifiers.shift_key();
 
                 let key_text = event.logical_key.to_text().unwrap_or("").to_string();
-                let named_key = event.logical_key;
 
+                // Detect Ctrl+B by key text alone (reliable on all platforms)
+                let is_prefix = key_text == "\u{2}";
 
-                // Check for prefix key (Ctrl+B)
-                let is_prefix = is_ctrl && (key_text == "\u{2}" || matches!(named_key, winit::keyboard::Key::Named(winit::keyboard::NamedKey::F1)));
+                // Detect Ctrl+C, Ctrl+D etc. for future pane forwarding
+                // Detect arrow keys via physical_key
+                let phys_key = event.physical_key;
 
                 match state.input_mode {
                     InputMode::Normal => {
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
+                            state.needs_redraw = true;
                             return;
                         }
-                        // Forward to pane (no-op for now — placeholder)
                     }
                     InputMode::Prefix => {
                         state.input_mode = InputMode::Normal;
 
-                        // Handle Ctrl+B Ctrl+B (send literal Ctrl+B)
                         if is_prefix {
-                            // Would send to pane in Phase 3
+                            // Ctrl+B Ctrl+B = literal Ctrl+B
                             return;
                         }
 
-                        let action = self.bindings.resolve(&key_text, is_ctrl, is_alt, is_shift, &named_key);
-
+                        let action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
                         let current = state.focused_pane;
                         match action {
                             Some(WmAction::FocusLeft) => {
@@ -637,6 +644,56 @@ impl ApplicationHandler for HecaApp {
             }
         }
     }
+}
+
+/// Core key-to-action resolution independent of modifier state.
+fn resolve_action_core(
+    key_text: &str,
+    phys_key: &winit::keyboard::PhysicalKey,
+    shift: bool,
+    logical_key: &winit::keyboard::Key,
+) -> Option<WmAction> {
+    // Arrow keys
+    if let winit::keyboard::PhysicalKey::Code(code) = phys_key {
+        match code {
+            winit::keyboard::KeyCode::ArrowLeft => return Some(WmAction::FocusLeft),
+            winit::keyboard::KeyCode::ArrowRight => return Some(WmAction::FocusRight),
+            winit::keyboard::KeyCode::ArrowUp => return Some(WmAction::FocusUp),
+            winit::keyboard::KeyCode::ArrowDown => return Some(WmAction::FocusDown),
+            _ => {}
+        }
+    }
+
+    // Named keys
+    if let winit::keyboard::Key::Named(named) = logical_key {
+        match named {
+            winit::keyboard::NamedKey::Space => return Some(WmAction::SidebarLeft),
+            _ => {}
+        }
+    }
+
+    // Text keys (single characters)
+    match key_text {
+        "h" if !shift => return Some(WmAction::FocusLeft),
+        "j" if !shift => return Some(WmAction::FocusDown),
+        "k" if !shift => return Some(WmAction::FocusUp),
+        "l" if !shift => return Some(WmAction::FocusRight),
+        "-" => return Some(WmAction::SplitHorizontal),
+        "v" => return Some(WmAction::SplitVertical),
+        "f" => return Some(WmAction::Float),
+        "s" => return Some(WmAction::Scratchpad),
+        "z" => return Some(WmAction::Hide),
+        "x" => return Some(WmAction::ClosePane),
+        "]" => return Some(WmAction::TabNext),
+        "[" => return Some(WmAction::TabPrev),
+        "H" => return Some(WmAction::ResizeLeft),
+        "L" => return Some(WmAction::ResizeRight),
+        "K" => return Some(WmAction::ResizeUp),
+        "J" => return Some(WmAction::ResizeDown),
+        _ => {}
+    }
+
+    None
 }
 
 fn main() {
