@@ -365,17 +365,24 @@ impl ApplicationHandler for HecaApp {
             WindowEvent::KeyboardInput {
                 event,
                 ..
-            } if event.state == ElementState::Pressed => {
+            } => {
+                if event.state != ElementState::Pressed {
+                    return;
+                }
                 state.needs_redraw = true;
 
                 let is_ctrl = state.modifiers.control_key();
                 let is_alt = state.modifiers.alt_key();
                 let is_shift = state.modifiers.shift_key();
 
-                let key_text = event.logical_key.to_text().unwrap_or("").to_string();
+                let log_key = &event.logical_key;
+                let key_text = log_key.to_text().unwrap_or("").to_string();
+                let phys = event.physical_key;
 
-                // Detect Ctrl+B by key text alone (reliable on all platforms)
-                let is_prefix = key_text == "\u{2}";
+                // Detect Ctrl+B by multiple methods:
+                let is_prefix = key_text == "\u{2}"                         // macOS control char
+                    || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")
+                    || (is_ctrl && phys == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyB));
 
                 // Detect Ctrl+C, Ctrl+D etc. for future pane forwarding
                 // Detect arrow keys via physical_key
@@ -383,6 +390,22 @@ impl ApplicationHandler for HecaApp {
 
                 match state.input_mode {
                     InputMode::Normal => {
+                        // Direct bindings (no prefix needed)
+                        let direct_action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
+                        match direct_action {
+                            Some(WmAction::SplitHorizontal) | Some(WmAction::SplitVertical)
+                            | Some(WmAction::Float) | Some(WmAction::Scratchpad)
+                            | Some(WmAction::Hide) | Some(WmAction::ClosePane) => {
+                                // These require prefix mode, skip in normal mode
+                            }
+                            Some(action) => {
+                                let current = state.focused_pane;
+                                execute_action(action, current, state);
+                                return;
+                            }
+                            None => {}
+                        }
+
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
                             state.needs_redraw = true;
@@ -393,106 +416,12 @@ impl ApplicationHandler for HecaApp {
                         state.input_mode = InputMode::Normal;
 
                         if is_prefix {
-                            // Ctrl+B Ctrl+B = literal Ctrl+B
                             return;
                         }
 
                         let action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
-                        let current = state.focused_pane;
-                        match action {
-                            Some(WmAction::FocusLeft) => {
-                                if let Some(id) = current {
-                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
-                                }
-                            }
-                            Some(WmAction::FocusRight) => {
-                                if let Some(id) = current {
-                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
-                                }
-                            }
-                            Some(WmAction::FocusUp) => {
-                                if let Some(id) = current {
-                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
-                                }
-                            }
-                            Some(WmAction::FocusDown) => {
-                                if let Some(id) = current {
-                                    state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
-                                }
-                            }
-                            Some(WmAction::SplitHorizontal) => {
-                                if let Some(id) = current {
-                                    if let Some(new_id) = state.panetree.split(id, SplitDirection::Horizontal) {
-                                        state.focused_pane = Some(new_id);
-                                    }
-                                }
-                            }
-                            Some(WmAction::SplitVertical) => {
-                                if let Some(id) = current {
-                                    if let Some(new_id) = state.panetree.split(id, SplitDirection::Vertical) {
-                                        state.focused_pane = Some(new_id);
-                                    }
-                                }
-                            }
-                            Some(WmAction::Float) => {
-                                if let Some(id) = current {
-                                    state.panetree.toggle_float(id, None);
-                                }
-                            }
-                            Some(WmAction::Scratchpad) => {
-                                if let Some(id) = current {
-                                    state.panetree.toggle_scratchpad(id);
-                                }
-                            }
-                            Some(WmAction::Hide) => {
-                                if let Some(id) = current {
-                                    state.panetree.hide(id);
-                                    state.focused_pane = None;
-                                }
-                            }
-                            Some(WmAction::ClosePane) => {
-                                if let Some(id) = current {
-                                    state.panetree.remove(id);
-                                    state.focused_pane = None;
-                                }
-                            }
-                            Some(WmAction::TabNext) => {
-                                if !state.tab_names.is_empty() {
-                                    state.active_tab = (state.active_tab + 1) % state.tab_names.len();
-                                }
-                            }
-                            Some(WmAction::TabPrev) => {
-                                if !state.tab_names.is_empty() {
-                                    state.active_tab = (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
-                                }
-                            }
-                            Some(WmAction::ResizeLeft) => {
-                                if let Some(id) = current {
-                                    state.panetree.resize(id, -0.05);
-                                }
-                            }
-                            Some(WmAction::ResizeRight) => {
-                                if let Some(id) = current {
-                                    state.panetree.resize(id, 0.05);
-                                }
-                            }
-                            Some(WmAction::ResizeUp) => {
-                                if let Some(id) = current {
-                                    state.panetree.resize(id, -0.05);
-                                }
-                            }
-                            Some(WmAction::ResizeDown) => {
-                                if let Some(id) = current {
-                                    state.panetree.resize(id, 0.05);
-                                }
-                            }
-                            Some(WmAction::SidebarLeft) => {
-                                state.sidebar.left_visible = !state.sidebar.left_visible;
-                            }
-                            Some(WmAction::SidebarRight) => {
-                                state.sidebar.right_visible = !state.sidebar.right_visible;
-                            }
-                            None => {} // Unbound key — cancel silently
+                        if let Some(act) = action {
+                            execute_action(act, state.focused_pane, state);
                         }
                     }
                 }
@@ -538,14 +467,23 @@ impl ApplicationHandler for HecaApp {
                             start_rect.w,
                             start_rect.h,
                         );
-                        // Update float position
+                        // Clamp so float stays at least partly visible
+                        let phys = state.window.inner_size();
+                        let log_w = phys.width as f32 / state.scale_factor as f32;
+                        let log_h = phys.height as f32 / state.scale_factor as f32;
+                        let clamped = heca_core::types::Rect::new(
+                            new_rect.x.clamp(-new_rect.w + 40.0, log_w - 40.0),
+                            new_rect.y.clamp(-new_rect.h + 40.0, log_h - 40.0),
+                            new_rect.w,
+                            new_rect.h,
+                        );
                         if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
-                            entry.1 = new_rect;
+                            entry.1 = clamped;
                         }
                         state.drag_state = DragState::MovingFloat {
                             pane_id,
                             start_mouse: (px, py),
-                            start_rect: new_rect,
+                            start_rect: clamped,
                         };
                     }
                     DragState::None => {}
@@ -642,6 +580,83 @@ impl ApplicationHandler for HecaApp {
             if state.needs_redraw {
                 state.window.request_redraw();
             }
+        }
+    }
+}
+
+fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) {
+    match action {
+        WmAction::FocusLeft | WmAction::FocusRight => {
+            if let Some(id) = current {
+                state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
+            }
+        }
+        WmAction::FocusUp | WmAction::FocusDown => {
+            if let Some(id) = current {
+                state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
+            }
+        }
+        WmAction::SplitHorizontal => {
+            if let Some(id) = current {
+                if let Some(new_id) = state.panetree.split(id, SplitDirection::Horizontal) {
+                    state.focused_pane = Some(new_id);
+                }
+            }
+        }
+        WmAction::SplitVertical => {
+            if let Some(id) = current {
+                if let Some(new_id) = state.panetree.split(id, SplitDirection::Vertical) {
+                    state.focused_pane = Some(new_id);
+                }
+            }
+        }
+        WmAction::Float => {
+            if let Some(id) = current {
+                state.panetree.toggle_float(id, None);
+            }
+        }
+        WmAction::Scratchpad => {
+            if let Some(id) = current {
+                state.panetree.toggle_scratchpad(id);
+            }
+        }
+        WmAction::Hide => {
+            if let Some(id) = current {
+                state.panetree.hide(id);
+                state.focused_pane = None;
+            }
+        }
+        WmAction::ClosePane => {
+            if let Some(id) = current {
+                state.panetree.remove(id);
+                state.focused_pane = None;
+            }
+        }
+        WmAction::TabNext => {
+            if !state.tab_names.is_empty() {
+                state.active_tab = (state.active_tab + 1) % state.tab_names.len();
+            }
+        }
+        WmAction::TabPrev => {
+            if !state.tab_names.is_empty() {
+                state.active_tab = (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
+            }
+        }
+        WmAction::ResizeLeft | WmAction::ResizeUp => {
+            if let Some(id) = current {
+                state.panetree.resize(id, -0.05);
+            }
+        }
+        WmAction::ResizeRight | WmAction::ResizeDown => {
+            if let Some(id) = current {
+                state.panetree.resize(id, 0.05);
+            }
+        }
+        WmAction::SidebarLeft => {
+            state.sidebar.left_visible = !state.sidebar.left_visible;
+        }
+        WmAction::SidebarRight => {
+            state.sidebar.right_visible = !state.sidebar.right_visible;
         }
     }
 }
