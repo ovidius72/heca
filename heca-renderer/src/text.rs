@@ -259,8 +259,12 @@ impl TextRenderer {
         let atlas_h = total_height.max(1);
         self.atlas_size = (atlas_w, atlas_h);
 
-        // Allocate atlas buffer
-        let mut atlas = vec![0u8; (atlas_w * atlas_h) as usize];
+        // Align stride for GPU texture upload
+        let align = |v: u32| ((v + 255) / 256) * 256;
+        let stride = align(atlas_w);
+
+        // Allocate atlas buffer with aligned stride
+        let mut atlas = vec![0u8; (stride * atlas_h) as usize];
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
         let mut current_y = 0u32;
@@ -274,7 +278,7 @@ impl TextRenderer {
             buffer.set_text(&mut self.font_system, &cmd.text, &Attrs::new(), Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
-            // Rasterize glyphs into atlas at (0, current_y)
+            // Rasterize glyphs into atlas at (0, current_y), using stride for row width
             for run in buffer.layout_runs() {
                 let line_y = run.line_y;
                 for glyph in run.glyphs {
@@ -289,8 +293,8 @@ impl TextRenderer {
                                 let src_idx = (py * gw + px) as usize;
                                 let dst_x = gx + px as i32;
                                 let dst_y = gy + py as i32;
-                                if dst_x >= 0 && dst_x < atlas_w as i32 && dst_y >= 0 && dst_y < atlas_h as i32 {
-                                    let dst_idx = (dst_y * atlas_w as i32 + dst_x) as usize;
+                                if dst_x >= 0 && dst_x < stride as i32 && dst_y >= 0 && dst_y < atlas_h as i32 {
+                                    let dst_idx = (dst_y * stride as i32 + dst_x) as usize;
                                     atlas[dst_idx] = atlas[dst_idx].saturating_add(img.data[src_idx]);
                                 }
                             }
@@ -339,6 +343,8 @@ impl TextRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
+        // bytes_per_row must be aligned to COPY_BYTES_PER_ROW_ALIGNMENT (256)
+        // Use the same aligned stride from allocation
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -349,7 +355,7 @@ impl TextRenderer {
             &atlas,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(atlas_w),
+                bytes_per_row: Some(stride),
                 rows_per_image: Some(atlas_h),
             },
             wgpu::Extent3d {
