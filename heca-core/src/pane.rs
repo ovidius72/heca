@@ -452,54 +452,41 @@ impl PaneTree {
             p.id == pane_id && (p.disposition == Disposition::Embedded || p.disposition == Disposition::Floating)
         })
     }
+}
 
-    /// Geometric neighbor detection: find the best pane in the given direction.
-    /// Searches both embedded panes and floats. Uses rectangle overlap for scoring.
-    pub fn find_neighbor_geo(&self, pane_id: u64, dir: SplitDirection, width: f32, height: f32, preferred: Option<u64>) -> Option<u64> {
-        let (embedded, floats) = self.compute_rects(width, height);
+/// Direction of movement for geometric neighbor detection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GeoDir { Left, Right, Up, Down }
 
-        // Find current pane's rect (search embedded first, then floats)
+impl PaneTree {
+    /// Geometric neighbor detection: find the best EMBEDDED pane in the given direction.
+    /// Floats are excluded — they are focused via cycle (prefix+n/p) or mouse only.
+    pub fn find_neighbor_geo(
+        &self,
+        pane_id: u64,
+        dir: GeoDir,
+        width: f32,
+        height: f32,
+        preferred: Option<u64>,
+    ) -> Option<u64> {
+        let (embedded, _) = self.compute_rects(width, height);
+
         let current_rect = embedded.iter()
             .find(|(_, p)| p.id == pane_id)
-            .map(|(r, _)| *r)
-            .or_else(|| floats.iter().find(|(p, _)| p.id == pane_id).map(|(_, r)| *r))?;
+            .map(|(r, _)| *r)?;
 
-        let mut best: Option<(u64, f32, f32)> = None; // (pane_id, overlap, center_dist)
-
-        // Score all candidates (embedded + floats)
-        let mut candidates: Vec<(u64, f32, f32)> = Vec::new(); // (pane_id, overlap, dist) for debug
+        let mut best: Option<(u64, f32, f32)> = None;
 
         for (rect, pane) in &embedded {
             if pane.id == pane_id { continue; }
-            if let Some(scored) = Self::score_neighbor(dir, &current_rect, rect, pane.id, preferred, &mut best) {
-                candidates.push((pane.id, scored.1, scored.2));
-            }
-        }
-        for (pane, rect) in &floats {
-            if pane.id == pane_id { continue; }
-            if let Some(scored) = Self::score_neighbor(dir, &current_rect, rect, pane.id, preferred, &mut best) {
-                candidates.push((pane.id, scored.1, scored.2));
-            }
+            Self::score_neighbor(dir, &current_rect, rect, pane.id, preferred, &mut best);
         }
 
-        let result = best.map(|(id, _, _)| id);
-
-        // Debug: print candidates and result
-        let curr_title = self.panes.iter().find(|p| p.id == pane_id).map(|p| p.title.as_str()).unwrap_or("?");
-        let dir_str = match dir { SplitDirection::Horizontal => "R", SplitDirection::Vertical => "D" };
-        eprint!("[geo] {} ->{} candidates=", curr_title, dir_str);
-        for (pid, ov, dist) in candidates {
-            let t = self.panes.iter().find(|p| p.id == pid).map(|p| p.title.as_str()).unwrap_or("?");
-            eprint!(" {}:ov={:.0},dist={:.0}", t, ov, dist);
-        }
-        let res_title = result.and_then(|id| self.panes.iter().find(|p| p.id == id).map(|p| p.title.as_str()));
-        eprintln!(" => {:?}", res_title);
-
-        result
+        best.map(|(id, _, _)| id)
     }
 
     fn score_neighbor(
-        dir: SplitDirection,
+        dir: GeoDir,
         current_rect: &Rect,
         rect: &Rect,
         pane_id: u64,
@@ -507,15 +494,23 @@ impl PaneTree {
         best: &mut Option<(u64, f32, f32)>,
     ) -> Option<(u64, f32, f32)> {
         let (in_dir, overlap) = match dir {
-            SplitDirection::Horizontal => {
-                let in_dir = rect.x + rect.w <= current_rect.x + 0.01
-                    || rect.x >= current_rect.x + current_rect.w - 0.01;
+            GeoDir::Left => {
+                let in_dir = rect.x + rect.w <= current_rect.x + 0.01; // strictly to the left
                 let y_ov = (rect.y + rect.h).min(current_rect.y + current_rect.h) - rect.y.max(current_rect.y);
                 (in_dir, y_ov.max(0.0))
             }
-            SplitDirection::Vertical => {
-                let in_dir = rect.y + rect.h <= current_rect.y + 0.01
-                    || rect.y >= current_rect.y + current_rect.h - 0.01;
+            GeoDir::Right => {
+                let in_dir = rect.x >= current_rect.x + current_rect.w - 0.01; // strictly to the right
+                let y_ov = (rect.y + rect.h).min(current_rect.y + current_rect.h) - rect.y.max(current_rect.y);
+                (in_dir, y_ov.max(0.0))
+            }
+            GeoDir::Up => {
+                let in_dir = rect.y + rect.h <= current_rect.y + 0.01; // strictly above
+                let x_ov = (rect.x + rect.w).min(current_rect.x + current_rect.w) - rect.x.max(current_rect.x);
+                (in_dir, x_ov.max(0.0))
+            }
+            GeoDir::Down => {
+                let in_dir = rect.y >= current_rect.y + current_rect.h - 0.01; // strictly below
                 let x_ov = (rect.x + rect.w).min(current_rect.x + current_rect.w) - rect.x.max(current_rect.x);
                 (in_dir, x_ov.max(0.0))
             }
@@ -524,12 +519,12 @@ impl PaneTree {
         if !in_dir || overlap <= 0.0 { return None; }
 
         let center_dist = match dir {
-            SplitDirection::Horizontal => {
+            GeoDir::Left | GeoDir::Right => {
                 let curr_cy = current_rect.y + current_rect.h / 2.0;
                 let other_cy = rect.y + rect.h / 2.0;
                 (curr_cy - other_cy).abs()
             }
-            SplitDirection::Vertical => {
+            GeoDir::Up | GeoDir::Down => {
                 let curr_cx = current_rect.x + current_rect.w / 2.0;
                 let other_cx = rect.x + rect.w / 2.0;
                 (curr_cx - other_cx).abs()

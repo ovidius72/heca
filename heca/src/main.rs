@@ -5,7 +5,7 @@ mod input;
 use app_state::{AppState, SidebarState, DragState, InputMode};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
-use heca_core::pane::{PaneTree, SplitDirection};
+use heca_core::pane::{PaneTree, SplitDirection, GeoDir};
 
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -735,16 +735,9 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
     };
     let pane_area = chrome.content_rect(win_w, win_h);
     match action {
-        WmAction::FocusLeft | WmAction::FocusRight => {
+        WmAction::FocusLeft => {
             if let Some(id) = current {
-                let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
-                let geo = state.panetree.find_neighbor_geo(
-                    id,
-                    SplitDirection::Horizontal,
-                    pane_area.w,
-                    pane_area.h,
-                    state.last_focused,
-                );
+                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Left, pane_area.w, pane_area.h, state.last_focused);
                 if let Some(target) = geo {
                     state.last_focused = Some(id);
                     state.focused_pane = Some(target);
@@ -752,15 +745,29 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
                 }
             }
         }
-        WmAction::FocusUp | WmAction::FocusDown => {
+        WmAction::FocusRight => {
             if let Some(id) = current {
-                let geo = state.panetree.find_neighbor_geo(
-                    id,
-                    SplitDirection::Vertical,
-                    pane_area.w,
-                    pane_area.h,
-                    state.last_focused,
-                );
+                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Right, pane_area.w, pane_area.h, state.last_focused);
+                if let Some(target) = geo {
+                    state.last_focused = Some(id);
+                    state.focused_pane = Some(target);
+                    state.panetree.bring_float_to_front(target);
+                }
+            }
+        }
+        WmAction::FocusUp => {
+            if let Some(id) = current {
+                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Up, pane_area.w, pane_area.h, state.last_focused);
+                if let Some(target) = geo {
+                    state.last_focused = Some(id);
+                    state.focused_pane = Some(target);
+                    state.panetree.bring_float_to_front(target);
+                }
+            }
+        }
+        WmAction::FocusDown => {
+            if let Some(id) = current {
+                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Down, pane_area.w, pane_area.h, state.last_focused);
                 if let Some(target) = geo {
                     state.last_focused = Some(id);
                     state.focused_pane = Some(target);
@@ -800,11 +807,10 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
         }
         WmAction::ClosePane => {
             if let Some(id) = current {
-                // Find best neighbor to focus after removal
-                let neighbor = state.panetree.find_neighbor_geo(
-                    id, SplitDirection::Horizontal, pane_area.w, pane_area.h, state.last_focused)
-                    .or_else(|| state.panetree.find_neighbor_geo(
-                        id, SplitDirection::Vertical, pane_area.w, pane_area.h, state.last_focused));
+                let neighbor = state.panetree.find_neighbor_geo(id, GeoDir::Left, pane_area.w, pane_area.h, state.last_focused)
+                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Right, pane_area.w, pane_area.h, state.last_focused))
+                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Up, pane_area.w, pane_area.h, state.last_focused))
+                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Down, pane_area.w, pane_area.h, state.last_focused));
                 state.panetree.remove(id);
                 state.focused_pane = neighbor;
                 state.last_focused = None;
