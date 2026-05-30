@@ -291,35 +291,40 @@ impl TextRenderer {
                 continue;
             }
 
-            // 3. Render into CPU buffer using Buffer::draw (SAME buffer!)
-            // wgpu requires bytes_per_row to be a multiple of 256
+            // 3. Manually blit glyph images into pixel buffer
+            // (buffer.draw() produces nothing — use the same loop that measures bounds)
             let align = |v: u32| ((v + 255) / 256) * 256;
             let stride = align(content_w);
             let mut pixels = vec![0u8; (stride * content_h) as usize];
-            let w_local = content_w;
-            let h_local = content_h;
-            let min_x_local = min_x;
-            let min_y_local = min_y;
 
-            buffer.draw(
-                &mut self.font_system,
-                &mut self.swash_cache,
-                CosmicColor::rgb(0xFF, 0xFF, 0xFF),
-                |x: i32, y: i32, _w: u32, _h: u32, color: CosmicColor| {
-                    let a = color.a();
-                    if a == 0 {
-                        return;
-                    }
-                    let px = (x - min_x_local) as u32;
-                    let py = (y - min_y_local) as u32;
-                    if px < w_local && py < h_local {
-                        let idx = (py * stride + px) as usize;
-                        pixels[idx] = pixels[idx].saturating_add(a);
-                    }
-                },
-            );
+            for run in buffer.layout_runs() {
+                for glyph in run.glyphs {
+                    let physical = glyph.physical((0.0, 0.0), 1.0);
+                    let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
+                    let img = match img_opt.as_ref() {
+                        Some(img) => img,
+                        None => continue,
+                    };
+                    let gw = img.placement.width;
+                    let gh = img.placement.height;
+                    if gw == 0 || gh == 0 { continue; }
 
-            // DEBUG: check if any pixel is non-zero
+                    let dst_x = (physical.x + img.placement.left - min_x) as u32;
+                    let dst_y = (run.line_y as i32 + physical.y + img.placement.top - min_y) as u32;
+
+                    for py in 0..gh {
+                        for px in 0..gw {
+                            let src_idx = (py * gw + px) as usize;
+                            let dst_idx = ((dst_y + py) * stride + (dst_x + px)) as usize;
+                            if dst_idx < pixels.len() {
+                                pixels[dst_idx] = pixels[dst_idx].saturating_add(img.data[src_idx]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // DEBUG
             let non_zero = pixels.iter().filter(|&&v| v > 0).count();
             eprintln!("[heca-text] '{}' -> {}x{} pixels, {} non-zero", cmd.text, content_w, content_h, non_zero);
 
