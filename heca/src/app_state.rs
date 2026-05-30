@@ -7,10 +7,12 @@ use std::sync::Arc;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
     Prefix,
+    /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
+    PaneSelect { candidates: Vec<(char, u64)> },
 }
 
 #[derive(Clone, Debug)]

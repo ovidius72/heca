@@ -24,6 +24,7 @@ pub enum WmAction {
     SidebarRight,
     NextPane,
     PrevPane,
+    PaneSelect,
 }
 
 #[allow(dead_code)]
@@ -58,6 +59,7 @@ impl KeyBindings {
                 ("Space".to_string(), "".to_string(), WmAction::SidebarLeft),
                 ("n".to_string(), "".to_string(), WmAction::NextPane),
                 ("p".to_string(), "".to_string(), WmAction::PrevPane),
+                ("q".to_string(), "".to_string(), WmAction::PaneSelect),
             ],
         }
     }

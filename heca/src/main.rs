@@ -279,9 +279,10 @@ impl HecaApp {
             .and_then(|id| state.panetree.panes.iter().find(|p| p.id == id))
             .map(|p| p.title.as_str())
             .unwrap_or("—");
-        let mode_str = match state.input_mode {
+        let mode_str = match &state.input_mode {
             InputMode::Normal => "NORMAL",
             InputMode::Prefix => "PREFIX",
+            InputMode::PaneSelect { .. } => "SELECT",
         };
         let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -300,6 +301,14 @@ impl HecaApp {
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
+        // Build letter map if in pane-select mode
+        let letter_map: std::collections::HashMap<u64, char> = match &state.input_mode {
+            InputMode::PaneSelect { candidates } => {
+                candidates.iter().map(|(c, id)| (*id, *c)).collect()
+            }
+            _ => std::collections::HashMap::new(),
+        };
+
         // ── EMBEDDED PANES ──
         for (rect, pane) in &embedded {
             let px = pane_area.x + rect.x;
@@ -313,6 +322,13 @@ impl HecaApp {
             state.text_renderer.queue_text(
                 &pane.title, px + 4.0, py + 4.0, pane_text, theme.foreground.to_f32x4(),
             );
+            if let Some(&ch) = letter_map.get(&pane.id) {
+                let label = ch.to_string();
+                let letter_size = 48.0f32;
+                let lx = px + (rect.w - letter_size * 0.6) / 2.0;
+                let ly = py + (rect.h - letter_size) / 2.0;
+                state.text_renderer.queue_text(&label, lx, ly, letter_size, [1.0, 0.9, 0.3, 0.9]);
+            }
         }
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
@@ -322,13 +338,28 @@ impl HecaApp {
             let fx = pane_area.x + rect.x;
             let fy = pane_area.y + rect.y;
             let fbg = [0.192, 0.196, 0.267, 1.0];
+            let is_focused = state.focused_pane == Some(pane.id);
+            let fborder = if is_focused {
+                [1.0, 0.8, 0.2, 1.0] // bright gold for focused float
+            } else {
+                accent_color
+            };
+            let fborder_width = if is_focused { border_width * 4.0 } else { border_width * 2.0 };
             state.primitive_renderer.draw_rect(fx, fy, rect.w, rect.h, fbg);
-            state.primitive_renderer.draw_border(fx, fy, rect.w, rect.h, accent_color, border_width * 2.0);
+            state.primitive_renderer.draw_border(fx, fy, rect.w, rect.h, fborder, fborder_width);
             // Title bar for float
-            state.primitive_renderer.draw_rect(fx, fy, rect.w, 24.0, accent_color);
+            let title_color = if is_focused { [1.0, 0.8, 0.2, 1.0] } else { accent_color };
+            state.primitive_renderer.draw_rect(fx, fy, rect.w, 24.0, title_color);
             state.text_renderer.queue_text(
                 &pane.title, fx + 4.0, fy + 4.0, pane_text, [1.0, 1.0, 1.0, 1.0],
             );
+            if let Some(&ch) = letter_map.get(&pane.id) {
+                let label = ch.to_string();
+                let letter_size = 48.0f32;
+                let lx = fx + (rect.w - letter_size * 0.6) / 2.0;
+                let ly = fy + (rect.h - letter_size) / 2.0;
+                state.text_renderer.queue_text(&label, lx, ly, letter_size, [1.0, 0.9, 0.3, 0.9]);
+            }
             // Flush each float individually so lower floats' text never shows through
             state.primitive_renderer.render(&state.device, &view, &mut encoder);
             state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
@@ -407,7 +438,7 @@ impl ApplicationHandler for HecaApp {
                 // Detect arrow keys via physical_key
                 let phys_key = event.physical_key;
 
-                match state.input_mode {
+                match &state.input_mode {
                     InputMode::Normal => {
                         // Direct bindings (no prefix needed)
                         let direct_action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
@@ -417,7 +448,8 @@ impl ApplicationHandler for HecaApp {
                             | Some(WmAction::Hide) | Some(WmAction::ClosePane)
                             | Some(WmAction::FocusLeft) | Some(WmAction::FocusRight)
                             | Some(WmAction::FocusUp) | Some(WmAction::FocusDown)
-                            | Some(WmAction::NextPane) | Some(WmAction::PrevPane) => {
+                            | Some(WmAction::NextPane) | Some(WmAction::PrevPane)
+                            | Some(WmAction::PaneSelect) => {
                                 // These require prefix mode, skip in normal mode
                             }
                             Some(action) => {
@@ -445,6 +477,15 @@ impl ApplicationHandler for HecaApp {
                         if let Some(act) = action {
                             execute_action(act, state.focused_pane, state);
                         }
+                    }
+                    InputMode::PaneSelect { candidates } => {
+                        if let Some(ch) = key_text.chars().next() {
+                            if let Some((_, pane_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                state.focused_pane = Some(*pane_id);
+                                state.panetree.bring_float_to_front(*pane_id);
+                            }
+                        }
+                        state.input_mode = InputMode::Normal;
                     }
                 }
             }
@@ -752,10 +793,47 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
         }
         WmAction::NextPane => {
             state.focused_pane = state.panetree.cycle_focus(state.focused_pane, 1);
+            if let Some(id) = state.focused_pane {
+                state.panetree.bring_float_to_front(id);
+            }
         }
         WmAction::PrevPane => {
             state.focused_pane = state.panetree.cycle_focus(state.focused_pane, -1);
+            if let Some(id) = state.focused_pane {
+                state.panetree.bring_float_to_front(id);
+            }
         }
+        WmAction::PaneSelect => {
+            let mut candidates: Vec<(char, u64)> = Vec::new();
+            let mut embedded_ids = Vec::new();
+            collect_embedded_ids(&state.panetree.root, &state.panetree.panes, &mut embedded_ids);
+            for id in embedded_ids {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, id));
+            }
+            for (id, _) in &state.panetree.floats {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, *id));
+            }
+            if !candidates.is_empty() {
+                state.input_mode = InputMode::PaneSelect { candidates };
+            }
+        }
+    }
+}
+
+fn collect_embedded_ids(node: &heca_core::pane::LayoutNode, panes: &[heca_core::pane::Pane], out: &mut Vec<u64>) {
+    match node {
+        heca_core::pane::LayoutNode::Split { left, right, .. } => {
+            collect_embedded_ids(left, panes, out);
+            collect_embedded_ids(right, panes, out);
+        }
+        heca_core::pane::LayoutNode::Leaf { pane_id } => {
+            if panes.iter().any(|p| p.id == *pane_id && p.disposition == heca_core::pane::Disposition::Embedded) {
+                out.push(*pane_id);
+            }
+        }
+        heca_core::pane::LayoutNode::Empty => {}
     }
 }
 
@@ -801,6 +879,7 @@ fn resolve_action_core(
         "[" => return Some(WmAction::TabPrev),
         "n" => return Some(WmAction::NextPane),
         "p" => return Some(WmAction::PrevPane),
+        "q" => return Some(WmAction::PaneSelect),
         "H" => return Some(WmAction::ResizeLeft),
         "L" => return Some(WmAction::ResizeRight),
         "K" => return Some(WmAction::ResizeUp),
