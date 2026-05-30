@@ -147,9 +147,11 @@ impl KeyBindings {
         // Helper: try once with given ctrl value
         let try_resolve = |try_ctrl: bool| -> Option<WmAction> {
             for b in &self.bindings {
-                // Single-char bindings: case-sensitive text, case-insensitive phys fallback
+                // Single-char bindings: exact case-sensitive text match ONLY.
+                // Physical key fallback ONLY when key_text is empty (macOS Ctrl+key).
                 let key_match = if b.key.len() == 1 {
-                    b.key == key || b.key.eq_ignore_ascii_case(&phys_name)
+                    b.key == key
+                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
                 } else {
                     b.key.eq_ignore_ascii_case(&key)
                         || b.key.eq_ignore_ascii_case(&named_key)
@@ -157,6 +159,10 @@ impl KeyBindings {
                 };
                 let ctrl_match = b.ctrl == try_ctrl;
                 let shift_match = b.shift == shift;
+                if in_prefix {
+                    eprintln!("[resolve] try_ctrl={} b.key={} b.ctrl={} b.shift={} | key_match={} ctrl_match={} shift_match={} action={:?}",
+                        try_ctrl, b.key, b.ctrl, b.shift, key_match, ctrl_match, shift_match, b.action);
+                }
                 if key_match && ctrl_match && shift_match {
                     return Some(b.action);
                 }

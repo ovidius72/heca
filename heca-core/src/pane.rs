@@ -362,6 +362,32 @@ impl PaneTree {
         }
     }
 
+    /// Check if a pane is the left/top (first) child of its immediate parent split.
+    pub fn is_first_child(&self, pane_id: u64) -> Option<bool> {
+        PaneTree::is_first_child_in_node(&self.root, pane_id)
+    }
+
+    fn is_first_child_in_node(node: &LayoutNode, pane_id: u64) -> Option<bool> {
+        match node {
+            LayoutNode::Split { left, right, .. } => {
+                if matches!(left.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id) {
+                    return Some(true);
+                }
+                if matches!(right.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id) {
+                    return Some(false);
+                }
+                if let Some(result) = Self::is_first_child_in_node(left, pane_id) {
+                    return Some(result);
+                }
+                if let Some(result) = Self::is_first_child_in_node(right, pane_id) {
+                    return Some(result);
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
     /// Resize the immediate parent split of a pane (single border move).
     /// For keyboard: delta sign depends on action direction.
     pub fn resize(&mut self, pane_id: u64, delta: f32) {

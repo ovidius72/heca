@@ -494,25 +494,29 @@ impl ApplicationHandler for HecaApp {
                 if !state.mouse_enabled { return; }
 
                 match state.drag_state {
-                    DragState::Resizing { pane_id, dir, start_pos } => {
+                    DragState::Resizing { pane_id, dir, start_pos, is_first_child } => {
                         let phys = state.window.inner_size();
                         let win_w = phys.width as f32 / state.scale_factor as f32;
                         let win_h = phys.height as f32 / state.scale_factor as f32;
                         let mx = state.mouse_pos.0;
                         let my = state.mouse_pos.1;
                         if state.panetree.panes.iter().any(|p| p.id == pane_id) {
-                            let delta = match dir {
+                            let mut delta = match dir {
                                 SplitDirection::Horizontal => (mx - start_pos.0) / win_w,
                                 SplitDirection::Vertical => (my - start_pos.1) / win_h,
                             };
-                            // Use resize_delta which always adds (no child-side inversion)
-                            // 0.6 multiplier: responsive but not jumpy
-                            state.panetree.resize_delta(pane_id, delta * 0.6);
+                            // Flip delta for right/bottom children so drag follows mouse
+                            if !is_first_child {
+                                delta = -delta;
+                            }
+                            // 0.5 multiplier: responsive but not jumpy at cross intersections
+                            state.panetree.resize_delta(pane_id, delta * 0.5);
                             // Reset start_pos so next frame is incremental
                             state.drag_state = DragState::Resizing {
                                 pane_id,
                                 dir,
                                 start_pos: (mx, my),
+                                is_first_child,
                             };
                         }
                     }
@@ -680,16 +684,20 @@ impl ApplicationHandler for HecaApp {
                                 let near_top = (mouse_pos.1 - py).abs() < 12.0;
                                 let near_bottom = (mouse_pos.1 - (py + rect.h)).abs() < 12.0;
                                 if near_left || near_right {
+                                    let is_first = state.panetree.is_first_child(pane.id).unwrap_or(true);
                                     state.drag_state = DragState::Resizing {
                                         pane_id: pane.id,
                                         dir: SplitDirection::Horizontal,
                                         start_pos: mouse_pos,
+                                        is_first_child: is_first,
                                     };
                                 } else if near_top || near_bottom {
+                                    let is_first = state.panetree.is_first_child(pane.id).unwrap_or(true);
                                     state.drag_state = DragState::Resizing {
                                         pane_id: pane.id,
                                         dir: SplitDirection::Vertical,
                                         start_pos: mouse_pos,
+                                        is_first_child: is_first,
                                     };
                                 }
                                 break;
