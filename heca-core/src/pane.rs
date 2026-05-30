@@ -206,7 +206,11 @@ impl PaneTree {
 
             if is_embedded {
                 self.panes[idx].disposition = Disposition::Floating;
-                let rect = default_rect.unwrap_or(Rect::new(100.0, 100.0, 400.0, 300.0));
+                let rect = default_rect.unwrap_or_else(|| {
+                    // Cascade: offset by 40px per existing float to avoid overlap
+                    let offset = self.floats.len() as f32 * 40.0;
+                    Rect::new(100.0 + offset, 100.0 + offset, 400.0, 300.0)
+                });
                 self.floats.push((pane_id, rect));
                 self.root.replace_leaf(pane_id, LayoutNode::Empty);
                 PaneTree::collapse_tree_node(&mut self.root);

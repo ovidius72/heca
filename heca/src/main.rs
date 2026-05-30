@@ -111,16 +111,8 @@ impl HecaApp {
         // Content area = full window minus chrome
         let log_w = physical.width as f32 / scale_factor as f32;
         let log_h = physical.height as f32 / scale_factor as f32;
-        let chrome_h = 32.0 + 24.0; // tab bar + status bar
-        let sidebar_w = 200.0;
-        let pane_area_w = (log_w - sidebar_w * 2.0).max(100.0);
-        let pane_area_h = (log_h - chrome_h).max(100.0);
-        panetree.toggle_float(term_id, Some(heca_core::types::Rect::new(
-            pane_area_w * 0.2,
-            pane_area_h * 0.15,
-            pane_area_w * 0.6,
-            pane_area_h * 0.6,
-        )));
+
+        // No auto-float — user creates floats via Ctrl+B + f
 
         Box::new(AppState {
             window,
