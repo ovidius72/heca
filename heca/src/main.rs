@@ -505,7 +505,9 @@ impl ApplicationHandler for HecaApp {
                                 SplitDirection::Horizontal => (mx - start_pos.0) / win_w,
                                 SplitDirection::Vertical => (my - start_pos.1) / win_h,
                             };
-                            state.panetree.resize(pane_id, delta * 0.1);
+                            // Use resize_delta which always adds (no child-side inversion)
+                            state.panetree.resize_delta(pane_id, delta * 1.2);
+                            // Reset start_pos so next frame is incremental
                             state.drag_state = DragState::Resizing {
                                 pane_id,
                                 dir,
@@ -671,11 +673,11 @@ impl ApplicationHandler for HecaApp {
                                 && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
                             {
                                 state.focused_pane = Some(pane.id);
-                                // Check if click is near a border to start resize
-                                let near_left = (mouse_pos.0 - px).abs() < 4.0;
-                                let near_right = (mouse_pos.0 - (px + rect.w)).abs() < 4.0;
-                                let near_top = (mouse_pos.1 - py).abs() < 4.0;
-                                let near_bottom = (mouse_pos.1 - (py + rect.h)).abs() < 4.0;
+                                // Check if click is near a border to start resize (12px hit area)
+                                let near_left = (mouse_pos.0 - px).abs() < 12.0;
+                                let near_right = (mouse_pos.0 - (px + rect.w)).abs() < 12.0;
+                                let near_top = (mouse_pos.1 - py).abs() < 12.0;
+                                let near_bottom = (mouse_pos.1 - (py + rect.h)).abs() < 12.0;
                                 if near_left || near_right {
                                     state.drag_state = DragState::Resizing {
                                         pane_id: pane.id,

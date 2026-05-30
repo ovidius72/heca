@@ -363,12 +363,19 @@ impl PaneTree {
     }
 
     /// Resize the immediate parent split of a pane (single border move).
-    /// delta is a signed amount to add to the ratio (e.g., 0.05).
+    /// For keyboard: delta sign depends on action direction.
     pub fn resize(&mut self, pane_id: u64, delta: f32) {
         PaneTree::resize_in_node(&mut self.root, pane_id, delta);
     }
 
+    /// Resize by directly adding delta to ratio (for mouse drag).
+    /// Always adds delta — caller must pass correctly-signed delta.
+    pub fn resize_delta(&mut self, pane_id: u64, delta: f32) {
+        PaneTree::resize_delta_in_node(&mut self.root, pane_id, delta);
+    }
+
     /// Only adjust the ratio at the split where pane_id is a DIRECT child.
+    /// For keyboard shortcuts: inverts delta for right-side children.
     fn resize_in_node(node: &mut LayoutNode, pane_id: u64, delta: f32) -> bool {
         match node {
             LayoutNode::Split { left, right, ratio, .. } => {
@@ -384,6 +391,27 @@ impl PaneTree {
                     return true;
                 }
                 if Self::resize_in_node(right, pane_id, delta) {
+                    return true;
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    /// Always adds delta to ratio (no child-side inversion).
+    fn resize_delta_in_node(node: &mut LayoutNode, pane_id: u64, delta: f32) -> bool {
+        match node {
+            LayoutNode::Split { left, right, ratio, .. } => {
+                if matches!(left.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id)
+                    || matches!(right.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id) {
+                    *ratio = (*ratio + delta).clamp(0.15, 0.85);
+                    return true;
+                }
+                if Self::resize_delta_in_node(left, pane_id, delta) {
+                    return true;
+                }
+                if Self::resize_delta_in_node(right, pane_id, delta) {
                     return true;
                 }
                 false

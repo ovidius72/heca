@@ -142,11 +142,6 @@ impl KeyBindings {
         };
 
         for b in &self.bindings {
-            // Key matching:
-            // - Single-char bindings: exact case-sensitive against key_text,
-            //   OR case-insensitive against physical key when modifiers held
-            //   (macOS Ctrl+key often produces empty key_text)
-            // - Multi-char bindings (Space, ArrowLeft): case-insensitive
             let key_match = if b.key.len() == 1 {
                 let text_match = b.key == key;
                 let phys_match = (ctrl || shift) && b.key.eq_ignore_ascii_case(&phys_name);
@@ -156,11 +151,8 @@ impl KeyBindings {
                     || b.key.eq_ignore_ascii_case(&named_key)
                     || b.key.eq_ignore_ascii_case(&phys_name)
             };
-
-            // Exact modifier matching: binding ctrl/shift must match event state
             let ctrl_match = b.ctrl == ctrl;
             let shift_match = b.shift == shift;
-
             if key_match && ctrl_match && shift_match {
                 return Some(b.action);
             }
