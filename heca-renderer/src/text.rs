@@ -292,7 +292,10 @@ impl TextRenderer {
             }
 
             // 3. Render into CPU buffer using Buffer::draw (SAME buffer!)
-            let mut pixels = vec![0u8; (content_w * content_h) as usize];
+            // wgpu requires bytes_per_row to be a multiple of 256
+            let align = |v: u32| ((v + 255) / 256) * 256;
+            let stride = align(content_w);
+            let mut pixels = vec![0u8; (stride * content_h) as usize];
             let w_local = content_w;
             let h_local = content_h;
             let min_x_local = min_x;
@@ -310,7 +313,7 @@ impl TextRenderer {
                     let px = (x - min_x_local) as u32;
                     let py = (y - min_y_local) as u32;
                     if px < w_local && py < h_local {
-                        let idx = (py * w_local + px) as usize;
+                        let idx = (py * stride + px) as usize;
                         pixels[idx] = pixels[idx].saturating_add(a);
                     }
                 },
@@ -342,7 +345,7 @@ impl TextRenderer {
                 &pixels,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(content_w),
+                    bytes_per_row: Some(stride),
                     rows_per_image: Some(content_h),
                 },
                 wgpu::Extent3d {
