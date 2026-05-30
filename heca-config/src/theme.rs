@@ -113,6 +113,27 @@ pub struct Theme {
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
+    /// Background color for floating panes.
+    #[serde(default = "default_float_bg")]
+    pub float_background: Color,
+    /// Accent color for floating panes (border / title bar).
+    #[serde(default = "default_float_accent")]
+    pub float_accent: Color,
+    /// Focused float border color.
+    #[serde(default = "default_float_focus")]
+    pub float_focus: Color,
+}
+
+fn default_float_bg() -> Color {
+    Color::new(49, 50, 68, 255) // same as border for subtle distinction
+}
+
+fn default_float_accent() -> Color {
+    Color::new(137, 180, 250, 255) // same as accent
+}
+
+fn default_float_focus() -> Color {
+    Color::new(250, 179, 135, 255) // peach — warm highlight
 }
 
 impl Default for Theme {
@@ -135,6 +156,9 @@ impl Theme {
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow::default(),
+            float_background: Color::new(49, 50, 68, 255),
+            float_accent: Color::new(137, 180, 250, 255),
+            float_focus: Color::new(250, 179, 135, 255),
         }
     }
 
@@ -155,6 +179,9 @@ impl Theme {
                 alpha: 0.15,
                 blur: 8.0,
             },
+            float_background: Color::new(204, 208, 218, 255),
+            float_accent: Color::new(30, 102, 245, 255),
+            float_focus: Color::new(230, 126, 34, 255),
         }
     }
 
@@ -202,19 +229,50 @@ impl Default for GeneralConfig {
     }
 }
 
+/// Keybinding map: action name -> key string(s), comma-separated (e.g. "focus_left" -> "h,ArrowLeft").
+pub type KeybindingMap = HashMap<String, String>;
+
 /// Root configuration struct loaded from `config.toml`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub theme: String,
     #[serde(default)]
     pub general: GeneralConfig,
+    #[serde(default)]
+    pub keybindings: KeybindingMap,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let mut keybindings = HashMap::new();
+        keybindings.insert("focus_left".to_string(), "h,ArrowLeft".to_string());
+        keybindings.insert("focus_right".to_string(), "l,ArrowRight".to_string());
+        keybindings.insert("focus_up".to_string(), "k,ArrowUp".to_string());
+        keybindings.insert("focus_down".to_string(), "j,ArrowDown".to_string());
+        keybindings.insert("split_horizontal".to_string(), "-".to_string());
+        keybindings.insert("split_vertical".to_string(), "v".to_string());
+        keybindings.insert("float".to_string(), "f".to_string());
+        keybindings.insert("scratchpad".to_string(), "s".to_string());
+        keybindings.insert("hide".to_string(), "z".to_string());
+        keybindings.insert("close".to_string(), "x".to_string());
+        keybindings.insert("tab_next".to_string(), "]".to_string());
+        keybindings.insert("tab_prev".to_string(), "[".to_string());
+        keybindings.insert("next_pane".to_string(), "n".to_string());
+        keybindings.insert("prev_pane".to_string(), "p".to_string());
+        keybindings.insert("pane_select".to_string(), "q".to_string());
+        keybindings.insert("resize_left".to_string(), "H".to_string());
+        keybindings.insert("resize_right".to_string(), "L".to_string());
+        keybindings.insert("resize_up".to_string(), "K".to_string());
+        keybindings.insert("resize_down".to_string(), "J".to_string());
+        keybindings.insert("sidebar_left".to_string(), "Space".to_string());
+        keybindings.insert("swap_left".to_string(), "Ctrl+h".to_string());
+        keybindings.insert("swap_right".to_string(), "Ctrl+l".to_string());
+        keybindings.insert("swap_up".to_string(), "Ctrl+k".to_string());
+        keybindings.insert("swap_down".to_string(), "Ctrl+j".to_string());
         Self {
             theme: "mocha".to_string(),
             general: GeneralConfig::default(),
+            keybindings,
         }
     }
 }

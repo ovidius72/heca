@@ -334,21 +334,19 @@ impl HecaApp {
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
         // ── FLOATING PANES (back-to-front, each with own flush so text doesn't bleed) ──
+        let fbg = theme.float_background.to_f32x4();
+        let faccent = theme.float_accent.to_f32x4();
+        let ffocus = theme.float_focus.to_f32x4();
         for (pane, rect) in &floats {
             let fx = pane_area.x + rect.x;
             let fy = pane_area.y + rect.y;
-            let fbg = [0.192, 0.196, 0.267, 1.0];
             let is_focused = state.focused_pane == Some(pane.id);
-            let fborder = if is_focused {
-                [1.0, 0.8, 0.2, 1.0] // bright gold for focused float
-            } else {
-                accent_color
-            };
-            let fborder_width = if is_focused { border_width * 4.0 } else { border_width * 2.0 };
+            let fborder = if is_focused { ffocus } else { faccent };
+            let fborder_width = if is_focused { border_width * 3.0 } else { border_width * 2.0 };
             state.primitive_renderer.draw_rect(fx, fy, rect.w, rect.h, fbg);
             state.primitive_renderer.draw_border(fx, fy, rect.w, rect.h, fborder, fborder_width);
             // Title bar for float
-            let title_color = if is_focused { [1.0, 0.8, 0.2, 1.0] } else { accent_color };
+            let title_color = if is_focused { ffocus } else { faccent };
             state.primitive_renderer.draw_rect(fx, fy, rect.w, 24.0, title_color);
             state.text_renderer.queue_text(
                 &pane.title, fx + 4.0, fy + 4.0, pane_text, [1.0, 1.0, 1.0, 1.0],
@@ -436,30 +434,9 @@ impl ApplicationHandler for HecaApp {
 
                 // Detect Ctrl+C, Ctrl+D etc. for future pane forwarding
                 // Detect arrow keys via physical_key
-                let phys_key = event.physical_key;
-
                 match &state.input_mode {
                     InputMode::Normal => {
-                        // Direct bindings (no prefix needed)
-                        let direct_action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
-                        match direct_action {
-                            Some(WmAction::SplitHorizontal) | Some(WmAction::SplitVertical)
-                            | Some(WmAction::Float) | Some(WmAction::Scratchpad)
-                            | Some(WmAction::Hide) | Some(WmAction::ClosePane)
-                            | Some(WmAction::FocusLeft) | Some(WmAction::FocusRight)
-                            | Some(WmAction::FocusUp) | Some(WmAction::FocusDown)
-                            | Some(WmAction::NextPane) | Some(WmAction::PrevPane)
-                            | Some(WmAction::PaneSelect) => {
-                                // These require prefix mode, skip in normal mode
-                            }
-                            Some(action) => {
-                                let current = state.focused_pane;
-                                execute_action(action, current, state);
-                                return;
-                            }
-                            None => {}
-                        }
-
+                        // Only prefix key activates prefix mode in Normal
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
                             state.needs_redraw = true;
@@ -473,7 +450,7 @@ impl ApplicationHandler for HecaApp {
                             return;
                         }
 
-                        let action = resolve_action_core(&key_text, &phys_key, is_shift, &event.logical_key);
+                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
                         if let Some(act) = action {
                             execute_action(act, state.focused_pane, state);
                         }
@@ -819,6 +796,42 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
                 state.input_mode = InputMode::PaneSelect { candidates };
             }
         }
+        WmAction::SwapLeft | WmAction::SwapRight => {
+            if let Some(id) = current {
+                let dir = if matches!(action, WmAction::SwapLeft) {
+                    SplitDirection::Horizontal
+                } else {
+                    SplitDirection::Horizontal
+                };
+                if let Some(neighbor) = state.panetree.find_neighbor(id, dir) {
+                    state.panetree.swap_panes(id, neighbor);
+                } else {
+                    // No neighbor — create a new pane at the edge
+                    let new_dir = SplitDirection::Vertical;
+                    if let Some(new_id) = state.panetree.split(id, new_dir) {
+                        state.focused_pane = Some(new_id);
+                    }
+                }
+            }
+        }
+        WmAction::SwapUp | WmAction::SwapDown => {
+            if let Some(id) = current {
+                let dir = if matches!(action, WmAction::SwapUp) {
+                    SplitDirection::Vertical
+                } else {
+                    SplitDirection::Vertical
+                };
+                if let Some(neighbor) = state.panetree.find_neighbor(id, dir) {
+                    state.panetree.swap_panes(id, neighbor);
+                } else {
+                    // No neighbor — create a new pane at the edge
+                    let new_dir = SplitDirection::Horizontal;
+                    if let Some(new_id) = state.panetree.split(id, new_dir) {
+                        state.focused_pane = Some(new_id);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -835,59 +848,6 @@ fn collect_embedded_ids(node: &heca_core::pane::LayoutNode, panes: &[heca_core::
         }
         heca_core::pane::LayoutNode::Empty => {}
     }
-}
-
-/// Core key-to-action resolution independent of modifier state.
-fn resolve_action_core(
-    key_text: &str,
-    phys_key: &winit::keyboard::PhysicalKey,
-    shift: bool,
-    logical_key: &winit::keyboard::Key,
-) -> Option<WmAction> {
-    // Arrow keys
-    if let winit::keyboard::PhysicalKey::Code(code) = phys_key {
-        match code {
-            winit::keyboard::KeyCode::ArrowLeft => return Some(WmAction::FocusLeft),
-            winit::keyboard::KeyCode::ArrowRight => return Some(WmAction::FocusRight),
-            winit::keyboard::KeyCode::ArrowUp => return Some(WmAction::FocusUp),
-            winit::keyboard::KeyCode::ArrowDown => return Some(WmAction::FocusDown),
-            _ => {}
-        }
-    }
-
-    // Named keys
-    if let winit::keyboard::Key::Named(named) = logical_key {
-        match named {
-            winit::keyboard::NamedKey::Space => return Some(WmAction::SidebarLeft),
-            _ => {}
-        }
-    }
-
-    // Text keys (single characters)
-    match key_text {
-        "h" if !shift => return Some(WmAction::FocusLeft),
-        "j" if !shift => return Some(WmAction::FocusDown),
-        "k" if !shift => return Some(WmAction::FocusUp),
-        "l" if !shift => return Some(WmAction::FocusRight),
-        "-" => return Some(WmAction::SplitHorizontal),
-        "v" => return Some(WmAction::SplitVertical),
-        "f" => return Some(WmAction::Float),
-        "s" => return Some(WmAction::Scratchpad),
-        "z" => return Some(WmAction::Hide),
-        "x" => return Some(WmAction::ClosePane),
-        "]" => return Some(WmAction::TabNext),
-        "[" => return Some(WmAction::TabPrev),
-        "n" => return Some(WmAction::NextPane),
-        "p" => return Some(WmAction::PrevPane),
-        "q" => return Some(WmAction::PaneSelect),
-        "H" => return Some(WmAction::ResizeLeft),
-        "L" => return Some(WmAction::ResizeRight),
-        "K" => return Some(WmAction::ResizeUp),
-        "J" => return Some(WmAction::ResizeDown),
-        _ => {}
-    }
-
-    None
 }
 
 fn main() {
