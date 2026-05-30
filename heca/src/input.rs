@@ -116,6 +116,9 @@ impl KeyBindings {
         (ctrl, shift, alt, key)
     }
 
+    /// Resolve a key press to an action.
+    /// `in_prefix`: when true, also tries with ctrl=false if exact match fails
+    ///              (handles macOS where modifier-release event may be delayed).
     pub fn resolve(
         &self,
         key_text: &str,
@@ -124,6 +127,7 @@ impl KeyBindings {
         shift: bool,
         named: &winit::keyboard::Key,
         phys: &winit::keyboard::PhysicalKey,
+        in_prefix: bool,
     ) -> Option<WmAction> {
         let key = key_text.to_string();
         let named_key = match named {
@@ -132,7 +136,6 @@ impl KeyBindings {
             _ => key.clone(),
         };
 
-        // Physical key name, stripping "Key" prefix (KeyJ -> J)
         let phys_name = match phys {
             winit::keyboard::PhysicalKey::Code(c) => {
                 let s = format!("{:?}", c);
@@ -141,20 +144,35 @@ impl KeyBindings {
             _ => String::new(),
         };
 
-        for b in &self.bindings {
-            let key_match = if b.key.len() == 1 {
-                let text_match = b.key == key;
-                let phys_match = (ctrl || shift) && b.key.eq_ignore_ascii_case(&phys_name);
-                text_match || phys_match
-            } else {
-                b.key.eq_ignore_ascii_case(&key)
-                    || b.key.eq_ignore_ascii_case(&named_key)
-                    || b.key.eq_ignore_ascii_case(&phys_name)
-            };
-            let ctrl_match = b.ctrl == ctrl;
-            let shift_match = b.shift == shift;
-            if key_match && ctrl_match && shift_match {
-                return Some(b.action);
+        // Helper: try once with given ctrl value
+        let try_resolve = |try_ctrl: bool| -> Option<WmAction> {
+            for b in &self.bindings {
+                // Single-char bindings: case-sensitive text, case-insensitive phys fallback
+                let key_match = if b.key.len() == 1 {
+                    b.key == key || b.key.eq_ignore_ascii_case(&phys_name)
+                } else {
+                    b.key.eq_ignore_ascii_case(&key)
+                        || b.key.eq_ignore_ascii_case(&named_key)
+                        || b.key.eq_ignore_ascii_case(&phys_name)
+                };
+                let ctrl_match = b.ctrl == try_ctrl;
+                let shift_match = b.shift == shift;
+                if key_match && ctrl_match && shift_match {
+                    return Some(b.action);
+                }
+            }
+            None
+        };
+
+        // First: exact match (Ctrl+hjkl → swap)
+        if let Some(action) = try_resolve(ctrl) {
+            return Some(action);
+        }
+        // Second: in prefix mode, try with ctrl=false (hjkl → focus)
+        // This handles macOS where modifier-release may be delayed after prefix
+        if in_prefix && ctrl {
+            if let Some(action) = try_resolve(false) {
+                return Some(action);
             }
         }
         None

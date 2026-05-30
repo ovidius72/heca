@@ -453,7 +453,7 @@ impl ApplicationHandler for HecaApp {
                             return;
                         }
 
-                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
+                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key, true);
                         if let Some(act) = action {
                             execute_action(act, state.focused_pane, state);
                         }
@@ -506,7 +506,8 @@ impl ApplicationHandler for HecaApp {
                                 SplitDirection::Vertical => (my - start_pos.1) / win_h,
                             };
                             // Use resize_delta which always adds (no child-side inversion)
-                            state.panetree.resize_delta(pane_id, delta * 1.2);
+                            // 0.6 multiplier: responsive but not jumpy
+                            state.panetree.resize_delta(pane_id, delta * 0.6);
                             // Reset start_pos so next frame is incremental
                             state.drag_state = DragState::Resizing {
                                 pane_id,
