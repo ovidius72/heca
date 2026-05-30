@@ -242,7 +242,7 @@ impl HecaApp {
             "Sessions", 8.0, 8.0, chrome_text, theme.foreground.to_f32x4(),
         );
         state.text_renderer.queue_text(
-            "  (empty — Phase 4)", 8.0, 8.0 + chrome_text * 1.4, chrome_text * 0.75,
+            "  (empty — Phase 4)", 8.0, 8.0 + chrome_text * 2.2, chrome_text * 0.75,
             [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
         );
 
