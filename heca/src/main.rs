@@ -233,28 +233,31 @@ impl HecaApp {
         } else {
             [0.953, 0.957, 0.973, 1.0]
         };
-        state.primitive_renderer.draw_rect(0.0, 0.0, chrome.left_sidebar_width, h, side_bg);
+        let sidebar_top = chrome.tab_bar_height;
+        let sidebar_bottom = h - chrome.status_bar_height;
+        let sidebar_h = sidebar_bottom - sidebar_top;
+        state.primitive_renderer.draw_rect(0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h, side_bg);
         state.primitive_renderer.draw_border(
-            chrome.left_sidebar_width - 1.0, 0.0, 1.0, h,
+            chrome.left_sidebar_width - 1.0, sidebar_top, 1.0, sidebar_h,
             theme.border.to_f32x4(), 1.0,
         );
         state.text_renderer.queue_text(
-            "Sessions", 8.0, 8.0, chrome_text, theme.foreground.to_f32x4(),
+            "Sessions", 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
         );
         state.text_renderer.queue_text(
-            "  (empty — Phase 4)", 8.0, 8.0 + chrome_text * 2.2, chrome_text * 0.75,
+            "  (empty — Phase 4)", 8.0, sidebar_top + 8.0 + chrome_text * 2.2, chrome_text * 0.75,
             [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
         );
 
         // ── RIGHT SIDEBAR ──
         let rsx = w - chrome.right_sidebar_width;
-        state.primitive_renderer.draw_rect(rsx, 0.0, chrome.right_sidebar_width, h, side_bg);
+        state.primitive_renderer.draw_rect(rsx, sidebar_top, chrome.right_sidebar_width, sidebar_h, side_bg);
         state.primitive_renderer.draw_border(
-            rsx, 0.0, 1.0, h,
+            rsx, sidebar_top, 1.0, sidebar_h,
             theme.border.to_f32x4(), 1.0,
         );
         state.text_renderer.queue_text(
-            "Details", rsx + 8.0, 8.0, chrome_text, theme.foreground.to_f32x4(),
+            "Details", rsx + 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
         );
 
         // ── TAB BAR ──
