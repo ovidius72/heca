@@ -32,9 +32,6 @@ pub enum DragState {
         pane_id: u64,
         dir: heca_core::pane::SplitDirection,
         start_pos: (f32, f32),
-        /// true if pane is left/top child of the split (delta adds to ratio)
-        /// false if pane is right/bottom child (delta subtracts from ratio)
-        is_first_child: bool,
     },
     MovingFloat {
         pane_id: u64,

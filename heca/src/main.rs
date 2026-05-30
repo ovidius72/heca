@@ -494,29 +494,24 @@ impl ApplicationHandler for HecaApp {
                 if !state.mouse_enabled { return; }
 
                 match state.drag_state {
-                    DragState::Resizing { pane_id, dir, start_pos, is_first_child } => {
+                    DragState::Resizing { pane_id, dir, start_pos } => {
                         let phys = state.window.inner_size();
                         let win_w = phys.width as f32 / state.scale_factor as f32;
                         let win_h = phys.height as f32 / state.scale_factor as f32;
                         let mx = state.mouse_pos.0;
                         let my = state.mouse_pos.1;
                         if state.panetree.panes.iter().any(|p| p.id == pane_id) {
-                            let mut delta = match dir {
+                            let delta = match dir {
                                 SplitDirection::Horizontal => (mx - start_pos.0) / win_w,
                                 SplitDirection::Vertical => (my - start_pos.1) / win_h,
                             };
-                            // Flip delta for right/bottom children so drag follows mouse
-                            if !is_first_child {
-                                delta = -delta;
-                            }
-                            // 0.5 multiplier: responsive but not jumpy at cross intersections
-                            state.panetree.resize_delta(pane_id, delta * 0.5);
-                            // Reset start_pos so next frame is incremental
+                            // resize_delta moves the split border in the drag direction
+                            // regardless of which side the pane is on
+                            state.panetree.resize_delta(pane_id, delta * 0.8);
                             state.drag_state = DragState::Resizing {
                                 pane_id,
                                 dir,
                                 start_pos: (mx, my),
-                                is_first_child,
                             };
                         }
                     }
@@ -678,26 +673,37 @@ impl ApplicationHandler for HecaApp {
                                 && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
                             {
                                 state.focused_pane = Some(pane.id);
-                                // Check if click is near a border to start resize (12px hit area)
-                                let near_left = (mouse_pos.0 - px).abs() < 12.0;
-                                let near_right = (mouse_pos.0 - (px + rect.w)).abs() < 12.0;
-                                let near_top = (mouse_pos.1 - py).abs() < 12.0;
-                                let near_bottom = (mouse_pos.1 - (py + rect.h)).abs() < 12.0;
+                                // Check if click is near a border (12px hit area)
+                                let d_left = (mouse_pos.0 - px).abs();
+                                let d_right = (mouse_pos.0 - (px + rect.w)).abs();
+                                let d_top = (mouse_pos.1 - py).abs();
+                                let d_bottom = (mouse_pos.1 - (py + rect.h)).abs();
+                                let near_left = d_left < 12.0;
+                                let near_right = d_right < 12.0;
+                                let near_top = d_top < 12.0;
+                                let near_bottom = d_bottom < 12.0;
+                                // Pick the closest edge; corners prefer the closer one
+                                let mut edge_dir: Option<SplitDirection> = None;
                                 if near_left || near_right {
-                                    let is_first = state.panetree.is_first_child(pane.id).unwrap_or(true);
-                                    state.drag_state = DragState::Resizing {
-                                        pane_id: pane.id,
-                                        dir: SplitDirection::Horizontal,
-                                        start_pos: mouse_pos,
-                                        is_first_child: is_first,
-                                    };
+                                    let h_dist = d_left.min(d_right);
+                                    if near_top || near_bottom {
+                                        let v_dist = d_top.min(d_bottom);
+                                        edge_dir = if h_dist < v_dist {
+                                            Some(SplitDirection::Horizontal)
+                                        } else {
+                                            Some(SplitDirection::Vertical)
+                                        };
+                                    } else {
+                                        edge_dir = Some(SplitDirection::Horizontal);
+                                    }
                                 } else if near_top || near_bottom {
-                                    let is_first = state.panetree.is_first_child(pane.id).unwrap_or(true);
+                                    edge_dir = Some(SplitDirection::Vertical);
+                                }
+                                if let Some(dir) = edge_dir {
                                     state.drag_state = DragState::Resizing {
                                         pane_id: pane.id,
-                                        dir: SplitDirection::Vertical,
+                                        dir,
                                         start_pos: mouse_pos,
-                                        is_first_child: is_first,
                                     };
                                 }
                                 break;
