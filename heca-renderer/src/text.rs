@@ -253,6 +253,7 @@ impl TextRenderer {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
+            buffer.set_size(&mut self.font_system, Some(4096.0), Some(4096.0));
             let attrs = Attrs::new().family(Family::Name(&self.font_family));
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
@@ -290,6 +291,7 @@ impl TextRenderer {
             }
 
             if !has_glyphs {
+                eprintln!("[heca-text]  '{}' -> NO GLYPHS", cmd.text);
                 // No renderable glyphs — skip but still create a tiny entry so indices stay aligned
                 entries.push(CmdAtlas {
                     cmd: TextCommand {
@@ -311,6 +313,7 @@ impl TextRenderer {
 
             let cmd_w = (max_x - min_x) as u32 + PAD * 2;
             let cmd_h = (max_y - min_y) as u32 + PAD * 2;
+            eprintln!("[heca-text]  '{}' -> bounds={}x{}@({},{}) atlas@({},{})", cmd.text, cmd_w, cmd_h, min_x, min_y, atlas_cursor_x, atlas_cursor_y);
 
             // Simple row packing
             if atlas_cursor_x + cmd_w > MAX_ATLAS_W {
@@ -343,6 +346,7 @@ impl TextRenderer {
         let atlas_h = (atlas_cursor_y + row_height).max(1);
         let atlas_w = total_width.max(1);
         self.atlas_size = (atlas_w, atlas_h);
+        eprintln!("[heca-text] {} commands, atlas={}x{}", self.commands.len(), atlas_w, atlas_h);
 
         // Align stride for GPU texture upload
         let align = |v: u32| ((v + 255) / 256) * 256;
@@ -362,6 +366,7 @@ impl TextRenderer {
             let scaled_size = entry.cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(font_system, metrics);
+            buffer.set_size(font_system, Some(4096.0), Some(4096.0));
             let attrs = Attrs::new().family(Family::Name(&self.font_family));
             buffer.set_text(font_system, &entry.cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(font_system, false);
@@ -374,11 +379,13 @@ impl TextRenderer {
             let min_x = entry.min_x;
             let min_y = entry.min_y;
 
+            let mut draw_count = 0u32;
             buffer.draw(
                 font_system,
                 swash_cache,
                 CosmicColor::rgb(0xFF, 0xFF, 0xFF),
                 |x: i32, y: i32, w: u32, h: u32, color: CosmicColor| {
+                    draw_count += 1;
                     let a = color.a();
                     if a == 0 {
                         return;
@@ -397,6 +404,7 @@ impl TextRenderer {
                     }
                 },
             );
+            eprintln!("[heca-text]  '{}' -> draw_count={}", entry.cmd.text, draw_count);
         }
 
         // ── PASS 3: build vertex quads (one per command) ──
