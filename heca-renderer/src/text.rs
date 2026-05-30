@@ -258,7 +258,8 @@ impl TextRenderer {
 
             for run in buffer.layout_runs() {
                 for glyph in run.glyphs {
-                    let physical = glyph.physical((0.0, 0.0), 1.0);
+                    // Use cosmic-text's own formula: offset by (0, line_y) so physical.y already includes baseline
+                    let physical = glyph.physical((0.0, run.line_y), 1.0);
                     let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
                     let img = match img_opt.as_ref() {
                         Some(img) => img,
@@ -268,8 +269,9 @@ impl TextRenderer {
                     let gh = img.placement.height;
                     if gw == 0 || gh == 0 { continue; }
 
+                    // Cosmic-text draw formula: physical.x + placement.left, physical.y - placement.top
                     let left = physical.x + img.placement.left;
-                    let top = run.line_y as i32 + physical.y + img.placement.top;
+                    let top = physical.y - img.placement.top;
                     let right = left + gw as i32;
                     let bottom = top + gh as i32;
 
@@ -299,7 +301,7 @@ impl TextRenderer {
 
             for run in buffer.layout_runs() {
                 for glyph in run.glyphs {
-                    let physical = glyph.physical((0.0, 0.0), 1.0);
+                    let physical = glyph.physical((0.0, run.line_y), 1.0);
                     let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
                     let img = match img_opt.as_ref() {
                         Some(img) => img,
@@ -309,8 +311,9 @@ impl TextRenderer {
                     let gh = img.placement.height;
                     if gw == 0 || gh == 0 { continue; }
 
+                    // Cosmic-text formula: physical.x + placement.left, physical.y - placement.top
                     let dst_x = (physical.x + img.placement.left - min_x) as u32;
-                    let dst_y = (run.line_y as i32 + physical.y + img.placement.top - min_y) as u32;
+                    let dst_y = (physical.y - img.placement.top - min_y) as u32;
 
                     for py in 0..gh {
                         for px in 0..gw {

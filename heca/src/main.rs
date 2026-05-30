@@ -456,39 +456,48 @@ impl ApplicationHandler for HecaApp {
                         let phys = state.window.inner_size();
                         let win_w = phys.width as f32 / state.scale_factor as f32;
                         let win_h = phys.height as f32 / state.scale_factor as f32;
-                        let px = position.x as f32;
-                        let py = position.y as f32;
+                        let mx = state.mouse_pos.0;
+                        let my = state.mouse_pos.1;
                         if state.panetree.panes.iter().any(|p| p.id == pane_id) {
                             let delta = match dir {
-                                SplitDirection::Horizontal => (px - start_pos.0) / win_w,
-                                SplitDirection::Vertical => (py - start_pos.1) / win_h,
+                                SplitDirection::Horizontal => (mx - start_pos.0) / win_w,
+                                SplitDirection::Vertical => (my - start_pos.1) / win_h,
                             };
                             state.panetree.resize(pane_id, delta * 0.1);
                             state.drag_state = DragState::Resizing {
                                 pane_id,
                                 dir,
-                                start_pos: (px, py),
+                                start_pos: (mx, my),
                             };
                         }
                     }
-                    DragState::MovingFloat { pane_id, start_mouse, start_rect } => {
-                        let px = position.x as f32;
-                        let py = position.y as f32;
-                        let dx = px - start_mouse.0;
-                        let dy = py - start_mouse.1;
+                    DragState::MovingFloat { pane_id, offset, start_rect } => {
+                        let mx = state.mouse_pos.0;
+                        let my = state.mouse_pos.1;
+                        // Recompute pane_area to convert screen -> content-area coords
+                        let phys = state.window.inner_size();
+                        let log_w = phys.width as f32 / state.scale_factor as f32;
+                        let log_h = phys.height as f32 / state.scale_factor as f32;
+                        let chrome = ChromeConfig {
+                            tab_bar_height: 32.0,
+                            status_bar_height: 24.0,
+                            left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
+                            right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
+                        };
+                        let pane_area = chrome.content_rect(log_w, log_h);
+
+                        let new_abs_x = mx - offset.0;
+                        let new_abs_y = my - offset.1;
                         let new_rect = heca_core::types::Rect::new(
-                            start_rect.x + dx,
-                            start_rect.y + dy,
+                            new_abs_x - pane_area.x,
+                            new_abs_y - pane_area.y,
                             start_rect.w,
                             start_rect.h,
                         );
                         // Clamp so float stays at least partly visible
-                        let phys = state.window.inner_size();
-                        let log_w = phys.width as f32 / state.scale_factor as f32;
-                        let log_h = phys.height as f32 / state.scale_factor as f32;
                         let clamped = heca_core::types::Rect::new(
-                            new_rect.x.clamp(-new_rect.w + 40.0, log_w - 40.0),
-                            new_rect.y.clamp(-new_rect.h + 40.0, log_h - 40.0),
+                            new_rect.x.clamp(-new_rect.w + 40.0, pane_area.w - 40.0),
+                            new_rect.y.clamp(-new_rect.h + 40.0, pane_area.h - 40.0),
                             new_rect.w,
                             new_rect.h,
                         );
@@ -497,15 +506,15 @@ impl ApplicationHandler for HecaApp {
                         }
                         state.drag_state = DragState::MovingFloat {
                             pane_id,
-                            start_mouse: (px, py),
+                            offset,
                             start_rect: clamped,
                         };
                     }
                     DragState::ResizingFloat { pane_id, edge, start_mouse, start_rect } => {
-                        let px = position.x as f32;
-                        let py = position.y as f32;
-                        let dx = px - start_mouse.0;
-                        let dy = py - start_mouse.1;
+                        let mx = state.mouse_pos.0;
+                        let my = state.mouse_pos.1;
+                        let dx = mx - start_mouse.0;
+                        let dy = my - start_mouse.1;
                         let mut r = start_rect;
                         match edge {
                             app_state::FloatEdge::Left | app_state::FloatEdge::TopLeft | app_state::FloatEdge::BottomLeft => { r.x += dx; r.w -= dx; }
@@ -522,7 +531,7 @@ impl ApplicationHandler for HecaApp {
                             if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
                                 entry.1 = r;
                             }
-                            state.drag_state = DragState::ResizingFloat { pane_id, edge, start_mouse: (px, py), start_rect: r };
+                            state.drag_state = DragState::ResizingFloat { pane_id, edge, start_mouse: (mx, my), start_rect: r };
                         }
                     }
                     DragState::None => {}
@@ -588,9 +597,10 @@ impl ApplicationHandler for HecaApp {
                             break;
                         } else if on_title {
                             state.focused_pane = Some(pane.id);
+                            let offset = (mouse_pos.0 - abs_x, mouse_pos.1 - abs_y);
                             state.drag_state = DragState::MovingFloat {
                                 pane_id: pane.id,
-                                start_mouse: mouse_pos,
+                                offset,
                                 start_rect: *rect,
                             };
                             break;

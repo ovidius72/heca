@@ -31,7 +31,8 @@ pub enum DragState {
     },
     MovingFloat {
         pane_id: u64,
-        start_mouse: (f32, f32),
+        /// Mouse position minus float top-left at drag start (screen coords)
+        offset: (f32, f32),
         start_rect: Rect,
     },
     ResizingFloat {
