@@ -1,4 +1,4 @@
-use cosmic_text::{Attrs, Buffer, Color as CosmicColor, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -27,11 +27,6 @@ struct TextCommand {
 /// A GPU-ready text label: texture + quad.
 struct TextLabel {
     bind_group: wgpu::BindGroup,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    color: [f32; 4],
 }
 
 pub struct TextRenderer {
@@ -45,7 +40,7 @@ pub struct TextRenderer {
     sampler: wgpu::Sampler,
     scale_factor: f64,
     commands: Vec<TextCommand>,
-    atlas_size: (u32, u32),
+    _atlas_size: (u32, u32),
     font_family: String,
 }
 
@@ -192,7 +187,7 @@ impl TextRenderer {
             sampler,
             scale_factor: 1.0,
             commands: Vec::new(),
-            atlas_size: (0, 0),
+            _atlas_size: (0, 0),
             font_family: "monospace".to_string(),
         }
     }
@@ -404,11 +399,6 @@ impl TextRenderer {
 
             labels.push(TextLabel {
                 bind_group,
-                x: screen_x,
-                y: screen_y,
-                w: screen_w,
-                h: screen_h,
-                color: cmd.color,
             });
 
             base += 4;

@@ -20,14 +20,17 @@ pub enum WmAction {
     ResizeUp,
     ResizeDown,
     SidebarLeft,
+    #[allow(dead_code)]
     SidebarRight,
 }
 
+#[allow(dead_code)]
 pub struct KeyBindings {
     pub prefix: String,
     pub bindings: Vec<(String, String, WmAction)>, // (key, mods, action)
 }
 
+#[allow(dead_code)]
 impl KeyBindings {
     pub fn load(_app_config: &AppConfig) -> Self {
         // Default bindings (Ctrl+B prefix, then single key)

@@ -21,6 +21,7 @@ use winit::window::{Window, WindowId};
 struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
+    #[allow(dead_code)]
     bindings: KeyBindings,
 }
 
@@ -105,12 +106,12 @@ impl HecaApp {
         // Initialize PaneTree: one editor pane and one floating terminal
         let mut panetree = PaneTree::new();
         let editor_id = panetree.add_pane("Editor", [0.118, 0.118, 0.180, 1.0]);
-        let term_id = panetree.add_pane("Terminal", [0.094, 0.094, 0.145, 1.0]);
+        let _term_id = panetree.add_pane("Terminal", [0.094, 0.094, 0.145, 1.0]);
         // Float the terminal centered, 60% of window width, 60% of height
         // Float rect is in LOGICAL pixels (relative to pane content area)
         // Content area = full window minus chrome
-        let log_w = physical.width as f32 / scale_factor as f32;
-        let log_h = physical.height as f32 / scale_factor as f32;
+        let _log_w = physical.width as f32 / scale_factor as f32;
+        let _log_h = physical.height as f32 / scale_factor as f32;
 
         // No auto-float — user creates floats via Ctrl+B + f
 
@@ -295,6 +296,11 @@ impl HecaApp {
 
         let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
 
+        // ── Flush chrome before panes so pane text doesn't bleed over chrome ──
+        state.primitive_renderer.render(&state.device, &view, &mut encoder);
+        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+
+        // ── EMBEDDED PANES ──
         for (rect, pane) in &embedded {
             let px = pane_area.x + rect.x;
             let py = pane_area.y + rect.y;
@@ -308,9 +314,11 @@ impl HecaApp {
                 &pane.title, px + 4.0, py + 4.0, pane_text, theme.foreground.to_f32x4(),
             );
         }
+        state.primitive_renderer.render(&state.device, &view, &mut encoder);
+        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
+        // ── FLOATING PANES (back-to-front, each with own flush so text doesn't bleed) ──
         for (pane, rect) in &floats {
-            // Float rects are in content-area coords — add pane_area offset for screen
             let fx = pane_area.x + rect.x;
             let fy = pane_area.y + rect.y;
             let fbg = [0.192, 0.196, 0.267, 1.0];
@@ -321,10 +329,10 @@ impl HecaApp {
             state.text_renderer.queue_text(
                 &pane.title, fx + 4.0, fy + 4.0, pane_text, [1.0, 1.0, 1.0, 1.0],
             );
+            // Flush each float individually so lower floats' text never shows through
+            state.primitive_renderer.render(&state.device, &view, &mut encoder);
+            state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
         }
-
-        state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
         state.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
@@ -383,7 +391,7 @@ impl ApplicationHandler for HecaApp {
                 state.needs_redraw = true;
 
                 let is_ctrl = state.modifiers.control_key();
-                let is_alt = state.modifiers.alt_key();
+                let _is_alt = state.modifiers.alt_key();
                 let is_shift = state.modifiers.shift_key();
 
                 let log_key = &event.logical_key;
@@ -406,7 +414,9 @@ impl ApplicationHandler for HecaApp {
                         match direct_action {
                             Some(WmAction::SplitHorizontal) | Some(WmAction::SplitVertical)
                             | Some(WmAction::Float) | Some(WmAction::Scratchpad)
-                            | Some(WmAction::Hide) | Some(WmAction::ClosePane) => {
+                            | Some(WmAction::Hide) | Some(WmAction::ClosePane)
+                            | Some(WmAction::FocusLeft) | Some(WmAction::FocusRight)
+                            | Some(WmAction::FocusUp) | Some(WmAction::FocusDown) => {
                                 // These require prefix mode, skip in normal mode
                             }
                             Some(action) => {
@@ -550,7 +560,7 @@ impl ApplicationHandler for HecaApp {
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
                     // Scope to end compute_rects borrow before mutating panetree
                     let float_click = {
-                        let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+                        let (_embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
 
                         // Hit test floating panes first (front-to-back)
                         let mut result: Option<(u64, Option<DragState>)> = None;
