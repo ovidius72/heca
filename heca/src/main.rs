@@ -140,6 +140,8 @@ impl HecaApp {
             tab_names: vec!["Main".to_string()],
             mouse_pos: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::default(),
+            last_focused: None,
+            mouse_enabled: self.app_config.config.general.mouse,
         })
     }
 
@@ -283,6 +285,7 @@ impl HecaApp {
             InputMode::Normal => "NORMAL",
             InputMode::Prefix => "PREFIX",
             InputMode::PaneSelect { .. } => "SELECT",
+            InputMode::PaneSwap { .. } => "SWAP",
         };
         let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -301,9 +304,9 @@ impl HecaApp {
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
-        // Build letter map if in pane-select mode
+        // Build letter map if in pane-select or pane-swap mode
         let letter_map: std::collections::HashMap<u64, char> = match &state.input_mode {
-            InputMode::PaneSelect { candidates } => {
+            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates } => {
                 candidates.iter().map(|(c, id)| (*id, *c)).collect()
             }
             _ => std::collections::HashMap::new(),
@@ -464,6 +467,18 @@ impl ApplicationHandler for HecaApp {
                         }
                         state.input_mode = InputMode::Normal;
                     }
+                    InputMode::PaneSwap { candidates } => {
+                        if let Some(ch) = key_text.chars().next() {
+                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                if let Some(current_id) = state.focused_pane {
+                                    if current_id != *target_id {
+                                        state.panetree.swap_panes(current_id, *target_id);
+                                    }
+                                }
+                            }
+                        }
+                        state.input_mode = InputMode::Normal;
+                    }
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
@@ -475,6 +490,8 @@ impl ApplicationHandler for HecaApp {
                     position.y as f32 / state.scale_factor as f32,
                 );
                 state.needs_redraw = true;
+
+                if !state.mouse_enabled { return; }
 
                 match state.drag_state {
                     DragState::Resizing { pane_id, dir, start_pos } => {
@@ -563,6 +580,7 @@ impl ApplicationHandler for HecaApp {
                 }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
+                if !state.mouse_enabled { return; }
                 state.needs_redraw = true;
                 let mouse_pos = state.mouse_pos;
                 let phys = state.window.inner_size();
@@ -695,15 +713,48 @@ impl ApplicationHandler for HecaApp {
 }
 
 fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) {
+    let phys = state.window.inner_size();
+    let win_w = phys.width as f32 / state.scale_factor as f32;
+    let win_h = phys.height as f32 / state.scale_factor as f32;
+    let chrome = ChromeConfig {
+        tab_bar_height: 32.0,
+        status_bar_height: 24.0,
+        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
+        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
+    };
+    let pane_area = chrome.content_rect(win_w, win_h);
     match action {
         WmAction::FocusLeft | WmAction::FocusRight => {
             if let Some(id) = current {
-                state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Horizontal);
+                let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+                let geo = state.panetree.find_neighbor_geo(
+                    id,
+                    SplitDirection::Horizontal,
+                    pane_area.w,
+                    pane_area.h,
+                    state.last_focused,
+                );
+                if let Some(target) = geo {
+                    state.last_focused = Some(id);
+                    state.focused_pane = Some(target);
+                    state.panetree.bring_float_to_front(target);
+                }
             }
         }
         WmAction::FocusUp | WmAction::FocusDown => {
             if let Some(id) = current {
-                state.focused_pane = state.panetree.find_neighbor(id, SplitDirection::Vertical);
+                let geo = state.panetree.find_neighbor_geo(
+                    id,
+                    SplitDirection::Vertical,
+                    pane_area.w,
+                    pane_area.h,
+                    state.last_focused,
+                );
+                if let Some(target) = geo {
+                    state.last_focused = Some(id);
+                    state.focused_pane = Some(target);
+                    state.panetree.bring_float_to_front(target);
+                }
             }
         }
         WmAction::SplitHorizontal => {
@@ -738,8 +789,14 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
         }
         WmAction::ClosePane => {
             if let Some(id) = current {
+                // Find best neighbor to focus after removal
+                let neighbor = state.panetree.find_neighbor_geo(
+                    id, SplitDirection::Horizontal, pane_area.w, pane_area.h, state.last_focused)
+                    .or_else(|| state.panetree.find_neighbor_geo(
+                        id, SplitDirection::Vertical, pane_area.w, pane_area.h, state.last_focused));
                 state.panetree.remove(id);
-                state.focused_pane = None;
+                state.focused_pane = neighbor;
+                state.last_focused = None;
             }
         }
         WmAction::TabNext => {
@@ -796,38 +853,42 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
                 state.input_mode = InputMode::PaneSelect { candidates };
             }
         }
+        WmAction::SwapSelect => {
+            let mut candidates: Vec<(char, u64)> = Vec::new();
+            let mut embedded_ids = Vec::new();
+            collect_embedded_ids(&state.panetree.root, &state.panetree.panes, &mut embedded_ids);
+            for id in embedded_ids {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, id));
+            }
+            for (id, _) in &state.panetree.floats {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, *id));
+            }
+            if !candidates.is_empty() {
+                state.input_mode = InputMode::PaneSwap { candidates };
+            }
+        }
         WmAction::SwapLeft | WmAction::SwapRight => {
             if let Some(id) = current {
-                let dir = if matches!(action, WmAction::SwapLeft) {
-                    SplitDirection::Horizontal
-                } else {
-                    SplitDirection::Horizontal
-                };
-                if let Some(neighbor) = state.panetree.find_neighbor(id, dir) {
-                    state.panetree.swap_panes(id, neighbor);
-                } else {
-                    // No neighbor — create a new pane at the edge
-                    let new_dir = SplitDirection::Vertical;
-                    if let Some(new_id) = state.panetree.split(id, new_dir) {
-                        state.focused_pane = Some(new_id);
+                let dir = SplitDirection::Horizontal;
+                if !state.panetree.move_pane(id, dir) {
+                    // No neighbor — split and move to edge
+                    if let Some(new_id) = state.panetree.split(id, dir) {
+                        state.panetree.swap_panes(id, new_id);
+                        state.focused_pane = Some(id);
                     }
                 }
             }
         }
         WmAction::SwapUp | WmAction::SwapDown => {
             if let Some(id) = current {
-                let dir = if matches!(action, WmAction::SwapUp) {
-                    SplitDirection::Vertical
-                } else {
-                    SplitDirection::Vertical
-                };
-                if let Some(neighbor) = state.panetree.find_neighbor(id, dir) {
-                    state.panetree.swap_panes(id, neighbor);
-                } else {
-                    // No neighbor — create a new pane at the edge
-                    let new_dir = SplitDirection::Horizontal;
-                    if let Some(new_id) = state.panetree.split(id, new_dir) {
-                        state.focused_pane = Some(new_id);
+                let dir = SplitDirection::Vertical;
+                if !state.panetree.move_pane(id, dir) {
+                    // No neighbor — split and move to edge
+                    if let Some(new_id) = state.panetree.split(id, dir) {
+                        state.panetree.swap_panes(id, new_id);
+                        state.focused_pane = Some(id);
                     }
                 }
             }

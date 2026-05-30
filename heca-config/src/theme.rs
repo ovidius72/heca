@@ -218,6 +218,12 @@ impl Theme {
 pub struct GeneralConfig {
     pub window_width: u32,
     pub window_height: u32,
+    #[serde(default = "default_mouse")]
+    pub mouse: bool,
+}
+
+fn default_mouse() -> bool {
+    true
 }
 
 impl Default for GeneralConfig {
@@ -225,6 +231,7 @@ impl Default for GeneralConfig {
         Self {
             window_width: 1280,
             window_height: 800,
+            mouse: true,
         }
     }
 }
@@ -260,6 +267,7 @@ impl Default for Config {
         keybindings.insert("next_pane".to_string(), "n".to_string());
         keybindings.insert("prev_pane".to_string(), "p".to_string());
         keybindings.insert("pane_select".to_string(), "q".to_string());
+        keybindings.insert("swap_select".to_string(), "Q".to_string());
         keybindings.insert("resize_left".to_string(), "H".to_string());
         keybindings.insert("resize_right".to_string(), "L".to_string());
         keybindings.insert("resize_up".to_string(), "K".to_string());

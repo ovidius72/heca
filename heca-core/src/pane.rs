@@ -362,33 +362,167 @@ impl PaneTree {
         }
     }
 
-    /// Resize a split: adjust the ratio of the split containing the given pane.
+    /// Resize the immediate parent split of a pane (single border move).
     /// delta is a signed amount to add to the ratio (e.g., 0.05).
     pub fn resize(&mut self, pane_id: u64, delta: f32) {
         PaneTree::resize_in_node(&mut self.root, pane_id, delta);
     }
 
-    fn resize_in_node(node: &mut LayoutNode, pane_id: u64, delta: f32) {
+    /// Only adjust the ratio at the split where pane_id is a DIRECT child.
+    fn resize_in_node(node: &mut LayoutNode, pane_id: u64, delta: f32) -> bool {
         match node {
-            LayoutNode::Split {
-                left,
-                right,
-                ratio,
-                ..
-            } if left.contains(pane_id) || right.contains(pane_id) => {
-                if left.contains(pane_id) {
+            LayoutNode::Split { left, right, ratio, .. } => {
+                if matches!(left.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id) {
                     *ratio = (*ratio + delta).clamp(0.15, 0.85);
-                } else {
-                    *ratio = (*ratio - delta).clamp(0.15, 0.85);
+                    return true;
                 }
-                PaneTree::resize_in_node(left, pane_id, delta);
-                PaneTree::resize_in_node(right, pane_id, delta);
+                if matches!(right.as_ref(), LayoutNode::Leaf { pane_id: pid } if *pid == pane_id) {
+                    *ratio = (*ratio - delta).clamp(0.15, 0.85);
+                    return true;
+                }
+                if Self::resize_in_node(left, pane_id, delta) {
+                    return true;
+                }
+                if Self::resize_in_node(right, pane_id, delta) {
+                    return true;
+                }
+                false
             }
-            LayoutNode::Split { left, right, .. } => {
-                PaneTree::resize_in_node(left, pane_id, delta);
-                PaneTree::resize_in_node(right, pane_id, delta);
+            _ => false,
+        }
+    }
+
+    /// Check if a pane is visible (embedded or floating).
+    pub fn is_visible(&self, pane_id: u64) -> bool {
+        self.panes.iter().any(|p| {
+            p.id == pane_id && (p.disposition == Disposition::Embedded || p.disposition == Disposition::Floating)
+        })
+    }
+
+    /// Geometric neighbor detection: find the best pane in the given direction.
+    /// Uses rectangle overlap for scoring; prefers `preferred` on ties.
+    pub fn find_neighbor_geo(&self, pane_id: u64, dir: SplitDirection, width: f32, height: f32, preferred: Option<u64>) -> Option<u64> {
+        let (embedded, _) = self.compute_rects(width, height);
+        let current_rect = embedded.iter().find(|(_, p)| p.id == pane_id).map(|(r, _)| *r)?;
+
+        let mut best: Option<(u64, f32, f32)> = None; // (pane_id, overlap, center_dist)
+
+        for (rect, pane) in &embedded {
+            if pane.id == pane_id { continue; }
+            let (in_dir, overlap) = match dir {
+                SplitDirection::Horizontal => {
+                    let in_dir = if rect.x + rect.w <= current_rect.x + 0.01 {
+                        // rect is to the left
+                        true
+                    } else if rect.x >= current_rect.x + current_rect.w - 0.01 {
+                        // rect is to the right
+                        true
+                    } else {
+                        false
+                    };
+                    let y_overlap = (rect.y + rect.h).min(current_rect.y + current_rect.h) - rect.y.max(current_rect.y);
+                    (in_dir, y_overlap.max(0.0))
+                }
+                SplitDirection::Vertical => {
+                    let in_dir = if rect.y + rect.h <= current_rect.y + 0.01 {
+                        // rect is above
+                        true
+                    } else if rect.y >= current_rect.y + current_rect.h - 0.01 {
+                        // rect is below
+                        true
+                    } else {
+                        false
+                    };
+                    let x_overlap = (rect.x + rect.w).min(current_rect.x + current_rect.w) - rect.x.max(current_rect.x);
+                    (in_dir, x_overlap.max(0.0))
+                }
+            };
+
+            if !in_dir || overlap <= 0.0 { continue; }
+
+            let center_dist = match dir {
+                SplitDirection::Horizontal => {
+                    let curr_cy = current_rect.y + current_rect.h / 2.0;
+                    let other_cy = rect.y + rect.h / 2.0;
+                    (curr_cy - other_cy).abs()
+                }
+                SplitDirection::Vertical => {
+                    let curr_cx = current_rect.x + current_rect.w / 2.0;
+                    let other_cx = rect.x + rect.w / 2.0;
+                    (curr_cx - other_cx).abs()
+                }
+            };
+
+            // Tiebreak: prefer `preferred` pane
+            let is_preferred = preferred == Some(pane.id);
+            let best_is_preferred = best.map_or(false, |(id, _, _)| preferred == Some(id));
+
+            let better = match best {
+                None => true,
+                Some((_, best_overlap, best_dist)) => {
+                    if is_preferred && !best_is_preferred {
+                        true
+                    } else if !is_preferred && best_is_preferred {
+                        false
+                    } else if overlap > best_overlap + 0.1 {
+                        true
+                    } else if (overlap - best_overlap).abs() < 0.1 && center_dist < best_dist {
+                        true
+                    } else {
+                        false
+                    }
+                }
+            };
+
+            if better {
+                best = Some((pane.id, overlap, center_dist));
             }
-            _ => {}
+        }
+
+        best.map(|(id, _, _)| id)
+    }
+
+    /// Move a pane by swapping the subtrees at the lowest common ancestor
+    /// with a matching direction. Falls back to ID-swap if no structural match.
+    pub fn move_pane(&mut self, pane_id: u64, dir: SplitDirection) -> bool {
+        if let Some(neighbor) = self.find_neighbor(pane_id, dir) {
+            // Try structural subtree swap at LCA with matching direction
+            if Self::swap_subtrees_at_lca(&mut self.root, pane_id, neighbor, dir) {
+                return true;
+            }
+            // Fall back to ID swap
+            self.swap_panes(pane_id, neighbor);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn swap_subtrees_at_lca(node: &mut LayoutNode, a: u64, b: u64, dir: SplitDirection) -> bool {
+        match node {
+            LayoutNode::Split { left, right, dir: split_dir, .. } => {
+                let a_in_left = left.contains(a);
+                let b_in_left = left.contains(b);
+                let a_in_right = right.contains(a);
+                let b_in_right = right.contains(b);
+
+                // If a and b are in different children AND the split direction matches,
+                // swap the entire child subtrees.
+                if *split_dir == dir && ((a_in_left && b_in_right) || (b_in_left && a_in_right)) {
+                    std::mem::swap(left, right);
+                    return true;
+                }
+
+                // Otherwise recurse into the child that contains either a or b
+                if (a_in_left || b_in_left) && Self::swap_subtrees_at_lca(left, a, b, dir) {
+                    return true;
+                }
+                if (a_in_right || b_in_right) && Self::swap_subtrees_at_lca(right, a, b, dir) {
+                    return true;
+                }
+                false
+            }
+            _ => false,
         }
     }
 

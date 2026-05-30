@@ -13,6 +13,8 @@ pub enum InputMode {
     Prefix,
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
     PaneSelect { candidates: Vec<(char, u64)> },
+    /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
+    PaneSwap { candidates: Vec<(char, u64)> },
 }
 
 #[derive(Clone, Debug)]
@@ -71,4 +73,8 @@ pub struct AppState {
     pub tab_names: Vec<String>,
     pub mouse_pos: (f32, f32),
     pub modifiers: ModifiersState,
+    /// Most recently focused pane (for "go back" behavior).
+    pub last_focused: Option<u64>,
+    /// Whether mouse interactions are enabled.
+    pub mouse_enabled: bool,
 }

@@ -24,6 +24,7 @@ pub enum WmAction {
     NextPane,
     PrevPane,
     PaneSelect,
+    SwapSelect,
     SwapLeft,
     SwapRight,
     SwapUp,
@@ -53,6 +54,7 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
+        "swap_select" => Some(WmAction::SwapSelect),
         "swap_left" => Some(WmAction::SwapLeft),
         "swap_right" => Some(WmAction::SwapRight),
         "swap_up" => Some(WmAction::SwapUp),
@@ -140,7 +142,10 @@ impl KeyBindings {
             let key_match = b.key.eq_ignore_ascii_case(&key)
                 || b.key.eq_ignore_ascii_case(&named_key)
                 || b.key.eq_ignore_ascii_case(&phys_name);
-            if key_match && b.ctrl == ctrl && b.shift == shift {
+            // Bindings without explicit ctrl match regardless of ctrl state
+            // (needed for tmux-style prefix chords where ctrl may still be held)
+            let ctrl_match = !b.ctrl || b.ctrl == ctrl;
+            if key_match && ctrl_match && b.shift == shift {
                 return Some(b.action);
             }
         }
