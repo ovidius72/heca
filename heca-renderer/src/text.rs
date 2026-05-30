@@ -1,4 +1,4 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Color as CosmicColor, Family, FontSystem, Metrics, Shaping, SwashCache};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -24,8 +24,18 @@ struct TextCommand {
     color: [f32; 4],
 }
 
+/// Per-command atlas entry.
+struct CmdAtlas {
+    cmd: TextCommand,
+    atlas_x: u32,
+    atlas_y: u32,
+    width: u32,
+    height: u32,
+    min_x: i32,
+    min_y: i32,
+}
+
 /// GPU text renderer powered by cosmic-text.
-/// Phase 1: simple per-frame atlas approach.
 pub struct TextRenderer {
     font_system: FontSystem,
     swash_cache: SwashCache,
@@ -207,12 +217,10 @@ impl TextRenderer {
         self.scale_factor = scale;
     }
 
-    /// Set the font family name (e.g. "JetBrainsMono Nerd Font", "Menlo", "monospace").
     pub fn set_font_family(&mut self, family: &str) {
         self.font_family = family.to_string();
     }
 
-    /// Queue a line of text for rendering (collected until `render()` is called).
     pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
         self.commands.push(TextCommand {
             text: text.to_string(),
@@ -223,8 +231,6 @@ impl TextRenderer {
         });
     }
 
-    /// Build the atlas, upload to GPU, and return vertices/indices for drawing.
-    /// Uses per-glyph quads: each glyph gets its own quad with exact UV mapping.
     fn build_atlas(
         &mut self,
         device: &wgpu::Device,
@@ -234,29 +240,15 @@ impl TextRenderer {
             return (Vec::new(), Vec::new());
         }
 
-        // Collect all glyphs from all commands, rasterize them, and pack into atlas.
-        #[derive(Clone, Copy)]
-        struct GlyphQuad {
-            x: f32,      // screen x (logical px)
-            y: f32,      // screen y (logical px)
-            w: f32,      // quad width (logical px)
-            h: f32,      // quad height (logical px)
-            u: f32,      // atlas u0
-            v: f32,      // atlas v0
-            uw: f32,     // atlas u width
-            vh: f32,     // atlas v height
-            color: [f32; 4],
-        }
-
-        let mut glyphs: Vec<GlyphQuad> = Vec::new();
-        let mut atlas_x = 0u32;
-        let mut atlas_y = 0u32;
+        // ── PASS 1: shape each command and measure exact glyph bounds ──
+        let mut entries: Vec<CmdAtlas> = Vec::new();
+        let mut atlas_cursor_x = 0u32;
+        let mut atlas_cursor_y = 0u32;
         let mut row_height = 0u32;
         let mut total_width = 0u32;
-        let mut total_height = 0u32;
-        const PAD: u32 = 2; // padding between glyphs in atlas
+        const PAD: u32 = 4; // padding around each command in atlas
+        const MAX_ATLAS_W: u32 = 2048;
 
-        // First pass: rasterize all glyphs, measure atlas size
         for cmd in &self.commands {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
@@ -265,11 +257,17 @@ impl TextRenderer {
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
+            // Measure exact pixel bounds by inspecting every glyph image
+            let mut min_x = i32::MAX;
+            let mut min_y = i32::MAX;
+            let mut max_x = i32::MIN;
+            let mut max_y = i32::MIN;
+            let mut has_glyphs = false;
+
             for run in buffer.layout_runs() {
                 for glyph in run.glyphs {
                     let physical = glyph.physical((0.0, 0.0), 1.0);
-                    let cache_key = physical.cache_key;
-                    let img_opt = self.swash_cache.get_image(&mut self.font_system, cache_key);
+                    let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
                     let img = match img_opt.as_ref() {
                         Some(img) => img,
                         None => continue,
@@ -278,116 +276,189 @@ impl TextRenderer {
                     let gh = img.placement.height;
                     if gw == 0 || gh == 0 { continue; }
 
-                    // Glyph image placed in atlas at (atlas_x, atlas_y)
-                    let u0 = atlas_x as f32;
-                    let v0 = atlas_y as f32;
+                    let left = physical.x + img.placement.left;
+                    let top = run.line_y as i32 + physical.y + img.placement.top;
+                    let right = left + gw as i32;
+                    let bottom = top + gh as i32;
 
-                    // Screen position: cmd origin + glyph position + image offset
-                    // All in logical pixels (divide by scale_factor)
-                    let scale = self.scale_factor as f32;
-                    let sx = cmd.x + (physical.x + img.placement.left) as f32 / scale;
-                    let sy = cmd.y + (run.line_y + physical.y as f32 + img.placement.top as f32) / scale;
-                    let sw = gw as f32 / scale;
-                    let sh = gh as f32 / scale;
-
-                    glyphs.push(GlyphQuad {
-                        x: sx, y: sy, w: sw, h: sh,
-                        u: u0, v: v0, uw: gw as f32, vh: gh as f32,
-                        color: cmd.color,
-                    });
-
-                    // Advance atlas cursor
-                    atlas_x += gw + PAD;
-                    row_height = row_height.max(gh + PAD);
-                    total_width = total_width.max(atlas_x);
+                    min_x = min_x.min(left);
+                    min_y = min_y.min(top);
+                    max_x = max_x.max(right);
+                    max_y = max_y.max(bottom);
+                    has_glyphs = true;
                 }
-                // New line in atlas
-                atlas_x = 0;
-                atlas_y += row_height;
-                total_height = total_height.max(atlas_y);
+            }
+
+            if !has_glyphs {
+                // No renderable glyphs — skip but still create a tiny entry so indices stay aligned
+                entries.push(CmdAtlas {
+                    cmd: TextCommand {
+                        text: cmd.text.clone(),
+                        x: cmd.x,
+                        y: cmd.y,
+                        font_size: cmd.font_size,
+                        color: cmd.color,
+                    },
+                    atlas_x: 0,
+                    atlas_y: 0,
+                    width: 1,
+                    height: 1,
+                    min_x: 0,
+                    min_y: 0,
+                });
+                continue;
+            }
+
+            let cmd_w = (max_x - min_x) as u32 + PAD * 2;
+            let cmd_h = (max_y - min_y) as u32 + PAD * 2;
+
+            // Simple row packing
+            if atlas_cursor_x + cmd_w > MAX_ATLAS_W {
+                atlas_cursor_x = 0;
+                atlas_cursor_y += row_height;
                 row_height = 0;
             }
+
+            entries.push(CmdAtlas {
+                cmd: TextCommand {
+                    text: cmd.text.clone(),
+                    x: cmd.x,
+                    y: cmd.y,
+                    font_size: cmd.font_size,
+                    color: cmd.color,
+                },
+                atlas_x: atlas_cursor_x,
+                atlas_y: atlas_cursor_y,
+                width: cmd_w,
+                height: cmd_h,
+                min_x,
+                min_y,
+            });
+
+            atlas_cursor_x += cmd_w;
+            row_height = row_height.max(cmd_h);
+            total_width = total_width.max(atlas_cursor_x);
         }
 
-        if glyphs.is_empty() {
-            return (Vec::new(), Vec::new());
-        }
-
+        let atlas_h = (atlas_cursor_y + row_height).max(1);
         let atlas_w = total_width.max(1);
-        let atlas_h = total_height.max(1);
         self.atlas_size = (atlas_w, atlas_h);
 
+        // Align stride for GPU texture upload
         let align = |v: u32| ((v + 255) / 256) * 256;
         let stride = align(atlas_w);
         let mut atlas = vec![0u8; (stride * atlas_h) as usize];
 
-        // Second pass: actually rasterize and blit into atlas
-        let mut glyph_idx = 0usize;
-        for cmd in &self.commands {
-            let scaled_size = cmd.font_size * self.scale_factor as f32;
+        // ── PASS 2: draw each command into the atlas using Buffer::draw ──
+        // Split mutable borrows so we can pass font_system + swash_cache together
+        let font_system = &mut self.font_system;
+        let swash_cache = &mut self.swash_cache;
+
+        for entry in &entries {
+            if entry.width <= 1 && entry.height <= 1 {
+                continue; // empty command
+            }
+
+            let scaled_size = entry.cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
-            let mut buffer = Buffer::new(&mut self.font_system, metrics);
+            let mut buffer = Buffer::new(font_system, metrics);
             let attrs = Attrs::new().family(Family::Name(&self.font_family));
-            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
-            buffer.shape_until_scroll(&mut self.font_system, false);
+            buffer.set_text(font_system, &entry.cmd.text, &attrs, Shaping::Advanced);
+            buffer.shape_until_scroll(font_system, false);
 
-            for run in buffer.layout_runs() {
-                for glyph in run.glyphs {
-                    let physical = glyph.physical((0.0, 0.0), 1.0);
-                    let cache_key = physical.cache_key;
-                    let img_opt = self.swash_cache.get_image(&mut self.font_system, cache_key);
-                    let img = match img_opt.as_ref() {
-                        Some(img) => img,
-                        None => continue,
-                    };
-                    let gw = img.placement.width;
-                    let gh = img.placement.height;
-                    if gw == 0 || gh == 0 { continue; }
+            let offset_x = entry.atlas_x + PAD;
+            let offset_y = entry.atlas_y + PAD;
+            let atlas_w_local = atlas_w;
+            let atlas_h_local = atlas_h;
+            let stride_local = stride;
+            let min_x = entry.min_x;
+            let min_y = entry.min_y;
 
-                    let g = &glyphs[glyph_idx];
-                    let ax = g.u as u32;
-                    let ay = g.v as u32;
-
-                    for py in 0..gh {
-                        for px in 0..gw {
-                            let src_idx = (py * gw + px) as usize;
-                            let dst_x = ax + px;
-                            let dst_y = ay + py;
-                            if dst_x < atlas_w && dst_y < atlas_h {
-                                let dst_idx = (dst_y * stride + dst_x) as usize;
-                                atlas[dst_idx] = atlas[dst_idx].saturating_add(img.data[src_idx]);
+            buffer.draw(
+                font_system,
+                swash_cache,
+                CosmicColor::rgb(0xFF, 0xFF, 0xFF),
+                |x: i32, y: i32, w: u32, h: u32, color: CosmicColor| {
+                    let a = color.a();
+                    if a == 0 {
+                        return;
+                    }
+                    let base_x = offset_x as i32 + (x - min_x);
+                    let base_y = offset_y as i32 + (y - min_y);
+                    for dy in 0..h {
+                        for dx in 0..w {
+                            let px = base_x + dx as i32;
+                            let py = base_y + dy as i32;
+                            if px >= 0 && px < atlas_w_local as i32 && py >= 0 && py < atlas_h_local as i32 {
+                                let idx = (py as u32 * stride_local + px as u32) as usize;
+                                atlas[idx] = atlas[idx].saturating_add(a);
                             }
                         }
                     }
-                    glyph_idx += 1;
-                }
-            }
+                },
+            );
         }
 
-        // Build vertices and indices from glyph quads
-        let mut vertices = Vec::with_capacity(glyphs.len() * 4);
-        let mut indices = Vec::with_capacity(glyphs.len() * 6);
-        for (i, g) in glyphs.iter().enumerate() {
-            let base = i as u16 * 4;
-            let x0 = g.x;
-            let y0 = g.y;
-            let x1 = g.x + g.w;
-            let y1 = g.y + g.h;
-            let u0 = g.u / atlas_w as f32;
-            let u1 = (g.u + g.uw) / atlas_w as f32;
-            let v0 = g.v / atlas_h as f32;
-            let v1 = (g.v + g.vh) / atlas_h as f32;
+        // ── PASS 3: build vertex quads (one per command) ──
+        let scale = self.scale_factor as f32;
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+        let mut base = 0u16;
 
-            vertices.push(TextVertex { position: [x0, y0], texcoord: [u0, v0], color: g.color });
-            vertices.push(TextVertex { position: [x1, y0], texcoord: [u1, v0], color: g.color });
-            vertices.push(TextVertex { position: [x1, y1], texcoord: [u1, v1], color: g.color });
-            vertices.push(TextVertex { position: [x0, y1], texcoord: [u0, v1], color: g.color });
+        for entry in &entries {
+            if entry.width <= 1 && entry.height <= 1 {
+                // Empty command — push degenerate quad
+                vertices.push(TextVertex {
+                    position: [0.0, 0.0],
+                    texcoord: [0.0, 0.0],
+                    color: [0.0, 0.0, 0.0, 0.0],
+                });
+                vertices.push(TextVertex {
+                    position: [0.0, 0.0],
+                    texcoord: [0.0, 0.0],
+                    color: [0.0, 0.0, 0.0, 0.0],
+                });
+                vertices.push(TextVertex {
+                    position: [0.0, 0.0],
+                    texcoord: [0.0, 0.0],
+                    color: [0.0, 0.0, 0.0, 0.0],
+                });
+                vertices.push(TextVertex {
+                    position: [0.0, 0.0],
+                    texcoord: [0.0, 0.0],
+                    color: [0.0, 0.0, 0.0, 0.0],
+                });
+                indices.push(base);
+                indices.push(base + 1);
+                indices.push(base + 2);
+                indices.push(base);
+                indices.push(base + 2);
+                indices.push(base + 3);
+                base += 4;
+                continue;
+            }
+
+            let x0 = entry.cmd.x + entry.min_x as f32 / scale;
+            let y0 = entry.cmd.y + entry.min_y as f32 / scale;
+            let x1 = x0 + entry.width as f32 / scale;
+            let y1 = y0 + entry.height as f32 / scale;
+
+            let u0 = entry.atlas_x as f32 / atlas_w as f32;
+            let u1 = (entry.atlas_x + entry.width) as f32 / atlas_w as f32;
+            let v0 = entry.atlas_y as f32 / atlas_h as f32;
+            let v1 = (entry.atlas_y + entry.height) as f32 / atlas_h as f32;
+
+            vertices.push(TextVertex { position: [x0, y0], texcoord: [u0, v0], color: entry.cmd.color });
+            vertices.push(TextVertex { position: [x1, y0], texcoord: [u1, v0], color: entry.cmd.color });
+            vertices.push(TextVertex { position: [x1, y1], texcoord: [u1, v1], color: entry.cmd.color });
+            vertices.push(TextVertex { position: [x0, y1], texcoord: [u0, v1], color: entry.cmd.color });
             indices.push(base);
             indices.push(base + 1);
             indices.push(base + 2);
             indices.push(base);
             indices.push(base + 2);
             indices.push(base + 3);
+            base += 4;
         }
 
         // Upload atlas texture
@@ -405,8 +476,7 @@ impl TextRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        // bytes_per_row must be aligned to COPY_BYTES_PER_ROW_ALIGNMENT (256)
-        // Use the same aligned stride from allocation
+
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -454,7 +524,6 @@ impl TextRenderer {
         (vertices, indices)
     }
 
-    /// Submit all queued text to the GPU.
     pub fn render(
         &mut self,
         device: &wgpu::Device,
