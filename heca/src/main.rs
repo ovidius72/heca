@@ -453,7 +453,7 @@ impl ApplicationHandler for HecaApp {
                             return;
                         }
 
-                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key, true);
+                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
                         if let Some(act) = action {
                             execute_action(act, state.focused_pane, state);
                         }

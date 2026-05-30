@@ -63,11 +63,33 @@ fn action_from_name(name: &str) -> Option<WmAction> {
     }
 }
 
-/// Parsed keybinding entry.
+/// Binding priority: lower = checked first. Focus wins over resize on conflicts.
+fn action_priority(action: WmAction) -> u8 {
+    match action {
+        // Navigation (highest priority)
+        WmAction::FocusLeft | WmAction::FocusRight |
+        WmAction::FocusUp | WmAction::FocusDown |
+        WmAction::NextPane | WmAction::PrevPane => 0,
+        // Pane management
+        WmAction::SplitHorizontal | WmAction::SplitVertical |
+        WmAction::Float | WmAction::Scratchpad |
+        WmAction::Hide | WmAction::ClosePane |
+        WmAction::PaneSelect | WmAction::SwapSelect => 1,
+        // Swap
+        WmAction::SwapLeft | WmAction::SwapRight |
+        WmAction::SwapUp | WmAction::SwapDown => 2,
+        // Resize (lowest priority — checked last)
+        WmAction::ResizeLeft | WmAction::ResizeRight |
+        WmAction::ResizeUp | WmAction::ResizeDown => 3,
+        // Other
+        _ => 4,
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Binding {
     action: WmAction,
-    key: String,          // e.g. "h", "Space", "-"
+    key: String,
     ctrl: bool,
     shift: bool,
     #[allow(dead_code)]
@@ -91,14 +113,13 @@ impl KeyBindings {
                 }
             }
         }
-        eprintln!("[heca-bindings] Loaded {} bindings:", bindings.len());
-        for b in &bindings {
-            eprintln!("  {:?}: key='{}' ctrl={} shift={}", b.action, b.key, b.ctrl, b.shift);
-        }
+        // Sort by priority so focus is checked before resize on conflicts
+        bindings.sort_by_key(|b| action_priority(b.action));
         Self { bindings }
     }
 
     /// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
+    /// Preserves key case exactly; shift ONLY from explicit "Shift+" modifier.
     fn parse_key(s: &str) -> (bool, bool, bool, String) {
         let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
         let mut ctrl = false;
@@ -110,19 +131,12 @@ impl KeyBindings {
                 "ctrl" => ctrl = true,
                 "shift" => shift = true,
                 "alt" => alt = true,
-                other => key = other.to_string(),
+                _ => key = part.to_string(),
             }
-        }
-        // Single uppercase letter implies shift unless explicit
-        if key.len() == 1 && key.chars().next().unwrap().is_ascii_uppercase() && parts.len() == 1 {
-            shift = true;
         }
         (ctrl, shift, alt, key)
     }
 
-    /// Resolve a key press to an action.
-    /// `in_prefix`: when true, also tries with ctrl=false if exact match fails
-    ///              (handles macOS where modifier-release event may be delayed).
     pub fn resolve(
         &self,
         key_text: &str,
@@ -131,7 +145,6 @@ impl KeyBindings {
         shift: bool,
         named: &winit::keyboard::Key,
         phys: &winit::keyboard::PhysicalKey,
-        in_prefix: bool,
     ) -> Option<WmAction> {
         let key = key_text.to_string();
         let named_key = match named {
@@ -148,41 +161,19 @@ impl KeyBindings {
             _ => String::new(),
         };
 
-        // Helper: try once with given ctrl value
-        let try_resolve = |try_ctrl: bool| -> Option<WmAction> {
-            for b in &self.bindings {
-                // Single-char bindings: exact case-sensitive text match ONLY.
-                // Physical key fallback ONLY when key_text is empty (macOS Ctrl+key).
-                let key_match = if b.key.len() == 1 {
-                    b.key == key
-                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
-                } else {
-                    b.key.eq_ignore_ascii_case(&key)
-                        || b.key.eq_ignore_ascii_case(&named_key)
-                        || b.key.eq_ignore_ascii_case(&phys_name)
-                };
-                let ctrl_match = b.ctrl == try_ctrl;
-                let shift_match = b.shift == shift;
-                if in_prefix {
-                    eprintln!("[resolve] try_ctrl={} b.key={} b.ctrl={} b.shift={} | key_match={} ctrl_match={} shift_match={} action={:?}",
-                        try_ctrl, b.key, b.ctrl, b.shift, key_match, ctrl_match, shift_match, b.action);
-                }
-                if key_match && ctrl_match && shift_match {
-                    return Some(b.action);
-                }
-            }
-            None
-        };
+        for b in &self.bindings {
+            let key_match = if b.key.len() == 1 {
+                // Single-char: exact case-sensitive.
+                // Also physical key fallback when key_text is empty (macOS Ctrl+key).
+                b.key == key || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
+            } else {
+                b.key.eq_ignore_ascii_case(&key)
+                    || b.key.eq_ignore_ascii_case(&named_key)
+                    || b.key.eq_ignore_ascii_case(&phys_name)
+            };
 
-        // First: exact match (Ctrl+hjkl → swap)
-        if let Some(action) = try_resolve(ctrl) {
-            return Some(action);
-        }
-        // Second: in prefix mode, try with ctrl=false (hjkl → focus)
-        // This handles macOS where modifier-release may be delayed after prefix
-        if in_prefix && ctrl {
-            if let Some(action) = try_resolve(false) {
-                return Some(action);
+            if key_match && b.ctrl == ctrl && b.shift == shift {
+                return Some(b.action);
             }
         }
         None
