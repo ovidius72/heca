@@ -224,6 +224,7 @@ impl TextRenderer {
     }
 
     /// Build the atlas, upload to GPU, and return vertices/indices for drawing.
+    /// Uses per-glyph quads: each glyph gets its own quad with exact UV mapping.
     fn build_atlas(
         &mut self,
         device: &wgpu::Device,
@@ -233,11 +234,29 @@ impl TextRenderer {
             return (Vec::new(), Vec::new());
         }
 
-        // First pass: measure all text blocks to size the atlas
-        let mut measurements = Vec::new();
-        let mut total_height = 0u32;
-        let mut max_width = 0u32;
+        // Collect all glyphs from all commands, rasterize them, and pack into atlas.
+        #[derive(Clone, Copy)]
+        struct GlyphQuad {
+            x: f32,      // screen x (logical px)
+            y: f32,      // screen y (logical px)
+            w: f32,      // quad width (logical px)
+            h: f32,      // quad height (logical px)
+            u: f32,      // atlas u0
+            v: f32,      // atlas v0
+            uw: f32,     // atlas u width
+            vh: f32,     // atlas v height
+            color: [f32; 4],
+        }
 
+        let mut glyphs: Vec<GlyphQuad> = Vec::new();
+        let mut atlas_x = 0u32;
+        let mut atlas_y = 0u32;
+        let mut row_height = 0u32;
+        let mut total_width = 0u32;
+        let mut total_height = 0u32;
+        const PAD: u32 = 2; // padding between glyphs in atlas
+
+        // First pass: rasterize all glyphs, measure atlas size
         for cmd in &self.commands {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
@@ -246,42 +265,65 @@ impl TextRenderer {
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
-            let mut cmd_w = 0f32;
-            let mut cmd_h = 0f32;
             for run in buffer.layout_runs() {
-                let mut line_w = 0f32;
                 for glyph in run.glyphs {
-                    line_w += glyph.w;
+                    let physical = glyph.physical((0.0, 0.0), 1.0);
+                    let cache_key = physical.cache_key;
+                    let img_opt = self.swash_cache.get_image(&mut self.font_system, cache_key);
+                    let img = match img_opt.as_ref() {
+                        Some(img) => img,
+                        None => continue,
+                    };
+                    let gw = img.placement.width;
+                    let gh = img.placement.height;
+                    if gw == 0 || gh == 0 { continue; }
+
+                    // Glyph image placed in atlas at (atlas_x, atlas_y)
+                    let u0 = atlas_x as f32;
+                    let v0 = atlas_y as f32;
+
+                    // Screen position: cmd origin + glyph position + image offset
+                    // All in logical pixels (divide by scale_factor)
+                    let scale = self.scale_factor as f32;
+                    let sx = cmd.x + (physical.x + img.placement.left) as f32 / scale;
+                    let sy = cmd.y + (run.line_y + physical.y as f32 + img.placement.top as f32) / scale;
+                    let sw = gw as f32 / scale;
+                    let sh = gh as f32 / scale;
+
+                    glyphs.push(GlyphQuad {
+                        x: sx, y: sy, w: sw, h: sh,
+                        u: u0, v: v0, uw: gw as f32, vh: gh as f32,
+                        color: cmd.color,
+                    });
+
+                    // Advance atlas cursor
+                    atlas_x += gw + PAD;
+                    row_height = row_height.max(gh + PAD);
+                    total_width = total_width.max(atlas_x);
                 }
-                cmd_w = cmd_w.max(line_w);
-                cmd_h += run.line_height;
+                // New line in atlas
+                atlas_x = 0;
+                atlas_y += row_height;
+                total_height = total_height.max(atlas_y);
+                row_height = 0;
             }
-            let w = cmd_w.ceil().max(1.0) as u32 + 4; // +4 padding for glyph overhang
-            let h = cmd_h.ceil().max(1.0) as u32 + 4;
-            measurements.push((w, h));
-            max_width = max_width.max(w);
-            total_height += h;
         }
 
+        if glyphs.is_empty() {
+            return (Vec::new(), Vec::new());
+        }
 
-
-        let atlas_w = max_width.max(1);
-        let atlas_h = total_height.max(1) + 4; // +4 padding at bottom
+        let atlas_w = total_width.max(1);
+        let atlas_h = total_height.max(1);
         self.atlas_size = (atlas_w, atlas_h);
 
-        // Align stride for GPU texture upload
         let align = |v: u32| ((v + 255) / 256) * 256;
         let stride = align(atlas_w);
-
-        // Allocate atlas buffer with aligned stride
         let mut atlas = vec![0u8; (stride * atlas_h) as usize];
-        let mut vertices = Vec::new();
-        let mut indices = Vec::new();
-        let mut current_y = 0u32;
 
-        // Second pass: rasterize each command into the atlas
-        for (i, cmd) in self.commands.iter().enumerate() {
-            let (cmd_w, cmd_h) = measurements[i];
+        // Second pass: actually rasterize and blit into atlas
+        let mut glyph_idx = 0usize;
+        for cmd in &self.commands {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
@@ -289,54 +331,63 @@ impl TextRenderer {
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
-            // Rasterize glyphs into atlas at (0, current_y), using stride for row width
             for run in buffer.layout_runs() {
-                let line_y = run.line_y;
                 for glyph in run.glyphs {
                     let physical = glyph.physical((0.0, 0.0), 1.0);
-                    if let Some(img) = self.swash_cache.get_image(&mut self.font_system, physical.cache_key) {
-                        let gx = physical.x as i32;
-                        let gy = current_y as i32 + (line_y + physical.y as f32) as i32;
-                        let gw = img.placement.width;
-                        let gh = img.placement.height;
-                        for py in 0..gh {
-                            for px in 0..gw {
-                                let src_idx = (py * gw + px) as usize;
-                                let dst_x = gx + px as i32;
-                                let dst_y = gy + py as i32;
-                                if dst_x >= 0 && dst_x < stride as i32 && dst_y >= 0 && dst_y < atlas_h as i32 {
-                                    let dst_idx = (dst_y * stride as i32 + dst_x) as usize;
-                                    atlas[dst_idx] = atlas[dst_idx].saturating_add(img.data[src_idx]);
-                                }
+                    let cache_key = physical.cache_key;
+                    let img_opt = self.swash_cache.get_image(&mut self.font_system, cache_key);
+                    let img = match img_opt.as_ref() {
+                        Some(img) => img,
+                        None => continue,
+                    };
+                    let gw = img.placement.width;
+                    let gh = img.placement.height;
+                    if gw == 0 || gh == 0 { continue; }
+
+                    let g = &glyphs[glyph_idx];
+                    let ax = g.u as u32;
+                    let ay = g.v as u32;
+
+                    for py in 0..gh {
+                        for px in 0..gw {
+                            let src_idx = (py * gw + px) as usize;
+                            let dst_x = ax + px;
+                            let dst_y = ay + py;
+                            if dst_x < atlas_w && dst_y < atlas_h {
+                                let dst_idx = (dst_y * stride + dst_x) as usize;
+                                atlas[dst_idx] = atlas[dst_idx].saturating_add(img.data[src_idx]);
                             }
                         }
                     }
+                    glyph_idx += 1;
                 }
             }
+        }
 
-            // Build quad for this text block
-            let base = vertices.len() as u16;
-            let x1 = cmd.x;
-            let y1 = cmd.y;
-            let x2 = cmd.x + (cmd_w as f32 / self.scale_factor as f32);
-            let y2 = cmd.y + (cmd_h as f32 / self.scale_factor as f32);
-            let u1 = 0.0;
-            let v1 = current_y as f32 / atlas_h as f32;
-            let u2 = cmd_w as f32 / atlas_w as f32;
-            let v2 = (current_y + cmd_h) as f32 / atlas_h as f32;
+        // Build vertices and indices from glyph quads
+        let mut vertices = Vec::with_capacity(glyphs.len() * 4);
+        let mut indices = Vec::with_capacity(glyphs.len() * 6);
+        for (i, g) in glyphs.iter().enumerate() {
+            let base = i as u16 * 4;
+            let x0 = g.x;
+            let y0 = g.y;
+            let x1 = g.x + g.w;
+            let y1 = g.y + g.h;
+            let u0 = g.u / atlas_w as f32;
+            let u1 = (g.u + g.uw) / atlas_w as f32;
+            let v0 = g.v / atlas_h as f32;
+            let v1 = (g.v + g.vh) / atlas_h as f32;
 
-            vertices.push(TextVertex { position: [x1, y1], texcoord: [u1, v1], color: cmd.color });
-            vertices.push(TextVertex { position: [x2, y1], texcoord: [u2, v1], color: cmd.color });
-            vertices.push(TextVertex { position: [x2, y2], texcoord: [u2, v2], color: cmd.color });
-            vertices.push(TextVertex { position: [x1, y2], texcoord: [u1, v2], color: cmd.color });
+            vertices.push(TextVertex { position: [x0, y0], texcoord: [u0, v0], color: g.color });
+            vertices.push(TextVertex { position: [x1, y0], texcoord: [u1, v0], color: g.color });
+            vertices.push(TextVertex { position: [x1, y1], texcoord: [u1, v1], color: g.color });
+            vertices.push(TextVertex { position: [x0, y1], texcoord: [u0, v1], color: g.color });
             indices.push(base);
             indices.push(base + 1);
             indices.push(base + 2);
             indices.push(base);
             indices.push(base + 2);
             indices.push(base + 3);
-
-            current_y += cmd_h;
         }
 
         // Upload atlas texture
