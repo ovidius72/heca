@@ -91,6 +91,10 @@ impl KeyBindings {
                 }
             }
         }
+        eprintln!("[heca-bindings] Loaded {} bindings:", bindings.len());
+        for b in &bindings {
+            eprintln!("  {:?}: key='{}' ctrl={} shift={}", b.action, b.key, b.ctrl, b.shift);
+        }
         Self { bindings }
     }
 
