@@ -230,6 +230,14 @@ impl PaneTree {
         }
     }
 
+    /// Move a float to the end of the vec so it renders on top.
+    pub fn bring_float_to_front(&mut self, pane_id: u64) {
+        if let Some(pos) = self.floats.iter().position(|(id, _)| *id == pane_id) {
+            let entry = self.floats.remove(pos);
+            self.floats.push(entry);
+        }
+    }
+
     /// Toggle a pane's scratchpad state: if visible (floating), hide it;
     /// if hidden/scratchpad, show it as floating.
     pub fn toggle_scratchpad(&mut self, pane_id: u64) {

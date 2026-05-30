@@ -328,10 +328,6 @@ impl TextRenderer {
                 }
             }
 
-            // DEBUG
-            let non_zero = pixels.iter().filter(|&&v| v > 0).count();
-            eprintln!("[heca-text] '{}' -> {}x{} pixels, {} non-zero", cmd.text, content_w, content_h, non_zero);
-
             // 4. Upload as individual texture
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("text_label"),

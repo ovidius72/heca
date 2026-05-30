@@ -548,66 +548,75 @@ impl ApplicationHandler for HecaApp {
                 let pane_area = chrome.content_rect(win_w, win_h);
 
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
-                    let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+                    // Scope to end compute_rects borrow before mutating panetree
+                    let float_click = {
+                        let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
 
-                    // Hit test floating panes first (front-to-back)
-                    for (pane, rect) in floats.iter().rev() {
-                        let abs_x = pane_area.x + rect.x;
-                        let abs_y = pane_area.y + rect.y;
-                        // Check if click is on title bar (top 24px)
-                        let edge = if mouse_pos.0 >= abs_x && mouse_pos.0 <= abs_x + rect.w
-                            && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + rect.h
-                        {
-                            let near_left = (mouse_pos.0 - abs_x).abs() < 6.0;
-                            let near_right = (mouse_pos.0 - (abs_x + rect.w)).abs() < 6.0;
-                            let near_top = (mouse_pos.1 - abs_y).abs() < 6.0;
-                            let near_bottom = (mouse_pos.1 - (abs_y + rect.h)).abs() < 6.0;
-                            match (near_left, near_right, near_top, near_bottom) {
-                                (true, _, true, _) => Some(app_state::FloatEdge::TopLeft),
-                                (_, true, true, _) => Some(app_state::FloatEdge::TopRight),
-                                (true, _, _, true) => Some(app_state::FloatEdge::BottomLeft),
-                                (_, true, _, true) => Some(app_state::FloatEdge::BottomRight),
-                                (true, _, _, _) => Some(app_state::FloatEdge::Left),
-                                (_, true, _, _) => Some(app_state::FloatEdge::Right),
-                                (_, _, true, _) => Some(app_state::FloatEdge::Top),
-                                (_, _, _, true) => Some(app_state::FloatEdge::Bottom),
-                                _ => None,
+                        // Hit test floating panes first (front-to-back)
+                        let mut result: Option<(u64, Option<DragState>)> = None;
+                        for (pane, rect) in floats.iter().rev() {
+                            let abs_x = pane_area.x + rect.x;
+                            let abs_y = pane_area.y + rect.y;
+                            let in_rect = mouse_pos.0 >= abs_x && mouse_pos.0 <= abs_x + rect.w
+                                && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + rect.h;
+                            let edge = if in_rect {
+                                let near_left = (mouse_pos.0 - abs_x).abs() < 6.0;
+                                let near_right = (mouse_pos.0 - (abs_x + rect.w)).abs() < 6.0;
+                                let near_top = (mouse_pos.1 - abs_y).abs() < 6.0;
+                                let near_bottom = (mouse_pos.1 - (abs_y + rect.h)).abs() < 6.0;
+                                match (near_left, near_right, near_top, near_bottom) {
+                                    (true, _, true, _) => Some(app_state::FloatEdge::TopLeft),
+                                    (_, true, true, _) => Some(app_state::FloatEdge::TopRight),
+                                    (true, _, _, true) => Some(app_state::FloatEdge::BottomLeft),
+                                    (_, true, _, true) => Some(app_state::FloatEdge::BottomRight),
+                                    (true, _, _, _) => Some(app_state::FloatEdge::Left),
+                                    (_, true, _, _) => Some(app_state::FloatEdge::Right),
+                                    (_, _, true, _) => Some(app_state::FloatEdge::Top),
+                                    (_, _, _, true) => Some(app_state::FloatEdge::Bottom),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            };
+
+                            let on_title = in_rect && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + 24.0;
+
+                            if let Some(e) = edge {
+                                result = Some((pane.id, Some(DragState::ResizingFloat {
+                                    pane_id: pane.id,
+                                    edge: e,
+                                    start_mouse: mouse_pos,
+                                    start_rect: *rect,
+                                })));
+                                break;
+                            } else if on_title {
+                                let offset = (mouse_pos.0 - abs_x, mouse_pos.1 - abs_y);
+                                result = Some((pane.id, Some(DragState::MovingFloat {
+                                    pane_id: pane.id,
+                                    offset,
+                                    start_rect: *rect,
+                                })));
+                                break;
+                            } else if in_rect {
+                                result = Some((pane.id, None));
+                                break;
                             }
-                        } else {
-                            None
-                        };
+                        }
+                        result
+                    };
 
-                        let on_title = mouse_pos.1 >= abs_y
-                            && mouse_pos.1 <= abs_y + 24.0
-                            && mouse_pos.0 >= abs_x
-                            && mouse_pos.0 <= abs_x + rect.w;
-
-                        if let Some(e) = edge {
-                            state.focused_pane = Some(pane.id);
-                            state.drag_state = DragState::ResizingFloat {
-                                pane_id: pane.id,
-                                edge: e,
-                                start_mouse: mouse_pos,
-                                start_rect: *rect,
-                            };
-                            break;
-                        } else if on_title {
-                            state.focused_pane = Some(pane.id);
-                            let offset = (mouse_pos.0 - abs_x, mouse_pos.1 - abs_y);
-                            state.drag_state = DragState::MovingFloat {
-                                pane_id: pane.id,
-                                offset,
-                                start_rect: *rect,
-                            };
-                            break;
-                        } else {
-                            state.focused_pane = Some(pane.id);
-                            break;
+                    // Apply float click after compute_rects borrow ends
+                    if let Some((pane_id, ref drag)) = float_click {
+                        state.focused_pane = Some(pane_id);
+                        state.panetree.bring_float_to_front(pane_id);
+                        if let Some(d) = drag {
+                            state.drag_state = d.clone();
                         }
                     }
 
-                    // Hit test embedded panes
-                    if !matches!(state.drag_state, DragState::MovingFloat { .. } | DragState::ResizingFloat { .. }) {
+                    // Hit test embedded panes (skip if a float was clicked)
+                    if float_click.is_none() {
+                        let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
                         for (rect, pane) in &embedded {
                             let px = pane_area.x + rect.x;
                             let py = pane_area.y + rect.y;
