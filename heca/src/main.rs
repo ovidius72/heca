@@ -416,7 +416,8 @@ impl ApplicationHandler for HecaApp {
                             | Some(WmAction::Float) | Some(WmAction::Scratchpad)
                             | Some(WmAction::Hide) | Some(WmAction::ClosePane)
                             | Some(WmAction::FocusLeft) | Some(WmAction::FocusRight)
-                            | Some(WmAction::FocusUp) | Some(WmAction::FocusDown) => {
+                            | Some(WmAction::FocusUp) | Some(WmAction::FocusDown)
+                            | Some(WmAction::NextPane) | Some(WmAction::PrevPane) => {
                                 // These require prefix mode, skip in normal mode
                             }
                             Some(action) => {
@@ -749,6 +750,12 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
         WmAction::SidebarRight => {
             state.sidebar.right_visible = !state.sidebar.right_visible;
         }
+        WmAction::NextPane => {
+            state.focused_pane = state.panetree.cycle_focus(state.focused_pane, 1);
+        }
+        WmAction::PrevPane => {
+            state.focused_pane = state.panetree.cycle_focus(state.focused_pane, -1);
+        }
     }
 }
 
@@ -792,6 +799,8 @@ fn resolve_action_core(
         "x" => return Some(WmAction::ClosePane),
         "]" => return Some(WmAction::TabNext),
         "[" => return Some(WmAction::TabPrev),
+        "n" => return Some(WmAction::NextPane),
+        "p" => return Some(WmAction::PrevPane),
         "H" => return Some(WmAction::ResizeLeft),
         "L" => return Some(WmAction::ResizeRight),
         "K" => return Some(WmAction::ResizeUp),

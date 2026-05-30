@@ -22,6 +22,8 @@ pub enum WmAction {
     SidebarLeft,
     #[allow(dead_code)]
     SidebarRight,
+    NextPane,
+    PrevPane,
 }
 
 #[allow(dead_code)]
@@ -54,6 +56,8 @@ impl KeyBindings {
                 ("k".to_string(), "Shift".to_string(), WmAction::ResizeUp),
                 ("j".to_string(), "Shift".to_string(), WmAction::ResizeDown),
                 ("Space".to_string(), "".to_string(), WmAction::SidebarLeft),
+                ("n".to_string(), "".to_string(), WmAction::NextPane),
+                ("p".to_string(), "".to_string(), WmAction::PrevPane),
             ],
         }
     }

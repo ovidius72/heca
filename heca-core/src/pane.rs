@@ -499,4 +499,49 @@ impl PaneTree {
             .filter(|p| p.disposition == Disposition::Embedded || p.disposition == Disposition::Floating)
             .count()
     }
+
+    /// Cycle focus through all visible panes (embedded then floats, in order).
+    /// delta = 1 for next, -1 for previous. Wraps around.
+    pub fn cycle_focus(&self, current: Option<u64>, delta: i32) -> Option<u64> {
+        let mut order: Vec<u64> = Vec::new();
+
+        // Embedded panes in tree order (left-to-right, top-to-bottom)
+        self.collect_leaf_ids(&self.root, &mut order);
+
+        // Floating panes in z-order (back-to-front)
+        for (id, _) in &self.floats {
+            if self.panes.iter().any(|p| p.id == *id && p.disposition == Disposition::Floating) {
+                order.push(*id);
+            }
+        }
+
+        if order.is_empty() {
+            return None;
+        }
+
+        let current_idx = current
+            .and_then(|id| order.iter().position(|&pid| pid == id))
+            .unwrap_or(0);
+
+        let len = order.len() as i32;
+        let next_idx = ((current_idx as i32 + delta).rem_euclid(len)) as usize;
+        Some(order[next_idx])
+    }
+
+    fn collect_leaf_ids(&self, node: &LayoutNode, out: &mut Vec<u64>) {
+        match node {
+            LayoutNode::Split { left, right, .. } => {
+                self.collect_leaf_ids(left, out);
+                self.collect_leaf_ids(right, out);
+            }
+            LayoutNode::Leaf { pane_id } => {
+                if let Some(pane) = self.panes.iter().find(|p| p.id == *pane_id) {
+                    if pane.disposition == Disposition::Embedded {
+                        out.push(*pane_id);
+                    }
+                }
+            }
+            LayoutNode::Empty => {}
+        }
+    }
 }
