@@ -132,20 +132,36 @@ impl KeyBindings {
             _ => key.clone(),
         };
 
-        // Build physical key name for arrow keys etc.
+        // Physical key name, stripping "Key" prefix (KeyJ -> J)
         let phys_name = match phys {
-            winit::keyboard::PhysicalKey::Code(c) => format!("{:?}", c),
+            winit::keyboard::PhysicalKey::Code(c) => {
+                let s = format!("{:?}", c);
+                s.strip_prefix("Key").unwrap_or(&s).to_string()
+            }
             _ => String::new(),
         };
 
         for b in &self.bindings {
-            let key_match = b.key.eq_ignore_ascii_case(&key)
-                || b.key.eq_ignore_ascii_case(&named_key)
-                || b.key.eq_ignore_ascii_case(&phys_name);
-            // Bindings without explicit ctrl match regardless of ctrl state
-            // (needed for tmux-style prefix chords where ctrl may still be held)
-            let ctrl_match = !b.ctrl || b.ctrl == ctrl;
-            if key_match && ctrl_match && b.shift == shift {
+            // Key matching:
+            // - Single-char bindings: exact case-sensitive against key_text,
+            //   OR case-insensitive against physical key when modifiers held
+            //   (macOS Ctrl+key often produces empty key_text)
+            // - Multi-char bindings (Space, ArrowLeft): case-insensitive
+            let key_match = if b.key.len() == 1 {
+                let text_match = b.key == key;
+                let phys_match = (ctrl || shift) && b.key.eq_ignore_ascii_case(&phys_name);
+                text_match || phys_match
+            } else {
+                b.key.eq_ignore_ascii_case(&key)
+                    || b.key.eq_ignore_ascii_case(&named_key)
+                    || b.key.eq_ignore_ascii_case(&phys_name)
+            };
+
+            // Exact modifier matching: binding ctrl/shift must match event state
+            let ctrl_match = b.ctrl == ctrl;
+            let shift_match = b.shift == shift;
+
+            if key_match && ctrl_match && shift_match {
                 return Some(b.action);
             }
         }
