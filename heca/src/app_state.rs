@@ -34,6 +34,18 @@ pub enum DragState {
         start_mouse: (f32, f32),
         start_rect: Rect,
     },
+    ResizingFloat {
+        pane_id: u64,
+        edge: FloatEdge,
+        start_mouse: (f32, f32),
+        start_rect: Rect,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FloatEdge {
+    Left, Right, Top, Bottom,
+    TopLeft, TopRight, BottomLeft, BottomRight,
 }
 
 pub struct AppState {

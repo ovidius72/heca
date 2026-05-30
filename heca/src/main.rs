@@ -98,6 +98,7 @@ impl HecaApp {
         let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
         let mut text_renderer = TextRenderer::new(&device, surface_format);
         text_renderer.set_scale_factor(scale_factor);
+        text_renderer.set_font_family(&self.app_config.theme.font_family);
         text_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
         primitive_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
 
@@ -105,14 +106,20 @@ impl HecaApp {
         let mut panetree = PaneTree::new();
         let editor_id = panetree.add_pane("Editor", [0.118, 0.118, 0.180, 1.0]);
         let term_id = panetree.add_pane("Terminal", [0.094, 0.094, 0.145, 1.0]);
-        // Float the terminal at a centered-ish position
-        let phys_w = physical.width as f32;
-        let phys_h = physical.height as f32;
+        // Float the terminal centered, 60% of window width, 60% of height
+        // Float rect is in LOGICAL pixels (relative to pane content area)
+        // Content area = full window minus chrome
+        let log_w = physical.width as f32 / scale_factor as f32;
+        let log_h = physical.height as f32 / scale_factor as f32;
+        let chrome_h = 32.0 + 24.0; // tab bar + status bar
+        let sidebar_w = 200.0;
+        let pane_area_w = (log_w - sidebar_w * 2.0).max(100.0);
+        let pane_area_h = (log_h - chrome_h).max(100.0);
         panetree.toggle_float(term_id, Some(heca_core::types::Rect::new(
-            phys_w / 4.0 / scale_factor as f32,
-            phys_h / 4.0 / scale_factor as f32,
-            phys_w / 2.0 / scale_factor as f32,
-            phys_h / 2.0 / scale_factor as f32,
+            pane_area_w * 0.2,
+            pane_area_h * 0.15,
+            pane_area_w * 0.6,
+            pane_area_h * 0.6,
         )));
 
         Box::new(AppState {
@@ -486,6 +493,30 @@ impl ApplicationHandler for HecaApp {
                             start_rect: clamped,
                         };
                     }
+                    DragState::ResizingFloat { pane_id, edge, start_mouse, start_rect } => {
+                        let px = position.x as f32;
+                        let py = position.y as f32;
+                        let dx = px - start_mouse.0;
+                        let dy = py - start_mouse.1;
+                        let mut r = start_rect;
+                        match edge {
+                            app_state::FloatEdge::Left | app_state::FloatEdge::TopLeft | app_state::FloatEdge::BottomLeft => { r.x += dx; r.w -= dx; }
+                            app_state::FloatEdge::Right | app_state::FloatEdge::TopRight | app_state::FloatEdge::BottomRight => { r.w += dx; }
+                            _ => {}
+                        }
+                        match edge {
+                            app_state::FloatEdge::Top | app_state::FloatEdge::TopLeft | app_state::FloatEdge::TopRight => { r.y += dy; r.h -= dy; }
+                            app_state::FloatEdge::Bottom | app_state::FloatEdge::BottomLeft | app_state::FloatEdge::BottomRight => { r.h += dy; }
+                            _ => {}
+                        }
+                        let min_size = 100.0;
+                        if r.w >= min_size && r.h >= min_size {
+                            if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
+                                entry.1 = r;
+                            }
+                            state.drag_state = DragState::ResizingFloat { pane_id, edge, start_mouse: (px, py), start_rect: r };
+                        }
+                    }
                     DragState::None => {}
                 }
             }
@@ -511,16 +542,43 @@ impl ApplicationHandler for HecaApp {
                         let abs_x = pane_area.x + rect.x;
                         let abs_y = pane_area.y + rect.y;
                         // Check if click is on title bar (top 24px)
+                        let edge = if mouse_pos.0 >= abs_x && mouse_pos.0 <= abs_x + rect.w
+                            && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + rect.h
+                        {
+                            let near_left = (mouse_pos.0 - abs_x).abs() < 6.0;
+                            let near_right = (mouse_pos.0 - (abs_x + rect.w)).abs() < 6.0;
+                            let near_top = (mouse_pos.1 - abs_y).abs() < 6.0;
+                            let near_bottom = (mouse_pos.1 - (abs_y + rect.h)).abs() < 6.0;
+                            match (near_left, near_right, near_top, near_bottom) {
+                                (true, _, true, _) => Some(app_state::FloatEdge::TopLeft),
+                                (_, true, true, _) => Some(app_state::FloatEdge::TopRight),
+                                (true, _, _, true) => Some(app_state::FloatEdge::BottomLeft),
+                                (_, true, _, true) => Some(app_state::FloatEdge::BottomRight),
+                                (true, _, _, _) => Some(app_state::FloatEdge::Left),
+                                (_, true, _, _) => Some(app_state::FloatEdge::Right),
+                                (_, _, true, _) => Some(app_state::FloatEdge::Top),
+                                (_, _, _, true) => Some(app_state::FloatEdge::Bottom),
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+
                         let on_title = mouse_pos.1 >= abs_y
                             && mouse_pos.1 <= abs_y + 24.0
                             && mouse_pos.0 >= abs_x
                             && mouse_pos.0 <= abs_x + rect.w;
-                        let on_body = mouse_pos.1 >= abs_y
-                            && mouse_pos.1 <= abs_y + rect.h
-                            && mouse_pos.0 >= abs_x
-                            && mouse_pos.0 <= abs_x + rect.w;
 
-                        if on_title {
+                        if let Some(e) = edge {
+                            state.focused_pane = Some(pane.id);
+                            state.drag_state = DragState::ResizingFloat {
+                                pane_id: pane.id,
+                                edge: e,
+                                start_mouse: mouse_pos,
+                                start_rect: *rect,
+                            };
+                            break;
+                        } else if on_title {
                             state.focused_pane = Some(pane.id);
                             state.drag_state = DragState::MovingFloat {
                                 pane_id: pane.id,
@@ -528,14 +586,14 @@ impl ApplicationHandler for HecaApp {
                                 start_rect: *rect,
                             };
                             break;
-                        } else if on_body {
+                        } else {
                             state.focused_pane = Some(pane.id);
                             break;
                         }
                     }
 
                     // Hit test embedded panes
-                    if !matches!(state.drag_state, DragState::MovingFloat { .. }) {
+                    if !matches!(state.drag_state, DragState::MovingFloat { .. } | DragState::ResizingFloat { .. }) {
                         for (rect, pane) in &embedded {
                             let px = pane_area.x + rect.x;
                             let py = pane_area.y + rect.y;

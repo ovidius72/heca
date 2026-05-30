@@ -1,4 +1,4 @@
-use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -41,6 +41,7 @@ pub struct TextRenderer {
     atlas_view: Option<wgpu::TextureView>,
     atlas_bind_group: Option<wgpu::BindGroup>,
     atlas_size: (u32, u32),
+    font_family: String,
 }
 
 impl TextRenderer {
@@ -190,6 +191,7 @@ impl TextRenderer {
             atlas_view: None,
             atlas_bind_group: None,
             atlas_size: (0, 0),
+            font_family: "monospace".to_string(),
         }
     }
 
@@ -203,6 +205,11 @@ impl TextRenderer {
 
     pub fn set_scale_factor(&mut self, scale: f64) {
         self.scale_factor = scale;
+    }
+
+    /// Set the font family name (e.g. "JetBrainsMono Nerd Font", "Menlo", "monospace").
+    pub fn set_font_family(&mut self, family: &str) {
+        self.font_family = family.to_string();
     }
 
     /// Queue a line of text for rendering (collected until `render()` is called).
@@ -235,7 +242,8 @@ impl TextRenderer {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
-            buffer.set_text(&mut self.font_system, &cmd.text, &Attrs::new(), Shaping::Advanced);
+            let attrs = Attrs::new().family(Family::Name(&self.font_family));
+            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
             let mut cmd_w = 0f32;
@@ -248,15 +256,17 @@ impl TextRenderer {
                 cmd_w = cmd_w.max(line_w);
                 cmd_h += run.line_height;
             }
-            let w = cmd_w.ceil().max(1.0) as u32;
-            let h = cmd_h.ceil().max(1.0) as u32;
+            let w = cmd_w.ceil().max(1.0) as u32 + 4; // +4 padding for glyph overhang
+            let h = cmd_h.ceil().max(1.0) as u32 + 4;
             measurements.push((w, h));
             max_width = max_width.max(w);
             total_height += h;
         }
 
+
+
         let atlas_w = max_width.max(1);
-        let atlas_h = total_height.max(1);
+        let atlas_h = total_height.max(1) + 4; // +4 padding at bottom
         self.atlas_size = (atlas_w, atlas_h);
 
         // Align stride for GPU texture upload
@@ -275,7 +285,8 @@ impl TextRenderer {
             let scaled_size = cmd.font_size * self.scale_factor as f32;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
-            buffer.set_text(&mut self.font_system, &cmd.text, &Attrs::new(), Shaping::Advanced);
+            let attrs = Attrs::new().family(Family::Name(&self.font_family));
+            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
             // Rasterize glyphs into atlas at (0, current_y), using stride for row width

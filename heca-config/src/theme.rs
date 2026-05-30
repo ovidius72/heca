@@ -131,7 +131,7 @@ impl Theme {
             border: Color::new(49, 50, 68, 255),        // #313244
             accent: Color::new(137, 180, 250, 255),     // #89b4fa
             font_family: "JetBrainsMono Nerd Font".to_string(),
-            font_size: 17.0,
+            font_size: 32.0,
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow::default(),
@@ -147,7 +147,7 @@ impl Theme {
             border: Color::new(204, 208, 218, 255),     // #ccd0da
             accent: Color::new(30, 102, 245, 255),      // #1e66f5
             font_family: "JetBrainsMono Nerd Font".to_string(),
-            font_size: 17.0,
+            font_size: 32.0,
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow {
