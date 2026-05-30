@@ -223,8 +223,9 @@ impl HecaApp {
             timestamp_writes: None,
         });
 
-        // Consistent text size from theme
-        let text_size = theme.font_size;
+        // Chrome text: fixed readable size (theme.font_size is for terminal content)
+        let chrome_text = 14.0f32;
+        let pane_text = 16.0f32;
 
         // ── LEFT SIDEBAR ──
         let side_bg = if theme.name == "Catppuccin Mocha" {
@@ -238,10 +239,10 @@ impl HecaApp {
             theme.border.to_f32x4(), 1.0,
         );
         state.text_renderer.queue_text(
-            "Sessions", 8.0, 8.0, text_size, theme.foreground.to_f32x4(),
+            "Sessions", 8.0, 8.0, chrome_text, theme.foreground.to_f32x4(),
         );
         state.text_renderer.queue_text(
-            "  (empty — Phase 4)", 8.0, 8.0 + text_size * 1.2, text_size * 0.6,
+            "  (empty — Phase 4)", 8.0, 8.0 + chrome_text * 1.4, chrome_text * 0.75,
             [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
         );
 
@@ -253,7 +254,7 @@ impl HecaApp {
             theme.border.to_f32x4(), 1.0,
         );
         state.text_renderer.queue_text(
-            "Details", rsx + 8.0, 8.0, text_size, theme.foreground.to_f32x4(),
+            "Details", rsx + 8.0, 8.0, chrome_text, theme.foreground.to_f32x4(),
         );
 
         // ── TAB BAR ──
@@ -267,9 +268,9 @@ impl HecaApp {
                 theme.border.to_f32x4()
             };
             state.primitive_renderer.draw_rect(tab_x, 2.0, 116.0, tb.tab_bar_height - 4.0, tab_color);
-            let tab_text_y = (tb.tab_bar_height - text_size) / 2.0;
+            let tab_text_y = (tb.tab_bar_height - chrome_text) / 2.0;
             state.text_renderer.queue_text(
-                tab_name, tab_x + 4.0, tab_text_y, text_size, theme.foreground.to_f32x4(),
+                tab_name, tab_x + 4.0, tab_text_y, chrome_text, theme.foreground.to_f32x4(),
             );
         }
 
@@ -287,9 +288,9 @@ impl HecaApp {
             InputMode::Prefix => "PREFIX",
         };
         let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
-        let status_text_y = sb_y + (tb.status_bar_height - text_size) / 2.0;
+        let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
         state.text_renderer.queue_text(
-            &status, 8.0, status_text_y, text_size, theme.foreground.to_f32x4(),
+            &status, 8.0, status_text_y, chrome_text, theme.foreground.to_f32x4(),
         );
 
         // ── PANE CONTENT AREA ──
@@ -309,7 +310,7 @@ impl HecaApp {
             };
             state.primitive_renderer.draw_border(px, py, rect.w, rect.h, bcolor, border_width);
             state.text_renderer.queue_text(
-                &pane.title, px + 4.0, py + 4.0, text_size, theme.foreground.to_f32x4(),
+                &pane.title, px + 4.0, py + 4.0, pane_text, theme.foreground.to_f32x4(),
             );
         }
 
@@ -323,7 +324,7 @@ impl HecaApp {
             // Title bar for float
             state.primitive_renderer.draw_rect(fx, fy, rect.w, 24.0, accent_color);
             state.text_renderer.queue_text(
-                &pane.title, fx + 4.0, fy + 4.0, text_size, [1.0, 1.0, 1.0, 1.0],
+                &pane.title, fx + 4.0, fy + 4.0, pane_text, [1.0, 1.0, 1.0, 1.0],
             );
         }
 

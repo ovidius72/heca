@@ -244,7 +244,8 @@ impl TextRenderer {
             let scaled_size = cmd.font_size * scale;
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
-            buffer.set_size(&mut self.font_system, Some(4096.0), Some(4096.0));
+            // Very large wrap size to prevent any line wrapping for single-line labels
+            buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
             let attrs = Attrs::new().family(Family::Name(&self.font_family));
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
