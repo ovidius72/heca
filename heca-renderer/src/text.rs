@@ -385,8 +385,9 @@ impl TextRenderer {
             });
 
             // 5. Build quad
-            let screen_x = cmd.x + min_x as f32 / scale;
-            let screen_y = cmd.y + min_y as f32 / scale;
+            // cmd.x/cmd.y is the TOP-LEFT of where text should appear
+            let screen_x = cmd.x;
+            let screen_y = cmd.y;
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
 
