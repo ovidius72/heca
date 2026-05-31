@@ -338,12 +338,12 @@ impl HecaApp {
             left_sidebar_width: if state.sidebar.left_visible {
                 state.sidebar.left_width
             } else {
-                32.0
+                40.0
             },
             right_sidebar_width: if state.sidebar.right_visible {
                 state.sidebar.right_width
             } else {
-                32.0
+                40.0
             },
         };
         let pane_area = chrome.content_rect(w, h);
@@ -498,12 +498,26 @@ impl HecaApp {
             theme.border.to_f32x4(), 1.0,
         );
         if chrome.left_sidebar_width >= 80.0 {
-            state.text_renderer.queue_text(
-                "Sessions", 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
+            sidebar::render_sidebar_expanded(
+                &state.sidebar_tree,
+                0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
+                matches!(state.input_mode, InputMode::SidebarNav),
+                theme.accent.to_f32x4(),
+                theme.foreground.to_f32x4(),
+                [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],  // cursor highlight
+                [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                &mut state.text_renderer,
+                &mut state.primitive_renderer,
             );
-            state.text_renderer.queue_text(
-                "  (empty)", 8.0, sidebar_top + 8.0 + chrome_text * 2.2, chrome_text * 0.75,
-                [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
+        } else {
+            sidebar::render_sidebar_collapsed(
+                &state.sidebar_tree,
+                0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
+                theme.accent.to_f32x4(),
+                theme.foreground.to_f32x4(),
+                [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                &mut state.text_renderer,
+                &mut state.primitive_renderer,
             );
         }
 
@@ -830,8 +844,8 @@ impl ApplicationHandler for HecaApp {
                 let chrome = ChromeConfig {
                     tab_bar_height: 32.0,
                     status_bar_height: 24.0,
-                    left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
-                    right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
+                    left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
+                    right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
                 };
                 let pane_area = chrome.content_rect(win_w, win_h);
 
@@ -987,8 +1001,8 @@ fn update_session_viewport(state: &mut AppState) {
     let chrome = ChromeConfig {
         tab_bar_height: 32.0,
         status_bar_height: 24.0,
-        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
-        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
+        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
+        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
     };
     let pane_area = chrome.content_rect(win_w, win_h);
     let new_size = heca_core::layout::types::Size::new(

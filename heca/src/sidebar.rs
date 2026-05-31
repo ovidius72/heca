@@ -288,4 +288,212 @@ impl SidebarTree {
     pub fn current_item(&self) -> Option<&SidebarItem> {
         self.flat_items.get(self.cursor)
     }
+
+    /// Get the pane ID at the given flat item index, if it's a pane.
+    pub fn pane_id_at(&self, index: usize) -> Option<u64> {
+        self.flat_items.get(index).and_then(|item| match item {
+            SidebarItem::Pane { pane_id } => Some(*pane_id),
+            _ => None,
+        })
+    }
+
+    /// Get the workspace index at the given flat item index, if it's a workspace.
+    pub fn workspace_idx_at(&self, index: usize) -> Option<usize> {
+        self.flat_items.get(index).and_then(|item| match item {
+            SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
+            _ => None,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar rendering functions
+// ---------------------------------------------------------------------------
+
+use heca_renderer::primitive::PrimitiveRenderer;
+use heca_renderer::text::TextRenderer;
+
+const ITEM_HEIGHT: f32 = 24.0;
+const LABEL_FONT_SIZE: f32 = 14.0;
+const INDENT_WS: f32 = 8.0;
+const INDENT_COL: f32 = 26.0;
+const INDENT_PANE: f32 = 44.0;
+
+/// Render the expanded sidebar tree (width >= 80px).
+pub fn render_sidebar_expanded(
+    tree: &SidebarTree,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    is_sidebar_nav: bool,
+    accent: [f32; 4],
+    foreground: [f32; 4],
+    cursor_bg: [f32; 4],
+    visited_color: [f32; 4],
+    text_renderer: &mut TextRenderer,
+    primitive_renderer: &mut PrimitiveRenderer,
+) {
+    let scroll = tree.scroll_offset;
+    let mut line_y = y + 4.0;
+    let visible_lines = (height / ITEM_HEIGHT) as usize;
+    let mut drawn = 0usize;
+    let font_size = LABEL_FONT_SIZE;
+
+    for (fi, flat_item) in tree.flat_items.iter().enumerate() {
+        if fi < scroll {
+            continue;
+        }
+        if drawn >= visible_lines {
+            break;
+        }
+
+        let is_cursor = fi == tree.cursor && is_sidebar_nav;
+        let (indent, label, is_ws) = match flat_item {
+            SidebarItem::Workspace { ws_idx } => {
+                if let Some(ws) = tree.workspaces.get(*ws_idx) {
+                    let arrow = if ws.collapsed { "▶ " } else { "▼ " };
+                    (INDENT_WS, format!("{}{}", arrow, ws.name), true)
+                } else {
+                    (INDENT_WS, format!("WS {}", ws_idx), true)
+                }
+            }
+            SidebarItem::Column { ws_idx: _, col_idx } => {
+                (INDENT_COL, format!("Col {}", col_idx + 1), false)
+            }
+            SidebarItem::Pane { pane_id } => {
+                (INDENT_PANE, pane_name_short(*pane_id, &tree.workspaces), false)
+            }
+        };
+
+        // Cursor background
+        if is_cursor {
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
+        }
+
+        // Determine color based on state
+        let color = if is_cursor {
+            accent
+        } else if is_ws {
+            // Look up workspace state
+            if let Some(ws) = flat_item.workspace_idx()
+                .and_then(|wi| tree.workspaces.get(wi))
+            {
+                match ws.state {
+                    crate::app_state::SidebarItemState::Active => accent,
+                    crate::app_state::SidebarItemState::Visited => visited_color,
+                    crate::app_state::SidebarItemState::None => foreground,
+                }
+            } else {
+                foreground
+            }
+        } else {
+            // Check if it's an active pane
+            if let SidebarItem::Pane { pane_id } = flat_item {
+                if let Some(ws) = tree.workspaces.iter().find(|w| {
+                    w.columns.iter().any(|c| c.panes.iter().any(|p| p.pane_id == *pane_id))
+                }) {
+                    if let Some(col) = ws.columns.iter().find(|c| c.panes.iter().any(|p| p.pane_id == *pane_id)) {
+                        if let Some(pane) = col.panes.iter().find(|p| p.pane_id == *pane_id) {
+                            match pane.state {
+                                crate::app_state::SidebarItemState::Active => accent,
+                                crate::app_state::SidebarItemState::Visited => visited_color,
+                                crate::app_state::SidebarItemState::None => foreground,
+                            }
+                        } else { foreground }
+                    } else { foreground }
+                } else { foreground }
+            } else { foreground }
+        };
+
+        let text_x = x + indent;
+        let text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
+        text_renderer.queue_text(&label, text_x, text_y, font_size, color);
+
+        line_y += ITEM_HEIGHT;
+        drawn += 1;
+    }
+}
+
+/// Render the collapsed sidebar (activity strip at 40px width).
+pub fn render_sidebar_collapsed(
+    tree: &SidebarTree,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    accent: [f32; 4],
+    foreground: [f32; 4],
+    visited_color: [f32; 4],
+    text_renderer: &mut TextRenderer,
+    primitive_renderer: &mut PrimitiveRenderer,
+) {
+    let font_size = 13.0; // slightly smaller for compact fit
+    let activity_bar_w = 4.0;
+    let text_x = x + activity_bar_w + 4.0; // 4px gap after activity bar
+    let mut line_y = y + 4.0;
+    let scroll = tree.scroll_offset;
+
+    for ws in &tree.workspaces {
+        // Activity bar
+        let bar_color = match ws.state {
+            crate::app_state::SidebarItemState::Active => accent,
+            crate::app_state::SidebarItemState::Visited => visited_color,
+            crate::app_state::SidebarItemState::None => [0.0; 4], // transparent
+        };
+
+        // Count lines for this workspace
+        let section_lines = 1 + if ws.collapsed { 0 } else {
+            ws.columns.iter().map(|c| c.panes.len()).sum::<usize>()
+        };
+        let section_height = section_lines as f32 * ITEM_HEIGHT;
+
+        // Draw activity bar (full height of section)
+        if bar_color[3] > 0.0 {
+            primitive_renderer.draw_rect(x, line_y, activity_bar_w, section_height, bar_color);
+        }
+
+        // Workspace number/identifier (first 2 chars)
+        let ws_label = ws.name.chars().take(2).collect::<String>();
+        let ws_color = match ws.state {
+            crate::app_state::SidebarItemState::Active => accent,
+            crate::app_state::SidebarItemState::Visited => visited_color,
+            crate::app_state::SidebarItemState::None => foreground,
+        };
+        let ws_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
+        text_renderer.queue_text(&ws_label, text_x, ws_text_y, font_size, ws_color);
+        line_y += ITEM_HEIGHT;
+
+        // Pane letters
+        if !ws.collapsed {
+            for col in &ws.columns {
+                for pane in &col.panes {
+                    let pane_char = pane.name.chars().next()
+                        .unwrap_or('?').to_string();
+                    let pane_color = match pane.state {
+                        crate::app_state::SidebarItemState::Active => accent,
+                        crate::app_state::SidebarItemState::Visited => visited_color,
+                        crate::app_state::SidebarItemState::None => foreground,
+                    };
+                    let pane_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
+                    text_renderer.queue_text(&pane_char, text_x, pane_text_y, font_size, pane_color);
+                    line_y += ITEM_HEIGHT;
+                }
+            }
+        }
+    }
+}
+
+/// Helper to find a pane's display name from the tree.
+fn pane_name_short(pane_id: u64, workspaces: &[SidebarWsEntry]) -> String {
+    for ws in workspaces {
+        for col in &ws.columns {
+            for pane in &col.panes {
+                if pane.pane_id == pane_id {
+                    return pane.name.clone();
+                }
+            }
+        }
+    }
+    format!("Pane {}", pane_id)
 }
