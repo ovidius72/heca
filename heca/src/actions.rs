@@ -44,7 +44,7 @@ impl ActionCategory {
 }
 
 /// Static descriptor for a window-manager action.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,

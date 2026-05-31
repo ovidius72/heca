@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use heca_config::theme::AppConfig;
 use winit::keyboard::NamedKey;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WmAction {
     FocusLeft,
     FocusRight,

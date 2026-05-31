@@ -1027,17 +1027,25 @@ fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
 }
 
 /// Collect ALL panes across ALL workspaces as letter candidates.
+/// Hard-capped at 52 unique labels (a–z, A–Z). Beyond that, use sidebar
+/// navigation instead of letter selection.
 fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
     let mut candidates = Vec::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
-                let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
+                if candidates.len() >= CANDIDATE_ALPHABET.len() {
+                    return candidates;
+                }
+                let ch = CANDIDATE_ALPHABET[candidates.len()];
                 candidates.push((ch, pane.id.0));
             }
         }
         for float in &ws.floating_panes {
-            let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
+            if candidates.len() >= CANDIDATE_ALPHABET.len() {
+                return candidates;
+            }
+            let ch = CANDIDATE_ALPHABET[candidates.len()];
             candidates.push((ch, float.pane.id.0));
         }
     }
@@ -1058,13 +1066,17 @@ fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
 }
 
 /// Collect ALL columns across ALL workspaces as letter candidates.
+/// Hard-capped at 52 unique labels (a–z, A–Z).
 /// The candidate ID is the first pane ID in the column (used for positioning the letter overlay).
 fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
     let mut candidates = Vec::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
+            if candidates.len() >= CANDIDATE_ALPHABET.len() {
+                return candidates;
+            }
             if let Some(first_pane) = col.panes.first() {
-                let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
+                let ch = CANDIDATE_ALPHABET[candidates.len()];
                 candidates.push((ch, first_pane.id.0));
             }
         }

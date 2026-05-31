@@ -38,9 +38,6 @@ pub struct SidebarColEntry {
     pub panes: Vec<SidebarPaneEntry>,
 }
 
-impl SidebarColEntry {
-}
-
 /// A workspace entry in the sidebar tree.
 #[derive(Debug, Clone)]
 pub struct SidebarWsEntry {
@@ -49,9 +46,6 @@ pub struct SidebarWsEntry {
     pub collapsed: bool,
     pub state: SidebarItemState,
     pub columns: Vec<SidebarColEntry>,
-}
-
-impl SidebarWsEntry {
 }
 
 /// The sidebar tree model — mirrors the session's layout hierarchy.
@@ -393,8 +387,9 @@ pub fn sidebar_hit_test(
             visible_line += 1;
         }
     } else {
+        let visible_lines = (sidebar_height / ITEM_HEIGHT) as usize;
         let fi = tree.scroll_offset + line_index;
-        if fi < tree.flat_items.len() {
+        if line_index < visible_lines && fi < tree.flat_items.len() {
             return Some(fi);
         }
     }

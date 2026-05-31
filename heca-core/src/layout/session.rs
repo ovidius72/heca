@@ -409,4 +409,16 @@ mod tests {
         assert!(!session.remove_workspace(5));
         assert_eq!(session.workspaces.len(), 2);
     }
+
+    #[test]
+    fn test_remove_workspace_active_is_removed() {
+        // 3 workspaces; active is 1. Remove ws 1.
+        // active_workspace_idx (1) is not > removed (1) and not >= len (2)
+        // → unchanged at 1, which now points to the former workspace 2.
+        let mut session = make_session_with_workspaces(3);
+        session.active_workspace_idx = 1;
+        assert!(session.remove_workspace(1));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.active_workspace_idx, 1);
+    }
 }
