@@ -1,13 +1,21 @@
-//! Action registry — static catalog of all window-manager actions.
+//! Action registry — dispatch table for all window-manager actions.
 //!
-//! This module provides the data source for the command palette and
-//! documentation generators. Each action maps a config key to a human-readable
-//! label, description, category, and default keybinding.
+//! This module provides the `ActionRegistry` which maps `WmAction` discriminants
+//! to named handler functions. It also preserves the static metadata catalog
+//! (labels, categories, default bindings) for the command palette and docs.
 //!
-//! Note: These types appear unused in the binary because the command palette UI
-//! is not yet implemented. They are fully exercised in unit tests and will be
-//! wired into the UI in a follow-up plan.
+//! Note: ActionRegistry methods appear unused in the binary until Phase 5
+//! when `execute_action()` is replaced by `registry.execute()`.
 #![allow(dead_code)]
+
+use std::collections::HashMap;
+
+/// Handler signature for all window-manager actions.
+///
+/// The `WmAction` parameter carries the full variant (including any embedded
+/// arguments), so the same handler can serve both unit and parameterized
+/// variants that share a discriminant.
+pub type ActionHandler = fn(&mut crate::app_state::AppState, &crate::input::WmAction);
 
 /// Category for grouping actions in the command palette and documentation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -58,8 +66,50 @@ pub struct ActionDescriptor {
     pub default_binding: &'static str,
 }
 
-/// Static registry of all window-manager actions.
-pub struct ActionRegistry;
+/// Registry that maps action discriminants to handler functions.
+///
+/// Call `register()` during app initialization to wire up all actions,
+/// then `execute()` at runtime to dispatch.
+pub struct ActionRegistry {
+    handlers: HashMap<std::mem::Discriminant<crate::input::WmAction>, ActionHandler>,
+}
+
+impl ActionRegistry {
+    /// Create an empty registry.
+    pub fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
+        }
+    }
+
+    /// Register a handler for all variants that share `action`'s discriminant.
+    pub fn register(
+        &mut self,
+        action: &crate::input::WmAction,
+        handler: ActionHandler,
+    ) {
+        let disc = crate::input::action_discriminant(action);
+        self.handlers.insert(disc, handler);
+    }
+
+    /// Execute the handler for `action`, if one is registered.
+    pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) {
+        let disc = crate::input::action_discriminant(action);
+        if let Some(handler) = self.handlers.get(&disc) {
+            handler(state, action);
+        } else {
+            eprintln!("No handler registered for {:?}", action);
+        }
+    }
+
+    /// Check whether a handler is registered for the given action.
+    pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
+        let disc = crate::input::action_discriminant(action);
+        self.handlers.contains_key(&disc)
+    }
+}
+
+// ── Static metadata catalog (unchanged from before) ──
 
 impl ActionRegistry {
     /// All registered actions in a stable order.
@@ -378,6 +428,18 @@ impl ActionRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input::WmAction;
+
+    #[test]
+    fn test_registry_dispatch() {
+        let mut registry = ActionRegistry::new();
+        fn dummy_handler(state: &mut crate::app_state::AppState, _action: &WmAction) {
+            state.needs_redraw = true;
+        }
+        registry.register(&WmAction::FocusLeft, dummy_handler);
+        assert!(registry.has_handler(&WmAction::FocusLeft));
+        assert!(!registry.has_handler(&WmAction::FocusRight));
+    }
 
     #[test]
     fn test_registry_has_actions() {
@@ -427,14 +489,12 @@ mod tests {
             assert!(!desc.label.is_empty(), "label must not be empty");
             assert!(!desc.description.is_empty(), "description must not be empty");
             assert!(!desc.default_binding.is_empty(), "default_binding must not be empty");
-            // Ensure category label is non-empty (exercises ActionCategory::label)
             assert!(!desc.category.label().is_empty(), "category label must not be empty");
         }
     }
 
     #[test]
     fn test_session_category_exists() {
-        // Exercises the Session variant so it is not flagged as dead code.
         let count = ActionRegistry::by_category(ActionCategory::Session).count();
         assert_eq!(count, 0, "no actions in Session category yet, but variant is reserved");
     }
