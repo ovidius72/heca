@@ -1,3 +1,4 @@
+mod actions;
 mod app_state;
 mod chrome;
 mod input;
@@ -1697,6 +1698,12 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 };
                 state.needs_redraw = true;
             }
+        }
+        WmAction::CommandPalette => {
+            // Stub: command palette UI will be implemented in a follow-up plan.
+            // For now, this action is a no-op that reserves the keybinding.
+            eprintln!("Command palette triggered (not yet implemented)");
+            state.needs_redraw = true;
         }
     }
 }

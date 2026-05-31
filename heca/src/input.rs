@@ -44,6 +44,7 @@ pub enum WmAction {
     WorkspacePrev,
     FocusToggleLocal,
     FocusToggleGlobal,
+    CommandPalette,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -88,6 +89,7 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
+        "command_palette" => Some(WmAction::CommandPalette),
         _ => None,
     }
 }
@@ -123,6 +125,8 @@ fn action_priority(action: WmAction) -> u8 {
         // Tabs and sidebars
         WmAction::TabNext | WmAction::TabPrev |
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
+        // System
+        WmAction::CommandPalette => 5,
     }
 }
 
