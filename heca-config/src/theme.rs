@@ -312,6 +312,9 @@ impl Default for Config {
         keybindings.insert("rename_workspace".to_string(), "Shift+w".to_string());
         keybindings.insert("rename_pane".to_string(), "Shift+p".to_string());
 
+        // ── Command palette ──
+        keybindings.insert("command_palette".to_string(), "p".to_string());
+
         // ── Move pane to column (NIRI-style) ──
         keybindings.insert("move_pane_left".to_string(), "[".to_string());
         keybindings.insert("move_pane_right".to_string(), "]".to_string());

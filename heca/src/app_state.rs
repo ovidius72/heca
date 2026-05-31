@@ -94,4 +94,6 @@ pub struct AppState {
     pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
+    /// When the user entered Prefix mode (for auto-timeout).
+    pub prefix_entered_at: Option<std::time::Instant>,
 }
