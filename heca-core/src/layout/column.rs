@@ -215,7 +215,7 @@ impl Column {
     /// Animate this column moving from an offset.
     pub fn animate_move_from(&mut self, from_x: f64, config: AnimationConfig) {
         let current = self.move_offset.current();
-        let anim = Animation::new(from_x + current, 0.0, 0.0, config);
+        let anim = Animation::new(from_x + current, 0.0, config);
         self.move_offset = Animated::Animating {
             animation: anim,
             from: from_x + current,
@@ -229,7 +229,7 @@ impl Pane {
     pub fn animate_move_y_from(&mut self, from_y: f64, config: AnimationConfig) {
         self.move_offset.to_static();
         self.move_offset = Animated::Animating {
-            animation: Animation::new(0.0, 1.0, 0.0, config),
+            animation: Animation::new(0.0, 1.0, config),
             from: Point::new(0.0, from_y),
             to: Point::new(0.0, 0.0),
         };
@@ -239,7 +239,7 @@ impl Pane {
     pub fn animate_move_from(&mut self, from: Point, config: AnimationConfig) {
         self.move_offset.to_static();
         self.move_offset = Animated::Animating {
-            animation: Animation::new(0.0, 1.0, 0.0, config),
+            animation: Animation::new(0.0, 1.0, config),
             from,
             to: Point::new(0.0, 0.0),
         };

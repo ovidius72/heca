@@ -1004,15 +1004,22 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 /// Also tracks last-visited workspace and rebuilds the sidebar tree.
 /// Record that we are departing a workspace, saving its active pane.
 /// The single canonical way to switch workspaces. Handles departure tracking
-/// (last_visited_ws_idx for sidebar highlight + FocusToggleGlobal) and
-/// ensures last_visited_pane_per_ws is NOT overwritten (it stores the
-/// previous pane within each workspace for Prefix+i toggle).
+/// (last_visited_ws_idx + last_visited_pane_per_ws for both sidebar
+/// highlight and Prefix+i / Prefix+Shift+l toggles).
 fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == new_idx {
         return;
     }
-    // Record which workspace we are departing from (for sidebar highlight)
+    // Record which pane was active in the workspace we are leaving.
+    // This is the ONLY place where last_visited_pane_per_ws is written
+    // for cross-workspace switches.
+    if let Some(pane_id) = state.focused_pane {
+        while state.last_visited_pane_per_ws.len() <= current_ws {
+            state.last_visited_pane_per_ws.push(None);
+        }
+        state.last_visited_pane_per_ws[current_ws] = Some(pane_id);
+    }
     state.last_visited_ws_idx = Some(current_ws);
     state.session.switch_to_workspace(new_idx);
 }

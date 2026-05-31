@@ -119,7 +119,6 @@ impl ViewGesture {
         self.animation = Some(Animation::new(
             from + current,
             0.0,
-            0.0,
             config,
         ));
     }

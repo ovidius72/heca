@@ -262,7 +262,6 @@ impl ScrollingSpace {
             self.view_offset = ViewOffset::Animation(Animation::new(
                 self.view_offset.current(),
                 new_offset,
-                0.0,
                 AnimationConfig::default(),
             ));
         }
@@ -705,7 +704,6 @@ impl ScrollingSpace {
             self.view_offset = ViewOffset::Animation(Animation::new(
                 current_offset,
                 target_offset,
-                0.0,
                 AnimationConfig::default(),
             ));
         }

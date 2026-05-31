@@ -150,7 +150,7 @@ impl Session {
             from_idx,
             to_idx: idx,
             progress: Animated::Animating {
-                animation: Animation::new(0.0, 1.0, 0.0, AnimationConfig::default()),
+                animation: Animation::new(0.0, 1.0, AnimationConfig::default()),
                 from: 0.0,
                 to: 1.0,
             },
@@ -188,7 +188,7 @@ impl Session {
         };
         let to = if self.overview.open { 1.0 } else { 0.0 };
         self.overview.progress = Animated::Animating {
-            animation: Animation::new(from, to, 0.0, AnimationConfig::default()),
+            animation: Animation::new(from, to, AnimationConfig::default()),
             from,
             to,
         };
