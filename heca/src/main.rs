@@ -1504,20 +1504,14 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             }
         }
         WmAction::FocusToggleGlobal => {
-            // Toggle between current and last-focused pane across all workspaces
-            if let Some(prev) = state.last_focused {
-                if Some(prev) != state.focused_pane {
-                    // Find which workspace contains the target pane
-                    let target = heca_core::layout::PaneId(prev);
-                    let target_ws = state.session.workspaces.iter().position(|ws| {
-                        ws.find_pane(target).is_some()
-                    });
-                    if let Some(ws_idx) = target_ws {
-                        if ws_idx != state.session.active_workspace_idx {
-                            state.session.switch_to_workspace(ws_idx);
-                        }
-                        focus_pane_by_id(state, prev);
+            // Go to the last-visited workspace and its active pane
+            if let Some(prev_ws) = state.last_visited_ws_idx {
+                if prev_ws != state.session.active_workspace_idx {
+                    state.session.switch_to_workspace(prev_ws);
+                    if let Some(pane_id) = state.last_visited_pane_per_ws.get(prev_ws).copied().flatten() {
+                        focus_pane_by_id(state, pane_id);
                     }
+                    sync_focus(state);
                 }
                 state.needs_redraw = true;
             }
