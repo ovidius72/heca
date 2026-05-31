@@ -170,10 +170,6 @@ impl KeyBindings {
         }
         // Sort by priority so focus is checked before resize on conflicts
         bindings.sort_by_key(|b| action_priority(b.action));
-        #[cfg(debug_assertions)]
-        for b in &bindings {
-            eprintln!("  binding: {:?} key='{}' ctrl={} shift={}", b.action, b.key, b.ctrl, b.shift);
-        }
 
         // ── Load mode-specific bindings ──
         let mut mode_bindings = HashMap::new();

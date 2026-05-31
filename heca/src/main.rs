@@ -674,10 +674,6 @@ impl ApplicationHandler for HecaApp {
                 let key_text = log_key.to_text().unwrap_or("").to_string();
                 let phys = event.physical_key;
 
-                #[cfg(debug_assertions)]
-                eprintln!("input: mode={:?} log_key={:?} text='{}' ctrl={} shift={} phys={:?}",
-                    state.input_mode, log_key, key_text, is_ctrl, is_shift, phys);
-
                 // Detect Ctrl+B by multiple methods:
                 let is_prefix = key_text == "\u{2}"                         // macOS control char
                     || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")
@@ -778,8 +774,6 @@ impl ApplicationHandler for HecaApp {
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
                         let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
-                        #[cfg(debug_assertions)]
-                        eprintln!("prefix: key_text='{}' shift={} phys={:?} action={:?}", key_text, is_shift, event.physical_key, action);
 
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
@@ -852,8 +846,6 @@ impl ApplicationHandler for HecaApp {
                                 &key_text, is_ctrl, false, is_shift,
                                 &event.logical_key, &event.physical_key,
                             );
-                            #[cfg(debug_assertions)]
-                            eprintln!("sidebar: key_text='{}' phys={:?} action={:?}", key_text, event.physical_key, action);
                             if let Some(act) = action {
                                 execute_action(act, state.focused_pane, state);
                             }
@@ -1016,6 +1008,7 @@ fn record_workspace_departure(state: &mut AppState, departed_ws: usize, pane_id:
 
 fn sync_focus(state: &mut AppState) {
     let prev_focused = state.focused_pane;
+    let prev_ws = state.session.active_workspace_idx;
 
     // Update focused_pane from session state
     state.focused_pane = state.session.active_workspace()
@@ -1023,17 +1016,16 @@ fn sync_focus(state: &mut AppState) {
         .map(|p| p.id.0);
 
     let focus_changed = prev_focused != state.focused_pane;
+    let current_ws = state.session.active_workspace_idx;
 
-    // Same-workspace focus change: record the previous pane locally.
-    // Workspace switches are tracked by the caller (action) BEFORE switching,
-    // because by the time sync_focus runs the session workspace has already changed
-    // and the old pane info is lost.
-    if focus_changed && prev_focused.is_some() {
-        let ws = state.session.active_workspace_idx;
-        while state.last_visited_pane_per_ws.len() <= ws {
+    // Only record per-workspace data for same-workspace focus changes.
+    // Workspace switches are tracked by the caller (action) BEFORE switching
+    // via record_workspace_departure().
+    if focus_changed && prev_focused.is_some() && prev_ws == current_ws {
+        while state.last_visited_pane_per_ws.len() <= current_ws {
             state.last_visited_pane_per_ws.push(None);
         }
-        state.last_visited_pane_per_ws[ws] = prev_focused;
+        state.last_visited_pane_per_ws[current_ws] = prev_focused;
     }
 
     // Track global last_focused (for Prefix+Shift+l toggle)
@@ -1123,15 +1115,9 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.needs_redraw = true;
         }
         WmAction::ClosePane => {
-            // Count total panes across all columns
-            let total_panes = state.session.active_workspace()
-                .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
-                .unwrap_or(0);
-            if total_panes <= 1 {
-                // Don't close the last pane — workspace would become empty
-                state.needs_redraw = true;
-                return;
-            }
+            // Close the focused pane. If the workspace becomes empty, remove it.
+            // If ALL workspaces become empty, create a default one.
+            let current_ws = state.session.active_workspace_idx;
             if let Some(ws) = state.session.active_workspace_mut() {
                 let col_idx = ws.scrolling.active_column_idx;
                 if let Some(col) = ws.scrolling.active_column() {
@@ -1141,7 +1127,29 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                     }
                 }
             }
-            sync_focus(state);
+
+            // Check if workspace is now empty
+            let ws_is_empty = state.session.workspaces
+                .get(current_ws)
+                .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
+                .unwrap_or(true);
+
+            if ws_is_empty && state.session.workspaces.len() > 1 {
+                // Remove empty workspace and switch to nearest neighbor
+                let _ = state.session.remove_workspace(current_ws);
+                let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
+                state.session.switch_to_workspace(new_idx);
+                sync_focus(state);
+            } else if ws_is_empty {
+                // Only workspace left and it's empty — create a default pane
+                let next_id = state.session.next_id();
+                let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+                state.session.add_pane(pane, None, true);
+                state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+                sync_focus(state);
+            } else {
+                sync_focus(state);
+            }
             state.needs_redraw = true;
         }
         WmAction::TabNext => {
@@ -1520,7 +1528,8 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             }
         }
         WmAction::CreateWorkspace => {
-            // Create a new empty workspace and switch to it
+            // Create a new workspace with a default pane, and switch to it
+            let current_ws = state.session.active_workspace_idx;
             let working_area = state.session.active_workspace()
                 .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
                 .unwrap_or_else(|| {
@@ -1531,8 +1540,16 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 });
             state.session.add_workspace(working_area);
             let new_idx = state.session.workspaces.len() - 1;
+            // Add a default pane so the workspace is not empty
+            let next_id = state.session.next_id();
+            let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+            state.session.add_pane(pane, None, true);
+            state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            // Record departure from old workspace before switching
+            if let Some(pane_id) = state.focused_pane {
+                record_workspace_departure(state, current_ws, pane_id);
+            }
             state.session.switch_to_workspace(new_idx);
-            // Ensure last_visited_pane_per_ws is sized correctly
             while state.last_visited_pane_per_ws.len() <= new_idx {
                 state.last_visited_pane_per_ws.push(None);
             }
