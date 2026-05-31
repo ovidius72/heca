@@ -343,6 +343,82 @@ impl OverviewState {
             Animated::Animating { .. } => true,
         }
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    fn make_session_with_workspaces(count: usize) -> Session {
+        let viewport = Size::new(1280.0, 800.0);
+        let mut session = Session::new(SessionId(1), viewport, 2.0);
+        // Session::new creates one workspace; add more if needed.
+        for _ in 1..count {
+            let wa = session.active_workspace().map(|ws| {
+                Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size)
+            }).unwrap_or_else(|| Rectangle::new(Point::default(), viewport));
+            session.add_workspace(wa);
+        }
+        session
+    }
+
+    #[test]
+    fn test_remove_workspace_active_after_removed() {
+        // 3 workspaces; active is 2. Remove ws 0.
+        // active_workspace_idx (2) > removed (0) → shift down to 1.
+        let mut session = make_session_with_workspaces(3);
+        session.active_workspace_idx = 2;
+        assert!(session.remove_workspace(0));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.active_workspace_idx, 1);
+    }
+
+    #[test]
+    fn test_remove_workspace_active_is_last() {
+        // 3 workspaces; active is 2. Remove ws 2 (last).
+        // active_workspace_idx (2) >= len (2) after removal → clamp to 1.
+        let mut session = make_session_with_workspaces(3);
+        session.active_workspace_idx = 2;
+        assert!(session.remove_workspace(2));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.active_workspace_idx, 1);
+    }
+
+    #[test]
+    fn test_remove_workspace_active_before_removed() {
+        // 3 workspaces; active is 0. Remove ws 1.
+        // active_workspace_idx (0) is not > removed (1) and not >= len (2)
+        // → unchanged at 0.
+        let mut session = make_session_with_workspaces(3);
+        session.active_workspace_idx = 0;
+        assert!(session.remove_workspace(1));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.active_workspace_idx, 0);
+    }
+
+    #[test]
+    fn test_remove_workspace_cannot_remove_last() {
+        let mut session = make_session_with_workspaces(1);
+        assert!(!session.remove_workspace(0));
+        assert_eq!(session.workspaces.len(), 1);
+    }
+
+    #[test]
+    fn test_remove_workspace_out_of_bounds() {
+        let mut session = make_session_with_workspaces(2);
+        assert!(!session.remove_workspace(5));
+        assert_eq!(session.workspaces.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_workspace_active_is_removed() {
+        // 3 workspaces; active is 1. Remove ws 1.
+        // active_workspace_idx (1) is not > removed (1) and not >= len (2)
+        // → unchanged at 1, which now points to the former workspace 2.
+        let mut session = make_session_with_workspaces(3);
+        session.active_workspace_idx = 1;
+        assert!(session.remove_workspace(1));
+        assert_eq!(session.workspaces.len(), 2);
+        assert_eq!(session.active_workspace_idx, 1);
+    }
 }
