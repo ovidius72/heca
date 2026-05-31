@@ -1,10 +1,10 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Easing function for animations.
 pub type EasingFn = fn(f64) -> f64;
 
 /// Animation configuration (duration + easing).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnimationConfig {
     pub duration_ms: u64,
     pub easing: EasingFn,
@@ -24,6 +24,8 @@ impl Default for AnimationConfig {
 pub struct Animation {
     start: f64,
     end: f64,
+    /// Initial velocity for spring-like animations.
+    velocity: f64,
     start_time: Instant,
     config: AnimationConfig,
 }
@@ -32,11 +34,13 @@ impl Animation {
     pub fn new(
         start: f64,
         end: f64,
+        velocity: f64,
         config: AnimationConfig,
     ) -> Self {
         Self {
             start,
             end,
+            velocity,
             start_time: Instant::now(),
             config,
         }
@@ -184,12 +188,6 @@ pub fn ease_in_out_cubic(t: f64) -> f64 {
 pub struct SwipeTracker {
     samples: Vec<(f64, Instant)>,
     pos: f64,
-}
-
-impl Default for SwipeTracker {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl SwipeTracker {

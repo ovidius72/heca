@@ -816,7 +816,8 @@ impl ApplicationHandler for HecaApp {
                         if mouse_pos.0 >= px && mouse_pos.0 <= px + pw
                             && mouse_pos.1 >= py && mouse_pos.1 <= py + ph
                         {
-                            focus_pane_by_id(state, pane_id.0);
+                            state.focused_pane = Some(pane_id.0);
+                            sync_focus(state);
                             break;
                         }
                     }
