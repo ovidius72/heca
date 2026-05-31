@@ -1401,8 +1401,18 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 let item = state.sidebar_tree.current_item().cloned();
                 match &item {
                     Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                        // Focus the pane and exit sidebar nav
-                        focus_pane_by_id(state, *pane_id);
+                        // Find which workspace contains this pane and switch to it
+                        let target_pane_id = heca_core::layout::PaneId(*pane_id);
+                        let target_ws = state.session.workspaces.iter().position(|ws| {
+                            ws.find_pane(target_pane_id).is_some()
+                        });
+                        if let Some(ws_idx) = target_ws {
+                            if ws_idx != state.session.active_workspace_idx {
+                                state.session.switch_to_workspace(ws_idx);
+                            }
+                            // Now focus the pane in its (now-active) workspace
+                            focus_pane_by_id(state, *pane_id);
+                        }
                         state.input_mode = InputMode::Normal;
                     }
                     _ => {
@@ -1417,8 +1427,17 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 let item = state.sidebar_tree.current_item().cloned();
                 match &item {
                     Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                        // Enter/expand on a pane focuses it
-                        focus_pane_by_id(state, *pane_id);
+                        // Focus the pane and switch to its workspace
+                        let target_pane_id = heca_core::layout::PaneId(*pane_id);
+                        let target_ws = state.session.workspaces.iter().position(|ws| {
+                            ws.find_pane(target_pane_id).is_some()
+                        });
+                        if let Some(ws_idx) = target_ws {
+                            if ws_idx != state.session.active_workspace_idx {
+                                state.session.switch_to_workspace(ws_idx);
+                            }
+                            focus_pane_by_id(state, *pane_id);
+                        }
                         state.input_mode = InputMode::Normal;
                     }
                     _ => {
