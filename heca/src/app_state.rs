@@ -97,3 +97,41 @@ pub struct AppState {
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_input_mode_candidates_none() {
+        assert_eq!(InputMode::Normal.candidates(), None);
+        assert_eq!(InputMode::Prefix.candidates(), None);
+        assert_eq!(InputMode::SidebarNav.candidates(), None);
+    }
+
+    #[test]
+    fn test_input_mode_candidates_some() {
+        let cands = vec![('a', 1), ('b', 2)];
+        assert_eq!(
+            InputMode::PaneSelect { candidates: cands.clone() }.candidates(),
+            Some(cands.as_slice())
+        );
+        assert_eq!(
+            InputMode::PaneSwap { candidates: cands.clone() }.candidates(),
+            Some(cands.as_slice())
+        );
+    }
+
+    #[test]
+    fn test_sidebar_item_state_eq() {
+        assert_eq!(SidebarItemState::Active, SidebarItemState::Active);
+        assert_ne!(SidebarItemState::Active, SidebarItemState::Visited);
+    }
+
+    #[test]
+    fn test_rename_target_clone() {
+        let t = RenameTarget::Workspace(3);
+        let cloned = t.clone();
+        assert_eq!(t, cloned);
+    }
+}

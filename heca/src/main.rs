@@ -95,6 +95,14 @@ fn render_backend_data(
     }
 }
 
+/// Extended alphabet for pane/column candidate labels (52 chars).
+const CANDIDATE_ALPHABET: &[char] = &[
+    'a','b','c','d','e','f','g','h','i','j','k','l','m',
+    'n','o','p','q','r','s','t','u','v','w','x','y','z',
+    'A','B','C','D','E','F','G','H','I','J','K','L','M',
+    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+];
+
 /// Distinct pane names so you can visually identify what's moving.
 const PANE_NAMES: &[&str] = &[
     "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
@@ -1024,12 +1032,12 @@ fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
-                let ch = (b'a' + candidates.len() as u8) as char;
+                let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
                 candidates.push((ch, pane.id.0));
             }
         }
         for float in &ws.floating_panes {
-            let ch = (b'a' + candidates.len() as u8) as char;
+            let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
             candidates.push((ch, float.pane.id.0));
         }
     }
@@ -1056,7 +1064,7 @@ fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             if let Some(first_pane) = col.panes.first() {
-                let ch = (b'a' + candidates.len() as u8) as char;
+                let ch = CANDIDATE_ALPHABET[candidates.len() % CANDIDATE_ALPHABET.len()];
                 candidates.push((ch, first_pane.id.0));
             }
         }
