@@ -93,7 +93,15 @@ impl SidebarTree {
     }
 
     /// Rebuild the tree from the current session state.
-    pub fn rebuild(&mut self, session: &Session, last_visited_ws_idx: Option<usize>, focused_pane: Option<u64>) {
+    /// `last_visited_pane_per_ws` provides per-workspace last-visited pane IDs
+    /// for toggle highlighting (Prefix+i).
+    pub fn rebuild(
+        &mut self,
+        session: &Session,
+        last_visited_ws_idx: Option<usize>,
+        focused_pane: Option<u64>,
+        last_visited_pane_per_ws: &[Option<u64>],
+    ) {
         self.workspaces.clear();
         self.flat_items.clear();
 
@@ -106,6 +114,8 @@ impl SidebarTree {
             } else {
                 SidebarItemState::None
             };
+
+            let last_visited_in_ws = last_visited_pane_per_ws.get(ws_idx).copied().flatten();
 
             let mut ws_entry = SidebarWsEntry {
                 ws_idx,
@@ -124,7 +134,7 @@ impl SidebarTree {
 
             for &col_idx in &cols_to_show {
                 if let Some(col) = ws.scrolling.columns.get(col_idx) {
-                    let is_active_col = col_idx == ws.scrolling.active_column_idx && is_active;
+                    let _is_active_col = col_idx == ws.scrolling.active_column_idx && is_active;
                     let mut col_entry = SidebarColEntry {
                         col_idx,
                         collapsed: false,
@@ -133,11 +143,14 @@ impl SidebarTree {
 
                     for (_, pane) in col.panes.iter().enumerate() {
                         let is_active_pane = Some(pane.id.0) == focused_pane;
+                        let is_visited_pane = !is_active_pane && Some(pane.id.0) == last_visited_in_ws;
                         col_entry.panes.push(SidebarPaneEntry {
                             pane_id: pane.id.0,
                             name: pane.title.clone(),
                             state: if is_active_pane {
                                 SidebarItemState::Active
+                            } else if is_visited_pane {
+                                SidebarItemState::Visited
                             } else {
                                 SidebarItemState::None
                             },
@@ -201,6 +214,40 @@ impl SidebarTree {
     pub fn cursor_down(&mut self) {
         if self.cursor + 1 < self.item_count {
             self.cursor += 1;
+        }
+    }
+
+    /// Returns true if the item at `idx` is visible in collapsed sidebar mode.
+    /// Columns are hidden; only Workspace and Pane items are shown.
+    fn is_visible_collapsed(&self, idx: usize) -> bool {
+        self.flat_items.get(idx).map_or(false, |item| {
+            !matches!(item, SidebarItem::Column { .. })
+        })
+    }
+
+    /// Move selection up, skipping invisible Column items (for collapsed sidebar nav).
+    pub fn cursor_up_collapsed(&mut self) {
+        loop {
+            if self.cursor == 0 {
+                break;
+            }
+            self.cursor -= 1;
+            if self.is_visible_collapsed(self.cursor) {
+                break;
+            }
+        }
+    }
+
+    /// Move selection down, skipping invisible Column items (for collapsed sidebar nav).
+    pub fn cursor_down_collapsed(&mut self) {
+        loop {
+            if self.cursor + 1 >= self.item_count {
+                break;
+            }
+            self.cursor += 1;
+            if self.is_visible_collapsed(self.cursor) {
+                break;
+            }
         }
     }
 
@@ -302,6 +349,23 @@ impl SidebarTree {
         self.flat_items.get(index).and_then(|item| match item {
             SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
             _ => None,
+        })
+    }
+
+    /// Get the workspace index of the item at the current cursor position.
+    /// Works for Workspace, Column, and Pane items.
+    pub fn cursor_workspace_index(&self) -> Option<usize> {
+        self.flat_items.get(self.cursor).and_then(|item| match item {
+            SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
+            SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
+            SidebarItem::Pane { pane_id } => {
+                // Search workspaces for this pane
+                self.workspaces.iter().position(|ws| {
+                    ws.columns.iter().any(|col| {
+                        col.panes.iter().any(|p| p.pane_id == *pane_id)
+                    })
+                })
+            }
         })
     }
 }
@@ -424,15 +488,21 @@ pub fn render_sidebar_expanded(
 }
 
 /// Render the collapsed sidebar (activity strip at 40px width).
+/// When `is_sidebar_nav` is true, the cursor line is highlighted so the user
+/// can navigate even in collapsed mode.
+/// `candidates` are shown as pane letters during PaneSwap / PaneSelect.
 pub fn render_sidebar_collapsed(
     tree: &SidebarTree,
     x: f32,
     y: f32,
     width: f32,
-    height: f32,
+    _height: f32,
+    is_sidebar_nav: bool,
     accent: [f32; 4],
     foreground: [f32; 4],
     visited_color: [f32; 4],
+    cursor_bg: [f32; 4],
+    candidates: Option<&[(char, u64)]>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
 ) {
@@ -440,9 +510,15 @@ pub fn render_sidebar_collapsed(
     let activity_bar_w = 4.0;
     let text_x = x + activity_bar_w + 4.0; // 4px gap after activity bar
     let mut line_y = y + 4.0;
-    let scroll = tree.scroll_offset;
+
+    // Track flat item index so we can match the cursor position.
+    // flat_items ordering: Workspace, [Column, [Pane...]...]...
+    let mut flat_idx = 0usize;
 
     for ws in &tree.workspaces {
+        let is_ws_cursor = is_sidebar_nav && flat_idx == tree.cursor;
+        flat_idx += 1; // consume Workspace item
+
         // Activity bar
         let bar_color = match ws.state {
             crate::app_state::SidebarItemState::Active => accent,
@@ -461,12 +537,21 @@ pub fn render_sidebar_collapsed(
             primitive_renderer.draw_rect(x, line_y, activity_bar_w, section_height, bar_color);
         }
 
+        // Cursor highlight
+        if is_ws_cursor {
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
+        }
+
         // Workspace number/identifier (first 2 chars)
         let ws_label = ws.name.chars().take(2).collect::<String>();
-        let ws_color = match ws.state {
-            crate::app_state::SidebarItemState::Active => accent,
-            crate::app_state::SidebarItemState::Visited => visited_color,
-            crate::app_state::SidebarItemState::None => foreground,
+        let ws_color = if is_ws_cursor {
+            accent
+        } else {
+            match ws.state {
+                crate::app_state::SidebarItemState::Active => accent,
+                crate::app_state::SidebarItemState::Visited => visited_color,
+                crate::app_state::SidebarItemState::None => foreground,
+            }
         };
         let ws_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
         text_renderer.queue_text(&ws_label, text_x, ws_text_y, font_size, ws_color);
@@ -475,13 +560,32 @@ pub fn render_sidebar_collapsed(
         // Pane letters
         if !ws.collapsed {
             for col in &ws.columns {
+                flat_idx += 1; // consume Column item (invisible in collapsed mode)
                 for pane in &col.panes {
-                    let pane_char = pane.name.chars().next()
+                    let is_pane_cursor = is_sidebar_nav && flat_idx == tree.cursor;
+                    flat_idx += 1; // consume Pane item
+
+                    if is_pane_cursor {
+                        primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
+                    }
+
+                    let mut pane_char = pane.name.chars().next()
                         .unwrap_or('?').to_string();
-                    let pane_color = match pane.state {
-                        crate::app_state::SidebarItemState::Active => accent,
-                        crate::app_state::SidebarItemState::Visited => visited_color,
-                        crate::app_state::SidebarItemState::None => foreground,
+                    // Show candidate letter during PaneSwap / PaneSelect
+                    if let Some(cands) = candidates {
+                        if let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id) {
+                            pane_char = ch.to_string();
+                        }
+                    }
+
+                    let pane_color = if is_pane_cursor {
+                        accent
+                    } else {
+                        match pane.state {
+                            crate::app_state::SidebarItemState::Active => accent,
+                            crate::app_state::SidebarItemState::Visited => visited_color,
+                            crate::app_state::SidebarItemState::None => foreground,
+                        }
                     };
                     let pane_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
                     text_renderer.queue_text(&pane_char, text_x, pane_text_y, font_size, pane_color);
@@ -549,7 +653,7 @@ mod tests {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
 
         // Should have 2 workspaces
         assert_eq!(tree.workspaces.len(), 2, "should have 2 workspaces");
@@ -568,7 +672,7 @@ mod tests {
     fn test_tree_flat_items() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
 
         // Flat items should contain workspaces, columns, and panes
         assert!(!tree.flat_items.is_empty(), "flat items should not be empty");
@@ -587,7 +691,7 @@ mod tests {
     fn test_cursor_movement() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
 
         assert_eq!(tree.cursor, 0, "cursor starts at 0");
 
@@ -614,7 +718,7 @@ mod tests {
     fn test_expand_collapse_workspace() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
 
         // Initially not collapsed
         assert!(!tree.workspaces[0].collapsed, "WS 0 should not be collapsed initially");
@@ -644,7 +748,7 @@ mod tests {
         session.switch_to_workspace(1);
 
         // Rebuild with last_visited_ws_idx = 0 (WS 0 was visited before)
-        tree.rebuild(&session, Some(0), Some(5));
+        tree.rebuild(&session, Some(0), Some(5), &[]);
 
         // WS 1 should be active (current)
         assert_eq!(tree.workspaces[1].state, SidebarItemState::Active, "WS 1 should be active after switch");
@@ -658,16 +762,16 @@ mod tests {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
         let first_count = tree.flat_items.len();
 
         // Rebuild again — should be same result
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
         assert_eq!(tree.flat_items.len(), first_count, "rebuild should produce same result");
 
         // Cursor should be clamped if it was out of bounds
         tree.cursor = 9999;
-        tree.rebuild(&session, None, Some(1));
+        tree.rebuild(&session, None, Some(1), &[]);
         assert!(tree.cursor < tree.flat_items.len(), "cursor should be clamped after rebuild");
     }
 
@@ -677,7 +781,7 @@ mod tests {
         let session = Session::new(SessionId(1), viewport, 2.0);
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, None);
+        tree.rebuild(&session, None, None, &[]);
 
         // Even an empty session has at least 1 workspace (the initial one)
         assert!(!tree.workspaces.is_empty(), "should have at least 1 workspace");

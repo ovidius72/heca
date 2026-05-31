@@ -263,7 +263,7 @@ impl HecaApp {
 
         let ws_count = session.workspaces.len();
         let mut sidebar_tree = SidebarTree::new();
-        sidebar_tree.rebuild(&session, None, Some(pane_id));
+        sidebar_tree.rebuild(&session, None, Some(pane_id), &vec![None; ws_count]);
 
         Box::new(AppState {
             window,
@@ -519,9 +519,12 @@ impl HecaApp {
             sidebar::render_sidebar_collapsed(
                 &state.sidebar_tree,
                 0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
+                matches!(state.input_mode, InputMode::SidebarNav),
                 theme.accent.to_f32x4(),
                 theme.foreground.to_f32x4(),
                 [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],
+                candidates,
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
             );
@@ -806,6 +809,7 @@ impl ApplicationHandler for HecaApp {
                         if let Some(ch) = typed {
                             if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 focus_pane_by_id(state, *target_id);
+                                sync_focus(state);
                             }
                         }
                     }
@@ -830,13 +834,17 @@ impl ApplicationHandler for HecaApp {
                         if let Some(ch) = typed {
                             if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 if let Some(current_id) = state.focused_pane {
-                                    if current_id != *target_id {
-                                        let current_ws = state.session.active_workspace_idx;
-                                        let target_ws = find_pane_workspace(&state.session, *target_id);
-                                        if target_ws == Some(current_ws) {
-                                            swap_panes(state, current_id, *target_id);
-                                        } else if let Some(tws) = target_ws {
-                                            move_pane_to_workspace(state, current_id, tws, *target_id);
+                                    let current_col = find_pane_column(&state.session, current_id);
+                                    let target_col = find_pane_column(&state.session, *target_id);
+                                    if let (Some((cws, ccol)), Some((tws, tcol))) = (current_col, target_col) {
+                                        if cws == tws && ccol == tcol {
+                                            // Same column — no-op
+                                        } else if cws == tws {
+                                            // Same workspace, different column: move pane to target column
+                                            move_pane_to_column(state, current_id, ccol, tcol);
+                                        } else {
+                                            // Cross-workspace: move pane to target workspace, target column
+                                            move_pane_to_workspace_column(state, current_id, tws, tcol);
                                         }
                                     }
                                 }
@@ -851,8 +859,6 @@ impl ApplicationHandler for HecaApp {
                         state.needs_redraw = true;
                     }
                     InputMode::SidebarNav => {
-                        // Sidebar mode uses its OWN keybinding set (mode_bindings["sidebar"])
-                        // so j/k/h/l etc. don't conflict with normal mode bindings.
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
 
                         if is_escape {
@@ -985,10 +991,37 @@ fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
     candidates
 }
 
+/// Find the (workspace_index, column_index) containing a pane.
+fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
+    let target = heca_core::layout::PaneId(pane_id);
+    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
+        for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
+            if col.panes.iter().any(|p| p.id == target) {
+                return Some((ws_idx, col_idx));
+            }
+        }
+    }
+    None
+}
+
+/// Collect ALL columns across ALL workspaces as letter candidates.
+/// The candidate ID is the first pane ID in the column (used for positioning the letter overlay).
+fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
+    let mut candidates = Vec::new();
+    for ws in &session.workspaces {
+        for col in &ws.scrolling.columns {
+            if let Some(first_pane) = col.panes.first() {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, first_pane.id.0));
+            }
+        }
+    }
+    candidates
+}
+
 /// Focus a specific pane by its ID, updating both `focused_pane` and the session's active state.
 /// If the pane is in a different workspace, switches to that workspace first.
 fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
-    // Track global last_focused before changing
     let prev_focused = state.focused_pane;
 
     // Switch workspace if the target pane is not in the current workspace.
@@ -998,22 +1031,23 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
         }
     }
 
-    // Track visited per-workspace: only if the old pane belongs to the current workspace.
-    if let Some(old_pane_id) = state.focused_pane {
-        let ws_idx = state.session.active_workspace_idx;
-        if let Some(ws) = state.session.workspaces.get(ws_idx) {
+    let current_ws = state.session.active_workspace_idx;
+
+    // Record same-workspace previous pane for Prefix+i toggle.
+    // Only save if prev_focused belongs to the CURRENT workspace — cross-workspace
+    // history is managed by the session itself (each workspace remembers its own
+    // active pane), so we must NOT pollute local toggle state with foreign panes.
+    if let Some(old_pane_id) = prev_focused {
+        if let Some(ws) = state.session.workspaces.get(current_ws) {
             if ws.find_pane(heca_core::layout::PaneId(old_pane_id)).is_some() {
-                while state.last_visited_pane_per_ws.len() <= ws_idx {
+                while state.last_visited_pane_per_ws.len() <= current_ws {
                     state.last_visited_pane_per_ws.push(None);
                 }
-                state.last_visited_pane_per_ws[ws_idx] = Some(old_pane_id);
+                state.last_visited_pane_per_ws[current_ws] = Some(old_pane_id);
             }
         }
     }
-    state.focused_pane = Some(pane_id);
-    if prev_focused != state.focused_pane && prev_focused.is_some() {
-        state.last_focused = prev_focused;
-    }
+
     if let Some(ws) = state.session.active_workspace_mut() {
         // Find location first (immutable scan), then mutate.
         let mut found = None;
@@ -1029,11 +1063,13 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 
         if let Some((ci, pi)) = found {
             ws.floating_is_active = false;
-            // Use activate_column to properly scroll the view to the target column.
-            // This ensures off-screen columns are brought into view.
             ws.scrolling.activate_column(ci);
             if let Some(col) = ws.scrolling.columns.get_mut(ci) {
                 col.activate_pane(pi);
+            }
+            state.focused_pane = Some(pane_id);
+            if prev_focused != state.focused_pane && prev_focused.is_some() {
+                state.last_focused = prev_focused;
             }
             return;
         }
@@ -1043,6 +1079,10 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
             if float.pane.id.0 == pane_id {
                 ws.floating_is_active = true;
                 float.is_active = true;
+                state.focused_pane = Some(pane_id);
+                if prev_focused != state.focused_pane && prev_focused.is_some() {
+                    state.last_focused = prev_focused;
+                }
                 return;
             }
         }
@@ -1051,23 +1091,15 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 
 /// Sync `focused_pane` from the session's active pane (scrolling or floating).
 /// Also tracks last-visited workspace and rebuilds the sidebar tree.
-/// Record that we are departing a workspace, saving its active pane.
-/// The single canonical way to switch workspaces. Handles departure tracking
-/// (last_visited_ws_idx + last_visited_pane_per_ws for both sidebar
-/// highlight and Prefix+i / Prefix+Shift+l toggles).
+/// The single canonical way to switch workspaces.
+/// Updates last_visited_ws_idx so Prefix+Shift+l can toggle back.
+/// Does NOT touch last_visited_pane_per_ws — that field is reserved for
+/// same-workspace pane toggle (Prefix+i) and must not be overwritten by
+/// workspace switches.
 fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == new_idx {
         return;
-    }
-    // Record which pane was active in the workspace we are leaving.
-    // This is the ONLY place where last_visited_pane_per_ws is written
-    // for cross-workspace switches.
-    if let Some(pane_id) = state.focused_pane {
-        while state.last_visited_pane_per_ws.len() <= current_ws {
-            state.last_visited_pane_per_ws.push(None);
-        }
-        state.last_visited_pane_per_ws[current_ws] = Some(pane_id);
     }
     state.last_visited_ws_idx = Some(current_ws);
     state.session.switch_to_workspace(new_idx);
@@ -1110,6 +1142,7 @@ fn sync_focus(state: &mut AppState) {
         &state.session,
         state.last_visited_ws_idx,
         state.focused_pane,
+        &state.last_visited_pane_per_ws,
     );
 }
 
@@ -1310,14 +1343,14 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             }
         }
         WmAction::SwapSelect => {
-            let candidates = collect_all_pane_candidates(&state.session);
+            let candidates = collect_all_column_candidates(&state.session);
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSwap { candidates };
                 state.needs_redraw = true;
             }
         }
         WmAction::SwapAndFocus => {
-            let candidates = collect_all_pane_candidates(&state.session);
+            let candidates = collect_all_column_candidates(&state.session);
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSwap { candidates };
                 state.swap_and_focus = true;
@@ -1446,25 +1479,39 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.needs_redraw = true;
         }
         WmAction::SidebarFocus => {
-            // Enter sidebar navigation mode
+            // Enter sidebar navigation mode.
+            // Auto-expand the sidebar so the tree is visible and navigable.
+            state.sidebar.left_visible = true;
+            state.sidebar.left_width = 200.0;
             state.input_mode = InputMode::SidebarNav;
-            // Auto-expand: rebuild tree if collapsed items exist
+            update_session_viewport(state);
             state.sidebar_tree.rebuild(
                 &state.session,
                 state.last_visited_ws_idx,
                 state.focused_pane,
+                &state.last_visited_pane_per_ws,
             );
             state.needs_redraw = true;
         }
         WmAction::SidebarUp => {
             if matches!(state.input_mode, InputMode::SidebarNav) {
-                state.sidebar_tree.cursor_up();
+                let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < 80.0;
+                if is_collapsed {
+                    state.sidebar_tree.cursor_up_collapsed();
+                } else {
+                    state.sidebar_tree.cursor_up();
+                }
                 state.needs_redraw = true;
             }
         }
         WmAction::SidebarDown => {
             if matches!(state.input_mode, InputMode::SidebarNav) {
-                state.sidebar_tree.cursor_down();
+                let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < 80.0;
+                if is_collapsed {
+                    state.sidebar_tree.cursor_down_collapsed();
+                } else {
+                    state.sidebar_tree.cursor_down();
+                }
                 state.needs_redraw = true;
             }
         }
@@ -1491,6 +1538,20 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                             }
                             focus_pane_by_id(state, *pane_id);
                         }
+                        state.input_mode = InputMode::Normal;
+                    }
+                    Some(sidebar::SidebarItem::Workspace { .. }) => {
+                        // Enter on workspace: create a new column with a pane in that workspace
+                        let ws_idx = state.sidebar_tree.cursor_workspace_index()
+                            .unwrap_or(state.session.active_workspace_idx);
+                        if ws_idx != state.session.active_workspace_idx {
+                            switch_workspace_tracked(state, ws_idx);
+                        }
+                        let next_id = state.session.next_id();
+                        let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+                        state.session.add_pane(pane, None, true);
+                        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+                        sync_focus(state);
                         state.input_mode = InputMode::Normal;
                     }
                     _ => {
@@ -1537,16 +1598,13 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             }
         }
         WmAction::FocusToggleGlobal => {
-            // Go to the last-visited workspace and its active pane.
-            // After switching, update last_visited_ws_idx to point back so
-            // the next toggle goes back (proper two-way toggle).
+            // Toggle to the last-visited workspace.
+            // The session already remembers each workspace's active pane, so
+            // after switching we just sync_focus() to pick it up.
             if let Some(prev_ws) = state.last_visited_ws_idx {
                 let current_ws = state.session.active_workspace_idx;
                 if prev_ws != current_ws {
                     switch_workspace_tracked(state, prev_ws);
-                    if let Some(pane_id) = state.last_visited_pane_per_ws.get(prev_ws).copied().flatten() {
-                        focus_pane_by_id(state, pane_id);
-                    }
                     sync_focus(state);
                 }
                 state.needs_redraw = true;
@@ -1729,7 +1787,8 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
 }
 
 /// Move a pane from its current workspace to a target workspace.
-/// The pane is inserted into the same column as the target pane (or a new column if needed).
+/// The pane is inserted into a new column in the target workspace.
+/// If the source workspace becomes empty, it is destroyed.
 fn move_pane_to_workspace(state: &mut AppState, pane_id: u64, target_ws: usize, _target_pane: u64) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == target_ws {
@@ -1756,8 +1815,136 @@ fn move_pane_to_workspace(state: &mut AppState, pane_id: u64, target_ws: usize, 
         // Switch to target workspace and add the pane there.
         state.session.switch_to_workspace(target_ws);
         state.session.add_pane(pane, None, true);
-        // Update focused_pane so it points to the moved pane in its new location.
         state.focused_pane = Some(pane_id);
+
+        // Destroy source workspace if it became empty.
+        destroy_empty_workspace(state, current_ws);
+    }
+
+    sync_focus(state);
+}
+
+/// Move a pane from its current workspace to a specific column in a target workspace.
+/// If the source workspace becomes empty, it is destroyed.
+fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: usize, target_col: usize) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == target_ws {
+        return;
+    }
+
+    let removed_pane = {
+        let ws = match state.session.workspaces.get_mut(current_ws) {
+            Some(ws) => ws,
+            None => return,
+        };
+        let mut removed = None;
+        for ci in 0..ws.scrolling.columns.len() {
+            if let Some(pi) = ws.scrolling.columns[ci].panes.iter().position(|p| p.id.0 == pane_id) {
+                removed = ws.scrolling.remove_pane(ci, pi);
+                break;
+            }
+        }
+        removed
+    };
+
+    if let Some(pane) = removed_pane {
+        state.session.switch_to_workspace(target_ws);
+
+        // Add to target column if it exists, otherwise create a new column.
+        if let Some(ws) = state.session.active_workspace_mut() {
+            if target_col < ws.scrolling.columns.len() {
+                ws.scrolling.add_pane_to_column(target_col, None, pane, true);
+            } else {
+                state.session.add_pane(pane, None, true);
+            }
+            state.focused_pane = Some(pane_id);
+        }
+
+        destroy_empty_workspace(state, current_ws);
+    }
+
+    sync_focus(state);
+}
+
+/// Move a pane from one column to another within the same workspace.
+/// Handles column removal when a column becomes empty after the move.
+fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: usize, dst_col: usize) {
+    if src_col == dst_col { return; }
+
+    let ws_idx = state.session.active_workspace_idx;
+
+    // Validate indices before mutation.
+    let col_count_before = state.session.workspaces.get(ws_idx)
+        .map(|ws| ws.scrolling.columns.len())
+        .unwrap_or(0);
+    if src_col >= col_count_before || dst_col >= col_count_before {
+        return;
+    }
+
+    let removed_pane = if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+        if let Some(pi) = ws.scrolling.columns.get(src_col)
+            .and_then(|col| col.panes.iter().position(|p| p.id.0 == pane_id))
+        {
+            ws.scrolling.remove_pane(src_col, pi)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(pane) = removed_pane {
+        // Check if the source column was removed (became empty after removal).
+        let col_count_after = state.session.workspaces.get(ws_idx)
+            .map(|ws| ws.scrolling.columns.len())
+            .unwrap_or(0);
+        let col_removed = col_count_after < col_count_before;
+
+        let adjusted_dst = if col_removed && src_col < dst_col {
+            dst_col.saturating_sub(1)
+        } else {
+            dst_col
+        };
+
+        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+            let target_col = adjusted_dst.min(ws.scrolling.columns.len().saturating_sub(1));
+            if target_col < ws.scrolling.columns.len() {
+                ws.scrolling.add_pane_to_column(target_col, None, pane, true);
+            } else {
+                ws.scrolling.add_column(None, Column::new(
+                    ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5),
+                ), true);
+            }
+            state.focused_pane = Some(pane_id);
+        }
+    }
+
+    sync_focus(state);
+}
+
+/// Remove a workspace if it is empty and there are other workspaces.
+/// Adjusts tracking indices after removal.
+fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
+    let is_empty = state.session.workspaces.get(ws_idx)
+        .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
+        .unwrap_or(true);
+
+    if is_empty && state.session.workspaces.len() > 1 {
+        state.session.remove_workspace(ws_idx);
+
+        // Fix up last_visited_ws_idx if it pointed to the removed workspace.
+        if state.last_visited_ws_idx == Some(ws_idx) {
+            state.last_visited_ws_idx = None;
+        } else if let Some(ref mut idx) = state.last_visited_ws_idx {
+            if *idx > ws_idx {
+                *idx -= 1;
+            }
+        }
+
+        // Fix up last_visited_pane_per_ws — remove the entry for the removed workspace.
+        if ws_idx < state.last_visited_pane_per_ws.len() {
+            state.last_visited_pane_per_ws.remove(ws_idx);
+        }
     }
 }
 

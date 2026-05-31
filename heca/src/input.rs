@@ -175,13 +175,14 @@ impl KeyBindings {
 
         // ── Load mode-specific bindings ──
         let mut mode_bindings = HashMap::new();
-        // Sidebar mode: j/k/h/l navigate, Enter activates, Escape exits
+        // Sidebar mode: single-key bindings (no prefix required within the mode)
         let sidebar_entries: Vec<(&str, &str)> = vec![
             ("sidebar_down", "j"),
             ("sidebar_up", "k"),
             ("sidebar_left_nav", "h"),
             ("sidebar_right_nav", "l,Enter"),
             ("sidebar_expand_toggle", "Tab,Space"),
+            ("sidebar_left", "b"),
         ];
         let mut sidebar_bindings = Vec::new();
         for (name, key_str) in sidebar_entries {
