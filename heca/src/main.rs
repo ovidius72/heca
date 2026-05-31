@@ -1067,16 +1067,24 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.needs_redraw = true;
         }
         WmAction::FocusUp => {
-            state.session.focus_up();
+            // Stay within workspace — don't wrap to previous workspace
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.focus_up();
+            }
             sync_focus(state);
             state.needs_redraw = true;
         }
         WmAction::FocusDown => {
-            state.session.focus_down();
+            // Stay within workspace — don't wrap to next workspace
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.focus_down();
+            }
             sync_focus(state);
             state.needs_redraw = true;
         }
         WmAction::SplitHorizontal => {
+            #[cfg(debug_assertions)]
+            eprintln!("execute_action: SplitHorizontal — creating new column");
             // New column to the right
             let next_id = state.session.next_id();
             let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
