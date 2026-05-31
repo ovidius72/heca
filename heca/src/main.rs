@@ -292,6 +292,7 @@ impl HecaApp {
             last_visited_pane_per_ws: vec![None; ws_count],
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.general.mouse,
+            prefix_entered_at: None,
         })
     }
 
@@ -717,6 +718,7 @@ impl ApplicationHandler for HecaApp {
                         // Only prefix key activates prefix mode in Normal
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
+                            state.prefix_entered_at = Some(std::time::Instant::now());
                             state.needs_redraw = true;
                             return;
                         }
@@ -739,6 +741,7 @@ impl ApplicationHandler for HecaApp {
                             // Double-prefix: forward literal Ctrl+B (0x02) to the terminal
                             // so nested tmux/screen work correctly.
                             state.input_mode = InputMode::Normal;
+                            state.prefix_entered_at = None;
                             if let Some(pane_id) = state.focused_pane
                                 && let Some(backend) = state.backends.get_mut(&pane_id) {
                                     backend.process_input(&[0x02]);
@@ -770,10 +773,12 @@ impl ApplicationHandler for HecaApp {
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
                         if let Some(act) = action {
                             state.input_mode = InputMode::Normal;
+                            state.prefix_entered_at = None;
                             execute_action(act, state.focused_pane, state);
                         } else if !key_text.is_empty() {
                             // Printable key that didn't match any binding — exit prefix.
                             state.input_mode = InputMode::Normal;
+                            state.prefix_entered_at = None;
                         }
                         // else: empty key_text, no action — stay in prefix mode.
                     }
@@ -892,7 +897,52 @@ impl ApplicationHandler for HecaApp {
                 let pane_area = chrome.content_rect(win_w, win_h);
 
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
-                    // Hit test against NIRI layout pane positions
+                    // ── Left sidebar hit test ──
+                    let sidebar_top = chrome.tab_bar_height;
+                    let sidebar_bottom = win_h - chrome.status_bar_height;
+                    let sidebar_h = sidebar_bottom - sidebar_top;
+                    if mouse_pos.0 >= 0.0 && mouse_pos.0 <= chrome.left_sidebar_width
+                        && mouse_pos.1 >= sidebar_top && mouse_pos.1 <= sidebar_bottom
+                    {
+                        if let Some(fi) = sidebar::sidebar_hit_test(
+                            &state.sidebar_tree,
+                            sidebar_top, sidebar_h, chrome.left_sidebar_width,
+                            mouse_pos.1,
+                        ) {
+                            state.sidebar_tree.cursor = fi;
+                            state.input_mode = InputMode::SidebarNav;
+                            // Activate the clicked item (same as Enter in SidebarNav)
+                            let item = state.sidebar_tree.current_item().cloned();
+                            match &item {
+                                Some(sidebar::SidebarItem::Pane { pane_id }) => {
+                                    let target_pane_id = heca_core::layout::PaneId(*pane_id);
+                                    let target_ws = state.session.workspaces.iter().position(|ws| {
+                                        ws.find_pane(target_pane_id).is_some()
+                                    });
+                                    if let Some(ws_idx) = target_ws {
+                                        if ws_idx != state.session.active_workspace_idx {
+                                            switch_workspace_tracked(state, ws_idx);
+                                        }
+                                        focus_pane_by_id(state, *pane_id);
+                                    }
+                                    state.input_mode = InputMode::Normal;
+                                }
+                                Some(sidebar::SidebarItem::Workspace { .. }) => {
+                                    let ws_idx = state.sidebar_tree.cursor_workspace_index()
+                                        .unwrap_or(state.session.active_workspace_idx);
+                                    if ws_idx != state.session.active_workspace_idx {
+                                        switch_workspace_tracked(state, ws_idx);
+                                    }
+                                    sync_focus(state);
+                                    state.input_mode = InputMode::Normal;
+                                }
+                                _ => {}
+                            }
+                        }
+                        return;
+                    }
+
+                    // ── Pane content area hit test ──
                     let pane_positions = state.session.active_workspace()
                         .map(|ws| ws.scrolling.panes_with_positions())
                         .unwrap_or_default();
@@ -921,6 +971,16 @@ impl ApplicationHandler for HecaApp {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(ref mut state) = self.state {
+            // Prefix mode auto-timeout: exit if user has been in prefix > 500 ms.
+            if matches!(state.input_mode, InputMode::Prefix)
+                && let Some(entered) = state.prefix_entered_at
+                && entered.elapsed() >= Duration::from_millis(500)
+            {
+                state.input_mode = InputMode::Normal;
+                state.prefix_entered_at = None;
+                state.needs_redraw = true;
+            }
+
             // Advance session animations.
             state.session.advance_animations();
 
