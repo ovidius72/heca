@@ -38,9 +38,6 @@ pub struct SidebarColEntry {
     pub panes: Vec<SidebarPaneEntry>,
 }
 
-impl SidebarColEntry {
-}
-
 /// A workspace entry in the sidebar tree.
 #[derive(Debug, Clone)]
 pub struct SidebarWsEntry {
@@ -49,9 +46,6 @@ pub struct SidebarWsEntry {
     pub collapsed: bool,
     pub state: SidebarItemState,
     pub columns: Vec<SidebarColEntry>,
-}
-
-impl SidebarWsEntry {
 }
 
 /// The sidebar tree model — mirrors the session's layout hierarchy.
@@ -351,6 +345,56 @@ impl SidebarTree {
             }
         })
     }
+}
+
+/// Hit-test the sidebar to find which flat item (if any) is under `mouse_y`.
+///
+/// * `sidebar_top` — Y coordinate of the sidebar's top edge
+/// * `sidebar_height` — total height of the sidebar content area
+/// * `sidebar_width` — current width (used to decide expanded vs collapsed)
+/// * `mouse_y` — the mouse cursor's Y coordinate
+///
+/// Returns the flat item index, or `None` if the click missed all items.
+pub fn sidebar_hit_test(
+    tree: &SidebarTree,
+    sidebar_top: f32,
+    sidebar_height: f32,
+    sidebar_width: f32,
+    mouse_y: f32,
+) -> Option<usize> {
+    if mouse_y < sidebar_top || mouse_y > sidebar_top + sidebar_height {
+        return None;
+    }
+
+    let is_collapsed = sidebar_width < 80.0;
+    let relative_y = mouse_y - (sidebar_top + 4.0);
+    if relative_y < 0.0 {
+        return None;
+    }
+
+    let line_index = (relative_y / ITEM_HEIGHT) as usize;
+
+    if is_collapsed {
+        // In collapsed mode columns are invisible; map visible line to flat idx.
+        let mut visible_line = 0usize;
+        for (fi, item) in tree.flat_items.iter().enumerate() {
+            if matches!(item, SidebarItem::Column { .. }) {
+                continue;
+            }
+            if visible_line == line_index {
+                return Some(fi);
+            }
+            visible_line += 1;
+        }
+    } else {
+        let visible_lines = (sidebar_height / ITEM_HEIGHT) as usize;
+        let fi = tree.scroll_offset + line_index;
+        if line_index < visible_lines && fi < tree.flat_items.len() {
+            return Some(fi);
+        }
+    }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -771,6 +815,126 @@ mod tests {
         // Even an empty session has at least 1 workspace (the initial one)
         assert!(!tree.workspaces.is_empty(), "should have at least 1 workspace");
         // But it may have no panes
+    }
+
+    #[test]
+    fn test_cursor_down_collapsed_skips_columns() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Start at first workspace (index 0). In collapsed mode cursor_down
+        // should skip the Column item and land on the first Pane.
+        tree.cursor = 0;
+        tree.cursor_down_collapsed();
+        assert!(
+            matches!(tree.flat_items[tree.cursor], SidebarItem::Pane { .. }),
+            "cursor_down_collapsed should skip Column and land on Pane, got {:?}",
+            tree.flat_items[tree.cursor]
+        );
+    }
+
+    #[test]
+    fn test_cursor_up_collapsed_skips_columns() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Put cursor on the first Pane item after its Column.
+        // cursor_up_collapsed should skip the Column and land on Workspace.
+        let first_pane_idx = tree.flat_items.iter().position(|i| {
+            matches!(i, SidebarItem::Pane { .. })
+        }).expect("should have a pane");
+        tree.cursor = first_pane_idx;
+        tree.cursor_up_collapsed();
+        assert!(
+            matches!(tree.flat_items[tree.cursor], SidebarItem::Workspace { .. }),
+            "cursor_up_collapsed should skip Column and land on Workspace, got {:?}",
+            tree.flat_items[tree.cursor]
+        );
+    }
+
+    #[test]
+    fn test_toggle_expand_clamps_cursor() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Place cursor deep inside workspace 0 (e.g. on a pane).
+        let ws0_last_idx = tree.flat_items.iter().enumerate().rposition(|(_, i)| {
+            matches!(i, SidebarItem::Workspace { ws_idx } if *ws_idx == 0)
+                || matches!(i, SidebarItem::Column { ws_idx, .. } if *ws_idx == 0)
+                || matches!(i, SidebarItem::Pane { pane_id } if *pane_id <= 4)
+        }).expect("should have ws0 items");
+        tree.cursor = ws0_last_idx;
+
+        // Collapse workspace 0 — its children disappear.
+        tree.workspaces[0].collapsed = true;
+        tree.rebuild_flat_items();
+        tree.clamp_cursor();
+
+        // clamp_cursor() only bounds-checks; cursor may end up on a later workspace.
+        // The invariant is that cursor must be valid after collapse.
+        assert!(
+            tree.cursor < tree.flat_items.len(),
+            "cursor must be valid after collapse: cursor={} len={}",
+            tree.cursor,
+            tree.flat_items.len()
+        );
+    }
+
+    #[test]
+    fn test_column_expand_collapse() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Find first Column item in flat list.
+        let col_idx = tree.flat_items.iter().position(|i| {
+            matches!(i, SidebarItem::Column { .. })
+        }).expect("should have a column");
+        tree.cursor = col_idx;
+
+        // Collapse the column.
+        tree.toggle_expand();
+        if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+            assert!(tree.workspaces[ws_idx].columns[c].collapsed, "column should be collapsed");
+        }
+
+        // Expand it back.
+        tree.toggle_expand();
+        if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
+            assert!(!tree.workspaces[ws_idx].columns[c].collapsed, "column should be expanded");
+        }
+    }
+
+    #[test]
+    fn test_sidebar_hit_test_expanded() {
+        let (session, _ids) = make_test_session();
+        let tree = SidebarTree::new();
+        // Rebuild into a fresh tree (cursor at 0)
+        let mut tree = tree;
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Click on first item line (just below top padding).
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 36.0 + 4.0 + 2.0);
+        assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
+
+        // Click above sidebar should miss.
+        assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 10.0), None);
+    }
+
+    #[test]
+    fn test_sidebar_hit_test_collapsed() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Collapsed mode (width < 80). Click on second visible line.
+        // In collapsed mode visible lines are: WS, Pane, Pane... (columns hidden).
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, 36.0 + 4.0 + 2.0 + ITEM_HEIGHT);
+        // Second visible line should be the first Pane (skipping the Column).
+        assert_eq!(fi, Some(2), "second visible line in collapsed mode should be first Pane (flat idx 2)");
     }
 }
 

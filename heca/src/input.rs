@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use heca_config::theme::AppConfig;
 use winit::keyboard::NamedKey;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WmAction {
     FocusLeft,
     FocusRight,
@@ -44,6 +44,7 @@ pub enum WmAction {
     WorkspacePrev,
     FocusToggleLocal,
     FocusToggleGlobal,
+    CommandPalette,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -88,6 +89,7 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
+        "command_palette" => Some(WmAction::CommandPalette),
         _ => None,
     }
 }
@@ -123,6 +125,8 @@ fn action_priority(action: WmAction) -> u8 {
         // Tabs and sidebars
         WmAction::TabNext | WmAction::TabPrev |
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
+        // System
+        WmAction::CommandPalette => 5,
     }
 }
 
@@ -356,5 +360,58 @@ impl KeyBindings {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_action_from_name_known() {
+        assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
+        assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
+        assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
+        assert_eq!(action_from_name("command_palette"), Some(WmAction::CommandPalette));
+    }
+
+    #[test]
+    fn test_action_from_name_unknown() {
+        assert_eq!(action_from_name("not_real"), None);
+        assert_eq!(action_from_name(""), None);
+    }
+
+    #[test]
+    fn test_parse_key_simple() {
+        let (ctrl, shift, key) = KeyBindings::parse_key("h");
+        assert!(!ctrl);
+        assert!(!shift);
+        assert_eq!(key, "h");
+    }
+
+    #[test]
+    fn test_parse_key_with_modifiers() {
+        let (ctrl, shift, key) = KeyBindings::parse_key("Ctrl+Shift+l");
+        assert!(ctrl);
+        assert!(shift);
+        assert_eq!(key, "l");
+    }
+
+    #[test]
+    fn test_parse_key_shift_only() {
+        let (ctrl, shift, key) = KeyBindings::parse_key("Shift+w");
+        assert!(!ctrl);
+        assert!(shift);
+        assert_eq!(key, "w");
+    }
+
+    #[test]
+    fn test_action_priority_order() {
+        // Navigation should have highest priority (lowest number)
+        assert!(action_priority(WmAction::FocusLeft) < action_priority(WmAction::ResizeIncrease));
+        // Resize should have lower priority than pane management
+        assert!(action_priority(WmAction::ResizeIncrease) > action_priority(WmAction::ClosePane));
+        // CommandPalette should have lowest priority
+        assert!(action_priority(WmAction::CommandPalette) > action_priority(WmAction::SidebarLeft));
     }
 }
