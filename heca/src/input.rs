@@ -10,15 +10,9 @@ pub enum WmAction {
     SplitHorizontal,
     SplitVertical,
     Float,
-    Scratchpad,
-    Hide,
     ClosePane,
     TabNext,
     TabPrev,
-    ResizeLeft,
-    ResizeRight,
-    ResizeUp,
-    ResizeDown,
     ResizeIncrease,
     ResizeDecrease,
     SidebarLeft,
@@ -46,15 +40,9 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "split_horizontal" => Some(WmAction::SplitHorizontal),
         "split_vertical" => Some(WmAction::SplitVertical),
         "float" => Some(WmAction::Float),
-        "scratchpad" => Some(WmAction::Scratchpad),
-        "hide" => Some(WmAction::Hide),
         "close" => Some(WmAction::ClosePane),
         "tab_next" => Some(WmAction::TabNext),
         "tab_prev" => Some(WmAction::TabPrev),
-        "resize_left" => Some(WmAction::ResizeLeft),
-        "resize_right" => Some(WmAction::ResizeRight),
-        "resize_up" => Some(WmAction::ResizeUp),
-        "resize_down" => Some(WmAction::ResizeDown),
         "resize_increase" => Some(WmAction::ResizeIncrease),
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
@@ -84,20 +72,18 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::NextPane | WmAction::PrevPane => 0,
         // Pane management
         WmAction::SplitHorizontal | WmAction::SplitVertical |
-        WmAction::Float | WmAction::Scratchpad |
-        WmAction::Hide | WmAction::ClosePane |
+        WmAction::Float | WmAction::ClosePane |
         WmAction::PaneSelect | WmAction::SwapSelect => 1,
         // Swap
         WmAction::SwapLeft | WmAction::SwapRight |
         WmAction::SwapUp | WmAction::SwapDown |
         WmAction::MovePaneLeft | WmAction::MovePaneRight => 2,
         // Resize (lowest priority — checked last)
-        WmAction::ResizeLeft | WmAction::ResizeRight |
-        WmAction::ResizeUp | WmAction::ResizeDown |
         WmAction::ResizeIncrease | WmAction::ResizeDecrease |
         WmAction::PaneHeightIncrease | WmAction::PaneHeightDecrease => 3,
-        // Other
-        _ => 4,
+        // Tabs and sidebars
+        WmAction::TabNext | WmAction::TabPrev |
+        WmAction::SidebarLeft | WmAction::SidebarRight => 4,
     }
 }
 
@@ -107,8 +93,6 @@ struct Binding {
     key: String,
     ctrl: bool,
     shift: bool,
-    #[allow(dead_code)]
-    alt: bool,
 }
 
 pub struct KeyBindings {
@@ -123,8 +107,8 @@ impl KeyBindings {
                 for part in key_str.split(',') {
                     let part = part.trim();
                     if part.is_empty() { continue; }
-                    let (ctrl, shift, alt, key) = Self::parse_key(part);
-                    bindings.push(Binding { action, key, ctrl, shift, alt });
+                    let (ctrl, shift, key) = Self::parse_key(part);
+                    bindings.push(Binding { action, key, ctrl, shift });
                 }
             }
         }
@@ -135,28 +119,25 @@ impl KeyBindings {
 
     /// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
     /// Preserves key case exactly; shift ONLY from explicit "Shift+" modifier.
-    fn parse_key(s: &str) -> (bool, bool, bool, String) {
+    fn parse_key(s: &str) -> (bool, bool, String) {
         let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
         let mut ctrl = false;
         let mut shift = false;
-        let mut alt = false;
         let mut key = String::new();
         for part in &parts {
             match part.to_lowercase().as_str() {
                 "ctrl" => ctrl = true,
                 "shift" => shift = true,
-                "alt" => alt = true,
                 _ => key = part.to_string(),
             }
         }
-        (ctrl, shift, alt, key)
+        (ctrl, shift, key)
     }
 
     pub fn resolve(
         &self,
         key_text: &str,
         ctrl: bool,
-        _alt: bool,
         shift: bool,
         named: &winit::keyboard::Key,
         phys: &winit::keyboard::PhysicalKey,
@@ -185,30 +166,19 @@ impl KeyBindings {
         // On macOS, shifted symbols (e.g. +, _, {, }, |, :, ", <, >, ?, ~, !, @, #, $, %, ^, &, *, (, ))
         // may have empty key_text or produce the shifted char without shift in modifiers.
         // Infer shift from physical key + logical key text mismatch.
-        let phys_implies_shift = match (phys_name.as_str(), key.as_str()) {
-            ("Equal", "+" | "") => true,
-            ("Minus", "_" | "") => true,
-            ("BracketLeft", "{" | "") => true,
-            ("BracketRight", "}" | "") => true,
-            ("Backslash", "|" | "") => true,
-            ("Semicolon", ":" | "") => true,
-            ("Quote", "\"" | "") => true,
-            ("Comma", "<" | "") => true,
-            ("Period", ">" | "") => true,
-            ("Slash", "?" | "") => true,
-            ("Backquote", "~" | "") => true,
-            ("Digit1", "!" | "") => true,
-            ("Digit2", "@" | "") => true,
-            ("Digit3", "#" | "") => true,
-            ("Digit4", "$" | "") => true,
-            ("Digit5", "%" | "") => true,
-            ("Digit6", "^" | "") => true,
-            ("Digit7", "&" | "") => true,
-            ("Digit8", "*" | "") => true,
-            ("Digit9", "(" | "") => true,
-            ("Digit0", ")" | "") => true,
-            _ => false,
-        };
+        let phys_implies_shift = matches!(
+            (phys_name.as_str(), key.as_str()),
+            ("Equal", "+" | "") | ("Minus", "_" | "") | ("BracketLeft", "{" | "")
+                | ("BracketRight", "}" | "") | ("Backslash", "|" | "")
+                | ("Semicolon", ":" | "") | ("Quote", "\"" | "")
+                | ("Comma", "<" | "") | ("Period", ">" | "")
+                | ("Slash", "?" | "") | ("Backquote", "~" | "")
+                | ("Digit1", "!" | "") | ("Digit2", "@" | "")
+                | ("Digit3", "#" | "") | ("Digit4", "$" | "")
+                | ("Digit5", "%" | "") | ("Digit6", "^" | "")
+                | ("Digit7", "&" | "") | ("Digit8", "*" | "")
+                | ("Digit9", "(" | "") | ("Digit0", ")" | "")
+        );
         let effective_shift = shift || key_implies_shift || phys_implies_shift;
 
         for b in &self.bindings {
@@ -234,8 +204,8 @@ impl KeyBindings {
                 };
                 b.key.eq_ignore_ascii_case(&key)
                     || b.key.eq_ignore_ascii_case(&named_key)
-                    || phys_char.map_or(false, |pc| b.key.eq_ignore_ascii_case(&pc.to_string()))
-                    || phys_as_char.map_or(false, |c| b.key.eq_ignore_ascii_case(&c.to_string()))
+                    || phys_char.is_some_and(|pc| b.key.eq_ignore_ascii_case(&pc.to_string()))
+                    || phys_as_char.is_some_and(|c| b.key.eq_ignore_ascii_case(&c.to_string()))
                     || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
             } else {
                 b.key.eq_ignore_ascii_case(&key)

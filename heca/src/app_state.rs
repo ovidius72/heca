@@ -1,12 +1,10 @@
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
-use heca_core::types::Rect;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
@@ -37,34 +35,6 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
-#[derive(Clone, Debug)]
-pub enum DragState {
-    None,
-    Resizing {
-        pane_id: u64,
-        dir: heca_core::pane::SplitDirection,
-        start_pos: (f32, f32),
-    },
-    MovingFloat {
-        pane_id: u64,
-        /// Mouse position minus float top-left at drag start (screen coords)
-        offset: (f32, f32),
-        start_rect: Rect,
-    },
-    ResizingFloat {
-        pane_id: u64,
-        edge: FloatEdge,
-        start_mouse: (f32, f32),
-        start_rect: Rect,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum FloatEdge {
-    Left, Right, Top, Bottom,
-    TopLeft, TopRight, BottomLeft, BottomRight,
-}
-
 pub struct AppState {
     pub window: Arc<Window>,
     pub surface: wgpu::Surface<'static>,
@@ -81,16 +51,11 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<u64>,
     pub input_mode: InputMode,
-    pub drag_state: DragState,
     pub sidebar: SidebarState,
     pub active_tab: usize,
     pub tab_names: Vec<String>,
     pub mouse_pos: (f32, f32),
     pub modifiers: ModifiersState,
-    /// Most recently focused pane (for "go back" behavior).
-    pub last_focused: Option<u64>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
-    /// Last frame render time for rate-limiting.
-    pub last_render_time: Option<Instant>,
 }

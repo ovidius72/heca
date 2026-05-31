@@ -1,8 +1,6 @@
 use super::animation::{Animation, AnimationConfig, Animated};
 use super::column::Pane;
-use super::scrolling::ScrollingSpace;
 use super::types::*;
-use super::view_offset::ViewOffset;
 use super::workspace::Workspace;
 
 /// A session manages all workspaces, the overview/expose mode, and workspace switching.
@@ -50,8 +48,9 @@ impl Default for OverviewState {
 }
 
 /// Workspace switching state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum WorkspaceSwitch {
+    #[default]
     None,
     /// Animated transition between workspaces.
     Animation {
@@ -64,12 +63,6 @@ pub enum WorkspaceSwitch {
         tracker: super::animation::SwipeTracker,
         current_idx: f64,
     },
-}
-
-impl Default for WorkspaceSwitch {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl Session {
@@ -112,24 +105,6 @@ impl Session {
         id
     }
 
-    /// Remove a workspace if it's empty and not pinned.
-    pub fn remove_workspace(&mut self, idx: usize) -> Option<Workspace> {
-        if idx >= self.workspaces.len() {
-            return None;
-        }
-        let ws = &self.workspaces[idx];
-        if ws.has_panes() || ws.is_pinned {
-            return None;
-        }
-        let ws = self.workspaces.remove(idx);
-        if self.active_workspace_idx >= self.workspaces.len() && !self.workspaces.is_empty() {
-            self.active_workspace_idx = self.workspaces.len() - 1;
-        } else if idx < self.active_workspace_idx {
-            self.active_workspace_idx -= 1;
-        }
-        Some(ws)
-    }
-
     /// Get the active workspace.
     pub fn active_workspace(&self) -> Option<&Workspace> {
         self.workspaces.get(self.active_workspace_idx)
@@ -150,7 +125,7 @@ impl Session {
             from_idx,
             to_idx: idx,
             progress: Animated::Animating {
-                animation: Animation::new(0.0, 1.0, 0.0, AnimationConfig::default()),
+                animation: Animation::new(0.0, 1.0, AnimationConfig::default()),
                 from: 0.0,
                 to: 1.0,
             },
@@ -188,24 +163,10 @@ impl Session {
         };
         let to = if self.overview.open { 1.0 } else { 0.0 };
         self.overview.progress = Animated::Animating {
-            animation: Animation::new(from, to, 0.0, AnimationConfig::default()),
+            animation: Animation::new(from, to, AnimationConfig::default()),
             from,
             to,
         };
-    }
-
-    /// Open the overview.
-    pub fn open_overview(&mut self) {
-        if !self.overview.open {
-            self.toggle_overview();
-        }
-    }
-
-    /// Close the overview.
-    pub fn close_overview(&mut self) {
-        if self.overview.open {
-            self.toggle_overview();
-        }
     }
 
     /// Compute the zoom factor for the current overview progress.
@@ -224,7 +185,7 @@ impl Session {
     pub fn workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
         if !self.overview.is_active() {
             // Normal mode: only active workspace visible.
-            if let Some(ws) = self.active_workspace() {
+            if self.active_workspace().is_some() {
                 vec![(self.active_workspace_idx, Rectangle::new(Point::default(), self.viewport_size))]
             } else {
                 vec![]
@@ -267,21 +228,20 @@ impl Session {
     /// Advance all animations in the session.
     pub fn advance_animations(&mut self) {
         // Advance overview animation.
-        if let Animated::Animating { ref animation, .. } = self.overview.progress {
-            if animation.is_done() {
-                let final_value = animation.target();
-                self.overview.progress = Animated::Static(final_value);
-            }
+        if let Animated::Animating { ref animation, .. } = self.overview.progress
+            && animation.is_done()
+        {
+            let final_value = animation.target();
+            self.overview.progress = Animated::Static(final_value);
         }
 
         // Advance workspace switch animation.
         match &mut self.workspace_switch {
-            WorkspaceSwitch::Animation { progress, .. } => {
-                if let Animated::Animating { animation, .. } = progress {
-                    if animation.is_done() {
-                        self.workspace_switch = WorkspaceSwitch::None;
-                    }
-                }
+            WorkspaceSwitch::Animation {
+                progress: Animated::Animating { animation, .. },
+                ..
+            } if animation.is_done() => {
+                self.workspace_switch = WorkspaceSwitch::None;
             }
             WorkspaceSwitch::Gesture { .. } => {
                 // Gestures are driven by input events.
@@ -330,20 +290,20 @@ impl Session {
 
     /// Focus up (previous pane or workspace).
     pub fn focus_up(&mut self) -> bool {
-        if let Some(ws) = self.active_workspace_mut() {
-            if ws.focus_up() {
-                return true;
-            }
+        if let Some(ws) = self.active_workspace_mut()
+            && ws.focus_up()
+        {
+            return true;
         }
         self.switch_workspace_up()
     }
 
     /// Focus down (next pane or workspace).
     pub fn focus_down(&mut self) -> bool {
-        if let Some(ws) = self.active_workspace_mut() {
-            if ws.focus_down() {
-                return true;
-            }
+        if let Some(ws) = self.active_workspace_mut()
+            && ws.focus_down()
+        {
+            return true;
         }
         self.switch_workspace_down()
     }
@@ -357,18 +317,6 @@ impl Session {
         }
     }
 
-    /// Find workspace under a point (for overview mode clicks).
-    pub fn workspace_under(&self, pos: Point) -> Option<usize> {
-        if !self.overview.is_active() {
-            return Some(self.active_workspace_idx);
-        }
-
-        let geometries = self.overview_workspace_geometries();
-        geometries
-            .iter()
-            .find(|(_, rect)| rect.contains(pos))
-            .map(|(idx, _)| *idx)
-    }
 }
 
 impl OverviewState {
@@ -380,11 +328,5 @@ impl OverviewState {
         }
     }
 
-    /// Whether overview is fully open.
-    pub fn is_fully_open(&self) -> bool {
-        match &self.progress {
-            Animated::Static(v) => (*v - 1.0).abs() < 0.001,
-            _ => false,
-        }
-    }
+
 }

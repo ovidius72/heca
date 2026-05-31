@@ -1,5 +1,4 @@
-use super::animation::{Animation, AnimationConfig, SwipeTracker};
-use std::time::Instant;
+use super::animation::{Animation, SwipeTracker};
 
 /// The horizontal scroll offset of the view.
 ///
@@ -64,10 +63,6 @@ impl ViewOffset {
         matches!(self, Self::Static(_))
     }
 
-    pub fn is_gesture(&self) -> bool {
-        matches!(self, Self::Gesture(_))
-    }
-
     pub fn is_animation_ongoing(&self) -> bool {
         match self {
             Self::Static(_) => false,
@@ -89,17 +84,6 @@ impl ViewOffset {
         }
     }
 
-    /// Cancel any ongoing gesture, snapping to current position.
-    pub fn cancel_gesture(&mut self) {
-        if let Self::Gesture(gesture) = self {
-            *self = Self::Static(gesture.current_view_offset);
-        }
-    }
-
-    /// Stop all animation/gesture and snap to current value.
-    pub fn stop_anim_and_gesture(&mut self) {
-        *self = Self::Static(self.current());
-    }
 }
 
 impl ViewGesture {
@@ -114,15 +98,6 @@ impl ViewGesture {
         }
     }
 
-    pub fn animate_from(&mut self, from: f64, config: AnimationConfig) {
-        let current = self.animation.as_ref().map_or(0.0, Animation::value);
-        self.animation = Some(Animation::new(
-            from + current,
-            0.0,
-            0.0,
-            config,
-        ));
-    }
 }
 
 /// Compute the new view offset to ensure a column at `col_x` with `col_width`

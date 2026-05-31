@@ -2,13 +2,12 @@ mod app_state;
 mod chrome;
 mod input;
 
-use app_state::{AppState, SidebarState, DragState, InputMode};
+use app_state::{AppState, SidebarState, InputMode};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
 use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
-use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth, ViewOffset};
-use heca_core::layout::animation::{Animation, AnimationConfig};
-use heca_core::pane::{SplitDirection, GeoDir};
+use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
+use heca_core::layout::animation::AnimationConfig;
 
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -18,13 +17,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{WindowEvent, MouseButton, ElementState};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::Key;
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 
 use winit::window::{Window, WindowId};
 
 /// Render a backend's content into a pane rectangle.
+#[allow(clippy::too_many_arguments)]
 fn render_backend_data(
     data: &BackendRenderData,
     px: f32,
@@ -35,61 +35,58 @@ fn render_backend_data(
     primitive_renderer: &mut PrimitiveRenderer,
     _theme: &heca_config::theme::Theme,
 ) {
-    match data {
-        BackendRenderData::Terminal {
+    if let BackendRenderData::Terminal {
             lines,
             cursor_col,
             cursor_row,
-        } => {
-            let cell_h = 14.0f32;
-            let cell_w = 8.4f32; // ~0.6 * cell_h for monospace
+        } = data {
+        let cell_h = 14.0f32;
+        let cell_w = 8.4f32; // ~0.6 * cell_h for monospace
 
-            // Background
-            primitive_renderer.draw_rect(px, py, _pw, _ph, [0.0, 0.0, 0.0, 1.0]);
+        // Background
+        primitive_renderer.draw_rect(px, py, _pw, _ph, [0.0, 0.0, 0.0, 1.0]);
 
-            // Text
-            for (row, line) in lines.iter().enumerate() {
-                let y = py + row as f32 * cell_h;
-                let mut current_text = String::new();
-                let mut current_fg = [1.0f32; 4];
-                let mut start_col = 0usize;
+        // Text
+        for (row, line) in lines.iter().enumerate() {
+            let y = py + row as f32 * cell_h;
+            let mut current_text = String::new();
+            let mut current_fg = [1.0f32; 4];
+            let mut start_col = 0usize;
 
-                for (col, cell) in line.cells.iter().enumerate() {
-                    if cell.c == ' ' || cell.c == '\0' {
-                        if !current_text.is_empty() {
-                            let x = px + start_col as f32 * cell_w;
-                            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                            current_text.clear();
-                        }
-                        start_col = col + 1;
-                        continue;
+            for (col, cell) in line.cells.iter().enumerate() {
+                if cell.c == ' ' || cell.c == '\0' {
+                    if !current_text.is_empty() {
+                        let x = px + start_col as f32 * cell_w;
+                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                        current_text.clear();
                     }
-
-                    if col > start_col && cell.fg != current_fg {
-                        if !current_text.is_empty() {
-                            let x = px + start_col as f32 * cell_w;
-                            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                            current_text.clear();
-                        }
-                        current_fg = cell.fg;
-                        start_col = col;
-                    }
-
-                    current_text.push(cell.c);
+                    start_col = col + 1;
+                    continue;
                 }
 
-                if !current_text.is_empty() {
-                    let x = px + start_col as f32 * cell_w;
-                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                if col > start_col && cell.fg != current_fg {
+                    if !current_text.is_empty() {
+                        let x = px + start_col as f32 * cell_w;
+                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                        current_text.clear();
+                    }
+                    current_fg = cell.fg;
+                    start_col = col;
                 }
+
+                current_text.push(cell.c);
             }
 
-            // Cursor
-            let cursor_x = px + *cursor_col as f32 * cell_w;
-            let cursor_y = py + *cursor_row as f32 * cell_h;
-            primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+            if !current_text.is_empty() {
+                let x = px + start_col as f32 * cell_w;
+                text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+            }
         }
-        _ => {}
+
+        // Cursor
+        let cursor_x = px + *cursor_col as f32 * cell_w;
+        let cursor_y = py + *cursor_row as f32 * cell_h;
+        primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
     }
 }
 
@@ -116,7 +113,7 @@ fn winit_key_to_terminal_input(
     // Ctrl+letter -> control character
     if ctrl && text.len() == 1 {
         let c = text.as_bytes()[0];
-        if c >= b'a' && c <= b'z' {
+        if c.is_ascii_lowercase() {
             return vec![c - b'a' + 1];
         }
     }
@@ -144,7 +141,6 @@ fn winit_key_to_terminal_input(
 struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
-    #[allow(dead_code)]
     bindings: KeyBindings,
 }
 
@@ -249,7 +245,7 @@ impl HecaApp {
         );
 
         // Create fake pane and add to workspace
-        let fake_pane = LayoutPane::new(PaneId(1), &pane_name(1));
+        let fake_pane = LayoutPane::new(PaneId(1), pane_name(1));
         let pane_id = fake_pane.id.0;
         session.add_pane(fake_pane, None, true);
 
@@ -272,7 +268,6 @@ impl HecaApp {
             needs_redraw: true,
             focused_pane: Some(pane_id),
             input_mode: InputMode::Normal,
-            drag_state: DragState::None,
             sidebar: SidebarState {
                 left_visible: true,
                 left_width: 200.0,
@@ -283,9 +278,7 @@ impl HecaApp {
             tab_names: vec!["Main".to_string()],
             mouse_pos: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::default(),
-            last_focused: None,
             mouse_enabled: self.app_config.config.general.mouse,
-            last_render_time: None,
         })
     }
 
@@ -295,7 +288,6 @@ impl HecaApp {
             return;
         }
         state.needs_redraw = false;
-        state.last_render_time = Some(std::time::Instant::now());
 
         let surface_texture = match state.surface.get_current_texture() {
             Ok(t) => t,
@@ -365,8 +357,6 @@ impl HecaApp {
 
         // Chrome text: fixed readable size (theme.font_size is for terminal content)
         let chrome_text = 14.0f32;
-        let pane_text = 16.0f32;
-
         // ── TAB BAR ──
         let tb = &chrome;
         let side_bg = if theme.name == "Catppuccin Mocha" {
@@ -457,7 +447,7 @@ impl HecaApp {
                 .and_then(|ws| ws.find_pane(*pane_id))
                 .map(|p| p.title.as_str())
                 .unwrap_or("?");
-            let name_size = (pw.min(ph) * 0.25).max(24.0).min(72.0);
+            let name_size = (pw.min(ph) * 0.25).clamp(24.0, 72.0);
             let name_color = if is_active {
                 [1.0, 1.0, 1.0, 0.9]
             } else {
@@ -525,7 +515,7 @@ impl HecaApp {
                 }
                 // Draw floating pane name centered
                 let float_name = &float.pane.title;
-                let f_name_size = (fw.min(fh) * 0.25).max(24.0).min(72.0);
+                let f_name_size = (fw.min(fh) * 0.25).clamp(24.0, 72.0);
                 let f_name_color = if is_focused { [1.0, 1.0, 1.0, 0.9] } else { [1.0, 1.0, 1.0, 0.4] };
                 let f_name_w = f_name_size * float_name.len() as f32 * 0.6;
                 let f_name_x = fx + (fw - f_name_w) / 2.0;
@@ -605,8 +595,8 @@ impl ApplicationHandler for HecaApp {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(phys) => {
-                if phys.width > 0 && phys.height > 0 {
+            WindowEvent::Resized(phys)
+                if phys.width > 0 && phys.height > 0 => {
                     state.surface_config.width = phys.width;
                     state.surface_config.height = phys.height;
                     state.surface.configure(&state.device, &state.surface_config);
@@ -618,7 +608,6 @@ impl ApplicationHandler for HecaApp {
                     update_session_viewport(state);
                     state.needs_redraw = true;
                 }
-            }
             WindowEvent::RedrawRequested => {
                 state.needs_redraw = true;
                 self.render();
@@ -662,8 +651,8 @@ impl ApplicationHandler for HecaApp {
                         }
 
                         // Forward key to focused pane's backend (terminal input)
-                        if let Some(pane_id) = state.focused_pane {
-                            if let Some(backend) = state.backends.get_mut(&pane_id) {
+                        if let Some(pane_id) = state.focused_pane
+                            && let Some(backend) = state.backends.get_mut(&pane_id) {
                                 let input_bytes = winit_key_to_terminal_input(
                                     &event.logical_key,
                                     &key_text,
@@ -671,21 +660,18 @@ impl ApplicationHandler for HecaApp {
                                 );
                                 if !input_bytes.is_empty() {
                                     backend.process_input(&input_bytes);
-                                    return;
                                 }
                             }
-                        }
                     }
                     InputMode::Prefix => {
                         if is_prefix {
                             // Double-prefix: forward literal Ctrl+B (0x02) to the terminal
                             // so nested tmux/screen work correctly.
                             state.input_mode = InputMode::Normal;
-                            if let Some(pane_id) = state.focused_pane {
-                                if let Some(backend) = state.backends.get_mut(&pane_id) {
+                            if let Some(pane_id) = state.focused_pane
+                                && let Some(backend) = state.backends.get_mut(&pane_id) {
                                     backend.process_input(&[0x02]);
                                 }
-                            }
                             return;
                         }
 
@@ -708,7 +694,7 @@ impl ApplicationHandler for HecaApp {
                         // In prefix mode, pass the REAL modifier state. The user may intentionally
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
-                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
+                        let action = self.bindings.resolve(&key_text, is_ctrl, is_shift, &event.logical_key, &event.physical_key);
                         #[cfg(debug_assertions)]
                         eprintln!("prefix: key_text='{}' shift={} phys={:?} action={:?}", key_text, is_shift, event.physical_key, action);
 
@@ -737,11 +723,10 @@ impl ApplicationHandler for HecaApp {
                             .map(|c| c.to_ascii_lowercase());
                         #[cfg(debug_assertions)]
                         eprintln!("pane_select: typed={:?} candidates={:?}", typed, candidates);
-                        if let Some(ch) = typed {
-                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                        if let Some(ch) = typed
+                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 focus_pane_by_id(state, *target_id);
                             }
-                        }
                         state.input_mode = InputMode::Normal;
                     }
                     InputMode::PaneSwap { candidates } => {
@@ -758,15 +743,12 @@ impl ApplicationHandler for HecaApp {
                             .map(|c| c.to_ascii_lowercase());
                         #[cfg(debug_assertions)]
                         eprintln!("pane_swap: typed={:?} candidates={:?}", typed, candidates);
-                        if let Some(ch) = typed {
-                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
-                                if let Some(current_id) = state.focused_pane {
-                                    if current_id != *target_id {
+                        if let Some(ch) = typed
+                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
+                                && let Some(current_id) = state.focused_pane
+                                    && current_id != *target_id {
                                         swap_panes(state, current_id, *target_id);
                                     }
-                                }
-                            }
-                        }
                         state.input_mode = InputMode::Normal;
                     }
                 }
@@ -781,7 +763,7 @@ impl ApplicationHandler for HecaApp {
                 );
                 state.needs_redraw = true;
 
-                if !state.mouse_enabled { return; }
+                if !state.mouse_enabled {}
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 if !state.mouse_enabled { return; }
@@ -954,7 +936,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         WmAction::SplitHorizontal => {
             // New column to the right
             let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
             let backend_id = next_id;
             state.session.add_pane(pane, None, true);
             state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
@@ -964,13 +946,12 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         WmAction::SplitVertical => {
             // New pane in current column
             let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
             let backend_id = next_id;
             let col_idx = state.session.active_workspace()
                 .map(|ws| ws.scrolling.active_column_idx)
                 .unwrap_or(0);
-            state.session.active_workspace_mut()
-                .map(|ws| ws.scrolling.add_pane_to_column(col_idx, None, pane, true));
+            if let Some(ws) = state.session.active_workspace_mut() { ws.scrolling.add_pane_to_column(col_idx, None, pane, true) }
             state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
             sync_focus(state);
             state.needs_redraw = true;
@@ -1135,8 +1116,8 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                     } else {
                         (pane_idx + 1).min(col.panes.len().saturating_sub(1))
                     };
-                    if swap_with != pane_idx {
-                        if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
+                    if swap_with != pane_idx
+                        && let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
                             // Compute Y offsets BEFORE swap for animation.
                             let h_above = col.pane_sizes.get(pane_idx.min(swap_with))
                                 .map(|s| s.h).unwrap_or(0.0);
@@ -1165,15 +1146,14 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                             col.active_pane_idx = swap_with;
                             col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
                         }
-                    }
                 }
             }
             sync_focus(state);
             state.needs_redraw = true;
         }
         WmAction::Float => {
-            if let Some(pane_id) = state.focused_pane {
-                if let Some(ws) = state.session.active_workspace_mut() {
+            if let Some(pane_id) = state.focused_pane
+                && let Some(ws) = state.session.active_workspace_mut() {
                     let wa = ws.scrolling.working_area;
                     let is_floating = ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id);
 
@@ -1211,8 +1191,8 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                             }
                             if found.is_some() { break; }
                         }
-                        if let Some((col_idx, pane_idx)) = found {
-                            if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                        if let Some((col_idx, pane_idx)) = found
+                            && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
                                 let fw = wa.size.w * 0.75;
                                 let fh = wa.size.h * 0.75;
                                 let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
@@ -1227,19 +1207,14 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                                 });
                                 ws.floating_is_active = true;
                             }
-                        }
                     }
                 }
-            }
             sync_focus(state);
             state.needs_redraw = true;
         }
-        WmAction::Scratchpad | WmAction::Hide => {}
-        WmAction::ResizeLeft | WmAction::ResizeUp | WmAction::ResizeRight | WmAction::ResizeDown => {}
     }
 }
 
-/// Returns true if any part of the column at `col_idx` intersects the current viewport.
 /// Swap two panes by their IDs. If the focused pane is involved, focus follows it.
 /// The viewport is only scrolled when the target window is hidden (off-screen).
 fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
