@@ -247,9 +247,8 @@ impl KeyBindings {
         for b in &self.bindings {
             let key_match = if b.key.len() == 1 {
                 // Single-char: case-insensitive match (handles Shift+Q vs q).
-                // Physical key fallback ALWAYS (macOS layouts may produce odd key_text).
-                let phys_char = phys_name.chars().next();
-                // Map physical key names to their unshifted character (for Shift+ bindings).
+                // Map physical key names to their unshifted character for symbol keys
+                // (e.g., "Equal" → '=' for when macOS doesn't report key_text for Shift+=).
                 let phys_as_char = match phys_name.as_str() {
                     "Equal" => Some('='),
                     "Minus" => Some('-'),
@@ -267,7 +266,6 @@ impl KeyBindings {
                 };
                 b.key.eq_ignore_ascii_case(&key)
                     || b.key.eq_ignore_ascii_case(&named_key)
-                    || phys_char.map_or(false, |pc| b.key.eq_ignore_ascii_case(&pc.to_string()))
                     || phys_as_char.map_or(false, |c| b.key.eq_ignore_ascii_case(&c.to_string()))
                     || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
             } else {
