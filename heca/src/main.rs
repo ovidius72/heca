@@ -674,6 +674,10 @@ impl ApplicationHandler for HecaApp {
                 let key_text = log_key.to_text().unwrap_or("").to_string();
                 let phys = event.physical_key;
 
+                #[cfg(debug_assertions)]
+                eprintln!("input: mode={:?} log_key={:?} text='{}' ctrl={} shift={} phys={:?}",
+                    state.input_mode, log_key, key_text, is_ctrl, is_shift, phys);
+
                 // Detect Ctrl+B by multiple methods:
                 let is_prefix = key_text == "\u{2}"                         // macOS control char
                     || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")
