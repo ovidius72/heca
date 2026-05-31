@@ -47,6 +47,8 @@ pub enum WmAction {
     RenamePane,
     WorkspaceNext,
     WorkspacePrev,
+    FocusToggleLocal,
+    FocusToggleGlobal,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -90,6 +92,8 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         "workspace_next" => Some(WmAction::WorkspaceNext),
+        "focus_toggle_local" => Some(WmAction::FocusToggleLocal),
+        "focus_toggle_global" => Some(WmAction::FocusToggleGlobal),
         "workspace_prev" => Some(WmAction::WorkspacePrev),
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
@@ -116,6 +120,7 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::Float | WmAction::Scratchpad |
         WmAction::Hide | WmAction::ClosePane |
         WmAction::PaneSelect | WmAction::SwapSelect |
+        WmAction::FocusToggleLocal | WmAction::FocusToggleGlobal |
         WmAction::CreateWorkspace | WmAction::RenameWorkspace |
         WmAction::RenamePane | WmAction::WorkspaceNext |
         WmAction::WorkspacePrev => 1,

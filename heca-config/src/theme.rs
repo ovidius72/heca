@@ -302,6 +302,10 @@ impl Default for Config {
         keybindings.insert("workspace_prev".to_string(), "u".to_string());
         keybindings.insert("workspace_next".to_string(), "d".to_string());
 
+        // ── Focus toggle ──
+        keybindings.insert("focus_toggle_local".to_string(), "i".to_string());
+        keybindings.insert("focus_toggle_global".to_string(), "Shift+l".to_string());
+
         // ── Workspace / naming ──
         keybindings.insert("create_workspace".to_string(), "w".to_string());
         keybindings.insert("rename_workspace".to_string(), "Shift+w".to_string());
