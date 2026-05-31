@@ -1420,6 +1420,23 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 state.needs_redraw = true;
             }
         }
+        WmAction::WorkspaceNext => {
+            let next = (state.session.active_workspace_idx + 1)
+                .min(state.session.workspaces.len().saturating_sub(1));
+            if next != state.session.active_workspace_idx {
+                state.session.switch_to_workspace(next);
+                sync_focus(state);
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::WorkspacePrev => {
+            let prev = state.session.active_workspace_idx.saturating_sub(1);
+            if prev != state.session.active_workspace_idx {
+                state.session.switch_to_workspace(prev);
+                sync_focus(state);
+                state.needs_redraw = true;
+            }
+        }
         WmAction::CreateWorkspace => {
             // Create a new empty workspace and switch to it
             let working_area = state.session.active_workspace()

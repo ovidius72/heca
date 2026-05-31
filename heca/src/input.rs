@@ -44,6 +44,8 @@ pub enum WmAction {
     CreateWorkspace,
     RenameWorkspace,
     RenamePane,
+    WorkspaceNext,
+    WorkspacePrev,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -86,6 +88,8 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "move_pane_right" => Some(WmAction::MovePaneRight),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
+        "workspace_next" => Some(WmAction::WorkspaceNext),
+        "workspace_prev" => Some(WmAction::WorkspacePrev),
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
@@ -110,7 +114,8 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::Hide | WmAction::ClosePane |
         WmAction::PaneSelect | WmAction::SwapSelect |
         WmAction::CreateWorkspace | WmAction::RenameWorkspace |
-        WmAction::RenamePane => 1,
+        WmAction::RenamePane | WmAction::WorkspaceNext |
+        WmAction::WorkspacePrev => 1,
         // Swap
         WmAction::SwapLeft | WmAction::SwapRight |
         WmAction::SwapUp | WmAction::SwapDown |
