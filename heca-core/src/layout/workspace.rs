@@ -62,16 +62,28 @@ impl Workspace {
 
     /// Find any pane by ID across both scrolling and floating.
     pub fn find_pane(&self, pane_id: PaneId) -> Option<&super::column::Pane> {
+        // Check floating panes first
+        if let Some(f) = self.floating_panes.iter().find(|f| f.pane.id == pane_id) {
+            return Some(&f.pane);
+        }
         for col in &self.scrolling.columns {
-            for pane in &col.panes {
-                if pane.id == pane_id {
-                    return Some(pane);
-                }
+            let found = col.panes.iter().find(|p| p.id == pane_id);
+            if found.is_some() {
+                return found;
             }
         }
-        for float in &self.floating_panes {
-            if float.pane.id == pane_id {
-                return Some(&float.pane);
+        None
+    }
+
+    pub fn find_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut super::column::Pane> {
+        // Check floating panes first
+        if let Some(f) = self.floating_panes.iter_mut().find(|f| f.pane.id == pane_id) {
+            return Some(&mut f.pane);
+        }
+        // Check scrolling columns
+        for col in &mut self.scrolling.columns {
+            if let Some(pane) = col.panes.iter_mut().find(|p| p.id == pane_id) {
+                return Some(pane);
             }
         }
         None

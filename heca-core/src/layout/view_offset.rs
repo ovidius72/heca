@@ -98,6 +98,7 @@ impl ViewGesture {
         }
     }
 
+
 }
 
 /// Compute the new view offset to ensure a column at `col_x` with `col_width`

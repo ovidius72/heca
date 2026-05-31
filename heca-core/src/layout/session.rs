@@ -105,6 +105,22 @@ impl Session {
         id
     }
 
+    /// Remove a workspace by index. Returns true if removed.
+    pub fn remove_workspace(&mut self, idx: usize) -> bool {
+        if idx >= self.workspaces.len() || self.workspaces.len() <= 1 {
+            return false;
+        }
+        self.workspaces.remove(idx);
+        if self.active_workspace_idx > idx {
+            // The active workspace was after the removed one; shift down.
+            self.active_workspace_idx -= 1;
+        } else if self.active_workspace_idx >= self.workspaces.len() {
+            // The removed workspace was the last one; clamp.
+            self.active_workspace_idx = self.workspaces.len() - 1;
+        }
+        true
+    }
+
     /// Get the active workspace.
     pub fn active_workspace(&self) -> Option<&Workspace> {
         self.workspaces.get(self.active_workspace_idx)

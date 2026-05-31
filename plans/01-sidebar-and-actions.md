@@ -56,15 +56,15 @@ These features turn heca from a "layout you can see" into a "layout you can navi
 
 | # | Task | Status | Est. Effort |
 |---|------|--------|-------------|
-| 1.1 | Define `SidebarTree` struct in `app_state.rs` (or new `sidebar.rs` module) | Pending | Small |
-| 1.2 | Store collapsed state per workspace node | Pending | Small |
-| 1.3 | Store selection cursor (current hovered/selected item) | Pending | Small |
-| 1.4 | Method to rebuild the tree from `Session` state | Pending | Small |
-| 1.5 | Method to find pane/workspace ID from cursor position | Pending | Small |
-| 1.6 | Auto-expand when entering SidebarNav mode | Pending | Small |
-| 1.7 | Add `last_visited_ws_idx: Option<usize>` to Session/AppState for visited tracking | Pending | Small |
-| 1.8 | Track workspace visits: update `last_visited_ws_idx` on every workspace switch | Pending | Small |
-| 1.9 | Track pane focus visits: maintain `last_visited_pane_id` per workspace for dim highlight | Pending | Small |
+| 1.1 | Define `SidebarTree` struct in `app_state.rs` (or new `sidebar.rs` module) | ✅ Done | Small |
+| 1.2 | Store collapsed state per workspace node | ✅ Done | Small |
+| 1.3 | Store selection cursor (current hovered/selected item) | ✅ Done | Small |
+| 1.4 | Method to rebuild the tree from `Session` state | ✅ Done | Small |
+| 1.5 | Method to find pane/workspace ID from cursor position | ✅ Done | Small |
+| 1.6 | Auto-expand when entering SidebarNav mode | ✅ Done | Small |
+| 1.7 | Add `last_visited_ws_idx: Option<usize>` to Session/AppState for visited tracking | ✅ Done | Small |
+| 1.8 | Track workspace visits: update `last_visited_ws_idx` on every workspace switch | ✅ Done | Small |
+| 1.9 | Track pane focus visits: maintain `last_visited_pane_id` per workspace for dim highlight | ✅ Done | Small |
 
 ### Details
 
@@ -190,18 +190,18 @@ state.last_visited_ws_idx = Some(state.session.active_workspace_idx);
 
 | # | Task | Status | Est. Effort |
 |---|------|--------|-------------|
-| 2.1 | Render workspace entries with indentation and collapse arrows (`v`/`>`) | Pending | Medium |
-| 2.2 | Render column headings for columns with multiple panes | Pending | Small |
-| 2.3 | Render pane entries with name and active indicator | Pending | Medium |
-| 2.4 | Highlight the sidebar cursor selection | Pending | Small |
-| 2.5 | Highlight the currently focused pane/workspace in sidebar | Pending | Small |
-| 2.6 | Scroll sidebar content if tree exceeds available height | Pending | Medium |
-| 2.7 | Rebuild sidebar tree and re-render on layout changes | Pending | Small |
-| 2.8 | Show selection letters during PaneSelect/PaneSwap mode in sidebar | Pending | Small |
-| 2.9 | Collapsed sidebar rendering (activity strip at 40px) with workspace number + pane letters | Pending | Medium |
-| 2.10 | Activity bar indicators (active/visited/never) with accent colors and opacity | Pending | Small |
-| 2.11 | Increase collapsed sidebar width from 32px to 40px in ChromeConfig | Pending | Small |
-| 2.12 | Active pane highlighted letter, last-visited pane subtle indicator | Pending | Small |
+| 2.1 | Render workspace entries with indentation and collapse arrows (`▶`/`▼`) | ✅ Done | Medium |
+| 2.2 | Render column headings for columns with multiple panes | ✅ Done | Small |
+| 2.3 | Render pane entries with name and active indicator | ✅ Done | Medium |
+| 2.4 | Highlight the sidebar cursor selection | ✅ Done | Small |
+| 2.5 | Highlight the currently focused pane/workspace in sidebar | ✅ Done | Small |
+| 2.6 | Scroll sidebar content if tree exceeds available height | ⏳ Pending | Medium |
+| 2.7 | Rebuild sidebar tree and re-render on layout changes | ✅ Done | Small |
+| 2.8 | Show selection letters during PaneSelect/PaneSwap mode in sidebar | ⏳ Pending | Small |
+| 2.9 | Collapsed sidebar rendering (activity strip at 40px) with workspace number + pane letters | ✅ Done | Medium |
+| 2.10 | Activity bar indicators (active/visited/never) with accent colors and opacity | ✅ Done | Small |
+| 2.11 | Increase collapsed sidebar width from 32px to 40px in ChromeConfig | ✅ Done | Small |
+| 2.12 | Active pane highlighted letter, last-visited pane subtle indicator | ✅ Done | Small |
 
 ### Details
 
@@ -330,14 +330,14 @@ fn render_sidebar_collapsed(tree: &SidebarTree, ...) {
 
 | # | Task | Status | Est. Effort |
 |---|------|--------|-------------|
-| 3.1 | Add `WmAction::CreateWorkspace`, `RenameWorkspace`, `RenamePane` to enum | Pending | Small |
-| 3.2 | Add `InputMode::Rename { target: RenameTarget, buffer: String }` | Pending | Small |
-| 3.3 | Implement `create_workspace`: add empty WS + activate it | Pending | Small |
-| 3.4 | Implement `rename_workspace`: enter Rename mode for workspace name | Pending | Small |
-| 3.5 | Implement `rename_pane`: enter Rename mode for pane name | Pending | Small |
-| 3.6 | Rename mode handling: Type text → Enter confirms, Esc cancels | Pending | Medium |
-| 3.7 | Add `set_workspace_name()` / `set_pane_name()` to Session/Workspace/Pane | Pending | Small |
-| 3.8 | Add default keybindings to config | Pending | Small |
+| 3.1 | Add `WmAction::CreateWorkspace`, `RenameWorkspace`, `RenamePane` to enum | ✅ Done | Small |
+| 3.2 | Add `InputMode::Rename { target: RenameTarget, buffer: String }` | ✅ Done | Small |
+| 3.3 | Implement `create_workspace`: add empty WS + activate it | ✅ Done | Small |
+| 3.4 | Implement `rename_workspace`: enter Rename mode for workspace name | ✅ Done | Small |
+| 3.5 | Implement `rename_pane`: enter Rename mode for pane name | ✅ Done | Small |
+| 3.6 | Rename mode handling: Type text → Enter confirms, Esc cancels | ✅ Done | Medium |
+| 3.7 | Add `find_pane_mut()` to Workspace for pane lookup by ID | ✅ Done | Small |
+| 3.8 | Add default keybindings to config | ✅ Done | Small |
 
 ### Details
 
