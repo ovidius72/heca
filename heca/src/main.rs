@@ -1004,12 +1004,18 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 /// Sync `focused_pane` from the session's active pane (scrolling or floating).
 /// Also tracks last-visited workspace and rebuilds the sidebar tree.
 /// Record that we are departing a workspace, saving its active pane.
-fn record_workspace_departure(state: &mut AppState, departed_ws: usize, pane_id: u64) {
-    while state.last_visited_pane_per_ws.len() <= departed_ws {
-        state.last_visited_pane_per_ws.push(None);
+/// The single canonical way to switch workspaces. Handles departure tracking
+/// (last_visited_ws_idx for sidebar highlight + FocusToggleGlobal) and
+/// ensures last_visited_pane_per_ws is NOT overwritten (it stores the
+/// previous pane within each workspace for Prefix+i toggle).
+fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == new_idx {
+        return;
     }
-    state.last_visited_pane_per_ws[departed_ws] = Some(pane_id);
-    state.last_visited_ws_idx = Some(departed_ws);
+    // Record which workspace we are departing from (for sidebar highlight)
+    state.last_visited_ws_idx = Some(current_ws);
+    state.session.switch_to_workspace(new_idx);
 }
 
 fn sync_focus(state: &mut AppState) {
@@ -1026,7 +1032,7 @@ fn sync_focus(state: &mut AppState) {
 
     // Only record per-workspace data for same-workspace focus changes.
     // Workspace switches are tracked by the caller (action) BEFORE switching
-    // via record_workspace_departure().
+    // via switch_workspace_tracked().
     if focus_changed && prev_focused.is_some() && prev_ws == current_ws {
         while state.last_visited_pane_per_ws.len() <= current_ws {
             state.last_visited_pane_per_ws.push(None);
@@ -1437,10 +1443,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                         });
                         if let Some(ws_idx) = target_ws {
                             if ws_idx != current_ws {
-                                if let Some(old_pane) = state.focused_pane {
-                                    record_workspace_departure(state, current_ws, old_pane);
-                                }
-                                state.session.switch_to_workspace(ws_idx);
+                                switch_workspace_tracked(state, ws_idx);
                             }
                             focus_pane_by_id(state, *pane_id);
                         }
@@ -1484,6 +1487,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             if let Some(prev_pane) = state.last_visited_pane_per_ws.get(ws_idx).copied().flatten() {
                 if Some(prev_pane) != state.focused_pane {
                     focus_pane_by_id(state, prev_pane);
+                    sync_focus(state);
                 }
                 state.needs_redraw = true;
             }
@@ -1495,11 +1499,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             if let Some(prev_ws) = state.last_visited_ws_idx {
                 let current_ws = state.session.active_workspace_idx;
                 if prev_ws != current_ws {
-                    // Record departure BEFORE switching (sync_focus can't detect it)
-                    if let Some(pane_id) = state.focused_pane {
-                        record_workspace_departure(state, current_ws, pane_id);
-                    }
-                    state.session.switch_to_workspace(prev_ws);
+                    switch_workspace_tracked(state, prev_ws);
                     if let Some(pane_id) = state.last_visited_pane_per_ws.get(prev_ws).copied().flatten() {
                         focus_pane_by_id(state, pane_id);
                     }
@@ -1513,10 +1513,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             let next = (current_ws + 1)
                 .min(state.session.workspaces.len().saturating_sub(1));
             if next != current_ws {
-                if let Some(pane_id) = state.focused_pane {
-                    record_workspace_departure(state, current_ws, pane_id);
-                }
-                state.session.switch_to_workspace(next);
+                switch_workspace_tracked(state, next);
                 sync_focus(state);
                 state.needs_redraw = true;
             }
@@ -1525,10 +1522,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             let current_ws = state.session.active_workspace_idx;
             let prev = current_ws.saturating_sub(1);
             if prev != current_ws {
-                if let Some(pane_id) = state.focused_pane {
-                    record_workspace_departure(state, current_ws, pane_id);
-                }
-                state.session.switch_to_workspace(prev);
+                switch_workspace_tracked(state, prev);
                 sync_focus(state);
                 state.needs_redraw = true;
             }
@@ -1536,10 +1530,6 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         WmAction::CreateWorkspace => {
             // Create a new workspace with a default pane, and switch to it
             let current_ws = state.session.active_workspace_idx;
-            // Record departure from old workspace BEFORE creating/switching
-            if let Some(pane_id) = state.focused_pane {
-                record_workspace_departure(state, current_ws, pane_id);
-            }
             let working_area = state.session.active_workspace()
                 .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
                 .unwrap_or_else(|| {
@@ -1551,7 +1541,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.session.add_workspace(working_area);
             let new_idx = state.session.workspaces.len() - 1;
             // Switch to new workspace FIRST, then add pane (add_pane uses active workspace)
-            state.session.switch_to_workspace(new_idx);
+            switch_workspace_tracked(state, new_idx);
             // Add a default pane so the workspace is not empty
             let next_id = state.session.next_id();
             let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
