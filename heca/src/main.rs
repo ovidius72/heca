@@ -1530,6 +1530,10 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         WmAction::CreateWorkspace => {
             // Create a new workspace with a default pane, and switch to it
             let current_ws = state.session.active_workspace_idx;
+            // Record departure from old workspace BEFORE creating/switching
+            if let Some(pane_id) = state.focused_pane {
+                record_workspace_departure(state, current_ws, pane_id);
+            }
             let working_area = state.session.active_workspace()
                 .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
                 .unwrap_or_else(|| {
@@ -1540,16 +1544,13 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 });
             state.session.add_workspace(working_area);
             let new_idx = state.session.workspaces.len() - 1;
+            // Switch to new workspace FIRST, then add pane (add_pane uses active workspace)
+            state.session.switch_to_workspace(new_idx);
             // Add a default pane so the workspace is not empty
             let next_id = state.session.next_id();
             let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
             state.session.add_pane(pane, None, true);
             state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-            // Record departure from old workspace before switching
-            if let Some(pane_id) = state.focused_pane {
-                record_workspace_departure(state, current_ws, pane_id);
-            }
-            state.session.switch_to_workspace(new_idx);
             while state.last_visited_pane_per_ws.len() <= new_idx {
                 state.last_visited_pane_per_ws.push(None);
             }
