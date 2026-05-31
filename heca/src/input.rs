@@ -19,6 +19,8 @@ pub enum WmAction {
     ResizeRight,
     ResizeUp,
     ResizeDown,
+    ResizeIncrease,
+    ResizeDecrease,
     SidebarLeft,
     SidebarRight,
     NextPane,
@@ -29,6 +31,10 @@ pub enum WmAction {
     SwapRight,
     SwapUp,
     SwapDown,
+    MovePaneLeft,
+    MovePaneRight,
+    PaneHeightIncrease,
+    PaneHeightDecrease,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -49,6 +55,8 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "resize_right" => Some(WmAction::ResizeRight),
         "resize_up" => Some(WmAction::ResizeUp),
         "resize_down" => Some(WmAction::ResizeDown),
+        "resize_increase" => Some(WmAction::ResizeIncrease),
+        "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
         "sidebar_right" => Some(WmAction::SidebarRight),
         "next_pane" => Some(WmAction::NextPane),
@@ -59,6 +67,10 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "swap_right" => Some(WmAction::SwapRight),
         "swap_up" => Some(WmAction::SwapUp),
         "swap_down" => Some(WmAction::SwapDown),
+        "move_pane_left" => Some(WmAction::MovePaneLeft),
+        "move_pane_right" => Some(WmAction::MovePaneRight),
+        "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
+        "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         _ => None,
     }
 }
@@ -77,10 +89,13 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::PaneSelect | WmAction::SwapSelect => 1,
         // Swap
         WmAction::SwapLeft | WmAction::SwapRight |
-        WmAction::SwapUp | WmAction::SwapDown => 2,
+        WmAction::SwapUp | WmAction::SwapDown |
+        WmAction::MovePaneLeft | WmAction::MovePaneRight => 2,
         // Resize (lowest priority — checked last)
         WmAction::ResizeLeft | WmAction::ResizeRight |
-        WmAction::ResizeUp | WmAction::ResizeDown => 3,
+        WmAction::ResizeUp | WmAction::ResizeDown |
+        WmAction::ResizeIncrease | WmAction::ResizeDecrease |
+        WmAction::PaneHeightIncrease | WmAction::PaneHeightDecrease => 3,
         // Other
         _ => 4,
     }
@@ -161,18 +176,49 @@ impl KeyBindings {
             _ => String::new(),
         };
 
+        // macOS winit often doesn't report shift in modifiers.
+        // Infer shift from key_text being any uppercase ASCII character (A-Z, +, _, etc).
+        // Physical key names like "KeyH" -> "H" are ALWAYS uppercase — never infer shift from them.
+        let key_implies_shift = key.len() == 1
+            && key.chars().next().unwrap().is_ascii_uppercase();
+        let effective_shift = shift || key_implies_shift;
+
         for b in &self.bindings {
             let key_match = if b.key.len() == 1 {
-                // Single-char: exact case-sensitive.
-                // Also physical key fallback when key_text is empty (macOS Ctrl+key).
-                b.key == key || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
+                // Single-char: case-insensitive match (handles Shift+Q vs q).
+                // Physical key fallback ALWAYS (macOS layouts may produce odd key_text).
+                let phys_char = phys_name.chars().next();
+                // Map physical key names to their unshifted character (for Shift+ bindings).
+                let phys_as_char = match phys_name.as_str() {
+                    "Equal" => Some('='),
+                    "Minus" => Some('-'),
+                    "Comma" => Some(','),
+                    "Period" => Some('.'),
+                    "Slash" => Some('/'),
+                    "Semicolon" => Some(';'),
+                    "Quote" => Some('\''),
+                    "BracketLeft" => Some('['),
+                    "BracketRight" => Some(']'),
+                    "Backslash" => Some('\\'),
+                    "Backquote" => Some('`'),
+                    "Space" => Some(' '),
+                    _ => None,
+                };
+                b.key.eq_ignore_ascii_case(&key)
+                    || b.key.eq_ignore_ascii_case(&named_key)
+                    || phys_char.map_or(false, |pc| b.key.eq_ignore_ascii_case(&pc.to_string()))
+                    || phys_as_char.map_or(false, |c| b.key.eq_ignore_ascii_case(&c.to_string()))
+                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
             } else {
                 b.key.eq_ignore_ascii_case(&key)
                     || b.key.eq_ignore_ascii_case(&named_key)
                     || b.key.eq_ignore_ascii_case(&phys_name)
             };
 
-            if key_match && b.ctrl == ctrl && b.shift == shift {
+            // Exact modifier match using effective_shift (inferred from key text/phys).
+            let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
+
+            if key_match && mod_match {
                 return Some(b.action);
             }
         }

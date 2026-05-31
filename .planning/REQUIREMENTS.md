@@ -22,7 +22,7 @@
 
 ### Layout (LAY)
 
-- [ ] **LAY-01**: BSP tree tiling layout with horizontal and vertical splits
+- [ ] **LAY-01**: NIRI-inspired scrolling-column layout — horizontal columns with animated ViewOffset, vertical pane stacks within columns, dynamic workspaces with animated switching
 - [ ] **LAY-02**: Floating panes with absolute x/y, size, and z-index
 - [ ] **LAY-03**: Scratchpad panes — hidden by default, toggled visible as floating
 - [ ] **LAY-04**: Predefined layout templates (TOML) applied to a tab

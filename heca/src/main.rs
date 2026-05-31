@@ -5,18 +5,141 @@ mod input;
 use app_state::{AppState, SidebarState, DragState, InputMode};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
-use heca_core::pane::{PaneTree, SplitDirection, GeoDir};
+use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
+use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth, ViewOffset};
+use heca_core::layout::animation::{Animation, AnimationConfig};
+use heca_core::pane::{SplitDirection, GeoDir};
 
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use input::{KeyBindings, WmAction};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{WindowEvent, MouseButton, ElementState};
+use winit::keyboard::{Key, NamedKey};
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 
 use winit::window::{Window, WindowId};
+
+/// Render a backend's content into a pane rectangle.
+fn render_backend_data(
+    data: &BackendRenderData,
+    px: f32,
+    py: f32,
+    _pw: f32,
+    _ph: f32,
+    text_renderer: &mut TextRenderer,
+    primitive_renderer: &mut PrimitiveRenderer,
+    _theme: &heca_config::theme::Theme,
+) {
+    match data {
+        BackendRenderData::Terminal {
+            lines,
+            cursor_col,
+            cursor_row,
+        } => {
+            let cell_h = 14.0f32;
+            let cell_w = 8.4f32; // ~0.6 * cell_h for monospace
+
+            // Background
+            primitive_renderer.draw_rect(px, py, _pw, _ph, [0.0, 0.0, 0.0, 1.0]);
+
+            // Text
+            for (row, line) in lines.iter().enumerate() {
+                let y = py + row as f32 * cell_h;
+                let mut current_text = String::new();
+                let mut current_fg = [1.0f32; 4];
+                let mut start_col = 0usize;
+
+                for (col, cell) in line.cells.iter().enumerate() {
+                    if cell.c == ' ' || cell.c == '\0' {
+                        if !current_text.is_empty() {
+                            let x = px + start_col as f32 * cell_w;
+                            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                            current_text.clear();
+                        }
+                        start_col = col + 1;
+                        continue;
+                    }
+
+                    if col > start_col && cell.fg != current_fg {
+                        if !current_text.is_empty() {
+                            let x = px + start_col as f32 * cell_w;
+                            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                            current_text.clear();
+                        }
+                        current_fg = cell.fg;
+                        start_col = col;
+                    }
+
+                    current_text.push(cell.c);
+                }
+
+                if !current_text.is_empty() {
+                    let x = px + start_col as f32 * cell_w;
+                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                }
+            }
+
+            // Cursor
+            let cursor_x = px + *cursor_col as f32 * cell_w;
+            let cursor_y = py + *cursor_row as f32 * cell_h;
+            primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+        }
+        _ => {}
+    }
+}
+
+/// Distinct pane names so you can visually identify what's moving.
+const PANE_NAMES: &[&str] = &[
+    "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
+    "Orange", "Purple", "Lime", "Pink", "Teal", "Coral",
+];
+
+fn pane_name(id: u64) -> String {
+    PANE_NAMES.get((id as usize).saturating_sub(1) % PANE_NAMES.len())
+        .unwrap_or(&"?")
+        .to_string()
+}
+
+/// Convert a winit key event to terminal input bytes.
+fn winit_key_to_terminal_input(
+    key: &winit::keyboard::Key,
+    text: &str,
+    ctrl: bool,
+) -> Vec<u8> {
+    use winit::keyboard::NamedKey;
+
+    // Ctrl+letter -> control character
+    if ctrl && text.len() == 1 {
+        let c = text.as_bytes()[0];
+        if c >= b'a' && c <= b'z' {
+            return vec![c - b'a' + 1];
+        }
+    }
+
+    match key {
+        Key::Named(NamedKey::Enter) => vec![b'\r'],
+        Key::Named(NamedKey::Backspace) => vec![0x7f],
+        Key::Named(NamedKey::Tab) => vec![b'\t'],
+        Key::Named(NamedKey::Escape) => vec![0x1b],
+        Key::Named(NamedKey::ArrowUp) => b"\x1b[A".to_vec(),
+        Key::Named(NamedKey::ArrowDown) => b"\x1b[B".to_vec(),
+        Key::Named(NamedKey::ArrowRight) => b"\x1b[C".to_vec(),
+        Key::Named(NamedKey::ArrowLeft) => b"\x1b[D".to_vec(),
+        Key::Named(NamedKey::Home) => b"\x1b[H".to_vec(),
+        Key::Named(NamedKey::End) => b"\x1b[F".to_vec(),
+        Key::Named(NamedKey::PageUp) => b"\x1b[5~".to_vec(),
+        Key::Named(NamedKey::PageDown) => b"\x1b[6~".to_vec(),
+        Key::Named(NamedKey::Delete) => b"\x1b[3~".to_vec(),
+        Key::Named(NamedKey::Space) => vec![b' '],
+        Key::Character(c) => c.as_bytes().to_vec(),
+        _ => vec![],
+    }
+}
 
 struct HecaApp {
     state: Option<Box<AppState>>,
@@ -103,17 +226,36 @@ impl HecaApp {
         text_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
         primitive_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
 
-        // Initialize PaneTree: one editor pane and one floating terminal
-        let mut panetree = PaneTree::new();
-        let editor_id = panetree.add_pane("Editor", [0.118, 0.118, 0.180, 1.0]);
-        let _term_id = panetree.add_pane("Terminal", [0.094, 0.094, 0.145, 1.0]);
-        // Float the terminal centered, 60% of window width, 60% of height
-        // Float rect is in LOGICAL pixels (relative to pane content area)
-        // Content area = full window minus chrome
-        let _log_w = physical.width as f32 / scale_factor as f32;
-        let _log_h = physical.height as f32 / scale_factor as f32;
+        // Compute chrome/content area size FIRST so session uses correct working area
+        let chrome = ChromeConfig {
+            tab_bar_height: 32.0,
+            status_bar_height: 24.0,
+            left_sidebar_width: 200.0,
+            right_sidebar_width: 200.0,
+        };
+        let log_w = physical.width as f32 / scale_factor as f32;
+        let log_h = physical.height as f32 / scale_factor as f32;
+        let pane_area = chrome.content_rect(log_w, log_h);
 
-        // No auto-float — user creates floats via Ctrl+B + f
+        // Initialize NIRI Session with content area size (not full window)
+        let viewport_size = heca_core::layout::types::Size::new(
+            pane_area.w as f64,
+            pane_area.h as f64,
+        );
+        let mut session = Session::new(
+            heca_core::layout::types::SessionId(1),
+            viewport_size,
+            scale_factor,
+        );
+
+        // Create fake pane and add to workspace
+        let fake_pane = LayoutPane::new(PaneId(1), &pane_name(1));
+        let pane_id = fake_pane.id.0;
+        session.add_pane(fake_pane, None, true);
+
+        // Create fake backend (no PTY overhead for layout testing)
+        let mut backends: HashMap<u64, Box<dyn PaneBackend>> = HashMap::new();
+        backends.insert(pane_id, Box::new(FakeBackend::new(80, 24)));
 
         Box::new(AppState {
             window,
@@ -123,11 +265,12 @@ impl HecaApp {
             surface_config: config,
             primitive_renderer,
             text_renderer,
-            panetree,
+            session,
+            backends,
             theme: self.app_config.theme.clone(),
             scale_factor,
             needs_redraw: true,
-            focused_pane: Some(editor_id),
+            focused_pane: Some(pane_id),
             input_mode: InputMode::Normal,
             drag_state: DragState::None,
             sidebar: SidebarState {
@@ -142,6 +285,7 @@ impl HecaApp {
             modifiers: winit::keyboard::ModifiersState::default(),
             last_focused: None,
             mouse_enabled: self.app_config.config.general.mouse,
+            last_render_time: None,
         })
     }
 
@@ -151,6 +295,7 @@ impl HecaApp {
             return;
         }
         state.needs_redraw = false;
+        state.last_render_time = Some(std::time::Instant::now());
 
         let surface_texture = match state.surface.get_current_texture() {
             Ok(t) => t,
@@ -222,41 +367,13 @@ impl HecaApp {
         let chrome_text = 14.0f32;
         let pane_text = 16.0f32;
 
-        // ── LEFT SIDEBAR ──
+        // ── TAB BAR ──
+        let tb = &chrome;
         let side_bg = if theme.name == "Catppuccin Mocha" {
             [0.067, 0.067, 0.106, 1.0]
         } else {
             [0.953, 0.957, 0.973, 1.0]
         };
-        let sidebar_top = chrome.tab_bar_height;
-        let sidebar_bottom = h - chrome.status_bar_height;
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        state.primitive_renderer.draw_rect(0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h, side_bg);
-        state.primitive_renderer.draw_border(
-            chrome.left_sidebar_width - 1.0, sidebar_top, 1.0, sidebar_h,
-            theme.border.to_f32x4(), 1.0,
-        );
-        state.text_renderer.queue_text(
-            "Sessions", 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
-        );
-        state.text_renderer.queue_text(
-            "  (empty — Phase 4)", 8.0, sidebar_top + 8.0 + chrome_text * 2.2, chrome_text * 0.75,
-            [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
-        );
-
-        // ── RIGHT SIDEBAR ──
-        let rsx = w - chrome.right_sidebar_width;
-        state.primitive_renderer.draw_rect(rsx, sidebar_top, chrome.right_sidebar_width, sidebar_h, side_bg);
-        state.primitive_renderer.draw_border(
-            rsx, sidebar_top, 1.0, sidebar_h,
-            theme.border.to_f32x4(), 1.0,
-        );
-        state.text_renderer.queue_text(
-            "Details", rsx + 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
-        );
-
-        // ── TAB BAR ──
-        let tb = &chrome;
         state.primitive_renderer.draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
         for (i, tab_name) in state.tab_names.iter().enumerate() {
             let tab_x = 4.0 + i as f32 * 120.0;
@@ -275,10 +392,11 @@ impl HecaApp {
         // ── STATUS BAR ──
         let sb_y = h - tb.status_bar_height;
         state.primitive_renderer.draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
-        let pane_count = state.panetree.visible_pane_count();
-        let focus_title = state
-            .focused_pane
-            .and_then(|id| state.panetree.panes.iter().find(|p| p.id == id))
+        let pane_count = state.session.active_workspace()
+            .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
+            .unwrap_or(0);
+        let focus_title = state.session.active_workspace()
+            .and_then(|ws| ws.scrolling.active_pane())
             .map(|p| p.title.as_str())
             .unwrap_or("—");
         let mode_str = match &state.input_mode {
@@ -293,78 +411,173 @@ impl HecaApp {
             &status, 8.0, status_text_y, chrome_text, theme.foreground.to_f32x4(),
         );
 
+        // ── Flush tab bar + status bar ──
+        state.primitive_renderer.render(&state.device, &view, &mut encoder);
+        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+
         // ── PANE CONTENT AREA ──
         let theme_border = theme.border.to_f32x4();
         let border_width = theme.border_width;
         let accent_color = theme.accent.to_f32x4();
 
-        let (embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+        // Get pane positions from NIRI layout engine
+        let pane_positions = state.session.active_workspace()
+            .map(|ws| ws.scrolling.panes_with_positions())
+            .unwrap_or_default();
 
-        // ── Flush chrome before panes so pane text doesn't bleed over chrome ──
-        state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+        // Get workspace geometry for overview (normal mode = full size)
+        let ws_geometries = state.session.workspace_geometries();
+        let ws_offset = ws_geometries.first()
+            .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+            .unwrap_or((0.0, 0.0));
 
-        // Build letter map if in pane-select or pane-swap mode
-        let letter_map: std::collections::HashMap<u64, char> = match &state.input_mode {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates } => {
-                candidates.iter().map(|(c, id)| (*id, *c)).collect()
-            }
-            _ => std::collections::HashMap::new(),
-        };
-
-        // ── EMBEDDED PANES ──
-        for (rect, pane) in &embedded {
-            let px = pane_area.x + rect.x;
-            let py = pane_area.y + rect.y;
-            state.primitive_renderer.draw_rect(px, py, rect.w, rect.h, pane.background);
-            let is_active = state.focused_pane == Some(pane.id);
+        // ── PANES ──
+        for (pane_id, rect) in &pane_positions {
+            let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
+            let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+            let pw = rect.size.w as f32;
+            let ph = rect.size.h as f32;
+            let is_active = state.focused_pane == Some(pane_id.0);
             let bcolor = if is_active { accent_color } else {
                 [theme_border[0], theme_border[1], theme_border[2], 0.5]
             };
-            state.primitive_renderer.draw_border(px, py, rect.w, rect.h, bcolor, border_width);
-            state.text_renderer.queue_text(
-                &pane.title, px + 4.0, py + 4.0, pane_text, theme.foreground.to_f32x4(),
-            );
-            if let Some(&ch) = letter_map.get(&pane.id) {
-                let label = ch.to_string();
-                let letter_size = 48.0f32;
-                let lx = px + (rect.w - letter_size * 0.6) / 2.0;
-                let ly = py + (rect.h - letter_size) / 2.0;
-                state.text_renderer.queue_text(&label, lx, ly, letter_size, [1.0, 0.9, 0.3, 0.9]);
+
+            if let Some(backend) = state.backends.get(&pane_id.0) {
+                let data = backend.render_data();
+                render_backend_data(
+                    &data, px, py, pw, ph,
+                    &mut state.text_renderer, &mut state.primitive_renderer, theme,
+                );
+            } else {
+                state.primitive_renderer.draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
             }
+
+            // Draw pane name as large centered label so you can tell panes apart
+            let pane_name = state.session.active_workspace()
+                .and_then(|ws| ws.find_pane(*pane_id))
+                .map(|p| p.title.as_str())
+                .unwrap_or("?");
+            let name_size = (pw.min(ph) * 0.25).max(24.0).min(72.0);
+            let name_color = if is_active {
+                [1.0, 1.0, 1.0, 0.9]
+            } else {
+                [1.0, 1.0, 1.0, 0.4]
+            };
+            // Center the text
+            let name_w = name_size * pane_name.len() as f32 * 0.6;
+            let name_x = px + (pw - name_w) / 2.0;
+            let name_y = py + (ph - name_size) / 2.0;
+            state.text_renderer.queue_text(pane_name, name_x, name_y, name_size, name_color);
+
+            state.primitive_renderer.draw_border(px, py, pw, ph, bcolor, border_width);
         }
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
-        // ── FLOATING PANES (back-to-front, each with own flush so text doesn't bleed) ──
-        let fbg = theme.float_background.to_f32x4();
-        let faccent = theme.float_accent.to_f32x4();
-        let ffocus = theme.float_focus.to_f32x4();
-        for (pane, rect) in &floats {
-            let fx = pane_area.x + rect.x;
-            let fy = pane_area.y + rect.y;
-            let is_focused = state.focused_pane == Some(pane.id);
-            let fborder = if is_focused { ffocus } else { faccent };
-            let fborder_width = if is_focused { border_width * 3.0 } else { border_width * 2.0 };
-            state.primitive_renderer.draw_rect(fx, fy, rect.w, rect.h, fbg);
-            state.primitive_renderer.draw_border(fx, fy, rect.w, rect.h, fborder, fborder_width);
-            // Title bar for float
-            let title_color = if is_focused { ffocus } else { faccent };
-            state.primitive_renderer.draw_rect(fx, fy, rect.w, 24.0, title_color);
+        // ── SIDEBARS (drawn ON TOP of panes so they cover any overflow) ──
+        let sidebar_top = chrome.tab_bar_height;
+        let sidebar_bottom = h - chrome.status_bar_height;
+        let sidebar_h = sidebar_bottom - sidebar_top;
+
+        // Left sidebar
+        state.primitive_renderer.draw_rect(0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h, side_bg);
+        state.primitive_renderer.draw_border(
+            chrome.left_sidebar_width - 1.0, sidebar_top, 1.0, sidebar_h,
+            theme.border.to_f32x4(), 1.0,
+        );
+        if chrome.left_sidebar_width >= 80.0 {
             state.text_renderer.queue_text(
-                &pane.title, fx + 4.0, fy + 4.0, pane_text, [1.0, 1.0, 1.0, 1.0],
+                "Sessions", 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
             );
-            if let Some(&ch) = letter_map.get(&pane.id) {
-                let label = ch.to_string();
-                let letter_size = 48.0f32;
-                let lx = fx + (rect.w - letter_size * 0.6) / 2.0;
-                let ly = fy + (rect.h - letter_size) / 2.0;
-                state.text_renderer.queue_text(&label, lx, ly, letter_size, [1.0, 0.9, 0.3, 0.9]);
-            }
-            // Flush each float individually so lower floats' text never shows through
-            state.primitive_renderer.render(&state.device, &view, &mut encoder);
-            state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+            state.text_renderer.queue_text(
+                "  (empty)", 8.0, sidebar_top + 8.0 + chrome_text * 2.2, chrome_text * 0.75,
+                [theme.foreground.to_f32x4()[0], theme.foreground.to_f32x4()[1], theme.foreground.to_f32x4()[2], 0.5],
+            );
         }
+
+        // Right sidebar
+        let rsx = w - chrome.right_sidebar_width;
+        state.primitive_renderer.draw_rect(rsx, sidebar_top, chrome.right_sidebar_width, sidebar_h, side_bg);
+        state.primitive_renderer.draw_border(
+            rsx, sidebar_top, 1.0, sidebar_h,
+            theme.border.to_f32x4(), 1.0,
+        );
+        if chrome.right_sidebar_width >= 80.0 {
+            state.text_renderer.queue_text(
+                "Details", rsx + 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
+            );
+        }
+
+        // ── FLOATING PANES ──
+        if let Some(ws) = state.session.active_workspace() {
+            for float in &ws.floating_panes {
+                let fx = float.position.x as f32 + pane_area.x;
+                let fy = float.position.y as f32 + pane_area.y;
+                let fw = float.size.w as f32;
+                let fh = float.size.h as f32;
+                let is_focused = state.focused_pane == Some(float.pane.id.0);
+                let fborder = if is_focused { theme.float_focus.to_f32x4() } else { theme.float_accent.to_f32x4() };
+                state.primitive_renderer.draw_rect(fx, fy, fw, fh, theme.float_background.to_f32x4());
+                state.primitive_renderer.draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
+                if let Some(backend) = state.backends.get(&float.pane.id.0) {
+                    let data = backend.render_data();
+                    render_backend_data(&data, fx, fy, fw, fh, &mut state.text_renderer, &mut state.primitive_renderer, theme);
+                }
+                // Draw floating pane name centered
+                let float_name = &float.pane.title;
+                let f_name_size = (fw.min(fh) * 0.25).max(24.0).min(72.0);
+                let f_name_color = if is_focused { [1.0, 1.0, 1.0, 0.9] } else { [1.0, 1.0, 1.0, 0.4] };
+                let f_name_w = f_name_size * float_name.len() as f32 * 0.6;
+                let f_name_x = fx + (fw - f_name_w) / 2.0;
+                let f_name_y = fy + (fh - f_name_size) / 2.0;
+                state.text_renderer.queue_text(float_name, f_name_x, f_name_y, f_name_size, f_name_color);
+            }
+        }
+
+        // ── Pane select / swap letter overlay ──
+        if let Some(candidates) = state.input_mode.candidates() {
+            let letter_size = 48.0f32;
+            let label_color = [1.0, 0.9, 0.3, 0.9];
+            for (ch, target_id) in candidates {
+                let mut found = false;
+                // Check scrolling panes
+                for (pane_id, rect) in &pane_positions {
+                    if pane_id.0 == *target_id {
+                        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
+                        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+                        let pw = rect.size.w as f32;
+                        let ph = rect.size.h as f32;
+                        let lx = px + (pw - letter_size * 0.6) / 2.0;
+                        let ly = py + (ph - letter_size) / 2.0;
+                        let label = ch.to_string();
+                        state.text_renderer.queue_text(&label, lx, ly, letter_size, label_color);
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    // Check floating panes
+                    if let Some(ws) = state.session.active_workspace() {
+                        for float in &ws.floating_panes {
+                            if float.pane.id.0 == *target_id {
+                                let fx = float.position.x as f32 + pane_area.x;
+                                let fy = float.position.y as f32 + pane_area.y;
+                                let fw = float.size.w as f32;
+                                let fh = float.size.h as f32;
+                                let lx = fx + (fw - letter_size * 0.6) / 2.0;
+                                let ly = fy + (fh - letter_size) / 2.0;
+                                let label = ch.to_string();
+                                state.text_renderer.queue_text(&label, lx, ly, letter_size, label_color);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        state.primitive_renderer.render(&state.device, &view, &mut encoder);
+        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
         state.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
@@ -401,6 +614,8 @@ impl ApplicationHandler for HecaApp {
                     let log_h = phys.height as f32 / state.scale_factor as f32;
                     state.primitive_renderer.set_screen_size(&state.queue, log_w, log_h);
                     state.text_renderer.set_screen_size(&state.queue, log_w, log_h);
+                    // Update NIRI session viewport to content area size
+                    update_session_viewport(state);
                     state.needs_redraw = true;
                 }
             }
@@ -445,34 +660,109 @@ impl ApplicationHandler for HecaApp {
                             state.needs_redraw = true;
                             return;
                         }
+
+                        // Forward key to focused pane's backend (terminal input)
+                        if let Some(pane_id) = state.focused_pane {
+                            if let Some(backend) = state.backends.get_mut(&pane_id) {
+                                let input_bytes = winit_key_to_terminal_input(
+                                    &event.logical_key,
+                                    &key_text,
+                                    is_ctrl,
+                                );
+                                if !input_bytes.is_empty() {
+                                    backend.process_input(&input_bytes);
+                                    return;
+                                }
+                            }
+                        }
                     }
                     InputMode::Prefix => {
-                        state.input_mode = InputMode::Normal;
-
                         if is_prefix {
+                            // Double-prefix: forward literal Ctrl+B (0x02) to the terminal
+                            // so nested tmux/screen work correctly.
+                            state.input_mode = InputMode::Normal;
+                            if let Some(pane_id) = state.focused_pane {
+                                if let Some(backend) = state.backends.get_mut(&pane_id) {
+                                    backend.process_input(&[0x02]);
+                                }
+                            }
                             return;
                         }
 
-                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
-                        if let Some(act) = action {
-                            execute_action(act, state.focused_pane, state);
+                        // Ignore bare modifier keys (Shift, etc.) in prefix mode.
+                        // The user may hold Shift while pressing the action key; we should
+                        // wait for the actual character key, not exit on Shift alone.
+                        let is_modifier_only = key_text.is_empty()
+                            && matches!(event.logical_key, winit::keyboard::Key::Named(
+                                winit::keyboard::NamedKey::Shift
+                                | winit::keyboard::NamedKey::Control
+                                | winit::keyboard::NamedKey::Alt
+                                | winit::keyboard::NamedKey::Super
+                                | winit::keyboard::NamedKey::Hyper
+                                | winit::keyboard::NamedKey::Meta
+                            ));
+                        if is_modifier_only {
+                            return;
                         }
+
+                        // In prefix mode, pass the REAL modifier state. The user may intentionally
+                        // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
+                        // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
+                        let action = self.bindings.resolve(&key_text, is_ctrl, false, is_shift, &event.logical_key, &event.physical_key);
+                        #[cfg(debug_assertions)]
+                        eprintln!("prefix: key_text='{}' shift={} phys={:?} action={:?}", key_text, is_shift, event.physical_key, action);
+
+                        // Only reset to Normal if we found an action or the key is printable.
+                        // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
+                        if let Some(act) = action {
+                            state.input_mode = InputMode::Normal;
+                            execute_action(act, state.focused_pane, state);
+                        } else if !key_text.is_empty() {
+                            // Printable key that didn't match any binding — exit prefix.
+                            state.input_mode = InputMode::Normal;
+                        }
+                        // else: empty key_text, no action — stay in prefix mode.
                     }
                     InputMode::PaneSelect { candidates } => {
-                        if let Some(ch) = key_text.chars().next() {
-                            if let Some((_, pane_id)) = candidates.iter().find(|(c, _)| *c == ch) {
-                                state.focused_pane = Some(*pane_id);
-                                state.panetree.bring_float_to_front(*pane_id);
+                        let typed = key_text.chars().next()
+                            .or_else(|| {
+                                match event.physical_key {
+                                    winit::keyboard::PhysicalKey::Code(c) => {
+                                        let s = format!("{:?}", c);
+                                        s.strip_prefix("Key").and_then(|n| n.chars().next())
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .map(|c| c.to_ascii_lowercase());
+                        #[cfg(debug_assertions)]
+                        eprintln!("pane_select: typed={:?} candidates={:?}", typed, candidates);
+                        if let Some(ch) = typed {
+                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                focus_pane_by_id(state, *target_id);
                             }
                         }
                         state.input_mode = InputMode::Normal;
                     }
                     InputMode::PaneSwap { candidates } => {
-                        if let Some(ch) = key_text.chars().next() {
+                        let typed = key_text.chars().next()
+                            .or_else(|| {
+                                match event.physical_key {
+                                    winit::keyboard::PhysicalKey::Code(c) => {
+                                        let s = format!("{:?}", c);
+                                        s.strip_prefix("Key").and_then(|n| n.chars().next())
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .map(|c| c.to_ascii_lowercase());
+                        #[cfg(debug_assertions)]
+                        eprintln!("pane_swap: typed={:?} candidates={:?}", typed, candidates);
+                        if let Some(ch) = typed {
                             if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 if let Some(current_id) = state.focused_pane {
                                     if current_id != *target_id {
-                                        state.panetree.swap_panes(current_id, *target_id);
+                                        swap_panes(state, current_id, *target_id);
                                     }
                                 }
                             }
@@ -492,94 +782,6 @@ impl ApplicationHandler for HecaApp {
                 state.needs_redraw = true;
 
                 if !state.mouse_enabled { return; }
-
-                match state.drag_state {
-                    DragState::Resizing { pane_id, dir, start_pos } => {
-                        let phys = state.window.inner_size();
-                        let win_w = phys.width as f32 / state.scale_factor as f32;
-                        let win_h = phys.height as f32 / state.scale_factor as f32;
-                        let mx = state.mouse_pos.0;
-                        let my = state.mouse_pos.1;
-                        if state.panetree.panes.iter().any(|p| p.id == pane_id) {
-                            let delta = match dir {
-                                SplitDirection::Horizontal => (mx - start_pos.0) / win_w,
-                                SplitDirection::Vertical => (my - start_pos.1) / win_h,
-                            };
-                            // resize_delta moves the split border in the drag direction
-                            // regardless of which side the pane is on
-                            state.panetree.resize_delta(pane_id, delta * 0.8);
-                            state.drag_state = DragState::Resizing {
-                                pane_id,
-                                dir,
-                                start_pos: (mx, my),
-                            };
-                        }
-                    }
-                    DragState::MovingFloat { pane_id, offset, start_rect } => {
-                        let mx = state.mouse_pos.0;
-                        let my = state.mouse_pos.1;
-                        // Recompute pane_area to convert screen -> content-area coords
-                        let phys = state.window.inner_size();
-                        let log_w = phys.width as f32 / state.scale_factor as f32;
-                        let log_h = phys.height as f32 / state.scale_factor as f32;
-                        let chrome = ChromeConfig {
-                            tab_bar_height: 32.0,
-                            status_bar_height: 24.0,
-                            left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 32.0 },
-                            right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
-                        };
-                        let pane_area = chrome.content_rect(log_w, log_h);
-
-                        let new_abs_x = mx - offset.0;
-                        let new_abs_y = my - offset.1;
-                        let new_rect = heca_core::types::Rect::new(
-                            new_abs_x - pane_area.x,
-                            new_abs_y - pane_area.y,
-                            start_rect.w,
-                            start_rect.h,
-                        );
-                        // Clamp so float stays at least partly visible
-                        let clamped = heca_core::types::Rect::new(
-                            new_rect.x.clamp(-new_rect.w + 40.0, pane_area.w - 40.0),
-                            new_rect.y.clamp(-new_rect.h + 40.0, pane_area.h - 40.0),
-                            new_rect.w,
-                            new_rect.h,
-                        );
-                        if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
-                            entry.1 = clamped;
-                        }
-                        state.drag_state = DragState::MovingFloat {
-                            pane_id,
-                            offset,
-                            start_rect: clamped,
-                        };
-                    }
-                    DragState::ResizingFloat { pane_id, edge, start_mouse, start_rect } => {
-                        let mx = state.mouse_pos.0;
-                        let my = state.mouse_pos.1;
-                        let dx = mx - start_mouse.0;
-                        let dy = my - start_mouse.1;
-                        let mut r = start_rect;
-                        match edge {
-                            app_state::FloatEdge::Left | app_state::FloatEdge::TopLeft | app_state::FloatEdge::BottomLeft => { r.x += dx; r.w -= dx; }
-                            app_state::FloatEdge::Right | app_state::FloatEdge::TopRight | app_state::FloatEdge::BottomRight => { r.w += dx; }
-                            _ => {}
-                        }
-                        match edge {
-                            app_state::FloatEdge::Top | app_state::FloatEdge::TopLeft | app_state::FloatEdge::TopRight => { r.y += dy; r.h -= dy; }
-                            app_state::FloatEdge::Bottom | app_state::FloatEdge::BottomLeft | app_state::FloatEdge::BottomRight => { r.h += dy; }
-                            _ => {}
-                        }
-                        let min_size = 100.0;
-                        if r.w >= min_size && r.h >= min_size {
-                            if let Some(entry) = state.panetree.floats.iter_mut().find(|(id, _)| *id == pane_id) {
-                                entry.1 = r;
-                            }
-                            state.drag_state = DragState::ResizingFloat { pane_id, edge, start_mouse: (mx, my), start_rect: r };
-                        }
-                    }
-                    DragState::None => {}
-                }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 if !state.mouse_enabled { return; }
@@ -597,139 +799,119 @@ impl ApplicationHandler for HecaApp {
                 let pane_area = chrome.content_rect(win_w, win_h);
 
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
-                    // Scope to end compute_rects borrow before mutating panetree
-                    let float_click = {
-                        let (_embedded, floats) = state.panetree.compute_rects(pane_area.w, pane_area.h);
+                    // Hit test against NIRI layout pane positions
+                    let pane_positions = state.session.active_workspace()
+                        .map(|ws| ws.scrolling.panes_with_positions())
+                        .unwrap_or_default();
+                    let ws_geometries = state.session.workspace_geometries();
+                    let ws_offset = ws_geometries.first()
+                        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+                        .unwrap_or((0.0, 0.0));
 
-                        // Hit test floating panes first (front-to-back)
-                        let mut result: Option<(u64, Option<DragState>)> = None;
-                        for (pane, rect) in floats.iter().rev() {
-                            let abs_x = pane_area.x + rect.x;
-                            let abs_y = pane_area.y + rect.y;
-                            let in_rect = mouse_pos.0 >= abs_x && mouse_pos.0 <= abs_x + rect.w
-                                && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + rect.h;
-                            let edge = if in_rect {
-                                let near_left = (mouse_pos.0 - abs_x).abs() < 6.0;
-                                let near_right = (mouse_pos.0 - (abs_x + rect.w)).abs() < 6.0;
-                                let near_top = (mouse_pos.1 - abs_y).abs() < 6.0;
-                                let near_bottom = (mouse_pos.1 - (abs_y + rect.h)).abs() < 6.0;
-                                match (near_left, near_right, near_top, near_bottom) {
-                                    (true, _, true, _) => Some(app_state::FloatEdge::TopLeft),
-                                    (_, true, true, _) => Some(app_state::FloatEdge::TopRight),
-                                    (true, _, _, true) => Some(app_state::FloatEdge::BottomLeft),
-                                    (_, true, _, true) => Some(app_state::FloatEdge::BottomRight),
-                                    (true, _, _, _) => Some(app_state::FloatEdge::Left),
-                                    (_, true, _, _) => Some(app_state::FloatEdge::Right),
-                                    (_, _, true, _) => Some(app_state::FloatEdge::Top),
-                                    (_, _, _, true) => Some(app_state::FloatEdge::Bottom),
-                                    _ => None,
-                                }
-                            } else {
-                                None
-                            };
-
-                            let on_title = in_rect && mouse_pos.1 >= abs_y && mouse_pos.1 <= abs_y + 24.0;
-
-                            if let Some(e) = edge {
-                                result = Some((pane.id, Some(DragState::ResizingFloat {
-                                    pane_id: pane.id,
-                                    edge: e,
-                                    start_mouse: mouse_pos,
-                                    start_rect: *rect,
-                                })));
-                                break;
-                            } else if on_title {
-                                let offset = (mouse_pos.0 - abs_x, mouse_pos.1 - abs_y);
-                                result = Some((pane.id, Some(DragState::MovingFloat {
-                                    pane_id: pane.id,
-                                    offset,
-                                    start_rect: *rect,
-                                })));
-                                break;
-                            } else if in_rect {
-                                result = Some((pane.id, None));
-                                break;
-                            }
-                        }
-                        result
-                    };
-
-                    // Apply float click after compute_rects borrow ends
-                    if let Some((pane_id, ref drag)) = float_click {
-                        state.focused_pane = Some(pane_id);
-                        state.panetree.bring_float_to_front(pane_id);
-                        if let Some(d) = drag {
-                            state.drag_state = d.clone();
+                    for (pane_id, rect) in &pane_positions {
+                        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
+                        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+                        let pw = rect.size.w as f32;
+                        let ph = rect.size.h as f32;
+                        if mouse_pos.0 >= px && mouse_pos.0 <= px + pw
+                            && mouse_pos.1 >= py && mouse_pos.1 <= py + ph
+                        {
+                            state.focused_pane = Some(pane_id.0);
+                            sync_focus(state);
+                            break;
                         }
                     }
-
-                    // Hit test embedded panes (skip if a float was clicked)
-                    if float_click.is_none() {
-                        let (embedded, _) = state.panetree.compute_rects(pane_area.w, pane_area.h);
-                        for (rect, pane) in &embedded {
-                            let px = pane_area.x + rect.x;
-                            let py = pane_area.y + rect.y;
-                            if mouse_pos.0 >= px && mouse_pos.0 <= px + rect.w
-                                && mouse_pos.1 >= py && mouse_pos.1 <= py + rect.h
-                            {
-                                state.focused_pane = Some(pane.id);
-                                // Check if click is near a border (12px hit area)
-                                let d_left = (mouse_pos.0 - px).abs();
-                                let d_right = (mouse_pos.0 - (px + rect.w)).abs();
-                                let d_top = (mouse_pos.1 - py).abs();
-                                let d_bottom = (mouse_pos.1 - (py + rect.h)).abs();
-                                let near_left = d_left < 12.0;
-                                let near_right = d_right < 12.0;
-                                let near_top = d_top < 12.0;
-                                let near_bottom = d_bottom < 12.0;
-                                // Pick the closest edge; corners prefer the closer one
-                                let mut edge_dir: Option<SplitDirection> = None;
-                                if near_left || near_right {
-                                    let h_dist = d_left.min(d_right);
-                                    if near_top || near_bottom {
-                                        let v_dist = d_top.min(d_bottom);
-                                        edge_dir = if h_dist < v_dist {
-                                            Some(SplitDirection::Horizontal)
-                                        } else {
-                                            Some(SplitDirection::Vertical)
-                                        };
-                                    } else {
-                                        edge_dir = Some(SplitDirection::Horizontal);
-                                    }
-                                } else if near_top || near_bottom {
-                                    edge_dir = Some(SplitDirection::Vertical);
-                                }
-                                if let Some(dir) = edge_dir {
-                                    state.drag_state = DragState::Resizing {
-                                        pane_id: pane.id,
-                                        dir,
-                                        start_pos: mouse_pos,
-                                    };
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if button == MouseButton::Left && button_state == ElementState::Released {
-                    state.drag_state = DragState::None;
                 }
             }
             _ => {}
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(ref state) = self.state {
-            if state.needs_redraw {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        if let Some(ref mut state) = self.state {
+            // Advance session animations.
+            state.session.advance_animations();
+
+            // Poll backends (fake backends return false)
+            let mut backend_has_data = false;
+            for backend in state.backends.values_mut() {
+                if backend.update() {
+                    backend_has_data = true;
+                }
+            }
+
+            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
+            if needs_frame {
                 state.window.request_redraw();
+            }
+
+            // Use WaitUntil during animations (60fps cap), Wait when idle (0% CPU).
+            if state.session.are_animations_ongoing() {
+                event_loop.set_control_flow(ControlFlow::WaitUntil(
+                    Instant::now() + Duration::from_millis(16)
+                ));
+            } else {
+                event_loop.set_control_flow(ControlFlow::Wait);
             }
         }
     }
 }
 
-fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) {
+/// Focus a specific pane by its ID, updating both `focused_pane` and the session's active state.
+/// Does NOT move the layout — compensates view_offset so pane positions stay visually fixed.
+fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
+    state.focused_pane = Some(pane_id);
+    if let Some(ws) = state.session.active_workspace_mut() {
+        // Find location first (immutable scan), then mutate.
+        let mut found = None;
+        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+            for (pi, pane) in col.panes.iter().enumerate() {
+                if pane.id.0 == pane_id {
+                    found = Some((ci, pi));
+                    break;
+                }
+            }
+            if found.is_some() { break; }
+        }
+
+        if let Some((ci, pi)) = found {
+            ws.floating_is_active = false;
+            // Compensate view_offset so the visual layout doesn't jump.
+            // view_pos = column_x(active_column_idx) + view_offset.
+            // We want view_pos to stay the same after changing active_column_idx.
+            let old_col_x = ws.scrolling.column_x(ws.scrolling.active_column_idx);
+            let new_col_x = ws.scrolling.column_x(ci);
+            let delta = old_col_x - new_col_x;
+            ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
+                ws.scrolling.view_offset.current() + delta
+            );
+            ws.scrolling.active_column_idx = ci;
+            if let Some(col) = ws.scrolling.columns.get_mut(ci) {
+                col.active_pane_idx = pi;
+            }
+            return;
+        }
+
+        // Check floating panes
+        for float in &mut ws.floating_panes {
+            if float.pane.id.0 == pane_id {
+                ws.floating_is_active = true;
+                float.is_active = true;
+                return;
+            }
+        }
+    }
+}
+
+/// Sync `focused_pane` from the session's active pane (scrolling or floating).
+fn sync_focus(state: &mut AppState) {
+    state.focused_pane = state.session.active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|p| p.id.0);
+}
+
+/// Update session viewport to match current chrome/content area size.
+fn update_session_viewport(state: &mut AppState) {
     let phys = state.window.inner_size();
     let win_w = phys.width as f32 / state.scale_factor as f32;
     let win_h = phys.height as f32 / state.scale_factor as f32;
@@ -740,87 +922,80 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
         right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 32.0 },
     };
     let pane_area = chrome.content_rect(win_w, win_h);
+    let new_size = heca_core::layout::types::Size::new(
+        pane_area.w as f64,
+        pane_area.h as f64,
+    );
+    state.session.update_viewport(new_size);
+}
+
+fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState) {
     match action {
         WmAction::FocusLeft => {
-            if let Some(id) = current {
-                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Left, pane_area.w, pane_area.h, state.last_focused);
-                if let Some(target) = geo {
-                    state.last_focused = Some(id);
-                    state.focused_pane = Some(target);
-                    state.panetree.bring_float_to_front(target);
-                }
-            }
+            state.session.focus_left();
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::FocusRight => {
-            if let Some(id) = current {
-                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Right, pane_area.w, pane_area.h, state.last_focused);
-                if let Some(target) = geo {
-                    state.last_focused = Some(id);
-                    state.focused_pane = Some(target);
-                    state.panetree.bring_float_to_front(target);
-                }
-            }
+            state.session.focus_right();
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::FocusUp => {
-            if let Some(id) = current {
-                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Up, pane_area.w, pane_area.h, state.last_focused);
-                if let Some(target) = geo {
-                    state.last_focused = Some(id);
-                    state.focused_pane = Some(target);
-                    state.panetree.bring_float_to_front(target);
-                }
-            }
+            state.session.focus_up();
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::FocusDown => {
-            if let Some(id) = current {
-                let geo = state.panetree.find_neighbor_geo(id, GeoDir::Down, pane_area.w, pane_area.h, state.last_focused);
-                if let Some(target) = geo {
-                    state.last_focused = Some(id);
-                    state.focused_pane = Some(target);
-                    state.panetree.bring_float_to_front(target);
-                }
-            }
+            state.session.focus_down();
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::SplitHorizontal => {
-            if let Some(id) = current {
-                if let Some(new_id) = state.panetree.split(id, SplitDirection::Horizontal) {
-                    state.focused_pane = Some(new_id);
-                }
-            }
+            // New column to the right
+            let next_id = state.session.next_id();
+            let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+            let backend_id = next_id;
+            state.session.add_pane(pane, None, true);
+            state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::SplitVertical => {
-            if let Some(id) = current {
-                if let Some(new_id) = state.panetree.split(id, SplitDirection::Vertical) {
-                    state.focused_pane = Some(new_id);
-                }
-            }
-        }
-        WmAction::Float => {
-            if let Some(id) = current {
-                state.panetree.toggle_float(id, None);
-            }
-        }
-        WmAction::Scratchpad => {
-            if let Some(id) = current {
-                state.panetree.toggle_scratchpad(id);
-            }
-        }
-        WmAction::Hide => {
-            if let Some(id) = current {
-                state.panetree.hide(id);
-                state.focused_pane = None;
-            }
+            // New pane in current column
+            let next_id = state.session.next_id();
+            let pane = LayoutPane::new(PaneId(next_id), &pane_name(next_id));
+            let backend_id = next_id;
+            let col_idx = state.session.active_workspace()
+                .map(|ws| ws.scrolling.active_column_idx)
+                .unwrap_or(0);
+            state.session.active_workspace_mut()
+                .map(|ws| ws.scrolling.add_pane_to_column(col_idx, None, pane, true));
+            state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::ClosePane => {
-            if let Some(id) = current {
-                let neighbor = state.panetree.find_neighbor_geo(id, GeoDir::Left, pane_area.w, pane_area.h, state.last_focused)
-                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Right, pane_area.w, pane_area.h, state.last_focused))
-                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Up, pane_area.w, pane_area.h, state.last_focused))
-                    .or_else(|| state.panetree.find_neighbor_geo(id, GeoDir::Down, pane_area.w, pane_area.h, state.last_focused));
-                state.panetree.remove(id);
-                state.focused_pane = neighbor;
-                state.last_focused = None;
+            // Count total panes across all columns
+            let total_panes = state.session.active_workspace()
+                .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
+                .unwrap_or(0);
+            if total_panes <= 1 {
+                // Don't close the last pane — workspace would become empty
+                state.needs_redraw = true;
+                return;
             }
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let col_idx = ws.scrolling.active_column_idx;
+                if let Some(col) = ws.scrolling.active_column() {
+                    let pane_idx = col.active_pane_idx;
+                    if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                        state.backends.remove(&removed.id.0);
+                    }
+                }
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::TabNext => {
             if !state.tab_names.is_empty() {
@@ -832,105 +1007,290 @@ fn execute_action(action: WmAction, current: Option<u64>, state: &mut AppState) 
                 state.active_tab = (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
             }
         }
-        WmAction::ResizeLeft | WmAction::ResizeUp => {
-            if let Some(id) = current {
-                state.panetree.resize(id, -0.05);
-            }
-        }
-        WmAction::ResizeRight | WmAction::ResizeDown => {
-            if let Some(id) = current {
-                state.panetree.resize(id, 0.05);
-            }
-        }
         WmAction::SidebarLeft => {
             state.sidebar.left_visible = !state.sidebar.left_visible;
+            update_session_viewport(state);
+            state.needs_redraw = true;
         }
         WmAction::SidebarRight => {
             state.sidebar.right_visible = !state.sidebar.right_visible;
+            update_session_viewport(state);
+            state.needs_redraw = true;
         }
         WmAction::NextPane => {
-            state.focused_pane = state.panetree.cycle_focus(state.focused_pane, 1);
-            if let Some(id) = state.focused_pane {
-                state.panetree.bring_float_to_front(id);
-            }
+            state.session.focus_right();
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::PrevPane => {
-            state.focused_pane = state.panetree.cycle_focus(state.focused_pane, -1);
-            if let Some(id) = state.focused_pane {
-                state.panetree.bring_float_to_front(id);
+            state.session.focus_left();
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::ResizeIncrease => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.resize_active_column(0.05);
             }
+            state.needs_redraw = true;
+        }
+        WmAction::ResizeDecrease => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.resize_active_column(-0.05);
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::PaneHeightIncrease => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let col_idx = ws.scrolling.active_column_idx;
+                if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
+                    let h = ws.scrolling.working_area.size.h;
+                    let gaps = ws.scrolling.options.gaps;
+                    col.resize_active_pane_height(40.0, h, gaps);
+                }
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::PaneHeightDecrease => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let col_idx = ws.scrolling.active_column_idx;
+                if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
+                    let h = ws.scrolling.working_area.size.h;
+                    let gaps = ws.scrolling.options.gaps;
+                    col.resize_active_pane_height(-40.0, h, gaps);
+                }
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::MovePaneLeft => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.move_active_pane_left();
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::MovePaneRight => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.move_active_pane_right();
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
         }
         WmAction::PaneSelect => {
             let mut candidates: Vec<(char, u64)> = Vec::new();
-            let mut embedded_ids = Vec::new();
-            collect_embedded_ids(&state.panetree.root, &state.panetree.panes, &mut embedded_ids);
-            for id in embedded_ids {
-                let ch = (b'a' + candidates.len() as u8) as char;
-                candidates.push((ch, id));
-            }
-            for (id, _) in &state.panetree.floats {
-                let ch = (b'a' + candidates.len() as u8) as char;
-                candidates.push((ch, *id));
+            if let Some(ws) = state.session.active_workspace() {
+                for col in &ws.scrolling.columns {
+                    for pane in &col.panes {
+                        let ch = (b'a' + candidates.len() as u8) as char;
+                        candidates.push((ch, pane.id.0));
+                    }
+                }
+                for float in &ws.floating_panes {
+                    let ch = (b'a' + candidates.len() as u8) as char;
+                    candidates.push((ch, float.pane.id.0));
+                }
             }
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSelect { candidates };
+                state.needs_redraw = true;
             }
         }
         WmAction::SwapSelect => {
             let mut candidates: Vec<(char, u64)> = Vec::new();
-            let mut embedded_ids = Vec::new();
-            collect_embedded_ids(&state.panetree.root, &state.panetree.panes, &mut embedded_ids);
-            for id in embedded_ids {
-                let ch = (b'a' + candidates.len() as u8) as char;
-                candidates.push((ch, id));
-            }
-            for (id, _) in &state.panetree.floats {
-                let ch = (b'a' + candidates.len() as u8) as char;
-                candidates.push((ch, *id));
+            if let Some(ws) = state.session.active_workspace() {
+                for col in &ws.scrolling.columns {
+                    for pane in &col.panes {
+                        let ch = (b'a' + candidates.len() as u8) as char;
+                        candidates.push((ch, pane.id.0));
+                    }
+                }
+                for float in &ws.floating_panes {
+                    let ch = (b'a' + candidates.len() as u8) as char;
+                    candidates.push((ch, float.pane.id.0));
+                }
             }
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSwap { candidates };
+                state.needs_redraw = true;
             }
         }
-        WmAction::SwapLeft | WmAction::SwapRight => {
-            if let Some(id) = current {
-                let dir = SplitDirection::Horizontal;
-                if !state.panetree.move_pane(id, dir) {
-                    // No neighbor — split and move to edge
-                    if let Some(new_id) = state.panetree.split(id, dir) {
-                        state.panetree.swap_panes(id, new_id);
-                        state.focused_pane = Some(id);
-                    }
-                }
+        WmAction::SwapLeft => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.move_column_left();
             }
+            state.needs_redraw = true;
+        }
+        WmAction::SwapRight => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                ws.scrolling.move_column_right();
+            }
+            state.needs_redraw = true;
         }
         WmAction::SwapUp | WmAction::SwapDown => {
-            if let Some(id) = current {
-                let dir = SplitDirection::Vertical;
-                if !state.panetree.move_pane(id, dir) {
-                    // No neighbor — split and move to edge
-                    if let Some(new_id) = state.panetree.split(id, dir) {
-                        state.panetree.swap_panes(id, new_id);
-                        state.focused_pane = Some(id);
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let col_idx = ws.scrolling.active_column_idx;
+                if let Some(col) = ws.scrolling.active_column() {
+                    let pane_idx = col.active_pane_idx;
+                    let swap_with = if matches!(action, WmAction::SwapUp) {
+                        pane_idx.saturating_sub(1)
+                    } else {
+                        (pane_idx + 1).min(col.panes.len().saturating_sub(1))
+                    };
+                    if swap_with != pane_idx {
+                        if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
+                            // Compute Y offsets BEFORE swap for animation.
+                            let h_above = col.pane_sizes.get(pane_idx.min(swap_with))
+                                .map(|s| s.h).unwrap_or(0.0);
+                            let h_below = col.pane_sizes.get(pane_idx.max(swap_with))
+                                .map(|s| s.h).unwrap_or(0.0);
+                            let gap = ws.scrolling.options.gaps;
+
+                            // Animate the two panes swapping positions.
+                            // Pane moving UP starts from below and slides up.
+                            // Pane moving DOWN starts from above and slides down.
+                            let up_offset = h_above + gap;
+                            let down_offset = -(h_below + gap);
+
+                            // Apply animation BEFORE the swap (so we animate the right panes).
+                            if swap_with < pane_idx {
+                                // SwapUp: pane at idx moves up, pane at idx-1 moves down.
+                                col.panes[pane_idx].animate_move_y_from(-up_offset, AnimationConfig::default());
+                                col.panes[swap_with].animate_move_y_from(down_offset, AnimationConfig::default());
+                            } else {
+                                // SwapDown: pane at idx moves down, pane at idx+1 moves up.
+                                col.panes[pane_idx].animate_move_y_from(-down_offset, AnimationConfig::default());
+                                col.panes[swap_with].animate_move_y_from(up_offset, AnimationConfig::default());
+                            }
+
+                            col.panes.swap(pane_idx, swap_with);
+                            col.active_pane_idx = swap_with;
+                            col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+                        }
                     }
                 }
             }
+            sync_focus(state);
+            state.needs_redraw = true;
         }
+        WmAction::Float => {
+            if let Some(pane_id) = state.focused_pane {
+                if let Some(ws) = state.session.active_workspace_mut() {
+                    let wa = ws.scrolling.working_area;
+                    let is_floating = ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id);
+
+                    if is_floating {
+                        // Tiling ← Floating: remove from floating, restore to original column
+                        if let Some(idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
+                            let float = ws.floating_panes.remove(idx);
+                            let orig_col = float.original_column_idx;
+                            let orig_pane = float.original_pane_idx;
+                            if let Some(col_idx) = orig_col {
+                                if col_idx < ws.scrolling.columns.len() {
+                                    let target_idx = orig_pane.unwrap_or(0).min(ws.scrolling.columns[col_idx].panes.len());
+                                    ws.scrolling.columns[col_idx].panes.insert(target_idx, float.pane);
+                                    ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
+                                    ws.scrolling.active_column_idx = col_idx;
+                                    ws.scrolling.update_all_column_widths();
+                                } else {
+                                    ws.scrolling.add_column(None, Column::new(
+                                        ColumnId(pane_id), float.pane, ColumnWidth::Proportion(0.5),
+                                    ), true);
+                                }
+                            } else {
+                                ws.scrolling.add_column(None, Column::new(
+                                    ColumnId(pane_id), float.pane, ColumnWidth::Proportion(0.5),
+                                ), true);
+                            }
+                            ws.floating_is_active = false;
+                        }
+                    } else {
+                        // Tiling → Floating: centered, 75% of working area
+                        let mut found = None;
+                        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+                            for (pi, pane) in col.panes.iter().enumerate() {
+                                if pane.id.0 == pane_id { found = Some((ci, pi)); break; }
+                            }
+                            if found.is_some() { break; }
+                        }
+                        if let Some((col_idx, pane_idx)) = found {
+                            if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                                let fw = wa.size.w * 0.75;
+                                let fh = wa.size.h * 0.75;
+                                let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
+                                let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
+                                ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
+                                    pane: removed,
+                                    position: heca_core::layout::types::Point::new(fx, fy),
+                                    size: heca_core::layout::types::Size::new(fw, fh),
+                                    is_active: true,
+                                    original_column_idx: Some(col_idx),
+                                    original_pane_idx: Some(pane_idx),
+                                });
+                                ws.floating_is_active = true;
+                            }
+                        }
+                    }
+                }
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::Scratchpad | WmAction::Hide => {}
+        WmAction::ResizeLeft | WmAction::ResizeUp | WmAction::ResizeRight | WmAction::ResizeDown => {}
     }
 }
 
-fn collect_embedded_ids(node: &heca_core::pane::LayoutNode, panes: &[heca_core::pane::Pane], out: &mut Vec<u64>) {
-    match node {
-        heca_core::pane::LayoutNode::Split { left, right, .. } => {
-            collect_embedded_ids(left, panes, out);
-            collect_embedded_ids(right, panes, out);
-        }
-        heca_core::pane::LayoutNode::Leaf { pane_id } => {
-            if panes.iter().any(|p| p.id == *pane_id && p.disposition == heca_core::pane::Disposition::Embedded) {
-                out.push(*pane_id);
+/// Swap two panes by their IDs. Preserves view position so layout doesn't move.
+fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        let mut a_col: Option<usize> = None;
+        let mut a_idx: Option<usize> = None;
+        let mut b_col: Option<usize> = None;
+        let mut b_idx: Option<usize> = None;
+
+        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+            for (pi, pane) in col.panes.iter().enumerate() {
+                if pane.id.0 == a_id {
+                    a_col = Some(ci);
+                    a_idx = Some(pi);
+                }
+                if pane.id.0 == b_id {
+                    b_col = Some(ci);
+                    b_idx = Some(pi);
+                }
             }
         }
-        heca_core::pane::LayoutNode::Empty => {}
+
+        if let (Some(ac), Some(ai), Some(bc), Some(bi)) = (a_col, a_idx, b_col, b_idx) {
+            let old_view_pos = ws.scrolling.view_pos();
+            if ac == bc {
+                ws.scrolling.columns[ac].panes.swap(ai, bi);
+            } else {
+                // Swap pane structs between columns.
+                // Use split_at_mut to get two mutable refs to different columns.
+                let (col_a, col_b) = if ac < bc {
+                    let (left, right) = ws.scrolling.columns.split_at_mut(bc);
+                    (&mut left[ac], &mut right[0])
+                } else {
+                    let (left, right) = ws.scrolling.columns.split_at_mut(ac);
+                    (&mut right[0], &mut left[bc])
+                };
+                std::mem::swap(&mut col_a.panes[ai], &mut col_b.panes[bi]);
+            }
+            // Recompute pane sizes since swapped panes may have different preferred heights
+            let h = ws.scrolling.working_area.size.h;
+            let gaps = ws.scrolling.options.gaps;
+            ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
+            if bc != ac {
+                ws.scrolling.columns[bc].compute_pane_sizes(h, gaps);
+            }
+            ws.scrolling.update_all_column_widths();
+            // Preserve view position so layout stays visually fixed
+            let new_view_pos = ws.scrolling.view_pos();
+            let delta = old_view_pos - new_view_pos;
+            ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
+                ws.scrolling.view_offset.current() + delta
+            );
+        }
     }
 }
 

@@ -6,3 +6,6 @@
 ## TO BE CONSIDERED
 
 - <https://github.com/emilk/egui>
+- <https://github.com/p4ymak/egui_code_editor>
+- <https://areweguiyet.com/>
+- <https://uianatomy.dev/>

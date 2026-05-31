@@ -256,23 +256,47 @@ impl Default for Config {
         keybindings.insert("focus_right".to_string(), "l,ArrowRight".to_string());
         keybindings.insert("focus_up".to_string(), "k,ArrowUp".to_string());
         keybindings.insert("focus_down".to_string(), "j,ArrowDown".to_string());
-        keybindings.insert("split_horizontal".to_string(), "-".to_string());
+        // ── Navigation ──
+        keybindings.insert("focus_left".to_string(), "h,ArrowLeft".to_string());
+        keybindings.insert("focus_right".to_string(), "l,ArrowRight".to_string());
+        keybindings.insert("focus_up".to_string(), "k,ArrowUp".to_string());
+        keybindings.insert("focus_down".to_string(), "j,ArrowDown".to_string());
+
+        // ── Splits ──
+        // Enter = new column (horizontal split); v = new pane in column (vertical split)
+        keybindings.insert("split_horizontal".to_string(), "Enter".to_string());
         keybindings.insert("split_vertical".to_string(), "v".to_string());
-        keybindings.insert("float".to_string(), "f".to_string());
-        keybindings.insert("scratchpad".to_string(), "s".to_string());
-        keybindings.insert("hide".to_string(), "z".to_string());
+
+        // ── Resize ──
+        // =/- column width; +/_ pane height (when >1 pane in column)
+        keybindings.insert("resize_increase".to_string(), "=".to_string());
+        keybindings.insert("resize_decrease".to_string(), "-".to_string());
+        keybindings.insert("pane_height_increase".to_string(), "Shift+=".to_string());
+        keybindings.insert("pane_height_decrease".to_string(), "Shift+-".to_string());
+
+        // ── Pane operations ──
         keybindings.insert("close".to_string(), "x".to_string());
-        keybindings.insert("tab_next".to_string(), "]".to_string());
-        keybindings.insert("tab_prev".to_string(), "[".to_string());
+        keybindings.insert("float".to_string(), "f".to_string());
+                
+        // ── Quick select / swap ──
+        keybindings.insert("pane_select".to_string(), "q".to_string());
+        keybindings.insert("swap_select".to_string(), "Shift+q".to_string());
+
+        // ── Tabs ──
+        keybindings.insert("tab_next".to_string(), "Ctrl+]".to_string());
+        keybindings.insert("tab_prev".to_string(), "Ctrl+[".to_string());
         keybindings.insert("next_pane".to_string(), "n".to_string());
         keybindings.insert("prev_pane".to_string(), "p".to_string());
-        keybindings.insert("pane_select".to_string(), "q".to_string());
-        keybindings.insert("swap_select".to_string(), "Q".to_string());
-        keybindings.insert("resize_left".to_string(), "H".to_string());
-        keybindings.insert("resize_right".to_string(), "L".to_string());
-        keybindings.insert("resize_up".to_string(), "K".to_string());
-        keybindings.insert("resize_down".to_string(), "J".to_string());
-        keybindings.insert("sidebar_left".to_string(), "Space".to_string());
+
+        // ── Sidebars ──
+        keybindings.insert("sidebar_left".to_string(), "b".to_string());
+        keybindings.insert("sidebar_right".to_string(), ".".to_string());
+
+        // ── Move pane to column (NIRI-style) ──
+        keybindings.insert("move_pane_left".to_string(), "[".to_string());
+        keybindings.insert("move_pane_right".to_string(), "]".to_string());
+
+        // ── Swap position (Ctrl+nav) ──
         keybindings.insert("swap_left".to_string(), "Ctrl+h".to_string());
         keybindings.insert("swap_right".to_string(), "Ctrl+l".to_string());
         keybindings.insert("swap_up".to_string(), "Ctrl+k".to_string());

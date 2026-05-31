@@ -20,11 +20,11 @@
 
 ## Table Stakes
 
-1. Tiling pane layout (HSplit/VSplit/BSP tree)
-2. Floating panes with z-index
+1. NIRI-style scrolling-column tiling layout (horizontal columns, vertical stacks, animated view offset)
+2. Floating panes with z-index and toggle-to-float
 3. Scratchpad panes (i3-style toggle)
 4. Full mouse support (focus, resize, drag, scroll)
-5. Keyboard-first navigation with configurable keybindings
+5. Keyboard-first navigation with tmux-style prefix bindings (Ctrl+B → key)
 6. Config via `config.toml`
 7. Session persistence (save/restore)
 8. Terminal pane (PTY + VTE)
@@ -52,7 +52,7 @@
 
 **Host owns the GPU.** The host is the only process with `winit`, `wgpu`, and `cosmic-text`. All panes are plugins implementing an `App` trait. The host composites their output into a single frame.
 
-**Herdr inspiration:** Borrow the client/server state split, BSP layout, socket API namespacing, and session persistence model — but replace the TUI renderer with a GPU compositor.
+**Herdr inspiration:** Borrow the client/server state split, socket API namespacing, and session persistence model — but replace the TUI renderer with a GPU compositor and the BSP tree with NIRI-inspired scrolling columns.
 
 ## Top Risks
 

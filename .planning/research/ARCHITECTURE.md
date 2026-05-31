@@ -1,8 +1,8 @@
 # Research: Architecture
 
-## 2025-06-29
+## 2026-05-29
 
-**Context:** heca is a *native GUI application* — an OS window that acts as a tiling compositor for embeddable applications. It does not run inside a terminal. It owns the GPU context and composites every pixel.
+**Context:** heca is a *native GUI application* — an OS window that acts as a tiling workspace manager with GPU-native rendering. It uses a NIRI-inspired scrolling-column layout engine rather than a traditional BSP tree.
 
 ---
 
@@ -16,110 +16,119 @@ The host is the only process that owns:
 - The `cosmic-text` font atlas and text renderer
 - The global input router
 
-Everything else is a plugin or a pane runtime managed by the host.
+Everything else is a pane runtime managed by the host.
 
-### 2. Compositor / Renderer
+### 2. Layout Engine (NIRI-inspired)
 
-Runs every frame:
-1. **Layout pass** — Compute pixel rectangles for all Embedded panes from the BSP tree. Collect Floating and Scratchpad rects.
-2. **Content update** — Ask each visible pane for its latest content.
-   - Text-grid panes (term, nvim): update cell buffers.
-   - Texture panes (future browser): update GPU texture.
-   - Draw-command panes (plugins): emit primitive batches.
-3. **Chrome draw** — Tab bar, pane borders/titles, status bar, command palette.
-4. **Composite** — Single `wgpu` render pass:
-   - Clear background
-   - Draw embedded panes (back-to-front or front-to-back with borders)
-   - Draw floating/scratchpad panes (with drop shadows if themed)
-   - Draw global overlays (command palette, notifications)
-5. **Present** — swapchain present.
-
-### 3. Session / Window / Tab / Pane Tree
+**Hierarchy:**
 
 ```
-Session (named, persistable)
-└── Window (OS window + winit event loop)
-    └── Tab (active workspace)
-        ├── Tiling Tree (BSP: HSplit / VSplit / Leaf / Empty)
-        ├── Floating Registry (Vec<PaneId> with absolute rects + z-index)
-        └── Scratchpad Registry (Vec<ScratchpadEntry>)
+Session                          ← manages all workspaces + overview/expose mode
+├── workspaces: Vec<Workspace>   ← arranged VERTICALLY (discrete switching)
+│   └── Workspace
+│       ├── scrolling: ScrollingSpace   ← horizontal COLUMNS (continuous scroll)
+│       │   ├── view_offset: ViewOffset ← animated horizontal scroll + snap
+│       │   ├── columns: Vec<Column>
+│       │   │   ├── width: ColumnWidth  ← Proportion | Fixed
+│       │   │   ├── panes: Vec<Pane>    ← vertical stack within column
+│       │   │   └── pane_sizes: Vec<Size>  ← computed heights
+│       │   └── active_column_idx
+│       └── floating_panes: Vec<FloatingPane>
+├── overview: OverviewState      ← zoom progress, open/closed
+├── workspace_switch: WorkspaceSwitch  ← animated vertical transitions
+└── active_workspace_idx
 ```
 
-- **Session**: Environment, CWD, all windows/tabs/panes metadata. Saved to disk as JSON/TOML.
-- **Window**: One `winit` window. Can host multiple tabs (only one visible).
-- **Tab**: One layout root + float registry + scratchpad registry.
-- **Pane**: A leaf containing an `App` implementation.
+**Key insight — scrolling model (two axes, two mechanisms):** Columns scroll horizontally as a continuous strip. Focus change animates the view to snap the active column into view. Workspaces are a vertical stack with animated discrete switching.
 
-### 4. Layout Engine
+**Scrolling model:**
 
-**BSP Tree** (inspired by herdr, i3, and many others):
-- Recursive binary splits.
-- Each `Split` has `dir: Axis` and `ratios: Vec<f32>`.
-- `Leaf` holds a `PaneId`.
-- `Empty` is a placeholder.
+| Axis | Container | Scroll Type | Mechanism |
+|------|-----------|-------------|-----------|
+| **Horizontal** | `ScrollingSpace.columns` | Continuous scroll + snap | `ViewOffset` (animated `f64`) |
+| **Vertical** | `Session.workspaces` | Discrete switch + animation | `WorkspaceSwitch` (animated index) |
 
 **Operations:**
-- Resize: nudge ratio in parent split.
-- Move: detach leaf, graft into new split location.
-- Swap: exchange `PaneId` in two leaves.
-- Collapse: remove empty splits.
+- **Focus left/right** — activate previous/next column, animate `ViewOffset`
+- **Focus up/down** — activate previous/next pane in column, or switch workspace
+- **Add pane** — new column (horizontal) or new pane in column (vertical)
+- **Remove pane** — remove from column, remove column if empty
+- **Move column** — reorder columns with animation
+- **Overview** — zoom out to see all workspaces as thumbnails
+
+### 3. Compositor / Renderer
+
+Runs every frame:
+1. **Layout pass** — Compute pixel rectangles for all panes from `Session.workspace_geometries()` and `ScrollingSpace.panes_with_positions()`
+2. **Content update** — Ask each visible pane's backend for latest content
+   - Text-grid panes (terminal): update cell buffers
+   - Future: Texture panes (browser), draw-command panes (plugins)
+3. **Chrome draw** — Tab bar, pane borders/titles, status bar, sidebars
+4. **Composite** — Single `wgpu` render pass:
+   - Clear background
+   - Draw workspace content (panes with borders)
+   - Draw floating panes (future)
+   - Draw global overlays (overview, command palette)
+5. **Present** — swapchain present
+
+### 4. Pane Runtime (`PaneBackend` Trait)
+
+Every pane content source implements:
+
+```rust
+pub trait PaneBackend: Send {
+    fn pane_type(&self) -> PaneType;
+    fn title(&self) -> &str;
+    fn set_size(&mut self, cols: usize, rows: usize);
+    fn process_input(&mut self, data: &[u8]);
+    fn update(&mut self) -> bool;  // returns true if new data arrived
+    fn render_data(&self) -> BackendRenderData;
+    fn should_close(&self) -> bool;
+}
+```
+
+**Built-in implementations:**
+- `TerminalBackend`: PTY + `vte` parser → produces cell grid
+- Future: `NeovimBackend`: msgpack-RPC → produces cell grid + chrome events
+- Future: `BrowserBackend`: CEF offscreen → produces GPU texture
+
+**BackendRenderData:**
+```rust
+pub enum BackendRenderData {
+    Terminal {
+        lines: Vec<TerminalLine>,
+        cursor_col: usize,
+        cursor_row: usize,
+    },
+    // Future: Neovim { ... }, Browser { texture_id }
+}
+```
 
 ### 5. Input Router
 
 **Keyboard:**
 - Global keymap resolves chords against WM bindings first.
-- If no match, forward to focused pane.
-- WM bindings use a prefix key or dedicated modifier (e.g., `Alt+Space` then `v` to split vertical).
+- If no match, forward to focused pane's backend.
+- WM bindings use a prefix key (e.g., `Ctrl+B`) then action key.
+
+**Navigation (NIRI-style):**
+- `h`/`l` — focus left/right column (with animated scroll)
+- `j`/`k` — focus down/up pane in column (or switch workspace at boundaries)
+- `-` — split horizontal (new column to the right)
+- `v` — split vertical (new pane in current column)
 
 **Mouse:**
-- Hit-test against current frame rects.
-- Chrome clicks → tab switch, drag tab reorder.
-- Border hover/drag → resize cursor, adjust split ratios.
-- Float title drag → move float.
-- Float edge/corner drag → resize float.
-- Pane click → focus pane, forward local coords to pane.
-- Scroll wheel → forward to pane (terminal scroll, nvim scroll).
+- Hit-test against current frame pane rects from `pane_under()`
+- Click pane → focus it
+- Chrome clicks → tab switch, sidebar toggle
 
-### 6. Pane Runtime (`App` Trait)
-
-Every pane content source implements:
-```rust
-trait App: Send {
-    fn init(&mut self, ctx: &AppContext);
-    fn resize(&mut self, size: Size);
-    fn input(&mut self, event: InputEvent) -> bool;
-    fn focus(&mut self, focused: bool);
-    fn title(&self) -> String;
-    fn cwd(&self) -> Option<PathBuf>;
-    fn render(&mut self, cx: &mut RenderCx);
-    fn shutdown(&mut self);
-}
-```
-
-**Built-in implementations:**
-- `TerminalApp`: PTY + `alacritty_terminal::Term` → produces cell grid.
-- `NeovimApp`: `tokio` msgpack client → produces cell grid + chrome events.
-- `PlaceholderApp`: Empty pane.
-
-**Plugin implementations:**
-- In-process (v1): `.so`/`.dll` via `libloading`.
-- Out-of-process (v2): socket-based draw-command stream or shared texture.
-
-### 7. RPC Server
-
-- Unix domain socket per session (or one global socket with session namespace).
-- JSON-RPC 2.0.
-- Namespaced methods: `session.*`, `window.*`, `tab.*`, `pane.*`, `tree.*`, `layout.*`.
-- External clients: CLI, scripts, AI agents.
-
-### 8. Session Persistence
+### 6. Session Persistence
 
 **What is saved:**
 - Session metadata (name, created date)
-- Window geometries
-- Tab names
-- Layout trees (with placeholder pane references)
-- Pane metadata: `app_type`, `cwd`, spawn command, float positions, scratchpad configs
+- Workspace list with column/pane structure
+- Pane metadata: backend type, spawn command, CWD
+- Layout options (gaps, column widths, etc.)
 
 **What is NOT saved:**
 - PTY scrollback (too large)
@@ -128,24 +137,22 @@ trait App: Send {
 
 **Restore flow:**
 1. Deserialize session file.
-2. Create winit windows with saved geometries.
-3. Respawn each pane's app in its saved cwd.
-4. Rebuild layout tree, float registry, scratchpad registry.
-5. Assign new PaneIds.
+2. Create winit window.
+3. Rebuild `Session` with workspaces, columns, panes.
+4. Respawn each pane's backend in its saved CWD.
 
 ---
 
 ## Data Flow
 
 ```
-Neovim Process ──msgpack──► NvimApp ──cell grid──► Compositor
-Terminal PTY ──bytes──► TerminalApp ──cell grid──► Compositor
-Plugin (.so) ──draw cmds──► PluginApp ──primitives──► Compositor
+Terminal PTY ──bytes──► TerminalBackend ──cell grid──► Compositor
+Neovim Process ──msgpack──► NeovimBackend ──cell grid──► Compositor
                                         ▲
                                         │
 Input Router ──events──► Focused Pane ──┘
                                         │
-RPC Server ──commands──► Session Manager ──mutations──► Layout Engine
+RPC Server ──commands──► Session ──mutations──► Layout Engine
 ```
 
 ---
@@ -153,14 +160,32 @@ RPC Server ──commands──► Session Manager ──mutations──► Layo
 ## Build Order
 
 1. **GPU Shell** — winit + wgpu + cosmic-text. Prove we can render text and rects.
-2. **Layout Engine** — BSP tree, rectangle computation, chrome rendering.
-3. **Terminal** — PTY + alacritty_terminal. First real pane content.
-4. **Neovim** — msgpack client + grid state. Most complex built-in pane.
+2. **Layout Engine** — NIRI-style scrolling columns, animations, overview mode.
+3. **Terminal** — PTY + vte parser. First real pane content.
+4. **Neovim** — msgpack client + grid state.
 5. **Input Router** — Full keyboard + mouse, keybindings, hit-testing.
 6. **Session Persistence** — Save/restore.
 7. **RPC Server** — External control.
-8. **Plugin SDK** — Dynamic loading.
-9. **Browser / Out-of-process** — v2.
+8. **Browser / Out-of-process** — v2.
 
 ---
-*Key difference from TUI multiplexers (herdr, tmux, zellij): we do not stream ANSI to a terminal. We composite pixels in a GPU surface.*
+
+## Files
+
+| Component | Path |
+|-----------|------|
+| Layout types | `heca-core/src/layout/types.rs` |
+| Animation system | `heca-core/src/layout/animation.rs` |
+| ViewOffset (scroll) | `heca-core/src/layout/view_offset.rs` |
+| Column / Pane | `heca-core/src/layout/column.rs` |
+| ScrollingSpace | `heca-core/src/layout/scrolling.rs` |
+| Workspace | `heca-core/src/layout/workspace.rs` |
+| Session / Overview | `heca-core/src/layout/session.rs` |
+| PaneBackend trait | `heca-core/src/backend/mod.rs` |
+| Terminal backend | `heca-core/src/backend/terminal.rs` |
+| Renderer | `heca-renderer/src/lib.rs` |
+| App / Event loop | `heca/src/main.rs` |
+
+---
+
+*Key differences: Unlike TUI multiplexers (herdr, tmux, zellij), we do not stream ANSI to a terminal — we composite pixels in a GPU surface. Unlike traditional tiling WMs (i3, sway), we use horizontal scrolling columns rather than fixed-grid trees. Like NIRI, our layout is a scrollable-tiling model where columns overflow the viewport and the view offset animates to reveal them.*

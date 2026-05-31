@@ -1,9 +1,12 @@
 use heca_config::theme::Theme;
-use heca_core::pane::PaneTree;
+use heca_core::backend::PaneBackend;
+use heca_core::layout::Session;
 use heca_core::types::Rect;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
@@ -15,6 +18,15 @@ pub enum InputMode {
     PaneSelect { candidates: Vec<(char, u64)> },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
     PaneSwap { candidates: Vec<(char, u64)> },
+}
+
+impl InputMode {
+    pub fn candidates(&self) -> Option<&[(char, u64)]> {
+        match self {
+            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates } => Some(candidates),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -61,7 +73,9 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
-    pub panetree: PaneTree,
+    pub session: Session,
+    /// Content backends for panes that have one.
+    pub backends: HashMap<u64, Box<dyn PaneBackend>>,
     pub theme: Theme,
     pub scale_factor: f64,
     pub needs_redraw: bool,
@@ -77,4 +91,6 @@ pub struct AppState {
     pub last_focused: Option<u64>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
+    /// Last frame render time for rate-limiting.
+    pub last_render_time: Option<Instant>,
 }
