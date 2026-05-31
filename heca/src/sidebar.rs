@@ -11,11 +11,13 @@ pub enum SidebarItem {
 }
 
 impl SidebarItem {
+    /// Returns the workspace index for Workspace and Column variants.
+    /// For Pane, returns None (use `cursor_workspace_index()` for tree search).
     pub fn workspace_idx(&self) -> Option<usize> {
         match self {
             SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
             SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
-            SidebarItem::Pane { pane_id: _ } => None, // need to find via session
+            SidebarItem::Pane { .. } => None,
         }
     }
 }
@@ -37,10 +39,6 @@ pub struct SidebarColEntry {
 }
 
 impl SidebarColEntry {
-    #[allow(dead_code)]
-    pub fn visible_pane_count(&self) -> usize {
-        if self.collapsed { 0 } else { self.panes.len() }
-    }
 }
 
 /// A workspace entry in the sidebar tree.
@@ -54,19 +52,6 @@ pub struct SidebarWsEntry {
 }
 
 impl SidebarWsEntry {
-    /// Number of visible items (columns + panes) under this workspace.
-    #[allow(dead_code)]
-    pub fn visible_child_count(&self) -> usize {
-        if self.collapsed {
-            return 0;
-        }
-        let mut count = 0;
-        for col in &self.columns {
-            count += 1; // the column header
-            count += col.visible_pane_count();
-        }
-        count
-    }
 }
 
 /// The sidebar tree model — mirrors the session's layout hierarchy.
@@ -205,17 +190,29 @@ impl SidebarTree {
         }
     }
 
-    /// Move selection up.
+    /// Move selection up, keeping cursor visible.
     pub fn cursor_up(&mut self) {
         if self.cursor > 0 {
             self.cursor -= 1;
         }
+        self.scroll_to_cursor();
     }
 
-    /// Move selection down.
+    /// Move selection down, keeping cursor visible.
     pub fn cursor_down(&mut self) {
         if self.cursor + 1 < self.item_count {
             self.cursor += 1;
+        }
+        self.scroll_to_cursor();
+    }
+
+    /// Ensure the cursor is within the visible scroll area.
+    fn scroll_to_cursor(&mut self) {
+        let visible_lines = 20; // rough estimate; renderer computes exact
+        if self.cursor < self.scroll_offset {
+            self.scroll_offset = self.cursor;
+        } else if self.cursor >= self.scroll_offset + visible_lines {
+            self.scroll_offset = self.cursor.saturating_sub(visible_lines - 1);
         }
     }
 
@@ -273,6 +270,7 @@ impl SidebarTree {
                 }
             }
             self.rebuild_flat_items();
+            self.clamp_cursor();
         }
     }
 
@@ -285,6 +283,7 @@ impl SidebarTree {
                         && ws_entry.collapsed {
                             ws_entry.collapsed = false;
                             self.rebuild_flat_items();
+                            self.clamp_cursor();
                         }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
@@ -293,6 +292,7 @@ impl SidebarTree {
                             && col_entry.collapsed {
                                 col_entry.collapsed = false;
                                 self.rebuild_flat_items();
+                                self.clamp_cursor();
                             }
                 }
                 SidebarItem::Pane { .. } => {
@@ -310,6 +310,7 @@ impl SidebarTree {
                     if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
                         ws_entry.collapsed = true;
                         self.rebuild_flat_items();
+                        self.clamp_cursor();
                     }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
@@ -317,12 +318,11 @@ impl SidebarTree {
                         && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
                             col_entry.collapsed = true;
                             self.rebuild_flat_items();
+                            self.clamp_cursor();
                         }
                 }
                 SidebarItem::Pane { .. } => {
-                    // Panes are leaves — collapse up: collapse the parent column.
-                    // Find the parent column and collapse it.
-                    // This requires traversing the tree — we'll just no-op for now.
+                    // Panes are leaves — no-op.
                 }
             }
         }
@@ -333,23 +333,7 @@ impl SidebarTree {
         self.flat_items.get(self.cursor)
     }
 
-    /// Get the pane ID at the given flat item index, if it's a pane.
-    #[allow(dead_code)]
-    pub fn pane_id_at(&self, index: usize) -> Option<u64> {
-        self.flat_items.get(index).and_then(|item| match item {
-            SidebarItem::Pane { pane_id } => Some(*pane_id),
-            _ => None,
-        })
-    }
 
-    /// Get the workspace index at the given flat item index, if it's a workspace.
-    #[allow(dead_code)]
-    pub fn workspace_idx_at(&self, index: usize) -> Option<usize> {
-        self.flat_items.get(index).and_then(|item| match item {
-            SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
-            _ => None,
-        })
-    }
 
     /// Get the workspace index of the item at the current cursor position.
     /// Works for Workspace, Column, and Pane items.

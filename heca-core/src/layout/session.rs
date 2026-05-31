@@ -111,7 +111,11 @@ impl Session {
             return false;
         }
         self.workspaces.remove(idx);
-        if self.active_workspace_idx >= self.workspaces.len() {
+        if self.active_workspace_idx > idx {
+            // The active workspace was after the removed one; shift down.
+            self.active_workspace_idx -= 1;
+        } else if self.active_workspace_idx >= self.workspaces.len() {
+            // The removed workspace was the last one; clamp.
             self.active_workspace_idx = self.workspaces.len() - 1;
         }
         true

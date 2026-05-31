@@ -840,7 +840,6 @@ impl ApplicationHandler for HecaApp {
                                     focus_pane_by_id(state, pane_id);
                                 }
                         }
-                        sync_focus(state);
                         state.needs_redraw = true;
                     }
                     InputMode::SidebarNav => {
@@ -1038,14 +1037,14 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
             if let Some(col) = ws.scrolling.columns.get_mut(ci) {
                 col.activate_pane(pi);
             }
-        }
-
-        // Check floating panes
-        for float in &mut ws.floating_panes {
-            if float.pane.id.0 == pane_id {
-                ws.floating_is_active = true;
-                float.is_active = true;
-                break;
+        } else {
+            // Not in scrolling columns — check floating panes.
+            for float in &mut ws.floating_panes {
+                if float.pane.id.0 == pane_id {
+                    ws.floating_is_active = true;
+                    float.is_active = true;
+                    break;
+                }
             }
         }
     }
@@ -1203,8 +1202,8 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 .unwrap_or(true);
 
             if ws_is_empty && state.session.workspaces.len() > 1 {
-                // Remove empty workspace and switch to nearest neighbor
-                let _ = state.session.remove_workspace(current_ws);
+                // Remove empty workspace (with tracking cleanup) and switch to nearest neighbor
+                destroy_empty_workspace(state, current_ws);
                 let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
                 state.session.switch_to_workspace(new_idx);
                 sync_focus(state);
@@ -1533,7 +1532,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                         });
                         if let Some(ws_idx) = target_ws {
                             if ws_idx != state.session.active_workspace_idx {
-                                state.session.switch_to_workspace(ws_idx);
+                                switch_workspace_tracked(state, ws_idx);
                             }
                             focus_pane_by_id(state, *pane_id);
                         }
@@ -1641,148 +1640,6 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         }
     }
 }
-
-/// Swap two panes by their IDs. If the focused pane is involved, focus follows it.
-/// The viewport is only scrolled when the target window is hidden (off-screen).
-#[allow(dead_code)]
-fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let mut a_col: Option<usize> = None;
-        let mut a_idx: Option<usize> = None;
-        let mut b_col: Option<usize> = None;
-        let mut b_idx: Option<usize> = None;
-
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            for (pi, pane) in col.panes.iter().enumerate() {
-                if pane.id.0 == a_id {
-                    a_col = Some(ci);
-                    a_idx = Some(pi);
-                }
-                if pane.id.0 == b_id {
-                    b_col = Some(ci);
-                    b_idx = Some(pi);
-                }
-            }
-        }
-
-        if let (Some(ac), Some(ai), Some(bc), Some(bi)) = (a_col, a_idx, b_col, b_idx) {
-            let focused_id = state.focused_pane;
-            let focused_is_a = focused_id == Some(a_id);
-            let focused_is_b = focused_id == Some(b_id);
-
-            if ac == bc {
-                // Same-column swap: just swap the pane structs and update the active index.
-                // Do NOT touch column widths or view offset — the viewport should stay exactly
-                // where it was so the user doesn't lose visual context.
-                ws.scrolling.columns[ac].panes.swap(ai, bi);
-                if focused_is_a {
-                    ws.scrolling.columns[ac].active_pane_idx = bi;
-                } else if focused_is_b {
-                    ws.scrolling.columns[ac].active_pane_idx = ai;
-                }
-                // Recompute pane sizes since swapped panes may have different preferred heights.
-                let h = ws.scrolling.working_area.size.h;
-                let gaps = ws.scrolling.options.gaps;
-                ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
-            } else {
-                // Cross-column swap: swap pane structs between columns.
-
-                // Remember the current viewport position so we can preserve it.
-                let old_view_pos = ws.scrolling.view_pos();
-
-                {
-                    let (col_a, col_b) = if ac < bc {
-                        let (left, right) = ws.scrolling.columns.split_at_mut(bc);
-                        (&mut left[ac], &mut right[0])
-                    } else {
-                        let (left, right) = ws.scrolling.columns.split_at_mut(ac);
-                        (&mut right[0], &mut left[bc])
-                    };
-                    std::mem::swap(&mut col_a.panes[ai], &mut col_b.panes[bi]);
-                }
-
-                // Follow the focused pane to its new column so active indices stay consistent.
-                if focused_is_a {
-                    ws.scrolling.active_column_idx = bc;
-                    ws.scrolling.columns[bc].active_pane_idx = bi;
-                } else if focused_is_b {
-                    ws.scrolling.active_column_idx = ac;
-                    ws.scrolling.columns[ac].active_pane_idx = ai;
-                }
-
-                // Recompute pane sizes for both affected columns.
-                let h = ws.scrolling.working_area.size.h;
-                let gaps = ws.scrolling.options.gaps;
-                ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
-                ws.scrolling.columns[bc].compute_pane_sizes(h, gaps);
-                ws.scrolling.update_all_column_widths();
-
-                // Check whether the target column was visible at the OLD viewport position.
-                let target_col = if focused_is_a { bc } else { ac };
-                let col_x = ws.scrolling.column_x(target_col);
-                let col_w = ws.scrolling.column_widths.get(target_col).copied().unwrap_or(0.0);
-                let view_left = old_view_pos;
-                let view_right = old_view_pos + ws.scrolling.working_area.size.w;
-                let target_was_visible = col_x < view_right && col_x + col_w > view_left;
-
-                if (focused_is_a || focused_is_b) && target_was_visible {
-                    // The target was already visible: compensate view_offset so the
-                    // viewport stays exactly where it was visually.
-                    let new_view_pos = ws.scrolling.view_pos();
-                    let delta = old_view_pos - new_view_pos;
-                    ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
-                        ws.scrolling.view_offset.current() + delta
-                    );
-                } else if focused_is_a || focused_is_b {
-                    // Target was off-screen: animate viewport to bring active column into view.
-                    ws.scrolling.align_view_to_active_column();
-                }
-            }
-        }
-    }
-}
-
-/// Move a pane from its current workspace to a target workspace.
-/// The pane is inserted into a new column in the target workspace.
-/// If the source workspace becomes empty, it is destroyed.
-#[allow(dead_code)]
-fn move_pane_to_workspace(state: &mut AppState, pane_id: u64, target_ws: usize, _target_pane: u64) {
-    let current_ws = state.session.active_workspace_idx;
-    if current_ws == target_ws {
-        return;
-    }
-
-    // Find and remove the pane from the current workspace.
-    let removed_pane = {
-        let ws = match state.session.workspaces.get_mut(current_ws) {
-            Some(ws) => ws,
-            None => return,
-        };
-        let mut removed = None;
-        for ci in 0..ws.scrolling.columns.len() {
-            if let Some(pi) = ws.scrolling.columns[ci].panes.iter().position(|p| p.id.0 == pane_id) {
-                removed = ws.scrolling.remove_pane(ci, pi);
-                break;
-            }
-        }
-        removed
-    };
-
-    if let Some(pane) = removed_pane {
-        // Switch to target workspace and add the pane there.
-        state.session.switch_to_workspace(target_ws);
-        state.session.add_pane(pane, None, true);
-        state.focused_pane = Some(pane_id);
-
-        // Destroy source workspace if it became empty.
-        destroy_empty_workspace(state, current_ws);
-    }
-
-    sync_focus(state);
-}
-
-/// Move a pane from its current workspace to a specific column in a target workspace.
-/// If the source workspace becomes empty, it is destroyed.
 fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: usize, target_col: usize) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == target_ws {

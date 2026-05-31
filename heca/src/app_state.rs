@@ -25,15 +25,7 @@ pub enum RenameTarget {
     Pane(u64),
 }
 
-impl RenameTarget {
-    #[allow(dead_code)]
-    pub fn label(&self) -> String {
-        match self {
-            RenameTarget::Workspace(idx) => format!("Workspace {}", idx + 1),
-            RenameTarget::Pane(id) => format!("Pane {}", id),
-        }
-    }
-}
+
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
