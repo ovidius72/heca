@@ -1152,12 +1152,12 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
 
                             // Apply animation BEFORE the swap (so we animate the right panes).
                             if swap_with < pane_idx {
-                                // SwapUp: pane at idx moves up, pane at idx-1 moves down.
-                                col.panes[pane_idx].animate_move_y_from(-up_offset, AnimationConfig::default());
+                                // SwapUp: pane at idx (lower) moves up, pane at idx-1 (upper) moves down.
+                                col.panes[pane_idx].animate_move_y_from(up_offset, AnimationConfig::default());
                                 col.panes[swap_with].animate_move_y_from(down_offset, AnimationConfig::default());
                             } else {
-                                // SwapDown: pane at idx moves down, pane at idx+1 moves up.
-                                col.panes[pane_idx].animate_move_y_from(-down_offset, AnimationConfig::default());
+                                // SwapDown: pane at idx (upper) moves down, pane at idx+1 (lower) moves up.
+                                col.panes[pane_idx].animate_move_y_from(down_offset, AnimationConfig::default());
                                 col.panes[swap_with].animate_move_y_from(up_offset, AnimationConfig::default());
                             }
 
@@ -1239,7 +1239,7 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
     }
 }
 
-/// Swap two panes by their IDs. Preserves view position so layout doesn't move.
+/// Swap two panes by their IDs. If the focused pane is involved, focus follows it.
 fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
     if let Some(ws) = state.session.active_workspace_mut() {
         let mut a_col: Option<usize> = None;
@@ -1261,22 +1261,42 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
         }
 
         if let (Some(ac), Some(ai), Some(bc), Some(bi)) = (a_col, a_idx, b_col, b_idx) {
-            let old_view_pos = ws.scrolling.view_pos();
+            let focused_id = state.focused_pane;
+            let focused_is_a = focused_id == Some(a_id);
+            let focused_is_b = focused_id == Some(b_id);
+
             if ac == bc {
                 ws.scrolling.columns[ac].panes.swap(ai, bi);
+                if focused_is_a {
+                    ws.scrolling.columns[ac].active_pane_idx = bi;
+                } else if focused_is_b {
+                    ws.scrolling.columns[ac].active_pane_idx = ai;
+                }
             } else {
                 // Swap pane structs between columns.
-                // Use split_at_mut to get two mutable refs to different columns.
-                let (col_a, col_b) = if ac < bc {
-                    let (left, right) = ws.scrolling.columns.split_at_mut(bc);
-                    (&mut left[ac], &mut right[0])
-                } else {
-                    let (left, right) = ws.scrolling.columns.split_at_mut(ac);
-                    (&mut right[0], &mut left[bc])
-                };
-                std::mem::swap(&mut col_a.panes[ai], &mut col_b.panes[bi]);
+                // Scope the split_at_mut borrow so we can mutate active indices afterwards.
+                {
+                    let (col_a, col_b) = if ac < bc {
+                        let (left, right) = ws.scrolling.columns.split_at_mut(bc);
+                        (&mut left[ac], &mut right[0])
+                    } else {
+                        let (left, right) = ws.scrolling.columns.split_at_mut(ac);
+                        (&mut right[0], &mut left[bc])
+                    };
+                    std::mem::swap(&mut col_a.panes[ai], &mut col_b.panes[bi]);
+                }
+
+                // Follow the focused pane to its new column so active indices stay consistent.
+                if focused_is_a {
+                    ws.scrolling.active_column_idx = bc;
+                    ws.scrolling.columns[bc].active_pane_idx = bi;
+                } else if focused_is_b {
+                    ws.scrolling.active_column_idx = ac;
+                    ws.scrolling.columns[ac].active_pane_idx = ai;
+                }
             }
-            // Recompute pane sizes since swapped panes may have different preferred heights
+
+            // Recompute pane sizes since swapped panes may have different preferred heights.
             let h = ws.scrolling.working_area.size.h;
             let gaps = ws.scrolling.options.gaps;
             ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
@@ -1284,12 +1304,12 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
                 ws.scrolling.columns[bc].compute_pane_sizes(h, gaps);
             }
             ws.scrolling.update_all_column_widths();
-            // Preserve view position so layout stays visually fixed
-            let new_view_pos = ws.scrolling.view_pos();
-            let delta = old_view_pos - new_view_pos;
-            ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
-                ws.scrolling.view_offset.current() + delta
-            );
+
+            // If the focused pane moved, animate the view so it stays visible.
+            // Otherwise leave the viewport untouched.
+            if focused_is_a || focused_is_b {
+                ws.scrolling.align_view_to_active_column();
+            }
         }
     }
 }
