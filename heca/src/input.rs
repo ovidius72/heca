@@ -105,10 +105,12 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::FocusLeft | WmAction::FocusRight |
         WmAction::FocusUp | WmAction::FocusDown |
         WmAction::NextPane | WmAction::PrevPane => 0,
-        // Sidebar navigation
-        WmAction::SidebarFocus | WmAction::SidebarUp | WmAction::SidebarDown |
+        // Sidebar navigation (only used in sidebar mode via resolve_mode)
+        // Low priority so they don't override focus bindings in normal/prefix mode.
+        WmAction::SidebarFocus => 0,
+        WmAction::SidebarUp | WmAction::SidebarDown |
         WmAction::SidebarLeftNav | WmAction::SidebarRightNav |
-        WmAction::SidebarExpandToggle => 0,
+        WmAction::SidebarExpandToggle => 4,
         // Pane management
         WmAction::SplitHorizontal | WmAction::SplitVertical |
         WmAction::Float | WmAction::Scratchpad |
