@@ -1,12 +1,16 @@
 mod app_state;
 mod chrome;
 mod input;
+mod sidebar;
 
-use app_state::{AppState, SidebarState, DragState, InputMode};
+use sidebar::SidebarTree;
+
+use app_state::{AppState, SidebarItemState, SidebarState, DragState, InputMode};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
 use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth, ViewOffset};
+use heca_core::layout::types::{Rectangle, Point, Size};
 use heca_core::layout::animation::{Animation, AnimationConfig};
 use heca_core::pane::{SplitDirection, GeoDir};
 
@@ -257,6 +261,10 @@ impl HecaApp {
         let mut backends: HashMap<u64, Box<dyn PaneBackend>> = HashMap::new();
         backends.insert(pane_id, Box::new(FakeBackend::new(80, 24)));
 
+        let ws_count = session.workspaces.len();
+        let mut sidebar_tree = SidebarTree::new();
+        sidebar_tree.rebuild(&session, None, Some(pane_id));
+
         Box::new(AppState {
             window,
             surface,
@@ -280,10 +288,13 @@ impl HecaApp {
                 right_width: 200.0,
             },
             active_tab: 0,
+            sidebar_tree,
             tab_names: vec!["Main".to_string()],
             mouse_pos: (0.0, 0.0),
             modifiers: winit::keyboard::ModifiersState::default(),
             last_focused: None,
+            last_visited_ws_idx: None,
+            last_visited_pane_per_ws: vec![None; ws_count],
             mouse_enabled: self.app_config.config.general.mouse,
             last_render_time: None,
         })
@@ -404,6 +415,7 @@ impl HecaApp {
             InputMode::Prefix => "PREFIX",
             InputMode::PaneSelect { .. } => "SELECT",
             InputMode::PaneSwap { .. } => "SWAP",
+            InputMode::SidebarNav => "SIDEBAR",
         };
         let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -769,6 +781,31 @@ impl ApplicationHandler for HecaApp {
                         }
                         state.input_mode = InputMode::Normal;
                     }
+                    InputMode::SidebarNav => {
+                        // In sidebar navigation mode, dispatch sidebar movement actions directly.
+                        // This avoids needing separate WmAction bindings for sidebar mode.
+                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
+
+                        if is_escape {
+                            state.input_mode = InputMode::Normal;
+                            state.needs_redraw = true;
+                        } else {
+                            // Resolve sidebar keys and dispatch
+                            let action = self.bindings.resolve(
+                                &key_text, is_ctrl, false, is_shift,
+                                &event.logical_key, &event.physical_key,
+                            );
+                            #[cfg(debug_assertions)]
+                            eprintln!("sidebar_nav: key_text='{}' phys={:?} action={:?}", key_text, event.physical_key, action);
+                            if let Some(act) = action {
+                                execute_action(act, state.focused_pane, state);
+                            } else if is_enter {
+                                // Enter = toggle expand / activate
+                                execute_action(WmAction::SidebarExpandToggle, state.focused_pane, state);
+                            }
+                        }
+                    }
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
@@ -860,6 +897,14 @@ impl ApplicationHandler for HecaApp {
 /// Focus a specific pane by its ID, updating both `focused_pane` and the session's active state.
 /// Does NOT move the layout — compensates view_offset so pane positions stay visually fixed.
 fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
+    // Track visited
+    if let Some(old_pane_id) = state.focused_pane {
+        let ws_idx = state.session.active_workspace_idx;
+        while state.last_visited_pane_per_ws.len() <= ws_idx {
+            state.last_visited_pane_per_ws.push(None);
+        }
+        state.last_visited_pane_per_ws[ws_idx] = Some(old_pane_id);
+    }
     state.focused_pane = Some(pane_id);
     if let Some(ws) = state.session.active_workspace_mut() {
         // Find location first (immutable scan), then mutate.
@@ -904,10 +949,34 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 }
 
 /// Sync `focused_pane` from the session's active pane (scrolling or floating).
+/// Also tracks last-visited workspace and rebuilds the sidebar tree.
 fn sync_focus(state: &mut AppState) {
+    // Track last visited workspace before updating
+    if let Some(old_ws_idx) = state.last_visited_ws_idx {
+        if old_ws_idx != state.session.active_workspace_idx {
+            // Record which pane was active in the departing workspace
+            if let Some(ws) = state.session.workspaces.get(old_ws_idx) {
+                if let Some(pane) = ws.active_pane() {
+                    while state.last_visited_pane_per_ws.len() <= old_ws_idx {
+                        state.last_visited_pane_per_ws.push(None);
+                    }
+                    state.last_visited_pane_per_ws[old_ws_idx] = Some(pane.id.0);
+                }
+            }
+        }
+    }
+    state.last_visited_ws_idx = Some(state.session.active_workspace_idx);
+
     state.focused_pane = state.session.active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id.0);
+
+    // Rebuild sidebar tree
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+    );
 }
 
 /// Update session viewport to match current chrome/content area size.
@@ -1232,6 +1301,92 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
                 }
             }
             sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::SidebarFocus => {
+            // Enter sidebar navigation mode
+            state.input_mode = InputMode::SidebarNav;
+            // Auto-expand: rebuild tree if collapsed items exist
+            state.sidebar_tree.rebuild(
+                &state.session,
+                state.last_visited_ws_idx,
+                state.focused_pane,
+            );
+            state.needs_redraw = true;
+        }
+        WmAction::SidebarUp => {
+            if matches!(state.input_mode, InputMode::SidebarNav) {
+                state.sidebar_tree.cursor_up();
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::SidebarDown => {
+            if matches!(state.input_mode, InputMode::SidebarNav) {
+                state.sidebar_tree.cursor_down();
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::SidebarLeftNav => {
+            if matches!(state.input_mode, InputMode::SidebarNav) {
+                state.sidebar_tree.collapse();
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::SidebarRightNav => {
+            if matches!(state.input_mode, InputMode::SidebarNav) {
+                let item = state.sidebar_tree.current_item().cloned();
+                match &item {
+                    Some(sidebar::SidebarItem::Pane { pane_id }) => {
+                        // Focus the pane and exit sidebar nav
+                        focus_pane_by_id(state, *pane_id);
+                        state.input_mode = InputMode::Normal;
+                    }
+                    _ => {
+                        state.sidebar_tree.expand();
+                    }
+                }
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::SidebarExpandToggle => {
+            if matches!(state.input_mode, InputMode::SidebarNav) {
+                let item = state.sidebar_tree.current_item().cloned();
+                match &item {
+                    Some(sidebar::SidebarItem::Pane { pane_id }) => {
+                        // Enter/expand on a pane focuses it
+                        focus_pane_by_id(state, *pane_id);
+                        state.input_mode = InputMode::Normal;
+                    }
+                    _ => {
+                        state.sidebar_tree.toggle_expand();
+                    }
+                }
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::CreateWorkspace => {
+            // Create a new empty workspace and switch to it
+            let working_area = state.session.active_workspace()
+                .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
+                .unwrap_or_else(|| {
+                    Rectangle::new(
+                        heca_core::layout::types::Point::default(),
+                        state.session.viewport_size,
+                    )
+                });
+            state.session.add_workspace(working_area);
+            let new_idx = state.session.workspaces.len() - 1;
+            state.session.switch_to_workspace(new_idx);
+            // Ensure last_visited_pane_per_ws is sized correctly
+            while state.last_visited_pane_per_ws.len() <= new_idx {
+                state.last_visited_pane_per_ws.push(None);
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::RenameWorkspace | WmAction::RenamePane => {
+            // Placeholder: stub for rename mode (Phase 3)
+            // Will enter InputMode::Rename with buffer
             state.needs_redraw = true;
         }
         WmAction::Scratchpad | WmAction::Hide => {}

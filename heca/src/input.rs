@@ -23,6 +23,12 @@ pub enum WmAction {
     ResizeDecrease,
     SidebarLeft,
     SidebarRight,
+    SidebarFocus,
+    SidebarUp,
+    SidebarDown,
+    SidebarLeftNav,
+    SidebarRightNav,
+    SidebarExpandToggle,
     NextPane,
     PrevPane,
     PaneSelect,
@@ -35,6 +41,9 @@ pub enum WmAction {
     MovePaneRight,
     PaneHeightIncrease,
     PaneHeightDecrease,
+    CreateWorkspace,
+    RenameWorkspace,
+    RenamePane,
 }
 
 fn action_from_name(name: &str) -> Option<WmAction> {
@@ -59,6 +68,12 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
         "sidebar_right" => Some(WmAction::SidebarRight),
+        "sidebar_focus" => Some(WmAction::SidebarFocus),
+        "sidebar_up" => Some(WmAction::SidebarUp),
+        "sidebar_down" => Some(WmAction::SidebarDown),
+        "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
+        "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
+        "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -71,6 +86,9 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "move_pane_right" => Some(WmAction::MovePaneRight),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
+        "create_workspace" => Some(WmAction::CreateWorkspace),
+        "rename_workspace" => Some(WmAction::RenameWorkspace),
+        "rename_pane" => Some(WmAction::RenamePane),
         _ => None,
     }
 }
@@ -82,11 +100,17 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::FocusLeft | WmAction::FocusRight |
         WmAction::FocusUp | WmAction::FocusDown |
         WmAction::NextPane | WmAction::PrevPane => 0,
+        // Sidebar navigation
+        WmAction::SidebarFocus | WmAction::SidebarUp | WmAction::SidebarDown |
+        WmAction::SidebarLeftNav | WmAction::SidebarRightNav |
+        WmAction::SidebarExpandToggle => 0,
         // Pane management
         WmAction::SplitHorizontal | WmAction::SplitVertical |
         WmAction::Float | WmAction::Scratchpad |
         WmAction::Hide | WmAction::ClosePane |
-        WmAction::PaneSelect | WmAction::SwapSelect => 1,
+        WmAction::PaneSelect | WmAction::SwapSelect |
+        WmAction::CreateWorkspace | WmAction::RenameWorkspace |
+        WmAction::RenamePane => 1,
         // Swap
         WmAction::SwapLeft | WmAction::SwapRight |
         WmAction::SwapUp | WmAction::SwapDown |
