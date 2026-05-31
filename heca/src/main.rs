@@ -983,18 +983,11 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 
         if let Some((ci, pi)) = found {
             ws.floating_is_active = false;
-            // Compensate view_offset so the visual layout doesn't jump.
-            // view_pos = column_x(active_column_idx) + view_offset.
-            // We want view_pos to stay the same after changing active_column_idx.
-            let old_col_x = ws.scrolling.column_x(ws.scrolling.active_column_idx);
-            let new_col_x = ws.scrolling.column_x(ci);
-            let delta = old_col_x - new_col_x;
-            ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
-                ws.scrolling.view_offset.current() + delta
-            );
-            ws.scrolling.active_column_idx = ci;
+            // Use activate_column to properly scroll the view to the target column.
+            // This ensures off-screen columns are brought into view.
+            ws.scrolling.activate_column(ci);
             if let Some(col) = ws.scrolling.columns.get_mut(ci) {
-                col.active_pane_idx = pi;
+                col.activate_pane(pi);
             }
             return;
         }
@@ -1504,13 +1497,18 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             }
         }
         WmAction::FocusToggleGlobal => {
-            // Go to the last-visited workspace and its active pane
+            // Go to the last-visited workspace and its active pane.
+            // After switching, update last_visited_ws_idx to point back so
+            // the next toggle goes back (proper two-way toggle).
             if let Some(prev_ws) = state.last_visited_ws_idx {
-                if prev_ws != state.session.active_workspace_idx {
+                let current_ws = state.session.active_workspace_idx;
+                if prev_ws != current_ws {
                     state.session.switch_to_workspace(prev_ws);
                     if let Some(pane_id) = state.last_visited_pane_per_ws.get(prev_ws).copied().flatten() {
                         focus_pane_by_id(state, pane_id);
                     }
+                    // Swap: now the "last visited" is the workspace we just left
+                    state.last_visited_ws_idx = Some(current_ws);
                     sync_focus(state);
                 }
                 state.needs_redraw = true;
