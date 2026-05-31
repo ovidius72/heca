@@ -281,6 +281,7 @@ impl Default for Config {
         // ── Quick select / swap ──
         keybindings.insert("pane_select".to_string(), "q".to_string());
         keybindings.insert("swap_select".to_string(), "Shift+q".to_string());
+        keybindings.insert("swap_and_focus".to_string(), "m".to_string());
 
         // ── Tabs ──
         keybindings.insert("tab_next".to_string(), "Ctrl+]".to_string());

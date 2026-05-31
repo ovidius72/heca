@@ -34,6 +34,7 @@ pub enum WmAction {
     PrevPane,
     PaneSelect,
     SwapSelect,
+    SwapAndFocus,
     SwapLeft,
     SwapRight,
     SwapUp,
@@ -83,6 +84,7 @@ fn action_from_name(name: &str) -> Option<WmAction> {
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
         "swap_select" => Some(WmAction::SwapSelect),
+        "swap_and_focus" => Some(WmAction::SwapAndFocus),
         "swap_left" => Some(WmAction::SwapLeft),
         "swap_right" => Some(WmAction::SwapRight),
         "swap_up" => Some(WmAction::SwapUp),
@@ -119,7 +121,7 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::SplitHorizontal | WmAction::SplitVertical |
         WmAction::Float | WmAction::Scratchpad |
         WmAction::Hide | WmAction::ClosePane |
-        WmAction::PaneSelect | WmAction::SwapSelect |
+        WmAction::PaneSelect | WmAction::SwapSelect | WmAction::SwapAndFocus |
         WmAction::FocusToggleLocal | WmAction::FocusToggleGlobal |
         WmAction::CreateWorkspace | WmAction::RenameWorkspace |
         WmAction::RenamePane | WmAction::WorkspaceNext |

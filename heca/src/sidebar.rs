@@ -320,6 +320,7 @@ const INDENT_COL: f32 = 26.0;
 const INDENT_PANE: f32 = 44.0;
 
 /// Render the expanded sidebar tree (width >= 80px).
+/// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
 pub fn render_sidebar_expanded(
     tree: &SidebarTree,
     x: f32,
@@ -331,6 +332,7 @@ pub fn render_sidebar_expanded(
     foreground: [f32; 4],
     cursor_bg: [f32; 4],
     visited_color: [f32; 4],
+    candidates: Option<&[(char, u64)]>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
 ) {
@@ -362,7 +364,13 @@ pub fn render_sidebar_expanded(
                 (INDENT_COL, format!("Col {}", col_idx + 1), false)
             }
             SidebarItem::Pane { pane_id } => {
-                (INDENT_PANE, pane_name_short(*pane_id, &tree.workspaces), false)
+                let mut label = pane_name_short(*pane_id, &tree.workspaces);
+                if let Some(cands) = candidates {
+                    if let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id) {
+                        label = format!("[{}] {}", ch, label);
+                    }
+                }
+                (INDENT_PANE, label, false)
             }
         };
 

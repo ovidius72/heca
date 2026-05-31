@@ -295,6 +295,7 @@ impl HecaApp {
             last_focused: None,
             last_visited_ws_idx: None,
             last_visited_pane_per_ws: vec![None; ws_count],
+            swap_and_focus: false,
             mouse_enabled: self.app_config.config.general.mouse,
             last_render_time: None,
         })
@@ -500,6 +501,7 @@ impl HecaApp {
             chrome.left_sidebar_width - 1.0, sidebar_top, 1.0, sidebar_h,
             theme.border.to_f32x4(), 1.0,
         );
+        let candidates = state.input_mode.candidates();
         if chrome.left_sidebar_width >= 80.0 {
             sidebar::render_sidebar_expanded(
                 &state.sidebar_tree,
@@ -509,6 +511,7 @@ impl HecaApp {
                 theme.foreground.to_f32x4(),
                 [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],  // cursor highlight
                 [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                candidates,
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
             );
@@ -787,6 +790,8 @@ impl ApplicationHandler for HecaApp {
                         // else: empty key_text, no action — stay in prefix mode.
                     }
                     InputMode::PaneSelect { candidates } => {
+                        let candidates = candidates.clone();
+                        state.input_mode = InputMode::Normal;
                         let typed = key_text.chars().next()
                             .or_else(|| {
                                 match event.physical_key {
@@ -798,16 +803,19 @@ impl ApplicationHandler for HecaApp {
                                 }
                             })
                             .map(|c| c.to_ascii_lowercase());
-                        #[cfg(debug_assertions)]
-                        eprintln!("pane_select: typed={:?} candidates={:?}", typed, candidates);
                         if let Some(ch) = typed {
                             if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 focus_pane_by_id(state, *target_id);
                             }
                         }
-                        state.input_mode = InputMode::Normal;
                     }
                     InputMode::PaneSwap { candidates } => {
+                        // Copy candidates and swap_and_focus so we can mutate state
+                        let candidates = candidates.clone();
+                        let should_focus = state.swap_and_focus;
+                        state.swap_and_focus = false;
+                        state.input_mode = InputMode::Normal;
+
                         let typed = key_text.chars().next()
                             .or_else(|| {
                                 match event.physical_key {
@@ -819,18 +827,28 @@ impl ApplicationHandler for HecaApp {
                                 }
                             })
                             .map(|c| c.to_ascii_lowercase());
-                        #[cfg(debug_assertions)]
-                        eprintln!("pane_swap: typed={:?} candidates={:?}", typed, candidates);
                         if let Some(ch) = typed {
                             if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
                                 if let Some(current_id) = state.focused_pane {
                                     if current_id != *target_id {
-                                        swap_panes(state, current_id, *target_id);
+                                        let current_ws = state.session.active_workspace_idx;
+                                        let target_ws = find_pane_workspace(&state.session, *target_id);
+                                        if target_ws == Some(current_ws) {
+                                            swap_panes(state, current_id, *target_id);
+                                        } else if let Some(tws) = target_ws {
+                                            move_pane_to_workspace(state, current_id, tws, *target_id);
+                                        }
                                     }
                                 }
                             }
+                            if should_focus {
+                                if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                    focus_pane_by_id(state, *target_id);
+                                }
+                            }
                         }
-                        state.input_mode = InputMode::Normal;
+                        sync_focus(state);
+                        state.needs_redraw = true;
                     }
                     InputMode::SidebarNav => {
                         // Sidebar mode uses its OWN keybinding set (mode_bindings["sidebar"])
@@ -941,15 +959,46 @@ impl ApplicationHandler for HecaApp {
     }
 }
 
+/// Find which workspace contains a pane (by ID). Returns workspace index or None.
+fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
+    let target = heca_core::layout::PaneId(pane_id);
+    session.workspaces.iter().position(|ws| {
+        ws.find_pane(target).is_some()
+    })
+}
+
+/// Collect ALL panes across ALL workspaces as letter candidates.
+fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
+    let mut candidates = Vec::new();
+    for ws in &session.workspaces {
+        for col in &ws.scrolling.columns {
+            for pane in &col.panes {
+                let ch = (b'a' + candidates.len() as u8) as char;
+                candidates.push((ch, pane.id.0));
+            }
+        }
+        for float in &ws.floating_panes {
+            let ch = (b'a' + candidates.len() as u8) as char;
+            candidates.push((ch, float.pane.id.0));
+        }
+    }
+    candidates
+}
+
 /// Focus a specific pane by its ID, updating both `focused_pane` and the session's active state.
-/// Does NOT move the layout — compensates view_offset so pane positions stay visually fixed.
+/// If the pane is in a different workspace, switches to that workspace first.
 fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
     // Track global last_focused before changing
     let prev_focused = state.focused_pane;
 
+    // Switch workspace if the target pane is not in the current workspace.
+    if let Some(target_ws) = find_pane_workspace(&state.session, pane_id) {
+        if target_ws != state.session.active_workspace_idx {
+            switch_workspace_tracked(state, target_ws);
+        }
+    }
+
     // Track visited per-workspace: only if the old pane belongs to the current workspace.
-    // If we just switched workspaces, the old pane is from the departed workspace — don't
-    // overwrite the current workspace's slot with a foreign pane ID.
     if let Some(old_pane_id) = state.focused_pane {
         let ws_idx = state.session.active_workspace_idx;
         if let Some(ws) = state.session.workspaces.get(ws_idx) {
@@ -1037,9 +1086,14 @@ fn sync_focus(state: &mut AppState) {
     let current_ws = state.session.active_workspace_idx;
 
     // Only record per-workspace data for same-workspace focus changes.
-    // Workspace switches are tracked by the caller (action) BEFORE switching
-    // via switch_workspace_tracked().
-    if focus_changed && prev_focused.is_some() && prev_ws == current_ws {
+    // If prev_focused doesn't belong to current_ws, a workspace switch
+    // happened and switch_workspace_tracked() already recorded it.
+    let pane_belongs_to_current_ws = prev_focused.map_or(false, |pid| {
+        state.session.workspaces.get(current_ws)
+            .map(|ws| ws.find_pane(heca_core::layout::PaneId(pid)).is_some())
+            .unwrap_or(false)
+    });
+    if focus_changed && prev_focused.is_some() && prev_ws == current_ws && pane_belongs_to_current_ws {
         while state.last_visited_pane_per_ws.len() <= current_ws {
             state.last_visited_pane_per_ws.push(None);
         }
@@ -1249,40 +1303,24 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.needs_redraw = true;
         }
         WmAction::PaneSelect => {
-            let mut candidates: Vec<(char, u64)> = Vec::new();
-            if let Some(ws) = state.session.active_workspace() {
-                for col in &ws.scrolling.columns {
-                    for pane in &col.panes {
-                        let ch = (b'a' + candidates.len() as u8) as char;
-                        candidates.push((ch, pane.id.0));
-                    }
-                }
-                for float in &ws.floating_panes {
-                    let ch = (b'a' + candidates.len() as u8) as char;
-                    candidates.push((ch, float.pane.id.0));
-                }
-            }
+            let candidates = collect_all_pane_candidates(&state.session);
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSelect { candidates };
                 state.needs_redraw = true;
             }
         }
         WmAction::SwapSelect => {
-            let mut candidates: Vec<(char, u64)> = Vec::new();
-            if let Some(ws) = state.session.active_workspace() {
-                for col in &ws.scrolling.columns {
-                    for pane in &col.panes {
-                        let ch = (b'a' + candidates.len() as u8) as char;
-                        candidates.push((ch, pane.id.0));
-                    }
-                }
-                for float in &ws.floating_panes {
-                    let ch = (b'a' + candidates.len() as u8) as char;
-                    candidates.push((ch, float.pane.id.0));
-                }
-            }
+            let candidates = collect_all_pane_candidates(&state.session);
             if !candidates.is_empty() {
                 state.input_mode = InputMode::PaneSwap { candidates };
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::SwapAndFocus => {
+            let candidates = collect_all_pane_candidates(&state.session);
+            if !candidates.is_empty() {
+                state.input_mode = InputMode::PaneSwap { candidates };
+                state.swap_and_focus = true;
                 state.needs_redraw = true;
             }
         }
@@ -1687,6 +1725,39 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
                 }
             }
         }
+    }
+}
+
+/// Move a pane from its current workspace to a target workspace.
+/// The pane is inserted into the same column as the target pane (or a new column if needed).
+fn move_pane_to_workspace(state: &mut AppState, pane_id: u64, target_ws: usize, _target_pane: u64) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == target_ws {
+        return;
+    }
+
+    // Find and remove the pane from the current workspace.
+    let removed_pane = {
+        let ws = match state.session.workspaces.get_mut(current_ws) {
+            Some(ws) => ws,
+            None => return,
+        };
+        let mut removed = None;
+        for ci in 0..ws.scrolling.columns.len() {
+            if let Some(pi) = ws.scrolling.columns[ci].panes.iter().position(|p| p.id.0 == pane_id) {
+                removed = ws.scrolling.remove_pane(ci, pi);
+                break;
+            }
+        }
+        removed
+    };
+
+    if let Some(pane) = removed_pane {
+        // Switch to target workspace and add the pane there.
+        state.session.switch_to_workspace(target_ws);
+        state.session.add_pane(pane, None, true);
+        // Update focused_pane so it points to the moved pane in its new location.
+        state.focused_pane = Some(pane_id);
     }
 }
 

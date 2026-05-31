@@ -129,6 +129,8 @@ pub struct AppState {
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight).
     pub last_visited_pane_per_ws: Vec<Option<u64>>,
+    /// When true, PaneSwap mode should focus the target pane after swapping.
+    pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Last frame render time for rate-limiting.
