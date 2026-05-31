@@ -1239,7 +1239,9 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
     }
 }
 
+/// Returns true if any part of the column at `col_idx` intersects the current viewport.
 /// Swap two panes by their IDs. If the focused pane is involved, focus follows it.
+/// The viewport is only scrolled when the target window is hidden (off-screen).
 fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
     if let Some(ws) = state.session.active_workspace_mut() {
         let mut a_col: Option<usize> = None;
@@ -1266,15 +1268,25 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
             let focused_is_b = focused_id == Some(b_id);
 
             if ac == bc {
+                // Same-column swap: just swap the pane structs and update the active index.
+                // Do NOT touch column widths or view offset — the viewport should stay exactly
+                // where it was so the user doesn't lose visual context.
                 ws.scrolling.columns[ac].panes.swap(ai, bi);
                 if focused_is_a {
                     ws.scrolling.columns[ac].active_pane_idx = bi;
                 } else if focused_is_b {
                     ws.scrolling.columns[ac].active_pane_idx = ai;
                 }
+                // Recompute pane sizes since swapped panes may have different preferred heights.
+                let h = ws.scrolling.working_area.size.h;
+                let gaps = ws.scrolling.options.gaps;
+                ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
             } else {
-                // Swap pane structs between columns.
-                // Scope the split_at_mut borrow so we can mutate active indices afterwards.
+                // Cross-column swap: swap pane structs between columns.
+
+                // Remember the current viewport position so we can preserve it.
+                let old_view_pos = ws.scrolling.view_pos();
+
                 {
                     let (col_a, col_b) = if ac < bc {
                         let (left, right) = ws.scrolling.columns.split_at_mut(bc);
@@ -1294,21 +1306,34 @@ fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
                     ws.scrolling.active_column_idx = ac;
                     ws.scrolling.columns[ac].active_pane_idx = ai;
                 }
-            }
 
-            // Recompute pane sizes since swapped panes may have different preferred heights.
-            let h = ws.scrolling.working_area.size.h;
-            let gaps = ws.scrolling.options.gaps;
-            ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
-            if bc != ac {
+                // Recompute pane sizes for both affected columns.
+                let h = ws.scrolling.working_area.size.h;
+                let gaps = ws.scrolling.options.gaps;
+                ws.scrolling.columns[ac].compute_pane_sizes(h, gaps);
                 ws.scrolling.columns[bc].compute_pane_sizes(h, gaps);
-            }
-            ws.scrolling.update_all_column_widths();
+                ws.scrolling.update_all_column_widths();
 
-            // If the focused pane moved, animate the view so it stays visible.
-            // Otherwise leave the viewport untouched.
-            if focused_is_a || focused_is_b {
-                ws.scrolling.align_view_to_active_column();
+                // Check whether the target column was visible at the OLD viewport position.
+                let target_col = if focused_is_a { bc } else { ac };
+                let col_x = ws.scrolling.column_x(target_col);
+                let col_w = ws.scrolling.column_widths.get(target_col).copied().unwrap_or(0.0);
+                let view_left = old_view_pos;
+                let view_right = old_view_pos + ws.scrolling.working_area.size.w;
+                let target_was_visible = col_x < view_right && col_x + col_w > view_left;
+
+                if (focused_is_a || focused_is_b) && target_was_visible {
+                    // The target was already visible: compensate view_offset so the
+                    // viewport stays exactly where it was visually.
+                    let new_view_pos = ws.scrolling.view_pos();
+                    let delta = old_view_pos - new_view_pos;
+                    ws.scrolling.view_offset = heca_core::layout::view_offset::ViewOffset::Static(
+                        ws.scrolling.view_offset.current() + delta
+                    );
+                } else if focused_is_a || focused_is_b {
+                    // Target was off-screen: animate viewport to bring active column into view.
+                    ws.scrolling.align_view_to_active_column();
+                }
             }
         }
     }
