@@ -977,6 +977,9 @@ impl ApplicationHandler for HecaApp {
                         );
                         state.insert_hint = Some(ws.scrolling.insert_position(space_pos));
                     }
+
+                    // Edge scroll: auto-scroll layout when dragging near viewport edges
+                    dnd_edge_scroll(state, mouse_pos, pane_area);
                 }
 
                 // Focus follows mouse (only when not dragging)
@@ -1128,6 +1131,39 @@ fn rubberband(x: f32) -> f32 {
     let c = 1.0;
     let d = 0.5;
     (1.0 - (1.0 / (x * c / d + 1.0))) * d
+}
+
+/// DnD edge scroll: auto-scroll the layout when the pointer is near the
+/// left/right edge of the content area during an interactive pane move.
+///
+/// Trigger zone: 80 px from edge. Speed: 400 px/sec (approx 6.7 px/frame @ 60fps).
+/// The delta is normalized by how deep the pointer is into the trigger zone.
+fn dnd_edge_scroll(state: &mut AppState, mouse_pos: (f32, f32), pane_area: CoreRect) {
+    let trigger = 80.0f32;
+    let speed = 400.0f32; // px/sec
+
+    let mouse_x_in_content = mouse_pos.0 - pane_area.x;
+    let content_w = pane_area.w;
+
+    let delta = if mouse_x_in_content < trigger {
+        // Near left edge: scroll right (negative view_offset delta)
+        -(trigger - mouse_x_in_content)
+    } else if content_w - mouse_x_in_content < trigger {
+        // Near right edge: scroll left (positive view_offset delta)
+        trigger - (content_w - mouse_x_in_content)
+    } else {
+        0.0
+    };
+
+    if delta != 0.0 {
+        let normalized = (delta.abs() / trigger).clamp(0.0, 1.0);
+        let scroll_per_frame = normalized * speed * (1.0 / 60.0); // per frame at 60fps
+        let signed = scroll_per_frame.copysign(delta);
+
+        if let Some(ws) = state.session.active_workspace_mut() {
+            ws.scrolling.view_offset.offset(signed as f64);
+        }
+    }
 }
 
 /// Compute the pane content area rectangle.
