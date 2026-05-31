@@ -1,4 +1,5 @@
 use crate::sidebar::SidebarTree;
+use crate::input::WmAction;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
@@ -22,6 +23,21 @@ pub enum SidebarItemState {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum RenameTarget {
+    Workspace(usize),
+    Pane(u64),
+}
+
+impl RenameTarget {
+    pub fn label(&self) -> String {
+        match self {
+            RenameTarget::Workspace(idx) => format!("Workspace {}", idx + 1),
+            RenameTarget::Pane(id) => format!("Pane {}", id),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
     Prefix,
@@ -31,6 +47,11 @@ pub enum InputMode {
     PaneSwap { candidates: Vec<(char, u64)> },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
+    /// Text input mode for renaming workspaces / panes.
+    Rename {
+        target: RenameTarget,
+        buffer: String,
+    },
 }
 
 impl InputMode {

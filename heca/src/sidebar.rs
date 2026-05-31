@@ -497,3 +497,183 @@ fn pane_name_short(pane_id: u64, workspaces: &[SidebarWsEntry]) -> String {
     }
     format!("Pane {}", pane_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_core::layout::{
+        Pane as LayoutPane, PaneId,
+        session::Session, types::{SessionId, Size},
+    };
+
+    fn make_test_session() -> (Session, Vec<u64>) {
+        let viewport = Size::new(1280.0, 800.0);
+        let mut session = Session::new(SessionId(1), viewport, 2.0);
+
+        // Create 3 panes in the first workspace
+        let ids: Vec<u64> = (1..=4).map(|i| {
+            let pane = LayoutPane::new(PaneId(i), &format!("Pane{}", i));
+            let id = pane.id.0;
+            session.add_pane(pane, None, true);
+            id
+        }).collect();
+
+        // Add a second workspace with 1 pane
+        let wa = session.active_workspace().map(|ws| {
+            let r = ws.scrolling.working_area;
+            heca_core::layout::types::Rectangle::new(r.loc, r.size)
+        }).unwrap_or_else(|| {
+            heca_core::layout::types::Rectangle::new(
+                heca_core::layout::types::Point::new(0.0, 0.0),
+                viewport,
+            )
+        });
+        session.add_workspace(wa);
+        let pane5 = LayoutPane::new(PaneId(5), "Pane5");
+        let id5 = pane5.id.0;
+        session.add_pane(pane5, None, true);
+
+        (session, vec![1, 2, 3, 4, 5])
+    }
+
+    #[test]
+    fn test_tree_rebuild() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+
+        tree.rebuild(&session, None, Some(1));
+
+        // Should have 2 workspaces
+        assert_eq!(tree.workspaces.len(), 2, "should have 2 workspaces");
+
+        // WS 0 should be active (the one with panes)
+        assert_eq!(tree.workspaces[0].state, SidebarItemState::Active, "WS 0 should be active");
+        assert_eq!(tree.workspaces[1].state, SidebarItemState::None, "WS 1 should be none (not yet visited)");
+
+        // WS 0 should have some columns with panes
+        let ws0 = &tree.workspaces[0];
+        assert!(!ws0.columns.is_empty(), "WS 0 should have columns");
+        assert!(!ws0.collapsed, "WS 0 should not be collapsed by default");
+    }
+
+    #[test]
+    fn test_tree_flat_items() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1));
+
+        // Flat items should contain workspaces, columns, and panes
+        assert!(!tree.flat_items.is_empty(), "flat items should not be empty");
+
+        // First item should be a workspace
+        match &tree.flat_items[0] {
+            SidebarItem::Workspace { .. } => {}
+            other => panic!("first flat item should be Workspace, got {:?}", other),
+        }
+
+        // Item count should match flat_items.len()
+        assert_eq!(tree.item_count, tree.flat_items.len(), "item_count should match");
+    }
+
+    #[test]
+    fn test_cursor_movement() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1));
+
+        assert_eq!(tree.cursor, 0, "cursor starts at 0");
+
+        tree.cursor_down();
+        assert_eq!(tree.cursor, 1, "cursor moves down to 1");
+
+        tree.cursor_up();
+        assert_eq!(tree.cursor, 0, "cursor moves up back to 0");
+
+        // Move to end, then past end should clamp
+        for _ in 0..tree.item_count + 5 {
+            tree.cursor_down();
+        }
+        assert_eq!(tree.cursor, tree.item_count - 1, "cursor clamps at last item");
+
+        // Move past start should clamp at 0
+        for _ in 0..103 {
+            tree.cursor_up();
+        }
+        assert_eq!(tree.cursor, 0, "cursor clamps at first item");
+    }
+
+    #[test]
+    fn test_expand_collapse_workspace() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1));
+
+        // Initially not collapsed
+        assert!(!tree.workspaces[0].collapsed, "WS 0 should not be collapsed initially");
+
+        // Move cursor to workspace 0 and toggle expand
+        tree.cursor = 0;
+        tree.toggle_expand();
+
+        // Should now be collapsed
+        assert!(tree.workspaces[0].collapsed, "WS 0 should be collapsed after toggle");
+
+        // Flat items should have fewer items (children hidden)
+        let collapsed_count = tree.flat_items.len();
+
+        // Toggle again to expand
+        tree.toggle_expand();
+        assert!(!tree.workspaces[0].collapsed, "WS 0 should be expanded after second toggle");
+        assert!(tree.flat_items.len() > collapsed_count, "flat items should increase after expand");
+    }
+
+    #[test]
+    fn test_visited_tracking() {
+        let (mut session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+
+        // Simulate visiting workspace 1 (switch to it)
+        session.switch_to_workspace(1);
+
+        // Rebuild with last_visited_ws_idx = 0 (WS 0 was visited before)
+        tree.rebuild(&session, Some(0), Some(5));
+
+        // WS 1 should be active (current)
+        assert_eq!(tree.workspaces[1].state, SidebarItemState::Active, "WS 1 should be active after switch");
+        // WS 0 should be visited
+        assert_eq!(tree.workspaces[0].state, SidebarItemState::Visited, "WS 0 should be visited");
+        // WS 2 (doesn't exist) is none
+    }
+
+    #[test]
+    fn test_rebuild_clears_previous() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+
+        tree.rebuild(&session, None, Some(1));
+        let first_count = tree.flat_items.len();
+
+        // Rebuild again — should be same result
+        tree.rebuild(&session, None, Some(1));
+        assert_eq!(tree.flat_items.len(), first_count, "rebuild should produce same result");
+
+        // Cursor should be clamped if it was out of bounds
+        tree.cursor = 9999;
+        tree.rebuild(&session, None, Some(1));
+        assert!(tree.cursor < tree.flat_items.len(), "cursor should be clamped after rebuild");
+    }
+
+    #[test]
+    fn test_empty_session() {
+        let viewport = Size::new(1280.0, 800.0);
+        let session = Session::new(SessionId(1), viewport, 2.0);
+        let mut tree = SidebarTree::new();
+
+        tree.rebuild(&session, None, None);
+
+        // Even an empty session has at least 1 workspace (the initial one)
+        assert!(!tree.workspaces.is_empty(), "should have at least 1 workspace");
+        // But it may have no panes
+    }
+}
+

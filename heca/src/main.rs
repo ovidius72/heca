@@ -5,7 +5,7 @@ mod sidebar;
 
 use sidebar::SidebarTree;
 
-use app_state::{AppState, SidebarItemState, SidebarState, DragState, InputMode};
+use app_state::{AppState, SidebarItemState, SidebarState, DragState, InputMode, RenameTarget};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
 use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
@@ -410,14 +410,17 @@ impl HecaApp {
             .and_then(|ws| ws.scrolling.active_pane())
             .map(|p| p.title.as_str())
             .unwrap_or("—");
-        let mode_str = match &state.input_mode {
-            InputMode::Normal => "NORMAL",
-            InputMode::Prefix => "PREFIX",
-            InputMode::PaneSelect { .. } => "SELECT",
-            InputMode::PaneSwap { .. } => "SWAP",
-            InputMode::SidebarNav => "SIDEBAR",
+        let (mode_str, rename_hint) = match &state.input_mode {
+            InputMode::Normal => ("NORMAL", String::new()),
+            InputMode::Prefix => ("PREFIX", String::new()),
+            InputMode::PaneSelect { .. } => ("SELECT", String::new()),
+            InputMode::PaneSwap { .. } => ("SWAP", String::new()),
+            InputMode::SidebarNav => ("SIDEBAR", String::new()),
+            InputMode::Rename { target, buffer } => {
+                ("RENAME", format!(": {}_", buffer))
+            }
         };
-        let status = format!("{} panes | {} | {}", pane_count, focus_title, mode_str);
+        let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
         state.text_renderer.queue_text(
             &status, 8.0, status_text_y, chrome_text, theme.foreground.to_f32x4(),
@@ -676,6 +679,42 @@ impl ApplicationHandler for HecaApp {
                     || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")
                     || (is_ctrl && phys == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyB));
 
+                // Handle Rename mode separately (needs mutable buffer access)
+                if let InputMode::Rename { target, buffer } = &mut state.input_mode {
+                    let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                    let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
+                    let is_backspace = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Backspace));
+
+                    if is_escape {
+                        state.input_mode = InputMode::Normal;
+                    } else if is_enter {
+                        // Commit rename
+                        let new_name = buffer.trim().to_string();
+                        match target {
+                            RenameTarget::Workspace(ws_idx) => {
+                                if let Some(ws) = state.session.workspaces.get_mut(*ws_idx) {
+                                    ws.name = if new_name.is_empty() { None } else { Some(new_name) };
+                                }
+                            }
+                            RenameTarget::Pane(pane_id) => {
+                                if let Some(ws) = state.session.active_workspace_mut() {
+                                    if let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(*pane_id)) {
+                                        pane.title = if new_name.is_empty() { format!("pane{}", pane_id) } else { new_name };
+                                    }
+                                }
+                            }
+                        }
+                        sync_focus(state);
+                        state.input_mode = InputMode::Normal;
+                    } else if is_backspace {
+                        buffer.pop();
+                    } else if key_text.len() == 1 && !is_ctrl {
+                        buffer.push_str(&key_text);
+                    }
+                    state.needs_redraw = true;
+                    return;
+                }
+
                 // Detect Ctrl+C, Ctrl+D etc. for future pane forwarding
                 // Detect arrow keys via physical_key
                 match &state.input_mode {
@@ -819,6 +858,9 @@ impl ApplicationHandler for HecaApp {
                                 execute_action(WmAction::SidebarExpandToggle, state.focused_pane, state);
                             }
                         }
+                    }
+                    InputMode::Rename { .. } => {
+                        // Handled by early return before this match
                     }
                 }
             }
@@ -1398,10 +1440,31 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             sync_focus(state);
             state.needs_redraw = true;
         }
-        WmAction::RenameWorkspace | WmAction::RenamePane => {
-            // Placeholder: stub for rename mode (Phase 3)
-            // Will enter InputMode::Rename with buffer
+        WmAction::RenameWorkspace => {
+            // Enter rename mode for current workspace
+            let ws_idx = state.session.active_workspace_idx;
+            let current_name = state.session.active_workspace()
+                .and_then(|ws| ws.name.clone())
+                .unwrap_or_default();
+            state.input_mode = InputMode::Rename {
+                target: RenameTarget::Workspace(ws_idx),
+                buffer: current_name,
+            };
             state.needs_redraw = true;
+        }
+        WmAction::RenamePane => {
+            // Enter rename mode for focused pane
+            if let Some(pane_id) = state.focused_pane {
+                let current_title = state.session.active_workspace()
+                    .and_then(|ws| ws.find_pane(heca_core::layout::PaneId(pane_id)))
+                    .map(|p| p.title.clone())
+                    .unwrap_or_default();
+                state.input_mode = InputMode::Rename {
+                    target: RenameTarget::Pane(pane_id),
+                    buffer: current_title,
+                };
+                state.needs_redraw = true;
+            }
         }
         WmAction::Scratchpad | WmAction::Hide => {}
         WmAction::ResizeLeft | WmAction::ResizeUp | WmAction::ResizeRight | WmAction::ResizeDown => {}

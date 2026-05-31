@@ -291,6 +291,17 @@ impl Default for Config {
         // ── Sidebars ──
         keybindings.insert("sidebar_left".to_string(), "b".to_string());
         keybindings.insert("sidebar_right".to_string(), ".".to_string());
+        keybindings.insert("sidebar_focus".to_string(), "e".to_string());
+        keybindings.insert("sidebar_up".to_string(), "k,ArrowUp".to_string());
+        keybindings.insert("sidebar_down".to_string(), "j,ArrowDown".to_string());
+        keybindings.insert("sidebar_left_nav".to_string(), "h,ArrowLeft".to_string());
+        keybindings.insert("sidebar_right_nav".to_string(), "l,ArrowRight,Enter".to_string());
+        keybindings.insert("sidebar_expand_toggle".to_string(), "Tab".to_string());
+
+        // ── Workspace / naming ──
+        keybindings.insert("create_workspace".to_string(), "w".to_string());
+        keybindings.insert("rename_workspace".to_string(), "Shift+w".to_string());
+        keybindings.insert("rename_pane".to_string(), "Shift+p".to_string());
 
         // ── Move pane to column (NIRI-style) ──
         keybindings.insert("move_pane_left".to_string(), "[".to_string());

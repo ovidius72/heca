@@ -330,14 +330,14 @@ fn render_sidebar_collapsed(tree: &SidebarTree, ...) {
 
 | # | Task | Status | Est. Effort |
 |---|------|--------|-------------|
-| 3.1 | Add `WmAction::CreateWorkspace`, `RenameWorkspace`, `RenamePane` to enum | Pending | Small |
-| 3.2 | Add `InputMode::Rename { target: RenameTarget, buffer: String }` | Pending | Small |
-| 3.3 | Implement `create_workspace`: add empty WS + activate it | Pending | Small |
-| 3.4 | Implement `rename_workspace`: enter Rename mode for workspace name | Pending | Small |
-| 3.5 | Implement `rename_pane`: enter Rename mode for pane name | Pending | Small |
-| 3.6 | Rename mode handling: Type text → Enter confirms, Esc cancels | Pending | Medium |
-| 3.7 | Add `set_workspace_name()` / `set_pane_name()` to Session/Workspace/Pane | Pending | Small |
-| 3.8 | Add default keybindings to config | Pending | Small |
+| 3.1 | Add `WmAction::CreateWorkspace`, `RenameWorkspace`, `RenamePane` to enum | ✅ Done | Small |
+| 3.2 | Add `InputMode::Rename { target: RenameTarget, buffer: String }` | ✅ Done | Small |
+| 3.3 | Implement `create_workspace`: add empty WS + activate it | ✅ Done | Small |
+| 3.4 | Implement `rename_workspace`: enter Rename mode for workspace name | ✅ Done | Small |
+| 3.5 | Implement `rename_pane`: enter Rename mode for pane name | ✅ Done | Small |
+| 3.6 | Rename mode handling: Type text → Enter confirms, Esc cancels | ✅ Done | Medium |
+| 3.7 | Add `find_pane_mut()` to Workspace for pane lookup by ID | ✅ Done | Small |
+| 3.8 | Add default keybindings to config | ✅ Done | Small |
 
 ### Details
 
