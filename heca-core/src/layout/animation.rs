@@ -46,6 +46,17 @@ impl Animation {
         }
     }
 
+    /// Current eased progress in the range [0.0, 1.0].
+    pub fn progress(&self) -> f64 {
+        let elapsed = self.start_time.elapsed().as_millis() as f64;
+        let duration = self.config.duration_ms as f64;
+        if elapsed >= duration {
+            return 1.0;
+        }
+        let t = (elapsed / duration).clamp(0.0, 1.0);
+        (self.config.easing)(t)
+    }
+
     /// Current interpolated value.
     pub fn value(&self) -> f64 {
         let elapsed = self.start_time.elapsed().as_millis() as f64;
@@ -82,7 +93,7 @@ impl Animation {
 #[derive(Debug, Clone)]
 pub enum Animated<T> {
     Static(T),
-    Animating { animation: Animation, from: T },
+    Animating { animation: Animation, from: T, to: T },
 }
 
 impl Animated<f64> {
@@ -119,20 +130,33 @@ impl Animated<super::types::Point> {
         use super::types::Point;
         match self {
             Self::Static(v) => *v,
-            Self::Animating { animation, from } => {
-                let t = if animation.is_done() {
-                    1.0
-                } else {
-                    let elapsed = animation.start_time.elapsed().as_millis() as f64;
-                    let duration = animation.config.duration_ms as f64;
-                    ((elapsed / duration).clamp(0.0, 1.0))
-                };
-                let eased = (animation.config.easing)(t);
+            Self::Animating { from, to, animation } => {
+                let progress = animation.progress();
                 Point::new(
-                    from.x + (animation.target() - animation.start) * eased,
-                    from.y + (animation.target() - animation.start) * eased,
+                    from.x + (to.x - from.x) * progress,
+                    from.y + (to.y - from.y) * progress,
                 )
             }
+        }
+    }
+
+    pub fn target(&self) -> super::types::Point {
+        match self {
+            Self::Static(v) => *v,
+            Self::Animating { to, .. } => *to,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        match self {
+            Self::Static(_) => true,
+            Self::Animating { animation, .. } => animation.is_done(),
+        }
+    }
+
+    pub fn to_static(&mut self) {
+        if matches!(self, Self::Animating { .. }) {
+            *self = Self::Static(self.current());
         }
     }
 }

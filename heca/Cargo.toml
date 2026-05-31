@@ -8,6 +8,6 @@ license.workspace = true
 heca-core = { path = "../heca-core" }
 heca-renderer = { path = "../heca-renderer" }
 heca-config = { path = "../heca-config" }
-winit = { workspace = true }
+winit.workspace = true
 wgpu = { workspace = true }
 pollster = { workspace = true }

@@ -206,11 +206,39 @@ impl KeyBindings {
         };
 
         // macOS winit often doesn't report shift in modifiers.
-        // Infer shift from key_text being any uppercase ASCII character (A-Z, +, _, etc).
+        // Infer shift from key_text being any uppercase ASCII character (A-Z).
         // Physical key names like "KeyH" -> "H" are ALWAYS uppercase — never infer shift from them.
         let key_implies_shift = key.len() == 1
             && key.chars().next().unwrap().is_ascii_uppercase();
-        let effective_shift = shift || key_implies_shift;
+
+        // On macOS, shifted symbols (e.g. +, _, {, }, |, :, ", <, >, ?, ~, !, @, #, $, %, ^, &, *, (, ))
+        // may have empty key_text or produce the shifted char without shift in modifiers.
+        // Infer shift from physical key + logical key text mismatch.
+        let phys_implies_shift = match (phys_name.as_str(), key.as_str()) {
+            ("Equal", "+" | "") => true,
+            ("Minus", "_" | "") => true,
+            ("BracketLeft", "{" | "") => true,
+            ("BracketRight", "}" | "") => true,
+            ("Backslash", "|" | "") => true,
+            ("Semicolon", ":" | "") => true,
+            ("Quote", "\"" | "") => true,
+            ("Comma", "<" | "") => true,
+            ("Period", ">" | "") => true,
+            ("Slash", "?" | "") => true,
+            ("Backquote", "~" | "") => true,
+            ("Digit1", "!" | "") => true,
+            ("Digit2", "@" | "") => true,
+            ("Digit3", "#" | "") => true,
+            ("Digit4", "$" | "") => true,
+            ("Digit5", "%" | "") => true,
+            ("Digit6", "^" | "") => true,
+            ("Digit7", "&" | "") => true,
+            ("Digit8", "*" | "") => true,
+            ("Digit9", "(" | "") => true,
+            ("Digit0", ")" | "") => true,
+            _ => false,
+        };
+        let effective_shift = shift || key_implies_shift || phys_implies_shift;
 
         for b in &self.bindings {
             let key_match = if b.key.len() == 1 {

@@ -152,6 +152,7 @@ impl Session {
             progress: Animated::Animating {
                 animation: Animation::new(0.0, 1.0, 0.0, AnimationConfig::default()),
                 from: 0.0,
+                to: 1.0,
             },
         };
         self.active_workspace_idx = idx;
@@ -189,6 +190,7 @@ impl Session {
         self.overview.progress = Animated::Animating {
             animation: Animation::new(from, to, 0.0, AnimationConfig::default()),
             from,
+            to,
         };
     }
 
