@@ -948,13 +948,19 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
     // Track global last_focused before changing
     let prev_focused = state.focused_pane;
 
-    // Track visited
+    // Track visited per-workspace: only if the old pane belongs to the current workspace.
+    // If we just switched workspaces, the old pane is from the departed workspace — don't
+    // overwrite the current workspace's slot with a foreign pane ID.
     if let Some(old_pane_id) = state.focused_pane {
         let ws_idx = state.session.active_workspace_idx;
-        while state.last_visited_pane_per_ws.len() <= ws_idx {
-            state.last_visited_pane_per_ws.push(None);
+        if let Some(ws) = state.session.workspaces.get(ws_idx) {
+            if ws.find_pane(heca_core::layout::PaneId(old_pane_id)).is_some() {
+                while state.last_visited_pane_per_ws.len() <= ws_idx {
+                    state.last_visited_pane_per_ws.push(None);
+                }
+                state.last_visited_pane_per_ws[ws_idx] = Some(old_pane_id);
+            }
         }
-        state.last_visited_pane_per_ws[ws_idx] = Some(old_pane_id);
     }
     state.focused_pane = Some(pane_id);
     if prev_focused != state.focused_pane && prev_focused.is_some() {
