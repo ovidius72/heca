@@ -1,3 +1,4 @@
+use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
@@ -8,6 +9,24 @@ use std::sync::Arc;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SidebarItemState {
+    /// Currently active (focused workspace / pane).
+    Active,
+    /// Was visited previously this session (last focused before current).
+    Visited,
+    /// Not visited this session.
+    None,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RenameTarget {
+    Workspace(usize),
+    Pane(u64),
+}
+
+
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -16,6 +35,13 @@ pub enum InputMode {
     PaneSelect { candidates: Vec<(char, u64)> },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
     PaneSwap { candidates: Vec<(char, u64)> },
+    /// Sidebar navigation: keyboard navigation within the sidebar tree.
+    SidebarNav,
+    /// Text input mode for renaming workspaces / panes.
+    Rename {
+        target: RenameTarget,
+        buffer: String,
+    },
 }
 
 impl InputMode {
@@ -52,10 +78,20 @@ pub struct AppState {
     pub focused_pane: Option<u64>,
     pub input_mode: InputMode,
     pub sidebar: SidebarState,
+    /// The sidebar tree model for workspace/pane tree navigation.
+    pub sidebar_tree: SidebarTree,
     pub active_tab: usize,
     pub tab_names: Vec<String>,
     pub mouse_pos: (f32, f32),
     pub modifiers: ModifiersState,
+    /// Most recently focused pane (for "go back" behavior).
+    pub last_focused: Option<u64>,
+    /// The last visited workspace index (for dim highlight in sidebar).
+    pub last_visited_ws_idx: Option<usize>,
+    /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
+    pub last_visited_pane_per_ws: Vec<Option<u64>>,
+    /// When true, PaneSwap mode should focus the target pane after swapping.
+    pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
 }
