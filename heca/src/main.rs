@@ -1065,6 +1065,19 @@ fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
     None
 }
 
+/// Find the (workspace_index, column_index, pane_index) containing a pane.
+fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usize, usize, usize)> {
+    let target = heca_core::layout::PaneId(pane_id);
+    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
+        for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
+            if let Some(pane_idx) = col.panes.iter().position(|p| p.id == target) {
+                return Some((ws_idx, col_idx, pane_idx));
+            }
+        }
+    }
+    None
+}
+
 /// Collect ALL columns across ALL workspaces as letter candidates.
 /// Hard-capped at 52 unique labels (a–z, A–Z).
 /// The candidate ID is the first pane ID in the column (used for positioning the letter overlay).
@@ -1724,6 +1737,146 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             // For now, this action is a no-op that reserves the keybinding.
             eprintln!("Command palette triggered (not yet implemented)");
             state.needs_redraw = true;
+        }
+        // ── Parameterized variants (RPC / direct invocation) ──
+        WmAction::FocusPane { pane_id } => {
+            focus_pane_by_id(state, pane_id);
+        }
+        WmAction::FocusWorkspace { ws_idx } => {
+            if ws_idx < state.session.workspaces.len() {
+                switch_workspace_tracked(state, ws_idx);
+                sync_focus(state);
+                state.needs_redraw = true;
+            }
+        }
+        WmAction::Swap { a_id, b_id } => {
+            if let Some((aws, acol, _)) = find_pane_location(&state.session, a_id)
+                && let Some((bws, bcol, _)) = find_pane_location(&state.session, b_id) {
+                    if aws == bws && acol == bcol {
+                        // Same column — no-op
+                    } else if aws == bws {
+                        move_pane_to_column(state, a_id, acol, bcol);
+                    } else {
+                        move_pane_to_workspace_column(state, a_id, bws, bcol);
+                    }
+                }
+            state.needs_redraw = true;
+        }
+        WmAction::Move { pane_id, target_col } => {
+            if let Some((_ws_idx, col_idx, _)) = find_pane_location(&state.session, pane_id) {
+                move_pane_to_column(state, pane_id, col_idx, target_col);
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::Resize { target, delta } => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                match target {
+                    input::ResizeTarget::Column => {
+                        let delta_f = delta as f64 / 1000.0;
+                        ws.scrolling.resize_active_column(delta_f);
+                    }
+                    input::ResizeTarget::Pane => {
+                        let h = ws.scrolling.working_area.size.h;
+                        let gaps = ws.scrolling.options.gaps;
+                        if let Some(col) = ws.scrolling.active_column_mut() {
+                            col.resize_active_pane_height(delta as f64, h, gaps);
+                        }
+                    }
+                }
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::ResizeTo { target, width, height } => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                match target {
+                    input::ResizeTarget::Column => {
+                        if let Some(col) = ws.scrolling.active_column_mut() {
+                            col.width = heca_core::layout::ColumnWidth::Fixed(width);
+                            ws.scrolling.update_all_column_widths();
+                        }
+                    }
+                    input::ResizeTarget::Pane => {
+                        let h = ws.scrolling.working_area.size.h;
+                        let gaps = ws.scrolling.options.gaps;
+                        if let Some(col) = ws.scrolling.active_column_mut() {
+                            let pane_idx = col.active_pane_idx;
+                            if let Some(size) = col.pane_sizes.get_mut(pane_idx) {
+                                size.h = height;
+                            }
+                            col.compute_pane_sizes(h, gaps);
+                        }
+                    }
+                }
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::FloatAt { pane_id, x, y, width, height } => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let mut found = None;
+                for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+                    for (pi, pane) in col.panes.iter().enumerate() {
+                        if pane.id.0 == pane_id { found = Some((ci, pi)); break; }
+                    }
+                    if found.is_some() { break; }
+                }
+                if let Some((col_idx, pane_idx)) = found
+                    && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
+                            pane: removed,
+                            position: heca_core::layout::types::Point::new(x, y),
+                            size: heca_core::layout::types::Size::new(width, height),
+                            is_active: true,
+                            original_column_idx: Some(col_idx),
+                            original_pane_idx: Some(pane_idx),
+                        });
+                        ws.floating_is_active = true;
+                    }
+            }
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+        WmAction::ClosePaneById { pane_id } => {
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let mut found = None;
+                for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+                    if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+                        found = Some((ci, pi));
+                        break;
+                    }
+                }
+                if let Some((ci, pi)) = found
+                    && let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
+                        state.backends.remove(&removed.id.0);
+                    }
+            }
+            let current_ws = state.session.active_workspace_idx;
+            let ws_is_empty = state.session.workspaces
+                .get(current_ws)
+                .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
+                .unwrap_or(true);
+            if ws_is_empty && state.session.workspaces.len() > 1 {
+                destroy_empty_workspace(state, current_ws);
+                let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
+                state.session.switch_to_workspace(new_idx);
+                sync_focus(state);
+            } else if ws_is_empty {
+                let next_id = state.session.next_id();
+                let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
+                state.session.add_pane(pane, None, true);
+                state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+                sync_focus(state);
+            } else {
+                sync_focus(state);
+            }
+            state.needs_redraw = true;
+        }
+        WmAction::RenameTarget { pane_id, name } => {
+            if let Some(ws) = state.session.active_workspace_mut()
+                && let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(pane_id)) {
+                    pane.title = if name.is_empty() { format!("pane{}", pane_id) } else { name.clone() };
+                    sync_focus(state);
+                    state.needs_redraw = true;
+                }
         }
     }
 }

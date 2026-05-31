@@ -2,20 +2,83 @@ use std::collections::HashMap;
 use heca_config::theme::AppConfig;
 use winit::keyboard::NamedKey;
 
+/// Target for resize actions.
+// Variants are constructed in tests and will be used by the RPC parser in Phase 4.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ResizeTarget {
+    Column,
+    Pane,
+}
+
+/// Window-manager action.
+///
+/// Unit variants are used for keybindings (no arguments).
+/// Parameterized variants are used for RPC commands and direct invocation
+/// (e.g. from the command palette or mouse handlers).
+// Note: WmAction does NOT derive Hash because f64 fields in parameterized
+// variants do not implement Hash. The registry uses discriminant-based
+// dispatch, so Hash is unnecessary.
+// Parameterized variants are currently only constructed in tests and via RPC
+// (Phase 4). The `dead_code` lint fires on the binary; suppress it until
+// the ActionRegistry wires them in (Phase 2).
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum WmAction {
+    // ── Navigation (unit) ──
     FocusLeft,
     FocusRight,
     FocusUp,
     FocusDown,
+    NextPane,
+    PrevPane,
+    WorkspaceNext,
+    WorkspacePrev,
+    FocusToggleLocal,
+    FocusToggleGlobal,
+
+    // ── Navigation (parameterized) ──
+    FocusPane { pane_id: u64 },
+    FocusWorkspace { ws_idx: usize },
+
+    // ── Layout (unit) ──
     SplitHorizontal,
     SplitVertical,
-    Float,
-    ClosePane,
-    TabNext,
-    TabPrev,
     ResizeIncrease,
     ResizeDecrease,
+    PaneHeightIncrease,
+    PaneHeightDecrease,
+    SwapLeft,
+    SwapRight,
+    SwapUp,
+    SwapDown,
+    MovePaneLeft,
+    MovePaneRight,
+
+    // ── Layout (parameterized) ──
+    Swap { a_id: u64, b_id: u64 },
+    Move { pane_id: u64, target_col: usize },
+    Resize { target: ResizeTarget, delta: i32 },
+    ResizeTo { target: ResizeTarget, width: f64, height: f64 },
+
+    // ── Pane (unit) ──
+    Float,
+    ClosePane,
+    PaneSelect,
+    SwapSelect,
+    SwapAndFocus,
+    RenamePane,
+
+    // ── Pane (parameterized) ──
+    FloatAt { pane_id: u64, x: f64, y: f64, width: f64, height: f64 },
+    ClosePaneById { pane_id: u64 },
+    RenameTarget { pane_id: u64, name: String },
+
+    // ── Workspace (unit) ──
+    CreateWorkspace,
+    RenameWorkspace,
+
+    // ── Sidebar / Chrome (unit) ──
     SidebarLeft,
     SidebarRight,
     SidebarFocus,
@@ -24,29 +87,25 @@ pub enum WmAction {
     SidebarLeftNav,
     SidebarRightNav,
     SidebarExpandToggle,
-    NextPane,
-    PrevPane,
-    PaneSelect,
-    SwapSelect,
-    SwapAndFocus,
-    SwapLeft,
-    SwapRight,
-    SwapUp,
-    SwapDown,
-    MovePaneLeft,
-    MovePaneRight,
-    PaneHeightIncrease,
-    PaneHeightDecrease,
-    CreateWorkspace,
-    RenameWorkspace,
-    RenamePane,
-    WorkspaceNext,
-    WorkspacePrev,
-    FocusToggleLocal,
-    FocusToggleGlobal,
+    TabNext,
+    TabPrev,
+
+    // ── System ──
     CommandPalette,
 }
 
+/// Return the discriminant of a `WmAction`.
+/// Two instances share a discriminant iff they are the same variant,
+/// regardless of field values.
+// Used by ActionRegistry (Phase 2) for handler dispatch.
+#[allow(dead_code)]
+pub fn action_discriminant(action: &WmAction) -> std::mem::Discriminant<WmAction> {
+    std::mem::discriminant(action)
+}
+
+/// Map a config key name to its unit `WmAction` variant.
+/// Parameterized variants are not reachable from config — they are
+/// constructed programmatically (RPC, mouse handlers, command palette).
 fn action_from_name(name: &str) -> Option<WmAction> {
     match name {
         "focus_left" => Some(WmAction::FocusLeft),
@@ -95,7 +154,7 @@ fn action_from_name(name: &str) -> Option<WmAction> {
 }
 
 /// Binding priority: lower = checked first. Focus wins over resize on conflicts.
-fn action_priority(action: WmAction) -> u8 {
+fn action_priority(action: &WmAction) -> u8 {
     match action {
         // Navigation (highest priority)
         WmAction::FocusLeft | WmAction::FocusRight |
@@ -127,6 +186,17 @@ fn action_priority(action: WmAction) -> u8 {
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
         WmAction::CommandPalette => 5,
+        // Parameterized variants are not resolved from keybindings,
+        // but we still match them explicitly to avoid catch-all.
+        WmAction::FocusPane { .. }
+        | WmAction::FocusWorkspace { .. }
+        | WmAction::Swap { .. }
+        | WmAction::Move { .. }
+        | WmAction::Resize { .. }
+        | WmAction::ResizeTo { .. }
+        | WmAction::FloatAt { .. }
+        | WmAction::ClosePaneById { .. }
+        | WmAction::RenameTarget { .. } => 6,
     }
 }
 
@@ -154,12 +224,12 @@ impl KeyBindings {
                     let part = part.trim();
                     if part.is_empty() { continue; }
                     let (ctrl, shift, key) = Self::parse_key(part);
-                    bindings.push(Binding { action, key, ctrl, shift });
+                    bindings.push(Binding { action: action.clone(), key, ctrl, shift });
                 }
             }
         }
         // Sort by priority so focus is checked before resize on conflicts
-        bindings.sort_by_key(|b| action_priority(b.action));
+        bindings.sort_by_key(|b| action_priority(&b.action));
 
         // ── Load mode-specific bindings ──
         let mut mode_bindings = HashMap::new();
@@ -179,7 +249,7 @@ impl KeyBindings {
                     let part = part.trim();
                     if part.is_empty() { continue; }
                     let (ctrl, shift, key) = Self::parse_key(part);
-                    sidebar_bindings.push(Binding { action, key, ctrl, shift });
+                    sidebar_bindings.push(Binding { action: action.clone(), key, ctrl, shift });
                 }
             }
         }
@@ -286,7 +356,7 @@ impl KeyBindings {
             let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
 
             if key_match && mod_match {
-                return Some(b.action);
+                return Some(b.action.clone());
             }
         }
         None
@@ -356,7 +426,7 @@ impl KeyBindings {
 
             let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
             if key_match && mod_match {
-                return Some(b.action);
+                return Some(b.action.clone());
             }
         }
         None
@@ -408,10 +478,33 @@ mod tests {
     #[test]
     fn test_action_priority_order() {
         // Navigation should have highest priority (lowest number)
-        assert!(action_priority(WmAction::FocusLeft) < action_priority(WmAction::ResizeIncrease));
+        assert!(action_priority(&WmAction::FocusLeft) < action_priority(&WmAction::ResizeIncrease));
         // Resize should have lower priority than pane management
-        assert!(action_priority(WmAction::ResizeIncrease) > action_priority(WmAction::ClosePane));
+        assert!(action_priority(&WmAction::ResizeIncrease) > action_priority(&WmAction::ClosePane));
         // CommandPalette should have lowest priority
-        assert!(action_priority(WmAction::CommandPalette) > action_priority(WmAction::SidebarLeft));
+        assert!(action_priority(&WmAction::CommandPalette) > action_priority(&WmAction::SidebarLeft));
+    }
+
+    #[test]
+    fn test_parameterized_variants_constructible() {
+        // Exercise all parameterized variants so they are not flagged as dead code.
+        let _ = WmAction::FocusPane { pane_id: 1 };
+        let _ = WmAction::FocusWorkspace { ws_idx: 0 };
+        let _ = WmAction::Swap { a_id: 1, b_id: 2 };
+        let _ = WmAction::Move { pane_id: 1, target_col: 0 };
+        let _ = WmAction::Resize { target: ResizeTarget::Column, delta: 10 };
+        let _ = WmAction::ResizeTo { target: ResizeTarget::Pane, width: 100.0, height: 200.0 };
+        let _ = WmAction::FloatAt { pane_id: 1, x: 0.0, y: 0.0, width: 100.0, height: 100.0 };
+        let _ = WmAction::ClosePaneById { pane_id: 1 };
+        let _ = WmAction::RenameTarget { pane_id: 1, name: "test".to_string() };
+    }
+
+    #[test]
+    fn test_action_discriminant_groups_variants() {
+        let a = WmAction::FocusPane { pane_id: 1 };
+        let b = WmAction::FocusPane { pane_id: 2 };
+        let c = WmAction::FocusLeft;
+        assert_eq!(action_discriminant(&a), action_discriminant(&b));
+        assert_ne!(action_discriminant(&a), action_discriminant(&c));
     }
 }
