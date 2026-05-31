@@ -66,15 +66,25 @@ Ctrl+B → h    Focus column left (animated scroll)
 Ctrl+B → l    Focus column right (animated scroll)
 Ctrl+B → j    Focus pane down / next workspace
 Ctrl+B → k    Focus pane up / prev workspace
-Ctrl+B → -    Split horizontal (new column to the right)
+Ctrl+B → Enter Split horizontal (new column to the right)
 Ctrl+B → v    Split vertical (new pane in current column)
 Ctrl+B → x    Close active pane
 Ctrl+B → f    Toggle pane floating
-Ctrl+B → q    Quick-select pane (overlay letters)
+Ctrl+B → q    Quick-select pane (overlay letters, all workspaces)
+Ctrl+B → Shift+q  Quick-swap pane (all columns, all workspaces)
+Ctrl+B → m    Swap and focus (all columns, all workspaces)
 Ctrl+B → =    Increase column width
 Ctrl+B → -    Decrease column width
 Ctrl+B → [    Move pane to column left
 Ctrl+B → ]    Move pane to column right
+Ctrl+B → e    Enter sidebar navigation mode
+Ctrl+B → w    Create workspace + pane
+Ctrl+B → Shift+w  Rename workspace
+Ctrl+B → Shift+p  Rename pane
+Ctrl+B → i    Toggle focus (local, same workspace)
+Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
+Ctrl+B → b    Toggle left sidebar
+Ctrl+B → p    Command palette (backend ready, UI pending)
 ```
 
 **Key rules:**
@@ -82,6 +92,9 @@ Ctrl+B → ]    Move pane to column right
 - The prefix key `Ctrl+B` is hardcoded — add config support when possible.
 - In Normal mode, all key events are forwarded to the focused backend (terminal/nvim).
 - Only the prefix key and explicitly bound keys trigger WM actions.
+- **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
+- **Pane letter limit:** PaneSelect/Swap modes use a-z, A-Z (52 unique labels). Sessions with >52 panes/columns fall back to sidebar navigation.
+- **Mouse:** Click on sidebar items focuses them. Click on pane content area focuses that pane.
 
 ---
 
@@ -121,8 +134,10 @@ myvim/
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
 │   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), execute_action()
-│   │   ├── app_state.rs   ← AppState, InputMode, DragState
-│   │   ├── input.rs       ← WmAction enum, KeyBindings, resolve()
+│   │   ├── app_state.rs   ← AppState, InputMode, SidebarState, RenameTarget
+│   │   ├── input.rs       ← WmAction enum, KeyBindings, resolve(), resolve_mode()
+│   │   ├── sidebar.rs     ← SidebarTree, rendering, hit-testing, navigation
+│   │   ├── actions.rs     ← ActionRegistry, ActionDescriptor, ActionCategory
 │   │   └── chrome.rs      ← ChromeConfig (tab bar, sidebar, status bar)
 │   └── Cargo.toml
 ├── heca-core/             ← Layout engine + backends (no GPU code)
@@ -294,6 +309,7 @@ See `.planning/PROJECT.md` for project overview, `.planning/ROADMAP.md` for phas
 | 1 — The Shell | ✅ ~Complete (GPU shell, theme, chrome) | 8 of 8 |
 | 2 — The Workspace | ✅ ~Complete (NIRI layout, animations, input) | 28 of 28 |
 | 3 — The Content | 🔄 In Progress (terminal backend wired) | PANE-01, PANE-02 done |
+| 3b — Sidebar + Actions | ✅ **DONE** (sidebar tree, naming, cross-ws ops, command palette backend) | 9 phases complete |
 | 4 — The Platform | ❌ Pending | Session persistence, RPC, plugins |
 
 ---
@@ -302,17 +318,18 @@ See `.planning/PROJECT.md` for project overview, `.planning/ROADMAP.md` for phas
 
 See `niri-compatibility-review.md` for full details. Key issues to be aware of:
 
-| ID | Issue | Severity |
-|----|-------|----------|
-| K1 | Prefix mode hardcodes `ctrl=false`, breaking all Ctrl+key bindings | Critical |
-| K2 | Prefix key hardcoded to Ctrl+B (not configurable) | High |
-| K3 | No prefix timeout (sticky prefix mode) | Medium |
-| K4 | Shift+special-char bindings fail on many layouts | High |
-| K5 | 6 actions (Scratchpad, Hide, ResizeL/R/U/D) are no-ops | Medium |
-| L1 | `update_all_column_widths()` runs on every mutation (violates niri principle 1) | Critical |
-| L2 | Proportion widths not stored persistently (window resize resets interactive resize) | High |
-| L4 | Focus up/down conflated with workspace switch | Medium |
-| L6 | Tabbed display, maximize, fullscreen, preset widths defined but dead code | Medium |
+| ID | Issue | Severity | Status |
+|----|-------|----------|--------|
+| K1 | Prefix mode hardcodes `ctrl=false`, breaking all Ctrl+key bindings | Critical | ✅ **FIXED** — passes real modifier state |
+| K2 | Prefix key hardcoded to Ctrl+B (not configurable) | High | Open |
+| K3 | No prefix timeout (sticky prefix mode) | Medium | ✅ **FIXED** — 500ms auto-exit in `about_to_wait` |
+| K4 | Shift+special-char bindings fail on many layouts | High | Open |
+| K5 | 6 actions (Scratchpad, Hide, ResizeL/R/U/D) are no-ops | Medium | Open |
+| L1 | `update_all_column_widths()` runs on every mutation (violates niri principle 1) | Critical | Open |
+| L2 | Proportion widths not stored persistently (window resize resets interactive resize) | High | Open |
+| L4 | Focus up/down conflated with workspace switch | Medium | ✅ **FIXED** — `j/k` stay within workspace; `u/d` switch workspace |
+| L6 | Tabbed display, maximize, fullscreen, preset widths defined but dead code | Medium | Open |
+| N1 | PaneSelect/Swap limited to 52 unique labels (a-z, A-Z) | Low | By design — use sidebar for >52 panes |
 
 ---
 

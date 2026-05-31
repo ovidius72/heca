@@ -5,12 +5,12 @@ mod sidebar;
 
 use sidebar::SidebarTree;
 
-use app_state::{AppState, SidebarState, InputMode, RenameTarget};
+use app_state::{AppState, SidebarState, InputMode, RenameTarget, DragState, DetachedPane};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
 use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
-use heca_core::layout::types::Rectangle;
+use heca_core::types::Rect as CoreRect;
 use heca_core::layout::animation::AnimationConfig;
 
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -292,6 +292,9 @@ impl HecaApp {
             last_visited_pane_per_ws: vec![None; ws_count],
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.general.mouse,
+            detached_pane: None,
+            insert_hint: None,
+            drag_state: app_state::DragState::None,
         })
     }
 
@@ -558,6 +561,41 @@ impl HecaApp {
                 let f_name_y = fy + (fh - f_name_size) / 2.0;
                 state.text_renderer.queue_text(float_name, f_name_x, f_name_y, f_name_size, f_name_color);
             }
+        }
+
+        // ── DETACHED PANE (interactive move) ──
+        if let Some(detached) = &state.detached_pane {
+            let px = pane_area.x + detached.render_pos.x as f32;
+            let py = pane_area.y + detached.render_pos.y as f32;
+            let pw = detached.size.w as f32;
+            let ph = detached.size.h as f32;
+
+            if let Some(backend) = state.backends.get(&detached.pane.id.0) {
+                let data = backend.render_data();
+                render_backend_data(&data, px, py, pw, ph, &mut state.text_renderer, &mut state.primitive_renderer, theme);
+            }
+            // Draw pane name
+            let d_name = &detached.pane.title;
+            let d_name_size = (pw.min(ph) * 0.25).clamp(24.0, 72.0);
+            let d_name_w = d_name_size * d_name.len() as f32 * 0.6;
+            let d_name_x = px + (pw - d_name_w) / 2.0;
+            let d_name_y = py + (ph - d_name_size) / 2.0;
+            state.text_renderer.queue_text(d_name, d_name_x, d_name_y, d_name_size, [1.0, 1.0, 1.0, 0.9]);
+            // Thicker border for detached pane
+            state.primitive_renderer.draw_border(px, py, pw, ph, accent_color, border_width * 3.0);
+        }
+
+        // ── INSERT HINT ──
+        if let Some(hint) = state.insert_hint {
+            let hint_rect = compute_insert_hint_rect(state, hint, pane_area);
+            let hx = pane_area.x + hint_rect.x;
+            let hy = pane_area.y + hint_rect.y;
+            let hw = hint_rect.w;
+            let hh = hint_rect.h;
+            let hint_bg = [accent_color[0], accent_color[1], accent_color[2], 0.15];
+            let hint_border = [accent_color[0], accent_color[1], accent_color[2], 0.6];
+            state.primitive_renderer.draw_rect(hx, hy, hw, hh, hint_bg);
+            state.primitive_renderer.draw_border(hx, hy, hw, hh, hint_border, 2.0);
         }
 
         // ── Pane select / swap letter overlay ──
@@ -874,45 +912,105 @@ impl ApplicationHandler for HecaApp {
                 );
                 state.needs_redraw = true;
 
-                if !state.mouse_enabled {}
+                let mouse_pos = state.mouse_pos;
+
+                // Handle drag state without holding a mutable borrow across function calls.
+                let should_transition_to_moving = match &state.drag_state {
+                    DragState::InteractiveMoveStarting { pane_id, start_mouse, threshold_sq, .. } => {
+                        let dx = mouse_pos.0 - start_mouse.0;
+                        let dy = mouse_pos.1 - start_mouse.1;
+                        let sq_dist = dx * dx + dy * dy;
+                        let factor = rubberband(sq_dist / *threshold_sq);
+
+                        // Apply rubberband offset to pane's interactive_move_offset
+                        if let Some((ci, pi)) = find_pane_in_layout(state, *pane_id)
+                            && let Some(ws) = state.session.active_workspace_mut()
+                        {
+                            ws.scrolling.columns[ci].panes[pi].interactive_move_offset =
+                                heca_core::layout::types::Point::new(dx as f64 * factor as f64, dy as f64 * factor as f64);
+                        }
+
+                        if sq_dist > *threshold_sq {
+                            Some(*pane_id)
+                        } else {
+                            None
+                        }
+                    }
+                    DragState::InteractiveMove { .. } => None,
+                    DragState::None => None,
+                };
+
+                if let Some(pane_id) = should_transition_to_moving {
+                    transition_to_moving(state, pane_id, mouse_pos);
+                }
+
+                if let DragState::InteractiveMove { offset, .. } = &state.drag_state {
+                    let offset = *offset;
+                    let pane_area = compute_pane_area(state);
+                    // Update detached pane position (view-local coords, same as panes_with_positions)
+                    if let Some(detached) = &mut state.detached_pane {
+                        detached.render_pos = heca_core::layout::types::Point::new(
+                            (mouse_pos.0 - pane_area.x - offset.0) as f64,
+                            (mouse_pos.1 - pane_area.y - offset.1) as f64,
+                        );
+                    }
+
+                    // Compute insert hint (space coords = view-local + view_pos)
+                    if let Some(ws) = state.session.active_workspace() {
+                        let space_pos = heca_core::layout::types::Point::new(
+                            (mouse_pos.0 - pane_area.x) as f64 + ws.scrolling.view_pos(),
+                            (mouse_pos.1 - pane_area.y) as f64,
+                        );
+                        state.insert_hint = Some(ws.scrolling.insert_position(space_pos));
+                    }
+                }
+
+                // Focus follows mouse (only when not dragging)
+                if matches!(state.drag_state, DragState::None)
+                    && state.mouse_enabled
+                    && self.app_config.config.general.focus_follows_mouse
+                    && matches!(state.input_mode, InputMode::Normal | InputMode::Prefix)
+                    && let Some(pane_id) = hit_test_pane(state, mouse_pos)
+                    && state.focused_pane != Some(pane_id)
+                {
+                    focus_pane_by_id(state, pane_id);
+                }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 if !state.mouse_enabled { return; }
                 state.needs_redraw = true;
                 let mouse_pos = state.mouse_pos;
-                let phys = state.window.inner_size();
-                let win_w = phys.width as f32 / state.scale_factor as f32;
-                let win_h = phys.height as f32 / state.scale_factor as f32;
-                let chrome = ChromeConfig {
-                    tab_bar_height: 32.0,
-                    status_bar_height: 24.0,
-                    left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
-                    right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
-                };
-                let pane_area = chrome.content_rect(win_w, win_h);
 
                 if button == MouseButton::Left && button_state == ElementState::Pressed {
-                    // Hit test against NIRI layout pane positions
-                    let pane_positions = state.session.active_workspace()
-                        .map(|ws| ws.scrolling.panes_with_positions())
-                        .unwrap_or_default();
-                    let ws_geometries = state.session.workspace_geometries();
-                    let ws_offset = ws_geometries.first()
-                        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
-                        .unwrap_or((0.0, 0.0));
-
-                    for (pane_id, rect) in &pane_positions {
-                        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-                        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
-                        let pw = rect.size.w as f32;
-                        let ph = rect.size.h as f32;
-                        if mouse_pos.0 >= px && mouse_pos.0 <= px + pw
-                            && mouse_pos.1 >= py && mouse_pos.1 <= py + ph
-                        {
-                            focus_pane_by_id(state, pane_id.0);
-                            break;
+                    let meta_held = state.modifiers.super_key();
+                    if meta_held {
+                        if let Some(pane_id) = hit_test_pane(state, mouse_pos) {
+                            state.drag_state = DragState::InteractiveMoveStarting {
+                                pane_id,
+                                start_mouse: mouse_pos,
+                                threshold_sq: 64.0, // 8px
+                            };
+                        }
+                    } else {
+                        // Normal click → focus
+                        if let Some(pane_id) = hit_test_pane(state, mouse_pos) {
+                            focus_pane_by_id(state, pane_id);
                         }
                     }
+                } else if button == MouseButton::Left && button_state == ElementState::Released {
+                    match &state.drag_state {
+                        DragState::InteractiveMoveStarting { pane_id, .. } => {
+                            cancel_interactive_move(state, *pane_id);
+                        }
+                        DragState::InteractiveMove { pane_id, .. } => {
+                            let hint = state.insert_hint.take()
+                                .unwrap_or(heca_core::layout::types::InsertPosition::NewColumn(0));
+                            drop_pane(state, *pane_id, hint);
+                        }
+                        _ => {}
+                    }
+                    state.drag_state = DragState::None;
+                    state.detached_pane = None;
                 }
             }
             _ => {}
@@ -947,6 +1045,237 @@ impl ApplicationHandler for HecaApp {
             }
         }
     }
+}
+
+/// NIRI's rubberband formula from src/rubber_band.rs.
+fn rubberband(x: f32) -> f32 {
+    let c = 1.0;
+    let d = 0.5;
+    (1.0 - (1.0 / (x * c / d + 1.0))) * d
+}
+
+/// Compute the pane content area rectangle.
+fn compute_pane_area(state: &AppState) -> CoreRect {
+    let phys = state.window.inner_size();
+    let win_w = phys.width as f32 / state.scale_factor as f32;
+    let win_h = phys.height as f32 / state.scale_factor as f32;
+    let chrome = ChromeConfig {
+        tab_bar_height: 32.0,
+        status_bar_height: 24.0,
+        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
+        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
+    };
+    chrome.content_rect(win_w, win_h)
+}
+
+/// Find a pane's (column_idx, pane_idx) in the active workspace's scrolling layout.
+fn find_pane_in_layout(state: &AppState, pane_id: u64) -> Option<(usize, usize)> {
+    let target = heca_core::layout::PaneId(pane_id);
+    let ws = state.session.active_workspace()?;
+    for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+        for (pi, pane) in col.panes.iter().enumerate() {
+            if pane.id == target {
+                return Some((ci, pi));
+            }
+        }
+    }
+    None
+}
+
+/// Transition from Starting to Moving: remove pane from layout, store detached.
+fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
+    let location = find_pane_in_layout(state, pane_id);
+    let Some((col_idx, pane_idx)) = location else { return; };
+
+    let ws = state.session.active_workspace_mut().expect("active workspace during move");
+
+    // Capture pane size BEFORE removing it (column may be removed if last pane).
+    let pane_size = ws.scrolling.columns.get(col_idx)
+        .and_then(|c| c.pane_sizes.get(pane_idx).copied())
+        .unwrap_or_else(|| {
+            heca_core::layout::types::Size::new(
+                ws.scrolling.columns.get(col_idx).map(|c| c.computed_width).unwrap_or(200.0),
+                200.0,
+            )
+        });
+
+    let old_col_x = ws.scrolling.column_x(col_idx);
+    let old_pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
+    let view_pos = ws.scrolling.view_pos();
+
+    let mut removed = ws.scrolling.remove_pane(col_idx, pane_idx).expect("pane exists");
+
+    // Do NOT call update_all_column_widths here.
+    // NIRI Principle 1: removing a pane should not affect widths of other columns.
+
+    // Clear interactive_move_offset from the removed pane
+    removed.interactive_move_offset = heca_core::layout::types::Point::new(0.0, 0.0);
+
+    // Compute view-local render position (same coordinate space as panes_with_positions).
+    let render_pos_x = old_col_x - view_pos;
+    let render_pos_y = old_pane_y;
+
+    let pane_area = compute_pane_area(state);
+
+    // Store detached pane
+    state.detached_pane = Some(DetachedPane {
+        pane: removed,
+        size: pane_size,
+        render_pos: heca_core::layout::types::Point::new(render_pos_x, render_pos_y),
+    });
+
+    // Offset = pointer - pane's on-screen top-left
+    state.drag_state = DragState::InteractiveMove {
+        pane_id,
+        offset: (
+            mouse_pos.0 - pane_area.x - render_pos_x as f32,
+            mouse_pos.1 - pane_area.y - render_pos_y as f32,
+        ),
+    };
+}
+
+/// Drop a detached pane at the given insert hint.
+fn drop_pane(state: &mut AppState, pane_id: u64, hint: heca_core::layout::types::InsertPosition) {
+    // Generate a fresh column ID before borrowing the workspace mutably.
+    let new_col_id = ColumnId(state.session.next_id());
+    let ws = state.session.active_workspace_mut().expect("active workspace during drop");
+    let detached = state.detached_pane.take().expect("detached pane during drop");
+
+    match hint {
+        heca_core::layout::types::InsertPosition::NewColumn(col_idx) => {
+            let col = Column::new(
+                new_col_id,
+                detached.pane,
+                ColumnWidth::Proportion(0.5),
+            );
+            ws.scrolling.add_column(Some(col_idx), col, true);
+        }
+        heca_core::layout::types::InsertPosition::InColumn { col_idx, pane_idx } => {
+            ws.scrolling.add_pane_to_column(col_idx, Some(pane_idx), detached.pane, true);
+        }
+    }
+
+    // Animate the dropped pane from its detached position to new layout position
+    let new_col_idx = ws.scrolling.columns.iter().position(|c| {
+        c.panes.iter().any(|p| p.id.0 == pane_id)
+    }).unwrap_or(0);
+    let new_pane_idx = ws.scrolling.columns[new_col_idx].panes.iter().position(|p| p.id.0 == pane_id).unwrap_or(0);
+    let new_col_x = ws.scrolling.column_x(new_col_idx);
+    let new_pane_y = ws.scrolling.pane_y_in_column(new_col_idx, new_pane_idx);
+    let new_pos = heca_core::layout::types::Point::new(
+        new_col_x + ws.scrolling.view_offset.current(),
+        new_pane_y,
+    );
+    let delta = detached.render_pos - new_pos;
+
+    // Find the pane in its new location and animate
+    if let Some(pane) = ws.scrolling.columns[new_col_idx].panes.get_mut(new_pane_idx) {
+        pane.animate_move_from(delta, AnimationConfig::default());
+    }
+}
+
+/// Cancel interactive move (Starting phase): animate pane back to origin.
+fn cancel_interactive_move(state: &mut AppState, pane_id: u64) {
+    // Clear rubberband offset
+    if let Some((ci, pi)) = find_pane_in_layout(state, pane_id)
+        && let Some(ws) = state.session.active_workspace_mut()
+    {
+        ws.scrolling.columns[ci].panes[pi].interactive_move_offset =
+            heca_core::layout::types::Point::new(0.0, 0.0);
+    }
+}
+
+/// Compute the insert hint rectangle for rendering.
+fn compute_insert_hint_rect(
+    state: &AppState,
+    hint: heca_core::layout::types::InsertPosition,
+    pane_area: CoreRect,
+) -> CoreRect {
+    let ws = state.session.active_workspace().unwrap();
+    let gaps = ws.scrolling.options.gaps as f32;
+    let view_pos = ws.scrolling.view_pos() as f32;
+
+    match hint {
+        heca_core::layout::types::InsertPosition::NewColumn(col_idx) => {
+            let x = if col_idx >= ws.scrolling.columns.len() {
+                let last_x = ws.scrolling.column_x(ws.scrolling.columns.len().saturating_sub(1)) as f32;
+                let last_w = ws.scrolling.column_widths.last().copied().unwrap_or(0.0) as f32;
+                last_x + last_w + gaps
+            } else {
+                ws.scrolling.column_x(col_idx) as f32
+            };
+            // Thin vertical bar centered on the gap, ~60% height
+            let bar_w = 24.0f32;
+            let bar_h = (pane_area.h * 0.6).max(80.0);
+            let px = x - view_pos - bar_w / 2.0;
+            let py = (pane_area.h - bar_h) / 2.0;
+            CoreRect::new(px, py, bar_w, bar_h)
+        }
+        heca_core::layout::types::InsertPosition::InColumn { col_idx, pane_idx } => {
+            let col_x = ws.scrolling.column_x(col_idx) as f32;
+            let col_w = ws.scrolling.column_widths.get(col_idx).copied().unwrap_or(0.0) as f32;
+            let y = ws.scrolling.pane_y_in_column(col_idx, pane_idx) as f32;
+            // Thin horizontal bar centered on the tile gap
+            let bar_h = 24.0f32;
+            let px = col_x - view_pos;
+            let py = y - bar_h / 2.0;
+            CoreRect::new(px, py, col_w, bar_h)
+        }
+    }
+}
+
+/// Hit-test mouse position against all panes (scrolling + floating).
+/// Returns the pane ID under the cursor, or None.
+/// Floating panes are tested first since they render on top.
+fn hit_test_pane(state: &AppState, mouse_pos: (f32, f32)) -> Option<u64> {
+    let phys = state.window.inner_size();
+    let win_w = phys.width as f32 / state.scale_factor as f32;
+    let win_h = phys.height as f32 / state.scale_factor as f32;
+    let chrome = ChromeConfig {
+        tab_bar_height: 32.0,
+        status_bar_height: 24.0,
+        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
+        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
+    };
+    let pane_area = chrome.content_rect(win_w, win_h);
+
+    // Check floating panes FIRST (they render on top of scrolling panes).
+    if let Some(ws) = state.session.active_workspace() {
+        for float in &ws.floating_panes {
+            let fx = float.position.x as f32 + pane_area.x;
+            let fy = float.position.y as f32 + pane_area.y;
+            let fw = float.size.w as f32;
+            let fh = float.size.h as f32;
+            if mouse_pos.0 >= fx && mouse_pos.0 < fx + fw
+                && mouse_pos.1 >= fy && mouse_pos.1 < fy + fh
+            {
+                return Some(float.pane.id.0);
+            }
+        }
+    }
+
+    // Check scrolling panes
+    let pane_positions = state.session.active_workspace()
+        .map(|ws| ws.scrolling.panes_with_positions())
+        .unwrap_or_default();
+    let ws_geometries = state.session.workspace_geometries();
+    let ws_offset = ws_geometries.first()
+        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+        .unwrap_or((0.0, 0.0));
+
+    for (pane_id, rect) in &pane_positions {
+        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        if mouse_pos.0 >= px && mouse_pos.0 < px + pw
+            && mouse_pos.1 >= py && mouse_pos.1 < py + ph
+        {
+            return Some(pane_id.0);
+        }
+    }
+
+    None
 }
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
@@ -1590,9 +1919,9 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
         WmAction::CreateWorkspace => {
             // Create a new workspace with a default pane, and switch to it
             let working_area = state.session.active_workspace()
-                .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
+                .map(|ws| heca_core::layout::types::Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
                 .unwrap_or_else(|| {
-                    Rectangle::new(
+                    heca_core::layout::types::Rectangle::new(
                         heca_core::layout::types::Point::default(),
                         state.session.viewport_size,
                     )

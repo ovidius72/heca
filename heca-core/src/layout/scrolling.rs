@@ -3,6 +3,9 @@ use super::column::{Column, Pane};
 use super::types::*;
 use super::view_offset::{compute_new_view_offset, ViewOffset};
 
+// Re-export InsertPosition for convenience.
+pub use super::types::InsertPosition;
+
 /// Direction for creating a new column when moving a pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Direction {
@@ -83,7 +86,7 @@ impl ScrollingSpace {
     }
 
     /// Compute the Y offset of a pane within a column.
-    fn pane_y_in_column(&self, col_idx: usize, pane_idx: usize) -> f64 {
+    pub fn pane_y_in_column(&self, col_idx: usize, pane_idx: usize) -> f64 {
         let col = &self.columns[col_idx];
         let gaps = self.options.gaps;
         let mut y = gaps;
@@ -768,6 +771,93 @@ impl ScrollingSpace {
             })
     }
 
+    /// Compute the insert position for a point in space coordinates.
+    /// Used during interactive move to determine where to drop a pane.
+    ///
+    /// Algorithm (from NIRI's `scrolling.insert_position()`):
+    /// 1. Transform to space coords and aim for center of gaps.
+    /// 2. Find closest column gap vs closest tile gap.
+    /// 3. Return whichever is closer.
+    pub fn insert_position(&self, pos: Point) -> InsertPosition {
+        let gaps = self.options.gaps;
+        // pos is already in space coordinates (caller adds view_pos).
+        let x = pos.x + gaps / 2.0;
+        let y = pos.y + gaps / 2.0;
+
+        // Before first column → NewColumn(0)
+        if x < 0.0 {
+            return InsertPosition::NewColumn(0);
+        }
+
+        // Find the column containing x.
+        let mut col_idx = 0usize;
+        let mut found_col = false;
+        for (i, col_x) in self.column_xs().enumerate() {
+            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
+            if x >= col_x && x < col_x + col_w {
+                col_idx = i;
+                found_col = true;
+                break;
+            }
+        }
+
+        // Past last column → NewColumn at end.
+        if !found_col {
+            return InsertPosition::NewColumn(self.columns.len());
+        }
+
+        // Find closest column gap.
+        let mut closest_col_gap_idx = 0usize;
+        let mut closest_col_gap_dist = f64::MAX;
+        for (i, col_x) in self.column_xs().enumerate() {
+            let dist = (col_x - x).abs();
+            if dist < closest_col_gap_dist {
+                closest_col_gap_dist = dist;
+                closest_col_gap_idx = i;
+            }
+            // Also check right edge of column (gap center after this column).
+            let col_w = self.column_widths.get(i).copied().unwrap_or(0.0);
+            let right_x = col_x + col_w + gaps;
+            let right_dist = (right_x - x).abs();
+            if right_dist < closest_col_gap_dist {
+                closest_col_gap_dist = right_dist;
+                closest_col_gap_idx = i + 1;
+            }
+        }
+
+        // Find closest tile gap within the containing column.
+        let col = &self.columns[col_idx];
+        let _col_x = self.column_x(col_idx);
+        let mut tile_y = gaps;
+        let mut closest_tile_idx = 0usize;
+        let mut closest_tile_gap_dist = f64::MAX;
+
+        for (i, size) in col.pane_sizes.iter().enumerate() {
+            let dist = (tile_y - y).abs();
+            if dist < closest_tile_gap_dist {
+                closest_tile_gap_dist = dist;
+                closest_tile_idx = i;
+            }
+            tile_y += size.h + gaps;
+        }
+        // Check bottom edge.
+        let bottom_dist = (tile_y - y).abs();
+        if bottom_dist < closest_tile_gap_dist {
+            closest_tile_gap_dist = bottom_dist;
+            closest_tile_idx = col.pane_sizes.len();
+        }
+
+        // Compare distances: column gap vs tile gap.
+        if closest_col_gap_dist <= closest_tile_gap_dist {
+            InsertPosition::NewColumn(closest_col_gap_idx.min(self.columns.len()))
+        } else {
+            InsertPosition::InColumn {
+                col_idx,
+                pane_idx: closest_tile_idx.min(col.panes.len()),
+            }
+        }
+    }
+
     /// Get all panes with their render positions.
     pub fn panes_with_positions(&self) -> Vec<(PaneId, Rectangle)> {
         let mut result = Vec::new();
@@ -789,7 +879,11 @@ impl ScrollingSpace {
                 ));
 
                 let pane_offset = pane.move_offset.current();
-                let pane_pos = view_off + col_pos + Point::new(pane_offset.x, pane_y + pane_offset.y);
+                let rubber = pane.interactive_move_offset;
+                let pane_pos = view_off + col_pos + Point::new(
+                    pane_offset.x + rubber.x,
+                    pane_y + pane_offset.y + rubber.y,
+                );
                 let rect = Rectangle::new(pane_pos, size);
                 result.push((pane.id, rect));
 

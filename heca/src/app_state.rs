@@ -27,6 +27,30 @@ pub enum RenameTarget {
 
 
 
+/// State for interactive drag-and-drop of panes.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DragState {
+    None,
+    /// Interactive move: starting (rubberband, pane still in layout).
+    InteractiveMoveStarting {
+        pane_id: u64,
+        start_mouse: (f32, f32),
+        threshold_sq: f32,
+    },
+    /// Interactive move: moving (pane detached, follows pointer).
+    InteractiveMove {
+        pane_id: u64,
+        offset: (f32, f32),      // pointer - pane top-left (in viewport space)
+    },
+}
+
+/// A pane temporarily removed from the layout for interactive move.
+pub struct DetachedPane {
+    pub pane: heca_core::layout::column::Pane,
+    pub size: heca_core::layout::types::Size,
+    pub render_pos: heca_core::layout::types::Point,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -94,4 +118,10 @@ pub struct AppState {
     pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
+    /// Detached pane during interactive move.
+    pub detached_pane: Option<DetachedPane>,
+    /// Current insert hint for interactive move.
+    pub insert_hint: Option<heca_core::layout::types::InsertPosition>,
+    /// Interactive move drag state.
+    pub drag_state: DragState,
 }

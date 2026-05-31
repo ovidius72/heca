@@ -220,9 +220,15 @@ pub struct GeneralConfig {
     pub window_height: u32,
     #[serde(default = "default_mouse")]
     pub mouse: bool,
+    #[serde(default = "default_focus_follows_mouse")]
+    pub focus_follows_mouse: bool,
 }
 
 fn default_mouse() -> bool {
+    true
+}
+
+fn default_focus_follows_mouse() -> bool {
     true
 }
 
@@ -232,6 +238,7 @@ impl Default for GeneralConfig {
             window_width: 1280,
             window_height: 800,
             mouse: true,
+            focus_follows_mouse: true,
         }
     }
 }
