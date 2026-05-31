@@ -1021,36 +1021,52 @@ fn sync_focus(state: &mut AppState) {
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id.0);
 
-    // Track last_visited_pane_per_ws:
-    // If workspace changed, record the departing workspace's active pane.
-    // If workspace stayed but focused pane changed, record it.
-    let is_new_ws = prev_ws_idx != Some(state.session.active_workspace_idx);
+    // Track prev_workspace_idx (workspace we came FROM) for sidebar visited highlight.
+    // prev_ws_idx is the value of last_visited_ws_idx from before this call.
+    // The CURRENT workspace is tracked by the session (state.session.active_workspace_idx).
+    // When the session's active workspace changes, we record the departed workspace and its pane.
     let focus_changed = prev_focused != state.focused_pane;
 
-    if let Some(old_ws) = prev_ws_idx {
-        let should_record = if is_new_ws {
-            true
-        } else if focus_changed && prev_focused.is_some() {
-            // Same workspace, focus moved — record the old pane
-            true
+    // Detect workspace switch by comparing prev_ws_idx (last known previous ws)
+    // with the current session active ws. We know we switched when prev_focused
+    // is Some but no longer in the active workspace, OR when prev_ws_idx differs.
+    let switched_ws = if let Some(ref prev) = prev_ws_idx {
+        *prev != state.session.active_workspace_idx
+    } else {
+        false
+    };
+    // Also check via prev_focused: if it was Some but no longer in current ws
+    let focused_switched = prev_focused.is_some()
+        && state.session.active_workspace()
+            .map(|ws| ws.find_pane(heca_core::layout::PaneId(prev_focused.unwrap_or(0))).is_none())
+            .unwrap_or(true);
+
+    if switched_ws || focused_switched {
+        // Find which workspace prev_focused belongs to
+        let departed_ws = if let Some(pid) = prev_focused {
+            state.session.workspaces.iter().position(|ws| {
+                ws.find_pane(heca_core::layout::PaneId(pid)).is_some()
+            })
         } else {
-            false
+            None
         };
 
-        if should_record {
-            let pid = prev_focused.or_else(|| {
-                state.session.workspaces.get(old_ws)
-                    .and_then(|ws| ws.active_pane().map(|p| p.id.0))
-            });
-            if let Some(pid) = pid {
-                while state.last_visited_pane_per_ws.len() <= old_ws {
-                    state.last_visited_pane_per_ws.push(None);
-                }
-                state.last_visited_pane_per_ws[old_ws] = Some(pid);
+        if let Some(dep_ws) = departed_ws {
+            // Record the pane that was active in the departed workspace
+            while state.last_visited_pane_per_ws.len() <= dep_ws {
+                state.last_visited_pane_per_ws.push(None);
             }
+            state.last_visited_pane_per_ws[dep_ws] = prev_focused;
+            state.last_visited_ws_idx = Some(dep_ws);
         }
+    } else if focus_changed && prev_focused.is_some() {
+        // Same workspace, focus moved — record the old pane
+        let ws = state.session.active_workspace_idx;
+        while state.last_visited_pane_per_ws.len() <= ws {
+            state.last_visited_pane_per_ws.push(None);
+        }
+        state.last_visited_pane_per_ws[ws] = prev_focused;
     }
-    state.last_visited_ws_idx = Some(state.session.active_workspace_idx);
 
     // Track global last_focused (for Prefix+Shift+l toggle)
     if focus_changed && prev_focused.is_some() {
