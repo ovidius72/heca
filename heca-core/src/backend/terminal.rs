@@ -89,9 +89,9 @@ impl Grid {
 
     fn resize(&mut self, width: usize, height: usize) {
         let mut new_cells = vec![vec![Cell::default(); width]; height];
-        for row in 0..self.height.min(height) {
-            for col in 0..self.width.min(width) {
-                new_cells[row][col] = self.cells[row][col];
+        for (row, new_row) in new_cells.iter_mut().enumerate().take(self.height.min(height)) {
+            for (col, cell) in new_row.iter_mut().enumerate().take(self.width.min(width)) {
+                *cell = self.cells[row][col];
             }
         }
         self.cells = new_cells;
@@ -265,10 +265,8 @@ impl vte::Perform for Grid {
                 let next_tab = (self.cursor_col / 8 + 1) * 8;
                 self.cursor_col = next_tab.min(self.width - 1);
             }
-            0x08 => {
-                if self.cursor_col > 0 {
-                    self.cursor_col -= 1;
-                }
+            0x08 if self.cursor_col > 0 => {
+                self.cursor_col -= 1;
             }
             _ => {}
         }
@@ -279,12 +277,12 @@ impl vte::Perform for Grid {
     fn unhook(&mut self) {}
 
     fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
-        if let Some(first) = params.first() {
-            if first.starts_with(b"0;") || first.starts_with(b"2;") {
-                let title_bytes = &first[2..];
-                if let Ok(s) = std::str::from_utf8(title_bytes) {
-                    self.title = s.to_string();
-                }
+        if let Some(first) = params.first()
+            && (first.starts_with(b"0;") || first.starts_with(b"2;"))
+        {
+            let title_bytes = &first[2..];
+            if let Ok(s) = std::str::from_utf8(title_bytes) {
+                self.title = s.to_string();
             }
         }
     }
@@ -359,7 +357,6 @@ enum PtyHandle {
     #[cfg(unix)]
     Unix {
         master: std::os::fd::RawFd,
-        child: std::process::Child,
     },
     #[cfg(not(unix))]
     Stub {
@@ -417,7 +414,7 @@ impl PtyHandle {
         }
 
         use std::os::unix::process::CommandExt;
-        let child = std::process::Command::new(&shell)
+        let _child = std::process::Command::new(&shell)
             .arg0(&shell)
             .stdin(unsafe { std::process::Stdio::from_raw_fd(slave_in) })
             .stdout(unsafe { std::process::Stdio::from_raw_fd(slave_out) })
@@ -429,7 +426,7 @@ impl PtyHandle {
             libc::close(slave);
         }
 
-        Ok(Self::Unix { master, child })
+        Ok(Self::Unix { master })
     }
 
     #[cfg(not(unix))]
@@ -463,7 +460,8 @@ impl PtyHandle {
 impl Drop for PtyHandle {
     fn drop(&mut self) {
         #[cfg(unix)]
-        if let PtyHandle::Unix { master, .. } = self {
+        {
+            let PtyHandle::Unix { master, .. } = self;
             unsafe {
                 libc::close(*master);
             }

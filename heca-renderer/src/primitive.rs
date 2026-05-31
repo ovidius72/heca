@@ -180,6 +180,7 @@ impl PrimitiveRenderer {
     }
 
     /// Queue a filled rectangle with a border.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,

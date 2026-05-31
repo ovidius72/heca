@@ -25,45 +25,14 @@ pub struct ScrollingSpace {
     pub active_column_idx: usize,
     /// Horizontal scroll offset.
     pub view_offset: ViewOffset,
-    /// View offset to restore after unfullscreening.
-    pub view_offset_to_restore: Option<f64>,
     /// Whether to activate the previous column on removal.
     pub activate_prev_on_removal: Option<f64>,
-    /// Ongoing interactive resize.
-    pub interactive_resize: Option<InteractiveResize>,
     /// Working area for layout computations.
     pub working_area: Rectangle,
     /// Current scale factor.
     pub scale: f64,
     /// Layout options.
     pub options: LayoutOptions,
-}
-
-/// Interactive resize state.
-#[derive(Debug, Clone, Copy)]
-pub struct InteractiveResize {
-    pub pane_id: PaneId,
-    pub original_size: Size,
-    pub edges: ResizeEdge,
-}
-
-/// Which edges are being resized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ResizeEdge {
-    pub left: bool,
-    pub right: bool,
-    pub top: bool,
-    pub bottom: bool,
-}
-
-impl ResizeEdge {
-    pub fn is_horizontal(&self) -> bool {
-        self.left || self.right
-    }
-
-    pub fn is_vertical(&self) -> bool {
-        self.top || self.bottom
-    }
 }
 
 impl ScrollingSpace {
@@ -73,9 +42,7 @@ impl ScrollingSpace {
             column_widths: Vec::new(),
             active_column_idx: 0,
             view_offset: ViewOffset::Static(0.0),
-            view_offset_to_restore: None,
             activate_prev_on_removal: None,
-            interactive_resize: None,
             working_area,
             scale,
             options,
@@ -211,7 +178,6 @@ impl ScrollingSpace {
     }
 
     fn compute_view_offset_centered(&self, idx: usize) -> f64 {
-        let col_x = self.column_x(idx);
         let col_w = self.column_widths.get(idx).copied().unwrap_or(0.0);
         let mode = self.columns.get(idx).map(|c| c.sizing_mode()).unwrap_or(SizingMode::Normal);
 
@@ -219,11 +185,7 @@ impl ScrollingSpace {
             return self.compute_view_offset_fit(idx);
         }
 
-        let area = if mode.is_maximized() {
-            self.working_area
-        } else {
-            self.working_area
-        };
+        let area = self.working_area;
 
         // Columns wider than view are left-aligned.
         if area.size.w <= col_w {
@@ -268,8 +230,6 @@ impl ScrollingSpace {
 
         self.active_column_idx = idx;
         self.activate_prev_on_removal = None;
-        self.view_offset_to_restore = None;
-        self.interactive_resize = None;
     }
 
     /// Add a column at a specific index (None = after active column).
@@ -383,10 +343,6 @@ impl ScrollingSpace {
 
         let col = self.columns.remove(idx);
         self.column_widths.remove(idx);
-
-        if idx == self.active_column_idx {
-            self.view_offset_to_restore = None;
-        }
 
         if self.columns.is_empty() {
             self.active_column_idx = 0;
@@ -561,7 +517,7 @@ impl ScrollingSpace {
 
         let pane_idx = self.columns[source_col].active_pane_idx;
         let pane = self.columns[source_col].remove_pane(pane_idx);
-        let Some(mut pane) = pane else { return false; };
+        let Some(pane) = pane else { return false; };
 
         // If source column became empty, remove it.
         if self.columns[source_col].is_empty() {
@@ -630,7 +586,7 @@ impl ScrollingSpace {
         let old_pane_y = self.pane_y_in_column(source_col, pane_idx);
 
         let pane = self.columns[source_col].remove_pane(pane_idx);
-        let Some(mut pane) = pane else { return false; };
+        let Some(pane) = pane else { return false; };
 
         let new_col = Column::new(
             ColumnId(pane.id.0),
@@ -777,25 +733,25 @@ impl ScrollingSpace {
     /// Advance animations for all columns, panes, and the view offset.
     pub fn advance_animations(&mut self) {
         // Advance view offset animation.
-        if let ViewOffset::Animation(anim) = &self.view_offset {
-            if anim.is_done() {
-                self.view_offset = ViewOffset::Static(anim.target());
-            }
+        if let ViewOffset::Animation(anim) = &self.view_offset
+            && anim.is_done()
+        {
+            self.view_offset = ViewOffset::Static(anim.target());
         }
 
         // Advance column animations.
         for col in &mut self.columns {
-            if let super::animation::Animated::Animating { ref animation, .. } = col.move_offset {
-                if animation.is_done() {
-                    col.move_offset = super::animation::Animated::Static(0.0);
-                }
+            if let super::animation::Animated::Animating { ref animation, .. } = col.move_offset
+                && animation.is_done()
+            {
+                col.move_offset = super::animation::Animated::Static(0.0);
             }
             // Advance pane Y-move animations.
             for pane in &mut col.panes {
-                if let super::animation::Animated::Animating { ref animation, .. } = pane.move_offset {
-                    if animation.is_done() {
-                        pane.move_offset = super::animation::Animated::Static(super::types::Point::default());
-                    }
+                if let super::animation::Animated::Animating { ref animation, .. } = pane.move_offset
+                    && animation.is_done()
+                {
+                    pane.move_offset = super::animation::Animated::Static(super::types::Point::default());
                 }
             }
         }
@@ -844,29 +800,4 @@ impl ScrollingSpace {
         result
     }
 
-    /// Find which pane (if any) is under a point.
-    pub fn pane_under(&self, pos: Point) -> Option<(ColumnId, PaneId)> {
-        let view_pos = self.view_pos();
-        let point_in_space = Point::new(pos.x + view_pos, pos.y);
-
-        for (col_idx, col) in self.columns.iter().enumerate() {
-            let col_x = self.column_x(col_idx);
-            let col_w = self.column_widths.get(col_idx).copied().unwrap_or(0.0);
-
-            if point_in_space.x < col_x || point_in_space.x >= col_x + col_w {
-                continue;
-            }
-
-            let mut pane_y = self.working_area.loc.y + self.options.gaps;
-            for (pane_idx, pane) in col.panes.iter().enumerate() {
-                let size = col.pane_sizes.get(pane_idx).copied().unwrap_or(Size::default());
-                if point_in_space.y >= pane_y && point_in_space.y < pane_y + size.h {
-                    return Some((col.id, pane.id));
-                }
-                pane_y += size.h + self.options.gaps;
-            }
-        }
-
-        None
-    }
 }

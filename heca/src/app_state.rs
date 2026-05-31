@@ -1,14 +1,11 @@
 use crate::sidebar::SidebarTree;
-use crate::input::WmAction;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
-use heca_core::types::Rect;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
@@ -29,6 +26,7 @@ pub enum RenameTarget {
 }
 
 impl RenameTarget {
+    #[allow(dead_code)]
     pub fn label(&self) -> String {
         match self {
             RenameTarget::Workspace(idx) => format!("Workspace {}", idx + 1),
@@ -71,34 +69,6 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
-#[derive(Clone, Debug)]
-pub enum DragState {
-    None,
-    Resizing {
-        pane_id: u64,
-        dir: heca_core::pane::SplitDirection,
-        start_pos: (f32, f32),
-    },
-    MovingFloat {
-        pane_id: u64,
-        /// Mouse position minus float top-left at drag start (screen coords)
-        offset: (f32, f32),
-        start_rect: Rect,
-    },
-    ResizingFloat {
-        pane_id: u64,
-        edge: FloatEdge,
-        start_mouse: (f32, f32),
-        start_rect: Rect,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum FloatEdge {
-    Left, Right, Top, Bottom,
-    TopLeft, TopRight, BottomLeft, BottomRight,
-}
-
 pub struct AppState {
     pub window: Arc<Window>,
     pub surface: wgpu::Surface<'static>,
@@ -115,7 +85,6 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<u64>,
     pub input_mode: InputMode,
-    pub drag_state: DragState,
     pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
@@ -127,12 +96,10 @@ pub struct AppState {
     pub last_focused: Option<u64>,
     /// The last visited workspace index (for dim highlight in sidebar).
     pub last_visited_ws_idx: Option<usize>,
-    /// Per-workspace last-visited pane IDs (for dim highlight).
+    /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
     pub last_visited_pane_per_ws: Vec<Option<u64>>,
     /// When true, PaneSwap mode should focus the target pane after swapping.
     pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
-    /// Last frame render time for rate-limiting.
-    pub last_render_time: Option<Instant>,
 }

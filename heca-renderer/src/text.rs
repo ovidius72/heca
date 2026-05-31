@@ -291,7 +291,7 @@ impl TextRenderer {
 
             // 3. Manually blit glyph images into pixel buffer
             // (buffer.draw() produces nothing — use the same loop that measures bounds)
-            let align = |v: u32| ((v + 255) / 256) * 256;
+            let align = |v: u32| v.div_ceil(256) * 256;
             let stride = align(content_w);
             let mut pixels = vec![0u8; (stride * content_h) as usize];
 

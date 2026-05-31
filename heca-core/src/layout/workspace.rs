@@ -1,7 +1,5 @@
-use super::animation::{Animation, AnimationConfig};
 use super::scrolling::ScrollingSpace;
 use super::types::*;
-use super::view_offset::ViewOffset;
 
 /// A workspace contains a scrolling layout and optionally floating panes.
 ///
@@ -21,8 +19,6 @@ pub struct Workspace {
     pub floating_visible: bool,
     /// Whether this workspace should be kept even when empty.
     pub is_pinned: bool,
-    /// Whether this workspace is currently visible on any output.
-    pub is_visible: bool,
 }
 
 /// A floating pane with position and size.
@@ -49,16 +45,11 @@ impl Workspace {
             floating_is_active: false,
             floating_visible: true,
             is_pinned: false,
-            is_visible: false,
         }
     }
 
     pub fn has_panes(&self) -> bool {
         !self.scrolling.is_empty() || !self.floating_panes.is_empty()
-    }
-
-    pub fn has_windows_or_name(&self) -> bool {
-        self.has_panes() || self.name.is_some()
     }
 
     pub fn active_pane(&self) -> Option<&super::column::Pane> {

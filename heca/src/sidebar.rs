@@ -37,6 +37,7 @@ pub struct SidebarColEntry {
 }
 
 impl SidebarColEntry {
+    #[allow(dead_code)]
     pub fn visible_pane_count(&self) -> usize {
         if self.collapsed { 0 } else { self.panes.len() }
     }
@@ -54,6 +55,7 @@ pub struct SidebarWsEntry {
 
 impl SidebarWsEntry {
     /// Number of visible items (columns + panes) under this workspace.
+    #[allow(dead_code)]
     pub fn visible_child_count(&self) -> usize {
         if self.collapsed {
             return 0;
@@ -141,7 +143,7 @@ impl SidebarTree {
                         panes: Vec::new(),
                     };
 
-                    for (_, pane) in col.panes.iter().enumerate() {
+                    for pane in col.panes.iter() {
                         let is_active_pane = Some(pane.id.0) == focused_pane;
                         let is_visited_pane = !is_active_pane && Some(pane.id.0) == last_visited_in_ws;
                         col_entry.panes.push(SidebarPaneEntry {
@@ -220,7 +222,7 @@ impl SidebarTree {
     /// Returns true if the item at `idx` is visible in collapsed sidebar mode.
     /// Columns are hidden; only Workspace and Pane items are shown.
     fn is_visible_collapsed(&self, idx: usize) -> bool {
-        self.flat_items.get(idx).map_or(false, |item| {
+        self.flat_items.get(idx).is_some_and(|item| {
             !matches!(item, SidebarItem::Column { .. })
         })
     }
@@ -261,11 +263,10 @@ impl SidebarTree {
                     }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        if let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
+                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
+                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
                             col_entry.collapsed = !col_entry.collapsed;
                         }
-                    }
                 }
                 SidebarItem::Pane { .. } => {
                     // Panes are leaves — no expand/collapse.
@@ -280,22 +281,19 @@ impl SidebarTree {
         if let Some(item) = self.flat_items.get(self.cursor) {
             match item {
                 SidebarItem::Workspace { ws_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        if ws_entry.collapsed {
+                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
+                        && ws_entry.collapsed {
                             ws_entry.collapsed = false;
                             self.rebuild_flat_items();
                         }
-                    }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        if let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
-                            if col_entry.collapsed {
+                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
+                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
+                            && col_entry.collapsed {
                                 col_entry.collapsed = false;
                                 self.rebuild_flat_items();
                             }
-                        }
-                    }
                 }
                 SidebarItem::Pane { .. } => {
                     // Panes are leaves — nothing to expand.
@@ -315,12 +313,11 @@ impl SidebarTree {
                     }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        if let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
+                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
+                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
                             col_entry.collapsed = true;
                             self.rebuild_flat_items();
                         }
-                    }
                 }
                 SidebarItem::Pane { .. } => {
                     // Panes are leaves — collapse up: collapse the parent column.
@@ -337,6 +334,7 @@ impl SidebarTree {
     }
 
     /// Get the pane ID at the given flat item index, if it's a pane.
+    #[allow(dead_code)]
     pub fn pane_id_at(&self, index: usize) -> Option<u64> {
         self.flat_items.get(index).and_then(|item| match item {
             SidebarItem::Pane { pane_id } => Some(*pane_id),
@@ -345,6 +343,7 @@ impl SidebarTree {
     }
 
     /// Get the workspace index at the given flat item index, if it's a workspace.
+    #[allow(dead_code)]
     pub fn workspace_idx_at(&self, index: usize) -> Option<usize> {
         self.flat_items.get(index).and_then(|item| match item {
             SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
@@ -385,6 +384,8 @@ const INDENT_PANE: f32 = 44.0;
 
 /// Render the expanded sidebar tree (width >= 80px).
 /// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
+// Each param is a distinct render input; grouping would hurt call-site readability.
+#[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_expanded(
     tree: &SidebarTree,
     x: f32,
@@ -429,11 +430,10 @@ pub fn render_sidebar_expanded(
             }
             SidebarItem::Pane { pane_id } => {
                 let mut label = pane_name_short(*pane_id, &tree.workspaces);
-                if let Some(cands) = candidates {
-                    if let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id) {
+                if let Some(cands) = candidates
+                    && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id) {
                         label = format!("[{}] {}", ch, label);
                     }
-                }
                 (INDENT_PANE, label, false)
             }
         };
@@ -491,6 +491,8 @@ pub fn render_sidebar_expanded(
 /// When `is_sidebar_nav` is true, the cursor line is highlighted so the user
 /// can navigate even in collapsed mode.
 /// `candidates` are shown as pane letters during PaneSwap / PaneSelect.
+// Each param is a distinct render input; grouping would hurt call-site readability.
+#[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_collapsed(
     tree: &SidebarTree,
     x: f32,
@@ -572,11 +574,10 @@ pub fn render_sidebar_collapsed(
                     let mut pane_char = pane.name.chars().next()
                         .unwrap_or('?').to_string();
                     // Show candidate letter during PaneSwap / PaneSelect
-                    if let Some(cands) = candidates {
-                        if let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id) {
+                    if let Some(cands) = candidates
+                        && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id) {
                             pane_char = ch.to_string();
                         }
-                    }
 
                     let pane_color = if is_pane_cursor {
                         accent
@@ -623,8 +624,8 @@ mod tests {
         let mut session = Session::new(SessionId(1), viewport, 2.0);
 
         // Create 3 panes in the first workspace
-        let ids: Vec<u64> = (1..=4).map(|i| {
-            let pane = LayoutPane::new(PaneId(i), &format!("Pane{}", i));
+        let _ids: Vec<u64> = (1..=4).map(|i| {
+            let pane = LayoutPane::new(PaneId(i), format!("Pane{}", i));
             let id = pane.id.0;
             session.add_pane(pane, None, true);
             id
@@ -642,7 +643,7 @@ mod tests {
         });
         session.add_workspace(wa);
         let pane5 = LayoutPane::new(PaneId(5), "Pane5");
-        let id5 = pane5.id.0;
+        let _id5 = pane5.id.0;
         session.add_pane(pane5, None, true);
 
         (session, vec![1, 2, 3, 4, 5])

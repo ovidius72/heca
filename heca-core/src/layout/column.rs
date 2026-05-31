@@ -20,16 +20,12 @@ pub struct Column {
     pub is_pending_fullscreen: bool,
     /// Whether this column is pending maximized.
     pub is_pending_maximized: bool,
-    /// How panes are arranged within this column.
-    pub display_mode: ColumnDisplay,
     /// Animation offset during column moves (e.g., when a column is added/removed nearby).
     pub move_offset: Animated<f64>,
     /// Cached computed width (updated after resize).
     pub computed_width: f64,
     /// Cached pane sizes.
     pub pane_sizes: Vec<Size>,
-    /// Whether this column is floating (future feature).
-    pub is_floating: bool,
 }
 
 impl Column {
@@ -42,20 +38,14 @@ impl Column {
             is_full_width: false,
             is_pending_fullscreen: false,
             is_pending_maximized: false,
-            display_mode: ColumnDisplay::Normal,
             move_offset: Animated::Static(0.0),
             computed_width: 0.0,
             pane_sizes: vec![],
-            is_floating: false,
         }
     }
 
     pub fn is_empty(&self) -> bool {
         self.panes.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.panes.len()
     }
 
     pub fn active_pane(&self) -> Option<&Pane> {
@@ -256,14 +246,8 @@ pub struct Pane {
     pub title: String,
     /// Preferred fixed height (None = auto).
     pub preferred_height: Option<f64>,
-    /// Whether this pane is urgent (needs attention).
-    pub is_urgent: bool,
     /// Move animation offset.
     pub move_offset: Animated<Point>,
-    /// Whether this pane is visible (for tabbed/stacked modes).
-    pub is_visible: bool,
-    /// Alpha for fade animations.
-    pub alpha: f64,
 }
 
 impl Pane {
@@ -272,10 +256,7 @@ impl Pane {
             id,
             title: title.into(),
             preferred_height: None,
-            is_urgent: false,
             move_offset: Animated::Static(Point::default()),
-            is_visible: true,
-            alpha: 1.0,
         }
     }
 }
