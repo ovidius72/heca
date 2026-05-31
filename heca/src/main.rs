@@ -839,27 +839,23 @@ impl ApplicationHandler for HecaApp {
                         state.input_mode = InputMode::Normal;
                     }
                     InputMode::SidebarNav => {
-                        // In sidebar navigation mode, dispatch sidebar movement actions directly.
-                        // This avoids needing separate WmAction bindings for sidebar mode.
+                        // Sidebar mode uses its OWN keybinding set (mode_bindings["sidebar"])
+                        // so j/k/h/l etc. don't conflict with normal mode bindings.
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
-                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
 
                         if is_escape {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                         } else {
-                            // Resolve sidebar keys and dispatch
-                            let action = self.bindings.resolve(
+                            let action = self.bindings.resolve_mode(
+                                "sidebar",
                                 &key_text, is_ctrl, false, is_shift,
                                 &event.logical_key, &event.physical_key,
                             );
                             #[cfg(debug_assertions)]
-                            eprintln!("sidebar_nav: key_text='{}' phys={:?} action={:?}", key_text, event.physical_key, action);
+                            eprintln!("sidebar: key_text='{}' phys={:?} action={:?}", key_text, event.physical_key, action);
                             if let Some(act) = action {
                                 execute_action(act, state.focused_pane, state);
-                            } else if is_enter {
-                                // Enter = toggle expand / activate
-                                execute_action(WmAction::SidebarExpandToggle, state.focused_pane, state);
                             }
                         }
                     }
@@ -1071,18 +1067,12 @@ fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState)
             state.needs_redraw = true;
         }
         WmAction::FocusUp => {
-            // Stay within workspace — don't wrap to previous workspace
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.focus_up();
-            }
+            state.session.focus_up();
             sync_focus(state);
             state.needs_redraw = true;
         }
         WmAction::FocusDown => {
-            // Stay within workspace — don't wrap to next workspace
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.focus_down();
-            }
+            state.session.focus_down();
             sync_focus(state);
             state.needs_redraw = true;
         }

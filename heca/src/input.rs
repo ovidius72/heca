@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use heca_config::theme::AppConfig;
 use winit::keyboard::NamedKey;
 
@@ -142,6 +143,9 @@ struct Binding {
 
 pub struct KeyBindings {
     bindings: Vec<Binding>,
+    /// Mode-specific bindings: mode_name -> Vec<Binding>
+    /// Each mode has its own keybinding set, resolved by resolve_mode().
+    mode_bindings: HashMap<String, Vec<Binding>>,
 }
 
 impl KeyBindings {
@@ -163,7 +167,31 @@ impl KeyBindings {
         for b in &bindings {
             eprintln!("  binding: {:?} key='{}' ctrl={} shift={}", b.action, b.key, b.ctrl, b.shift);
         }
-        Self { bindings }
+
+        // ── Load mode-specific bindings ──
+        let mut mode_bindings = HashMap::new();
+        // Sidebar mode: j/k/h/l navigate, Enter activates, Escape exits
+        let sidebar_entries: Vec<(&str, &str)> = vec![
+            ("sidebar_down", "j"),
+            ("sidebar_up", "k"),
+            ("sidebar_left_nav", "h"),
+            ("sidebar_right_nav", "l,Enter"),
+            ("sidebar_expand_toggle", "Tab,Space"),
+        ];
+        let mut sidebar_bindings = Vec::new();
+        for (name, key_str) in sidebar_entries {
+            if let Some(action) = action_from_name(name) {
+                for part in key_str.split(',') {
+                    let part = part.trim();
+                    if part.is_empty() { continue; }
+                    let (ctrl, shift, alt, key) = Self::parse_key(part);
+                    sidebar_bindings.push(Binding { action, key, ctrl, shift, alt });
+                }
+            }
+        }
+        mode_bindings.insert("sidebar".to_string(), sidebar_bindings);
+
+        Self { bindings, mode_bindings }
     }
 
     /// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
@@ -277,6 +305,74 @@ impl KeyBindings {
             // Exact modifier match using effective_shift (inferred from key text/phys).
             let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
 
+            if key_match && mod_match {
+                return Some(b.action);
+            }
+        }
+        None
+    }
+
+    /// Resolve a keypress against mode-specific bindings.
+    /// Returns None if the mode doesn't exist or no binding matches.
+    pub fn resolve_mode(
+        &self,
+        mode: &str,
+        key_text: &str,
+        ctrl: bool,
+        _alt: bool,
+        shift: bool,
+        named: &winit::keyboard::Key,
+        phys: &winit::keyboard::PhysicalKey,
+    ) -> Option<WmAction> {
+        let bindings = self.mode_bindings.get(mode)?;
+        let key = key_text.to_string();
+        let named_key = match named {
+            winit::keyboard::Key::Named(NamedKey::Space) => "Space".to_string(),
+            winit::keyboard::Key::Named(n) => format!("{:?}", n),
+            _ => key.clone(),
+        };
+
+        let phys_name = match phys {
+            winit::keyboard::PhysicalKey::Code(c) => {
+                let s = format!("{:?}", c);
+                s.strip_prefix("Key").unwrap_or(&s).to_string()
+            }
+            _ => String::new(),
+        };
+
+        let key_implies_shift = key.len() == 1
+            && key.chars().next().unwrap().is_ascii_uppercase();
+        let effective_shift = shift || key_implies_shift;
+
+        for b in bindings {
+            let key_match = if b.key.len() == 1 {
+                // Single-char: case-insensitive match
+                let phys_as_char = match phys_name.as_str() {
+                    "Equal" => Some('='),
+                    "Minus" => Some('-'),
+                    "Comma" => Some(','),
+                    "Period" => Some('.'),
+                    "Slash" => Some('/'),
+                    "Semicolon" => Some(';'),
+                    "Quote" => Some('\''),
+                    "BracketLeft" => Some('['),
+                    "BracketRight" => Some(']'),
+                    "Backslash" => Some('\\'),
+                    "Backquote" => Some('`'),
+                    "Space" => Some(' '),
+                    _ => None,
+                };
+                b.key.eq_ignore_ascii_case(&key)
+                    || b.key.eq_ignore_ascii_case(&named_key)
+                    || phys_as_char.map_or(false, |c| b.key.eq_ignore_ascii_case(&c.to_string()))
+                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
+            } else {
+                b.key.eq_ignore_ascii_case(&key)
+                    || b.key.eq_ignore_ascii_case(&named_key)
+                    || b.key.eq_ignore_ascii_case(&phys_name)
+            };
+
+            let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
             if key_match && mod_match {
                 return Some(b.action);
             }
