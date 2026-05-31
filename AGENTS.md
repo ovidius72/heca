@@ -353,6 +353,8 @@ See `niri-compatibility-review.md` for full details. Key issues to be aware of:
 4. Add new keybindings to both `heca-config/src/theme.rs` (defaults) and `heca/src/input.rs` (action enum + parser + execute_action).
 5. Test prefix mode: verify both plain key and Ctrl-modified key bindings work.
 6. Do NOT remove or refactor layout code without consulting the NIRI skill.
+7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.
+8. **After every task, run `cargo clippy --workspace --all-targets --all-features` and fix all warnings.** The codebase must stay clippy-clean. Use `cargo clippy --fix` for auto-fixable issues.
 
 ### When Reviewing
 1. Check for BSP tree references that should be NIRI scrolling columns.
