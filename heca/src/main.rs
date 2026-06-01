@@ -155,16 +155,19 @@ struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
     bindings: KeyBindings,
+    registry: actions::ActionRegistry,
 }
 
 impl HecaApp {
     fn new() -> Self {
         let app_config = AppConfig::load();
         let bindings = KeyBindings::load(&app_config);
+        let registry = build_registry();
         Self {
             state: None,
             app_config,
             bindings,
+            registry,
         }
     }
 
@@ -783,7 +786,7 @@ impl ApplicationHandler for HecaApp {
                         if let Some(act) = action {
                             state.input_mode = InputMode::Normal;
                             state.prefix_entered_at = None;
-                            execute_action(act, state.focused_pane, state);
+                            self.registry.execute(&act, state);
                         } else if !key_text.is_empty() {
                             // Printable key that didn't match any binding — exit prefix.
                             state.input_mode = InputMode::Normal;
@@ -869,7 +872,7 @@ impl ApplicationHandler for HecaApp {
                                 &event.logical_key, &event.physical_key,
                             );
                             if let Some(act) = action {
-                                execute_action(act, state.focused_pane, state);
+                                self.registry.execute(&act, state);
                             }
                         }
                     }
@@ -1222,6 +1225,85 @@ fn update_session_viewport(state: &mut AppState) {
         pane_area.h as f64,
     );
     state.session.update_viewport(new_size);
+}
+
+/// Generic handler that delegates to the legacy `execute_action()` match.
+/// This is a transitional shim — in Phase 5 each action will get its own
+/// named handler and `execute_action()` will be removed.
+fn generic_handler(state: &mut AppState, action: &WmAction) {
+    execute_action(action.clone(), state.focused_pane, state);
+}
+
+/// Build the action registry and register handlers for all actions.
+pub fn build_registry() -> actions::ActionRegistry {
+    use actions::ActionRegistry;
+    use input::WmAction;
+
+    let mut registry = ActionRegistry::new();
+
+    // ── Navigation ──
+    registry.register(&WmAction::FocusLeft, generic_handler);
+    registry.register(&WmAction::FocusRight, generic_handler);
+    registry.register(&WmAction::FocusUp, generic_handler);
+    registry.register(&WmAction::FocusDown, generic_handler);
+    registry.register(&WmAction::NextPane, generic_handler);
+    registry.register(&WmAction::PrevPane, generic_handler);
+    registry.register(&WmAction::WorkspaceNext, generic_handler);
+    registry.register(&WmAction::WorkspacePrev, generic_handler);
+    registry.register(&WmAction::FocusToggleLocal, generic_handler);
+    registry.register(&WmAction::FocusToggleGlobal, generic_handler);
+    registry.register(&WmAction::FocusPane { pane_id: 0 }, generic_handler);
+    registry.register(&WmAction::FocusWorkspace { ws_idx: 0 }, generic_handler);
+
+    // ── Layout ──
+    registry.register(&WmAction::SplitHorizontal, generic_handler);
+    registry.register(&WmAction::SplitVertical, generic_handler);
+    registry.register(&WmAction::ResizeIncrease, generic_handler);
+    registry.register(&WmAction::ResizeDecrease, generic_handler);
+    registry.register(&WmAction::PaneHeightIncrease, generic_handler);
+    registry.register(&WmAction::PaneHeightDecrease, generic_handler);
+    registry.register(&WmAction::SwapLeft, generic_handler);
+    registry.register(&WmAction::SwapRight, generic_handler);
+    registry.register(&WmAction::SwapUp, generic_handler);
+    registry.register(&WmAction::SwapDown, generic_handler);
+    registry.register(&WmAction::MovePaneLeft, generic_handler);
+    registry.register(&WmAction::MovePaneRight, generic_handler);
+    registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, generic_handler);
+    registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, generic_handler);
+    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, delta: 0 }, generic_handler);
+    registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, generic_handler);
+
+    // ── Pane ──
+    registry.register(&WmAction::Float, generic_handler);
+    registry.register(&WmAction::ClosePane, generic_handler);
+    registry.register(&WmAction::PaneSelect, generic_handler);
+    registry.register(&WmAction::SwapSelect, generic_handler);
+    registry.register(&WmAction::SwapAndFocus, generic_handler);
+    registry.register(&WmAction::RenamePane, generic_handler);
+    registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, generic_handler);
+    registry.register(&WmAction::ClosePaneById { pane_id: 0 }, generic_handler);
+    registry.register(&WmAction::RenameTarget { pane_id: 0, name: String::new() }, generic_handler);
+
+    // ── Workspace ──
+    registry.register(&WmAction::CreateWorkspace, generic_handler);
+    registry.register(&WmAction::RenameWorkspace, generic_handler);
+
+    // ── Sidebar / Chrome ──
+    registry.register(&WmAction::SidebarLeft, generic_handler);
+    registry.register(&WmAction::SidebarRight, generic_handler);
+    registry.register(&WmAction::SidebarFocus, generic_handler);
+    registry.register(&WmAction::SidebarUp, generic_handler);
+    registry.register(&WmAction::SidebarDown, generic_handler);
+    registry.register(&WmAction::SidebarLeftNav, generic_handler);
+    registry.register(&WmAction::SidebarRightNav, generic_handler);
+    registry.register(&WmAction::SidebarExpandToggle, generic_handler);
+    registry.register(&WmAction::TabNext, generic_handler);
+    registry.register(&WmAction::TabPrev, generic_handler);
+
+    // ── System ──
+    registry.register(&WmAction::CommandPalette, generic_handler);
+
+    registry
 }
 
 fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState) {
