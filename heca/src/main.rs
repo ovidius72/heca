@@ -2,6 +2,7 @@ mod actions;
 mod app_state;
 mod chrome;
 mod input;
+mod keymap;
 mod sidebar;
 
 use sidebar::SidebarTree;
@@ -154,8 +155,8 @@ fn winit_key_to_terminal_input(
 struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
-    bindings: KeyBindings,
     registry: actions::ActionRegistry,
+    keymap: keymap::KeymapRegistry,
 }
 
 impl HecaApp {
@@ -163,11 +164,31 @@ impl HecaApp {
         let app_config = AppConfig::load();
         let bindings = KeyBindings::load(&app_config);
         let registry = build_registry();
+        let mut keymap = keymap::KeymapRegistry::new();
+        // Populate keymap from existing KeyBindings for now.
+        // In Phase 5 this will be built directly from ActionRegistry metadata.
+        for b in &bindings.bindings {
+            let mut parts = Vec::new();
+            if b.ctrl { parts.push("Ctrl"); }
+            if b.shift { parts.push("Shift"); }
+            parts.push(&b.key);
+            let combo = keymap::KeyCombo::parse(&parts.join("+"));
+            keymap.bind("normal", combo, b.action.clone());
+        }
+        for b in bindings.mode_bindings.get("sidebar").unwrap_or(&vec![]) {
+            let mut parts = Vec::new();
+            if b.ctrl { parts.push("Ctrl"); }
+            if b.shift { parts.push("Shift"); }
+            parts.push(&b.key);
+            let combo = keymap::KeyCombo::parse(&parts.join("+"));
+            keymap.bind("sidebar", combo, b.action.clone());
+        }
+
         Self {
             state: None,
             app_config,
-            bindings,
             registry,
+            keymap,
         }
     }
 
@@ -780,7 +801,8 @@ impl ApplicationHandler for HecaApp {
                         // In prefix mode, pass the REAL modifier state. The user may intentionally
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
-                        let action = self.bindings.resolve(&key_text, is_ctrl, is_shift, &event.logical_key, &event.physical_key);
+                        let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let action = self.keymap.resolve("normal", &combo).cloned();
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
                         if let Some(act) = action {
@@ -866,11 +888,8 @@ impl ApplicationHandler for HecaApp {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                         } else {
-                            let action = self.bindings.resolve_mode(
-                                "sidebar",
-                                &key_text, is_ctrl, false, is_shift,
-                                &event.logical_key, &event.physical_key,
-                            );
+                            let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                            let action = self.keymap.resolve("sidebar", &combo).cloned();
                             if let Some(act) = action {
                                 self.registry.execute(&act, state);
                             }

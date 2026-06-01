@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use heca_config::theme::AppConfig;
-use winit::keyboard::NamedKey;
 
 /// Target for resize actions.
 // Variants are constructed in tests and will be used by the RPC parser in Phase 4.
@@ -201,18 +200,18 @@ fn action_priority(action: &WmAction) -> u8 {
 }
 
 #[derive(Clone, Debug)]
-struct Binding {
-    action: WmAction,
-    key: String,
-    ctrl: bool,
-    shift: bool,
+pub(crate) struct Binding {
+    pub(crate) action: WmAction,
+    pub(crate) key: String,
+    pub(crate) ctrl: bool,
+    pub(crate) shift: bool,
 }
 
 pub struct KeyBindings {
-    bindings: Vec<Binding>,
+    pub(crate) bindings: Vec<Binding>,
     /// Mode-specific bindings: mode_name -> Vec<Binding>
     /// Each mode has its own keybinding set, resolved by resolve_mode().
-    mode_bindings: HashMap<String, Vec<Binding>>,
+    pub(crate) mode_bindings: HashMap<String, Vec<Binding>>,
 }
 
 impl KeyBindings {
@@ -275,162 +274,7 @@ impl KeyBindings {
         (ctrl, shift, key)
     }
 
-    pub fn resolve(
-        &self,
-        key_text: &str,
-        ctrl: bool,
-        shift: bool,
-        named: &winit::keyboard::Key,
-        phys: &winit::keyboard::PhysicalKey,
-    ) -> Option<WmAction> {
-        let key = key_text.to_string();
-        let named_key = match named {
-            winit::keyboard::Key::Named(NamedKey::Space) => "Space".to_string(),
-            winit::keyboard::Key::Named(n) => format!("{:?}", n),
-            _ => key.clone(),
-        };
 
-        let phys_name = match phys {
-            winit::keyboard::PhysicalKey::Code(c) => {
-                let s = format!("{:?}", c);
-                s.strip_prefix("Key").unwrap_or(&s).to_string()
-            }
-            _ => String::new(),
-        };
-
-        // macOS winit often doesn't report shift in modifiers.
-        // Infer shift from key_text being any uppercase ASCII character (A-Z).
-        // Physical key names like "KeyH" -> "H" are ALWAYS uppercase — never infer shift from them.
-        let key_implies_shift = key.len() == 1
-            && key.chars().next().unwrap().is_ascii_uppercase();
-
-        // On macOS, shifted symbols (e.g. +, _, {, }, |, :, ", <, >, ?, ~, !, @, #, $, %, ^, &, *, (, ))
-        // may have empty key_text or produce the shifted char without shift in modifiers.
-        // Infer shift from physical key + logical key text mismatch.
-        let phys_implies_shift = matches!(
-            (phys_name.as_str(), key.as_str()),
-            ("Equal", "+" | "") | ("Minus", "_" | "") | ("BracketLeft", "{" | "")
-                | ("BracketRight", "}" | "") | ("Backslash", "|" | "")
-                | ("Semicolon", ":" | "") | ("Quote", "\"" | "")
-                | ("Comma", "<" | "") | ("Period", ">" | "")
-                | ("Slash", "?" | "") | ("Backquote", "~" | "")
-                | ("Digit1", "!" | "") | ("Digit2", "@" | "")
-                | ("Digit3", "#" | "") | ("Digit4", "$" | "")
-                | ("Digit5", "%" | "") | ("Digit6", "^" | "")
-                | ("Digit7", "&" | "") | ("Digit8", "*" | "")
-                | ("Digit9", "(" | "") | ("Digit0", ")" | "")
-        );
-        let effective_shift = shift || key_implies_shift || phys_implies_shift;
-
-        for b in &self.bindings {
-            let key_match = if b.key.len() == 1 {
-                // Single-char: case-insensitive match (handles Shift+Q vs q).
-                // Map physical key names to their unshifted character for symbol keys
-                // (e.g., "Equal" → '=' for when macOS doesn't report key_text for Shift+=).
-                let phys_as_char = match phys_name.as_str() {
-                    "Equal" => Some('='),
-                    "Minus" => Some('-'),
-                    "Comma" => Some(','),
-                    "Period" => Some('.'),
-                    "Slash" => Some('/'),
-                    "Semicolon" => Some(';'),
-                    "Quote" => Some('\''),
-                    "BracketLeft" => Some('['),
-                    "BracketRight" => Some(']'),
-                    "Backslash" => Some('\\'),
-                    "Backquote" => Some('`'),
-                    "Space" => Some(' '),
-                    _ => None,
-                };
-                b.key.eq_ignore_ascii_case(&key)
-                    || b.key.eq_ignore_ascii_case(&named_key)
-                    || phys_as_char.is_some_and(|c| b.key.eq_ignore_ascii_case(&c.to_string()))
-                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
-            } else {
-                b.key.eq_ignore_ascii_case(&key)
-                    || b.key.eq_ignore_ascii_case(&named_key)
-                    || b.key.eq_ignore_ascii_case(&phys_name)
-            };
-
-            // Exact modifier match using effective_shift (inferred from key text/phys).
-            let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
-
-            if key_match && mod_match {
-                return Some(b.action.clone());
-            }
-        }
-        None
-    }
-
-    /// Resolve a keypress against mode-specific bindings.
-    /// Returns None if the mode doesn't exist or no binding matches.
-    // Each parameter is a distinct dimension of the key event; a struct would not improve clarity.
-    #[allow(clippy::too_many_arguments)]
-    pub fn resolve_mode(
-        &self,
-        mode: &str,
-        key_text: &str,
-        ctrl: bool,
-        _alt: bool,
-        shift: bool,
-        named: &winit::keyboard::Key,
-        phys: &winit::keyboard::PhysicalKey,
-    ) -> Option<WmAction> {
-        let bindings = self.mode_bindings.get(mode)?;
-        let key = key_text.to_string();
-        let named_key = match named {
-            winit::keyboard::Key::Named(NamedKey::Space) => "Space".to_string(),
-            winit::keyboard::Key::Named(n) => format!("{:?}", n),
-            _ => key.clone(),
-        };
-
-        let phys_name = match phys {
-            winit::keyboard::PhysicalKey::Code(c) => {
-                let s = format!("{:?}", c);
-                s.strip_prefix("Key").unwrap_or(&s).to_string()
-            }
-            _ => String::new(),
-        };
-
-        let key_implies_shift = key.len() == 1
-            && key.chars().next().unwrap().is_ascii_uppercase();
-        let effective_shift = shift || key_implies_shift;
-
-        for b in bindings {
-            let key_match = if b.key.len() == 1 {
-                // Single-char: case-insensitive match
-                let phys_as_char = match phys_name.as_str() {
-                    "Equal" => Some('='),
-                    "Minus" => Some('-'),
-                    "Comma" => Some(','),
-                    "Period" => Some('.'),
-                    "Slash" => Some('/'),
-                    "Semicolon" => Some(';'),
-                    "Quote" => Some('\''),
-                    "BracketLeft" => Some('['),
-                    "BracketRight" => Some(']'),
-                    "Backslash" => Some('\\'),
-                    "Backquote" => Some('`'),
-                    "Space" => Some(' '),
-                    _ => None,
-                };
-                b.key.eq_ignore_ascii_case(&key)
-                    || b.key.eq_ignore_ascii_case(&named_key)
-                    || phys_as_char.is_some_and(|c| b.key.eq_ignore_ascii_case(&c.to_string()))
-                    || (key.is_empty() && b.key.eq_ignore_ascii_case(&phys_name))
-            } else {
-                b.key.eq_ignore_ascii_case(&key)
-                    || b.key.eq_ignore_ascii_case(&named_key)
-                    || b.key.eq_ignore_ascii_case(&phys_name)
-            };
-
-            let mod_match = b.ctrl == ctrl && b.shift == effective_shift;
-            if key_match && mod_match {
-                return Some(b.action.clone());
-            }
-        }
-        None
-    }
 }
 
 #[cfg(test)]
