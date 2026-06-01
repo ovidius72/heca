@@ -1159,9 +1159,9 @@ fn dnd_edge_scroll(state: &mut AppState, pane_area: CoreRect, dt: f32) -> bool {
     let is_dragging = !matches!(state.drag_state, DragState::None);
 
     let (trigger, speed, inset) = if is_dragging {
-        (150.0f32, 500.0f32, 0.0f32) // dragging: wider trigger, faster, no inset
+        (150.0f32, 1000.0f32, 0.0f32) // dragging: wider trigger, fast, no inset
     } else {
-        (80.0f32, 300.0f32, 8.0f32)  // hover: tighter, slower, inset
+        (80.0f32, 300.0f32, 8.0f32)   // hover: tighter, slower, inset
     };
 
     let mouse_pos = state.mouse_pos;
@@ -1189,14 +1189,43 @@ fn dnd_edge_scroll(state: &mut AppState, pane_area: CoreRect, dt: f32) -> bool {
         0.0
     };
 
-    if delta != 0.0 {
-        let normalized = (delta.abs() / trigger).clamp(0.0, 1.0);
-        let scroll = normalized * speed * dt;
-        let signed = scroll.copysign(delta);
+    if delta == 0.0 {
+        return false;
+    }
 
-        if let Some(ws) = state.session.active_workspace_mut() {
-            ws.scrolling.view_offset.offset(signed as f64);
-        }
+    let normalized = (delta.abs() / trigger).clamp(0.0, 1.0);
+    let scroll = normalized * speed * dt;
+    let signed = scroll.copysign(delta);
+
+    let Some(ws) = state.session.active_workspace_mut() else {
+        return false;
+    };
+
+    // Clamp view_pos so we never scroll past the first/last column.
+    // view_pos = col_x(active) + view_offset.current()  → content x at viewport left edge.
+    let current_view_pos = ws.scrolling.view_pos();
+    let proposed_view_pos = current_view_pos + signed as f64;
+
+    let padding = ws.scrolling.options.gaps;
+    let viewport_w = pane_area.w as f64;
+    let total_content_w = if ws.scrolling.columns.is_empty() {
+        0.0
+    } else {
+        let last = ws.scrolling.columns.len() - 1;
+        ws.scrolling.column_x(last)
+            + ws.scrolling.column_widths.get(last).copied().unwrap_or(0.0)
+    };
+
+    // Hard limits: first column left edge at viewport left edge (with padding),
+    // last column right edge at viewport right edge (with padding).
+    let min_view_pos = -padding;
+    let max_view_pos = (total_content_w - viewport_w + padding).max(min_view_pos);
+
+    let clamped_view_pos = proposed_view_pos.clamp(min_view_pos, max_view_pos);
+    let actual_delta = clamped_view_pos - current_view_pos;
+
+    if actual_delta != 0.0 {
+        ws.scrolling.view_offset.offset(actual_delta);
         true
     } else {
         false
