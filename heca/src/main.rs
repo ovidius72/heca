@@ -16,7 +16,7 @@ use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
-use input::{KeyBindings, WmAction};
+use input::{KeyBindings, WmAction, action_from_name};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -135,6 +135,26 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
     }
 }
 
+/// Convert a `Binding` to a `KeyCombo`.
+fn binding_to_combo(b: &input::Binding) -> keymap::KeyCombo {
+    let mut parts = Vec::new();
+    if b.ctrl { parts.push("Ctrl"); }
+    if b.shift { parts.push("Shift"); }
+    parts.push(&b.key);
+    keymap::KeyCombo::parse(&parts.join("+"))
+}
+
+/// Parse a key string that may use `prefix+` syntax.
+/// Returns `(is_prefix, KeyCombo)`.
+fn parse_key_string(s: &str) -> (bool, keymap::KeyCombo) {
+    let trimmed = s.trim();
+    if let Some(rest) = trimmed.strip_prefix("prefix+") {
+        (true, keymap::KeyCombo::parse(rest.trim()))
+    } else {
+        (false, keymap::KeyCombo::parse(trimmed))
+    }
+}
+
 /// Convert a winit key event to terminal input bytes.
 fn winit_key_to_terminal_input(
     key: &winit::keyboard::Key,
@@ -195,23 +215,42 @@ impl HecaApp {
         let bindings = KeyBindings::load(&app_config);
         let registry = build_registry();
         let mut keymap = keymap::KeymapRegistry::new();
-        // Populate keymap from existing KeyBindings for now.
-        // In Phase 5 this will be built directly from ActionRegistry metadata.
+
+        // ── Prefix-mode bindings ──
         for b in &bindings.bindings {
-            let mut parts = Vec::new();
-            if b.ctrl { parts.push("Ctrl"); }
-            if b.shift { parts.push("Shift"); }
-            parts.push(&b.key);
-            let combo = keymap::KeyCombo::parse(&parts.join("+"));
+            let combo = binding_to_combo(b);
             keymap.bind("normal", combo, b.action.clone());
         }
+
+        // ── Sidebar-mode bindings ──
         for b in bindings.mode_bindings.get("sidebar").unwrap_or(&vec![]) {
-            let mut parts = Vec::new();
-            if b.ctrl { parts.push("Ctrl"); }
-            if b.shift { parts.push("Shift"); }
-            parts.push(&b.key);
-            let combo = keymap::KeyCombo::parse(&parts.join("+"));
+            let combo = binding_to_combo(b);
             keymap.bind("sidebar", combo, b.action.clone());
+        }
+
+        // ── Global (non-prefix) bindings from [global] config ──
+        for (name, value) in &app_config.config.global {
+            if let Some(action) = action_from_name(name) {
+                for key_str in value.keys() {
+                    let (is_prefix, combo) = parse_key_string(key_str);
+                    if is_prefix {
+                        // Global bindings should not use prefix syntax
+                        eprintln!("warning: global binding '{name}' uses prefix syntax '{key_str}'; ignoring");
+                        continue;
+                    }
+                    keymap.bind("global", combo, action.clone());
+                }
+            }
+        }
+
+        // ── Custom command bindings from [[keys.command]] config ──
+        for cmd_cfg in &app_config.config.commands {
+            let action = WmAction::SpawnCommand {
+                command: cmd_cfg.command.clone(),
+            };
+            let (is_prefix, combo) = parse_key_string(&cmd_cfg.key);
+            let mode = if is_prefix { "normal" } else { "global" };
+            keymap.bind(mode, combo, action);
         }
 
         Self {
@@ -798,6 +837,14 @@ impl ApplicationHandler for HecaApp {
                             return;
                         }
 
+                        // Check global (non-prefix) keybindings before forwarding to terminal.
+                        // These use modifiers (Alt, Super, F-keys) to avoid stealing typing.
+                        let global_action = self.keymap.resolve("global", &event_combo).cloned();
+                        if let Some(act) = global_action {
+                            self.registry.execute(&act, state);
+                            return;
+                        }
+
                         // Forward key to focused pane's backend (terminal input)
                         if let Some(pane_id) = state.focused_pane
                             && let Some(backend) = state.backends.get_mut(&pane_id) {
@@ -1357,6 +1404,7 @@ pub fn build_registry() -> actions::ActionRegistry {
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
+    registry.register(&WmAction::SpawnCommand { command: String::new() }, handle_spawn_command);
 
     registry
 }

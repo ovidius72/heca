@@ -91,6 +91,9 @@ pub enum WmAction {
 
     // ── System ──
     CommandPalette,
+
+    // ── External commands ──
+    SpawnCommand { command: String },
 }
 
 /// Return the discriminant of a `WmAction`.
@@ -105,7 +108,7 @@ pub fn action_discriminant(action: &WmAction) -> std::mem::Discriminant<WmAction
 /// Map a config key name to its unit `WmAction` variant.
 /// Parameterized variants are not reachable from config — they are
 /// constructed programmatically (RPC, mouse handlers, command palette).
-fn action_from_name(name: &str) -> Option<WmAction> {
+pub fn action_from_name(name: &str) -> Option<WmAction> {
     match name {
         "focus_left" => Some(WmAction::FocusLeft),
         "focus_right" => Some(WmAction::FocusRight),
@@ -195,7 +198,8 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ResizeTo { .. }
         | WmAction::FloatAt { .. }
         | WmAction::ClosePaneById { .. }
-        | WmAction::RenameTarget { .. } => 6,
+        | WmAction::RenameTarget { .. }
+        | WmAction::SpawnCommand { .. } => 6,
     }
 }
 

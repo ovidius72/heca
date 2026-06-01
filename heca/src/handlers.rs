@@ -790,3 +790,17 @@ pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
     eprintln!("Command palette triggered (not yet implemented)");
     state.needs_redraw = true;
 }
+
+// ── External commands ──
+
+pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
+    let WmAction::SpawnCommand { command } = action else { return };
+    // Create a new pane with the command as its title.
+    // In the future this will spawn a real PTY via portable-pty.
+    let next_id = state.session.next_id();
+    let pane = LayoutPane::new(PaneId(next_id), command.clone());
+    state.session.add_pane(pane, None, true);
+    state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+    sync_focus(state);
+    state.needs_redraw = true;
+}

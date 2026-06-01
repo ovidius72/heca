@@ -272,6 +272,24 @@ impl BindingValue {
 pub type KeybindingMap = HashMap<String, BindingValue>;
 
 /// Root configuration struct loaded from `config.toml`.
+/// A command that can be bound to a key.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CommandKeybindConfig {
+    /// Key that runs the command. Use `prefix+g` for prefix mode or a
+    /// modified key like `alt+1` for direct mode.
+    pub key: String,
+    /// Command to execute.
+    pub command: String,
+    /// Where to run the command. `"pane"` creates a new pane.
+    /// `"shell"` runs in the background (not yet supported).
+    #[serde(default = "default_command_type")]
+    pub command_type: String,
+}
+
+fn default_command_type() -> String {
+    "pane".to_string()
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub theme: String,
@@ -279,6 +297,14 @@ pub struct Config {
     pub general: GeneralConfig,
     #[serde(default)]
     pub keybindings: KeybindingMap,
+    /// Global (non-prefix) keybindings. These trigger directly in Normal mode
+    /// without requiring the prefix key. Use modifiers (Alt, Super, F-keys)
+    /// to avoid stealing typing from terminal apps.
+    #[serde(default)]
+    pub global: KeybindingMap,
+    /// Custom command keybindings. Each entry binds a key to a shell command.
+    #[serde(default)]
+    pub commands: Vec<CommandKeybindConfig>,
 }
 
 impl Default for Config {
@@ -356,6 +382,8 @@ impl Default for Config {
             theme: "mocha".to_string(),
             general: GeneralConfig::default(),
             keybindings,
+            global: HashMap::new(),
+            commands: Vec::new(),
         }
     }
 }
