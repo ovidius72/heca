@@ -27,30 +27,6 @@ pub enum RenameTarget {
 
 
 
-/// State for interactive drag-and-drop of panes.
-#[derive(Clone, Debug, PartialEq)]
-pub enum DragState {
-    None,
-    /// Interactive move: starting (rubberband, pane still in layout).
-    InteractiveMoveStarting {
-        pane_id: u64,
-        start_mouse: (f32, f32),
-        threshold_sq: f32,
-    },
-    /// Interactive move: moving (pane detached, follows pointer).
-    InteractiveMove {
-        pane_id: u64,
-        offset: (f32, f32),      // pointer - pane top-left (in viewport space)
-    },
-}
-
-/// A pane temporarily removed from the layout for interactive move.
-pub struct DetachedPane {
-    pub pane: heca_core::layout::column::Pane,
-    pub size: heca_core::layout::types::Size,
-    pub render_pos: heca_core::layout::types::Point,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -58,7 +34,8 @@ pub enum InputMode {
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
     PaneSelect { candidates: Vec<(char, u64)> },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
-    PaneSwap { candidates: Vec<(char, u64)> },
+    /// `focus_after` determines whether focus follows the swapped pane.
+    PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
     /// Text input mode for renaming workspaces / panes.
@@ -66,12 +43,18 @@ pub enum InputMode {
         target: RenameTarget,
         buffer: String,
     },
+    /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
+    /// `sequence` holds the keys pressed so far (after prefix).
+    Chord { sequence: Vec<String> },
+    /// Custom mode (e.g. resize mode). Stay in mode until Esc.
+    /// `name` is the mode identifier from config.
+    Mode { name: String },
 }
 
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, u64)]> {
         match self {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates } => Some(candidates),
+            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates, .. } => Some(candidates),
             _ => None,
         }
     }
@@ -114,20 +97,15 @@ pub struct AppState {
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
     pub last_visited_pane_per_ws: Vec<Option<u64>>,
-    /// When true, PaneSwap mode should focus the target pane after swapping.
-    pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
-    /// Last frame time (for smooth time-based edge scroll).
-    pub last_frame_time: Option<std::time::Instant>,
-    /// Detached pane during interactive move.
-    pub detached_pane: Option<DetachedPane>,
-    /// Current insert hint for interactive move.
-    pub insert_hint: Option<heca_core::layout::types::InsertPosition>,
-    /// Interactive move drag state.
-    pub drag_state: DragState,
+    /// The configured prefix key combo (e.g. Ctrl+b).
+    pub prefix_combo: crate::keymap::KeyCombo,
+    /// Set to true when the user requests a config reload (e.g. via keybinding).
+    /// The app checks this in about_to_wait and rebuilds keymaps/settings.
+    pub pending_reload: bool,
 }
 
 #[cfg(test)]
@@ -149,7 +127,7 @@ mod tests {
             Some(cands.as_slice())
         );
         assert_eq!(
-            InputMode::PaneSwap { candidates: cands.clone() }.candidates(),
+            InputMode::PaneSwap { candidates: cands.clone(), focus_after: false }.candidates(),
             Some(cands.as_slice())
         );
     }
