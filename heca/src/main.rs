@@ -136,15 +136,15 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
 }
 
 /// Normalize a winit key event into a config-compatible key string.
-/// Printable characters pass through. Named keys become their canonical name
-/// (Enter, Tab, ArrowLeft, etc.) so they match config strings.
+/// Named keys become their canonical name (Enter, Tab, ArrowLeft, etc.).
+/// Character keys use the character itself. This must be checked BEFORE
+/// falling back to key_text because to_text() returns "\r" for Enter,
+/// "\t" for Tab, etc., which would never match config strings.
 fn normalize_key_text(logical_key: &winit::keyboard::Key, key_text: &str) -> String {
-    if !key_text.is_empty() {
-        return key_text.to_string();
-    }
     match logical_key {
         winit::keyboard::Key::Named(n) => format!("{:?}", n),
         winit::keyboard::Key::Character(c) => c.to_string(),
+        _ if !key_text.is_empty() => key_text.to_string(),
         _ => String::new(),
     }
 }
@@ -212,7 +212,13 @@ impl HecaApp {
         let mut keymap = keymap::KeymapRegistry::new();
 
         // ── Load bindings from [keys] flat map ──
-        for (action_name, value) in &app_config.config.keys.bindings {
+        // Merge defaults with user config: user values override defaults.
+        let default_keys = heca_config::theme::KeysConfig::default();
+        let mut merged_bindings = default_keys.bindings.clone();
+        for (k, v) in &app_config.config.keys.bindings {
+            merged_bindings.insert(k.clone(), v.clone());
+        }
+        for (action_name, value) in &merged_bindings {
             let Some(action) = action_from_name(action_name) else { continue };
             for key_str in value.keys() {
                 let trimmed = key_str.trim();
@@ -816,10 +822,17 @@ impl ApplicationHandler for HecaApp {
 
                 // Check if current key matches the configured prefix combo.
                 let is_prefix = event_combo_matches(&event_combo, &state.prefix_combo)
-                    // macOS special case: Ctrl+B may report as control char \u{2}
-                    || (state.prefix_combo.ctrl && state.prefix_combo.key.eq_ignore_ascii_case("b")
-                        && (key_text == "\u{2}"
-                            || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")));
+                    // macOS special case: Ctrl+letter may report as control character
+                    // (e.g. Ctrl+A → \u{1}, Ctrl+B → \u{2}). Match the configured prefix
+                    // key against the control-char equivalent.
+                    || (state.prefix_combo.ctrl
+                        && state.prefix_combo.key.len() == 1
+                        && state.prefix_combo.key.chars().next().unwrap().is_ascii_lowercase()
+                        && {
+                            let expected_ctrl = (state.prefix_combo.key.as_bytes()[0] - b'a' + 1) as char;
+                            key_text == String::from(expected_ctrl)
+                                || matches!(log_key, winit::keyboard::Key::Character(c) if c.starts_with(expected_ctrl))
+                        });
 
                 // Handle Rename mode separately (needs mutable buffer access)
                 if let InputMode::Rename { target, buffer } = &mut state.input_mode {

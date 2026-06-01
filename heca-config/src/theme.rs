@@ -239,7 +239,8 @@ fn default_mode_sticky() -> bool { true }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KeysConfig {
     /// The prefix key that activates prefix mode.
-    #[serde(default = "default_prefix_key")]
+    /// Accepts both `prefix` and `prefix_key` for compatibility.
+    #[serde(default = "default_prefix_key", alias = "prefix_key")]
     pub prefix: String,
     /// Flat action bindings (any key not named "prefix", "command", or "mode").
     #[serde(flatten)]
