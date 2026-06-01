@@ -543,3 +543,59 @@ fn modifier_is_held(modifiers: &ModifiersState, config: &str) -> bool {
 
 3. **How to handle multi-workspace moves?**
    - Deferred. Phase 1 targets single-workspace only. Multi-workspace would need workspace hit-testing similar to NIRI's `monitor.insert_position()`.
+
+---
+
+## Appendix: SGR Mouse Protocol (for PANE-03)
+
+### What it is
+
+SGR (`1006`) is the modern xterm mouse-tracking protocol. When an application (e.g. vim, tmux, Neovim) enables it, the terminal emulator (heca) sends escape sequences back to the application for every mouse event.
+
+### Enabling
+
+The app sends to the PTY:
+```
+ESC[?1006h   // enable SGR encoding
+ESC[?1002h   // report press + drag
+```
+
+### Event format
+
+| Event | Sequence |
+|-------|----------|
+| Press | `ESC[<button;col;rowM` |
+| Release | `ESC[<button;col;rowm` |
+| Wheel up | `ESC[<64;col;rowM` |
+| Wheel down | `ESC[<65;col;rowM` |
+
+Coordinates are **1-based** decimal ASCII. The trailing `M`/`m` distinguishes press from release.
+
+### Why SGR over older protocols
+
+| Protocol | Problem |
+|----------|---------|
+| X10 (`9`) | 6-byte binary, 223-column limit |
+| UTF-8 (`1005`) | Corrupts multi-byte sequences |
+| urxvt (`1015`) | Less widely supported |
+| **SGR (`1006`)** | Pure ASCII, unlimited coordinates, unambiguous |
+
+### heca implementation notes
+
+1. **Track mouse mode state** — When the terminal backend parses `ESC[?1006h` / `ESC[?1006l` via the existing SGR parser, set a flag `mouse_tracking: bool` and `mouse_mode: MouseMode` on the backend.
+
+2. **Translate winit → SGR** — In `heca/src/main.rs` `MouseInput` / `CursorMoved` / `MouseWheel` handlers, when the event is inside a terminal pane and that pane's backend reports `mouse_tracking == true`:
+   - Convert pixel coords to **cell coords**: `col = ((mouse_x - pane_x) / cell_w).floor() + 1`, `row = ((mouse_y - pane_y) / cell_h).floor() + 1`
+   - Build the escape sequence string
+   - Call `backend.process_input(seq.as_bytes())` — same path as keyboard
+
+3. **Cell size** — The terminal backend knows its `cell_w` / `cell_h` (currently hardcoded at 8.4×14 in the renderer; should be exposed from the backend).
+
+### Dependency ordering
+
+**SGR mouse forwarding (PANE-03) depends on TerminalBackend being live.**
+
+- FakeBackend never enables mouse mode — there's no vim/tmux inside it.
+- TerminalBackend must be active, with a real shell running inside, before SGR forwarding has any effect.
+
+Therefore: **Implement TerminalBackend switch first, then SGR mouse forwarding immediately after.**

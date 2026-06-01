@@ -1,13 +1,13 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-05-31
+> Last updated: 2026-06-01
 
 ---
 
 ## What This Is
 
-**heca** is a native, GPU-accelerated tiling workspace compositor for developers. Think tmux meets i3 meets Neovide — but rendered in a single GPU window via `wgpu` and `cosmic-text`, not in a terminal.
+**heca** is a native, GPU-accelerated tiling workspace compositor for developers. Think tmux meets NIRI meets Neovide — but rendered in a single GPU window via `wgpu` and `cosmic-text`, not in a terminal.
 
 ### Core Value
 
@@ -95,6 +95,143 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 - **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
 - **Pane letter limit:** PaneSelect/Swap modes use a-z, A-Z (52 unique labels). Sessions with >52 panes/columns fall back to sidebar navigation.
 - **Mouse:** Click on sidebar items focuses them. Click on pane content area focuses that pane.
+
+---
+
+## Mouse Interaction System
+
+heca has a fully configurable, multi-phase mouse interaction system. All mouse features are gated by `state.mouse_enabled` (set via config `general.mouse`, default `true`).
+
+### Architecture
+
+Mouse events flow through `heca/src/main.rs` in the `ApplicationHandler::window_event` match on `WindowEvent`:
+
+```
+CursorMoved  →  rubberband / drag update / focus-follows-mouse / insert-hint
+MouseInput   →  sidebar hit-test / drag start / drag drop / click-to-focus
+MouseWheel   →  (not yet implemented — see PANE-03)
+```
+
+### Phase 0: Focus Follows Mouse
+
+When enabled (`general.focus_follows_mouse`, default `true`), hovering over a different pane automatically focuses it — no click required.
+
+**Implementation:**
+- In `CursorMoved`, after drag-state handling, calls `hit_test_pane(state, mouse_pos)`.
+- Only activates when:
+  - `drag_state == DragState::None` (not currently dragging)
+  - `mouse_enabled == true`
+  - `input_mode` is `Normal` or `Prefix` (disabled during `PaneSelect`, `PaneSwap`, `SidebarNav`, `Rename`)
+  - Pointer is inside the **content area** (not over sidebar/chrome)
+  - The hovered pane is different from `state.focused_pane`
+- Calls `focus_pane_by_id(state, pane_id)` which compensates `view_offset` so the layout stays visually fixed.
+
+### Phase 1: Click to Focus
+
+A normal left-click (no modifier held) inside the content area focuses the clicked pane.
+
+**Implementation:**
+- In `MouseInput` (Left + Pressed), if no modifier is held:
+  - Calls `hit_test_pane(state, mouse_pos)`
+  - If a pane is hit, calls `focus_pane_by_id(state, pane_id)`
+- Floating panes are hit-tested **before** scrolling panes since they render on top.
+- Hit-test uses **exclusive bounds** (`<` not `<=`) so border points don't belong to two panes.
+
+### Phase 2: Interactive Move (Meta+Click Drag-and-Drop)
+
+Move a pane between columns or workspaces by dragging it with a modifier key held.
+
+**Config:**
+- `general.interactive_move_modifier`: `Super` (default), `Alt`, `Ctrl`, `Shift`
+- Stored as strongly-typed `ModifierKey` enum (not bare String) for zero-cost dispatch and parse-time validation.
+
+**Two-phase state machine (`DragState`):**
+
+```
+DragState::None
+    ↓  Left-click + modifier held on pane
+DragState::InteractiveMoveStarting { pane_id, start_mouse, threshold_sq }
+    │
+    │  CursorMoved:
+    │    • Compute dx, dy from start_mouse
+    │    • Apply rubberband: factor = rubberband(sq_dist / threshold_sq)
+    │    • Set pane.interactive_move_offset = Point::new(dx * factor, dy * factor)
+    │    • If sq_dist > threshold_sq → transition to Moving
+    │
+    ↓  transition_to_moving()
+DragState::InteractiveMove { pane_id, offset }
+    │
+    │  CursorMoved:
+    │    • Update detached_pane.render_pos = mouse_pos - pane_area - offset
+    │    • Compute insert_hint from space coordinates
+    │
+    │  about_to_wait:
+    │    • Edge scroll active during drag (wider trigger, faster speed)
+    │
+    ↓  Left-click release
+    • drop_pane() with insert_hint, or
+    • cancel_interactive_move() if still in Starting phase
+```
+
+**Rubberband formula** (exact from NIRI `src/rubber_band.rs`):
+```rust
+fn rubberband(x: f32) -> f32 {
+    let c = 1.0;
+    let d = 0.5;
+    (1.0 - (1.0 / (x * c / d + 1.0))) * d
+}
+```
+
+**Drop behavior:**
+- `InsertPosition::NewColumn(col_idx)` — creates a new column with the pane
+- `InsertPosition::InColumn { col_idx, pane_idx }` — inserts pane into existing column
+- Uses **fresh ColumnId** (`ColumnId(state.session.next_id())`) to avoid ID collisions
+- Animates the pane from its detached position to the new layout position via `animate_move_from()`
+
+**Key invariant:** NIRI Principle 1 — removing a pane from a column does NOT affect widths of other columns. Only remove the column entirely if it becomes empty.
+
+### Phase 3: Edge Scroll
+
+Auto-scroll the horizontal layout when the pointer is near the left/right edge of the content area. Works both during drag and on plain hover.
+
+**Config:**
+- `general.auto_scroll_edge`: `bool` (default `true`)
+
+**Dual-mode design:**
+
+| Mode | Trigger | Speed | Inset | Content restriction |
+|------|---------|-------|-------|---------------------|
+| **Hover** | 80px | 300 px/sec | 8px | Must be inside content area |
+| **Drag** | 150px | 1000 px/sec | 0px | Anywhere on screen |
+
+**Content bounds clamping:**
+```rust
+min_view_pos = -padding;
+max_view_pos = (total_content_width - viewport_width + padding).max(min_view_pos);
+view_pos = proposed_view_pos.clamp(min_view_pos, max_view_pos);
+```
+- Stops scrolling at first/last column
+- No scrolling when all content fits (`max_view_pos == min_view_pos`)
+
+**Frame-rate independence:** Runs in `about_to_wait` (not just `CursorMoved`) with `dt`-based delta for smooth scrolling even when the mouse is stationary.
+
+### Rendering
+
+| Element | When | Style |
+|---------|------|-------|
+| Detached pane | During `InteractiveMove` | Rendered at `detached_pane.render_pos` with 3× accent border |
+| Insert hint | During `InteractiveMove` | Translucent rectangle: 24px × 60% height for new column, full-width × 24px for in-column |
+| Pane name | Always | Large centered label (distinct colors) so you can see what's moving |
+
+### Files
+
+| File | Role |
+|------|------|
+| `heca/src/main.rs` | Event handling (`CursorMoved`, `MouseInput`), `hit_test_pane()`, `dnd_edge_scroll()`, `transition_to_moving()`, `drop_pane()`, `cancel_interactive_move()`, `compute_insert_hint_rect()` |
+| `heca/src/app_state.rs` | `DragState`, `DetachedPane` |
+| `heca-core/src/layout/scrolling.rs` | `insert_position()` — computes drop target from pointer coordinates |
+| `heca-core/src/layout/column.rs` | `Pane::interactive_move_offset` |
+| `heca-config/src/theme.rs` | `ModifierKey` enum, `auto_scroll_edge`, `interactive_move_modifier` |
 
 ---
 
