@@ -213,6 +213,22 @@ impl Theme {
     }
 }
 
+/// Modifier keys that can be used for mouse-driven interactive actions.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ModifierKey {
+    /// Super / Command / Windows key.
+    #[default]
+    Super,
+    /// Alt / Option key.
+    Alt,
+    /// Control key (also accepts "Control" in config).
+    #[serde(alias = "Control")]
+    Ctrl,
+    /// Shift key.
+    Shift,
+}
+
 /// General application configuration.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GeneralConfig {
@@ -222,6 +238,12 @@ pub struct GeneralConfig {
     pub mouse: bool,
     #[serde(default = "default_focus_follows_mouse")]
     pub focus_follows_mouse: bool,
+    /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
+    #[serde(default = "default_auto_scroll_edge")]
+    pub auto_scroll_edge: bool,
+    /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
+    #[serde(default)]
+    pub interactive_move_modifier: ModifierKey,
 }
 
 fn default_mouse() -> bool {
@@ -232,6 +254,10 @@ fn default_focus_follows_mouse() -> bool {
     true
 }
 
+fn default_auto_scroll_edge() -> bool {
+    true
+}
+
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
@@ -239,6 +265,8 @@ impl Default for GeneralConfig {
             window_height: 800,
             mouse: true,
             focus_follows_mouse: true,
+            auto_scroll_edge: true,
+            interactive_move_modifier: ModifierKey::default(),
         }
     }
 }

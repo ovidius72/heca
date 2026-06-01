@@ -1057,7 +1057,12 @@ impl ApplicationHandler for HecaApp {
                     }
 
                     // ── Pane content area hit test ──
-                    let meta_held = state.modifiers.super_key();
+                    let meta_held = match self.app_config.config.general.interactive_move_modifier {
+                        heca_config::theme::ModifierKey::Alt => state.modifiers.alt_key(),
+                        heca_config::theme::ModifierKey::Ctrl => state.modifiers.control_key(),
+                        heca_config::theme::ModifierKey::Shift => state.modifiers.shift_key(),
+                        heca_config::theme::ModifierKey::Super => state.modifiers.super_key(),
+                    };
                     if meta_held {
                         if let Some(pane_id) = hit_test_pane(state, mouse_pos) {
                             state.drag_state = DragState::InteractiveMoveStarting {
@@ -1113,11 +1118,16 @@ impl ApplicationHandler for HecaApp {
             state.last_frame_time = Some(now);
 
             // Edge scroll when hovering near content edges (works both during drag and on hover).
-            let pane_area = compute_pane_area(state);
-            let edge_scroll_active = dnd_edge_scroll(state, pane_area, dt);
-            if edge_scroll_active {
-                state.needs_redraw = true;
-            }
+            let edge_scroll_active = if self.app_config.config.general.auto_scroll_edge {
+                let pane_area = compute_pane_area(state);
+                let active = dnd_edge_scroll(state, pane_area, dt);
+                if active {
+                    state.needs_redraw = true;
+                }
+                active
+            } else {
+                false
+            };
 
             // Poll backends (fake backends return false)
             let mut backend_has_data = false;
