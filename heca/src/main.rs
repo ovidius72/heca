@@ -982,11 +982,19 @@ impl ApplicationHandler for HecaApp {
                     dnd_edge_scroll(state, mouse_pos, pane_area);
                 }
 
-                // Focus follows mouse (only when not dragging)
+                // Focus follows mouse (only when not dragging, and mouse is over
+                // the actual pane content area — not the sidebar/chrome)
+                let pane_area = compute_pane_area(state);
+                let mouse_in_content = mouse_pos.0 >= pane_area.x
+                    && mouse_pos.0 <= pane_area.x + pane_area.w
+                    && mouse_pos.1 >= pane_area.y
+                    && mouse_pos.1 <= pane_area.y + pane_area.h;
+
                 if matches!(state.drag_state, DragState::None)
                     && state.mouse_enabled
                     && self.app_config.config.general.focus_follows_mouse
                     && matches!(state.input_mode, InputMode::Normal | InputMode::Prefix)
+                    && mouse_in_content
                     && let Some(pane_id) = hit_test_pane(state, mouse_pos)
                     && state.focused_pane != Some(pane_id)
                 {
@@ -1141,16 +1149,30 @@ fn rubberband(x: f32) -> f32 {
 fn dnd_edge_scroll(state: &mut AppState, mouse_pos: (f32, f32), pane_area: CoreRect) {
     let trigger = 80.0f32;
     let speed = 120.0f32; // px/sec — slower, more controlled feel
+    let inset = 8.0f32;   // small buffer inside the content edge
 
+    // Only scroll when the pointer is actually inside the content area.
+    // This prevents scrolling when hovering over the sidebars or chrome.
     let mouse_x_in_content = mouse_pos.0 - pane_area.x;
+    let mouse_y_in_content = mouse_pos.1 - pane_area.y;
+    if mouse_x_in_content < 0.0
+        || mouse_x_in_content > pane_area.w
+        || mouse_y_in_content < 0.0
+        || mouse_y_in_content > pane_area.h
+    {
+        return;
+    }
+
     let content_w = pane_area.w;
 
-    let delta = if mouse_x_in_content < trigger {
+    // Apply inset so the trigger zone starts slightly inside the content area,
+    // not right at the chrome boundary.
+    let delta = if mouse_x_in_content < trigger + inset {
         // Near left edge: scroll right (negative view_offset delta)
-        -(trigger - mouse_x_in_content)
-    } else if content_w - mouse_x_in_content < trigger {
+        -(trigger + inset - mouse_x_in_content)
+    } else if content_w - mouse_x_in_content < trigger + inset {
         // Near right edge: scroll left (positive view_offset delta)
-        trigger - (content_w - mouse_x_in_content)
+        trigger + inset - (content_w - mouse_x_in_content)
     } else {
         0.0
     };
