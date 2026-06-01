@@ -120,6 +120,8 @@ pub struct AppState {
     pub mouse_enabled: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
+    /// Last frame time (for smooth time-based edge scroll).
+    pub last_frame_time: Option<std::time::Instant>,
     /// Detached pane during interactive move.
     pub detached_pane: Option<DetachedPane>,
     /// Current insert hint for interactive move.

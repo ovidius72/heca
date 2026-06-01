@@ -302,6 +302,7 @@ impl HecaApp {
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.general.mouse,
             prefix_entered_at: None,
+            last_frame_time: None,
             detached_pane: None,
             insert_hint: None,
             drag_state: app_state::DragState::None,
@@ -977,9 +978,6 @@ impl ApplicationHandler for HecaApp {
                         );
                         state.insert_hint = Some(ws.scrolling.insert_position(space_pos));
                     }
-
-                    // Edge scroll: auto-scroll layout when dragging near viewport edges
-                    dnd_edge_scroll(state, mouse_pos, pane_area);
                 }
 
                 // Focus follows mouse (only when not dragging, and mouse is over
@@ -1109,6 +1107,18 @@ impl ApplicationHandler for HecaApp {
             // Advance session animations.
             state.session.advance_animations();
 
+            // Compute elapsed time since last frame (for smooth edge scroll).
+            let now = Instant::now();
+            let dt = state.last_frame_time.map(|t| (now - t).as_secs_f32()).unwrap_or(1.0 / 60.0);
+            state.last_frame_time = Some(now);
+
+            // Edge scroll when hovering near content edges (works both during drag and on hover).
+            let pane_area = compute_pane_area(state);
+            let edge_scroll_active = dnd_edge_scroll(state, pane_area, dt);
+            if edge_scroll_active {
+                state.needs_redraw = true;
+            }
+
             // Poll backends (fake backends return false)
             let mut backend_has_data = false;
             for backend in state.backends.values_mut() {
@@ -1122,8 +1132,8 @@ impl ApplicationHandler for HecaApp {
                 state.window.request_redraw();
             }
 
-            // Use WaitUntil during animations (60fps cap), Wait when idle (0% CPU).
-            if state.session.are_animations_ongoing() {
+            // Use WaitUntil during animations or edge scroll (60fps cap), Wait when idle (0% CPU).
+            if state.session.are_animations_ongoing() || edge_scroll_active {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(
                     Instant::now() + Duration::from_millis(16)
                 ));
@@ -1141,37 +1151,39 @@ fn rubberband(x: f32) -> f32 {
     (1.0 - (1.0 / (x * c / d + 1.0))) * d
 }
 
-/// DnD edge scroll: auto-scroll the layout when the pointer is near the
-/// left/right edge of the content area during an interactive pane move.
+/// Edge scroll: auto-scroll the layout when the pointer is near the left/right
+/// edge of the content area. Works both during drag and on plain hover.
 ///
-/// Trigger zone: 80 px from edge. Speed: 400 px/sec (approx 6.7 px/frame @ 60fps).
-/// The delta is normalized by how deep the pointer is into the trigger zone.
-fn dnd_edge_scroll(state: &mut AppState, mouse_pos: (f32, f32), pane_area: CoreRect) {
-    let trigger = 80.0f32;
-    let speed = 120.0f32; // px/sec — slower, more controlled feel
-    let inset = 8.0f32;   // small buffer inside the content edge
+/// Returns `true` if a scroll was applied this frame.
+fn dnd_edge_scroll(state: &mut AppState, pane_area: CoreRect, dt: f32) -> bool {
+    let is_dragging = !matches!(state.drag_state, DragState::None);
 
-    // Only scroll when the pointer is actually inside the content area.
-    // This prevents scrolling when hovering over the sidebars or chrome.
+    let (trigger, speed, inset) = if is_dragging {
+        (150.0f32, 500.0f32, 0.0f32) // dragging: wider trigger, faster, no inset
+    } else {
+        (80.0f32, 300.0f32, 8.0f32)  // hover: tighter, slower, inset
+    };
+
+    let mouse_pos = state.mouse_pos;
     let mouse_x_in_content = mouse_pos.0 - pane_area.x;
     let mouse_y_in_content = mouse_pos.1 - pane_area.y;
-    if mouse_x_in_content < 0.0
-        || mouse_x_in_content > pane_area.w
-        || mouse_y_in_content < 0.0
-        || mouse_y_in_content > pane_area.h
+
+    // Hover mode: only scroll when pointer is inside the content area.
+    // Drag mode: allow pointer anywhere on screen (even over sidebars).
+    if !is_dragging
+        && (mouse_x_in_content < 0.0
+            || mouse_x_in_content > pane_area.w
+            || mouse_y_in_content < 0.0
+            || mouse_y_in_content > pane_area.h)
     {
-        return;
+        return false;
     }
 
     let content_w = pane_area.w;
 
-    // Apply inset so the trigger zone starts slightly inside the content area,
-    // not right at the chrome boundary.
     let delta = if mouse_x_in_content < trigger + inset {
-        // Near left edge: scroll right (negative view_offset delta)
         -(trigger + inset - mouse_x_in_content)
     } else if content_w - mouse_x_in_content < trigger + inset {
-        // Near right edge: scroll left (positive view_offset delta)
         trigger + inset - (content_w - mouse_x_in_content)
     } else {
         0.0
@@ -1179,12 +1191,15 @@ fn dnd_edge_scroll(state: &mut AppState, mouse_pos: (f32, f32), pane_area: CoreR
 
     if delta != 0.0 {
         let normalized = (delta.abs() / trigger).clamp(0.0, 1.0);
-        let scroll_per_frame = normalized * speed * (1.0 / 60.0); // per frame at 60fps
-        let signed = scroll_per_frame.copysign(delta);
+        let scroll = normalized * speed * dt;
+        let signed = scroll.copysign(delta);
 
         if let Some(ws) = state.session.active_workspace_mut() {
             ws.scrolling.view_offset.offset(signed as f64);
         }
+        true
+    } else {
+        false
     }
 }
 
