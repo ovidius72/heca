@@ -1,6 +1,3 @@
-use std::collections::HashMap;
-use heca_config::theme::AppConfig;
-
 /// Target for resize actions.
 // Variants are constructed in tests and will be used by the RPC parser in Phase 4.
 #[allow(dead_code)]
@@ -156,6 +153,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
 }
 
 /// Binding priority: lower = checked first. Focus wins over resize on conflicts.
+#[cfg(test)]
 fn action_priority(action: &WmAction) -> u8 {
     match action {
         // Navigation (highest priority)
@@ -203,78 +201,22 @@ fn action_priority(action: &WmAction) -> u8 {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct Binding {
-    pub(crate) action: WmAction,
-    pub(crate) key: String,
-    pub(crate) ctrl: bool,
-    pub(crate) shift: bool,
-}
-
-pub struct KeyBindings {
-    pub(crate) bindings: Vec<Binding>,
-    /// Mode-specific bindings: mode_name -> Vec<Binding>
-    /// Each mode has its own keybinding set, resolved by resolve_mode().
-    pub(crate) mode_bindings: HashMap<String, Vec<Binding>>,
-}
-
-impl KeyBindings {
-    pub fn load(app_config: &AppConfig) -> Self {
-        let mut bindings = Vec::new();
-        for (name, value) in &app_config.config.keybindings {
-            if let Some(action) = action_from_name(name) {
-                for key_str in value.keys() {
-                    let (ctrl, shift, key) = Self::parse_key(key_str);
-                    bindings.push(Binding { action: action.clone(), key, ctrl, shift });
-                }
-            }
+/// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
+/// Preserves key case exactly; shift ONLY from explicit "Shift+" modifier.
+#[cfg(test)]
+fn parse_key(s: &str) -> (bool, bool, String) {
+    let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
+    let mut ctrl = false;
+    let mut shift = false;
+    let mut key = String::new();
+    for part in &parts {
+        match part.to_lowercase().as_str() {
+            "ctrl" => ctrl = true,
+            "shift" => shift = true,
+            _ => key = part.to_string(),
         }
-        // Sort by priority so focus is checked before resize on conflicts
-        bindings.sort_by_key(|b| action_priority(&b.action));
-
-        // ── Load mode-specific bindings ──
-        let mut mode_bindings = HashMap::new();
-        // Sidebar mode: single-key bindings (no prefix required within the mode)
-        let sidebar_entries: Vec<(&str, Vec<&str>)> = vec![
-            ("sidebar_down", vec!["j"]),
-            ("sidebar_up", vec!["k"]),
-            ("sidebar_left_nav", vec!["h"]),
-            ("sidebar_right_nav", vec!["l", "Enter"]),
-            ("sidebar_expand_toggle", vec!["Tab", "Space"]),
-            ("sidebar_left", vec!["b"]),
-        ];
-        let mut sidebar_bindings = Vec::new();
-        for (name, keys) in sidebar_entries {
-            if let Some(action) = action_from_name(name) {
-                for key_str in keys {
-                    let (ctrl, shift, key) = Self::parse_key(key_str);
-                    sidebar_bindings.push(Binding { action: action.clone(), key, ctrl, shift });
-                }
-            }
-        }
-        mode_bindings.insert("sidebar".to_string(), sidebar_bindings);
-
-        Self { bindings, mode_bindings }
     }
-
-    /// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
-    /// Preserves key case exactly; shift ONLY from explicit "Shift+" modifier.
-    fn parse_key(s: &str) -> (bool, bool, String) {
-        let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
-        let mut ctrl = false;
-        let mut shift = false;
-        let mut key = String::new();
-        for part in &parts {
-            match part.to_lowercase().as_str() {
-                "ctrl" => ctrl = true,
-                "shift" => shift = true,
-                _ => key = part.to_string(),
-            }
-        }
-        (ctrl, shift, key)
-    }
-
-
+    (ctrl, shift, key)
 }
 
 #[cfg(test)]
@@ -297,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_parse_key_simple() {
-        let (ctrl, shift, key) = KeyBindings::parse_key("h");
+        let (ctrl, shift, key) = parse_key("h");
         assert!(!ctrl);
         assert!(!shift);
         assert_eq!(key, "h");
@@ -305,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_parse_key_with_modifiers() {
-        let (ctrl, shift, key) = KeyBindings::parse_key("Ctrl+Shift+l");
+        let (ctrl, shift, key) = parse_key("Ctrl+Shift+l");
         assert!(ctrl);
         assert!(shift);
         assert_eq!(key, "l");
@@ -313,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_parse_key_shift_only() {
-        let (ctrl, shift, key) = KeyBindings::parse_key("Shift+w");
+        let (ctrl, shift, key) = parse_key("Shift+w");
         assert!(!ctrl);
         assert!(shift);
         assert_eq!(key, "w");

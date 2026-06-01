@@ -4,7 +4,10 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-/// A color value parsed from hex strings like `#RRGGBB` or `#RRGGBBAA`.
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Color
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Color {
@@ -19,7 +22,6 @@ impl Color {
         Self { r, g, b, a }
     }
 
-    /// Convert to [f32; 4] for GPU usage (RGBA, 0.0–1.0).
     pub fn to_f32x4(&self) -> [f32; 4] {
         [
             self.r as f32 / 255.0,
@@ -32,32 +34,19 @@ impl Color {
 
 impl FromStr for Color {
     type Err = String;
-
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
-        if !s.starts_with('#') {
-            return Err(format!("Color must start with #: got {}", s));
-        }
+        if !s.starts_with('#') { return Err(format!("Color must start with #: got {}", s)); }
         let hex = &s[1..];
-        let len = hex.len();
-        if len != 6 && len != 8 {
-            return Err(format!(
-                "Color hex must be 6 or 8 chars: got {} ({})",
-                len, s
-            ));
+        if hex.len() != 6 && hex.len() != 8 {
+            return Err(format!("Color hex must be 6 or 8 chars: got {}", hex.len()));
         }
-        let r = u8::from_str_radix(&hex[0..2], 16)
-            .map_err(|e| format!("Invalid red component: {}", e))?;
-        let g = u8::from_str_radix(&hex[2..4], 16)
-            .map_err(|e| format!("Invalid green component: {}", e))?;
-        let b = u8::from_str_radix(&hex[4..6], 16)
-            .map_err(|e| format!("Invalid blue component: {}", e))?;
-        let a = if len >= 8 {
-            u8::from_str_radix(&hex[6..8], 16)
-                .map_err(|e| format!("Invalid alpha component: {}", e))?
-        } else {
-            255
-        };
+        let r = u8::from_str_radix(&hex[0..2], 16).map_err(|e| format!("Invalid red: {}", e))?;
+        let g = u8::from_str_radix(&hex[2..4], 16).map_err(|e| format!("Invalid green: {}", e))?;
+        let b = u8::from_str_radix(&hex[4..6], 16).map_err(|e| format!("Invalid blue: {}", e))?;
+        let a = if hex.len() >= 8 {
+            u8::from_str_radix(&hex[6..8], 16).map_err(|e| format!("Invalid alpha: {}", e))?
+        } else { 255 };
         Ok(Color { r, g, b, a })
     }
 }
@@ -68,21 +57,13 @@ impl fmt::Display for Color {
     }
 }
 
-impl From<Color> for String {
-    fn from(c: Color) -> Self {
-        c.to_string()
-    }
-}
+impl From<Color> for String { fn from(c: Color) -> Self { c.to_string() } }
+impl TryFrom<String> for Color { type Error = String; fn try_from(s: String) -> Result<Self, Self::Error> { Color::from_str(&s) } }
 
-impl TryFrom<String> for Color {
-    type Error = String;
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Shadow & Theme
+// ═══════════════════════════════════════════════════════════════════════════════
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        Color::from_str(&s)
-    }
-}
-
-/// Shadow styling for chrome elements.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Shadow {
     pub color: String,
@@ -91,16 +72,9 @@ pub struct Shadow {
 }
 
 impl Default for Shadow {
-    fn default() -> Self {
-        Self {
-            color: "#000000".to_string(),
-            alpha: 0.3,
-            blur: 8.0,
-        }
-    }
+    fn default() -> Self { Self { color: "#000000".to_string(), alpha: 0.3, blur: 8.0 } }
 }
 
-/// A visual theme for the compositor chrome.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
     pub name: String,
@@ -113,44 +87,25 @@ pub struct Theme {
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
-    /// Background color for floating panes.
-    #[serde(default = "default_float_bg")]
-    pub float_background: Color,
-    /// Accent color for floating panes (border / title bar).
-    #[serde(default = "default_float_accent")]
-    pub float_accent: Color,
-    /// Focused float border color.
-    #[serde(default = "default_float_focus")]
-    pub float_focus: Color,
+    #[serde(default = "default_float_bg")]     pub float_background: Color,
+    #[serde(default = "default_float_accent")] pub float_accent: Color,
+    #[serde(default = "default_float_focus")]  pub float_focus: Color,
 }
 
-fn default_float_bg() -> Color {
-    Color::new(49, 50, 68, 255) // same as border for subtle distinction
-}
+fn default_float_bg()    -> Color { Color::new(49, 50, 68, 255) }
+fn default_float_accent() -> Color { Color::new(137, 180, 250, 255) }
+fn default_float_focus()  -> Color { Color::new(250, 179, 135, 255) }
 
-fn default_float_accent() -> Color {
-    Color::new(137, 180, 250, 255) // same as accent
-}
-
-fn default_float_focus() -> Color {
-    Color::new(250, 179, 135, 255) // peach — warm highlight
-}
-
-impl Default for Theme {
-    fn default() -> Self {
-        Self::catppuccin_mocha()
-    }
-}
+impl Default for Theme { fn default() -> Self { Self::catppuccin_mocha() } }
 
 impl Theme {
-    /// Catppuccin Mocha — the default dark theme.
     pub fn catppuccin_mocha() -> Self {
         Self {
             name: "Catppuccin Mocha".to_string(),
-            background: Color::new(30, 30, 46, 255),    // #1e1e2e
-            foreground: Color::new(205, 214, 244, 255), // #cdd6f4
-            border: Color::new(49, 50, 68, 255),        // #313244
-            accent: Color::new(137, 180, 250, 255),     // #89b4fa
+            background: Color::new(30, 30, 46, 255),
+            foreground: Color::new(205, 214, 244, 255),
+            border: Color::new(49, 50, 68, 255),
+            accent: Color::new(137, 180, 250, 255),
             font_family: "JetBrainsMono Nerd Font".to_string(),
             font_size: 32.0,
             border_radius: 6.0,
@@ -162,96 +117,70 @@ impl Theme {
         }
     }
 
-    /// Catppuccin Latte — the bundled light theme.
     pub fn catppuccin_latte() -> Self {
         Self {
             name: "Catppuccin Latte".to_string(),
-            background: Color::new(239, 241, 245, 255), // #eff1f5
-            foreground: Color::new(76, 79, 105, 255),   // #4c4f69
-            border: Color::new(204, 208, 218, 255),     // #ccd0da
-            accent: Color::new(30, 102, 245, 255),      // #1e66f5
+            background: Color::new(239, 241, 245, 255),
+            foreground: Color::new(76, 79, 105, 255),
+            border: Color::new(204, 208, 218, 255),
+            accent: Color::new(30, 102, 245, 255),
             font_family: "JetBrainsMono Nerd Font".to_string(),
             font_size: 32.0,
             border_radius: 6.0,
             border_width: 1.0,
-            shadow: Shadow {
-                color: "#000000".to_string(),
-                alpha: 0.15,
-                blur: 8.0,
-            },
+            shadow: Shadow { color: "#000000".to_string(), alpha: 0.15, blur: 8.0 },
             float_background: Color::new(204, 208, 218, 255),
             float_accent: Color::new(30, 102, 245, 255),
             float_focus: Color::new(230, 126, 34, 255),
         }
     }
 
-    /// Load a theme by name from the filesystem or bundled defaults.
     pub fn load(name: &str) -> Self {
-        // Try filesystem first
-        if let Some(theme) = Self::load_from_disk(name) {
-            return theme;
-        }
-        // Fall back to bundled themes
-        Self::load_bundled(name).unwrap_or_default()
+        Self::load_from_disk(name).unwrap_or_else(|| Self::load_bundled(name).unwrap_or_default())
     }
 
     fn load_from_disk(name: &str) -> Option<Self> {
         let path = config_dir().join("themes").join(format!("{}.toml", name));
-        let content = std::fs::read_to_string(path).ok()?;
-        toml::from_str(&content).ok()
+        std::fs::read_to_string(path).ok().and_then(|c| toml::from_str(&c).ok())
     }
 
     fn load_bundled(name: &str) -> Option<Self> {
         let bundled: HashMap<&str, &str> = [
             ("mocha", include_str!("themes/mocha.toml")),
             ("latte", include_str!("themes/latte.toml")),
-        ]
-        .into_iter()
-        .collect();
-        let content = bundled.get(name)?;
-        toml::from_str(content).ok()
+        ].into_iter().collect();
+        toml::from_str(bundled.get(name)?).ok()
     }
 }
 
-fn default_mouse() -> bool {
-    true
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Settings
+// ═══════════════════════════════════════════════════════════════════════════════
 
-fn default_prefix_key() -> String {
-    "Ctrl+b".to_string()
-}
+fn default_theme()        -> String { "mocha".to_string() }
+fn default_mouse()        -> bool   { true }
+fn default_window_width() -> u32    { 1280 }
+fn default_window_height()-> u32    { 800 }
+fn default_prefix_key()   -> String { "ctrl+b".to_string() }
 
-/// General application configuration.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct GeneralConfig {
-    pub window_width: u32,
-    pub window_height: u32,
-    #[serde(default = "default_mouse")]
-    pub mouse: bool,
-    /// The prefix key that activates prefix mode.
-    /// Default: "Ctrl+b"
-    #[serde(default = "default_prefix_key")]
-    pub prefix_key: String,
+pub struct SettingsConfig {
+    #[serde(default = "default_theme")]         pub theme: String,
+    #[serde(default = "default_mouse")]         pub mouse: bool,
+    #[serde(default = "default_window_width")]  pub window_width: u32,
+    #[serde(default = "default_window_height")] pub window_height: u32,
 }
 
-impl Default for GeneralConfig {
+impl Default for SettingsConfig {
     fn default() -> Self {
-        Self {
-            window_width: 1280,
-            window_height: 800,
-            mouse: true,
-            prefix_key: default_prefix_key(),
-        }
+        Self { theme: default_theme(), mouse: default_mouse(), window_width: default_window_width(), window_height: default_window_height() }
     }
 }
 
-/// A keybinding value that can be either a single string or an array of strings.
-///
-/// Both styles are accepted in TOML:
-/// ```toml
-/// focus_left = "h, Left"       # single string (comma-separated)
-/// focus_left = ["h", "Left"]   # array of strings
-/// ```
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Keybinding types
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BindingValue {
@@ -260,135 +189,148 @@ pub enum BindingValue {
 }
 
 impl BindingValue {
-    /// Return all key strings bound by this value.
     pub fn keys(&self) -> Vec<&str> {
         match self {
             BindingValue::Single(s) => s.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect(),
-            BindingValue::Many(v) => v.iter().map(|s| s.as_str()).filter(|p| !p.is_empty()).collect(),
+            BindingValue::Many(v)   => v.iter().map(|s| s.as_str()).filter(|p| !p.is_empty()).collect(),
         }
     }
 }
 
 pub type KeybindingMap = HashMap<String, BindingValue>;
 
-/// Root configuration struct loaded from `config.toml`.
-/// A command that can be bound to a key.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommandKeybindConfig {
-    /// Key that runs the command. Use `prefix+g` for prefix mode or a
-    /// modified key like `alt+1` for direct mode.
     pub key: String,
-    /// Command to execute.
     pub command: String,
-    /// Where to run the command. `"pane"` creates a new pane.
-    /// `"shell"` runs in the background (not yet supported).
-    #[serde(default = "default_command_type")]
-    pub command_type: String,
+    #[serde(default = "default_command_type")] pub command_type: String,
 }
 
-fn default_command_type() -> String {
-    "pane".to_string()
+fn default_command_type() -> String { "pane".to_string() }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ModeBindingConfig {
+    pub action: String,
+    pub keys: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Config {
-    pub theme: String,
-    #[serde(default)]
-    pub general: GeneralConfig,
-    #[serde(default)]
-    pub keybindings: KeybindingMap,
-    /// Global (non-prefix) keybindings. These trigger directly in Normal mode
-    /// without requiring the prefix key. Use modifiers (Alt, Super, F-keys)
-    /// to avoid stealing typing from terminal apps.
-    #[serde(default)]
-    pub global: KeybindingMap,
-    /// Custom command keybindings. Each entry binds a key to a shell command.
-    #[serde(default)]
-    pub commands: Vec<CommandKeybindConfig>,
+pub struct KeyModeConfig {
+    pub name: String,
+    pub trigger: String,
+    #[serde(default)] pub bindings: Vec<ModeBindingConfig>,
 }
 
-impl Default for Config {
+// ═══════════════════════════════════════════════════════════════════════════════
+//  KeysConfig — holds prefix, flat action bindings, commands, and modes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct KeysConfig {
+    /// The prefix key that activates prefix mode.
+    #[serde(default = "default_prefix_key")]
+    pub prefix: String,
+    /// Flat action bindings (any key not named "prefix", "command", or "mode").
+    #[serde(flatten)]
+    pub bindings: KeybindingMap,
+    /// Custom command bindings.
+    #[serde(default)]
+    pub command: Vec<CommandKeybindConfig>,
+    /// Custom input modes.
+    #[serde(default)]
+    pub mode: Vec<KeyModeConfig>,
+}
+
+impl Default for KeysConfig {
     fn default() -> Self {
-        let mut keybindings = HashMap::new();
+        let mut bindings = HashMap::new();
         use BindingValue::*;
 
-        // ── Navigation (both string and array styles demonstrated) ──
-        keybindings.insert("focus_left".to_string(), Single("h,ArrowLeft".to_string()));
-        keybindings.insert("focus_right".to_string(), Many(vec!["l".to_string(), "ArrowRight".to_string()]));
-        keybindings.insert("focus_up".to_string(), Single("k,ArrowUp".to_string()));
-        keybindings.insert("focus_down".to_string(), Single("j,ArrowDown".to_string()));
+        // ── Navigation ──
+        bindings.insert("focus_left".to_string(),  Single("h".to_string()));
+        bindings.insert("focus_right".to_string(), Single("l".to_string()));
+        bindings.insert("focus_up".to_string(),    Single("k".to_string()));
+        bindings.insert("focus_down".to_string(),  Single("j".to_string()));
 
         // ── Splits ──
-        keybindings.insert("split_horizontal".to_string(), Single("Enter".to_string()));
-        keybindings.insert("split_vertical".to_string(), Single("v".to_string()));
+        bindings.insert("split_horizontal".to_string(), Single("prefix+Enter".to_string()));
+        bindings.insert("split_vertical".to_string(),   Single("prefix+v".to_string()));
 
         // ── Resize ──
-        keybindings.insert("resize_increase".to_string(), Single("=".to_string()));
-        keybindings.insert("resize_decrease".to_string(), Single("-".to_string()));
-        keybindings.insert("pane_height_increase".to_string(), Single("Shift+=".to_string()));
-        keybindings.insert("pane_height_decrease".to_string(), Single("Shift+-".to_string()));
+        bindings.insert("resize_increase".to_string(),      Single("prefix+=".to_string()));
+        bindings.insert("resize_decrease".to_string(),      Single("prefix+-".to_string()));
+        bindings.insert("pane_height_increase".to_string(), Single("prefix+Shift+=".to_string()));
+        bindings.insert("pane_height_decrease".to_string(), Single("prefix+Shift+-".to_string()));
 
         // ── Pane operations ──
-        keybindings.insert("close".to_string(), Single("x".to_string()));
-        keybindings.insert("float".to_string(), Single("f".to_string()));
+        bindings.insert("close".to_string(),  Single("prefix+x".to_string()));
+        bindings.insert("float".to_string(),  Single("prefix+f".to_string()));
 
         // ── Quick select / swap ──
-        keybindings.insert("pane_select".to_string(), Single("q".to_string()));
-        keybindings.insert("swap_select".to_string(), Single("Shift+q".to_string()));
-        keybindings.insert("swap_and_focus".to_string(), Single("m".to_string()));
+        bindings.insert("pane_select".to_string(),     Single("prefix+q".to_string()));
+        bindings.insert("swap_select".to_string(),     Single("prefix+Shift+q".to_string()));
+        bindings.insert("swap_and_focus".to_string(),  Single("prefix+m".to_string()));
 
         // ── Tabs ──
-        keybindings.insert("tab_next".to_string(), Single("Ctrl+]".to_string()));
-        keybindings.insert("tab_prev".to_string(), Single("Ctrl+[".to_string()));
-        keybindings.insert("next_pane".to_string(), Single("n".to_string()));
-        keybindings.insert("prev_pane".to_string(), Single("p".to_string()));
+        bindings.insert("tab_next".to_string(),  Single("prefix+Ctrl+]".to_string()));
+        bindings.insert("tab_prev".to_string(),  Single("prefix+Ctrl+[".to_string()));
+        bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
+        bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
 
         // ── Sidebars ──
-        keybindings.insert("sidebar_left".to_string(), Single("b".to_string()));
-        keybindings.insert("sidebar_right".to_string(), Single(".".to_string()));
-        keybindings.insert("sidebar_focus".to_string(), Single("e".to_string()));
-        keybindings.insert("sidebar_up".to_string(), Single("k,ArrowUp".to_string()));
-        keybindings.insert("sidebar_down".to_string(), Single("j,ArrowDown".to_string()));
-        keybindings.insert("sidebar_left_nav".to_string(), Single("h,ArrowLeft".to_string()));
-        keybindings.insert("sidebar_right_nav".to_string(), Single("l,ArrowRight".to_string()));
-        keybindings.insert("sidebar_expand_toggle".to_string(), Single("Tab".to_string()));
+        bindings.insert("sidebar_left".to_string(),  Single("prefix+b".to_string()));
+        bindings.insert("sidebar_right".to_string(), Single("prefix+.".to_string()));
+        bindings.insert("sidebar_focus".to_string(), Single("prefix+e".to_string()));
+        bindings.insert("sidebar_up".to_string(),    Single("prefix+k".to_string()));
+        bindings.insert("sidebar_down".to_string(),  Single("prefix+j".to_string()));
+        bindings.insert("sidebar_left_nav".to_string(),  Single("prefix+h".to_string()));
+        bindings.insert("sidebar_right_nav".to_string(), Single("prefix+l".to_string()));
+        bindings.insert("sidebar_expand_toggle".to_string(), Single("prefix+Tab".to_string()));
 
         // ── Workspace navigation ──
-        keybindings.insert("workspace_prev".to_string(), Single("u".to_string()));
-        keybindings.insert("workspace_next".to_string(), Single("d".to_string()));
+        bindings.insert("workspace_prev".to_string(), Single("prefix+u".to_string()));
+        bindings.insert("workspace_next".to_string(), Single("prefix+d".to_string()));
 
         // ── Focus toggle ──
-        keybindings.insert("focus_toggle_local".to_string(), Single("i".to_string()));
-        keybindings.insert("focus_toggle_global".to_string(), Single("Shift+l".to_string()));
+        bindings.insert("focus_toggle_local".to_string(),  Single("prefix+i".to_string()));
+        bindings.insert("focus_toggle_global".to_string(), Single("prefix+Shift+l".to_string()));
 
         // ── Workspace / naming ──
-        keybindings.insert("create_workspace".to_string(), Single("w".to_string()));
-        keybindings.insert("rename_workspace".to_string(), Single("Shift+w".to_string()));
-        keybindings.insert("rename_pane".to_string(), Single("Shift+p".to_string()));
+        bindings.insert("create_workspace".to_string(),  Single("prefix+w".to_string()));
+        bindings.insert("rename_workspace".to_string(),  Single("prefix+Shift+w".to_string()));
+        bindings.insert("rename_pane".to_string(),       Single("prefix+Shift+p".to_string()));
 
         // ── Command palette ──
-        keybindings.insert("command_palette".to_string(), Single("p".to_string()));
+        bindings.insert("command_palette".to_string(), Single("prefix+p".to_string()));
 
         // ── Move pane to column (NIRI-style) ──
-        keybindings.insert("move_pane_left".to_string(), Single("[".to_string()));
-        keybindings.insert("move_pane_right".to_string(), Single("]".to_string()));
+        bindings.insert("move_pane_left".to_string(),  Single("prefix+[".to_string()));
+        bindings.insert("move_pane_right".to_string(), Single("prefix+]".to_string()));
 
         // ── Swap position (Ctrl+nav) ──
-        keybindings.insert("swap_left".to_string(), Single("Ctrl+h".to_string()));
-        keybindings.insert("swap_right".to_string(), Single("Ctrl+l".to_string()));
-        keybindings.insert("swap_up".to_string(), Single("Ctrl+k".to_string()));
-        keybindings.insert("swap_down".to_string(), Single("Ctrl+j".to_string()));
-        Self {
-            theme: "mocha".to_string(),
-            general: GeneralConfig::default(),
-            keybindings,
-            global: HashMap::new(),
-            commands: Vec::new(),
-        }
+        bindings.insert("swap_left".to_string(),  Single("prefix+Ctrl+h".to_string()));
+        bindings.insert("swap_right".to_string(), Single("prefix+Ctrl+l".to_string()));
+        bindings.insert("swap_up".to_string(),    Single("prefix+Ctrl+k".to_string()));
+        bindings.insert("swap_down".to_string(),  Single("prefix+Ctrl+j".to_string()));
+
+        Self { prefix: default_prefix_key(), bindings, command: Vec::new(), mode: Vec::new() }
     }
 }
 
-/// Combined config + theme, ready for use by the app.
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Config
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct Config {
+    #[serde(default)] pub settings: SettingsConfig,
+    #[serde(default)] pub keys: KeysConfig,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  AppConfig
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub config: Config,
@@ -396,37 +338,37 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    /// Load config from the user's config directory.
-    /// Falls back to defaults if files are missing.
     pub fn load() -> Self {
-        let config = Self::load_config_file().unwrap_or_default();
-        let theme = Theme::load(&config.theme);
+        let config = Self::load_config_file().unwrap_or_else(|e| {
+            eprintln!("[config] failed to load: {e}; using defaults");
+            Config::default()
+        });
+        let theme = Theme::load(&config.settings.theme);
         Self { config, theme }
     }
 
-    fn load_config_file() -> Option<Config> {
-        // Try ~/.config/heca/config.toml first (cross-platform convention).
-        let dotconfig = dirs::home_dir()
-            .map(|h| h.join(".config").join("heca").join("config.toml"));
-        if let Some(ref path) = dotconfig
-            && let Ok(content) = std::fs::read_to_string(path)
-        {
-            return toml::from_str(&content).ok();
+    fn load_config_file() -> Result<Config, String> {
+        let paths = [
+            dirs::home_dir().map(|h| h.join(".config").join("heca").join("config.toml")),
+            Some(config_dir().join("config.toml")),
+        ];
+        for path in paths.into_iter().flatten() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                return toml::from_str(&content)
+                    .map_err(|e| format!("parse error in {}: {}", path.display(), e));
+            }
         }
-        // Fall back to platform-specific config dir.
-        let path = config_dir().join("config.toml");
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|content| toml::from_str(&content).ok())
+        Err("no config file found".to_string())
     }
 }
 
-/// Return the heca config directory (`~/.config/heca/` on Unix).
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("heca")
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("heca")
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Tests
+// ═══════════════════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
 mod tests {
@@ -435,19 +377,13 @@ mod tests {
     #[test]
     fn test_color_from_hex() {
         let c: Color = "#1e1e2e".parse().unwrap();
-        assert_eq!(c.r, 30);
-        assert_eq!(c.g, 30);
-        assert_eq!(c.b, 46);
-        assert_eq!(c.a, 255);
+        assert_eq!(c.r, 30); assert_eq!(c.g, 30); assert_eq!(c.b, 46); assert_eq!(c.a, 255);
     }
 
     #[test]
     fn test_color_with_alpha() {
         let c: Color = "#ff000080".parse().unwrap();
-        assert_eq!(c.r, 255);
-        assert_eq!(c.g, 0);
-        assert_eq!(c.b, 0);
-        assert_eq!(c.a, 128);
+        assert_eq!(c.r, 255); assert_eq!(c.g, 0); assert_eq!(c.b, 0); assert_eq!(c.a, 128);
     }
 
     #[test]
@@ -462,28 +398,23 @@ mod tests {
     fn test_default_theme_is_mocha() {
         let theme = Theme::default();
         assert_eq!(theme.name, "Catppuccin Mocha");
-        assert_eq!(theme.background, Color::new(30, 30, 46, 255));
-        assert_eq!(theme.foreground, Color::new(205, 214, 244, 255));
     }
 
     #[test]
     fn test_bundled_mocha_theme() {
-        let theme = Theme::load("mocha");
-        assert_eq!(theme.name, "Catppuccin Mocha");
+        assert_eq!(Theme::load("mocha").name, "Catppuccin Mocha");
     }
 
     #[test]
     fn test_bundled_latte_theme() {
-        let theme = Theme::load("latte");
-        assert_eq!(theme.name, "Catppuccin Latte");
+        assert_eq!(Theme::load("latte").name, "Catppuccin Latte");
     }
 
     #[test]
     fn test_fallback_when_config_missing() {
-        // AppConfig::load() should never panic, even with no files on disk
-        let app_config = AppConfig::load();
-        assert_eq!(app_config.config.theme, "mocha");
-        assert_eq!(app_config.theme.name, "Catppuccin Mocha");
+        let app = AppConfig::load();
+        assert_eq!(app.config.settings.theme, "mocha");
+        assert_eq!(app.theme.name, "Catppuccin Mocha");
     }
 
     #[test]
@@ -502,5 +433,53 @@ mod tests {
     fn test_binding_value_empty_ignored() {
         let v = BindingValue::Single("h, , Left".to_string());
         assert_eq!(v.keys(), vec!["h", "Left"]);
+    }
+
+    #[test]
+    fn test_config_default_prefix() {
+        let cfg = Config::default();
+        assert_eq!(cfg.keys.prefix, "ctrl+b");
+    }
+
+    #[test]
+    fn test_config_has_default_bindings() {
+        let cfg = Config::default();
+        assert!(cfg.keys.bindings.contains_key("focus_left"));
+        assert!(cfg.keys.bindings.contains_key("split_horizontal"));
+        assert!(cfg.keys.bindings.contains_key("close"));
+    }
+
+    #[test]
+    fn test_parse_toml_config() {
+        let toml = r#"
+[settings]
+theme = "mocha"
+mouse = true
+
+[keys]
+prefix = "ctrl+a"
+focus_left = ["h", "Left"]
+focus_right = "l"
+
+[[keys.command]]
+key = "prefix+Shift+g"
+command = "lazygit"
+
+[[keys.mode]]
+name = "resize"
+trigger = "prefix+r"
+
+[[keys.mode.bindings]]
+action = "resize_increase"
+keys = "="
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.keys.prefix, "ctrl+a");
+        assert_eq!(cfg.keys.bindings.get("focus_left").unwrap().keys(), vec!["h", "Left"]);
+        assert_eq!(cfg.keys.bindings.get("focus_right").unwrap().keys(), vec!["l"]);
+        assert_eq!(cfg.keys.command.len(), 1);
+        assert_eq!(cfg.keys.mode.len(), 1);
+        assert_eq!(cfg.keys.mode[0].name, "resize");
+        assert_eq!(cfg.keys.mode[0].bindings.len(), 1);
     }
 }

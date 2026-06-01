@@ -16,7 +16,7 @@ use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
-use input::{KeyBindings, WmAction, action_from_name};
+use input::{WmAction, action_from_name};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -135,26 +135,6 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
     }
 }
 
-/// Convert a `Binding` to a `KeyCombo`.
-fn binding_to_combo(b: &input::Binding) -> keymap::KeyCombo {
-    let mut parts = Vec::new();
-    if b.ctrl { parts.push("Ctrl"); }
-    if b.shift { parts.push("Shift"); }
-    parts.push(&b.key);
-    keymap::KeyCombo::parse(&parts.join("+"))
-}
-
-/// Parse a key string that may use `prefix+` syntax.
-/// Returns `(is_prefix, KeyCombo)`.
-fn parse_key_string(s: &str) -> (bool, keymap::KeyCombo) {
-    let trimmed = s.trim();
-    if let Some(rest) = trimmed.strip_prefix("prefix+") {
-        (true, keymap::KeyCombo::parse(rest.trim()))
-    } else {
-        (false, keymap::KeyCombo::parse(trimmed))
-    }
-}
-
 /// Convert a winit key event to terminal input bytes.
 fn winit_key_to_terminal_input(
     key: &winit::keyboard::Key,
@@ -212,46 +192,56 @@ impl HecaApp {
 
     fn new() -> Self {
         let app_config = AppConfig::load();
-        let bindings = KeyBindings::load(&app_config);
         let registry = build_registry();
         let mut keymap = keymap::KeymapRegistry::new();
 
-        // ── Prefix-mode bindings ──
-        for b in &bindings.bindings {
-            let combo = binding_to_combo(b);
-            keymap.bind("normal", combo, b.action.clone());
-        }
-
-        // ── Sidebar-mode bindings ──
-        for b in bindings.mode_bindings.get("sidebar").unwrap_or(&vec![]) {
-            let combo = binding_to_combo(b);
-            keymap.bind("sidebar", combo, b.action.clone());
-        }
-
-        // ── Global (non-prefix) bindings from [global] config ──
-        for (name, value) in &app_config.config.global {
-            if let Some(action) = action_from_name(name) {
-                for key_str in value.keys() {
-                    let (is_prefix, combo) = parse_key_string(key_str);
-                    if is_prefix {
-                        // Global bindings should not use prefix syntax
-                        eprintln!("warning: global binding '{name}' uses prefix syntax '{key_str}'; ignoring");
-                        continue;
-                    }
+        // ── Load bindings from [keys] flat map ──
+        for (action_name, value) in &app_config.config.keys.bindings {
+            let Some(action) = action_from_name(action_name) else { continue };
+            for key_str in value.keys() {
+                let trimmed = key_str.trim();
+                if trimmed.starts_with("prefix+") {
+                    let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+                    let combo = keymap::KeyCombo::parse(rest);
+                    keymap.bind("normal", combo, action.clone());
+                } else {
+                    let combo = keymap::KeyCombo::parse(trimmed);
                     keymap.bind("global", combo, action.clone());
                 }
             }
         }
 
-        // ── Custom command bindings from [[keys.command]] config ──
-        for cmd_cfg in &app_config.config.commands {
+        // ── Sidebar-mode bindings (hardcoded for now) ──
+        let sidebar_bindings = vec![
+            ("j", WmAction::SidebarDown),
+            ("k", WmAction::SidebarUp),
+            ("h", WmAction::SidebarLeftNav),
+            ("l", WmAction::SidebarRightNav),
+            ("Tab", WmAction::SidebarExpandToggle),
+            ("Space", WmAction::SidebarExpandToggle),
+            ("b", WmAction::SidebarLeft),
+            ("Enter", WmAction::SidebarRightNav),
+        ];
+        for (key, action) in sidebar_bindings {
+            keymap.bind("sidebar", keymap::KeyCombo::parse(key), action);
+        }
+
+        // ── Custom command bindings from [[keys.command]] ──
+        for cmd_cfg in &app_config.config.keys.command {
             let action = WmAction::SpawnCommand {
                 command: cmd_cfg.command.clone(),
             };
-            let (is_prefix, combo) = parse_key_string(&cmd_cfg.key);
-            let mode = if is_prefix { "normal" } else { "global" };
-            keymap.bind(mode, combo, action);
+            let trimmed = cmd_cfg.key.trim();
+            if trimmed.starts_with("prefix+") {
+                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+                keymap.bind("normal", keymap::KeyCombo::parse(rest), action);
+            } else {
+                keymap.bind("global", keymap::KeyCombo::parse(trimmed), action);
+            }
         }
+
+        // ── Custom modes from [[keys.mode]] ──
+        // TODO: implement mode runtime
 
         Self {
             state: None,
@@ -265,8 +255,8 @@ impl HecaApp {
         let window_attrs = Window::default_attributes()
             .with_title("heca")
             .with_inner_size(winit::dpi::LogicalSize::new(
-                self.app_config.config.general.window_width as f64,
-                self.app_config.config.general.window_height as f64,
+                self.app_config.config.settings.window_width as f64,
+                self.app_config.config.settings.window_height as f64,
             ));
         let window = Arc::new(event_loop.create_window(window_attrs).unwrap());
         let scale_factor = window.scale_factor();
@@ -393,9 +383,11 @@ impl HecaApp {
             last_visited_ws_idx: None,
             last_visited_pane_per_ws: vec![None; ws_count],
             swap_and_focus: false,
-            mouse_enabled: self.app_config.config.general.mouse,
+            mouse_enabled: self.app_config.config.settings.mouse,
             prefix_entered_at: None,
-            prefix_combo: keymap::KeyCombo::parse(&self.app_config.config.general.prefix_key),
+            prefix_combo: keymap::KeyCombo::parse(
+                &self.app_config.config.keys.prefix,
+            ),
         })
     }
 
