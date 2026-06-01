@@ -217,12 +217,10 @@ pub struct KeyBindings {
 impl KeyBindings {
     pub fn load(app_config: &AppConfig) -> Self {
         let mut bindings = Vec::new();
-        for (name, key_str) in &app_config.config.keybindings {
+        for (name, value) in &app_config.config.keybindings {
             if let Some(action) = action_from_name(name) {
-                for part in key_str.split(',') {
-                    let part = part.trim();
-                    if part.is_empty() { continue; }
-                    let (ctrl, shift, key) = Self::parse_key(part);
+                for key_str in value.keys() {
+                    let (ctrl, shift, key) = Self::parse_key(key_str);
                     bindings.push(Binding { action: action.clone(), key, ctrl, shift });
                 }
             }
@@ -233,21 +231,19 @@ impl KeyBindings {
         // ── Load mode-specific bindings ──
         let mut mode_bindings = HashMap::new();
         // Sidebar mode: single-key bindings (no prefix required within the mode)
-        let sidebar_entries: Vec<(&str, &str)> = vec![
-            ("sidebar_down", "j"),
-            ("sidebar_up", "k"),
-            ("sidebar_left_nav", "h"),
-            ("sidebar_right_nav", "l,Enter"),
-            ("sidebar_expand_toggle", "Tab,Space"),
-            ("sidebar_left", "b"),
+        let sidebar_entries: Vec<(&str, Vec<&str>)> = vec![
+            ("sidebar_down", vec!["j"]),
+            ("sidebar_up", vec!["k"]),
+            ("sidebar_left_nav", vec!["h"]),
+            ("sidebar_right_nav", vec!["l", "Enter"]),
+            ("sidebar_expand_toggle", vec!["Tab", "Space"]),
+            ("sidebar_left", vec!["b"]),
         ];
         let mut sidebar_bindings = Vec::new();
-        for (name, key_str) in sidebar_entries {
+        for (name, keys) in sidebar_entries {
             if let Some(action) = action_from_name(name) {
-                for part in key_str.split(',') {
-                    let part = part.trim();
-                    if part.is_empty() { continue; }
-                    let (ctrl, shift, key) = Self::parse_key(part);
+                for key_str in keys {
+                    let (ctrl, shift, key) = Self::parse_key(key_str);
                     sidebar_bindings.push(Binding { action: action.clone(), key, ctrl, shift });
                 }
             }

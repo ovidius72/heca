@@ -236,8 +236,31 @@ impl Default for GeneralConfig {
     }
 }
 
-/// Keybinding map: action name -> key string(s), comma-separated (e.g. "focus_left" -> "h,ArrowLeft").
-pub type KeybindingMap = HashMap<String, String>;
+/// A keybinding value that can be either a single string or an array of strings.
+///
+/// Both styles are accepted in TOML:
+/// ```toml
+/// focus_left = "h, Left"       # single string (comma-separated)
+/// focus_left = ["h", "Left"]   # array of strings
+/// ```
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BindingValue {
+    Single(String),
+    Many(Vec<String>),
+}
+
+impl BindingValue {
+    /// Return all key strings bound by this value.
+    pub fn keys(&self) -> Vec<&str> {
+        match self {
+            BindingValue::Single(s) => s.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect(),
+            BindingValue::Many(v) => v.iter().map(|s| s.as_str()).filter(|p| !p.is_empty()).collect(),
+        }
+    }
+}
+
+pub type KeybindingMap = HashMap<String, BindingValue>;
 
 /// Root configuration struct loaded from `config.toml`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -252,78 +275,74 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let mut keybindings = HashMap::new();
-        keybindings.insert("focus_left".to_string(), "h,ArrowLeft".to_string());
-        keybindings.insert("focus_right".to_string(), "l,ArrowRight".to_string());
-        keybindings.insert("focus_up".to_string(), "k,ArrowUp".to_string());
-        keybindings.insert("focus_down".to_string(), "j,ArrowDown".to_string());
-        // ── Navigation ──
-        keybindings.insert("focus_left".to_string(), "h,ArrowLeft".to_string());
-        keybindings.insert("focus_right".to_string(), "l,ArrowRight".to_string());
-        keybindings.insert("focus_up".to_string(), "k,ArrowUp".to_string());
-        keybindings.insert("focus_down".to_string(), "j,ArrowDown".to_string());
+        use BindingValue::*;
+
+        // ── Navigation (both string and array styles demonstrated) ──
+        keybindings.insert("focus_left".to_string(), Single("h,ArrowLeft".to_string()));
+        keybindings.insert("focus_right".to_string(), Many(vec!["l".to_string(), "ArrowRight".to_string()]));
+        keybindings.insert("focus_up".to_string(), Single("k,ArrowUp".to_string()));
+        keybindings.insert("focus_down".to_string(), Single("j,ArrowDown".to_string()));
 
         // ── Splits ──
-        // Enter = new column (horizontal split); v = new pane in column (vertical split)
-        keybindings.insert("split_horizontal".to_string(), "Enter".to_string());
-        keybindings.insert("split_vertical".to_string(), "v".to_string());
+        keybindings.insert("split_horizontal".to_string(), Single("Enter".to_string()));
+        keybindings.insert("split_vertical".to_string(), Single("v".to_string()));
 
         // ── Resize ──
-        // =/- column width; +/_ pane height (when >1 pane in column)
-        keybindings.insert("resize_increase".to_string(), "=".to_string());
-        keybindings.insert("resize_decrease".to_string(), "-".to_string());
-        keybindings.insert("pane_height_increase".to_string(), "Shift+=".to_string());
-        keybindings.insert("pane_height_decrease".to_string(), "Shift+-".to_string());
+        keybindings.insert("resize_increase".to_string(), Single("=".to_string()));
+        keybindings.insert("resize_decrease".to_string(), Single("-".to_string()));
+        keybindings.insert("pane_height_increase".to_string(), Single("Shift+=".to_string()));
+        keybindings.insert("pane_height_decrease".to_string(), Single("Shift+-".to_string()));
 
         // ── Pane operations ──
-        keybindings.insert("close".to_string(), "x".to_string());
-        keybindings.insert("float".to_string(), "f".to_string());
-                
+        keybindings.insert("close".to_string(), Single("x".to_string()));
+        keybindings.insert("float".to_string(), Single("f".to_string()));
+
         // ── Quick select / swap ──
-        keybindings.insert("pane_select".to_string(), "q".to_string());
-        keybindings.insert("swap_select".to_string(), "Shift+q".to_string());
-        keybindings.insert("swap_and_focus".to_string(), "m".to_string());
+        keybindings.insert("pane_select".to_string(), Single("q".to_string()));
+        keybindings.insert("swap_select".to_string(), Single("Shift+q".to_string()));
+        keybindings.insert("swap_and_focus".to_string(), Single("m".to_string()));
 
         // ── Tabs ──
-        keybindings.insert("tab_next".to_string(), "Ctrl+]".to_string());
-        keybindings.insert("tab_prev".to_string(), "Ctrl+[".to_string());
-        keybindings.insert("next_pane".to_string(), "n".to_string());
-        keybindings.insert("prev_pane".to_string(), "p".to_string());
+        keybindings.insert("tab_next".to_string(), Single("Ctrl+]".to_string()));
+        keybindings.insert("tab_prev".to_string(), Single("Ctrl+[".to_string()));
+        keybindings.insert("next_pane".to_string(), Single("n".to_string()));
+        keybindings.insert("prev_pane".to_string(), Single("p".to_string()));
 
         // ── Sidebars ──
-        keybindings.insert("sidebar_left".to_string(), "b".to_string());
-        keybindings.insert("sidebar_right".to_string(), ".".to_string());
-        keybindings.insert("sidebar_focus".to_string(), "e".to_string());
-        keybindings.insert("sidebar_up".to_string(), "k,ArrowUp".to_string());
-        keybindings.insert("sidebar_down".to_string(), "j,ArrowDown".to_string());
-        keybindings.insert("sidebar_left_nav".to_string(), "h,ArrowLeft".to_string());
-        keybindings.insert("sidebar_right_nav".to_string(), "l,ArrowRight".to_string());
-        keybindings.insert("sidebar_expand_toggle".to_string(), "Tab".to_string());
+        keybindings.insert("sidebar_left".to_string(), Single("b".to_string()));
+        keybindings.insert("sidebar_right".to_string(), Single(".".to_string()));
+        keybindings.insert("sidebar_focus".to_string(), Single("e".to_string()));
+        keybindings.insert("sidebar_up".to_string(), Single("k,ArrowUp".to_string()));
+        keybindings.insert("sidebar_down".to_string(), Single("j,ArrowDown".to_string()));
+        keybindings.insert("sidebar_left_nav".to_string(), Single("h,ArrowLeft".to_string()));
+        keybindings.insert("sidebar_right_nav".to_string(), Single("l,ArrowRight".to_string()));
+        keybindings.insert("sidebar_expand_toggle".to_string(), Single("Tab".to_string()));
 
         // ── Workspace navigation ──
-        keybindings.insert("workspace_prev".to_string(), "u".to_string());
-        keybindings.insert("workspace_next".to_string(), "d".to_string());
+        keybindings.insert("workspace_prev".to_string(), Single("u".to_string()));
+        keybindings.insert("workspace_next".to_string(), Single("d".to_string()));
 
         // ── Focus toggle ──
-        keybindings.insert("focus_toggle_local".to_string(), "i".to_string());
-        keybindings.insert("focus_toggle_global".to_string(), "Shift+l".to_string());
+        keybindings.insert("focus_toggle_local".to_string(), Single("i".to_string()));
+        keybindings.insert("focus_toggle_global".to_string(), Single("Shift+l".to_string()));
 
         // ── Workspace / naming ──
-        keybindings.insert("create_workspace".to_string(), "w".to_string());
-        keybindings.insert("rename_workspace".to_string(), "Shift+w".to_string());
-        keybindings.insert("rename_pane".to_string(), "Shift+p".to_string());
+        keybindings.insert("create_workspace".to_string(), Single("w".to_string()));
+        keybindings.insert("rename_workspace".to_string(), Single("Shift+w".to_string()));
+        keybindings.insert("rename_pane".to_string(), Single("Shift+p".to_string()));
 
         // ── Command palette ──
-        keybindings.insert("command_palette".to_string(), "p".to_string());
+        keybindings.insert("command_palette".to_string(), Single("p".to_string()));
 
         // ── Move pane to column (NIRI-style) ──
-        keybindings.insert("move_pane_left".to_string(), "[".to_string());
-        keybindings.insert("move_pane_right".to_string(), "]".to_string());
+        keybindings.insert("move_pane_left".to_string(), Single("[".to_string()));
+        keybindings.insert("move_pane_right".to_string(), Single("]".to_string()));
 
         // ── Swap position (Ctrl+nav) ──
-        keybindings.insert("swap_left".to_string(), "Ctrl+h".to_string());
-        keybindings.insert("swap_right".to_string(), "Ctrl+l".to_string());
-        keybindings.insert("swap_up".to_string(), "Ctrl+k".to_string());
-        keybindings.insert("swap_down".to_string(), "Ctrl+j".to_string());
+        keybindings.insert("swap_left".to_string(), Single("Ctrl+h".to_string()));
+        keybindings.insert("swap_right".to_string(), Single("Ctrl+l".to_string()));
+        keybindings.insert("swap_up".to_string(), Single("Ctrl+k".to_string()));
+        keybindings.insert("swap_down".to_string(), Single("Ctrl+j".to_string()));
         Self {
             theme: "mocha".to_string(),
             general: GeneralConfig::default(),
@@ -418,5 +437,23 @@ mod tests {
         let app_config = AppConfig::load();
         assert_eq!(app_config.config.theme, "mocha");
         assert_eq!(app_config.theme.name, "Catppuccin Mocha");
+    }
+
+    #[test]
+    fn test_binding_value_single() {
+        let v = BindingValue::Single("h, Left".to_string());
+        assert_eq!(v.keys(), vec!["h", "Left"]);
+    }
+
+    #[test]
+    fn test_binding_value_many() {
+        let v = BindingValue::Many(vec!["h".to_string(), "Left".to_string()]);
+        assert_eq!(v.keys(), vec!["h", "Left"]);
+    }
+
+    #[test]
+    fn test_binding_value_empty_ignored() {
+        let v = BindingValue::Single("h, , Left".to_string());
+        assert_eq!(v.keys(), vec!["h", "Left"]);
     }
 }
