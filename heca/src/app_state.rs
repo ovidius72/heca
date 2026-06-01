@@ -96,6 +96,8 @@ pub struct AppState {
     pub mouse_enabled: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
+    /// The configured prefix key combo (e.g. Ctrl+b).
+    pub prefix_combo: crate::keymap::KeyCombo,
 }
 
 #[cfg(test)]

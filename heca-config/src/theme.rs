@@ -213,6 +213,14 @@ impl Theme {
     }
 }
 
+fn default_mouse() -> bool {
+    true
+}
+
+fn default_prefix_key() -> String {
+    "Ctrl+b".to_string()
+}
+
 /// General application configuration.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GeneralConfig {
@@ -220,10 +228,10 @@ pub struct GeneralConfig {
     pub window_height: u32,
     #[serde(default = "default_mouse")]
     pub mouse: bool,
-}
-
-fn default_mouse() -> bool {
-    true
+    /// The prefix key that activates prefix mode.
+    /// Default: "Ctrl+b"
+    #[serde(default = "default_prefix_key")]
+    pub prefix_key: String,
 }
 
 impl Default for GeneralConfig {
@@ -232,6 +240,7 @@ impl Default for GeneralConfig {
             window_width: 1280,
             window_height: 800,
             mouse: true,
+            prefix_key: default_prefix_key(),
         }
     }
 }

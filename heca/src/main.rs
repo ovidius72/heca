@@ -115,6 +115,26 @@ pub(crate) fn pane_name(id: u64) -> String {
         .to_string()
 }
 
+/// Check if a key event's combo matches a configured KeyCombo.
+/// Case-insensitive for alphabetic keys; exact otherwise.
+fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) -> bool {
+    if event.ctrl != configured.ctrl
+        || event.shift != configured.shift
+        || event.alt != configured.alt
+        || event.super_ != configured.super_
+    {
+        return false;
+    }
+    // Case-insensitive match for single alphabetic characters.
+    if event.key.len() == 1 && configured.key.len() == 1 {
+        let e = event.key.chars().next().unwrap();
+        let c = configured.key.chars().next().unwrap();
+        e.eq_ignore_ascii_case(&c)
+    } else {
+        event.key.eq_ignore_ascii_case(&configured.key)
+    }
+}
+
 /// Convert a winit key event to terminal input bytes.
 fn winit_key_to_terminal_input(
     key: &winit::keyboard::Key,
@@ -336,6 +356,7 @@ impl HecaApp {
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.general.mouse,
             prefix_entered_at: None,
+            prefix_combo: keymap::KeyCombo::parse(&self.app_config.config.general.prefix_key),
         })
     }
 
@@ -712,12 +733,23 @@ impl ApplicationHandler for HecaApp {
 
                 let log_key = &event.logical_key;
                 let key_text = log_key.to_text().unwrap_or("").to_string();
-                let phys = event.physical_key;
+                let _phys = event.physical_key;
 
-                // Detect Ctrl+B by multiple methods:
-                let is_prefix = key_text == "\u{2}"                         // macOS control char
-                    || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")
-                    || (is_ctrl && phys == winit::keyboard::PhysicalKey::Code(winit::keyboard::KeyCode::KeyB));
+                // Build a KeyCombo from the current key event for comparison.
+                let event_combo = keymap::KeyCombo {
+                    key: key_text.clone(),
+                    ctrl: is_ctrl,
+                    shift: is_shift,
+                    alt: state.modifiers.alt_key(),
+                    super_: state.modifiers.super_key(),
+                };
+
+                // Check if current key matches the configured prefix combo.
+                let is_prefix = event_combo_matches(&event_combo, &state.prefix_combo)
+                    // macOS special case: Ctrl+B may report as control char \u{2}
+                    || (state.prefix_combo.ctrl && state.prefix_combo.key.eq_ignore_ascii_case("b")
+                        && (key_text == "\u{2}"
+                            || matches!(log_key, winit::keyboard::Key::Character(c) if c == "\u{2}")));
 
                 // Handle Rename mode separately (needs mutable buffer access)
                 if let InputMode::Rename { target, buffer } = &mut state.input_mode {
