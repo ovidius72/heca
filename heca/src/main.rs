@@ -1,6 +1,7 @@
 mod actions;
 mod app_state;
 mod chrome;
+mod handlers;
 mod input;
 mod keymap;
 mod rpc;
@@ -13,9 +14,6 @@ use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
 use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
-use heca_core::layout::types::Rectangle;
-use heca_core::layout::animation::AnimationConfig;
-
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use input::{KeyBindings, WmAction};
@@ -111,7 +109,7 @@ const PANE_NAMES: &[&str] = &[
     "Orange", "Purple", "Lime", "Pink", "Teal", "Coral",
 ];
 
-fn pane_name(id: u64) -> String {
+pub(crate) fn pane_name(id: u64) -> String {
     PANE_NAMES.get((id as usize).saturating_sub(1) % PANE_NAMES.len())
         .unwrap_or(&"?")
         .to_string()
@@ -1063,7 +1061,7 @@ fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
 /// Collect ALL panes across ALL workspaces as letter candidates.
 /// Hard-capped at 52 unique labels (a–z, A–Z). Beyond that, use sidebar
 /// navigation instead of letter selection.
-fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
+pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
     let mut candidates = Vec::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
@@ -1087,7 +1085,7 @@ fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
 }
 
 /// Find the (workspace_index, column_index) containing a pane.
-fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
+pub(crate) fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
     let target = heca_core::layout::PaneId(pane_id);
     for (ws_idx, ws) in session.workspaces.iter().enumerate() {
         for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
@@ -1100,7 +1098,7 @@ fn find_pane_column(session: &Session, pane_id: u64) -> Option<(usize, usize)> {
 }
 
 /// Find the (workspace_index, column_index, pane_index) containing a pane.
-fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usize, usize, usize)> {
+pub(crate) fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usize, usize, usize)> {
     let target = heca_core::layout::PaneId(pane_id);
     for (ws_idx, ws) in session.workspaces.iter().enumerate() {
         for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
@@ -1115,7 +1113,7 @@ fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usize, usize, 
 /// Collect ALL columns across ALL workspaces as letter candidates.
 /// Hard-capped at 52 unique labels (a–z, A–Z).
 /// The candidate ID is the first pane ID in the column (used for positioning the letter overlay).
-fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
+pub(crate) fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
     let mut candidates = Vec::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
@@ -1139,7 +1137,7 @@ fn collect_all_column_candidates(session: &Session) -> Vec<(char, u64)> {
 ///
 /// **All** focus changes must go through this function — mouse clicks, keyboard nav,
 /// sidebar selection, pane select, swap-and-focus, etc.
-fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
+pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
     // Switch workspace if the target pane is not in the current workspace.
     if let Some(target_ws) = find_pane_workspace(&state.session, pane_id)
         && target_ws != state.session.active_workspace_idx {
@@ -1189,7 +1187,7 @@ fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 /// Does NOT touch last_visited_pane_per_ws — that field is reserved for
 /// same-workspace pane toggle (Prefix+i) and must not be overwritten by
 /// workspace switches.
-fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
+pub(crate) fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == new_idx {
         return;
@@ -1198,7 +1196,7 @@ fn switch_workspace_tracked(state: &mut AppState, new_idx: usize) {
     state.session.switch_to_workspace(new_idx);
 }
 
-fn sync_focus(state: &mut AppState) {
+pub(crate) fn sync_focus(state: &mut AppState) {
     let prev_focused = state.focused_pane;
     let prev_ws = state.session.active_workspace_idx;
 
@@ -1240,7 +1238,7 @@ fn sync_focus(state: &mut AppState) {
 }
 
 /// Update session viewport to match current chrome/content area size.
-fn update_session_viewport(state: &mut AppState) {
+pub(crate) fn update_session_viewport(state: &mut AppState) {
     let phys = state.window.inner_size();
     let win_w = phys.width as f32 / state.scale_factor as f32;
     let win_h = phys.height as f32 / state.scale_factor as f32;
@@ -1258,742 +1256,79 @@ fn update_session_viewport(state: &mut AppState) {
     state.session.update_viewport(new_size);
 }
 
-/// Generic handler that delegates to the legacy `execute_action()` match.
-/// This is a transitional shim — in Phase 5 each action will get its own
-/// named handler and `execute_action()` will be removed.
-fn generic_handler(state: &mut AppState, action: &WmAction) {
-    execute_action(action.clone(), state.focused_pane, state);
-}
-
-/// Build the action registry and register handlers for all actions.
+/// Build the action registry and register individual handlers for all actions.
 pub fn build_registry() -> actions::ActionRegistry {
     use actions::ActionRegistry;
+    use handlers::*;
     use input::WmAction;
 
     let mut registry = ActionRegistry::new();
 
     // ── Navigation ──
-    registry.register(&WmAction::FocusLeft, generic_handler);
-    registry.register(&WmAction::FocusRight, generic_handler);
-    registry.register(&WmAction::FocusUp, generic_handler);
-    registry.register(&WmAction::FocusDown, generic_handler);
-    registry.register(&WmAction::NextPane, generic_handler);
-    registry.register(&WmAction::PrevPane, generic_handler);
-    registry.register(&WmAction::WorkspaceNext, generic_handler);
-    registry.register(&WmAction::WorkspacePrev, generic_handler);
-    registry.register(&WmAction::FocusToggleLocal, generic_handler);
-    registry.register(&WmAction::FocusToggleGlobal, generic_handler);
-    registry.register(&WmAction::FocusPane { pane_id: 0 }, generic_handler);
-    registry.register(&WmAction::FocusWorkspace { ws_idx: 0 }, generic_handler);
+    registry.register(&WmAction::FocusLeft, handle_focus_left);
+    registry.register(&WmAction::FocusRight, handle_focus_right);
+    registry.register(&WmAction::FocusUp, handle_focus_up);
+    registry.register(&WmAction::FocusDown, handle_focus_down);
+    registry.register(&WmAction::NextPane, handle_next_pane);
+    registry.register(&WmAction::PrevPane, handle_prev_pane);
+    registry.register(&WmAction::WorkspaceNext, handle_workspace_next);
+    registry.register(&WmAction::WorkspacePrev, handle_workspace_prev);
+    registry.register(&WmAction::FocusToggleLocal, handle_focus_toggle_local);
+    registry.register(&WmAction::FocusToggleGlobal, handle_focus_toggle_global);
+    registry.register(&WmAction::FocusPane { pane_id: 0 }, handle_focus_pane);
+    registry.register(&WmAction::FocusWorkspace { ws_idx: 0 }, handle_focus_workspace);
 
     // ── Layout ──
-    registry.register(&WmAction::SplitHorizontal, generic_handler);
-    registry.register(&WmAction::SplitVertical, generic_handler);
-    registry.register(&WmAction::ResizeIncrease, generic_handler);
-    registry.register(&WmAction::ResizeDecrease, generic_handler);
-    registry.register(&WmAction::PaneHeightIncrease, generic_handler);
-    registry.register(&WmAction::PaneHeightDecrease, generic_handler);
-    registry.register(&WmAction::SwapLeft, generic_handler);
-    registry.register(&WmAction::SwapRight, generic_handler);
-    registry.register(&WmAction::SwapUp, generic_handler);
-    registry.register(&WmAction::SwapDown, generic_handler);
-    registry.register(&WmAction::MovePaneLeft, generic_handler);
-    registry.register(&WmAction::MovePaneRight, generic_handler);
-    registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, generic_handler);
-    registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, generic_handler);
-    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, delta: 0 }, generic_handler);
-    registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, generic_handler);
+    registry.register(&WmAction::SplitHorizontal, handle_split_horizontal);
+    registry.register(&WmAction::SplitVertical, handle_split_vertical);
+    registry.register(&WmAction::ResizeIncrease, handle_resize_increase);
+    registry.register(&WmAction::ResizeDecrease, handle_resize_decrease);
+    registry.register(&WmAction::PaneHeightIncrease, handle_pane_height_increase);
+    registry.register(&WmAction::PaneHeightDecrease, handle_pane_height_decrease);
+    registry.register(&WmAction::SwapLeft, handle_swap_left);
+    registry.register(&WmAction::SwapRight, handle_swap_right);
+    registry.register(&WmAction::SwapUp, handle_swap_up);
+    registry.register(&WmAction::SwapDown, handle_swap_down);
+    registry.register(&WmAction::MovePaneLeft, handle_move_pane_left);
+    registry.register(&WmAction::MovePaneRight, handle_move_pane_right);
+    registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, handle_swap_param);
+    registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, handle_move_param);
+    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, delta: 0 }, handle_resize);
+    registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, handle_resize_to);
 
     // ── Pane ──
-    registry.register(&WmAction::Float, generic_handler);
-    registry.register(&WmAction::ClosePane, generic_handler);
-    registry.register(&WmAction::PaneSelect, generic_handler);
-    registry.register(&WmAction::SwapSelect, generic_handler);
-    registry.register(&WmAction::SwapAndFocus, generic_handler);
-    registry.register(&WmAction::RenamePane, generic_handler);
-    registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, generic_handler);
-    registry.register(&WmAction::ClosePaneById { pane_id: 0 }, generic_handler);
-    registry.register(&WmAction::RenameTarget { pane_id: 0, name: String::new() }, generic_handler);
+    registry.register(&WmAction::Float, handle_float);
+    registry.register(&WmAction::ClosePane, handle_close_pane);
+    registry.register(&WmAction::PaneSelect, handle_pane_select);
+    registry.register(&WmAction::SwapSelect, handle_swap_select);
+    registry.register(&WmAction::SwapAndFocus, handle_swap_and_focus);
+    registry.register(&WmAction::RenamePane, handle_rename_pane);
+    registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, handle_float_at);
+    registry.register(&WmAction::ClosePaneById { pane_id: 0 }, handle_close_pane_by_id);
+    registry.register(&WmAction::RenameTarget { pane_id: 0, name: String::new() }, handle_rename_target);
 
     // ── Workspace ──
-    registry.register(&WmAction::CreateWorkspace, generic_handler);
-    registry.register(&WmAction::RenameWorkspace, generic_handler);
+    registry.register(&WmAction::CreateWorkspace, handle_create_workspace);
+    registry.register(&WmAction::RenameWorkspace, handle_rename_workspace);
 
     // ── Sidebar / Chrome ──
-    registry.register(&WmAction::SidebarLeft, generic_handler);
-    registry.register(&WmAction::SidebarRight, generic_handler);
-    registry.register(&WmAction::SidebarFocus, generic_handler);
-    registry.register(&WmAction::SidebarUp, generic_handler);
-    registry.register(&WmAction::SidebarDown, generic_handler);
-    registry.register(&WmAction::SidebarLeftNav, generic_handler);
-    registry.register(&WmAction::SidebarRightNav, generic_handler);
-    registry.register(&WmAction::SidebarExpandToggle, generic_handler);
-    registry.register(&WmAction::TabNext, generic_handler);
-    registry.register(&WmAction::TabPrev, generic_handler);
+    registry.register(&WmAction::SidebarLeft, handle_sidebar_left);
+    registry.register(&WmAction::SidebarRight, handle_sidebar_right);
+    registry.register(&WmAction::SidebarFocus, handle_sidebar_focus);
+    registry.register(&WmAction::SidebarUp, handle_sidebar_up);
+    registry.register(&WmAction::SidebarDown, handle_sidebar_down);
+    registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
+    registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
+    registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
+    registry.register(&WmAction::TabNext, handle_tab_next);
+    registry.register(&WmAction::TabPrev, handle_tab_prev);
 
     // ── System ──
-    registry.register(&WmAction::CommandPalette, generic_handler);
+    registry.register(&WmAction::CommandPalette, handle_command_palette);
 
     registry
 }
-
-fn execute_action(action: WmAction, _current: Option<u64>, state: &mut AppState) {
-    match action {
-        WmAction::FocusLeft => {
-            state.session.focus_left();
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::FocusRight => {
-            state.session.focus_right();
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::FocusUp => {
-            // Stay within workspace — don't wrap to previous workspace
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.focus_up();
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::FocusDown => {
-            // Stay within workspace — don't wrap to next workspace
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.focus_down();
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::SplitHorizontal => {
-            // New column to the right
-            let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-            let backend_id = next_id;
-            state.session.add_pane(pane, None, true);
-            state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::SplitVertical => {
-            // New pane in current column
-            let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-            let backend_id = next_id;
-            let col_idx = state.session.active_workspace()
-                .map(|ws| ws.scrolling.active_column_idx)
-                .unwrap_or(0);
-            if let Some(ws) = state.session.active_workspace_mut() { ws.scrolling.add_pane_to_column(col_idx, None, pane, true) }
-            state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::ClosePane => {
-            // Close the focused pane. If the workspace becomes empty, remove it.
-            // If ALL workspaces become empty, create a default one.
-            let current_ws = state.session.active_workspace_idx;
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let col_idx = ws.scrolling.active_column_idx;
-                if let Some(col) = ws.scrolling.active_column() {
-                    let pane_idx = col.active_pane_idx;
-                    if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                        state.backends.remove(&removed.id.0);
-                    }
-                }
-            }
-
-            // Check if workspace is now empty
-            let ws_is_empty = state.session.workspaces
-                .get(current_ws)
-                .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
-                .unwrap_or(true);
-
-            if ws_is_empty && state.session.workspaces.len() > 1 {
-                // Remove empty workspace (with tracking cleanup) and switch to nearest neighbor
-                destroy_empty_workspace(state, current_ws);
-                let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-                state.session.switch_to_workspace(new_idx);
-                sync_focus(state);
-            } else if ws_is_empty {
-                // Only workspace left and it's empty — create a default pane
-                let next_id = state.session.next_id();
-                let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-                state.session.add_pane(pane, None, true);
-                state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-                sync_focus(state);
-            } else {
-                sync_focus(state);
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::TabNext => {
-            if !state.tab_names.is_empty() {
-                state.active_tab = (state.active_tab + 1) % state.tab_names.len();
-            }
-        }
-        WmAction::TabPrev => {
-            if !state.tab_names.is_empty() {
-                state.active_tab = (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
-            }
-        }
-        WmAction::SidebarLeft => {
-            state.sidebar.left_visible = !state.sidebar.left_visible;
-            update_session_viewport(state);
-            state.needs_redraw = true;
-        }
-        WmAction::SidebarRight => {
-            state.sidebar.right_visible = !state.sidebar.right_visible;
-            update_session_viewport(state);
-            state.needs_redraw = true;
-        }
-        WmAction::NextPane => {
-            state.session.focus_right();
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::PrevPane => {
-            state.session.focus_left();
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::ResizeIncrease => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.resize_active_column(0.05);
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::ResizeDecrease => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.resize_active_column(-0.05);
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::PaneHeightIncrease => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let col_idx = ws.scrolling.active_column_idx;
-                if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
-                    let h = ws.scrolling.working_area.size.h;
-                    let gaps = ws.scrolling.options.gaps;
-                    col.resize_active_pane_height(40.0, h, gaps);
-                }
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::PaneHeightDecrease => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let col_idx = ws.scrolling.active_column_idx;
-                if let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
-                    let h = ws.scrolling.working_area.size.h;
-                    let gaps = ws.scrolling.options.gaps;
-                    col.resize_active_pane_height(-40.0, h, gaps);
-                }
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::MovePaneLeft => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.move_active_pane_left();
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::MovePaneRight => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.move_active_pane_right();
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::PaneSelect => {
-            let candidates = collect_all_pane_candidates(&state.session);
-            if !candidates.is_empty() {
-                state.input_mode = InputMode::PaneSelect { candidates };
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SwapSelect => {
-            let candidates = collect_all_column_candidates(&state.session);
-            if !candidates.is_empty() {
-                state.input_mode = InputMode::PaneSwap { candidates };
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SwapAndFocus => {
-            let candidates = collect_all_column_candidates(&state.session);
-            if !candidates.is_empty() {
-                state.input_mode = InputMode::PaneSwap { candidates };
-                state.swap_and_focus = true;
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SwapLeft => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.move_column_left();
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::SwapRight => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                ws.scrolling.move_column_right();
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::SwapUp | WmAction::SwapDown => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let col_idx = ws.scrolling.active_column_idx;
-                if let Some(col) = ws.scrolling.active_column() {
-                    let pane_idx = col.active_pane_idx;
-                    let swap_with = if matches!(action, WmAction::SwapUp) {
-                        pane_idx.saturating_sub(1)
-                    } else {
-                        (pane_idx + 1).min(col.panes.len().saturating_sub(1))
-                    };
-                    if swap_with != pane_idx
-                        && let Some(col) = ws.scrolling.columns.get_mut(col_idx) {
-                            // Compute Y offsets BEFORE swap for animation.
-                            let h_above = col.pane_sizes.get(pane_idx.min(swap_with))
-                                .map(|s| s.h).unwrap_or(0.0);
-                            let h_below = col.pane_sizes.get(pane_idx.max(swap_with))
-                                .map(|s| s.h).unwrap_or(0.0);
-                            let gap = ws.scrolling.options.gaps;
-
-                            // Animate the two panes swapping positions.
-                            // Pane moving UP starts from below and slides up.
-                            // Pane moving DOWN starts from above and slides down.
-                            let up_offset = h_above + gap;
-                            let down_offset = -(h_below + gap);
-
-                            // Apply animation BEFORE the swap (so we animate the right panes).
-                            if swap_with < pane_idx {
-                                // SwapUp: pane at idx (lower) moves up, pane at idx-1 (upper) moves down.
-                                col.panes[pane_idx].animate_move_y_from(up_offset, AnimationConfig::default());
-                                col.panes[swap_with].animate_move_y_from(down_offset, AnimationConfig::default());
-                            } else {
-                                // SwapDown: pane at idx (upper) moves down, pane at idx+1 (lower) moves up.
-                                col.panes[pane_idx].animate_move_y_from(down_offset, AnimationConfig::default());
-                                col.panes[swap_with].animate_move_y_from(up_offset, AnimationConfig::default());
-                            }
-
-                            col.panes.swap(pane_idx, swap_with);
-                            col.active_pane_idx = swap_with;
-                            col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
-                        }
-                }
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::Float => {
-            if let Some(pane_id) = state.focused_pane
-                && let Some(ws) = state.session.active_workspace_mut() {
-                    let wa = ws.scrolling.working_area;
-                    let is_floating = ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id);
-
-                    if is_floating {
-                        // Tiling ← Floating: remove from floating, restore to original column
-                        if let Some(idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
-                            let float = ws.floating_panes.remove(idx);
-                            let orig_col = float.original_column_idx;
-                            let orig_pane = float.original_pane_idx;
-                            if let Some(col_idx) = orig_col {
-                                if col_idx < ws.scrolling.columns.len() {
-                                    let target_idx = orig_pane.unwrap_or(0).min(ws.scrolling.columns[col_idx].panes.len());
-                                    ws.scrolling.columns[col_idx].panes.insert(target_idx, float.pane);
-                                    ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
-                                    ws.scrolling.active_column_idx = col_idx;
-                                    ws.scrolling.update_all_column_widths();
-                                } else {
-                                    ws.scrolling.add_column(None, Column::new(
-                                        ColumnId(pane_id), float.pane, ColumnWidth::Proportion(0.5),
-                                    ), true);
-                                }
-                            } else {
-                                ws.scrolling.add_column(None, Column::new(
-                                    ColumnId(pane_id), float.pane, ColumnWidth::Proportion(0.5),
-                                ), true);
-                            }
-                            ws.floating_is_active = false;
-                        }
-                    } else {
-                        // Tiling → Floating: centered, 75% of working area
-                        let mut found = None;
-                        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-                            for (pi, pane) in col.panes.iter().enumerate() {
-                                if pane.id.0 == pane_id { found = Some((ci, pi)); break; }
-                            }
-                            if found.is_some() { break; }
-                        }
-                        if let Some((col_idx, pane_idx)) = found
-                            && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                                let fw = wa.size.w * 0.75;
-                                let fh = wa.size.h * 0.75;
-                                let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
-                                let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
-                                ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-                                    pane: removed,
-                                    position: heca_core::layout::types::Point::new(fx, fy),
-                                    size: heca_core::layout::types::Size::new(fw, fh),
-                                    is_active: true,
-                                    original_column_idx: Some(col_idx),
-                                    original_pane_idx: Some(pane_idx),
-                                });
-                                ws.floating_is_active = true;
-                            }
-                    }
-                }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::SidebarFocus => {
-            // Enter sidebar navigation mode.
-            // Auto-expand the sidebar so the tree is visible and navigable.
-            state.sidebar.left_visible = true;
-            state.sidebar.left_width = 200.0;
-            state.input_mode = InputMode::SidebarNav;
-            update_session_viewport(state);
-            state.sidebar_tree.rebuild(
-                &state.session,
-                state.last_visited_ws_idx,
-                state.focused_pane,
-                &state.last_visited_pane_per_ws,
-            );
-            state.needs_redraw = true;
-        }
-        WmAction::SidebarUp => {
-            if matches!(state.input_mode, InputMode::SidebarNav) {
-                let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < 80.0;
-                if is_collapsed {
-                    state.sidebar_tree.cursor_up_collapsed();
-                } else {
-                    state.sidebar_tree.cursor_up();
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SidebarDown => {
-            if matches!(state.input_mode, InputMode::SidebarNav) {
-                let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < 80.0;
-                if is_collapsed {
-                    state.sidebar_tree.cursor_down_collapsed();
-                } else {
-                    state.sidebar_tree.cursor_down();
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SidebarLeftNav => {
-            if matches!(state.input_mode, InputMode::SidebarNav) {
-                state.sidebar_tree.collapse();
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SidebarRightNav => {
-            if matches!(state.input_mode, InputMode::SidebarNav) {
-                let item = state.sidebar_tree.current_item().cloned();
-                match &item {
-                    Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                        let current_ws = state.session.active_workspace_idx;
-                        // Find which workspace contains this pane and switch to it
-                        let target_pane_id = heca_core::layout::PaneId(*pane_id);
-                        let target_ws = state.session.workspaces.iter().position(|ws| {
-                            ws.find_pane(target_pane_id).is_some()
-                        });
-                        if let Some(ws_idx) = target_ws {
-                            if ws_idx != current_ws {
-                                switch_workspace_tracked(state, ws_idx);
-                            }
-                            focus_pane_by_id(state, *pane_id);
-                        }
-                        state.input_mode = InputMode::Normal;
-                    }
-                    Some(sidebar::SidebarItem::Workspace { .. }) => {
-                        // Enter on workspace: create a new column with a pane in that workspace
-                        let ws_idx = state.sidebar_tree.cursor_workspace_index()
-                            .unwrap_or(state.session.active_workspace_idx);
-                        if ws_idx != state.session.active_workspace_idx {
-                            switch_workspace_tracked(state, ws_idx);
-                        }
-                        let next_id = state.session.next_id();
-                        let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-                        state.session.add_pane(pane, None, true);
-                        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-                        sync_focus(state);
-                        state.input_mode = InputMode::Normal;
-                    }
-                    _ => {
-                        state.sidebar_tree.expand();
-                    }
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::SidebarExpandToggle => {
-            if matches!(state.input_mode, InputMode::SidebarNav) {
-                let item = state.sidebar_tree.current_item().cloned();
-                match &item {
-                    Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                        // Focus the pane and switch to its workspace
-                        let target_pane_id = heca_core::layout::PaneId(*pane_id);
-                        let target_ws = state.session.workspaces.iter().position(|ws| {
-                            ws.find_pane(target_pane_id).is_some()
-                        });
-                        if let Some(ws_idx) = target_ws {
-                            if ws_idx != state.session.active_workspace_idx {
-                                switch_workspace_tracked(state, ws_idx);
-                            }
-                            focus_pane_by_id(state, *pane_id);
-                        }
-                        state.input_mode = InputMode::Normal;
-                    }
-                    _ => {
-                        state.sidebar_tree.toggle_expand();
-                    }
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::FocusToggleLocal => {
-            // Toggle between current and last-focused pane in current workspace
-            let ws_idx = state.session.active_workspace_idx;
-            if let Some(prev_pane) = state.last_visited_pane_per_ws.get(ws_idx).copied().flatten() {
-                if Some(prev_pane) != state.focused_pane {
-                    focus_pane_by_id(state, prev_pane);
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::FocusToggleGlobal => {
-            // Toggle to the last-visited workspace.
-            // The session already remembers each workspace's active pane, so
-            // after switching we just sync_focus() to pick it up.
-            if let Some(prev_ws) = state.last_visited_ws_idx {
-                let current_ws = state.session.active_workspace_idx;
-                if prev_ws != current_ws {
-                    switch_workspace_tracked(state, prev_ws);
-                    sync_focus(state);
-                }
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::WorkspaceNext => {
-            let current_ws = state.session.active_workspace_idx;
-            let next = (current_ws + 1)
-                .min(state.session.workspaces.len().saturating_sub(1));
-            if next != current_ws {
-                switch_workspace_tracked(state, next);
-                sync_focus(state);
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::WorkspacePrev => {
-            let current_ws = state.session.active_workspace_idx;
-            let prev = current_ws.saturating_sub(1);
-            if prev != current_ws {
-                switch_workspace_tracked(state, prev);
-                sync_focus(state);
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::CreateWorkspace => {
-            // Create a new workspace with a default pane, and switch to it
-            let working_area = state.session.active_workspace()
-                .map(|ws| Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size))
-                .unwrap_or_else(|| {
-                    Rectangle::new(
-                        heca_core::layout::types::Point::default(),
-                        state.session.viewport_size,
-                    )
-                });
-            state.session.add_workspace(working_area);
-            let new_idx = state.session.workspaces.len() - 1;
-            // Switch to new workspace FIRST, then add pane (add_pane uses active workspace)
-            switch_workspace_tracked(state, new_idx);
-            // Add a default pane so the workspace is not empty
-            let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-            state.session.add_pane(pane, None, true);
-            state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-            while state.last_visited_pane_per_ws.len() <= new_idx {
-                state.last_visited_pane_per_ws.push(None);
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::RenameWorkspace => {
-            // Enter rename mode for current workspace
-            let ws_idx = state.session.active_workspace_idx;
-            let current_name = state.session.active_workspace()
-                .and_then(|ws| ws.name.clone())
-                .unwrap_or_default();
-            state.input_mode = InputMode::Rename {
-                target: RenameTarget::Workspace(ws_idx),
-                buffer: current_name,
-            };
-            state.needs_redraw = true;
-        }
-        WmAction::RenamePane => {
-            // Enter rename mode for focused pane
-            if let Some(pane_id) = state.focused_pane {
-                let current_title = state.session.active_workspace()
-                    .and_then(|ws| ws.find_pane(heca_core::layout::PaneId(pane_id)))
-                    .map(|p| p.title.clone())
-                    .unwrap_or_default();
-                state.input_mode = InputMode::Rename {
-                    target: RenameTarget::Pane(pane_id),
-                    buffer: current_title,
-                };
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::CommandPalette => {
-            // Stub: command palette UI will be implemented in a follow-up plan.
-            // For now, this action is a no-op that reserves the keybinding.
-            eprintln!("Command palette triggered (not yet implemented)");
-            state.needs_redraw = true;
-        }
-        // ── Parameterized variants (RPC / direct invocation) ──
-        WmAction::FocusPane { pane_id } => {
-            focus_pane_by_id(state, pane_id);
-        }
-        WmAction::FocusWorkspace { ws_idx } => {
-            if ws_idx < state.session.workspaces.len() {
-                switch_workspace_tracked(state, ws_idx);
-                sync_focus(state);
-                state.needs_redraw = true;
-            }
-        }
-        WmAction::Swap { a_id, b_id } => {
-            if let Some((aws, acol, _)) = find_pane_location(&state.session, a_id)
-                && let Some((bws, bcol, _)) = find_pane_location(&state.session, b_id) {
-                    if aws == bws && acol == bcol {
-                        // Same column — no-op
-                    } else if aws == bws {
-                        move_pane_to_column(state, a_id, acol, bcol);
-                    } else {
-                        move_pane_to_workspace_column(state, a_id, bws, bcol);
-                    }
-                }
-            state.needs_redraw = true;
-        }
-        WmAction::Move { pane_id, target_col } => {
-            if let Some((_ws_idx, col_idx, _)) = find_pane_location(&state.session, pane_id) {
-                move_pane_to_column(state, pane_id, col_idx, target_col);
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::Resize { target, delta } => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                match target {
-                    input::ResizeTarget::Column => {
-                        let delta_f = delta as f64 / 1000.0;
-                        ws.scrolling.resize_active_column(delta_f);
-                    }
-                    input::ResizeTarget::Pane => {
-                        let h = ws.scrolling.working_area.size.h;
-                        let gaps = ws.scrolling.options.gaps;
-                        if let Some(col) = ws.scrolling.active_column_mut() {
-                            col.resize_active_pane_height(delta as f64, h, gaps);
-                        }
-                    }
-                }
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::ResizeTo { target, width, height } => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                match target {
-                    input::ResizeTarget::Column => {
-                        if let Some(col) = ws.scrolling.active_column_mut() {
-                            col.width = heca_core::layout::ColumnWidth::Fixed(width);
-                            ws.scrolling.update_all_column_widths();
-                        }
-                    }
-                    input::ResizeTarget::Pane => {
-                        let h = ws.scrolling.working_area.size.h;
-                        let gaps = ws.scrolling.options.gaps;
-                        if let Some(col) = ws.scrolling.active_column_mut() {
-                            let pane_idx = col.active_pane_idx;
-                            if let Some(size) = col.pane_sizes.get_mut(pane_idx) {
-                                size.h = height;
-                            }
-                            col.compute_pane_sizes(h, gaps);
-                        }
-                    }
-                }
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::FloatAt { pane_id, x, y, width, height } => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let mut found = None;
-                for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-                    for (pi, pane) in col.panes.iter().enumerate() {
-                        if pane.id.0 == pane_id { found = Some((ci, pi)); break; }
-                    }
-                    if found.is_some() { break; }
-                }
-                if let Some((col_idx, pane_idx)) = found
-                    && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-                            pane: removed,
-                            position: heca_core::layout::types::Point::new(x, y),
-                            size: heca_core::layout::types::Size::new(width, height),
-                            is_active: true,
-                            original_column_idx: Some(col_idx),
-                            original_pane_idx: Some(pane_idx),
-                        });
-                        ws.floating_is_active = true;
-                    }
-            }
-            sync_focus(state);
-            state.needs_redraw = true;
-        }
-        WmAction::ClosePaneById { pane_id } => {
-            if let Some(ws) = state.session.active_workspace_mut() {
-                let mut found = None;
-                for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-                    if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
-                        found = Some((ci, pi));
-                        break;
-                    }
-                }
-                if let Some((ci, pi)) = found
-                    && let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                        state.backends.remove(&removed.id.0);
-                    }
-            }
-            let current_ws = state.session.active_workspace_idx;
-            let ws_is_empty = state.session.workspaces
-                .get(current_ws)
-                .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
-                .unwrap_or(true);
-            if ws_is_empty && state.session.workspaces.len() > 1 {
-                destroy_empty_workspace(state, current_ws);
-                let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-                state.session.switch_to_workspace(new_idx);
-                sync_focus(state);
-            } else if ws_is_empty {
-                let next_id = state.session.next_id();
-                let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-                state.session.add_pane(pane, None, true);
-                state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-                sync_focus(state);
-            } else {
-                sync_focus(state);
-            }
-            state.needs_redraw = true;
-        }
-        WmAction::RenameTarget { pane_id, name } => {
-            if let Some(ws) = state.session.active_workspace_mut()
-                && let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(pane_id)) {
-                    pane.title = if name.is_empty() { format!("pane{}", pane_id) } else { name.clone() };
-                    sync_focus(state);
-                    state.needs_redraw = true;
-                }
-        }
-    }
-}
-fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: usize, target_col: usize) {
+pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: usize, target_col: usize) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == target_ws {
         return;
@@ -2035,7 +1370,7 @@ fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: 
 
 /// Move a pane from one column to another within the same workspace.
 /// Handles column removal when a column becomes empty after the move.
-fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: usize, dst_col: usize) {
+pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: usize, dst_col: usize) {
     if src_col == dst_col { return; }
 
     let ws_idx = state.session.active_workspace_idx;
@@ -2091,7 +1426,7 @@ fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: usize, dst_c
 
 /// Remove a workspace if it is empty and there are other workspaces.
 /// Adjusts tracking indices after removal.
-fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
+pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
     let is_empty = state.session.workspaces.get(ws_idx)
         .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
         .unwrap_or(true);
