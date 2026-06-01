@@ -3,6 +3,7 @@ mod app_state;
 mod chrome;
 mod input;
 mod keymap;
+mod rpc;
 mod sidebar;
 
 use sidebar::SidebarTree;
@@ -160,6 +161,17 @@ struct HecaApp {
 }
 
 impl HecaApp {
+    /// Parse and execute an RPC command string.
+    /// Returns the parsed action on success, or an error string on failure.
+    // Transitional: will be used by the RPC server / socket listener in Phase 5.
+    #[allow(dead_code)]
+    pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<WmAction, String> {
+        let state = self.state.as_mut().ok_or("app not initialized")?;
+        let action = rpc::parse_rpc_command(cmd).map_err(|e| e.to_string())?;
+        self.registry.execute(&action, state);
+        Ok(action)
+    }
+
     fn new() -> Self {
         let app_config = AppConfig::load();
         let bindings = KeyBindings::load(&app_config);
