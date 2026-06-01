@@ -279,6 +279,29 @@ args = { target = "column", axis = "x", amount = "-50" }
 4. `keys.unbind` removes specific defaults
 5. Default modes are **always merged** with user modes (user modes override same name)
 
+### Unbinding Keybindings
+
+To remove a default binding, add it to `[keys.unbind]`:
+
+```toml
+[keys.unbind]
+"prefix+f" = true        # Remove float toggle
+"prefix+q" = true        # Remove pane select
+"prefix+Shift+q" = true  # Remove swap pane
+```
+
+**How it works:**
+- During config loading, all defaults are bound first
+- Then `[keys.unbind]` entries are processed
+- `keymap.unbind("normal", &combo)` removes the binding from the normal mode keymap
+- If the combo was also bound in global mode, it is removed from there too
+- The action itself still exists — you can rebind it to a different combo
+
+**Use cases:**
+- Free up a key for a custom binding
+- Disable features you don't use
+- Resolve conflicts between default and custom bindings
+
 ### Config Reload
 
 `WmAction::ReloadConfig` triggers `reload_config()` on `HecaApp`:
