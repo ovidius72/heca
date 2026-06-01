@@ -118,6 +118,9 @@ pub enum WmAction {
 
     // ── External commands ──
     SpawnCommand { command: String },
+
+    // ── Mode management ──
+    EnterMode { name: String },
 }
 
 /// Return the discriminant of a `WmAction`.
@@ -175,7 +178,16 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
         "command_palette" => Some(WmAction::CommandPalette),
-        _ => None,
+        _ => {
+            // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
+            if let Some(rest) = name.strip_prefix("focus_workspace_")
+                && let Ok(n) = rest.parse::<usize>()
+                && n >= 1
+            {
+                return Some(WmAction::FocusWorkspace { ws_idx: n - 1 });
+            }
+            None
+        }
     }
 }
 
@@ -303,7 +315,8 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::FloatAt { .. }
         | WmAction::ClosePaneById { .. }
         | WmAction::RenameTarget { .. }
-        | WmAction::SpawnCommand { .. } => 6,
+        | WmAction::SpawnCommand { .. }
+        | WmAction::EnterMode { .. } => 6,
     }
 }
 
@@ -398,5 +411,20 @@ mod tests {
         let c = WmAction::FocusLeft;
         assert_eq!(action_discriminant(&a), action_discriminant(&b));
         assert_ne!(action_discriminant(&a), action_discriminant(&c));
+    }
+
+    #[test]
+    fn test_focus_workspace_dynamic_parsing() {
+        assert_eq!(
+            action_from_name("focus_workspace_1"),
+            Some(WmAction::FocusWorkspace { ws_idx: 0 })
+        );
+        assert_eq!(
+            action_from_name("focus_workspace_9"),
+            Some(WmAction::FocusWorkspace { ws_idx: 8 })
+        );
+        assert_eq!(action_from_name("focus_workspace_0"), None);
+        assert_eq!(action_from_name("focus_workspace_"), None);
+        assert_eq!(action_from_name("focus_workspace"), None);
     }
 }

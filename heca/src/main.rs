@@ -192,6 +192,9 @@ struct HecaApp {
     keymap: keymap::KeymapRegistry,
     /// Per-mode keymaps (e.g. "resize" mode bindings).
     mode_keymaps: HashMap<String, keymap::KeymapRegistry>,
+    /// Mode triggers: name → (trigger combo, sticky).
+    /// Populated from [[keys.mode]] trigger field.
+    mode_triggers: HashMap<String, (keymap::KeyCombo, bool)>,
 }
 
 impl HecaApp {
@@ -225,16 +228,24 @@ impl HecaApp {
                 if trimmed.starts_with("prefix+") {
                     let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
                     let combo = keymap::KeyCombo::parse(rest);
-                    eprintln!("[bind] prefix+ -> normal: {:?} -> {}", combo, action_name);
                     keymap.bind("normal", combo, action.clone());
                 } else {
                     let combo = keymap::KeyCombo::parse(trimmed);
-                    // Global bindings use Alt/Super modifiers to avoid stealing typing.
-                    // Everything else (plain keys, Ctrl+, Shift+) are prefix-mode bindings.
-                    let mode = if combo.alt || combo.super_ { "global" } else { "normal" };
-                    eprintln!("[bind] {} -> {}: {:?} -> {}", trimmed, mode, combo, action_name);
-                    keymap.bind(mode, combo, action.clone());
+                    keymap.bind("global", combo, action.clone());
                 }
+            }
+        }
+
+        // ── Apply unbinds ──
+        for combo_str in app_config.config.keys.unbind.keys() {
+            let trimmed = combo_str.trim();
+            if trimmed.starts_with("prefix+") {
+                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+                let combo = keymap::KeyCombo::parse(rest);
+                keymap.unbind("normal", &combo);
+            } else {
+                let combo = keymap::KeyCombo::parse(trimmed);
+                keymap.unbind("global", &combo);
             }
         }
 
@@ -269,6 +280,7 @@ impl HecaApp {
 
         // ── Custom modes from [[keys.mode]] ──
         let mut mode_keymaps = HashMap::new();
+        let mut mode_triggers: HashMap<String, (keymap::KeyCombo, bool)> = HashMap::new(); // name → (combo, sticky)
         for mode_cfg in &app_config.config.keys.mode {
             let mut mode_map = keymap::KeymapRegistry::new();
             for binding in &mode_cfg.bindings {
@@ -284,6 +296,15 @@ impl HecaApp {
                 mode_map.bind(&mode_cfg.name, combo, action);
             }
             mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
+            // Register trigger: prefix+... → normal, else → global
+            let trigger_trimmed = mode_cfg.trigger.trim();
+            let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
+                let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
+                keymap::KeyCombo::parse(rest)
+            } else {
+                keymap::KeyCombo::parse(trigger_trimmed)
+            };
+            mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
         }
 
         Self {
@@ -292,6 +313,7 @@ impl HecaApp {
             registry,
             keymap,
             mode_keymaps,
+            mode_triggers,
         }
     }
 
@@ -945,8 +967,22 @@ impl ApplicationHandler for HecaApp {
                         let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
                         eprintln!("[key] prefix: combo={:?}", combo);
 
+                        // Check mode triggers first (e.g. prefix+r → resize mode).
+                        let mut entered_mode = None;
+                        for (mode_name, (trigger_combo, sticky)) in &self.mode_triggers {
+                            if event_combo_matches(&combo, trigger_combo) {
+                                entered_mode = Some((mode_name.clone(), *sticky));
+                                break;
+                            }
+                        }
+                        if let Some((mode_name, _sticky)) = entered_mode {
+                            state.input_mode = InputMode::Mode { name: mode_name };
+                            state.prefix_entered_at = None;
+                            state.needs_redraw = true;
+                            return;
+                        }
+
                         let action = self.keymap.resolve("normal", &combo).cloned();
-                        eprintln!("[key] prefix: action={:?}", action);
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
                         if let Some(ref act) = action {
@@ -990,6 +1026,7 @@ impl ApplicationHandler for HecaApp {
                         state.needs_redraw = true;
                     }
                     InputMode::Mode { name } => {
+                        let name = name.clone();
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
                         if is_escape {
                             state.input_mode = InputMode::Normal;
@@ -997,13 +1034,15 @@ impl ApplicationHandler for HecaApp {
                             return;
                         }
                         let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
-                        if let Some(mode_map) = self.mode_keymaps.get(name)
-                            && let Some(action) = mode_map.resolve(name, &combo).cloned()
+                        if let Some(mode_map) = self.mode_keymaps.get(&name)
+                            && let Some(action) = mode_map.resolve(&name, &combo).cloned()
                         {
+                            let sticky = self.mode_triggers.get(&name).map(|(_, s)| *s).unwrap_or(true);
                             self.registry.execute(&action, state);
-                            // If mode is not sticky, exit after one action.
-                            // (Sticky check would need config access here.)
-                            // For now, all modes are sticky until Esc.
+                            if !sticky {
+                                state.input_mode = InputMode::Normal;
+                                state.needs_redraw = true;
+                            }
                         }
                     }
                     InputMode::PaneSelect { candidates } => {
@@ -1505,6 +1544,9 @@ pub fn build_registry() -> actions::ActionRegistry {
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
     registry.register(&WmAction::SpawnCommand { command: String::new() }, handle_spawn_command);
+
+    // ── Mode ──
+    registry.register(&WmAction::EnterMode { name: String::new() }, handle_enter_mode);
 
     registry
 }

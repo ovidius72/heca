@@ -805,3 +805,11 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     sync_focus(state);
     state.needs_redraw = true;
 }
+
+// ── Mode ──
+
+pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
+    let WmAction::EnterMode { name } = action else { return };
+    state.input_mode = InputMode::Mode { name: name.clone() };
+    state.needs_redraw = true;
+}

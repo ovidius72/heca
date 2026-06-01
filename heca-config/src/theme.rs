@@ -276,9 +276,13 @@ pub struct KeysConfig {
     /// Accepts both `prefix` and `prefix_key` for compatibility.
     #[serde(default = "default_prefix_key", alias = "prefix_key")]
     pub prefix: String,
-    /// Flat action bindings (any key not named "prefix", "command", or "mode").
+    /// Flat action bindings (any key not named "prefix", "command", "mode", or "unbind").
     #[serde(flatten)]
     pub bindings: KeybindingMap,
+    /// Key combos to remove from the keymap (e.g. to free a default binding).
+    /// Each entry is a combo string like "prefix+w" or "Alt+1".
+    #[serde(default)]
+    pub unbind: HashMap<String, bool>,
     /// Custom command bindings.
     #[serde(default)]
     pub command: Vec<CommandKeybindConfig>,
@@ -293,10 +297,10 @@ impl Default for KeysConfig {
         use BindingValue::*;
 
         // ── Navigation ──
-        bindings.insert("focus_left".to_string(),  Single("h".to_string()));
-        bindings.insert("focus_right".to_string(), Single("l".to_string()));
-        bindings.insert("focus_up".to_string(),    Single("k".to_string()));
-        bindings.insert("focus_down".to_string(),  Single("j".to_string()));
+        bindings.insert("focus_left".to_string(),  Single("prefix+h".to_string()));
+        bindings.insert("focus_right".to_string(), Single("prefix+l".to_string()));
+        bindings.insert("focus_up".to_string(),    Single("prefix+k".to_string()));
+        bindings.insert("focus_down".to_string(),  Single("prefix+j".to_string()));
 
         // ── Splits ──
         bindings.insert("split_horizontal".to_string(), Single("prefix+Enter".to_string()));
@@ -359,7 +363,7 @@ impl Default for KeysConfig {
         bindings.insert("swap_up".to_string(),    Single("prefix+Ctrl+k".to_string()));
         bindings.insert("swap_down".to_string(),  Single("prefix+Ctrl+j".to_string()));
 
-        Self { prefix: default_prefix_key(), bindings, command: Vec::new(), mode: Vec::new() }
+        Self { prefix: default_prefix_key(), bindings, unbind: HashMap::new(), command: Vec::new(), mode: Vec::new() }
     }
 }
 
