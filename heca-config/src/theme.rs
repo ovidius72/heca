@@ -364,9 +364,24 @@ impl AppConfig {
             Some(config_dir().join("config.toml")),
         ];
         for path in paths.into_iter().flatten() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                return toml::from_str(&content)
-                    .map_err(|e| format!("parse error in {}: {}", path.display(), e));
+            eprintln!("[config] trying: {}", path.display());
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    eprintln!("[config] found file at: {}", path.display());
+                    match toml::from_str(&content) {
+                        Ok(config) => {
+                            eprintln!("[config] parsed successfully");
+                            return Ok(config);
+                        }
+                        Err(e) => {
+                            eprintln!("[config] PARSE ERROR in {}: {}", path.display(), e);
+                            return Err(format!("parse error in {}: {}", path.display(), e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[config] not found: {} ({e})", path.display());
+                }
             }
         }
         Err("no config file found".to_string())

@@ -909,14 +909,6 @@ impl ApplicationHandler for HecaApp {
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
                         let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
 
-                        // Check for chord starters (e.g. "w" starts workspace-switch chord).
-                        if key_text.eq_ignore_ascii_case("w") && !is_ctrl && !is_shift {
-                            state.input_mode = InputMode::Chord { sequence: vec!["w".to_string()] };
-                            state.prefix_entered_at = Some(std::time::Instant::now());
-                            state.needs_redraw = true;
-                            return;
-                        }
-
                         let action = self.keymap.resolve("normal", &combo).cloned();
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
