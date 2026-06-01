@@ -369,9 +369,14 @@ impl AppConfig {
             match std::fs::read_to_string(&path) {
                 Ok(content) => {
                     eprintln!("[config] found file at: {}", path.display());
-                    match toml::from_str(&content) {
+                    match toml::from_str::<Config>(&content) {
                         Ok(config) => {
                             eprintln!("[config] parsed successfully");
+                            eprintln!("[config] prefix='{}' bindings_count={} command_count={} mode_count={}",
+                                config.keys.prefix,
+                                config.keys.bindings.len(),
+                                config.keys.command.len(),
+                                config.keys.mode.len());
                             return Ok(config);
                         }
                         Err(e) => {

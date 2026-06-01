@@ -225,10 +225,15 @@ impl HecaApp {
                 if trimmed.starts_with("prefix+") {
                     let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
                     let combo = keymap::KeyCombo::parse(rest);
+                    eprintln!("[bind] prefix+ -> normal: {:?} -> {}", combo, action_name);
                     keymap.bind("normal", combo, action.clone());
                 } else {
                     let combo = keymap::KeyCombo::parse(trimmed);
-                    keymap.bind("global", combo, action.clone());
+                    // Global bindings use Alt/Super modifiers to avoid stealing typing.
+                    // Everything else (plain keys, Ctrl+, Shift+) are prefix-mode bindings.
+                    let mode = if combo.alt || combo.super_ { "global" } else { "normal" };
+                    eprintln!("[bind] {} -> {}: {:?} -> {}", trimmed, mode, combo, action_name);
+                    keymap.bind(mode, combo, action.clone());
                 }
             }
         }
@@ -424,9 +429,11 @@ impl HecaApp {
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.settings.mouse,
             prefix_entered_at: None,
-            prefix_combo: keymap::KeyCombo::parse(
-                &self.app_config.config.keys.prefix,
-            ),
+            prefix_combo: {
+                let combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
+                eprintln!("[init] prefix loaded: '{}' -> {:?}", self.app_config.config.keys.prefix, combo);
+                combo
+            },
         })
     }
 
@@ -873,6 +880,7 @@ impl ApplicationHandler for HecaApp {
                 // Detect arrow keys via physical_key
                 match &state.input_mode {
                     InputMode::Normal => {
+                        eprintln!("[key] normal: event={:?} prefix={:?} is_prefix={}", event_combo, state.prefix_combo, is_prefix);
                         // Only prefix key activates prefix mode in Normal
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
@@ -935,8 +943,10 @@ impl ApplicationHandler for HecaApp {
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
                         let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        eprintln!("[key] prefix: combo={:?}", combo);
 
                         let action = self.keymap.resolve("normal", &combo).cloned();
+                        eprintln!("[key] prefix: action={:?}", action);
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
                         if let Some(ref act) = action {
