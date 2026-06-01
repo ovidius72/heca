@@ -906,10 +906,10 @@ impl ApplicationHandler for HecaApp {
                         let action = self.keymap.resolve("normal", &combo).cloned();
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
-                        if let Some(act) = action {
+                        if let Some(ref act) = action {
                             state.input_mode = InputMode::Normal;
                             state.prefix_entered_at = None;
-                            self.registry.execute(&act, state);
+                            self.registry.execute(act, state);
                         } else if !key_text.is_empty() {
                             // Printable key that didn't match any binding — exit prefix.
                             state.input_mode = InputMode::Normal;

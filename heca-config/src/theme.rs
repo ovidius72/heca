@@ -405,9 +405,19 @@ impl AppConfig {
     }
 
     fn load_config_file() -> Option<Config> {
+        // Try ~/.config/heca/config.toml first (cross-platform convention).
+        let dotconfig = dirs::home_dir()
+            .map(|h| h.join(".config").join("heca").join("config.toml"));
+        if let Some(ref path) = dotconfig
+            && let Ok(content) = std::fs::read_to_string(path)
+        {
+            return toml::from_str(&content).ok();
+        }
+        // Fall back to platform-specific config dir.
         let path = config_dir().join("config.toml");
-        let content = std::fs::read_to_string(path).ok()?;
-        toml::from_str(&content).ok()
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| toml::from_str(&content).ok())
     }
 }
 
