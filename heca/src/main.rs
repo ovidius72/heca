@@ -135,6 +135,20 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
     }
 }
 
+/// Normalize a winit key event into a config-compatible key string.
+/// Printable characters pass through. Named keys become their canonical name
+/// (Enter, Tab, ArrowLeft, etc.) so they match config strings.
+fn normalize_key_text(logical_key: &winit::keyboard::Key, key_text: &str) -> String {
+    if !key_text.is_empty() {
+        return key_text.to_string();
+    }
+    match logical_key {
+        winit::keyboard::Key::Named(n) => format!("{:?}", n),
+        winit::keyboard::Key::Character(c) => c.to_string(),
+        _ => String::new(),
+    }
+}
+
 /// Convert a winit key event to terminal input bytes.
 fn winit_key_to_terminal_input(
     key: &winit::keyboard::Key,
@@ -793,7 +807,7 @@ impl ApplicationHandler for HecaApp {
 
                 // Build a KeyCombo from the current key event for comparison.
                 let event_combo = keymap::KeyCombo {
-                    key: key_text.clone(),
+                    key: normalize_key_text(&event.logical_key, &key_text),
                     ctrl: is_ctrl,
                     shift: is_shift,
                     alt: state.modifiers.alt_key(),
@@ -907,7 +921,7 @@ impl ApplicationHandler for HecaApp {
                         // In prefix mode, pass the REAL modifier state. The user may intentionally
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
-                        let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
 
                         let action = self.keymap.resolve("normal", &combo).cloned();
                         // Only reset to Normal if we found an action or the key is printable.
@@ -959,7 +973,7 @@ impl ApplicationHandler for HecaApp {
                             state.needs_redraw = true;
                             return;
                         }
-                        let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
                         if let Some(mode_map) = self.mode_keymaps.get(name)
                             && let Some(action) = mode_map.resolve(name, &combo).cloned()
                         {
@@ -1041,7 +1055,7 @@ impl ApplicationHandler for HecaApp {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                         } else {
-                            let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                            let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
                             let action = self.keymap.resolve("sidebar", &combo).cloned();
                             if let Some(act) = action {
                                 self.registry.execute(&act, state);
