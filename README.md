@@ -18,10 +18,11 @@ Think tmux meets NIRI meets Neovide — all panes render in a single GPU-acceler
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Keyboard Commands](#keyboard-commands)
-- [Mouse Interaction](#mouse-interaction)
 - [Configuration](#configuration)
-- [Adding Panes and Workspaces](#adding-panes-and-workspaces)
-- [Customizing Keybindings](#customizing-keybindings)
+- [Actions System](#actions-system)
+- [Keybindings](#keybindings)
+- [Modes](#modes)
+- [Spawning Applications](#spawning-applications)
 - [Architecture](#architecture)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -36,7 +37,6 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 - **Vertical stacks** — Within each column, panes stack vertically with intelligent height distribution.
 - **Workspaces** — Multiple workspaces stacked vertically, switched with animated transitions.
 - **Floating panes** — Any pane can be detached from the scrolling layout and positioned freely.
-- **Overview mode** — Zoom out to see all workspaces as scaled thumbnails.
 - **GPU-native chrome** — Tab bar, sidebars, status bar, pane borders — all rendered in one GPU pass.
 
 **Why not tmux + a terminal?**
@@ -138,10 +138,10 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 
 | Command | Default Binding | Description |
 |---------|----------------|-------------|
-| Focus left | `h` / `←` | Activate column left, scroll view |
-| Focus right | `l` / `→` | Activate column right, scroll view |
-| Focus up | `k` / `↑` | Activate pane above in column |
-| Focus down | `j` / `↓` | Activate pane below in column |
+| Focus left | `h` | Activate column left, scroll view |
+| Focus right | `l` | Activate column right, scroll view |
+| Focus up | `k` | Activate pane above in column |
+| Focus down | `j` | Activate pane below in column |
 | Next pane | `n` | Cycle to next pane across columns |
 | Prev pane | `p` | Cycle to prev pane across columns |
 | Workspace next | `d` | Switch to next workspace (down) |
@@ -155,11 +155,11 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 |---------|----------------|-------------|
 | Split horizontal | `Enter` | New column to the right of active |
 | Split vertical | `v` | New pane below active in same column |
-| Close | `x` | Close active pane (protected: won't close last pane) |
+| Close | `x` | Close active pane |
 | Float | `f` | Toggle pane between scrolling and floating |
 | Pane select | `q` | Overlay letters on panes; press letter to focus |
-| Swap select | `Shift+Q` | Overlay letters; press letter to swap positions |
-| Swap and focus | `m` | (Used with SwapSelect) focus target after swap |
+| Swap pane | `Shift+Q` | Overlay letters; swap panes (stay at current position) |
+| Swap and focus | `m` | Overlay letters; swap panes (follow to destination) |
 
 ### Resize
 
@@ -167,19 +167,19 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 |---------|----------------|-------------|
 | Resize increase | `=` | Widen active column |
 | Resize decrease | `-` | Narrow active column |
-| Pane height increase | `Shift+=` | Increase active pane's preferred height |
-| Pane height decrease | `Shift+-` | Decrease active pane's preferred height |
+| Pane height increase | `Shift+=` | Grow active pane height |
+| Pane height decrease | `Shift+-` | Shrink active pane height |
 
-### Move
+### Move / Swap (adjacent)
 
 | Command | Default Binding | Description |
 |---------|----------------|-------------|
-| Move pane left | `[` | Move active pane to column on left (or new column) |
-| Move pane right | `]` | Move active pane to column on right (or new column) |
-| Swap left | `Ctrl+H` | Swap active pane with pane to the left |
-| Swap right | `Ctrl+L` | Swap active pane with pane to the right |
-| Swap up | `Ctrl+K` | Swap active pane with pane above |
-| Swap down | `Ctrl+J` | Swap active pane with pane below |
+| Move pane left | `Ctrl+[` | Move active pane to column on left |
+| Move pane right | `Ctrl+]` | Move active pane to column on right |
+| Swap left | `Ctrl+H` | Swap with pane to the left |
+| Swap right | `Ctrl+L` | Swap with pane to the right |
+| Swap up | `Ctrl+K` | Swap with pane above |
+| Swap down | `Ctrl+J` | Swap with pane below |
 
 ### Workspace & Sidebar
 
@@ -192,71 +192,23 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Enter sidebar navigation mode |
 
-### Sidebar Navigation Mode (when sidebar is focused)
+### Sidebar Navigation Mode
 
-| Command | Binding | Description |
-|---------|---------|-------------|
-| Down | `j` / `↓` | Move cursor down |
-| Up | `k` / `↑` | Move cursor up |
-| Expand/collapse | `Tab` / `Space` | Toggle folder expansion |
-| Activate | `l` / `Enter` | Focus selected workspace/pane |
+When in sidebar mode (`Ctrl+B → e` or clicking sidebar):
 
-### Tabs
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move cursor down / up |
+| `h` / `l` | Collapse / expand tree node |
+| `Enter` | Activate selected item (focus pane/workspace) |
+| `Escape` | Exit sidebar mode |
+
+### System
 
 | Command | Default Binding | Description |
 |---------|----------------|-------------|
-| Tab next | `Ctrl+]` | Next workspace tab |
-| Tab prev | `Ctrl+[` | Previous workspace tab |
-
----
-
-## Mouse Interaction
-
-heca has a fully configurable mouse interaction system. All features are enabled by default (`general.mouse = true`).
-
-### Click to Focus
-
-**Left-click** anywhere inside a pane to focus it. Works for both scrolling and floating panes.
-
-### Focus Follows Mouse
-
-When enabled (`general.focus_follows_mouse = true`, default), hovering over a pane automatically focuses it — no click required. Disabled during modal modes (Pane Select, Swap, Rename, Sidebar Nav) to prevent accidental focus changes.
-
-### Interactive Pane Move (Drag and Drop)
-
-Hold a **modifier key** + **left-click** on a pane to grab and drag it to a new position.
-
-**Config:**
-```toml
-[general]
-interactive_move_modifier = "Super"  # Options: "Super", "Alt", "Ctrl", "Shift"
-```
-
-**How it works:**
-
-1. **Grab** — Modifier+click on a pane. The pane rubberbands with your cursor (visual feedback).
-2. **Drag** — Move the mouse. Once you drag past a threshold (8px), the pane detaches from the layout and follows your cursor.
-3. **Insert hint** — A translucent bar shows where the pane will drop:
-   - **Vertical bar** (24px wide, 60% height) = new column
-   - **Horizontal bar** (full width, 24px tall) = within existing column
-4. **Drop** — Release to place the pane. It animates smoothly into its new position.
-
-### Edge Scroll
-
-When enabled (`general.auto_scroll_edge = true`, default), hovering near the left/right edge of the content area automatically scrolls the layout. Works both during drag-and-drop and on plain hover.
-
-| Mode | Trigger zone | Speed |
-|------|-------------|-------|
-| Hover | 80px from edge | 300 px/sec |
-| Drag | 150px from edge | 1000 px/sec |
-
-Scrolling stops at the first/last column — it never scrolls past content bounds.
-
-### Sidebar Click
-
-Click on items in the left sidebar to focus them directly:
-- **Pane item** — Switches to that pane's workspace and focuses it
-- **Workspace item** — Switches to that workspace
+| Command palette | `p` | Open command palette |
+| Reload config | `Shift+R` | Reload config.toml at runtime |
 
 ---
 
@@ -267,33 +219,69 @@ heca loads config from `~/.config/heca/config.toml` (Linux/macOS) or `%APPDATA%\
 ### Minimal Config
 
 ```toml
+# Prefix key (default: "ctrl+b")
+prefix = "ctrl+a"
+
+# Theme
+# Built-in: "mocha" (dark), "latte" (light)
 theme = "mocha"
 
-[general]
+# Window settings
+[settings]
 window_width = 1280
 window_height = 800
 mouse = true
-focus_follows_mouse = true
-auto_scroll_edge = true
-interactive_move_modifier = "Super"
 
-[keybindings]
-focus_left = "h,ArrowLeft"
-focus_right = "l,ArrowRight"
-focus_up = "k,ArrowUp"
-focus_down = "j,ArrowDown"
-split_horizontal = "Enter"
-split_vertical = "v"
-close = "x"
-float = "f"
-pane_select = "q"
-swap_select = "Shift+q"
-resize_increase = "="
-resize_decrease = "-"
-move_pane_left = "["
-move_pane_right = "]"
-sidebar_left = "b"
+# Keybindings — prefix+ syntax for prefix bindings, direct for global
+[keys]
+focus_left = "prefix+h"
+focus_right = "prefix+l"
+focus_up = "prefix+k"
+focus_down = "prefix+j"
+split_horizontal = "prefix+Enter"
+split_vertical = "prefix+v"
+close = "prefix+x"
+float = "prefix+f"
+pane_select = "prefix+q"
+swap_pane = "prefix+Shift+q"
+swap_and_focus_pane = "prefix+m"
 ```
+
+### Config File Format
+
+The config uses TOML with a flat `[keys]` table:
+
+```toml
+[keys]
+# Single binding
+focus_left = "prefix+h"
+
+# Multiple bindings (list syntax)
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+
+# Global binding (no prefix — works in Normal mode)
+# These are checked before forwarding to terminal
+Alt+Enter = "spawn_lazygit"   # Requires [[keys.command]]
+
+# Unbind defaults
+[keys.unbind]
+"prefix+f" = true   # Remove float toggle
+```
+
+### Key Combo Syntax
+
+```
+prefix+h           → Press prefix, then h
+prefix+Shift+q     → Press prefix, then Shift+q
+prefix+Ctrl+h      → Press prefix, then Ctrl+h
+Alt+Enter          → Global Alt+Enter (no prefix)
+Super+t            → Global Super+t (no prefix)
+F1                 → Global F1
+```
+
+**Modifiers:** `Ctrl`, `Shift`, `Alt`, `Super` (also accepts `Win`, `Cmd`)
+
+**Named keys:** `Enter`, `Tab`, `Escape`, `Backspace`, `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Space`, `Delete`
 
 ### Theme
 
@@ -316,126 +304,183 @@ alpha = 0.3
 blur = 8.0
 ```
 
-### General Options
+### Settings
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `window_width` | `u32` | `1280` | Initial window width |
-| `window_height` | `u32` | `800` | Initial window height |
-| `mouse` | `bool` | `true` | Enable mouse interactions |
-| `focus_follows_mouse` | `bool` | `true` | Focus pane on hover |
-| `auto_scroll_edge` | `bool` | `true` | Auto-scroll near edges |
-| `interactive_move_modifier` | `String` | `"Super"` | Modifier for drag-and-drop |
+```toml
+[settings]
+window_width = 1280           # Initial window width
+window_height = 800           # Initial window height
+mouse = true                  # Enable mouse interactions
+focus_follows_mouse = true    # Focus pane on hover
+auto_scroll_edge = true       # Auto-scroll near edges
+interactive_move_modifier = "Super"  # Modifier for drag-and-drop
+```
 
 ---
 
-## Adding Panes and Workspaces
+## Actions System
 
-### Add a Pane (Vertical Split)
+Every WM command in heca is an **action**. Actions are the core abstraction — everything from focusing a pane to resizing a column to spawning an application is an action.
 
-```
-Ctrl+B → v
-```
+### Action Types
 
-Creates a new pane below the active one in the same column.
+**Unit actions** — Simple commands with no arguments:
+- `focus_left`, `focus_right`, `split_horizontal`, `close`, `float`
 
-### Add a Column (Horizontal Split)
+**Parameterized actions** — Commands with arguments:
+- `FocusPane { pane_id }` — Focus a specific pane by ID
+- `FocusWorkspace { ws_idx }` — Focus a workspace by index
+- `Swap { a_id, b_id }` — Swap two panes
+- `Resize { target, axis, amount }` — Resize column or pane
+- `SpawnCommand { command }` — Run an external command
 
-```
-Ctrl+B → Enter
-```
+### Registry Dispatch
 
-Creates a new column to the right of the active column.
-
-### Create a Workspace
-
-```
-Ctrl+B → w
-```
-
-Creates a new workspace with a single pane and switches to it.
-
-### Close a Pane
+All actions go through a central registry:
 
 ```
-Ctrl+B → x
+Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry → Handler
 ```
 
-Closes the active pane. The last pane in a workspace is protected — you cannot close it. To close a workspace, close all its panes or switch away.
+This design means:
+- Every action is traceable and hookable
+- Future scripting/IPC can trigger any action by name
+- Actions can be composed and chained
 
-### Float a Pane
+### Creating Custom Actions
 
+To add a new action to heca:
+
+1. **Add to `WmAction` enum** in `heca/src/input.rs`:
+```rust
+pub enum WmAction {
+    // ... existing variants
+    MyCustomAction,
+}
 ```
-Ctrl+B → f
+
+2. **Add name mapping** in `action_from_name()`:
+```rust
+"my_custom_action" => Some(WmAction::MyCustomAction),
 ```
 
-Toggles the active pane between the scrolling layout and floating. Floating panes:
-- Render on top of scrolling panes
-- Are positioned freely within the workspace
-- Remember their original position for restoration
+3. **Add priority** in `action_priority()`:
+```rust
+WmAction::MyCustomAction => 1,  // Lower = higher priority
+```
+
+4. **Create handler** in `heca/src/handlers.rs`:
+```rust
+pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
+    // Your logic here
+    state.needs_redraw = true;
+}
+```
+
+5. **Register** in `build_registry()` in `heca/src/main.rs`:
+```rust
+registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
+```
+
+6. **Add default binding** in `heca-config/src/theme.rs`:
+```rust
+bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
+```
 
 ---
 
-## Customizing Keybindings
+## Keybindings
 
-All keybindings live in the `[keybindings]` table of `config.toml`. The format is:
+### Default Keybindings
 
-```toml
-[keybindings]
-action_name = "key"
-action_name = "key1,key2"  # Multiple keys for same action
-```
+See [`keybindings.toml`](keybindings.toml) for a complete reference of all default keybindings that can be customized.
 
-### Modifier Syntax
+### Customizing Keybindings
+
+Edit `~/.config/heca/config.toml`:
 
 ```toml
-# Single key
-focus_left = "h"
+[keys]
+# Change prefix key
+prefix = "ctrl+a"
 
-# With modifier
-swap_left = "Ctrl+h"
-resize_increase = "Shift+="
+# Rebind actions
+focus_left = "prefix+h"
+focus_right = "prefix+l"
 
-# Multiple bindings (comma-separated)
-focus_left = "h,ArrowLeft"
+# Multiple bindings for same action
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+
+# Global bindings (no prefix needed)
+# Checked before forwarding to terminal
+Alt+Enter = "spawn_terminal"
+
+# Remove default bindings
+[keys.unbind]
+"prefix+f" = true
 ```
 
-### Supported Modifiers
+### Modes
 
-- `Ctrl` — Control key
-- `Shift` — Shift key
-- `Shift+Ctrl` — Both (order doesn't matter)
+Modes are groups of bindings that stay active until `Escape` or `Enter` is pressed. The default resize mode is an example:
 
-### Special Keys
+```toml
+# Default built-in: prefix+r enters resize mode
+# In resize mode:
+#   h / l  → resize column narrower / wider
+#   j / k  → resize pane shorter / taller
+#   Arrow keys work too
+#   Escape / Enter → exit mode
 
-Use the key name directly: `Enter`, `Space`, `Tab`, `Escape`, `Backspace`, `ArrowLeft`, `ArrowRight`, `ArrowUp`, `ArrowDown`, `Home`, `End`, `PageUp`, `PageDown`, `Delete`.
+# Custom modes
+[[keys.mode]]
+name = "my_mode"
+trigger = "prefix+o"      # How to enter the mode
+sticky = true             # true = stay until Esc/Enter
 
-### Full Action List
+[[keys.mode.bindings]]
+action = "focus_left"
+keys = "h"
 
-| Action Name | Description |
-|-------------|-------------|
-| `focus_left` / `focus_right` / `focus_up` / `focus_down` | Navigate between panes |
-| `split_horizontal` | New column |
-| `split_vertical` | New pane in column |
-| `close` | Close active pane |
-| `float` | Toggle floating |
-| `resize_increase` / `resize_decrease` | Column width |
-| `pane_height_increase` / `pane_height_decrease` | Pane height |
-| `move_pane_left` / `move_pane_right` | Move pane to adjacent column |
-| `swap_left` / `swap_right` / `swap_up` / `swap_down` | Swap with adjacent pane |
-| `pane_select` | Quick-select by letter |
-| `swap_select` | Quick-swap by letter |
-| `swap_and_focus` | Focus after swap |
-| `next_pane` / `prev_pane` | Cycle panes |
-| `workspace_next` / `workspace_prev` | Switch workspace |
-| `create_workspace` | New workspace |
-| `rename_workspace` | Rename workspace |
-| `rename_pane` | Rename pane |
-| `focus_toggle_local` / `focus_toggle_global` | Toggle last focused |
-| `sidebar_left` / `sidebar_right` | Toggle sidebars |
-| `sidebar_focus` | Focus sidebar |
-| `tab_next` / `tab_prev` | Workspace tabs |
-| `command_palette` | Command palette |
+[[keys.mode.bindings]]
+action = "focus_right"
+keys = "l"
+```
+
+**Sticky vs Non-sticky modes:**
+- **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
+- **Non-sticky** (`sticky = false`, or chord): Execute one action then exit. Like `prefix+w` → `1` creates workspace 1.
+
+### Binding Precedence
+
+heca checks bindings in this order:
+
+1. **Mode bindings** — If in a custom mode, check mode-specific keymap
+2. **Prefix mode** — If in prefix mode, check "normal" keymap for `prefix+key` combos
+3. **Global bindings** — In Normal mode, check "global" keymap for direct `Alt+key` / `Super+key` combos
+4. **Forward to terminal** — If no binding matched, send key to focused pane's backend
+
+---
+
+## Spawning Applications
+
+Launch external applications in new panes using `[[keys.command]]`:
+
+```toml
+[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+
+[[keys.command]]
+keys = "prefix+t"
+command = "btm"  # bottom system monitor
+
+[[keys.command]]
+keys = "Alt+Enter"
+command = "alacritty"
+```
+
+This creates a new pane with the command as its title. When PTY support is fully implemented, the application will run inside heca with full terminal emulation.
 
 ---
 
@@ -445,7 +490,8 @@ Use the key name directly: `Enter`, `Space`, `Tab`, `Escape`, `Backspace`, `Arro
 ┌─────────────────────────────────────────┐
 │  heca (main binary)                     │
 │  ├── winit event loop                   │
-│  ├── input routing (prefix mode)        │
+│  ├── input routing (prefix/keymap)      │
+│  ├── ActionRegistry dispatch            │
 │  ├── render() — GPU compositor          │
 │  └── chrome (tab bar, sidebars, status) │
 ├─────────────────────────────────────────┤
@@ -455,7 +501,7 @@ Use the key name directly: `Enter`, `Space`, `Tab`, `Escape`, `Backspace`, `Arro
 ├─────────────────────────────────────────┤
 │  heca-core                              │
 │  ├── layout/                            │
-│  │   ├── Session → Workspace → Column → Pane │
+│  │   ├── Session → Workspace → Column → Pane
 │  │   ├── ViewOffset (animated scroll)   │
 │  │   └── Animation (easing, springs)    │
 │  └── backend/                           │
@@ -472,8 +518,10 @@ Use the key name directly: `Enter`, `Space`, `Tab`, `Escape`, `Backspace`, `Arro
 
 - **NIRI layout engine**: Horizontal scrolling columns, not BSP trees. Column widths are independent.
 - **Separation of concerns**: Layout in `heca-core`, GPU in `heca-renderer`, orchestration in `heca`.
-- **`PaneBackend` trait**: All content sources (terminal, Neovim, browser) implement the same interface.
+- **ActionRegistry**: All WM commands go through one dispatch point. Every action is a `WmAction` enum variant.
+- **KeymapRegistry**: Mode-specific keymaps. Modes are groups of bindings active until Esc/Enter.
 - **Prefix mode**: Intentionally tmux-style to avoid conflicts with hosted applications.
+- **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
 
 ---
 
@@ -483,8 +531,8 @@ Use the key name directly: `Enter`, `Space`, `Tab`, `Escape`, `Backspace`, `Arro
 |-------|--------|-------------|
 | **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
 | **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
-| **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC, mouse forwarding |
-| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins, damage tracking |
+| **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |
+| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins |
 
 See `.planning/ROADMAP.md` for detailed requirements.
 
