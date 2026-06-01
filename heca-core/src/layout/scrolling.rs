@@ -757,6 +757,14 @@ impl ScrollingSpace {
         }
     }
 
+    /// Scroll the view by a delta (positive = right, negative = left).
+    /// Clamps to content bounds.
+    pub fn scroll_by(&mut self, delta: f64) {
+        let current = self.view_offset.current();
+        let new_offset = current + delta;
+        self.view_offset = ViewOffset::Static(new_offset);
+    }
+
     /// Check if any animations are ongoing.
     pub fn are_animations_ongoing(&self) -> bool {
         self.view_offset.is_animation_ongoing()

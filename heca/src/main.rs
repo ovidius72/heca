@@ -910,7 +910,6 @@ impl ApplicationHandler for HecaApp {
                         }
 
                         // Check global (non-prefix) keybindings before forwarding to terminal.
-                        // These use modifiers (Alt, Super, F-keys) to avoid stealing typing.
                         let global_action = self.keymap.resolve("global", &event_combo).cloned();
                         if let Some(act) = global_action {
                             self.registry.execute(&act, state);
@@ -1259,6 +1258,14 @@ impl ApplicationHandler for HecaApp {
             // Advance session animations.
             state.session.advance_animations();
 
+            // Edge scroll when hovering near content edges.
+            let pane_area = compute_pane_area(state);
+            let edge_scroll_active = if self.app_config.config.settings.auto_scroll_edge {
+                dnd_edge_scroll(state, pane_area)
+            } else {
+                false
+            };
+
             // Poll backends (fake backends return false)
             let mut backend_has_data = false;
             for backend in state.backends.values_mut() {
@@ -1267,13 +1274,13 @@ impl ApplicationHandler for HecaApp {
                 }
             }
 
-            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
+            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing() || edge_scroll_active;
             if needs_frame {
                 state.window.request_redraw();
             }
 
-            // Use WaitUntil during animations (60fps cap), Wait when idle (0% CPU).
-            if state.session.are_animations_ongoing() {
+            // Use WaitUntil during animations or edge scroll (60fps cap), Wait when idle (0% CPU).
+            if state.session.are_animations_ongoing() || edge_scroll_active {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(
                     Instant::now() + Duration::from_millis(16)
                 ));
@@ -1753,6 +1760,7 @@ pub(crate) fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
         };
         std::mem::swap(&mut col_a.panes[aidx], &mut col_b.panes[bidx]);
     }
+    sync_focus(state);
     state.needs_redraw = true;
 }
 
@@ -1778,6 +1786,48 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
         if ws_idx < state.last_visited_pane_per_ws.len() {
             state.last_visited_pane_per_ws.remove(ws_idx);
         }
+    }
+}
+
+/// Edge scroll: auto-scroll the layout when the pointer is near the left/right
+/// edge of the content area. Returns true if scrolling is active.
+fn dnd_edge_scroll(state: &mut AppState, pane_area: heca_core::types::Rect) -> bool {
+    let trigger = 80.0f32;
+    let speed = 800.0f32; // px/sec
+    let inset = 8.0f32;
+
+    let mouse_pos = state.mouse_pos;
+    let mouse_x_in_content = mouse_pos.0 - pane_area.x;
+    let mouse_y_in_content = mouse_pos.1 - pane_area.y;
+
+    // Only scroll when pointer is inside the content area.
+    if mouse_x_in_content < 0.0
+        || mouse_x_in_content > pane_area.w
+        || mouse_y_in_content < 0.0
+        || mouse_y_in_content > pane_area.h
+    {
+        return false;
+    }
+
+    let content_w = pane_area.w;
+    let delta = if mouse_x_in_content < trigger + inset {
+        -(trigger + inset - mouse_x_in_content)
+    } else if content_w - mouse_x_in_content < trigger + inset {
+        trigger + inset - (content_w - mouse_x_in_content)
+    } else {
+        0.0
+    };
+
+    if delta != 0.0 {
+        let factor = delta.abs() / trigger;
+        let scroll_amount = (speed * factor * 0.016) as f64; // ~1 frame at 60fps
+        let direction = if delta < 0.0 { -1.0 } else { 1.0 };
+        if let Some(ws) = state.session.active_workspace_mut() {
+            ws.scrolling.scroll_by(direction * scroll_amount);
+        }
+        true
+    } else {
+        false
     }
 }
 

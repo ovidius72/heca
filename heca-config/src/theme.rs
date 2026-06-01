@@ -330,13 +330,11 @@ impl Default for KeysConfig {
         bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
 
         // ── Sidebars ──
+        // Note: sidebar navigation (h/j/k/l) is ONLY active in SidebarNav mode.
+        // Do NOT bind them in the normal prefix map — they conflict with focus_left/right/up/down.
         bindings.insert("sidebar_left".to_string(),  Single("prefix+b".to_string()));
         bindings.insert("sidebar_right".to_string(), Single("prefix+.".to_string()));
         bindings.insert("sidebar_focus".to_string(), Single("prefix+e".to_string()));
-        bindings.insert("sidebar_up".to_string(),    Single("prefix+k".to_string()));
-        bindings.insert("sidebar_down".to_string(),  Single("prefix+j".to_string()));
-        bindings.insert("sidebar_left_nav".to_string(),  Single("prefix+h".to_string()));
-        bindings.insert("sidebar_right_nav".to_string(), Single("prefix+l".to_string()));
         bindings.insert("sidebar_expand_toggle".to_string(), Single("prefix+Tab".to_string()));
 
         // ── Workspace navigation ──
