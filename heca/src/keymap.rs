@@ -7,13 +7,35 @@ use std::collections::HashMap;
 use crate::input::WmAction;
 
 /// Normalized representation of a key press.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Equality and hashing are case-insensitive on the `key` field so that
+/// "Enter" and "enter" match the same binding.
+#[derive(Clone, Debug, Eq)]
 pub struct KeyCombo {
     pub key: String,
     pub ctrl: bool,
     pub shift: bool,
     pub alt: bool,
     pub super_: bool,
+}
+
+impl PartialEq for KeyCombo {
+    fn eq(&self, other: &Self) -> bool {
+        self.ctrl == other.ctrl
+            && self.shift == other.shift
+            && self.alt == other.alt
+            && self.super_ == other.super_
+            && self.key.eq_ignore_ascii_case(&other.key)
+    }
+}
+
+impl std::hash::Hash for KeyCombo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.ctrl.hash(state);
+        self.shift.hash(state);
+        self.alt.hash(state);
+        self.super_.hash(state);
+        self.key.to_lowercase().hash(state);
+    }
 }
 
 impl KeyCombo {
@@ -154,5 +176,25 @@ mod tests {
         reg.bind("sidebar", combo.clone(), WmAction::SidebarDown);
         assert_eq!(reg.resolve("normal", &combo), Some(&WmAction::FocusDown));
         assert_eq!(reg.resolve("sidebar", &combo), Some(&WmAction::SidebarDown));
+    }
+
+    #[test]
+    fn test_case_insensitive_named_key() {
+        // Config stores "enter" (lowercased by parse), event sends "Enter".
+        let mut reg = KeymapRegistry::new();
+        let config_combo = KeyCombo::parse("Enter");
+        let event_combo = KeyCombo { key: "Enter".to_string(), ctrl: false, shift: false, alt: false, super_: false };
+        reg.bind("normal", config_combo, WmAction::SplitHorizontal);
+        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SplitHorizontal));
+    }
+
+    #[test]
+    fn test_shift_q_matches_lowercase_q() {
+        // Shift+Q produces "Q" but config stores "q".
+        let mut reg = KeymapRegistry::new();
+        let config_combo = KeyCombo::parse("Shift+q");
+        let event_combo = KeyCombo { key: "Q".to_string(), ctrl: false, shift: true, alt: false, super_: false };
+        reg.bind("normal", config_combo, WmAction::SwapSelect);
+        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SwapSelect));
     }
 }

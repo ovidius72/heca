@@ -1090,9 +1090,9 @@ impl ApplicationHandler for HecaApp {
                                         if cws == tws && ccol == tcol {
                                             // Same column — no-op
                                         } else if cws == tws {
-                                            // Same workspace, different column: move pane to target column
-                                            move_pane_to_column(state, current_id, ccol, tcol);
-                                            moved_pane = Some(current_id);
+                                            // Same workspace, different column: SWAP panes
+                                            swap_panes(state, current_id, *target_id);
+                                            moved_pane = Some(*target_id);
                                         } else {
                                             // Cross-workspace: move pane to target workspace, target column
                                             move_pane_to_workspace_column(state, current_id, tws, tcol);
@@ -1136,7 +1136,26 @@ impl ApplicationHandler for HecaApp {
                 );
                 state.needs_redraw = true;
 
-                if !state.mouse_enabled {}
+                if !state.mouse_enabled { return; }
+
+                let mouse_pos = state.mouse_pos;
+
+                // Focus follows mouse (only when mouse is over the actual pane
+                // content area — not the sidebar/chrome)
+                let pane_area = compute_pane_area(state);
+                let mouse_in_content = mouse_pos.0 >= pane_area.x
+                    && mouse_pos.0 <= pane_area.x + pane_area.w
+                    && mouse_pos.1 >= pane_area.y
+                    && mouse_pos.1 <= pane_area.y + pane_area.h;
+
+                if self.app_config.config.settings.focus_follows_mouse
+                    && matches!(state.input_mode, InputMode::Normal | InputMode::Prefix)
+                    && mouse_in_content
+                    && let Some(pane_id) = hit_test_pane(state, mouse_pos)
+                    && state.focused_pane != Some(pane_id)
+                {
+                    focus_pane_by_id(state, pane_id);
+                }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 if !state.mouse_enabled { return; }
@@ -1263,6 +1282,63 @@ impl ApplicationHandler for HecaApp {
             }
         }
     }
+}
+
+/// Compute the content area rectangle (excluding chrome).
+fn compute_pane_area(state: &AppState) -> heca_core::types::Rect {
+    let phys = state.window.inner_size();
+    let win_w = phys.width as f32 / state.scale_factor as f32;
+    let win_h = phys.height as f32 / state.scale_factor as f32;
+    let chrome = ChromeConfig {
+        tab_bar_height: 32.0,
+        status_bar_height: 24.0,
+        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
+        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
+    };
+    chrome.content_rect(win_w, win_h)
+}
+
+/// Hit-test panes under the mouse cursor. Returns the topmost pane ID or None.
+fn hit_test_pane(state: &AppState, mouse_pos: (f32, f32)) -> Option<u64> {
+    let pane_area = compute_pane_area(state);
+
+    // Check floating panes FIRST (they render on top of scrolling panes).
+    if let Some(ws) = state.session.active_workspace() {
+        for float in &ws.floating_panes {
+            let fx = float.position.x as f32 + pane_area.x;
+            let fy = float.position.y as f32 + pane_area.y;
+            let fw = float.size.w as f32;
+            let fh = float.size.h as f32;
+            if mouse_pos.0 >= fx && mouse_pos.0 < fx + fw
+                && mouse_pos.1 >= fy && mouse_pos.1 < fy + fh
+            {
+                return Some(float.pane.id.0);
+            }
+        }
+    }
+
+    // Check scrolling panes
+    let pane_positions = state.session.active_workspace()
+        .map(|ws| ws.scrolling.panes_with_positions())
+        .unwrap_or_default();
+    let ws_geometries = state.session.workspace_geometries();
+    let ws_offset = ws_geometries.first()
+        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+        .unwrap_or((0.0, 0.0));
+
+    for (pane_id, rect) in &pane_positions {
+        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        if mouse_pos.0 >= px && mouse_pos.0 < px + pw
+            && mouse_pos.1 >= py && mouse_pos.1 < py + ph
+        {
+            return Some(pane_id.0);
+        }
+    }
+
+    None
 }
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
@@ -1641,6 +1717,43 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
     }
 
     sync_focus(state);
+}
+
+/// Swap two panes' positions. Works within the same workspace.
+/// If panes are in the same column, swaps their indices.
+/// If in different columns, swaps the Pane values using split_at_mut.
+pub(crate) fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
+    let loc_a = find_pane_location(&state.session, a_id);
+    let loc_b = find_pane_location(&state.session, b_id);
+    let (aws, acol, aidx) = match loc_a {
+        Some(l) => l,
+        None => return,
+    };
+    let (bws, bcol, bidx) = match loc_b {
+        Some(l) => l,
+        None => return,
+    };
+
+    if aws != bws {
+        // Cross-workspace swap: fall back to move for now.
+        move_pane_to_workspace_column(state, a_id, bws, bcol);
+        return;
+    }
+
+    let ws = &mut state.session.workspaces[aws];
+    if acol == bcol {
+        ws.scrolling.columns[acol].panes.swap(aidx, bidx);
+    } else {
+        let (col_a, col_b) = if acol < bcol {
+            let (left, right) = ws.scrolling.columns.split_at_mut(bcol);
+            (&mut left[acol], &mut right[0])
+        } else {
+            let (left, right) = ws.scrolling.columns.split_at_mut(acol);
+            (&mut right[0], &mut left[bcol])
+        };
+        std::mem::swap(&mut col_a.panes[aidx], &mut col_b.panes[bidx]);
+    }
+    state.needs_redraw = true;
 }
 
 /// Remove a workspace if it is empty and there are other workspaces.
