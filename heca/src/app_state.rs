@@ -42,6 +42,9 @@ pub enum InputMode {
         target: RenameTarget,
         buffer: String,
     },
+    /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
+    /// `sequence` holds the keys pressed so far (after prefix).
+    Chord { sequence: Vec<String> },
 }
 
 impl InputMode {

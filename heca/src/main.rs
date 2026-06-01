@@ -515,6 +515,9 @@ impl HecaApp {
             InputMode::Rename { target: _, buffer } => {
                 ("RENAME", format!(": {}_", buffer))
             }
+            InputMode::Chord { sequence } => {
+                ("CHORD", format!(" w→{}", sequence.join("→")))
+            }
         };
         let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -891,6 +894,15 @@ impl ApplicationHandler for HecaApp {
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
                         let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+
+                        // Check for chord starters (e.g. "w" starts workspace-switch chord).
+                        if key_text.eq_ignore_ascii_case("w") && !is_ctrl && !is_shift {
+                            state.input_mode = InputMode::Chord { sequence: vec!["w".to_string()] };
+                            state.prefix_entered_at = Some(std::time::Instant::now());
+                            state.needs_redraw = true;
+                            return;
+                        }
+
                         let action = self.keymap.resolve("normal", &combo).cloned();
                         // Only reset to Normal if we found an action or the key is printable.
                         // If no action matched and key_text is empty, stay in prefix (e.g. dead keys).
@@ -904,6 +916,35 @@ impl ApplicationHandler for HecaApp {
                             state.prefix_entered_at = None;
                         }
                         // else: empty key_text, no action — stay in prefix mode.
+                    }
+                    InputMode::Chord { sequence } => {
+                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                        if is_escape {
+                            state.input_mode = InputMode::Normal;
+                            state.needs_redraw = true;
+                            return;
+                        }
+
+                        // Hardcoded chord: w → digit switches to workspace.
+                        if sequence.len() == 1
+                            && sequence[0].eq_ignore_ascii_case("w")
+                            && let Some(digit) = key_text.chars().next()
+                                .filter(|c| c.is_ascii_digit())
+                                .and_then(|c| c.to_digit(10))
+                        {
+                            let ws_idx = (digit as usize).saturating_sub(1);
+                            if ws_idx < state.session.workspaces.len() {
+                                switch_workspace_tracked(state, ws_idx);
+                                sync_focus(state);
+                                state.needs_redraw = true;
+                            }
+                            state.input_mode = InputMode::Normal;
+                            return;
+                        }
+
+                        // Unknown chord key — cancel.
+                        state.input_mode = InputMode::Normal;
+                        state.needs_redraw = true;
                     }
                     InputMode::PaneSelect { candidates } => {
                         let candidates = candidates.clone();
@@ -1091,11 +1132,10 @@ impl ApplicationHandler for HecaApp {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         if let Some(ref mut state) = self.state {
-            // Prefix mode auto-timeout: exit if user has been in prefix > 500 ms.
-            if matches!(state.input_mode, InputMode::Prefix)
-                && let Some(entered) = state.prefix_entered_at
-                && entered.elapsed() >= Duration::from_millis(500)
-            {
+            // Prefix / Chord mode auto-timeout: exit if inactive > 500 ms.
+            let should_timeout = matches!(state.input_mode, InputMode::Prefix | InputMode::Chord { .. })
+                && state.prefix_entered_at.is_some_and(|entered| entered.elapsed() >= Duration::from_millis(500));
+            if should_timeout {
                 state.input_mode = InputMode::Normal;
                 state.prefix_entered_at = None;
                 state.needs_redraw = true;
