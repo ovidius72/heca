@@ -137,14 +137,15 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
 
 /// Normalize a winit key event into a config-compatible key string.
 /// Named keys become their canonical name (Enter, Tab, ArrowLeft, etc.).
-/// Character keys use the character itself. This must be checked BEFORE
-/// falling back to key_text because to_text() returns "\r" for Enter,
-/// "\t" for Tab, etc., which would never match config strings.
+/// Character keys are lowercased so 'Q' from Shift+q matches config 'q'.
+/// This must be checked BEFORE falling back to key_text because to_text()
+/// returns "\r" for Enter, "\t" for Tab, etc., which would never match
+/// config strings.
 fn normalize_key_text(logical_key: &winit::keyboard::Key, key_text: &str) -> String {
     match logical_key {
         winit::keyboard::Key::Named(n) => format!("{:?}", n),
-        winit::keyboard::Key::Character(c) => c.to_string(),
-        _ if !key_text.is_empty() => key_text.to_string(),
+        winit::keyboard::Key::Character(c) => c.to_lowercase().to_string(),
+        _ if !key_text.is_empty() => key_text.to_lowercase(),
         _ => String::new(),
     }
 }
@@ -451,11 +452,9 @@ impl HecaApp {
             swap_and_focus: false,
             mouse_enabled: self.app_config.config.settings.mouse,
             prefix_entered_at: None,
-            prefix_combo: {
-                let combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
-                eprintln!("[init] prefix loaded: '{}' -> {:?}", self.app_config.config.keys.prefix, combo);
-                combo
-            },
+            prefix_combo: keymap::KeyCombo::parse(
+                &self.app_config.config.keys.prefix,
+            ),
         })
     }
 
@@ -902,7 +901,6 @@ impl ApplicationHandler for HecaApp {
                 // Detect arrow keys via physical_key
                 match &state.input_mode {
                     InputMode::Normal => {
-                        eprintln!("[key] normal: event={:?} prefix={:?} is_prefix={}", event_combo, state.prefix_combo, is_prefix);
                         // Only prefix key activates prefix mode in Normal
                         if is_prefix {
                             state.input_mode = InputMode::Prefix;
@@ -965,7 +963,6 @@ impl ApplicationHandler for HecaApp {
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
                         let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
-                        eprintln!("[key] prefix: combo={:?}", combo);
 
                         // Check mode triggers first (e.g. prefix+r → resize mode).
                         let mut entered_mode = None;

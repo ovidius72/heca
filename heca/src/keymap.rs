@@ -18,6 +18,7 @@ pub struct KeyCombo {
 
 impl KeyCombo {
     /// Parse a key string like "h", "Ctrl+h", "Ctrl+Shift+l", "Space".
+    /// Character keys are lowercased so "Q" and "q" match the same binding.
     pub fn parse(s: &str) -> Self {
         let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
         let mut ctrl = false;
@@ -31,7 +32,7 @@ impl KeyCombo {
                 "shift" => shift = true,
                 "alt" => alt = true,
                 "super" | "win" | "cmd" => super_ = true,
-                _ => key = part.to_string(),
+                _ => key = part.to_lowercase(),
             }
         }
         Self { key, ctrl, shift, alt, super_ }

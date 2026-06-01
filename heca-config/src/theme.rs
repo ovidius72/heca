@@ -245,6 +245,8 @@ fn default_command_type() -> String { "pane".to_string() }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModeBindingConfig {
     pub action: String,
+    /// The key(s) for this binding. Also accepts `key` (singular) for convenience.
+    #[serde(alias = "key")]
     pub keys: String,
     /// Arguments for parameterized actions.
     /// e.g. `args = { target = "column", axis = "x", amount = "50" }`
