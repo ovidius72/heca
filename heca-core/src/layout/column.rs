@@ -175,6 +175,16 @@ impl Column {
             }
         }
 
+        // Third pass: if all panes have fixed heights and there's leftover space,
+        // scale them up proportionally so the column is always full.
+        let total_pane_height: f64 = sizes.iter().map(|s| s.h).sum();
+        if total_pane_height < available_height && total_pane_height > 0.0 {
+            let scale = available_height / total_pane_height;
+            for size in &mut sizes {
+                size.h *= scale;
+            }
+        }
+
         // Set widths to column width.
         let width = self.computed_width;
         for size in &mut sizes {

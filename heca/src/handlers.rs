@@ -184,6 +184,7 @@ pub fn handle_pane_height_decrease(state: &mut AppState, _action: &WmAction) {
 pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_column_left();
+        ws.scrolling.align_view_to_active_column();
     }
     state.needs_redraw = true;
 }
@@ -191,6 +192,7 @@ pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
 pub fn handle_swap_right(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_column_right();
+        ws.scrolling.align_view_to_active_column();
     }
     state.needs_redraw = true;
 }
@@ -226,6 +228,9 @@ pub fn handle_swap_up(state: &mut AppState, _action: &WmAction) {
         }
     }
     sync_focus(state);
+    if let Some(pane_id) = state.focused_pane {
+        crate::focus_pane_by_id(state, pane_id);
+    }
     state.needs_redraw = true;
 }
 
@@ -260,6 +265,9 @@ pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
         }
     }
     sync_focus(state);
+    if let Some(pane_id) = state.focused_pane {
+        crate::focus_pane_by_id(state, pane_id);
+    }
     state.needs_redraw = true;
 }
 
@@ -372,7 +380,6 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         ws.scrolling.columns[col_idx].panes.insert(target_idx, float.pane);
                         ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
                         ws.scrolling.active_column_idx = col_idx;
-                        ws.scrolling.update_all_column_widths();
                     } else {
                         ws.scrolling.add_column(
                             None,
@@ -477,19 +484,18 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-pub fn handle_swap_select(state: &mut AppState, _action: &WmAction) {
+pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
     let candidates = collect_all_column_candidates(&state.session);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap { candidates };
+        state.input_mode = InputMode::PaneSwap { candidates, focus_after: false };
         state.needs_redraw = true;
     }
 }
 
-pub fn handle_swap_and_focus(state: &mut AppState, _action: &WmAction) {
+pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
     let candidates = collect_all_column_candidates(&state.session);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap { candidates };
-        state.swap_and_focus = true;
+        state.input_mode = InputMode::PaneSwap { candidates, focus_after: true };
         state.needs_redraw = true;
     }
 }
@@ -720,7 +726,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                     }
                     focus_pane_by_id(state, *pane_id);
                 }
-                state.input_mode = InputMode::Normal;
+                // Stay in sidebar mode; only Enter/Esc exit
             }
             Some(sidebar::SidebarItem::Workspace { .. }) => {
                 let ws_idx = state
@@ -735,7 +741,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 state.session.add_pane(pane, None, true);
                 state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
                 sync_focus(state);
-                state.input_mode = InputMode::Normal;
+                // Stay in sidebar mode; only Enter/Esc exit
             }
             _ => {
                 state.sidebar_tree.expand();
@@ -772,19 +778,6 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
     }
 }
 
-pub fn handle_tab_next(state: &mut AppState, _action: &WmAction) {
-    if !state.tab_names.is_empty() {
-        state.active_tab = (state.active_tab + 1) % state.tab_names.len();
-    }
-}
-
-pub fn handle_tab_prev(state: &mut AppState, _action: &WmAction) {
-    if !state.tab_names.is_empty() {
-        state.active_tab =
-            (state.active_tab + state.tab_names.len() - 1) % state.tab_names.len();
-    }
-}
-
 // ── System ──
 
 pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
@@ -812,4 +805,11 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
     let WmAction::EnterMode { name } = action else { return };
     state.input_mode = InputMode::Mode { name: name.clone() };
     state.needs_redraw = true;
+}
+
+// ── Config ──
+
+pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
+    eprintln!("[config] reload requested");
+    state.pending_reload = true;
 }

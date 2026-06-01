@@ -54,7 +54,39 @@ impl KeyCombo {
                 "shift" => shift = true,
                 "alt" => alt = true,
                 "super" | "win" | "cmd" => super_ = true,
-                _ => key = part.to_lowercase(),
+                _ => {
+                    let k = part.to_lowercase();
+                    // Map shifted symbols to their base key + set shift flag.
+                    // This lets config write `ctrl+{` instead of `ctrl+shift+[`.
+                    let (base, is_shifted) = match k.as_str() {
+                        "{" => ("[", true),
+                        "}" => ("]", true),
+                        ":" => (";", true),
+                        "\"" => ("'", true),
+                        "<" => (",", true),
+                        ">" => (".", true),
+                        "?" => ("/", true),
+                        "+" => ("=", true),
+                        "_" => ("-", true),
+                        "|" => ("\\", true),
+                        "!" => ("1", true),
+                        "@" => ("2", true),
+                        "#" => ("3", true),
+                        "$" => ("4", true),
+                        "%" => ("5", true),
+                        "^" => ("6", true),
+                        "&" => ("7", true),
+                        "*" => ("8", true),
+                        "(" => ("9", true),
+                        ")" => ("0", true),
+                        "~" => ("`", true),
+                        _ => (k.as_str(), false),
+                    };
+                    key = base.to_string();
+                    if is_shifted {
+                        shift = true;
+                    }
+                }
             }
         }
         Self { key, ctrl, shift, alt, super_ }
@@ -194,7 +226,7 @@ mod tests {
         let mut reg = KeymapRegistry::new();
         let config_combo = KeyCombo::parse("Shift+q");
         let event_combo = KeyCombo { key: "Q".to_string(), ctrl: false, shift: true, alt: false, super_: false };
-        reg.bind("normal", config_combo, WmAction::SwapSelect);
-        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SwapSelect));
+        reg.bind("normal", config_combo, WmAction::SwapPane);
+        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SwapPane));
     }
 }

@@ -138,16 +138,97 @@ fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) 
 /// Normalize a winit key event into a config-compatible key string.
 /// Named keys become their canonical name (Enter, Tab, ArrowLeft, etc.).
 /// Character keys are lowercased so 'Q' from Shift+q matches config 'q'.
-/// This must be checked BEFORE falling back to key_text because to_text()
-/// returns "\r" for Enter, "\t" for Tab, etc., which would never match
-/// config strings.
-fn normalize_key_text(logical_key: &winit::keyboard::Key, key_text: &str) -> String {
-    match logical_key {
-        winit::keyboard::Key::Named(n) => format!("{:?}", n),
+/// When `shift` is true, shifted symbols are mapped back to their unshifted
+/// base key so that config "Shift+=" matches the event from Shift+Equal.
+fn normalize_key_text(
+    logical_key: &winit::keyboard::Key,
+    key_text: &str,
+    shift: bool,
+    ctrl: bool,
+    physical_key: &winit::keyboard::PhysicalKey,
+) -> String {
+    // Ctrl+special keys may produce control characters (e.g. Ctrl+[ → \u{1b}).
+    // Use the physical key to recover the original printable key.
+    if ctrl
+        && let winit::keyboard::PhysicalKey::Code(code) = physical_key {
+            let mapped = match code {
+                winit::keyboard::KeyCode::BracketLeft => "[",
+                winit::keyboard::KeyCode::BracketRight => "]",
+                winit::keyboard::KeyCode::Semicolon => ";",
+                winit::keyboard::KeyCode::Quote => "'",
+                winit::keyboard::KeyCode::Comma => ",",
+                winit::keyboard::KeyCode::Period => ".",
+                winit::keyboard::KeyCode::Slash => "/",
+                winit::keyboard::KeyCode::Backslash => "\\",
+                winit::keyboard::KeyCode::Minus => "-",
+                winit::keyboard::KeyCode::Equal => "=",
+                winit::keyboard::KeyCode::Backquote => "`",
+                winit::keyboard::KeyCode::Digit0 => "0",
+                winit::keyboard::KeyCode::Digit1 => "1",
+                winit::keyboard::KeyCode::Digit2 => "2",
+                winit::keyboard::KeyCode::Digit3 => "3",
+                winit::keyboard::KeyCode::Digit4 => "4",
+                winit::keyboard::KeyCode::Digit5 => "5",
+                winit::keyboard::KeyCode::Digit6 => "6",
+                winit::keyboard::KeyCode::Digit7 => "7",
+                winit::keyboard::KeyCode::Digit8 => "8",
+                winit::keyboard::KeyCode::Digit9 => "9",
+                _ => "",
+            };
+            if !mapped.is_empty() {
+                return mapped.to_string();
+            }
+        }
+
+    let mut key = match logical_key {
+        // Ctrl+[ produces Escape on some systems; recover the original key
+        // via physical key so the binding still matches.
+        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape) if ctrl => {
+            if let winit::keyboard::PhysicalKey::Code(code) = physical_key {
+                let mapped = match code {
+                    winit::keyboard::KeyCode::BracketLeft => "[",
+                    winit::keyboard::KeyCode::BracketRight => "]",
+                    _ => "",
+                };
+                if !mapped.is_empty() {
+                    return mapped.to_string();
+                }
+            }
+            return "Escape".to_string();
+        }
+        winit::keyboard::Key::Named(n) => return format!("{:?}", n),
         winit::keyboard::Key::Character(c) => c.to_lowercase().to_string(),
         _ if !key_text.is_empty() => key_text.to_lowercase(),
-        _ => String::new(),
+        _ => return String::new(),
+    };
+    if shift {
+        // Map shifted symbols back to their unshifted base key.
+        key = match key.as_str() {
+            "+" => "=".to_string(),
+            "_" => "-".to_string(),
+            "{" => "[".to_string(),
+            "}" => "]".to_string(),
+            "|" => "\\".to_string(),
+            ":" => ";".to_string(),
+            "\"" => "'".to_string(),
+            "<" => ",".to_string(),
+            ">" => ".".to_string(),
+            "?" => "/".to_string(),
+            "!" => "1".to_string(),
+            "@" => "2".to_string(),
+            "#" => "3".to_string(),
+            "$" => "4".to_string(),
+            "%" => "5".to_string(),
+            "^" => "6".to_string(),
+            "&" => "7".to_string(),
+            "*" => "8".to_string(),
+            "(" => "9".to_string(),
+            ")" => "0".to_string(),
+            "~" => "`".to_string(),
+            _ => key,
+        };
     }
+    key
 }
 
 /// Convert a winit key event to terminal input bytes.
@@ -213,100 +294,8 @@ impl HecaApp {
     fn new() -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
-        let mut keymap = keymap::KeymapRegistry::new();
-
-        // ── Load bindings from [keys] flat map ──
-        // Merge defaults with user config: user values override defaults.
-        let default_keys = heca_config::theme::KeysConfig::default();
-        let mut merged_bindings = default_keys.bindings.clone();
-        for (k, v) in &app_config.config.keys.bindings {
-            merged_bindings.insert(k.clone(), v.clone());
-        }
-        for (action_name, value) in &merged_bindings {
-            let Some(action) = action_from_name(action_name) else { continue };
-            for key_str in value.keys() {
-                let trimmed = key_str.trim();
-                if trimmed.starts_with("prefix+") {
-                    let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-                    let combo = keymap::KeyCombo::parse(rest);
-                    keymap.bind("normal", combo, action.clone());
-                } else {
-                    let combo = keymap::KeyCombo::parse(trimmed);
-                    keymap.bind("global", combo, action.clone());
-                }
-            }
-        }
-
-        // ── Apply unbinds ──
-        for combo_str in app_config.config.keys.unbind.keys() {
-            let trimmed = combo_str.trim();
-            if trimmed.starts_with("prefix+") {
-                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-                let combo = keymap::KeyCombo::parse(rest);
-                keymap.unbind("normal", &combo);
-            } else {
-                let combo = keymap::KeyCombo::parse(trimmed);
-                keymap.unbind("global", &combo);
-            }
-        }
-
-        // ── Sidebar-mode bindings (hardcoded for now) ──
-        let sidebar_bindings = vec![
-            ("j", WmAction::SidebarDown),
-            ("k", WmAction::SidebarUp),
-            ("h", WmAction::SidebarLeftNav),
-            ("l", WmAction::SidebarRightNav),
-            ("Tab", WmAction::SidebarExpandToggle),
-            ("Space", WmAction::SidebarExpandToggle),
-            ("b", WmAction::SidebarLeft),
-            ("Enter", WmAction::SidebarRightNav),
-        ];
-        for (key, action) in sidebar_bindings {
-            keymap.bind("sidebar", keymap::KeyCombo::parse(key), action);
-        }
-
-        // ── Custom command bindings from [[keys.command]] ──
-        for cmd_cfg in &app_config.config.keys.command {
-            let action = WmAction::SpawnCommand {
-                command: cmd_cfg.command.clone(),
-            };
-            let trimmed = cmd_cfg.key.trim();
-            if trimmed.starts_with("prefix+") {
-                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-                keymap.bind("normal", keymap::KeyCombo::parse(rest), action);
-            } else {
-                keymap.bind("global", keymap::KeyCombo::parse(trimmed), action);
-            }
-        }
-
-        // ── Custom modes from [[keys.mode]] ──
-        let mut mode_keymaps = HashMap::new();
-        let mut mode_triggers: HashMap<String, (keymap::KeyCombo, bool)> = HashMap::new(); // name → (combo, sticky)
-        for mode_cfg in &app_config.config.keys.mode {
-            let mut mode_map = keymap::KeymapRegistry::new();
-            for binding in &mode_cfg.bindings {
-                let action = if let Some(unit) = action_from_name(&binding.action) {
-                    unit
-                } else if let Some(built) = build_action(&binding.action, &binding.args) {
-                    built
-                } else {
-                    eprintln!("warning: unknown mode action '{}' in mode '{}'", binding.action, mode_cfg.name);
-                    continue;
-                };
-                let combo = keymap::KeyCombo::parse(&binding.keys);
-                mode_map.bind(&mode_cfg.name, combo, action);
-            }
-            mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
-            // Register trigger: prefix+... → normal, else → global
-            let trigger_trimmed = mode_cfg.trigger.trim();
-            let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
-                let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
-                keymap::KeyCombo::parse(rest)
-            } else {
-                keymap::KeyCombo::parse(trigger_trimmed)
-            };
-            mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
-        }
+        let keymap = build_keymap(&app_config.config);
+        let (mode_keymaps, mode_triggers) = build_modes(&app_config.config);
 
         Self {
             state: None,
@@ -318,6 +307,24 @@ impl HecaApp {
         }
     }
 
+    fn reload_config(&mut self) {
+        if let Some(ref mut state) = self.state {
+            let new_config = AppConfig::load();
+            self.app_config = new_config.clone();
+            self.keymap = build_keymap(&self.app_config.config);
+            let (new_mode_keymaps, new_mode_triggers) = build_modes(&self.app_config.config);
+            self.mode_keymaps = new_mode_keymaps;
+            self.mode_triggers = new_mode_triggers;
+            state.theme = self.app_config.theme.clone();
+            state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
+            state.mouse_enabled = self.app_config.config.settings.mouse;
+            state.needs_redraw = true;
+            eprintln!("========================================");
+            eprintln!("Configuration reloaded!");
+            eprintln!("========================================");
+        }
+    }
+
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
         let window_attrs = Window::default_attributes()
             .with_title("heca")
@@ -325,7 +332,7 @@ impl HecaApp {
                 self.app_config.config.settings.window_width as f64,
                 self.app_config.config.settings.window_height as f64,
             ));
-        let window = Arc::new(event_loop.create_window(window_attrs).unwrap());
+        let window = Arc::new(event_loop.create_window(window_attrs).expect("Failed to create window"));
         let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -333,7 +340,7 @@ impl HecaApp {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = instance.create_surface(window.clone()).expect("Failed to create surface");
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -449,12 +456,12 @@ impl HecaApp {
             last_focused: None,
             last_visited_ws_idx: None,
             last_visited_pane_per_ws: vec![None; ws_count],
-            swap_and_focus: false,
             mouse_enabled: self.app_config.config.settings.mouse,
             prefix_entered_at: None,
             prefix_combo: keymap::KeyCombo::parse(
                 &self.app_config.config.keys.prefix,
             ),
+            pending_reload: false,
         })
     }
 
@@ -837,11 +844,10 @@ impl ApplicationHandler for HecaApp {
 
                 let log_key = &event.logical_key;
                 let key_text = log_key.to_text().unwrap_or("").to_string();
-                let _phys = event.physical_key;
 
                 // Build a KeyCombo from the current key event for comparison.
                 let event_combo = keymap::KeyCombo {
-                    key: normalize_key_text(&event.logical_key, &key_text),
+                    key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key),
                     ctrl: is_ctrl,
                     shift: is_shift,
                     alt: state.modifiers.alt_key(),
@@ -961,7 +967,7 @@ impl ApplicationHandler for HecaApp {
                         // In prefix mode, pass the REAL modifier state. The user may intentionally
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
-                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
 
                         // Check mode triggers first (e.g. prefix+r → resize mode).
                         let mut entered_mode = None;
@@ -1009,8 +1015,7 @@ impl ApplicationHandler for HecaApp {
                         {
                             let ws_idx = (digit as usize).saturating_sub(1);
                             if ws_idx < state.session.workspaces.len() {
-                                switch_workspace_tracked(state, ws_idx);
-                                sync_focus(state);
+                                self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
                                 state.needs_redraw = true;
                             }
                             state.input_mode = InputMode::Normal;
@@ -1024,12 +1029,13 @@ impl ApplicationHandler for HecaApp {
                     InputMode::Mode { name } => {
                         let name = name.clone();
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
-                        if is_escape {
+                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
+                        if is_escape || is_enter {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                             return;
                         }
-                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
                         if let Some(mode_map) = self.mode_keymaps.get(&name)
                             && let Some(action) = mode_map.resolve(&name, &combo).cloned()
                         {
@@ -1057,15 +1063,14 @@ impl ApplicationHandler for HecaApp {
                             .map(|c| c.to_ascii_lowercase());
                         if let Some(ch) = typed
                             && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
-                                focus_pane_by_id(state, *target_id);
+                                self.registry.execute(&WmAction::FocusPane { pane_id: *target_id }, state);
                             }
                         state.input_mode = InputMode::Normal;
                     }
-                    InputMode::PaneSwap { candidates } => {
-                        // Copy candidates and swap_and_focus so we can mutate state
+                    InputMode::PaneSwap { candidates, focus_after } => {
+                        // Copy candidates and focus_after so we can mutate state
                         let candidates = candidates.clone();
-                        let should_focus = state.swap_and_focus;
-                        state.swap_and_focus = false;
+                        let should_focus = *focus_after;
                         state.input_mode = InputMode::Normal;
 
                         let typed = key_text.chars().next()
@@ -1079,41 +1084,80 @@ impl ApplicationHandler for HecaApp {
                                 }
                             })
                             .map(|c| c.to_ascii_lowercase());
-                        if let Some(ch) = typed {
-                            let mut moved_pane: Option<u64> = None;
-                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
-                                && let Some(current_id) = state.focused_pane {
-                                    let current_col = find_pane_column(&state.session, current_id);
-                                    let target_col = find_pane_column(&state.session, *target_id);
-                                    if let (Some((cws, ccol)), Some((tws, tcol))) = (current_col, target_col) {
-                                        if cws == tws && ccol == tcol {
-                                            // Same column — no-op
-                                        } else if cws == tws {
-                                            // Same workspace, different column: SWAP panes
-                                            swap_panes(state, current_id, *target_id);
-                                            moved_pane = Some(*target_id);
-                                        } else {
-                                            // Cross-workspace: move pane to target workspace, target column
-                                            move_pane_to_workspace_column(state, current_id, tws, tcol);
-                                            moved_pane = Some(current_id);
-                                        }
+                        let current_id = state.focused_pane;
+                        if let Some(ch) = typed
+                            && let Some(current_id) = current_id
+                        {
+                            if let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                let _target_id = target_id;
+                                let current_col = find_pane_column(&state.session, current_id);
+                                let target_col = find_pane_column(&state.session, *target_id);
+                                if let (Some((cws, ccol)), Some((tws, tcol))) = (current_col, target_col) {
+                                    if cws == tws && ccol == tcol {
+                                        // Same column — no-op
+                                    } else if cws == tws {
+                                        // Same workspace, different column: SWAP panes
+                                        swap_panes(state, current_id, *target_id);
+                                    } else {
+                                        // Cross-workspace: move pane to target workspace, target column
+                                        move_pane_to_workspace_column(state, current_id, tws, tcol);
                                     }
                                 }
-                            if should_focus
-                                && let Some(pane_id) = moved_pane {
-                                    focus_pane_by_id(state, pane_id);
-                                }
+                            }
+                            // Focus after swap/move:
+                            // - swap_pane: keep focus at current position (the other pane
+                            //   that moved here, or just stay here for cross-ws move).
+                            // - swap_and_focus_pane: follow the moved pane to destination.
+                            if should_focus {
+                                self.registry.execute(&WmAction::FocusPane { pane_id: current_id }, state);
+                            }
+                            // If !should_focus, do nothing — stay in current workspace
+                            // and focus. The pane that was at current position (for same-ws
+                            // swap) or the next pane (for cross-ws move) is already focused
+                            // because we haven't changed focus.
                         }
                         state.needs_redraw = true;
                     }
                     InputMode::SidebarNav => {
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
 
                         if is_escape {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
+                        } else if is_enter {
+                            // Activate current sidebar item and exit sidebar mode
+                            let item = state.sidebar_tree.current_item().cloned();
+                            match &item {
+                                Some(sidebar::SidebarItem::Pane { pane_id }) => {
+                                    let target_pane_id = heca_core::layout::PaneId(*pane_id);
+                                    let target_ws = state
+                                        .session
+                                        .workspaces
+                                        .iter()
+                                        .position(|ws| ws.find_pane(target_pane_id).is_some());
+                                    if let Some(ws_idx) = target_ws {
+                                        if ws_idx != state.session.active_workspace_idx {
+                                            self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                                        }
+                                        self.registry.execute(&WmAction::FocusPane { pane_id: *pane_id }, state);
+                                    }
+                                }
+                                Some(sidebar::SidebarItem::Workspace { .. }) => {
+                                    let ws_idx = state
+                                        .sidebar_tree
+                                        .cursor_workspace_index()
+                                        .unwrap_or(state.session.active_workspace_idx);
+                                    if ws_idx != state.session.active_workspace_idx {
+                                        self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                                    }
+                                }
+                                _ => {}
+                            }
+                            state.input_mode = InputMode::Normal;
+                            state.needs_redraw = true;
                         } else {
-                            let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                            let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
                             let action = self.keymap.resolve("sidebar", &combo).cloned();
                             if let Some(act) = action {
                                 self.registry.execute(&act, state);
@@ -1134,27 +1178,6 @@ impl ApplicationHandler for HecaApp {
                     position.y as f32 / state.scale_factor as f32,
                 );
                 state.needs_redraw = true;
-
-                if !state.mouse_enabled { return; }
-
-                let mouse_pos = state.mouse_pos;
-
-                // Focus follows mouse (only when mouse is over the actual pane
-                // content area — not the sidebar/chrome)
-                let pane_area = compute_pane_area(state);
-                let mouse_in_content = mouse_pos.0 >= pane_area.x
-                    && mouse_pos.0 <= pane_area.x + pane_area.w
-                    && mouse_pos.1 >= pane_area.y
-                    && mouse_pos.1 <= pane_area.y + pane_area.h;
-
-                if self.app_config.config.settings.focus_follows_mouse
-                    && matches!(state.input_mode, InputMode::Normal | InputMode::Prefix)
-                    && mouse_in_content
-                    && let Some(pane_id) = hit_test_pane(state, mouse_pos)
-                    && state.focused_pane != Some(pane_id)
-                {
-                    focus_pane_by_id(state, pane_id);
-                }
             }
             WindowEvent::MouseInput { state: button_state, button, .. } => {
                 if !state.mouse_enabled { return; }
@@ -1196,9 +1219,9 @@ impl ApplicationHandler for HecaApp {
                                     });
                                     if let Some(ws_idx) = target_ws {
                                         if ws_idx != state.session.active_workspace_idx {
-                                            switch_workspace_tracked(state, ws_idx);
+                                            self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
                                         }
-                                        focus_pane_by_id(state, *pane_id);
+                                        self.registry.execute(&WmAction::FocusPane { pane_id: *pane_id }, state);
                                     }
                                     state.input_mode = InputMode::Normal;
                                 }
@@ -1206,9 +1229,8 @@ impl ApplicationHandler for HecaApp {
                                     let ws_idx = state.sidebar_tree.cursor_workspace_index()
                                         .unwrap_or(state.session.active_workspace_idx);
                                     if ws_idx != state.session.active_workspace_idx {
-                                        switch_workspace_tracked(state, ws_idx);
+                                        self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
                                     }
-                                    sync_focus(state);
                                     state.input_mode = InputMode::Normal;
                                 }
                                 _ => {}
@@ -1234,7 +1256,7 @@ impl ApplicationHandler for HecaApp {
                         if mouse_pos.0 >= px && mouse_pos.0 <= px + pw
                             && mouse_pos.1 >= py && mouse_pos.1 <= py + ph
                         {
-                            focus_pane_by_id(state, pane_id.0);
+                            self.registry.execute(&WmAction::FocusPane { pane_id: pane_id.0 }, state);
                             break;
                         }
                     }
@@ -1245,7 +1267,17 @@ impl ApplicationHandler for HecaApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Config reload requested via keybinding — do it before borrowing state.
+        let needs_reload = self.state.as_ref().map(|s| s.pending_reload).unwrap_or(false);
+        if needs_reload {
+            if let Some(state) = self.state.as_mut() {
+                state.pending_reload = false;
+            }
+            self.reload_config();
+        }
+
         if let Some(ref mut state) = self.state {
+
             // Prefix / Chord mode auto-timeout: exit if inactive > 500 ms.
             let should_timeout = matches!(state.input_mode, InputMode::Prefix | InputMode::Chord { .. })
                 && state.prefix_entered_at.is_some_and(|entered| entered.elapsed() >= Duration::from_millis(500));
@@ -1258,14 +1290,6 @@ impl ApplicationHandler for HecaApp {
             // Advance session animations.
             state.session.advance_animations();
 
-            // Edge scroll when hovering near content edges.
-            let pane_area = compute_pane_area(state);
-            let edge_scroll_active = if self.app_config.config.settings.auto_scroll_edge {
-                dnd_edge_scroll(state, pane_area)
-            } else {
-                false
-            };
-
             // Poll backends (fake backends return false)
             let mut backend_has_data = false;
             for backend in state.backends.values_mut() {
@@ -1274,13 +1298,13 @@ impl ApplicationHandler for HecaApp {
                 }
             }
 
-            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing() || edge_scroll_active;
+            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
             if needs_frame {
                 state.window.request_redraw();
             }
 
-            // Use WaitUntil during animations or edge scroll (60fps cap), Wait when idle (0% CPU).
-            if state.session.are_animations_ongoing() || edge_scroll_active {
+            // Use WaitUntil during animations (60fps cap), Wait when idle (0% CPU).
+            if state.session.are_animations_ongoing() {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(
                     Instant::now() + Duration::from_millis(16)
                 ));
@@ -1291,63 +1315,119 @@ impl ApplicationHandler for HecaApp {
     }
 }
 
-/// Compute the content area rectangle (excluding chrome).
-fn compute_pane_area(state: &AppState) -> heca_core::types::Rect {
-    let phys = state.window.inner_size();
-    let win_w = phys.width as f32 / state.scale_factor as f32;
-    let win_h = phys.height as f32 / state.scale_factor as f32;
-    let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
-        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
-        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
-    };
-    chrome.content_rect(win_w, win_h)
-}
+/// Build the keymap registry from a config.
+fn build_keymap(config: &heca_config::theme::Config) -> keymap::KeymapRegistry {
+    let mut keymap = keymap::KeymapRegistry::new();
 
-/// Hit-test panes under the mouse cursor. Returns the topmost pane ID or None.
-fn hit_test_pane(state: &AppState, mouse_pos: (f32, f32)) -> Option<u64> {
-    let pane_area = compute_pane_area(state);
-
-    // Check floating panes FIRST (they render on top of scrolling panes).
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.x;
-            let fy = float.position.y as f32 + pane_area.y;
-            let fw = float.size.w as f32;
-            let fh = float.size.h as f32;
-            if mouse_pos.0 >= fx && mouse_pos.0 < fx + fw
-                && mouse_pos.1 >= fy && mouse_pos.1 < fy + fh
-            {
-                return Some(float.pane.id.0);
+    // ── Load bindings from [keys] flat map ──
+    let default_keys = heca_config::theme::KeysConfig::default();
+    let mut merged_bindings = default_keys.bindings.clone();
+    for (k, v) in &config.keys.bindings {
+        merged_bindings.insert(k.clone(), v.clone());
+    }
+    for (action_name, value) in &merged_bindings {
+        let Some(action) = action_from_name(action_name) else { continue };
+        for key_str in value.keys() {
+            let trimmed = key_str.trim();
+            if trimmed.starts_with("prefix+") {
+                let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+                let combo = keymap::KeyCombo::parse(rest);
+                keymap.bind("normal", combo, action.clone());
+            } else {
+                let combo = keymap::KeyCombo::parse(trimmed);
+                keymap.bind("global", combo, action.clone());
             }
         }
     }
 
-    // Check scrolling panes
-    let pane_positions = state.session.active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
-        .unwrap_or_default();
-    let ws_geometries = state.session.workspace_geometries();
-    let ws_offset = ws_geometries.first()
-        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
-        .unwrap_or((0.0, 0.0));
-
-    for (pane_id, rect) in &pane_positions {
-        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        if mouse_pos.0 >= px && mouse_pos.0 < px + pw
-            && mouse_pos.1 >= py && mouse_pos.1 < py + ph
-        {
-            return Some(pane_id.0);
+    // ── Apply unbinds ──
+    for combo_str in config.keys.unbind.keys() {
+        let trimmed = combo_str.trim();
+        if trimmed.starts_with("prefix+") {
+            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+            let combo = keymap::KeyCombo::parse(rest);
+            keymap.unbind("normal", &combo);
+        } else {
+            let combo = keymap::KeyCombo::parse(trimmed);
+            keymap.unbind("global", &combo);
         }
     }
 
-    None
+    // ── Sidebar-mode bindings (hardcoded for now) ──
+    let sidebar_bindings = vec![
+        ("j", WmAction::SidebarDown),
+        ("k", WmAction::SidebarUp),
+        ("h", WmAction::SidebarLeftNav),
+        ("l", WmAction::SidebarRightNav),
+        ("Tab", WmAction::SidebarExpandToggle),
+        ("Space", WmAction::SidebarExpandToggle),
+        ("b", WmAction::SidebarLeft),
+        ("Enter", WmAction::SidebarRightNav),
+    ];
+    for (key, action) in sidebar_bindings {
+        keymap.bind("sidebar", keymap::KeyCombo::parse(key), action);
+    }
+
+    // ── Custom command bindings from [[keys.command]] ──
+    for cmd_cfg in &config.keys.command {
+        let action = WmAction::SpawnCommand {
+            command: cmd_cfg.command.clone(),
+        };
+        let trimmed = cmd_cfg.key.trim();
+        if trimmed.starts_with("prefix+") {
+            let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
+            keymap.bind("normal", keymap::KeyCombo::parse(rest), action);
+        } else {
+            keymap.bind("global", keymap::KeyCombo::parse(trimmed), action);
+        }
+    }
+
+    keymap
 }
 
+/// Build mode keymaps and triggers from config.
+fn build_modes(config: &heca_config::theme::Config) -> (
+    HashMap<String, keymap::KeymapRegistry>,
+    HashMap<String, (keymap::KeyCombo, bool)>,
+) {
+    let mut mode_keymaps = HashMap::new();
+    let mut mode_triggers: HashMap<String, (keymap::KeyCombo, bool)> = HashMap::new();
+
+    // Start with default modes so built-in modes (resize, etc.) are always available.
+    let default_keys = heca_config::theme::KeysConfig::default();
+    let modes_to_load: Vec<_> = default_keys.mode.iter()
+        .chain(config.keys.mode.iter())
+        .cloned()
+        .collect();
+
+    for mode_cfg in &modes_to_load {
+        let mut mode_map = keymap::KeymapRegistry::new();
+        for binding in &mode_cfg.bindings {
+            let action = if let Some(unit) = action_from_name(&binding.action) {
+                unit
+            } else if let Some(built) = build_action(&binding.action, &binding.args) {
+                built
+            } else {
+                eprintln!("warning: unknown mode action '{}' in mode '{}'", binding.action, mode_cfg.name);
+                continue;
+            };
+            let combo = keymap::KeyCombo::parse(&binding.keys);
+            mode_map.bind(&mode_cfg.name, combo, action);
+        }
+        mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
+        let trigger_trimmed = mode_cfg.trigger.trim();
+        let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
+            let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
+            keymap::KeyCombo::parse(rest)
+        } else {
+            keymap::KeyCombo::parse(trigger_trimmed)
+        };
+        mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
+    }
+    (mode_keymaps, mode_triggers)
+}
+
+/// Compute the content area rectangle (excluding chrome).
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
 fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
     let target = heca_core::layout::PaneId(pane_id);
@@ -1598,8 +1678,8 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::Float, handle_float);
     registry.register(&WmAction::ClosePane, handle_close_pane);
     registry.register(&WmAction::PaneSelect, handle_pane_select);
-    registry.register(&WmAction::SwapSelect, handle_swap_select);
-    registry.register(&WmAction::SwapAndFocus, handle_swap_and_focus);
+    registry.register(&WmAction::SwapPane, handle_swap_pane);
+    registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, handle_float_at);
     registry.register(&WmAction::ClosePaneById { pane_id: 0 }, handle_close_pane_by_id);
@@ -1618,12 +1698,11 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
-    registry.register(&WmAction::TabNext, handle_tab_next);
-    registry.register(&WmAction::TabPrev, handle_tab_prev);
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
     registry.register(&WmAction::SpawnCommand { command: String::new() }, handle_spawn_command);
+    registry.register(&WmAction::ReloadConfig, handle_reload_config);
 
     // ── Mode ──
     registry.register(&WmAction::EnterMode { name: String::new() }, handle_enter_mode);
@@ -1791,49 +1870,9 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
 
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right
 /// edge of the content area. Returns true if scrolling is active.
-fn dnd_edge_scroll(state: &mut AppState, pane_area: heca_core::types::Rect) -> bool {
-    let trigger = 80.0f32;
-    let speed = 800.0f32; // px/sec
-    let inset = 8.0f32;
-
-    let mouse_pos = state.mouse_pos;
-    let mouse_x_in_content = mouse_pos.0 - pane_area.x;
-    let mouse_y_in_content = mouse_pos.1 - pane_area.y;
-
-    // Only scroll when pointer is inside the content area.
-    if mouse_x_in_content < 0.0
-        || mouse_x_in_content > pane_area.w
-        || mouse_y_in_content < 0.0
-        || mouse_y_in_content > pane_area.h
-    {
-        return false;
-    }
-
-    let content_w = pane_area.w;
-    let delta = if mouse_x_in_content < trigger + inset {
-        -(trigger + inset - mouse_x_in_content)
-    } else if content_w - mouse_x_in_content < trigger + inset {
-        trigger + inset - (content_w - mouse_x_in_content)
-    } else {
-        0.0
-    };
-
-    if delta != 0.0 {
-        let factor = delta.abs() / trigger;
-        let scroll_amount = (speed * factor * 0.016) as f64; // ~1 frame at 60fps
-        let direction = if delta < 0.0 { -1.0 } else { 1.0 };
-        if let Some(ws) = state.session.active_workspace_mut() {
-            ws.scrolling.scroll_by(direction * scroll_amount);
-        }
-        true
-    } else {
-        false
-    }
-}
-
 fn main() {
-    let event_loop = EventLoop::new().unwrap();
+    let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = HecaApp::new();
-    event_loop.run_app(&mut app).unwrap();
+    event_loop.run_app(&mut app).expect("Failed to run event loop");
 }

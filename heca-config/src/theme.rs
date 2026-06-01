@@ -320,12 +320,10 @@ impl Default for KeysConfig {
 
         // ── Quick select / swap ──
         bindings.insert("pane_select".to_string(),     Single("prefix+q".to_string()));
-        bindings.insert("swap_select".to_string(),     Single("prefix+Shift+q".to_string()));
-        bindings.insert("swap_and_focus".to_string(),  Single("prefix+m".to_string()));
+        bindings.insert("swap_pane".to_string(),     Single("prefix+Shift+q".to_string()));
+        bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+m".to_string()));
 
         // ── Tabs ──
-        bindings.insert("tab_next".to_string(),  Single("prefix+Ctrl+]".to_string()));
-        bindings.insert("tab_prev".to_string(),  Single("prefix+Ctrl+[".to_string()));
         bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
         bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
 
@@ -353,9 +351,12 @@ impl Default for KeysConfig {
         // ── Command palette ──
         bindings.insert("command_palette".to_string(), Single("prefix+p".to_string()));
 
+        // ── Config reload ──
+        bindings.insert("reload_config".to_string(), Single("prefix+Shift+r".to_string()));
+
         // ── Move pane to column (NIRI-style) ──
-        bindings.insert("move_pane_left".to_string(),  Single("prefix+[".to_string()));
-        bindings.insert("move_pane_right".to_string(), Single("prefix+]".to_string()));
+        bindings.insert("move_pane_left".to_string(),  Single("prefix+Ctrl+[".to_string()));
+        bindings.insert("move_pane_right".to_string(), Single("prefix+Ctrl+]".to_string()));
 
         // ── Swap position (Ctrl+nav) ──
         bindings.insert("swap_left".to_string(),  Single("prefix+Ctrl+h".to_string()));
@@ -363,7 +364,90 @@ impl Default for KeysConfig {
         bindings.insert("swap_up".to_string(),    Single("prefix+Ctrl+k".to_string()));
         bindings.insert("swap_down".to_string(),  Single("prefix+Ctrl+j".to_string()));
 
-        Self { prefix: default_prefix_key(), bindings, unbind: HashMap::new(), command: Vec::new(), mode: Vec::new() }
+        // ── Default resize mode ──
+        let mut mode = Vec::new();
+        let mut resize_bindings = Vec::new();
+        use ModeBindingConfig as Mbc;
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "h".to_string(),
+            args: [
+                ("target".to_string(), "column".to_string()),
+                ("axis".to_string(), "x".to_string()),
+                ("amount".to_string(), "-50".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "l".to_string(),
+            args: [
+                ("target".to_string(), "column".to_string()),
+                ("axis".to_string(), "x".to_string()),
+                ("amount".to_string(), "50".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "j".to_string(),
+            args: [
+                ("target".to_string(), "pane".to_string()),
+                ("axis".to_string(), "y".to_string()),
+                ("amount".to_string(), "-40".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "k".to_string(),
+            args: [
+                ("target".to_string(), "pane".to_string()),
+                ("axis".to_string(), "y".to_string()),
+                ("amount".to_string(), "40".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "Left".to_string(),
+            args: [
+                ("target".to_string(), "column".to_string()),
+                ("axis".to_string(), "x".to_string()),
+                ("amount".to_string(), "-50".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "Right".to_string(),
+            args: [
+                ("target".to_string(), "column".to_string()),
+                ("axis".to_string(), "x".to_string()),
+                ("amount".to_string(), "50".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "Down".to_string(),
+            args: [
+                ("target".to_string(), "pane".to_string()),
+                ("axis".to_string(), "y".to_string()),
+                ("amount".to_string(), "-40".to_string()),
+            ].into_iter().collect(),
+        });
+        resize_bindings.push(Mbc {
+            action: "resize".to_string(),
+            keys: "Up".to_string(),
+            args: [
+                ("target".to_string(), "pane".to_string()),
+                ("axis".to_string(), "y".to_string()),
+                ("amount".to_string(), "40".to_string()),
+            ].into_iter().collect(),
+        });
+        mode.push(KeyModeConfig {
+            name: "resize".to_string(),
+            trigger: "prefix+r".to_string(),
+            sticky: true,
+            bindings: resize_bindings,
+        });
+
+        Self { prefix: default_prefix_key(), bindings, unbind: HashMap::new(), command: Vec::new(), mode }
     }
 }
 

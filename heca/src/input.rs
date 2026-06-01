@@ -88,8 +88,8 @@ pub enum WmAction {
     Float,
     ClosePane,
     PaneSelect,
-    SwapSelect,
-    SwapAndFocus,
+    SwapPane,
+    SwapAndFocusPane,
     RenamePane,
 
     // ── Pane (parameterized) ──
@@ -110,8 +110,6 @@ pub enum WmAction {
     SidebarLeftNav,
     SidebarRightNav,
     SidebarExpandToggle,
-    TabNext,
-    TabPrev,
 
     // ── System ──
     CommandPalette,
@@ -121,6 +119,9 @@ pub enum WmAction {
 
     // ── Mode management ──
     EnterMode { name: String },
+
+    // ── Config ──
+    ReloadConfig,
 }
 
 /// Return the discriminant of a `WmAction`.
@@ -145,8 +146,6 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "split_vertical" => Some(WmAction::SplitVertical),
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
-        "tab_next" => Some(WmAction::TabNext),
-        "tab_prev" => Some(WmAction::TabPrev),
         "resize_increase" => Some(WmAction::ResizeIncrease),
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
@@ -160,8 +159,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
-        "swap_select" => Some(WmAction::SwapSelect),
-        "swap_and_focus" => Some(WmAction::SwapAndFocus),
+        "swap_pane" => Some(WmAction::SwapPane),
+        "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
         "swap_left" => Some(WmAction::SwapLeft),
         "swap_right" => Some(WmAction::SwapRight),
         "swap_up" => Some(WmAction::SwapUp),
@@ -178,6 +177,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
         "command_palette" => Some(WmAction::CommandPalette),
+        "reload_config" => Some(WmAction::ReloadConfig),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
             if let Some(rest) = name.strip_prefix("focus_workspace_")
@@ -287,7 +287,7 @@ fn action_priority(action: &WmAction) -> u8 {
         // Pane management
         WmAction::SplitHorizontal | WmAction::SplitVertical |
         WmAction::Float | WmAction::ClosePane |
-        WmAction::PaneSelect | WmAction::SwapSelect | WmAction::SwapAndFocus |
+        WmAction::PaneSelect | WmAction::SwapPane | WmAction::SwapAndFocusPane |
         WmAction::FocusToggleLocal | WmAction::FocusToggleGlobal |
         WmAction::CreateWorkspace | WmAction::RenameWorkspace |
         WmAction::RenamePane | WmAction::WorkspaceNext |
@@ -299,8 +299,7 @@ fn action_priority(action: &WmAction) -> u8 {
         // Resize (lowest priority — checked last)
         WmAction::ResizeIncrease | WmAction::ResizeDecrease |
         WmAction::PaneHeightIncrease | WmAction::PaneHeightDecrease => 3,
-        // Tabs and sidebars
-        WmAction::TabNext | WmAction::TabPrev |
+        // Sidebars
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
         WmAction::CommandPalette => 5,
@@ -316,26 +315,31 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ClosePaneById { .. }
         | WmAction::RenameTarget { .. }
         | WmAction::SpawnCommand { .. }
-        | WmAction::EnterMode { .. } => 6,
+        | WmAction::EnterMode { .. }
+        | WmAction::ReloadConfig => 6,
     }
 }
 
 /// Parse a key string like "h", "H", "Ctrl+h", "Ctrl+Shift+l", "Space".
 /// Preserves key case exactly; shift ONLY from explicit "Shift+" modifier.
 #[cfg(test)]
-fn parse_key(s: &str) -> (bool, bool, String) {
+fn parse_key(s: &str) -> (bool, bool, bool, bool, String) {
     let parts: Vec<&str> = s.split('+').map(|p| p.trim()).collect();
     let mut ctrl = false;
     let mut shift = false;
+    let mut alt = false;
+    let mut super_ = false;
     let mut key = String::new();
     for part in &parts {
         match part.to_lowercase().as_str() {
             "ctrl" => ctrl = true,
             "shift" => shift = true,
+            "alt" => alt = true,
+            "super" | "win" | "cmd" => super_ = true,
             _ => key = part.to_string(),
         }
     }
-    (ctrl, shift, key)
+    (ctrl, shift, alt, super_, key)
 }
 
 #[cfg(test)]
@@ -358,26 +362,42 @@ mod tests {
 
     #[test]
     fn test_parse_key_simple() {
-        let (ctrl, shift, key) = parse_key("h");
+        let (ctrl, shift, alt, super_, key) = parse_key("h");
         assert!(!ctrl);
         assert!(!shift);
+        assert!(!alt);
+        assert!(!super_);
         assert_eq!(key, "h");
     }
 
     #[test]
     fn test_parse_key_with_modifiers() {
-        let (ctrl, shift, key) = parse_key("Ctrl+Shift+l");
+        let (ctrl, shift, alt, super_, key) = parse_key("Ctrl+Shift+l");
         assert!(ctrl);
         assert!(shift);
+        assert!(!alt);
+        assert!(!super_);
         assert_eq!(key, "l");
     }
 
     #[test]
     fn test_parse_key_shift_only() {
-        let (ctrl, shift, key) = parse_key("Shift+w");
+        let (ctrl, shift, alt, super_, key) = parse_key("Shift+w");
         assert!(!ctrl);
         assert!(shift);
+        assert!(!alt);
+        assert!(!super_);
         assert_eq!(key, "w");
+    }
+
+    #[test]
+    fn test_parse_key_alt_super() {
+        let (ctrl, shift, alt, super_, key) = parse_key("Alt+Super+x");
+        assert!(!ctrl);
+        assert!(!shift);
+        assert!(alt);
+        assert!(super_);
+        assert_eq!(key, "x");
     }
 
     #[test]

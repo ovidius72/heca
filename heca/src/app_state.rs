@@ -34,7 +34,8 @@ pub enum InputMode {
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
     PaneSelect { candidates: Vec<(char, u64)> },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
-    PaneSwap { candidates: Vec<(char, u64)> },
+    /// `focus_after` determines whether focus follows the swapped pane.
+    PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
     /// Text input mode for renaming workspaces / panes.
@@ -53,7 +54,7 @@ pub enum InputMode {
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, u64)]> {
         match self {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates } => Some(candidates),
+            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates, .. } => Some(candidates),
             _ => None,
         }
     }
@@ -96,14 +97,15 @@ pub struct AppState {
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
     pub last_visited_pane_per_ws: Vec<Option<u64>>,
-    /// When true, PaneSwap mode should focus the target pane after swapping.
-    pub swap_and_focus: bool,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).
     pub prefix_combo: crate::keymap::KeyCombo,
+    /// Set to true when the user requests a config reload (e.g. via keybinding).
+    /// The app checks this in about_to_wait and rebuilds keymaps/settings.
+    pub pending_reload: bool,
 }
 
 #[cfg(test)]
@@ -125,7 +127,7 @@ mod tests {
             Some(cands.as_slice())
         );
         assert_eq!(
-            InputMode::PaneSwap { candidates: cands.clone() }.candidates(),
+            InputMode::PaneSwap { candidates: cands.clone(), focus_after: false }.candidates(),
             Some(cands.as_slice())
         );
     }
