@@ -1,7 +1,7 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-06-01
+> Last updated: 2026-06-02
 
 ---
 
@@ -22,6 +22,8 @@ A keyboard-native workspace where every tool lives in a tiled, floating, or scra
 | NIRI-inspired scrolling columns | Horizontal scrollable columns (not BSP tree). View offset animates when switching focus. |
 | tmux-style prefix bindings | `Ctrl+B → key` avoids conflicts with hosted terminal applications. |
 | Cross-platform from day one | Linux, macOS, Windows. All GPU via wgpu. |
+| Registry-based action dispatch | Every WM action goes through `ActionRegistry` — traceable, hookable, scriptable. |
+| Config reload at runtime | `prefix+Shift+r` reloads keymaps, themes, settings without restart. |
 
 ---
 
@@ -64,15 +66,15 @@ Session                          ← manages all workspaces + overview/expose mo
 ```
 Ctrl+B → h    Focus column left (animated scroll)
 Ctrl+B → l    Focus column right (animated scroll)
-Ctrl+B → j    Focus pane down / next workspace
-Ctrl+B → k    Focus pane up / prev workspace
+Ctrl+B → j    Focus pane down
+Ctrl+B → k    Focus pane up
 Ctrl+B → Enter Split horizontal (new column to the right)
 Ctrl+B → v    Split vertical (new pane in current column)
 Ctrl+B → x    Close active pane
 Ctrl+B → f    Toggle pane floating
 Ctrl+B → q    Quick-select pane (overlay letters, all workspaces)
-Ctrl+B → Shift+q  Quick-swap pane (all columns, all workspaces)
-Ctrl+B → m    Swap and focus (all columns, all workspaces)
+Ctrl+B → Shift+q  Quick-swap pane (stay at current position)
+Ctrl+B → m    Swap and focus (follow to destination)
 Ctrl+B → =    Increase column width
 Ctrl+B → -    Decrease column width
 Ctrl+B → [    Move pane to column left
@@ -84,154 +86,206 @@ Ctrl+B → Shift+p  Rename pane
 Ctrl+B → i    Toggle focus (local, same workspace)
 Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
 Ctrl+B → b    Toggle left sidebar
+Ctrl+B → r    Enter resize mode (sticky)
+Ctrl+B → Shift+r  Reload config at runtime
 Ctrl+B → p    Command palette (backend ready, UI pending)
 ```
 
 **Key rules:**
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
-- The prefix key `Ctrl+B` is hardcoded — add config support when possible.
+- The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
 - In Normal mode, all key events are forwarded to the focused backend (terminal/nvim).
 - Only the prefix key and explicitly bound keys trigger WM actions.
 - **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
 - **Pane letter limit:** PaneSelect/Swap modes use a-z, A-Z (52 unique labels). Sessions with >52 panes/columns fall back to sidebar navigation.
-- **Mouse:** Click on sidebar items focuses them. Click on pane content area focuses that pane.
 
 ---
 
-## Mouse Interaction System
+## Action System Architecture
 
-heca has a fully configurable, multi-phase mouse interaction system. All mouse features are gated by `state.mouse_enabled` (set via config `general.mouse`, default `true`).
-
-### Architecture
-
-Mouse events flow through `heca/src/main.rs` in the `ApplicationHandler::window_event` match on `WindowEvent`:
+### Three-Layer Dispatch
 
 ```
-CursorMoved  →  rubberband / drag update / focus-follows-mouse / insert-hint
-MouseInput   →  sidebar hit-test / drag start / drag drop / click-to-focus
-MouseWheel   →  (not yet implemented — see PANE-03)
+Keyboard Input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry → Handler
+     │                                                            │
+     │                                                            ├── handle_focus_pane()
+     │                                                            ├── handle_swap_pane()
+     │                                                            ├── handle_resize()
+     │                                                            └── ...
+     │
+     └── Physical key normalization
+         ├── macOS: Ctrl+letter → control char fallback
+         ├── Shift+symbol → unshifted base key
+         └── NamedKey mapping (Enter, Tab, ArrowLeft, ...)
 ```
 
-### Phase 0: Focus Follows Mouse
+### ActionRegistry (`heca/src/actions.rs`)
 
-When enabled (`general.focus_follows_mouse`, default `true`), hovering over a different pane automatically focuses it — no click required.
+The central dispatch for all WM actions:
 
-**Implementation:**
-- In `CursorMoved`, after drag-state handling, calls `hit_test_pane(state, mouse_pos)`.
-- Only activates when:
-  - `drag_state == DragState::None` (not currently dragging)
-  - `mouse_enabled == true`
-  - `input_mode` is `Normal` or `Prefix` (disabled during `PaneSelect`, `PaneSwap`, `SidebarNav`, `Rename`)
-  - Pointer is inside the **content area** (not over sidebar/chrome)
-  - The hovered pane is different from `state.focused_pane`
-- Calls `focus_pane_by_id(state, pane_id)` which compensates `view_offset` so the layout stays visually fixed.
-
-### Phase 1: Click to Focus
-
-A normal left-click (no modifier held) inside the content area focuses the clicked pane.
-
-**Implementation:**
-- In `MouseInput` (Left + Pressed), if no modifier is held:
-  - Calls `hit_test_pane(state, mouse_pos)`
-  - If a pane is hit, calls `focus_pane_by_id(state, pane_id)`
-- Floating panes are hit-tested **before** scrolling panes since they render on top.
-- Hit-test uses **exclusive bounds** (`<` not `<=`) so border points don't belong to two panes.
-
-### Phase 2: Interactive Move (Meta+Click Drag-and-Drop)
-
-Move a pane between columns or workspaces by dragging it with a modifier key held.
-
-**Config:**
-- `general.interactive_move_modifier`: `Super` (default), `Alt`, `Ctrl`, `Shift`
-- Stored as strongly-typed `ModifierKey` enum (not bare String) for zero-cost dispatch and parse-time validation.
-
-**Two-phase state machine (`DragState`):**
-
-```
-DragState::None
-    ↓  Left-click + modifier held on pane
-DragState::InteractiveMoveStarting { pane_id, start_mouse, threshold_sq }
-    │
-    │  CursorMoved:
-    │    • Compute dx, dy from start_mouse
-    │    • Apply rubberband: factor = rubberband(sq_dist / threshold_sq)
-    │    • Set pane.interactive_move_offset = Point::new(dx * factor, dy * factor)
-    │    • If sq_dist > threshold_sq → transition to Moving
-    │
-    ↓  transition_to_moving()
-DragState::InteractiveMove { pane_id, offset }
-    │
-    │  CursorMoved:
-    │    • Update detached_pane.render_pos = mouse_pos - pane_area - offset
-    │    • Compute insert_hint from space coordinates
-    │
-    │  about_to_wait:
-    │    • Edge scroll active during drag (wider trigger, faster speed)
-    │
-    ↓  Left-click release
-    • drop_pane() with insert_hint, or
-    • cancel_interactive_move() if still in Starting phase
-```
-
-**Rubberband formula** (exact from NIRI `src/rubber_band.rs`):
 ```rust
-fn rubberband(x: f32) -> f32 {
-    let c = 1.0;
-    let d = 0.5;
-    (1.0 - (1.0 / (x * c / d + 1.0))) * d
+pub struct ActionRegistry {
+    handlers: HashMap<Discriminant<WmAction>, ActionHandler>,
+}
+
+type ActionHandler = fn(&mut AppState, &WmAction);
+```
+
+- **Register** a handler: `registry.register(&WmAction::FocusPane { pane_id: 0 }, handle_focus_pane)`
+- **Execute** an action: `registry.execute(&action, state)` — routes to the correct handler by discriminant
+- **Parameterized variants** share one handler — the handler destructures the action to get arguments
+
+**Registry bypasses are bugs.** All WM state changes must go through `registry.execute()`. Direct calls like `focus_pane_by_id(state, id)` are only allowed inside handlers (as part of their implementation).
+
+### KeymapRegistry (`heca/src/keymap.rs`)
+
+Mode-specific keymap lookup:
+
+```rust
+pub struct KeymapRegistry {
+    keymaps: HashMap<String, HashMap<KeyCombo, WmAction>>,
 }
 ```
 
-**Drop behavior:**
-- `InsertPosition::NewColumn(col_idx)` — creates a new column with the pane
-- `InsertPosition::InColumn { col_idx, pane_idx }` — inserts pane into existing column
-- Uses **fresh ColumnId** (`ColumnId(state.session.next_id())`) to avoid ID collisions
-- Animates the pane from its detached position to the new layout position via `animate_move_from()`
+- **Bind**: `keymap.bind("normal", combo, action)`
+- **Resolve**: `keymap.resolve("normal", &combo)` → `Option<&WmAction>`
+- **Modes**: `"normal"` (prefix bindings), `"global"` (direct bindings), `"sidebar"` (sidebar nav), custom mode names
 
-**Key invariant:** NIRI Principle 1 — removing a pane from a column does NOT affect widths of other columns. Only remove the column entirely if it becomes empty.
+### WmAction Enum (`heca/src/input.rs`)
 
-### Phase 3: Edge Scroll
-
-Auto-scroll the horizontal layout when the pointer is near the left/right edge of the content area. Works both during drag and on plain hover.
-
-**Config:**
-- `general.auto_scroll_edge`: `bool` (default `true`)
-
-**Dual-mode design:**
-
-| Mode | Trigger | Speed | Inset | Content restriction |
-|------|---------|-------|-------|---------------------|
-| **Hover** | 80px | 300 px/sec | 8px | Must be inside content area |
-| **Drag** | 150px | 1000 px/sec | 0px | Anywhere on screen |
-
-**Content bounds clamping:**
 ```rust
-min_view_pos = -padding;
-max_view_pos = (total_content_width - viewport_width + padding).max(min_view_pos);
-view_pos = proposed_view_pos.clamp(min_view_pos, max_view_pos);
+pub enum WmAction {
+    // Unit actions (no arguments)
+    FocusLeft, FocusRight, FocusUp, FocusDown,
+    SplitHorizontal, SplitVertical,
+    ClosePane, Float, PaneSelect, SwapPane, SwapAndFocusPane,
+    CreateWorkspace, RenameWorkspace, RenamePane,
+    SidebarLeft, SidebarRight, SidebarFocus,
+    CommandPalette, ReloadConfig, ...
+
+    // Parameterized actions (arguments)
+    FocusPane { pane_id: u64 },
+    FocusWorkspace { ws_idx: usize },
+    Swap { a_id: u64, b_id: u64 },
+    Move { pane_id: u64, target_col: usize },
+    Resize { target: ResizeTarget, axis: ResizeAxis, amount: f64 },
+    ResizeTo { target: ResizeTarget, width: f64, height: f64 },
+    FloatAt { pane_id: u64, x: f64, y: f64, width: f64, height: f64 },
+    ClosePaneById { pane_id: u64 },
+    RenameTarget { pane_id: u64, name: String },
+    SpawnCommand { command: String },
+    EnterMode { name: String },
+}
 ```
-- Stops scrolling at first/last column
-- No scrolling when all content fits (`max_view_pos == min_view_pos`)
 
-**Frame-rate independence:** Runs in `about_to_wait` (not just `CursorMoved`) with `dt`-based delta for smooth scrolling even when the mouse is stationary.
+### Input Modes (`heca/src/app_state.rs`)
 
-### Rendering
+```rust
+pub enum InputMode {
+    Normal,           // Forward keys to terminal, prefix triggers prefix mode
+    Prefix,           // Waiting for action key after prefix
+    PaneSelect { candidates: Vec<(char, u64)> },  // Quick-select overlay
+    PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },  // Quick-swap overlay
+    SidebarNav,       // Sidebar tree navigation
+    Rename { target, buffer },  // Text input for renaming
+    Chord { sequence },  // Multi-key chord (e.g., w → digit)
+    Mode { name },     // Custom mode (resize, etc.)
+}
+```
 
-| Element | When | Style |
-|---------|------|-------|
-| Detached pane | During `InteractiveMove` | Rendered at `detached_pane.render_pos` with 3× accent border |
-| Insert hint | During `InteractiveMove` | Translucent rectangle: 24px × 60% height for new column, full-width × 24px for in-column |
-| Pane name | Always | Large centered label (distinct colors) so you can see what's moving |
+**Mode triggers**: Config defines how to enter modes:
+```toml
+[[keys.mode]]
+name = "resize"
+trigger = "prefix+r"
+sticky = true   # true = stay until Esc/Enter; false = one-shot (chord)
+```
 
-### Files
+### KeyCombo (`heca/src/keymap.rs`)
 
-| File | Role |
-|------|------|
-| `heca/src/main.rs` | Event handling (`CursorMoved`, `MouseInput`), `hit_test_pane()`, `dnd_edge_scroll()`, `transition_to_moving()`, `drop_pane()`, `cancel_interactive_move()`, `compute_insert_hint_rect()` |
-| `heca/src/app_state.rs` | `DragState`, `DetachedPane` |
-| `heca-core/src/layout/scrolling.rs` | `insert_position()` — computes drop target from pointer coordinates |
-| `heca-core/src/layout/column.rs` | `Pane::interactive_move_offset` |
-| `heca-config/src/theme.rs` | `ModifierKey` enum, `auto_scroll_edge`, `interactive_move_modifier` |
+```rust
+pub struct KeyCombo {
+    pub key: String,      // Normalized key name (lowercase, "enter", "arrowleft")
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub super_: bool,
+}
+```
+
+- **Case-insensitive equality**: `"h"` matches `"H"`
+- **Shift inference**: `"{"` parses as `"["` + `shift=true`
+- **macOS physical key fallback**: When `key_text` is empty (Ctrl produces control char), physical key maps back to printable key
+- **Named keys**: `Enter`, `Tab`, `Escape`, `ArrowLeft`, etc.
+
+---
+
+## Config System (`heca-config/src/theme.rs`)
+
+### Config File Format
+
+```toml
+# ~/.config/heca/config.toml
+
+prefix = "ctrl+a"   # Prefix key (default: "ctrl+b")
+theme = "mocha"     # Theme name
+
+[settings]
+window_width = 1280
+window_height = 800
+mouse = true
+focus_follows_mouse = true
+auto_scroll_edge = true
+interactive_move_modifier = "Super"
+
+[keys]
+# Prefix bindings (checked in Prefix mode)
+focus_left = "prefix+h"
+focus_right = "prefix+l"
+# ...
+
+# Global bindings (checked in Normal mode, before terminal forwarding)
+Alt+Enter = "spawn_terminal"
+
+# Multiple bindings
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+
+# Unbind defaults
+[keys.unbind]
+"prefix+f" = true
+
+# Spawn external commands
+[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+
+# Custom modes
+[[keys.mode]]
+name = "resize"
+trigger = "prefix+r"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "resize"
+keys = "h"
+args = { target = "column", axis = "x", amount = "-50" }
+```
+
+### Config Loading
+
+1. `~/.config/heca/config.toml` (user config, optional)
+2. Built-in defaults from `heca-config/src/theme.rs`
+3. User config **overrides** defaults (same key replaces)
+4. `keys.unbind` removes specific defaults
+5. Default modes are **always merged** with user modes (user modes override same name)
+
+### Config Reload
+
+`WmAction::ReloadConfig` triggers `reload_config()` on `HecaApp`:
+- Rebuilds keymaps from config file
+- Reloads theme
+- Updates settings (mouse, focus_follows_mouse, etc.)
+- Does NOT restart the app
 
 ---
 
@@ -267,14 +321,18 @@ view_pos = proposed_view_pos.clamp(min_view_pos, max_view_pos);
 ```
 myvim/
 ├── AGENTS.md              ← This file
+├── README.md              ← User-facing documentation
+├── keybindings.toml       ← Complete keybinding reference
 ├── Cargo.toml             ← Workspace root
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
-│   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), execute_action()
-│   │   ├── app_state.rs   ← AppState, InputMode, SidebarState, RenameTarget
-│   │   ├── input.rs       ← WmAction enum, KeyBindings, resolve(), resolve_mode()
-│   │   ├── sidebar.rs     ← SidebarTree, rendering, hit-testing, navigation
+│   │   ├── main.rs        ← HecaApp, ApplicationHandler, render(), registry setup
+│   │   ├── app_state.rs   ← AppState, InputMode, DragState, SidebarState
+│   │   ├── input.rs       ← WmAction enum, action_from_name(), action_priority()
+│   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
 │   │   ├── actions.rs     ← ActionRegistry, ActionDescriptor, ActionCategory
+│   │   ├── handlers.rs    ← All action handlers (handle_focus_pane, handle_swap, etc.)
+│   │   ├── sidebar.rs     ← SidebarTree, rendering, hit-testing, navigation
 │   │   └── chrome.rs      ← ChromeConfig (tab bar, sidebar, status bar)
 │   └── Cargo.toml
 ├── heca-core/             ← Layout engine + backends (no GPU code)
@@ -357,11 +415,12 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 - Put GPU rendering in `heca-renderer/src/`. No layout logic in the renderer.
 - Put input handling and WM actions in `heca/src/`. This is the orchestrator.
 - Use `PaneBackend` trait for all pane content sources (terminal, neovim, browser).
-- Pass `WmAction` through `execute_action()` for all WM commands.
+- **Route ALL WM actions through `registry.execute()`**. Direct function calls are registry bypasses.
 - Use `Animated<T>` for any value that should animate smoothly over time.
 - Store column widths as `ColumnWidth::Proportion(f64)` or `ColumnWidth::Fixed(f64)`. NEVER normalize column widths.
 - Store `working_area` in the layout engine; apply chrome offsets in the renderer.
 - Add `#[cfg(debug_assertions)]` for debug logging.
+- Use `expect("descriptive message")` instead of `unwrap()` for initialization code.
 
 ### Don't
 
@@ -372,6 +431,7 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 - **Do NOT use the old `Rect` type** from `heca-core/src/types.rs`. Use `Rectangle` from `heca-core/src/layout/types.rs` for new code.
 - **Do NOT add a webview.** All chrome renders via `wgpu` primitives.
 - **Do NOT add tokio to the main event loop** without careful thought. winit events must not block. Use `pollster` for async init.
+- **Do NOT create registry bypasses.** All focus/workspace/layout changes must go through `registry.execute()`.
 
 ### Prefix Mode Design Rules
 
@@ -379,7 +439,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 
 - ✅ Pass real modifier state (`state.modifiers.control_key()`) in prefix mode — don't hardcode `false`.
 - ✅ Add a prefix timeout (~500ms) so the user can't get stuck in prefix mode.
-- ✅ Make the prefix key configurable (when config supports it).
+- ✅ Make the prefix key configurable (via `prefix = "ctrl+b"` in config).
 - ✅ Forward literal prefix key on double-press (`Ctrl+B Ctrl+B` → send 0x02 to backend).
 - ❌ Do not eliminate prefix mode — it prevents conflicts with hosted terminal apps.
 - ❌ Do not make prefix mode modeless — that defeats the purpose.
@@ -391,8 +451,18 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - `action_from_name()`: maps config string names to actions. Keep in sync.
 - `action_priority()`: **do NOT use `_ =>` catch-all** — explicitly match every variant.
 - `resolve()`: case-insensitive key matching, modifier-exact. Physical key fallback for macOS.
-- `execute_action()`: every variant must do something — no empty match arms.
+- **All WM state changes go through `registry.execute()`** — no direct `focus_pane_by_id()` calls outside handlers.
 - Default keybindings in `heca-config/src/theme.rs`: add new bindings here.
+
+### Adding New Actions
+
+1. Add variant to `WmAction` in `heca/src/input.rs`
+2. Add string mapping in `action_from_name()`
+3. Add priority in `action_priority()`
+4. Create handler in `heca/src/handlers.rs`
+5. Register in `build_registry()` in `heca/src/main.rs`
+6. Add default binding in `heca-config/src/theme.rs`
+7. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
 
 ---
 
@@ -415,13 +485,13 @@ cargo test -p heca-core
 cargo test -p heca-renderer
 
 # Lint (before committing)
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets --all-features
+
+# Fix auto-fixable issues
+cargo clippy --fix --workspace --all-targets --all-features
 
 # Watch (auto-rebuild on changes)
 cargo watch -x check
-
-# Validate config parsing (standalone)
-cargo run --bin niri validate   # if you built niri separately
 ```
 
 ---
@@ -446,27 +516,27 @@ See `.planning/PROJECT.md` for project overview, `.planning/ROADMAP.md` for phas
 | 1 — The Shell | ✅ ~Complete (GPU shell, theme, chrome) | 8 of 8 |
 | 2 — The Workspace | ✅ ~Complete (NIRI layout, animations, input) | 28 of 28 |
 | 3 — The Content | 🔄 In Progress (terminal backend wired) | PANE-01, PANE-02 done |
-| 3b — Sidebar + Actions | ✅ **DONE** (sidebar tree, naming, cross-ws ops, command palette backend) | 9 phases complete |
+| 3b — Sidebar + Actions | ✅ **DONE** (sidebar tree, naming, cross-ws ops, command palette backend, registry system) | 9 phases complete |
 | 4 — The Platform | ❌ Pending | Session persistence, RPC, plugins |
 
 ---
 
 ## Known Issues (from code review)
 
-See `niri-compatibility-review.md` for full details. Key issues to be aware of:
+See `niri-compatibility-review.md` for full details. Key issues:
 
 | ID | Issue | Severity | Status |
 |----|-------|----------|--------|
-| K1 | Prefix mode hardcodes `ctrl=false`, breaking all Ctrl+key bindings | Critical | ✅ **FIXED** — passes real modifier state |
-| K2 | Prefix key hardcoded to Ctrl+B (not configurable) | High | Open |
-| K3 | No prefix timeout (sticky prefix mode) | Medium | ✅ **FIXED** — 500ms auto-exit in `about_to_wait` |
-| K4 | Shift+special-char bindings fail on many layouts | High | Open |
-| K5 | 6 actions (Scratchpad, Hide, ResizeL/R/U/D) are no-ops | Medium | Open |
-| L1 | `update_all_column_widths()` runs on every mutation (violates niri principle 1) | Critical | Open |
-| L2 | Proportion widths not stored persistently (window resize resets interactive resize) | High | Open |
-| L4 | Focus up/down conflated with workspace switch | Medium | ✅ **FIXED** — `j/k` stay within workspace; `u/d` switch workspace |
-| L6 | Tabbed display, maximize, fullscreen, preset widths defined but dead code | Medium | Open |
-| N1 | PaneSelect/Swap limited to 52 unique labels (a-z, A-Z) | Low | By design — use sidebar for >52 panes |
+| K1 | Prefix mode hardcodes `ctrl=false` | Critical | ✅ **FIXED** — passes real modifier state |
+| K2 | Prefix key not configurable | High | ✅ **FIXED** — `prefix = "ctrl+b"` in config |
+| K3 | No prefix timeout | Medium | ✅ **FIXED** — 500ms auto-exit |
+| K4 | Shift+special-char bindings fail on some layouts | High | ✅ **FIXED** — `KeyCombo::parse()` maps shifted symbols |
+| K5 | Registry bypasses (direct function calls) | High | ✅ **FIXED** — all routing through `registry.execute()` |
+| L1 | `update_all_column_widths()` on every mutation | Critical | ✅ **FIXED** — removed from float/unfloat path |
+| L2 | Proportion widths not persistent | High | Open |
+| L4 | Focus up/down conflated with workspace switch | Medium | ✅ **FIXED** — `j/k` stay within workspace; `u/d` switch |
+| L6 | Tabbed display, maximize, fullscreen dead code | Medium | Open |
+| N1 | PaneSelect/Swap limited to 52 labels | Low | By design — use sidebar for >52 panes |
 
 ---
 
@@ -498,13 +568,14 @@ See `niri-compatibility-review.md` for full details. Key issues to be aware of:
 1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.
 2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
 3. Check `heca/src/input.rs` and `heca-config/src/theme.rs` for keybinding concerns.
-4. Run `cargo check` before and after changes — the project must compile.
+4. Check `heca/src/main.rs` for registry setup and bypasses.
+5. Run `cargo check` before and after changes — the project must compile.
 
 ### When Writing Code
 1. Use the NIRI layout engine, not BSP (`pane.rs` is dead reference code).
 2. Always use `Rectangle` from `layout/types.rs`, not `Rect` from `types.rs`.
-3. Every `WmAction` variant in `execute_action()` must have a non-empty implementation.
-4. Add new keybindings to both `heca-config/src/theme.rs` (defaults) and `heca/src/input.rs` (action enum + parser + execute_action).
+3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
+4. Add new keybindings to both `heca-config/src/theme.rs` (defaults) and `heca/src/input.rs` (action enum + parser + priority).
 5. Test prefix mode: verify both plain key and Ctrl-modified key bindings work.
 6. Do NOT remove or refactor layout code without consulting the NIRI skill.
 7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.
@@ -513,6 +584,7 @@ See `niri-compatibility-review.md` for full details. Key issues to be aware of:
 ### When Reviewing
 1. Check for BSP tree references that should be NIRI scrolling columns.
 2. Verify `update_all_column_widths()` isn't called unnecessarily.
-3. Ensure `execute_action()` has no empty match arms.
+3. **Verify no registry bypasses** — all state changes go through `registry.execute()`.
 4. Check prefix mode passes real modifier state, not hardcoded `false`.
 5. Verify column widths are stored per-column, not normalized.
+6. Check `action_priority()` explicitly matches all variants.
