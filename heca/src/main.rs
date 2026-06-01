@@ -1140,7 +1140,7 @@ fn rubberband(x: f32) -> f32 {
 /// The delta is normalized by how deep the pointer is into the trigger zone.
 fn dnd_edge_scroll(state: &mut AppState, mouse_pos: (f32, f32), pane_area: CoreRect) {
     let trigger = 80.0f32;
-    let speed = 400.0f32; // px/sec
+    let speed = 120.0f32; // px/sec — slower, more controlled feel
 
     let mouse_x_in_content = mouse_pos.0 - pane_area.x;
     let content_w = pane_area.w;
