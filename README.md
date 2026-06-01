@@ -414,11 +414,25 @@ focus_left = ["prefix+h", "prefix+ArrowLeft"]
 # Global bindings (no prefix needed)
 # Checked before forwarding to terminal
 Alt+Enter = "spawn_terminal"
-
-# Remove default bindings
-[keys.unbind]
-"prefix+f" = true
 ```
+
+### Unbinding Defaults
+
+To remove a default keybinding, add it to `[keys.unbind]`:
+
+```toml
+[keys.unbind]
+"prefix+f" = true        # Disable float toggle
+"prefix+q" = true        # Disable pane select
+"prefix+Shift+q" = true  # Disable swap pane
+```
+
+**Why unbind?**
+- Free up keys for custom bindings
+- Disable features you don't use
+- Resolve conflicts with custom bindings
+
+The action still exists — you can rebind it to a different key in `[keys]`. For example, if you unbind `prefix+f` (float), you can rebind it to `prefix+Shift+f`.
 
 ### Modes
 
