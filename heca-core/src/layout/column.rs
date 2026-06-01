@@ -256,8 +256,11 @@ pub struct Pane {
     pub title: String,
     /// Preferred fixed height (None = auto).
     pub preferred_height: Option<f64>,
-    /// Move animation offset.
+    /// Move animation offset (entry/exit animations).
     pub move_offset: Animated<Point>,
+    /// Offset applied during interactive move Starting phase (rubberband).
+    /// Cleared on transition to Moving. Not used by entry/exit animations.
+    pub interactive_move_offset: Point,
 }
 
 impl Pane {
@@ -267,6 +270,7 @@ impl Pane {
             title: title.into(),
             preferred_height: None,
             move_offset: Animated::Static(Point::default()),
+            interactive_move_offset: Point::default(),
         }
     }
 }
