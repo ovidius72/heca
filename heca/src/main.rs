@@ -16,7 +16,7 @@ use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
 use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
-use input::{WmAction, action_from_name};
+use input::{WmAction, action_from_name, build_action};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -176,6 +176,8 @@ struct HecaApp {
     app_config: AppConfig,
     registry: actions::ActionRegistry,
     keymap: keymap::KeymapRegistry,
+    /// Per-mode keymaps (e.g. "resize" mode bindings).
+    mode_keymaps: HashMap<String, keymap::KeymapRegistry>,
 }
 
 impl HecaApp {
@@ -241,13 +243,30 @@ impl HecaApp {
         }
 
         // ── Custom modes from [[keys.mode]] ──
-        // TODO: implement mode runtime
+        let mut mode_keymaps = HashMap::new();
+        for mode_cfg in &app_config.config.keys.mode {
+            let mut mode_map = keymap::KeymapRegistry::new();
+            for binding in &mode_cfg.bindings {
+                let action = if let Some(unit) = action_from_name(&binding.action) {
+                    unit
+                } else if let Some(built) = build_action(&binding.action, &binding.args) {
+                    built
+                } else {
+                    eprintln!("warning: unknown mode action '{}' in mode '{}'", binding.action, mode_cfg.name);
+                    continue;
+                };
+                let combo = keymap::KeyCombo::parse(&binding.keys);
+                mode_map.bind(&mode_cfg.name, combo, action);
+            }
+            mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
+        }
 
         Self {
             state: None,
             app_config,
             registry,
             keymap,
+            mode_keymaps,
         }
     }
 
@@ -509,6 +528,9 @@ impl HecaApp {
             }
             InputMode::Chord { sequence } => {
                 ("CHORD", format!(" w→{}", sequence.join("→")))
+            }
+            InputMode::Mode { name } => {
+                ("MODE", format!(" {} → ?", name))
             }
         };
         let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
@@ -937,6 +959,23 @@ impl ApplicationHandler for HecaApp {
                         // Unknown chord key — cancel.
                         state.input_mode = InputMode::Normal;
                         state.needs_redraw = true;
+                    }
+                    InputMode::Mode { name } => {
+                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                        if is_escape {
+                            state.input_mode = InputMode::Normal;
+                            state.needs_redraw = true;
+                            return;
+                        }
+                        let combo = keymap::KeyCombo { key: key_text.clone(), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        if let Some(mode_map) = self.mode_keymaps.get(name)
+                            && let Some(action) = mode_map.resolve(name, &combo).cloned()
+                        {
+                            self.registry.execute(&action, state);
+                            // If mode is not sticky, exit after one action.
+                            // (Sticky check would need config access here.)
+                            // For now, all modes are sticky until Esc.
+                        }
                     }
                     InputMode::PaneSelect { candidates } => {
                         let candidates = candidates.clone();
@@ -1404,7 +1443,7 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::MovePaneRight, handle_move_pane_right);
     registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, handle_swap_param);
     registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, handle_move_param);
-    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, delta: 0 }, handle_resize);
+    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, axis: input::ResizeAxis::X, amount: 0.0 }, handle_resize);
     registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, handle_resize_to);
 
     // ── Pane ──

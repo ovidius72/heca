@@ -208,18 +208,29 @@ pub struct CommandKeybindConfig {
 
 fn default_command_type() -> String { "pane".to_string() }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModeBindingConfig {
     pub action: String,
     pub keys: String,
+    /// Arguments for parameterized actions.
+    /// e.g. `args = { target = "column", axis = "x", amount = "50" }`
+    /// → WmAction::Resize { target: Column, axis: X, amount: 50.0 }
+    #[serde(default)]
+    pub args: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KeyModeConfig {
     pub name: String,
     pub trigger: String,
+    /// If true, stay in this mode until Esc or another mode trigger.
+    /// If false, execute one binding and exit to Normal.
+    #[serde(default = "default_mode_sticky")]
+    pub sticky: bool,
     #[serde(default)] pub bindings: Vec<ModeBindingConfig>,
 }
+
+fn default_mode_sticky() -> bool { true }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  KeysConfig — holds prefix, flat action bindings, commands, and modes

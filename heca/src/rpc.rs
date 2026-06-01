@@ -6,7 +6,7 @@
 //!   split-h | split-v
 //!   close-pane | close-pane-id <pane_id>
 //!   float | float-at <pane_id> <x> <y> <w> <h>
-//!   resize <column|pane> <delta>
+//!   resize <column|pane> <axis> <amount>
 //!   move-pane <pane_id> <target_col>
 //!   swap <a_id> <b_id>
 //!   focus-left | focus-right | focus-up | focus-down
@@ -165,14 +165,25 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     })
                 }
             };
-            let delta_arg = expect_arg!("delta");
-            let delta = delta_arg
-                .parse::<i32>()
-                .map_err(|_| RpcError::ParseInt {
+            let axis_arg = expect_arg!("axis");
+            let axis = match axis_arg.to_lowercase().as_str() {
+                "x" | "horizontal" | "width" => crate::input::ResizeAxis::X,
+                "y" | "vertical" | "height" => crate::input::ResizeAxis::Y,
+                _ => {
+                    return Err(RpcError::ParseInt {
+                        cmd: cmd.clone(),
+                        value: axis_arg.to_string(),
+                    })
+                }
+            };
+            let amount_arg = expect_arg!("amount");
+            let amount = amount_arg
+                .parse::<f64>()
+                .map_err(|_| RpcError::ParseFloat {
                     cmd: cmd.clone(),
-                    value: delta_arg.to_string(),
+                    value: amount_arg.to_string(),
                 })?;
-            Ok(WmAction::Resize { target, delta })
+            Ok(WmAction::Resize { target, axis, amount })
         }
         "move-pane" => {
             let pane_arg = expect_arg!("pane_id");
@@ -287,17 +298,19 @@ mod tests {
     #[test]
     fn test_resize() {
         assert_eq!(
-            parse_rpc_command("resize column 50"),
+            parse_rpc_command("resize column x 50"),
             Ok(WmAction::Resize {
                 target: ResizeTarget::Column,
-                delta: 50,
+                axis: crate::input::ResizeAxis::X,
+                amount: 50.0,
             }),
         );
         assert_eq!(
-            parse_rpc_command("resize pane -25"),
+            parse_rpc_command("resize pane y -25"),
             Ok(WmAction::Resize {
                 target: ResizeTarget::Pane,
-                delta: -25,
+                axis: crate::input::ResizeAxis::Y,
+                amount: -25.0,
             }),
         );
     }

@@ -45,6 +45,9 @@ pub enum InputMode {
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
     Chord { sequence: Vec<String> },
+    /// Custom mode (e.g. resize mode). Stay in mode until Esc.
+    /// `name` is the mode identifier from config.
+    Mode { name: String },
 }
 
 impl InputMode {

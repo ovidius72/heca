@@ -1,10 +1,37 @@
 /// Target for resize actions.
-// Variants are constructed in tests and will be used by the RPC parser in Phase 4.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResizeTarget {
     Column,
     Pane,
+}
+
+impl std::str::FromStr for ResizeTarget {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "column" | "col" => Ok(ResizeTarget::Column),
+            "pane" => Ok(ResizeTarget::Pane),
+            _ => Err(format!("unknown resize target: {}", s)),
+        }
+    }
+}
+
+/// Axis for resize actions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ResizeAxis {
+    X,
+    Y,
+}
+
+impl std::str::FromStr for ResizeAxis {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "x" | "horizontal" | "width" => Ok(ResizeAxis::X),
+            "y" | "vertical" | "height" => Ok(ResizeAxis::Y),
+            _ => Err(format!("unknown resize axis: {}", s)),
+        }
+    }
 }
 
 /// Window-manager action.
@@ -54,7 +81,7 @@ pub enum WmAction {
     // ── Layout (parameterized) ──
     Swap { a_id: u64, b_id: u64 },
     Move { pane_id: u64, target_col: usize },
-    Resize { target: ResizeTarget, delta: i32 },
+    Resize { target: ResizeTarget, axis: ResizeAxis, amount: f64 },
     ResizeTo { target: ResizeTarget, width: f64, height: f64 },
 
     // ── Pane (unit) ──
@@ -148,6 +175,85 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
         "command_palette" => Some(WmAction::CommandPalette),
+        _ => None,
+    }
+}
+
+// ── Parameterized action builders ──
+
+fn get_u64(args: &std::collections::HashMap<String, String>, key: &str) -> Option<u64> {
+    args.get(key)?.parse().ok()
+}
+fn get_usize(args: &std::collections::HashMap<String, String>, key: &str) -> Option<usize> {
+    args.get(key)?.parse().ok()
+}
+fn get_f64(args: &std::collections::HashMap<String, String>, key: &str) -> Option<f64> {
+    args.get(key)?.parse().ok()
+}
+fn get_string(args: &std::collections::HashMap<String, String>, key: &str) -> Option<String> {
+    args.get(key).cloned()
+}
+fn get_enum<T: std::str::FromStr>(args: &std::collections::HashMap<String, String>, key: &str) -> Option<T> {
+    args.get(key)?.parse().ok()
+}
+
+/// Build a parameterized `WmAction` from a name and string args.
+/// Returns `None` if the action name is unknown or args are missing/invalid.
+///
+/// Supported names and required args:
+///   "focus_pane"          → pane_id: u64
+///   "focus_workspace"     → ws_idx: usize
+///   "swap"                → a_id: u64, b_id: u64
+///   "move"                → pane_id: u64, target_col: usize
+///   "resize"              → target: "column"|"pane", axis: "x"|"y", amount: f64
+///   "resize_to"           → target: "column"|"pane", width: f64, height: f64
+///   "float_at"            → pane_id: u64, x: f64, y: f64, width: f64, height: f64
+///   "close_pane_by_id"    → pane_id: u64
+///   "rename_target"       → pane_id: u64, name: String
+///   "spawn_command"       → command: String
+pub fn build_action(name: &str, args: &std::collections::HashMap<String, String>) -> Option<WmAction> {
+    match name {
+        "focus_pane" => Some(WmAction::FocusPane {
+            pane_id: get_u64(args, "pane_id")?,
+        }),
+        "focus_workspace" => Some(WmAction::FocusWorkspace {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
+        "swap" => Some(WmAction::Swap {
+            a_id: get_u64(args, "a_id")?,
+            b_id: get_u64(args, "b_id")?,
+        }),
+        "move" => Some(WmAction::Move {
+            pane_id: get_u64(args, "pane_id")?,
+            target_col: get_usize(args, "target_col")?,
+        }),
+        "resize" => Some(WmAction::Resize {
+            target: get_enum(args, "target")?,
+            axis: get_enum(args, "axis")?,
+            amount: get_f64(args, "amount")?,
+        }),
+        "resize_to" => Some(WmAction::ResizeTo {
+            target: get_enum(args, "target")?,
+            width: get_f64(args, "width")?,
+            height: get_f64(args, "height")?,
+        }),
+        "float_at" => Some(WmAction::FloatAt {
+            pane_id: get_u64(args, "pane_id")?,
+            x: get_f64(args, "x")?,
+            y: get_f64(args, "y")?,
+            width: get_f64(args, "width")?,
+            height: get_f64(args, "height")?,
+        }),
+        "close_pane_by_id" => Some(WmAction::ClosePaneById {
+            pane_id: get_u64(args, "pane_id")?,
+        }),
+        "rename_target" => Some(WmAction::RenameTarget {
+            pane_id: get_u64(args, "pane_id")?,
+            name: get_string(args, "name")?,
+        }),
+        "spawn_command" => Some(WmAction::SpawnCommand {
+            command: get_string(args, "command")?,
+        }),
         _ => None,
     }
 }
@@ -278,7 +384,7 @@ mod tests {
         let _ = WmAction::FocusWorkspace { ws_idx: 0 };
         let _ = WmAction::Swap { a_id: 1, b_id: 2 };
         let _ = WmAction::Move { pane_id: 1, target_col: 0 };
-        let _ = WmAction::Resize { target: ResizeTarget::Column, delta: 10 };
+        let _ = WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 10.0 };
         let _ = WmAction::ResizeTo { target: ResizeTarget::Pane, width: 100.0, height: 200.0 };
         let _ = WmAction::FloatAt { pane_id: 1, x: 0.0, y: 0.0, width: 100.0, height: 100.0 };
         let _ = WmAction::ClosePaneById { pane_id: 1 };

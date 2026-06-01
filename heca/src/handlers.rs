@@ -304,20 +304,21 @@ pub fn handle_move_param(state: &mut AppState, action: &WmAction) {
 }
 
 pub fn handle_resize(state: &mut AppState, action: &WmAction) {
-    let WmAction::Resize { target, delta } = action else { return };
+    let WmAction::Resize { target, axis, amount } = action else { return };
     if let Some(ws) = state.session.active_workspace_mut() {
-        match target {
-            crate::input::ResizeTarget::Column => {
-                let delta_f = *delta as f64 / 1000.0;
+        match (target, axis) {
+            (crate::input::ResizeTarget::Column, crate::input::ResizeAxis::X) => {
+                let delta_f = *amount / 1000.0;
                 ws.scrolling.resize_active_column(delta_f);
             }
-            crate::input::ResizeTarget::Pane => {
+            (crate::input::ResizeTarget::Pane, crate::input::ResizeAxis::Y) => {
                 let h = ws.scrolling.working_area.size.h;
                 let gaps = ws.scrolling.options.gaps;
                 if let Some(col) = ws.scrolling.active_column_mut() {
-                    col.resize_active_pane_height(*delta as f64, h, gaps);
+                    col.resize_active_pane_height(*amount, h, gaps);
                 }
             }
+            _ => {} // Column-Y and Pane-X are not yet implemented
         }
     }
     state.needs_redraw = true;
