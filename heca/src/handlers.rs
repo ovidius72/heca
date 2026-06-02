@@ -365,7 +365,7 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 // same pane and makes the swap effective.
                 let mut inserts = vec![(bcol, bpi, placeholder_a_pid, new_col_for_a), (acol, api, placeholder_b_pid, new_col_for_b)];
                 // Insert in descending col index order so earlier inserts don't shift later targets.
-                inserts.sort_by(|a, b| b.0.cmp(&a.0));
+                inserts.sort_by_key(|b| std::cmp::Reverse(b.0));
 
                 for (col_pos, pane_idx, ph_pid, new_cid) in inserts {
                     if col_pos < ws.scrolling.columns.len() {
@@ -396,19 +396,18 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 let mut removes = vec![];
                 if let Some((ci, pi)) = found_a { removes.push((ci, pi, a_pid)); }
                 if let Some((ci, pi)) = found_b { removes.push((ci, pi, b_pid)); }
-                removes.sort_by(|x, y| y.0.cmp(&x.0));
+                removes.sort_by_key(|y| std::cmp::Reverse(y.0));
 
                 let mut removed_a: Option<LayoutPane> = None;
                 let mut removed_b: Option<LayoutPane> = None;
 
                 for (ci, pi, pid) in removes {
-                    if ci < ws.scrolling.columns.len() {
-                        if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
+                    if ci < ws.scrolling.columns.len()
+                        && let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
                             eprintln!("[swap] removed original pane id={} from col {} idx {}", pid, ci, pi);
                             if pid == a_pid { removed_a = Some(removed); }
                             else if pid == b_pid { removed_b = Some(removed); }
                         }
-                    }
                 }
 
                 // Now replace placeholders with the removed panes and animate from old positions.
@@ -432,8 +431,8 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                         ws.scrolling.columns[ci].compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
                         ws.scrolling.update_all_column_widths();
 
-                        if let Some(old_rect) = old_rect_opt {
-                            if let Some((_, new_rect)) = ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws.scrolling.columns[ci].panes[pi].id) {
+                        if let Some(old_rect) = old_rect_opt
+                            && let Some((_, new_rect)) = ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws.scrolling.columns[ci].panes[pi].id) {
                                 let mut dx = old_rect.loc.x - new_rect.loc.x;
                                 let mut dy = old_rect.loc.y - new_rect.loc.y;
                                 // Clamp extreme values so panes don't dash across the whole window when
@@ -443,7 +442,6 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                                 ws.scrolling.columns[ci].panes[pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
                                 eprintln!("[swap] animated pane id={} from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", ws.scrolling.columns[ci].panes[pi].id.0, old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
                             }
-                        }
                         eprintln!("[swap] replaced placeholder {} at ws col {} idx {}", ph_id, ci, pi);
                     } else {
                         eprintln!("[swap] placeholder {} not found for replacement", ph_id);
@@ -455,156 +453,141 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
             }
         }
     } else {
-        // Different workspaces: exchange panes between workspaces preserving column identity when possible.
-        // Implement reinsert-first semantics to avoid temporary column deletion and to allow
-        // nicer pane-level animations (move pane visually from old location to new).
-        eprintln!("[swap] cross-workspace (reinsert-first): A ws={} col={} idx={}  B ws={} col={} idx={}", aws, acol, api, bws, bcol, bpi);
+        // Different workspaces: remove-then-insert approach.
+        //
+        // The previous reinsert-first (placeholder) approach had an index-shift bug:
+        // after inserting a placeholder in B's column at B's index, B's actual index shifts
+        // by +1, but we were still removing at the original index (removing the placeholder
+        // instead of B).
+        //
+        // New approach: remove both panes by ID (searching for them), then insert each at
+        // the other's target position. If removing a pane deletes its column (it was the only
+        // pane), we recreate the column for the incoming pane.
+        eprintln!("[swap] cross-workspace (remove-then-insert): A ws={} col={} idx={}  B ws={} col={} idx={}", aws, acol, api, bws, bcol, bpi);
 
-        // Capture meta info before mutation.
-        let a_col_id = state.session.workspaces.get(aws).and_then(|ws| ws.scrolling.columns.get(acol).map(|c| c.id));
-        let b_col_id = state.session.workspaces.get(bws).and_then(|ws| ws.scrolling.columns.get(bcol).map(|c| c.id));
-        let a_col_pos = acol;
-        let b_col_pos = bcol;
-        let a_col_len = state.session.workspaces.get(aws).and_then(|ws| ws.scrolling.columns.get(acol).map(|c| c.panes.len())).unwrap_or(0);
-        let b_col_len = state.session.workspaces.get(bws).and_then(|ws| ws.scrolling.columns.get(bcol).map(|c| c.panes.len())).unwrap_or(0);
+        // Capture working area info for column recreation.
+        let a_wa = state.session.workspaces.get(aws).map(|ws| ws.scrolling.working_area);
+        let b_wa = state.session.workspaces.get(bws).map(|ws| ws.scrolling.working_area);
+        let a_gaps = state.session.workspaces.get(aws).map(|ws| ws.scrolling.options.gaps).unwrap_or(0.0);
+        let b_gaps = state.session.workspaces.get(bws).map(|ws| ws.scrolling.options.gaps).unwrap_or(0.0);
 
         // Capture old pane render positions (used to compute animation offsets).
         let old_a_rect = state.session.workspaces.get(aws)
-            .map(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id)).map(|(_, r)| r))
-            .flatten();
+            .and_then(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id)).map(|(_, r)| r));
         let old_b_rect = state.session.workspaces.get(bws)
-            .map(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id)).map(|(_, r)| r))
-            .flatten();
+            .and_then(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id)).map(|(_, r)| r));
 
-        // Pre-generate ids for placeholder panes and for any recreated columns.
-        let placeholder_a_pid = state.session.next_id();
-        let placeholder_b_pid = state.session.next_id();
-        let new_col_for_a = ColumnId(state.session.next_id());
-        let new_col_for_b = ColumnId(state.session.next_id());
-
-        // Step A -> B: insert a placeholder in B's workspace where A should land.
-        if let Some(ws_b) = state.session.workspaces.get_mut(bws) {
-            if b_col_len > 1 {
-                let target_col = b_col_pos.min(ws_b.scrolling.columns.len().saturating_sub(1));
-                let insert_idx = bpi.min(ws_b.scrolling.columns[target_col].panes.len());
-                let placeholder = LayoutPane::new(PaneId(placeholder_a_pid), pane_name(placeholder_a_pid));
-                ws_b.scrolling.add_pane_to_column(target_col, Some(insert_idx), placeholder, true);
-                eprintln!("[swap] placed placeholder for A at ws={} col={} idx={} (placeholder id={})", bws, target_col, insert_idx, placeholder_a_pid);
-            } else {
-                let pos = b_col_pos.min(ws_b.scrolling.columns.len());
-                let placeholder = LayoutPane::new(PaneId(placeholder_a_pid), pane_name(placeholder_a_pid));
-                ws_b.scrolling.add_column(Some(pos), Column::new(new_col_for_a, placeholder, ColumnWidth::Proportion(0.5)), true);
-                eprintln!("[swap] created column placeholder for A at ws={} pos={} (placeholder id={})", bws, pos, placeholder_a_pid);
+        // Helper: remove pane by ID from a workspace. Returns (removed_pane, was_only_pane_in_column, column_id).
+        // If the column was deleted (pane was alone), was_only_pane_in_column is true.
+        let remove_pane_by_id = |session: &mut heca_core::layout::session::Session, ws_idx: usize, pane_id_val: u64| -> Option<(LayoutPane, bool, ColumnId)> {
+            let ws = session.workspaces.get_mut(ws_idx)?;
+            for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+                if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id_val) {
+                    let col_id = col.id;
+                    let was_only = col.panes.len() == 1;
+                    let removed = ws.scrolling.remove_pane(ci, pi)?;
+                    return Some((removed, was_only, col_id));
+                }
             }
-        } else {
-            eprintln!("[swap] target workspace {} missing when placing placeholder for A", bws);
-            return;
+            None
+        };
+
+        // Step 1: Remove A from its workspace.
+        let (removed_a, a_was_only, a_original_col_id) = match remove_pane_by_id(&mut state.session, aws, *a_id) {
+            Some(r) => { eprintln!("[swap] removed A (id={}) from ws={}, was_only={}", *a_id, aws, r.1); r }
+            None => { eprintln!("[swap] failed to remove pane A from ws={}", aws); return; }
+        };
+
+        // Step 2: Remove B from its workspace.
+        let (removed_b, b_was_only, b_original_col_id) = match remove_pane_by_id(&mut state.session, bws, *b_id) {
+            Some(r) => { eprintln!("[swap] removed B (id={}) from ws={}, was_only={}", *b_id, bws, r.1); r }
+            None => { eprintln!("[swap] failed to remove pane B from ws={}", bws); return; }
+        };
+
+        // Step 3: Insert A into B's old position in B's workspace.
+        // If B's column was deleted (was_only), recreate it.
+        let vw = state.session.viewport_size.w;
+        let vh = state.session.viewport_size.h;
+        let max_dx = vw * 0.9;
+        let max_dy = vh * 0.9;
+
+        if let Some(ws_b) = state.session.workspaces.get_mut(bws) {
+            if b_was_only {
+                // B's column was deleted when B was removed. Recreate it with A.
+                let insert_pos = bcol.min(ws_b.scrolling.columns.len());
+                let mut new_col = Column::new(b_original_col_id, removed_a, ColumnWidth::Proportion(0.5));
+                if let Some(wa) = b_wa { new_col.compute_pane_sizes(wa.size.h, b_gaps); }
+                ws_b.scrolling.add_column(Some(insert_pos), new_col, true);
+                eprintln!("[swap] recreated column for A in ws={} at pos={} (col_id={:?})", bws, insert_pos, b_original_col_id);
+            } else {
+                // B's column still exists. Find it by ID and insert A at the same index.
+                let target_ci = ws_b.scrolling.columns.iter().position(|c| c.id == b_original_col_id).unwrap_or(bcol.min(ws_b.scrolling.columns.len().saturating_sub(1)));
+                let insert_idx = bpi.min(ws_b.scrolling.columns[target_ci].panes.len());
+                ws_b.scrolling.add_pane_to_column(target_ci, Some(insert_idx), removed_a, true);
+                eprintln!("[swap] inserted A into ws={} col={} at idx={}", bws, target_ci, insert_idx);
+            }
         }
 
-        // Now remove the original A from its workspace.
-        let removed_a = {
-            let ws_a = match state.session.workspaces.get_mut(aws) { Some(w) => w, None => { eprintln!("[swap] source workspace {} missing when removing A", aws); return; } };
-            if acol < ws_a.scrolling.columns.len() {
-                eprintln!("[swap] removing A from ({},{})", aws, acol);
-                ws_a.scrolling.remove_pane(acol, api)
-            } else { None }
-        };
-        if removed_a.is_none() { eprintln!("[swap] failed to remove pane A"); return; }
-        let removed_a = removed_a.unwrap();
-
-        // Replace placeholder in B's workspace with removed A and animate from old position.
-        if let Some(ws_b) = state.session.workspaces.get_mut(bws) {
-            // Find the placeholder we inserted.
-            let mut found = None;
-            for (ci, col) in ws_b.scrolling.columns.iter().enumerate() {
-                for (pi, p) in col.panes.iter().enumerate() {
-                    if p.id.0 == placeholder_a_pid { found = Some((ci, pi)); break; }
+        // Animate A from old position to new (separate borrow scope).
+        if let Some(old_rect) = old_a_rect
+            && let Some(ws_b) = state.session.workspaces.get_mut(bws) {
+                // Find A's new position in its workspace.
+                let mut found = None;
+                for (ci, col) in ws_b.scrolling.columns.iter().enumerate() {
+                    for (pi, p) in col.panes.iter().enumerate() {
+                        if p.id.0 == *a_id { found = Some((ci, pi)); break; }
+                    }
+                    if found.is_some() { break; }
                 }
-                if found.is_some() { break; }
-            }
-            if let Some((ci, pi)) = found {
-                // Replace placeholder with the removed pane.
-                ws_b.scrolling.columns[ci].panes[pi] = removed_a;
-                ws_b.scrolling.columns[ci].active_pane_idx = pi;
-                // Recompute sizes and widths.
-                ws_b.scrolling.columns[ci].compute_pane_sizes(ws_b.scrolling.working_area.size.h, ws_b.scrolling.options.gaps);
-                ws_b.scrolling.update_all_column_widths();
-
-                // Compute animation offset if we have old position info.
-                if let Some(old_rect) = old_a_rect {
-                    let new_rect_opt = ws_b.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws_b.scrolling.columns[ci].panes[pi].id);
-                    if let Some((_, new_rect)) = new_rect_opt {
-                        let dx = old_rect.loc.x - new_rect.loc.x;
-                        let dy = old_rect.loc.y - new_rect.loc.y;
-                        ws_b.scrolling.columns[ci].panes[pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+                if let Some((new_ci, new_pi)) = found
+                    && let Some((_, new_rect)) = ws_b.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id)) {
+                        let mut dx = old_rect.loc.x - new_rect.loc.x;
+                        let mut dy = old_rect.loc.y - new_rect.loc.y;
+                        if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
+                        if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
+                        ws_b.scrolling.columns[new_ci].panes[new_pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
                         eprintln!("[swap] animated A from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
                     }
-                }
-                eprintln!("[swap] placed A into ws={} at col={} idx={}", bws, ci, pi);
+            }
+
+        // Step 4: Insert B into A's old position in A's workspace.
+        if let Some(ws_a) = state.session.workspaces.get_mut(aws) {
+            if a_was_only {
+                // A's column was deleted when A was removed. Recreate it with B.
+                let insert_pos = acol.min(ws_a.scrolling.columns.len());
+                let mut new_col = Column::new(a_original_col_id, removed_b, ColumnWidth::Proportion(0.5));
+                if let Some(wa) = a_wa { new_col.compute_pane_sizes(wa.size.h, a_gaps); }
+                ws_a.scrolling.add_column(Some(insert_pos), new_col, true);
+                eprintln!("[swap] recreated column for B in ws={} at pos={} (col_id={:?})", aws, insert_pos, a_original_col_id);
             } else {
-                eprintln!("[swap] placeholder for A not found in ws={}", bws);
+                // A's column still exists. Find it by ID and insert B at the same index.
+                let target_ci = ws_a.scrolling.columns.iter().position(|c| c.id == a_original_col_id).unwrap_or(acol.min(ws_a.scrolling.columns.len().saturating_sub(1)));
+                let insert_idx = api.min(ws_a.scrolling.columns[target_ci].panes.len());
+                ws_a.scrolling.add_pane_to_column(target_ci, Some(insert_idx), removed_b, true);
+                eprintln!("[swap] inserted B into ws={} col={} at idx={}", aws, target_ci, insert_idx);
             }
         }
 
-        // Step B -> A: insert placeholder in A's workspace.
-        if let Some(ws_a) = state.session.workspaces.get_mut(aws) {
-            if a_col_len > 1 {
-                let target_col = a_col_pos.min(ws_a.scrolling.columns.len().saturating_sub(1));
-                let insert_idx = api.min(ws_a.scrolling.columns[target_col].panes.len());
-                let placeholder = LayoutPane::new(PaneId(placeholder_b_pid), pane_name(placeholder_b_pid));
-                ws_a.scrolling.add_pane_to_column(target_col, Some(insert_idx), placeholder, true);
-                eprintln!("[swap] placed placeholder for B at ws={} col={} idx={} (placeholder id={})", aws, target_col, insert_idx, placeholder_b_pid);
-            } else {
-                let pos = a_col_pos.min(ws_a.scrolling.columns.len());
-                let placeholder = LayoutPane::new(PaneId(placeholder_b_pid), pane_name(placeholder_b_pid));
-                ws_a.scrolling.add_column(Some(pos), Column::new(new_col_for_b, placeholder, ColumnWidth::Proportion(0.5)), true);
-                eprintln!("[swap] created column placeholder for B at ws={} pos={} (placeholder id={})", aws, pos, placeholder_b_pid);
-            }
-        } else {
-            eprintln!("[swap] source workspace {} missing when placing placeholder for B", aws);
-            return;
-        }
-
-        // Now remove the original B from its workspace.
-        let removed_b = {
-            let ws_b = match state.session.workspaces.get_mut(bws) { Some(w) => w, None => { eprintln!("[swap] target workspace {} missing when removing B", bws); return; } };
-            if bcol < ws_b.scrolling.columns.len() {
-                eprintln!("[swap] removing B from ({},{})", bws, bcol);
-                ws_b.scrolling.remove_pane(bcol, bpi)
-            } else { None }
-        };
-        if removed_b.is_none() { eprintln!("[swap] failed to remove pane B"); return; }
-        let removed_b = removed_b.unwrap();
-
-        // Replace placeholder in A's workspace with removed B and animate from old position.
-        if let Some(ws_a) = state.session.workspaces.get_mut(aws) {
-            let mut found = None;
-            for (ci, col) in ws_a.scrolling.columns.iter().enumerate() {
-                for (pi, p) in col.panes.iter().enumerate() {
-                    if p.id.0 == placeholder_b_pid { found = Some((ci, pi)); break; }
+        // Animate B from old position to new (separate borrow scope).
+        if let Some(old_rect) = old_b_rect
+            && let Some(ws_a) = state.session.workspaces.get_mut(aws) {
+                let mut found = None;
+                for (ci, col) in ws_a.scrolling.columns.iter().enumerate() {
+                    for (pi, p) in col.panes.iter().enumerate() {
+                        if p.id.0 == *b_id { found = Some((ci, pi)); break; }
+                    }
+                    if found.is_some() { break; }
                 }
-                if found.is_some() { break; }
-            }
-            if let Some((ci, pi)) = found {
-                ws_a.scrolling.columns[ci].panes[pi] = removed_b;
-                ws_a.scrolling.columns[ci].active_pane_idx = pi;
-                ws_a.scrolling.columns[ci].compute_pane_sizes(ws_a.scrolling.working_area.size.h, ws_a.scrolling.options.gaps);
-                ws_a.scrolling.update_all_column_widths();
-
-                if let Some(old_rect) = old_b_rect {
-                    let new_rect_opt = ws_a.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws_a.scrolling.columns[ci].panes[pi].id);
-                    if let Some((_, new_rect)) = new_rect_opt {
-                        let dx = old_rect.loc.x - new_rect.loc.x;
-                        let dy = old_rect.loc.y - new_rect.loc.y;
-                        ws_a.scrolling.columns[ci].panes[pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+                if let Some((new_ci, new_pi)) = found
+                    && let Some((_, new_rect)) = ws_a.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id)) {
+                        let mut dx = old_rect.loc.x - new_rect.loc.x;
+                        let mut dy = old_rect.loc.y - new_rect.loc.y;
+                        if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
+                        if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
+                        ws_a.scrolling.columns[new_ci].panes[new_pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
                         eprintln!("[swap] animated B from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
                     }
-                }
-                eprintln!("[swap] placed B into ws={} at col={} idx={}", aws, ci, pi);
-            } else {
-                eprintln!("[swap] placeholder for B not found in ws={}", aws);
             }
-        }
     }
 
 
