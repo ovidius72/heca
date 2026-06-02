@@ -81,6 +81,8 @@ pub enum WmAction {
     SwapDown,
     MovePaneLeft,
     MovePaneRight,
+    MoveColumnUp,
+    MoveColumnDown,
 
     // ── Layout (parameterized) ──
     Swap {
@@ -99,6 +101,11 @@ pub enum WmAction {
         pane_id: u64,
         ws_idx: usize,
         col_idx: usize,
+    },
+    MoveColumnToWorkspace {
+        col_idx: usize,
+        ws_idx: usize,
+        focus: bool,
     },
     Resize {
         target: ResizeTarget,
@@ -211,6 +218,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "swap_down" => Some(WmAction::SwapDown),
         "move_pane_left" => Some(WmAction::MovePaneLeft),
         "move_pane_right" => Some(WmAction::MovePaneRight),
+        "move_column_up" => Some(WmAction::MoveColumnUp),
+        "move_column_down" => Some(WmAction::MoveColumnDown),
         "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
             pane_id: 0,
             ws_idx: 0,
@@ -219,6 +228,11 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
             pane_id: 0,
             ws_idx: 0,
             col_idx: 0,
+        }),
+        "move_column_to_workspace" => Some(WmAction::MoveColumnToWorkspace {
+            col_idx: 0,
+            ws_idx: 0,
+            focus: true,
         }),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
@@ -378,7 +392,9 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SwapUp
         | WmAction::SwapDown
         | WmAction::MovePaneLeft
-        | WmAction::MovePaneRight => 2,
+        | WmAction::MovePaneRight
+        | WmAction::MoveColumnUp
+        | WmAction::MoveColumnDown => 2,
         // Resize (lowest priority — checked last)
         WmAction::ResizeIncrease
         | WmAction::ResizeDecrease
@@ -396,6 +412,7 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::Move { .. }
         | WmAction::MovePaneToWorkspace { .. }
         | WmAction::MovePaneToColumn { .. }
+        | WmAction::MoveColumnToWorkspace { .. }
         | WmAction::Resize { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::FloatAt { .. }
@@ -520,6 +537,11 @@ mod tests {
             pane_id: 1,
             ws_idx: 0,
             col_idx: 0,
+        };
+        let _ = WmAction::MoveColumnToWorkspace {
+            col_idx: 0,
+            ws_idx: 1,
+            focus: true,
         };
         let _ = WmAction::Resize {
             target: ResizeTarget::Column,

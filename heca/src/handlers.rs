@@ -288,6 +288,31 @@ pub fn handle_move_pane_right(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+pub fn handle_move_column_up(state: &mut AppState, _action: &WmAction) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == 0 { return; }
+    let target_ws = current_ws - 1;
+    let col_idx = state.session.active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx)
+        .unwrap_or(0);
+    crate::move_column_to_workspace(state, col_idx, target_ws, true);
+}
+
+pub fn handle_move_column_down(state: &mut AppState, _action: &WmAction) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws >= state.session.workspaces.len().saturating_sub(1) { return; }
+    let target_ws = current_ws + 1;
+    let col_idx = state.session.active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx)
+        .unwrap_or(0);
+    crate::move_column_to_workspace(state, col_idx, target_ws, true);
+}
+
+pub fn handle_move_column_to_workspace(state: &mut AppState, action: &WmAction) {
+    let WmAction::MoveColumnToWorkspace { col_idx, ws_idx, focus } = action else { return };
+    crate::move_column_to_workspace(state, *col_idx, *ws_idx, *focus);
+}
+
 pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     let WmAction::Swap { a_id, b_id } = action else { return };
     if a_id == b_id { return; }
