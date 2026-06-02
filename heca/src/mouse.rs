@@ -129,19 +129,26 @@ pub fn on_mouse_input(
 
     match (button, button_state) {
         (MouseButton::Left, ElementState::Pressed) => {
-            // Check if interactive move modifier is held.
+            // Meta+click on sidebar pane → start drag from sidebar.
+            if interactive_move_modifier_held(state)
+                && let Some(pane_id) = sidebar_pane_hit_test(state, pos) {
+                start_sidebar_drag(state, pane_id, pos);
+                return None;
+            }
+
+            // Meta+click on content pane → start drag from content.
             if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos) {
                     start_interactive_move(state, pane_id, pos);
                     return None;
                 }
 
-            // Sidebar hit test.
+            // Sidebar click (no modifier) → focus.
             if let Some(action) = sidebar_click(state, pos) {
                 return Some(action);
             }
 
-            // Pane content area hit → focus.
+            // Content click → focus.
             if let Some(pane_id) = hit_test_pane(state, pos) {
                 return Some(WmAction::FocusPane { pane_id });
             }
@@ -331,6 +338,53 @@ pub fn hit_test_pane(state: &AppState, pos: (f32, f32)) -> Option<u64> {
     }
 
     None
+}
+
+/// Check if a sidebar pane item is under the cursor. Returns pane_id if found.
+fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option<u64> {
+    let (_win_w, win_h) = window_logical_size(state);
+    let chrome = chrome_config(state);
+    let sidebar_top = chrome.tab_bar_height;
+    let sidebar_bottom = win_h - chrome.status_bar_height;
+    let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { 40.0 };
+
+    if pos.0 < 0.0 || pos.0 >= sw || pos.1 < sidebar_top || pos.1 >= sidebar_bottom {
+        return None;
+    }
+
+    let sidebar_h = sidebar_bottom - sidebar_top;
+    let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)?;
+    match state.sidebar_tree.flat_items.get(fi)? {
+        crate::sidebar::SidebarItem::Pane { pane_id } => Some(*pane_id),
+        _ => None,
+    }
+}
+
+/// Start a drag from a sidebar pane item.
+/// Switches to the pane's source workspace if needed, then starts the same
+/// interactive move state machine as content-initiated drags.
+fn start_sidebar_drag(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
+    // Cancel any previous incomplete drag.
+    if matches!(state.mouse.drag_state, DragState::InteractiveMoveStarting { .. } | DragState::InteractiveMove { .. }) {
+        cancel_interactive_move(state);
+    }
+
+    // Find which workspace contains this pane.
+    let (ws_idx, _col_idx, _pane_idx) = match crate::find_pane_location(&state.session, pane_id) {
+        Some(loc) => loc,
+        None => return,
+    };
+
+    eprintln!("[sidebar-drag] starting drag for pane_id={} from ws={}", pane_id, ws_idx);
+
+    // Switch to the source workspace if needed.
+    if state.session.active_workspace_idx != ws_idx {
+        eprintln!("[sidebar-drag] switching to source workspace {}", ws_idx);
+        crate::switch_workspace_tracked(state, ws_idx);
+    }
+
+    // Start the drag the same as content-initiated drag.
+    start_interactive_move(state, pane_id, mouse_pos);
 }
 
 /// Handle a click on the sidebar. Returns a WmAction if the click targets
