@@ -90,11 +90,20 @@ pub struct Theme {
     #[serde(default = "default_float_bg")]     pub float_background: Color,
     #[serde(default = "default_float_accent")] pub float_accent: Color,
     #[serde(default = "default_float_focus")]  pub float_focus: Color,
+    // ── Sidebar drag-and-drop colors ──
+    #[serde(default = "default_drag_ghost_bg")]    pub sidebar_drag_ghost_bg: Color,
+    #[serde(default = "default_drag_ghost_fg")]    pub sidebar_drag_ghost_fg: Color,
+    #[serde(default = "default_drag_source_bg")]   pub sidebar_drag_source_bg: Color,
+    #[serde(default = "default_drag_source_border")] pub sidebar_drag_source_border: Color,
 }
 
 fn default_float_bg()    -> Color { Color::new(49, 50, 68, 255) }
 fn default_float_accent() -> Color { Color::new(137, 180, 250, 255) }
 fn default_float_focus()  -> Color { Color::new(250, 179, 135, 255) }
+fn default_drag_ghost_bg()    -> Color { Color::new(137, 180, 250, 217) } // accent @ 85%
+fn default_drag_ghost_fg()    -> Color { Color::new(255, 255, 255, 255) } // white
+fn default_drag_source_bg()   -> Color { Color::new(137, 180, 250, 38)  } // accent @ 15%
+fn default_drag_source_border() -> Color { Color::new(137, 180, 250, 255) } // accent
 
 impl Default for Theme { fn default() -> Self { Self::catppuccin_mocha() } }
 
@@ -114,6 +123,10 @@ impl Theme {
             float_background: Color::new(49, 50, 68, 255),
             float_accent: Color::new(137, 180, 250, 255),
             float_focus: Color::new(250, 179, 135, 255),
+            sidebar_drag_ghost_bg: Color::new(137, 180, 250, 217),
+            sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
+            sidebar_drag_source_bg: Color::new(137, 180, 250, 38),
+            sidebar_drag_source_border: Color::new(137, 180, 250, 255),
         }
     }
 
@@ -132,6 +145,10 @@ impl Theme {
             float_background: Color::new(204, 208, 218, 255),
             float_accent: Color::new(30, 102, 245, 255),
             float_focus: Color::new(230, 126, 34, 255),
+            sidebar_drag_ghost_bg: Color::new(30, 102, 245, 217),
+            sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
+            sidebar_drag_source_bg: Color::new(30, 102, 245, 38),
+            sidebar_drag_source_border: Color::new(30, 102, 245, 255),
         }
     }
 

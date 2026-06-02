@@ -298,6 +298,12 @@ font_size = 32.0
 border_radius = 6.0
 border_width = 1.0
 
+# Sidebar drag-and-drop colors
+sidebar_drag_ghost_bg = "#89b4faD9"     # Ghost label background (accent @ 85%)
+sidebar_drag_ghost_fg = "#ffffff"        # Ghost label text (white)
+sidebar_drag_source_bg = "#89b4fa26"     # Source item background (accent @ 15%)
+sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
+
 [shadow]
 color = "#000000"
 alpha = 0.3

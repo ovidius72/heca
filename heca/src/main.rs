@@ -685,6 +685,9 @@ impl HecaApp {
         );
         let candidates = state.input_mode.candidates();
         let drag_hover_fi = state.mouse.drag_hover_sidebar_fi;
+        let drag_source_fi = state.mouse.sidebar_drag_source_fi;
+        let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
+        let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
         if chrome.left_sidebar_width >= 80.0 {
             sidebar::render_sidebar_expanded(
                 &state.sidebar_tree,
@@ -699,6 +702,9 @@ impl HecaApp {
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
                 drag_hover_fi,
+                drag_source_fi,
+                drag_source_bg,
+                drag_source_border,
             );
         } else {
             sidebar::render_sidebar_collapsed(
@@ -714,6 +720,9 @@ impl HecaApp {
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
                 drag_hover_fi,
+                drag_source_fi,
+                drag_source_bg,
+                drag_source_border,
             );
         }
 
@@ -724,21 +733,19 @@ impl HecaApp {
             let ghost_x = label.x + 10.0; // offset from cursor
             let ghost_y = label.y - ghost_h / 2.0; // center on cursor
 
-            // Ghost background with accent color.
-            let mut ghost_bg = theme.accent.to_f32x4();
-            ghost_bg[3] = 0.85; // mostly opaque
-            state.primitive_renderer.draw_rect(ghost_x, ghost_y, ghost_w, ghost_h, ghost_bg);
+            // Ghost background from theme.
+            state.primitive_renderer.draw_rect(ghost_x, ghost_y, ghost_w, ghost_h, theme.sidebar_drag_ghost_bg.to_f32x4());
 
-            // Ghost border.
-            state.primitive_renderer.draw_border(ghost_x, ghost_y, ghost_w, ghost_h, theme.accent.to_f32x4(), 1.5);
+            // Ghost border from theme.
+            state.primitive_renderer.draw_border(ghost_x, ghost_y, ghost_w, ghost_h, theme.sidebar_drag_source_border.to_f32x4(), 1.5);
 
-            // Ghost text.
+            // Ghost text from theme.
             state.text_renderer.queue_text(
                 &label.text,
                 ghost_x + 6.0,
                 ghost_y + 4.0,
                 13.0,
-                [1.0, 1.0, 1.0, 1.0], // white text on accent bg
+                theme.sidebar_drag_ghost_fg.to_f32x4(),
             );
         }
 
