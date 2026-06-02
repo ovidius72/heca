@@ -1,0 +1,760 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Introduction</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-0392ca55.css">
+        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-a011c713.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-dccf2e73.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title"></h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="heca"><a class="header" href="#heca">heca</a></h1>
+<p><a href="https://github.com/ovidius72/heca">heca</a> is a GPU-native terminal workspace compositor for developers. Inspired by <a href="https://github.com/YaLTeR/niri">NIRI</a>’s scrollable-tiling model, powered by <a href="https://wgpu.rs/">wgpu</a> and <a href="https://github.com/pop-os/cosmic-text">cosmic-text</a>.</p>
+<p>Think tmux meets NIRI meets Neovide — all panes render in a single GPU-accelerated window with smooth animations, sharp fonts, and zero window seams.</p>
+<p><img src="https://img.shields.io/badge/status-alpha-orange" alt="Status">
+<img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-blue" alt="Platform">
+<img src="https://img.shields.io/badge/license-MIT-green" alt="License"></p>
+<hr>
+<h2 id="what-it-does"><a class="header" href="#what-it-does">What It Does</a></h2>
+<p>heca is a <strong>workspace compositor</strong> — not a traditional terminal emulator or window manager. It hosts multiple content panes (terminals, Neovim, browsers) inside a single native window with a NIRI-inspired layout engine:</p>
+<ul>
+<li><strong>Scrolling columns</strong> — Panes are arranged in horizontal columns that scroll smoothly. Focus left/right animates the view to the active column.</li>
+<li><strong>Vertical stacks</strong> — Within each column, panes stack vertically with intelligent height distribution.</li>
+<li><strong>Workspaces</strong> — Multiple workspaces stacked vertically, switched with animated transitions.</li>
+<li><strong>Floating panes</strong> — Any pane can be detached from the scrolling layout and positioned freely.</li>
+<li><strong>GPU-native chrome</strong> — Tab bar, sidebars, status bar, pane borders — all rendered in one GPU pass.</li>
+</ul>
+<p><strong>Why not tmux + a terminal?</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th>tmux in a terminal</th><th>heca</th></tr>
+</thead>
+<tbody>
+<tr><td>Rendering</td><td>CPU text grid</td><td>GPU text atlas + primitives</td></tr>
+<tr><td>Fonts</td><td>Limited ligature support</td><td>Full HarfBuzz shaping, variable fonts</td></tr>
+<tr><td>Animations</td><td>None</td><td>Smooth scroll, zoom, slide</td></tr>
+<tr><td>Panes</td><td>Terminal only</td><td>Terminal, Neovim, browser, plugins</td></tr>
+<tr><td>Chrome</td><td>Text-only</td><td>GPU-rendered shapes, shadows, rounded corners</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Why NIRI-inspired?</strong></p>
+<p><a href="https://github.com/YaLTeR/niri">NIRI</a> is a scrollable-tiling Wayland compositor. heca replicates its core layout principles:</p>
+<ol>
+<li><strong>Opening a new window does not affect sizes of existing windows.</strong></li>
+<li><strong>The focused window does not move around on its own.</strong></li>
+<li><strong>Column widths are NOT normalized</strong> — each column keeps its own width.</li>
+<li><strong>Only the active column’s width changes on resize.</strong></li>
+<li><strong>Horizontal scrolling with animated snap</strong> when switching focus.</li>
+</ol>
+<hr>
+<h2 id="tech-stack"><a class="header" href="#tech-stack">Tech Stack</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Windowing</strong></td><td><a href="https://github.com/rust-windowing/winit">winit</a></td><td>Cross-platform window creation, input events</td></tr>
+<tr><td><strong>GPU API</strong></td><td><a href="https://wgpu.rs/">wgpu</a></td><td>Vulkan/Metal/DX12/WebGPU abstraction</td></tr>
+<tr><td><strong>Text</strong></td><td><a href="https://github.com/pop-os/cosmic-text">cosmic-text</a></td><td>Font shaping, glyph atlas, ligatures</td></tr>
+<tr><td><strong>Terminal</strong></td><td><a href="https://github.com/alacritty/vte">vte</a> + PTY</td><td>ANSI terminal emulation</td></tr>
+<tr><td><strong>Config</strong></td><td><a href="https://serde.rs/">serde</a> + TOML</td><td>User configuration</td></tr>
+<tr><td><strong>Language</strong></td><td>Rust</td><td>Memory-safe, zero-cost abstractions</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<ul>
+<li><strong>Rust</strong> 1.80+ (install via <a href="https://rustup.rs/">rustup</a>)</li>
+<li><strong>GPU</strong> with Vulkan (Linux), Metal (macOS), or DX12 (Windows) support</li>
+<li><strong>OS</strong>: Linux, macOS, or Windows</li>
+</ul>
+<h3 id="platform-notes"><a class="header" href="#platform-notes">Platform Notes</a></h3>
+<ul>
+<li><strong>macOS</strong>: Uses <code>WaitUntil</code> event loop control flow to avoid 100% CPU busy loops. Physical key fallback for empty <code>key_text</code> on winit.</li>
+<li><strong>Linux</strong>: Native Wayland/X11 via winit. PTY spawning via <code>libc::openpty()</code>.</li>
+<li><strong>Windows</strong>: wgpu DX12 backend. PTY via Windows ConPTY (planned).</li>
+</ul>
+<hr>
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<pre><code class="language-bash"># Clone
+git clone https://github.com/ovidius72/heca.git
+cd heca
+
+# Build
+cargo build --release
+
+# Run
+cargo run -p heca
+</code></pre>
+<hr>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>On first launch, heca creates a default config at:</p>
+<ul>
+<li><strong>Linux/macOS</strong>: <code>~/.config/heca/config.toml</code></li>
+<li><strong>Windows</strong>: <code>%APPDATA%\heca\config.toml</code></li>
+</ul>
+<p>The window opens with a single pane. All WM commands use a <strong>prefix key</strong> (<code>Ctrl+B</code> by default), like tmux:</p>
+<pre><code>Ctrl+B → h   Focus left column
+Ctrl+B → l   Focus right column
+Ctrl+B → Enter  New column (horizontal split)
+Ctrl+B → v   New pane in column (vertical split)
+Ctrl+B → x   Close active pane
+Ctrl+B → f   Toggle floating
+</code></pre>
+<hr>
+<h2 id="keyboard-commands"><a class="header" href="#keyboard-commands">Keyboard Commands</a></h2>
+<h3 id="prefix-key"><a class="header" href="#prefix-key">Prefix Key</a></h3>
+<p>heca uses <strong>tmux-style prefix mode</strong>: press <code>Ctrl+B</code>, release, then press the action key. This avoids conflicts with applications running inside panes.</p>
+<ul>
+<li><strong>Prefix timeout</strong>: 500ms — if you don’t press a key, prefix mode exits automatically.</li>
+<li><strong>Double prefix</strong>: <code>Ctrl+B</code> <code>Ctrl+B</code> sends a literal <code>Ctrl+B</code> (0x02) to the focused pane.</li>
+<li><strong>Bare modifiers</strong>: Holding Shift/Ctrl/Alt alone in prefix mode does nothing — wait for the actual key.</li>
+</ul>
+<h3 id="navigation"><a class="header" href="#navigation">Navigation</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Focus left</td><td><code>h</code></td><td>Activate column left, scroll view</td></tr>
+<tr><td>Focus right</td><td><code>l</code></td><td>Activate column right, scroll view</td></tr>
+<tr><td>Focus up</td><td><code>k</code></td><td>Activate pane above in column</td></tr>
+<tr><td>Focus down</td><td><code>j</code></td><td>Activate pane below in column</td></tr>
+<tr><td>Next pane</td><td><code>n</code></td><td>Cycle to next pane across columns</td></tr>
+<tr><td>Prev pane</td><td><code>p</code></td><td>Cycle to prev pane across columns</td></tr>
+<tr><td>Workspace next</td><td><code>d</code></td><td>Switch to next workspace (down)</td></tr>
+<tr><td>Workspace prev</td><td><code>u</code></td><td>Switch to prev workspace (up)</td></tr>
+<tr><td>Focus toggle (local)</td><td><code>i</code></td><td>Toggle between last two panes in same workspace</td></tr>
+<tr><td>Focus toggle (global)</td><td><code>Shift+L</code></td><td>Toggle between last two panes globally</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="pane-operations"><a class="header" href="#pane-operations">Pane Operations</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Split horizontal</td><td><code>Enter</code></td><td>New column to the right of active</td></tr>
+<tr><td>Split vertical</td><td><code>v</code></td><td>New pane below active in same column</td></tr>
+<tr><td>Close</td><td><code>x</code></td><td>Close active pane</td></tr>
+<tr><td>Float</td><td><code>f</code></td><td>Toggle pane between scrolling and floating</td></tr>
+<tr><td>Pane select</td><td><code>q</code></td><td>Overlay letters on panes; press letter to focus</td></tr>
+<tr><td>Swap pane</td><td><code>Shift+Q</code></td><td>Overlay letters; swap panes (stay at current position)</td></tr>
+<tr><td>Swap and focus</td><td><code>m</code></td><td>Overlay letters; swap panes (follow to destination)</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="resize"><a class="header" href="#resize">Resize</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Resize increase</td><td><code>=</code></td><td>Widen active column</td></tr>
+<tr><td>Resize decrease</td><td><code>-</code></td><td>Narrow active column</td></tr>
+<tr><td>Pane height increase</td><td><code>Shift+=</code></td><td>Grow active pane height</td></tr>
+<tr><td>Pane height decrease</td><td><code>Shift+-</code></td><td>Shrink active pane height</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="move--swap-adjacent"><a class="header" href="#move--swap-adjacent">Move / Swap (adjacent)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Move pane left</td><td><code>Ctrl+[</code></td><td>Move active pane to column on left</td></tr>
+<tr><td>Move pane right</td><td><code>Ctrl+]</code></td><td>Move active pane to column on right</td></tr>
+<tr><td>Swap left</td><td><code>Ctrl+H</code></td><td>Swap with pane to the left</td></tr>
+<tr><td>Swap right</td><td><code>Ctrl+L</code></td><td>Swap with pane to the right</td></tr>
+<tr><td>Swap up</td><td><code>Ctrl+K</code></td><td>Swap with pane above</td></tr>
+<tr><td>Swap down</td><td><code>Ctrl+J</code></td><td>Swap with pane below</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="workspace--sidebar"><a class="header" href="#workspace--sidebar">Workspace &amp; Sidebar</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Create workspace</td><td><code>w</code></td><td>Create new workspace with a pane</td></tr>
+<tr><td>Rename workspace</td><td><code>Shift+W</code></td><td>Rename current workspace</td></tr>
+<tr><td>Rename pane</td><td><code>Shift+P</code></td><td>Rename active pane</td></tr>
+<tr><td>Toggle left sidebar</td><td><code>b</code></td><td>Show/hide left sidebar</td></tr>
+<tr><td>Toggle right sidebar</td><td><code>.</code></td><td>Show/hide right sidebar</td></tr>
+<tr><td>Sidebar focus</td><td><code>e</code></td><td>Enter sidebar navigation mode</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="sidebar-navigation-mode"><a class="header" href="#sidebar-navigation-mode">Sidebar Navigation Mode</a></h3>
+<p>When in sidebar mode (<code>Ctrl+B → e</code> or clicking sidebar):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>j</code> / <code>k</code></td><td>Move cursor down / up</td></tr>
+<tr><td><code>h</code> / <code>l</code></td><td>Collapse / expand tree node</td></tr>
+<tr><td><code>Enter</code></td><td>Activate selected item (focus pane/workspace)</td></tr>
+<tr><td><code>Escape</code></td><td>Exit sidebar mode</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="system"><a class="header" href="#system">System</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command</th><th>Default Binding</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>Command palette</td><td><code>p</code></td><td>Open command palette</td></tr>
+<tr><td>Reload config</td><td><code>Shift+R</code></td><td>Reload config.toml at runtime</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p>heca loads config from <code>~/.config/heca/config.toml</code> (Linux/macOS) or <code>%APPDATA%\heca\config.toml</code> (Windows).</p>
+<h3 id="minimal-config"><a class="header" href="#minimal-config">Minimal Config</a></h3>
+<pre><code class="language-toml"># Prefix key (default: "ctrl+b")
+prefix = "ctrl+a"
+
+# Theme
+# Built-in: "mocha" (dark), "latte" (light)
+theme = "mocha"
+
+# Window settings
+[settings]
+window_width = 1280
+window_height = 800
+mouse = true
+
+# Keybindings — prefix+ syntax for prefix bindings, direct for global
+[keys]
+focus_left = "prefix+h"
+focus_right = "prefix+l"
+focus_up = "prefix+k"
+focus_down = "prefix+j"
+split_horizontal = "prefix+Enter"
+split_vertical = "prefix+v"
+close = "prefix+x"
+float = "prefix+f"
+pane_select = "prefix+q"
+swap_pane = "prefix+Shift+q"
+swap_and_focus_pane = "prefix+m"
+</code></pre>
+<h3 id="config-file-format"><a class="header" href="#config-file-format">Config File Format</a></h3>
+<p>The config uses TOML with a flat <code>[keys]</code> table:</p>
+<pre><code class="language-toml">[keys]
+# Single binding
+focus_left = "prefix+h"
+
+# Multiple bindings (list syntax)
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+
+# Global binding (no prefix — works in Normal mode)
+# These are checked before forwarding to terminal
+Alt+Enter = "spawn_lazygit"   # Requires [[keys.command]]
+
+# Unbind defaults
+[keys.unbind]
+"prefix+f" = true   # Remove float toggle
+</code></pre>
+<h3 id="key-combo-syntax"><a class="header" href="#key-combo-syntax">Key Combo Syntax</a></h3>
+<pre><code>prefix+h           → Press prefix, then h
+prefix+Shift+q     → Press prefix, then Shift+q
+prefix+Ctrl+h      → Press prefix, then Ctrl+h
+Alt+Enter          → Global Alt+Enter (no prefix)
+Super+t            → Global Super+t (no prefix)
+F1                 → Global F1
+</code></pre>
+<p><strong>Modifiers:</strong> <code>Ctrl</code>, <code>Shift</code>, <code>Alt</code>, <code>Super</code> (also accepts <code>Win</code>, <code>Cmd</code>)</p>
+<p><strong>Named keys:</strong> <code>Enter</code>, <code>Tab</code>, <code>Escape</code>, <code>Backspace</code>, <code>ArrowLeft</code>, <code>ArrowRight</code>, <code>ArrowUp</code>, <code>ArrowDown</code>, <code>Space</code>, <code>Delete</code></p>
+<h3 id="theme"><a class="header" href="#theme">Theme</a></h3>
+<p>Built-in themes: <code>mocha</code> (dark), <code>latte</code> (light). Create custom themes in <code>~/.config/heca/themes/mytheme.toml</code>:</p>
+<pre><code class="language-toml">name = "My Theme"
+background = "#1e1e2e"
+foreground = "#cdd6f4"
+border = "#313244"
+accent = "#89b4fa"
+font_family = "JetBrainsMono Nerd Font"
+font_size = 32.0
+border_radius = 6.0
+border_width = 1.0
+
+[shadow]
+color = "#000000"
+alpha = 0.3
+blur = 8.0
+</code></pre>
+<h3 id="settings"><a class="header" href="#settings">Settings</a></h3>
+<pre><code class="language-toml">[settings]
+window_width = 1280           # Initial window width
+window_height = 800           # Initial window height
+mouse = true                  # Enable mouse interactions
+focus_follows_mouse = true    # Focus pane on hover
+auto_scroll_edge = true       # Auto-scroll near edges
+interactive_move_modifier = "Super"  # Modifier for drag-and-drop
+</code></pre>
+<hr>
+<h2 id="actions-system"><a class="header" href="#actions-system">Actions System</a></h2>
+<p>Every WM command in heca is an <strong>action</strong>. Actions are the core abstraction — everything from focusing a pane to resizing a column to spawning an application is an action.</p>
+<h3 id="action-types"><a class="header" href="#action-types">Action Types</a></h3>
+<p><strong>Unit actions</strong> — Simple commands with no arguments:</p>
+<ul>
+<li><code>focus_left</code>, <code>focus_right</code>, <code>split_horizontal</code>, <code>close</code>, <code>float</code></li>
+</ul>
+<p><strong>Parameterized actions</strong> — Commands with arguments:</p>
+<ul>
+<li><code>FocusPane { pane_id }</code> — Focus a specific pane by ID</li>
+<li><code>FocusWorkspace { ws_idx }</code> — Focus a workspace by index</li>
+<li><code>Swap { a_id, b_id }</code> — Swap two panes</li>
+<li><code>Resize { target, axis, amount }</code> — Resize column or pane</li>
+<li><code>SpawnCommand { command }</code> — Run an external command</li>
+</ul>
+<h3 id="registry-dispatch"><a class="header" href="#registry-dispatch">Registry Dispatch</a></h3>
+<p>All actions go through a central registry:</p>
+<pre><code>Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry → Handler
+</code></pre>
+<p>This design means:</p>
+<ul>
+<li>Every action is traceable and hookable</li>
+<li>Future scripting/IPC can trigger any action by name</li>
+<li>Actions can be composed and chained</li>
+</ul>
+<h3 id="creating-custom-actions"><a class="header" href="#creating-custom-actions">Creating Custom Actions</a></h3>
+<p>To add a new action to heca:</p>
+<ol>
+<li><strong>Add to <code>WmAction</code> enum</strong> in <code>heca/src/input.rs</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum WmAction {
+    // ... existing variants
+    MyCustomAction,
+}
+<span class="boring">}</span></code></pre>
+<ol start="2">
+<li><strong>Add name mapping</strong> in <code>action_from_name()</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>"my_custom_action" =&gt; Some(WmAction::MyCustomAction),
+<span class="boring">}</span></code></pre>
+<ol start="3">
+<li><strong>Add priority</strong> in <code>action_priority()</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>WmAction::MyCustomAction =&gt; 1,  // Lower = higher priority
+<span class="boring">}</span></code></pre>
+<ol start="4">
+<li><strong>Create handler</strong> in <code>heca/src/handlers.rs</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn handle_my_custom_action(state: &amp;mut AppState, _action: &amp;WmAction) {
+    // Your logic here
+    state.needs_redraw = true;
+}
+<span class="boring">}</span></code></pre>
+<ol start="5">
+<li><strong>Register</strong> in <code>build_registry()</code> in <code>heca/src/main.rs</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>registry.register(&amp;WmAction::MyCustomAction, handle_my_custom_action);
+<span class="boring">}</span></code></pre>
+<ol start="6">
+<li><strong>Add default binding</strong> in <code>heca-config/src/theme.rs</code>:</li>
+</ol>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="keybindings"><a class="header" href="#keybindings">Keybindings</a></h2>
+<h3 id="default-keybindings"><a class="header" href="#default-keybindings">Default Keybindings</a></h3>
+<p>See <a href="keybindings.toml"><code>keybindings.toml</code></a> for a complete reference of all default keybindings that can be customized.</p>
+<h3 id="customizing-keybindings"><a class="header" href="#customizing-keybindings">Customizing Keybindings</a></h3>
+<p>Edit <code>~/.config/heca/config.toml</code>:</p>
+<pre><code class="language-toml">[keys]
+# Change prefix key
+prefix = "ctrl+a"
+
+# Rebind actions
+focus_left = "prefix+h"
+focus_right = "prefix+l"
+
+# Multiple bindings for same action
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+
+# Global bindings (no prefix needed)
+# Checked before forwarding to terminal
+Alt+Enter = "spawn_terminal"
+</code></pre>
+<h3 id="unbinding-defaults"><a class="header" href="#unbinding-defaults">Unbinding Defaults</a></h3>
+<p>To remove a default keybinding, add it to <code>[keys.unbind]</code>:</p>
+<pre><code class="language-toml">[keys.unbind]
+"prefix+f" = true        # Disable float toggle
+"prefix+q" = true        # Disable pane select
+"prefix+Shift+q" = true  # Disable swap pane
+</code></pre>
+<p><strong>Why unbind?</strong></p>
+<ul>
+<li>Free up keys for custom bindings</li>
+<li>Disable features you don’t use</li>
+<li>Resolve conflicts with custom bindings</li>
+</ul>
+<p>The action still exists — you can rebind it to a different key in <code>[keys]</code>. For example, if you unbind <code>prefix+f</code> (float), you can rebind it to <code>prefix+Shift+f</code>.</p>
+<h3 id="modes"><a class="header" href="#modes">Modes</a></h3>
+<p>Modes are groups of bindings that stay active until <code>Escape</code> or <code>Enter</code> is pressed. The default resize mode is an example:</p>
+<pre><code class="language-toml"># Default built-in: prefix+r enters resize mode
+# In resize mode:
+#   h / l  → resize column narrower / wider
+#   j / k  → resize pane shorter / taller
+#   Arrow keys work too
+#   Escape / Enter → exit mode
+
+# Custom modes
+[[keys.mode]]
+name = "my_mode"
+trigger = "prefix+o"      # How to enter the mode
+sticky = true             # true = stay until Esc/Enter
+
+[[keys.mode.bindings]]
+action = "focus_left"
+keys = "h"
+
+[[keys.mode.bindings]]
+action = "focus_right"
+keys = "l"
+</code></pre>
+<p><strong>Sticky vs Non-sticky modes:</strong></p>
+<ul>
+<li><strong>Sticky</strong> (<code>sticky = true</code>): Stay in mode until <code>Escape</code> or <code>Enter</code>. Resize mode is sticky.</li>
+<li><strong>Non-sticky</strong> (<code>sticky = false</code>, or chord): Execute one action then exit. Like <code>prefix+w</code> → <code>1</code> creates workspace 1.</li>
+</ul>
+<h3 id="binding-precedence"><a class="header" href="#binding-precedence">Binding Precedence</a></h3>
+<p>heca checks bindings in this order:</p>
+<ol>
+<li><strong>Mode bindings</strong> — If in a custom mode, check mode-specific keymap</li>
+<li><strong>Prefix mode</strong> — If in prefix mode, check “normal” keymap for <code>prefix+key</code> combos</li>
+<li><strong>Global bindings</strong> — In Normal mode, check “global” keymap for direct <code>Alt+key</code> / <code>Super+key</code> combos</li>
+<li><strong>Forward to terminal</strong> — If no binding matched, send key to focused pane’s backend</li>
+</ol>
+<hr>
+<h2 id="spawning-applications"><a class="header" href="#spawning-applications">Spawning Applications</a></h2>
+<p>Launch external applications in new panes using <code>[[keys.command]]</code>:</p>
+<pre><code class="language-toml">[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+
+[[keys.command]]
+keys = "prefix+t"
+command = "btm"  # bottom system monitor
+
+[[keys.command]]
+keys = "Alt+Enter"
+command = "alacritty"
+</code></pre>
+<p>This creates a new pane with the command as its title. When PTY support is fully implemented, the application will run inside heca with full terminal emulation.</p>
+<hr>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────┐
+│  heca (main binary)                     │
+│  ├── winit event loop                   │
+│  ├── input routing (prefix/keymap)      │
+│  ├── ActionRegistry dispatch            │
+│  ├── render() — GPU compositor          │
+│  └── chrome (tab bar, sidebars, status) │
+├─────────────────────────────────────────┤
+│  heca-renderer                          │
+│  ├── PrimitiveRenderer (rects, borders) │
+│  └── TextRenderer (cosmic-text atlas)   │
+├─────────────────────────────────────────┤
+│  heca-core                              │
+│  ├── layout/                            │
+│  │   ├── Session → Workspace → Column → Pane
+│  │   ├── ViewOffset (animated scroll)   │
+│  │   └── Animation (easing, springs)    │
+│  └── backend/                           │
+│      ├── PaneBackend trait              │
+│      ├── TerminalBackend (PTY + vte)    │
+│      └── FakeBackend (layout testing)   │
+├─────────────────────────────────────────┤
+│  heca-config                            │
+│  └── TOML config + theme loading        │
+└─────────────────────────────────────────┘
+</code></pre>
+<p><strong>Key design decisions:</strong></p>
+<ul>
+<li><strong>NIRI layout engine</strong>: Horizontal scrolling columns, not BSP trees. Column widths are independent.</li>
+<li><strong>Separation of concerns</strong>: Layout in <code>heca-core</code>, GPU in <code>heca-renderer</code>, orchestration in <code>heca</code>.</li>
+<li><strong>ActionRegistry</strong>: All WM commands go through one dispatch point. Every action is a <code>WmAction</code> enum variant.</li>
+<li><strong>KeymapRegistry</strong>: Mode-specific keymaps. Modes are groups of bindings active until Esc/Enter.</li>
+<li><strong>Prefix mode</strong>: Intentionally tmux-style to avoid conflicts with hosted applications.</li>
+<li><strong>PaneBackend trait</strong>: All content sources (terminal, Neovim, browser) implement the same interface.</li>
+</ul>
+<hr>
+<h2 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Phase</th><th>Status</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>1 — The Shell</strong></td><td>✅ Complete</td><td>GPU window, text rendering, theme system</td></tr>
+<tr><td><strong>2 — The Workspace</strong></td><td>✅ Complete</td><td>NIRI layout, animations, input, sidebar</td></tr>
+<tr><td><strong>3 — The Content</strong></td><td>🔄 In Progress</td><td>Terminal backend, Neovim msgpack-RPC</td></tr>
+<tr><td><strong>4 — The Platform</strong></td><td>📋 Planned</td><td>Session persistence, JSON-RPC, plugins</td></tr>
+</tbody>
+</table>
+</div>
+<p>See <code>.planning/ROADMAP.md</code> for detailed requirements.</p>
+<hr>
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>MIT License — see <a href="LICENSE">LICENSE</a> for details.</p>
+<hr>
+<h2 id="acknowledgments"><a class="header" href="#acknowledgments">Acknowledgments</a></h2>
+<ul>
+<li><strong><a href="https://github.com/YaLTeR/niri">NIRI</a></strong> by Ivan Molodetskikh — The scrollable-tiling compositor that inspired heca’s layout engine.</li>
+<li><strong><a href="https://github.com/pop-os/cosmic-text">cosmic-text</a></strong> by System76 — GPU text rendering with excellent font shaping.</li>
+<li><strong><a href="https://wgpu.rs/">wgpu</a></strong> — Safe, portable GPU API for Rust.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="chapter1.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="keybindings.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="chapter1.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="keybindings.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-09f2665d.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-c22b7243.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
