@@ -33,6 +33,7 @@ impl PaneFrame {
         let style = &theme.pane_style;
         
         let border_color = if focused { style.active_border_color.to_f32x4() } else { style.border_color.to_f32x4() };
+        let active_bw = if focused { style.active_border_width } else { style.border_width };
         let glow_color = style.glow_color.to_f32x4();
         
         // 1. Draw Bloom/Glow
@@ -56,27 +57,26 @@ impl PaneFrame {
         // To do a true border, we'd need a dedicated border method.
         // Let's use the draw_border method if available, but with rounded corners it's tricky.
         // For now, let's just draw a slightly smaller inner rect with the bg color to "hollow out" the border.
-        let bw = style.border_width;
         primitive.draw_rounded_rect(
-            x + bw, y + bw, w - 2.0 * bw, h - 2.0 * bw,
+            x + active_bw, y + active_bw, w - 2.0 * active_bw, h - 2.0 * active_bw,
             style.bg_gradient_start.to_f32x4(), style.bg_gradient_end.to_f32x4(),
-            style.border_radius - bw
+            style.border_radius - active_bw
         );
 
         // 4. Title Bar
-        let mut inner_y = y + bw;
+        let mut inner_y = y + active_bw;
         if style.show_title_bar {
             let th = style.title_bar_height;
             let tb_color = style.title_bar_bg_color.to_f32x4();
             
             // Title bar background
-            primitive.draw_rect(x + bw, inner_y, w - 2.0 * bw, th, tb_color);
+            primitive.draw_rect(x + active_bw, inner_y, w - 2.0 * active_bw, th, tb_color);
             
             // Title text
             let title_color = if focused { style.title_active_color.to_f32x4() } else { style.title_color.to_f32x4() };
             text.queue_text(
                 pane_name, 
-                x + bw + style.padding, 
+                x + active_bw + style.padding, 
                 inner_y + (th - style.title_font_size) / 2.0 + 1.0, 
                 style.title_font_size, 
                 title_color
@@ -84,7 +84,7 @@ impl PaneFrame {
             
             // Close Button [x]
             let close_btn_size = 16.0;
-            let btn_x = x + w - bw - close_btn_size - style.padding;
+            let btn_x = x + w - active_bw - close_btn_size - style.padding;
             let btn_y = inner_y + (th - close_btn_size) / 2.0;
             
             primitive.draw_rounded_rect(
@@ -93,15 +93,15 @@ impl PaneFrame {
             );
             
             // Precisely center the 'x' character
-            text.queue_text("×", btn_x + 4.5, btn_y + 2.5, 10.0, title_color);
+            text.queue_text("×", btn_x + 5.0, btn_y + 3.0, 10.0, title_color);
             
             inner_y += th;
         }
 
         // 5. Content Area Calculation
-        let inner_x = x + bw + style.padding;
-        let inner_w = w - 2.0 * (bw + style.padding);
-        let inner_h = (h - bw * 2.0) - (if style.show_title_bar { style.title_bar_height } else { 0.0 }) - 2.0 * style.padding;
+        let inner_x = x + active_bw + style.padding;
+        let inner_w = w - 2.0 * (active_bw + style.padding);
+        let inner_h = (h - 2.0 * active_bw) - (if style.show_title_bar { style.title_bar_height } else { 0.0 }) - 2.0 * style.padding;
         
         [inner_x, inner_y + style.padding, inner_w, inner_h]
     }

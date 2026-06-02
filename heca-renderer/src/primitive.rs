@@ -179,7 +179,7 @@ impl PrimitiveRenderer {
         self.draw_rect(x + w - width, y + width, width, h - 2.0 * width, color);
     }
 
-    /// Queue a filled rectangle with rounded corners and optional gradient.
+    /// Queue a filled rectangle with smooth rounded corners and optional gradient.
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
@@ -191,49 +191,53 @@ impl PrimitiveRenderer {
         radius: f32,
     ) {
         let r = radius.min(w / 2.0).min(h / 2.0);
+        if r <= 0.0 {
+            self.draw_rect(x, y, w, h, color_start); // Fallback to sharp rect
+            return;
+        }
+
         let base = self.vertices.len() as u16;
+        let segments = 8; // Vertices per corner arc for smoothness
+        
+        // Helper to add arc vertices
+        let mut add_arc = |cx: f32, cy: f32, start_angle: f32, end_angle: f32, color: [f32; 4]| {
+            for i in 0..=segments {
+                let angle = start_angle + (end_angle - start_angle) * (i as f32 / segments as f32);
+                self.vertices.push(Vertex {
+                    position: [cx + r * angle.cos(), cy + r * angle.sin()],
+                    color,
+                });
+            }
+        };
 
-        // 8 vertices for the rounded corners
-        // Top-left
-        self.vertices.push(Vertex { position: [x + r, y], color: color_start });
-        self.vertices.push(Vertex { position: [x, y + r], color: color_start });
-        // Top-right
-        self.vertices.push(Vertex { position: [x + w - r, y], color: color_start });
-        self.vertices.push(Vertex { position: [x + w, y + r], color: color_start });
-        // Bottom-right
-        self.vertices.push(Vertex { position: [x + w - r, y + h], color: color_end });
-        self.vertices.push(Vertex { position: [x + w, y + h - r], color: color_end });
-        // Bottom-left
-        self.vertices.push(Vertex { position: [x + r, y + h], color: color_end });
-        self.vertices.push(Vertex { position: [x, y + h - r], color: color_end });
+        // Top-left arc
+        add_arc(x + r, y + r, std::f32::consts::PI, 1.5 * std::f32::consts::PI, color_start);
+        // Top-right arc
+        add_arc(x + w - r, y + r, 1.5 * std::f32::consts::PI, 2.0 * std::f32::consts::PI, color_start);
+        // Bottom-right arc
+        add_arc(x + w - r, y + h - r, 0.0, 0.5 * std::f32::consts::PI, color_end);
+        // Bottom-left arc
+        add_arc(x + r, y + h - r, 0.5 * std::f32::consts::PI, std::f32::consts::PI, color_end);
 
-        // Indices for the center and 4 corners
-        // This is a simplified representation; for perfect arcs we'd need more vertices.
-        // For the "Tron" look, 8 vertices + center usually suffice for small radii.
-        self.indices.push(base);
-        self.indices.push(base + 1);
-        self.indices.push(base + 2);
-        self.indices.push(base + 1);
-        self.indices.push(base + 2);
-        self.indices.push(base + 3);
-        self.indices.push(base + 2);
-        self.indices.push(base + 3);
-        self.indices.push(base + 4);
-        self.indices.push(base + 3);
-        self.indices.push(base + 4);
-        self.indices.push(base + 5);
-        self.indices.push(base + 4);
-        self.indices.push(base + 5);
-        self.indices.push(base + 6);
-        self.indices.push(base + 5);
-        self.indices.push(base + 6);
-        self.indices.push(base + 7);
-        self.indices.push(base + 6);
-        self.indices.push(base + 7);
-        self.indices.push(base);
-        self.indices.push(base + 7);
-        self.indices.push(base);
-        self.indices.push(base + 1);
+        // Triangulate the interior
+        // This is a simplified triangulation for a rounded box.
+        // We'll use a fan from the center of the rect.
+        let center = [x + w / 2.0, y + h / 2.0];
+        let center_idx = self.vertices.len() as u16;
+        self.vertices.push(Vertex { position: center, color: [
+            (color_start[0] + color_end[0]) / 2.0,
+            (color_start[1] + color_end[1]) / 2.0,
+            (color_start[2] + color_end[2]) / 2.0,
+            (color_start[3] + color_end[3]) / 2.0,
+        ]});
+
+        let total_arc_verts = (segments + 1) * 4;
+        for i in 0..total_arc_verts {
+            let next = (i + 1) % total_arc_verts;
+            self.indices.push(center_idx);
+            self.indices.push(base + i as u16);
+            self.indices.push(base + next as u16);
+        }
     }
 
     /// Queue a "glow" effect by layering multiple semi-transparent rounded rects.

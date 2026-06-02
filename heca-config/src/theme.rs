@@ -78,6 +78,7 @@ impl Default for Shadow {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PaneStyle {
     pub border_width: f32,
+    pub active_border_width: f32,
     pub border_radius: f32,
     pub border_color: Color,
     pub active_border_color: Color,
@@ -101,23 +102,24 @@ pub struct PaneStyle {
 impl Default for PaneStyle {
     fn default() -> Self {
         Self {
-            border_width: 0.6,
-            border_radius: 4.0,
+            border_width: 0.2,
+            active_border_width: 1.0,
+            border_radius: 1.5,
             border_color: Color::new(49, 50, 68, 255),
             active_border_color: Color::new(137, 180, 250, 255),
-            glow_color: Color::new(137, 180, 250, 100),
-            glow_radius: 6.0,
+            glow_color: Color::new(137, 180, 250, 90),
+            glow_radius: 5.0,
             bg_gradient_start: Color::new(20, 20, 30, 255),
             bg_gradient_end: Color::new(30, 30, 46, 255),
             shadow_gradient_start: Color::new(0, 0, 0, 150),
             shadow_gradient_end: Color::new(0, 0, 0, 0),
             show_title_bar: true,
-            title_bar_height: 20.0,
+            title_bar_height: 10.0,
             title_bar_bg_color: Color::new(40, 40, 60, 255),
             title_font_size: 11.0,
             title_color: Color::new(150, 150, 180, 255),
             title_active_color: Color::new(205, 214, 244, 255),
-            padding: 4.0,
+            padding: 2.0,
             close_btn_color: Color::new(100, 100, 120, 255),
             close_btn_hover_color: Color::new(255, 100, 100, 255),
         }
