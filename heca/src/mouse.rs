@@ -457,6 +457,29 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
         40.0
     };
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+        // Check buttons first.
+        if let Some(button) = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1) {
+            match button {
+                crate::sidebar::SidebarButton::CreateWorkspace => {
+                    return Some(WmAction::CreateWorkspace);
+                }
+                crate::sidebar::SidebarButton::AddColumn { ws_idx } => {
+                    // Switch to the target workspace and split horizontal.
+                    if ws_idx != state.session.active_workspace_idx {
+                        crate::switch_workspace_tracked(state, ws_idx);
+                    }
+                    return Some(WmAction::SplitHorizontal);
+                }
+                crate::sidebar::SidebarButton::AddPane { ws_idx, col_idx: _ } => {
+                    // Switch to the target workspace and split vertical.
+                    if ws_idx != state.session.active_workspace_idx {
+                        crate::switch_workspace_tracked(state, ws_idx);
+                    }
+                    return Some(WmAction::SplitVertical);
+                }
+            }
+        }
+
         let sidebar_h = sidebar_bottom - sidebar_top;
         if let Some(fi) =
             crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)

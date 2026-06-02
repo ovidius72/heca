@@ -60,6 +60,29 @@ pub struct SidebarTree {
     pub scroll_offset: usize,
     /// Flat navigation list (built from tree, skipping collapsed items).
     pub flat_items: Vec<SidebarItem>,
+    /// Button hitboxes for [+w], [+c], [+p] buttons (set during render).
+    pub button_hitboxes: Vec<SidebarButtonHitbox>,
+}
+
+/// A clickable button in the sidebar.
+#[derive(Debug, Clone)]
+pub enum SidebarButton {
+    /// [+w] — create new workspace.
+    CreateWorkspace,
+    /// [+c] — add column to workspace.
+    AddColumn { ws_idx: usize },
+    /// [+p] — add pane to column.
+    AddPane { ws_idx: usize, col_idx: usize },
+}
+
+/// Hitbox for a sidebar button.
+#[derive(Debug, Clone)]
+pub struct SidebarButtonHitbox {
+    pub button: SidebarButton,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 impl SidebarTree {
@@ -70,6 +93,7 @@ impl SidebarTree {
             item_count: 0,
             scroll_offset: 0,
             flat_items: Vec::new(),
+            button_hitboxes: Vec::new(),
         }
     }
 
@@ -397,6 +421,23 @@ pub fn sidebar_hit_test(
     None
 }
 
+/// Check if a mouse position hits any sidebar button.
+/// Returns the button if hit, None otherwise.
+pub fn sidebar_button_hit_test(
+    tree: &SidebarTree,
+    mouse_x: f32,
+    mouse_y: f32,
+) -> Option<SidebarButton> {
+    for hitbox in &tree.button_hitboxes {
+        if mouse_x >= hitbox.x && mouse_x <= hitbox.x + hitbox.width
+            && mouse_y >= hitbox.y && mouse_y <= hitbox.y + hitbox.height
+        {
+            return Some(hitbox.button.clone());
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar rendering functions
 // ---------------------------------------------------------------------------
@@ -409,13 +450,15 @@ const LABEL_FONT_SIZE: f32 = 14.0;
 const INDENT_WS: f32 = 8.0;
 const INDENT_COL: f32 = 26.0;
 const INDENT_PANE: f32 = 44.0;
+const BTN_SIZE: f32 = 16.0;
+const BTN_FONT_SIZE: f32 = 10.0;
 
 /// Render the expanded sidebar tree (width >= 80px).
 /// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
 // Each param is a distinct render input; grouping would hurt call-site readability.
 #[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_expanded(
-    tree: &SidebarTree,
+    tree: &mut SidebarTree,
     x: f32,
     y: f32,
     width: f32,
@@ -437,11 +480,35 @@ pub fn render_sidebar_expanded(
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
 ) {
+    // Clear and collect button hitboxes.
+    tree.button_hitboxes.clear();
+
     let scroll = tree.scroll_offset;
     let mut line_y = y + 4.0;
     let visible_lines = (height / ITEM_HEIGHT) as usize;
     let mut drawn = 0usize;
     let font_size = LABEL_FONT_SIZE;
+
+    // [+w] button at the top of the sidebar.
+    {
+        let btn_x = x + width - BTN_SIZE - 4.0;
+        let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+        let btn_label = "+w";
+        // Button background.
+        let mut btn_bg = accent;
+        btn_bg[3] = 0.3;
+        primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
+        // Button border.
+        primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
+        // Button text.
+        text_renderer.queue_text(btn_label, btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+        tree.button_hitboxes.push(SidebarButtonHitbox {
+            button: SidebarButton::CreateWorkspace,
+            x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
+        });
+    }
+    line_y += ITEM_HEIGHT;
+    drawn += 1;
 
     for (fi, flat_item) in tree.flat_items.iter().enumerate() {
         if fi < scroll {
@@ -532,6 +599,36 @@ pub fn render_sidebar_expanded(
         let text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
         text_renderer.queue_text(&label, text_x, text_y, font_size, color);
 
+        // [+c] button next to workspace items.
+        if let SidebarItem::Workspace { ws_idx } = flat_item {
+            let btn_x = x + width - BTN_SIZE - 4.0;
+            let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+            let mut btn_bg = accent;
+            btn_bg[3] = 0.3;
+            primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
+            primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
+            text_renderer.queue_text("+c", btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                button: SidebarButton::AddColumn { ws_idx: *ws_idx },
+                x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
+            });
+        }
+
+        // [+p] button next to column items.
+        if let SidebarItem::Column { ws_idx, col_idx } = flat_item {
+            let btn_x = x + width - BTN_SIZE - 4.0;
+            let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+            let mut btn_bg = accent;
+            btn_bg[3] = 0.3;
+            primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
+            primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
+            text_renderer.queue_text("+p", btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                button: SidebarButton::AddPane { ws_idx: *ws_idx, col_idx: *col_idx },
+                x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
+            });
+        }
+
         line_y += ITEM_HEIGHT;
         drawn += 1;
     }
@@ -544,7 +641,7 @@ pub fn render_sidebar_expanded(
 // Each param is a distinct render input; grouping would hurt call-site readability.
 #[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_collapsed(
-    tree: &SidebarTree,
+    tree: &mut SidebarTree,
     x: f32,
     y: f32,
     width: f32,

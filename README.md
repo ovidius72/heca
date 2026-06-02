@@ -1,9 +1,7 @@
 # heca
 
-> Heca takes its name from the Hecatoncheires — those mythic hundred‑handed giants who could juggle mountains (or at least a lot of panes).
-> Just like those multi‑armed titans, heca lets you wrangle terminals, Neovim, browsers, and more, all within a single GPU‑accelerated window.
-> No ambrosia required — just prefix keys, smooth animations, and the feeling of having a hundred hands at your fingertips.
-> (Warning: excessive pane splitting may cause sudden urges to declare war on Titans.)
+> Heca takes its name from the Hecatoncheires — hundred‑handed giants of myth — because it lets you juggle terminals, editors, and tools in a single GPU‑accelerated window.
+> Think prefix keys, smooth animations, and zero ambrosia required.
 
 A GPU-native terminal workspace compositor for developers. Inspired by [NIRI](https://github.com/YaLTeR/niri)'s scrollable-tiling model, powered by [wgpu](https://wgpu.rs/) and [cosmic-text](https://github.com/pop-os/cosmic-text).
 
