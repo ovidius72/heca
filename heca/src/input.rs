@@ -61,8 +61,12 @@ pub enum WmAction {
     FocusToggleGlobal,
 
     // ── Navigation (parameterized) ──
-    FocusPane { pane_id: u64 },
-    FocusWorkspace { ws_idx: usize },
+    FocusPane {
+        pane_id: u64,
+    },
+    FocusWorkspace {
+        ws_idx: usize,
+    },
 
     // ── Layout (unit) ──
     SplitHorizontal,
@@ -79,12 +83,33 @@ pub enum WmAction {
     MovePaneRight,
 
     // ── Layout (parameterized) ──
-    Swap { a_id: u64, b_id: u64 },
-    Move { pane_id: u64, target_col: usize },
-    MovePaneToWorkspace { pane_id: u64, ws_idx: usize },
-    MovePaneToColumn { pane_id: u64, ws_idx: usize, col_idx: usize },
-    Resize { target: ResizeTarget, axis: ResizeAxis, amount: f64 },
-    ResizeTo { target: ResizeTarget, width: f64, height: f64 },
+    Swap {
+        a_id: u64,
+        b_id: u64,
+    },
+    Move {
+        pane_id: u64,
+        target_col: usize,
+    },
+    MovePaneToWorkspace {
+        pane_id: u64,
+        ws_idx: usize,
+    },
+    MovePaneToColumn {
+        pane_id: u64,
+        ws_idx: usize,
+        col_idx: usize,
+    },
+    Resize {
+        target: ResizeTarget,
+        axis: ResizeAxis,
+        amount: f64,
+    },
+    ResizeTo {
+        target: ResizeTarget,
+        width: f64,
+        height: f64,
+    },
 
     // ── Pane (unit) ──
     Float,
@@ -95,9 +120,20 @@ pub enum WmAction {
     RenamePane,
 
     // ── Pane (parameterized) ──
-    FloatAt { pane_id: u64, x: f64, y: f64, width: f64, height: f64 },
-    ClosePaneById { pane_id: u64 },
-    RenameTarget { pane_id: u64, name: String },
+    FloatAt {
+        pane_id: u64,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+    ClosePaneById {
+        pane_id: u64,
+    },
+    RenameTarget {
+        pane_id: u64,
+        name: String,
+    },
 
     // ── Workspace (unit) ──
     CreateWorkspace,
@@ -117,10 +153,14 @@ pub enum WmAction {
     CommandPalette,
 
     // ── External commands ──
-    SpawnCommand { command: String },
+    SpawnCommand {
+        command: String,
+    },
 
     // ── Mode management ──
-    EnterMode { name: String },
+    EnterMode {
+        name: String,
+    },
 
     // ── Config ──
     ReloadConfig,
@@ -135,9 +175,11 @@ pub fn action_discriminant(action: &WmAction) -> std::mem::Discriminant<WmAction
     std::mem::discriminant(action)
 }
 
-/// Map a config key name to its unit `WmAction` variant.
-/// Parameterized variants are not reachable from config — they are
-/// constructed programmatically (RPC, mouse handlers, command palette).
+/**
+Map a config key name to its unit `WmAction` variant.
+Parameterized variants are not reachable from config — they are
+constructed programmatically (RPC, mouse handlers, command palette).
+*/
 pub fn action_from_name(name: &str) -> Option<WmAction> {
     match name {
         "focus_left" => Some(WmAction::FocusLeft),
@@ -169,8 +211,15 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "swap_down" => Some(WmAction::SwapDown),
         "move_pane_left" => Some(WmAction::MovePaneLeft),
         "move_pane_right" => Some(WmAction::MovePaneRight),
-        "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 }),
-        "move_pane_to_column" => Some(WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 }),
+        "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
+            pane_id: 0,
+            ws_idx: 0,
+        }),
+        "move_pane_to_column" => Some(WmAction::MovePaneToColumn {
+            pane_id: 0,
+            ws_idx: 0,
+            col_idx: 0,
+        }),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         "workspace_next" => Some(WmAction::WorkspaceNext),
@@ -209,7 +258,10 @@ fn get_f64(args: &std::collections::HashMap<String, String>, key: &str) -> Optio
 fn get_string(args: &std::collections::HashMap<String, String>, key: &str) -> Option<String> {
     args.get(key).cloned()
 }
-fn get_enum<T: std::str::FromStr>(args: &std::collections::HashMap<String, String>, key: &str) -> Option<T> {
+fn get_enum<T: std::str::FromStr>(
+    args: &std::collections::HashMap<String, String>,
+    key: &str,
+) -> Option<T> {
     args.get(key)?.parse().ok()
 }
 
@@ -227,7 +279,10 @@ fn get_enum<T: std::str::FromStr>(args: &std::collections::HashMap<String, Strin
 ///   "close_pane_by_id"    → pane_id: u64
 ///   "rename_target"       → pane_id: u64, name: String
 ///   "spawn_command"       → command: String
-pub fn build_action(name: &str, args: &std::collections::HashMap<String, String>) -> Option<WmAction> {
+pub fn build_action(
+    name: &str,
+    args: &std::collections::HashMap<String, String>,
+) -> Option<WmAction> {
     match name {
         "focus_pane" => Some(WmAction::FocusPane {
             pane_id: get_u64(args, "pane_id")?,
@@ -288,30 +343,47 @@ pub fn build_action(name: &str, args: &std::collections::HashMap<String, String>
 fn action_priority(action: &WmAction) -> u8 {
     match action {
         // Navigation (highest priority)
-        WmAction::FocusLeft | WmAction::FocusRight |
-        WmAction::FocusUp | WmAction::FocusDown |
-        WmAction::NextPane | WmAction::PrevPane => 0,
+        WmAction::FocusLeft
+        | WmAction::FocusRight
+        | WmAction::FocusUp
+        | WmAction::FocusDown
+        | WmAction::NextPane
+        | WmAction::PrevPane => 0,
         // Sidebar navigation (only used in sidebar mode via resolve_mode)
         // Low priority so they don't override focus bindings in normal/prefix mode.
         WmAction::SidebarFocus => 0,
-        WmAction::SidebarUp | WmAction::SidebarDown |
-        WmAction::SidebarLeftNav | WmAction::SidebarRightNav |
-        WmAction::SidebarExpandToggle => 4,
+        WmAction::SidebarUp
+        | WmAction::SidebarDown
+        | WmAction::SidebarLeftNav
+        | WmAction::SidebarRightNav
+        | WmAction::SidebarExpandToggle => 4,
         // Pane management
-        WmAction::SplitHorizontal | WmAction::SplitVertical |
-        WmAction::Float | WmAction::ClosePane |
-        WmAction::PaneSelect | WmAction::SwapPane | WmAction::SwapAndFocusPane |
-        WmAction::FocusToggleLocal | WmAction::FocusToggleGlobal |
-        WmAction::CreateWorkspace | WmAction::RenameWorkspace |
-        WmAction::RenamePane | WmAction::WorkspaceNext |
-        WmAction::WorkspacePrev => 1,
+        WmAction::SplitHorizontal
+        | WmAction::SplitVertical
+        | WmAction::Float
+        | WmAction::ClosePane
+        | WmAction::PaneSelect
+        | WmAction::SwapPane
+        | WmAction::SwapAndFocusPane
+        | WmAction::FocusToggleLocal
+        | WmAction::FocusToggleGlobal
+        | WmAction::CreateWorkspace
+        | WmAction::RenameWorkspace
+        | WmAction::RenamePane
+        | WmAction::WorkspaceNext
+        | WmAction::WorkspacePrev => 1,
         // Swap
-        WmAction::SwapLeft | WmAction::SwapRight |
-        WmAction::SwapUp | WmAction::SwapDown |
-        WmAction::MovePaneLeft | WmAction::MovePaneRight => 2,
+        WmAction::SwapLeft
+        | WmAction::SwapRight
+        | WmAction::SwapUp
+        | WmAction::SwapDown
+        | WmAction::MovePaneLeft
+        | WmAction::MovePaneRight => 2,
         // Resize (lowest priority — checked last)
-        WmAction::ResizeIncrease | WmAction::ResizeDecrease |
-        WmAction::PaneHeightIncrease | WmAction::PaneHeightDecrease => 3,
+        WmAction::ResizeIncrease
+        | WmAction::ResizeDecrease
+        | WmAction::PaneHeightIncrease
+        | WmAction::PaneHeightDecrease => 3,
         // Sidebars
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
@@ -366,7 +438,10 @@ mod tests {
         assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
-        assert_eq!(action_from_name("command_palette"), Some(WmAction::CommandPalette));
+        assert_eq!(
+            action_from_name("command_palette"),
+            Some(WmAction::CommandPalette)
+        );
     }
 
     #[test]
@@ -422,7 +497,9 @@ mod tests {
         // Resize should have lower priority than pane management
         assert!(action_priority(&WmAction::ResizeIncrease) > action_priority(&WmAction::ClosePane));
         // CommandPalette should have lowest priority
-        assert!(action_priority(&WmAction::CommandPalette) > action_priority(&WmAction::SidebarLeft));
+        assert!(
+            action_priority(&WmAction::CommandPalette) > action_priority(&WmAction::SidebarLeft)
+        );
     }
 
     #[test]
@@ -431,14 +508,41 @@ mod tests {
         let _ = WmAction::FocusPane { pane_id: 1 };
         let _ = WmAction::FocusWorkspace { ws_idx: 0 };
         let _ = WmAction::Swap { a_id: 1, b_id: 2 };
-        let _ = WmAction::Move { pane_id: 1, target_col: 0 };
-        let _ = WmAction::MovePaneToWorkspace { pane_id: 1, ws_idx: 0 };
-        let _ = WmAction::MovePaneToColumn { pane_id: 1, ws_idx: 0, col_idx: 0 };
-        let _ = WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 10.0 };
-        let _ = WmAction::ResizeTo { target: ResizeTarget::Pane, width: 100.0, height: 200.0 };
-        let _ = WmAction::FloatAt { pane_id: 1, x: 0.0, y: 0.0, width: 100.0, height: 100.0 };
+        let _ = WmAction::Move {
+            pane_id: 1,
+            target_col: 0,
+        };
+        let _ = WmAction::MovePaneToWorkspace {
+            pane_id: 1,
+            ws_idx: 0,
+        };
+        let _ = WmAction::MovePaneToColumn {
+            pane_id: 1,
+            ws_idx: 0,
+            col_idx: 0,
+        };
+        let _ = WmAction::Resize {
+            target: ResizeTarget::Column,
+            axis: ResizeAxis::X,
+            amount: 10.0,
+        };
+        let _ = WmAction::ResizeTo {
+            target: ResizeTarget::Pane,
+            width: 100.0,
+            height: 200.0,
+        };
+        let _ = WmAction::FloatAt {
+            pane_id: 1,
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        };
         let _ = WmAction::ClosePaneById { pane_id: 1 };
-        let _ = WmAction::RenameTarget { pane_id: 1, name: "test".to_string() };
+        let _ = WmAction::RenameTarget {
+            pane_id: 1,
+            name: "test".to_string(),
+        };
     }
 
     #[test]

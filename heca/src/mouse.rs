@@ -416,6 +416,12 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
         }
     };
 
+    // Capture detached pane id for logging (det.pane will be moved later).
+    let detached_id = det.pane.id.0;
+    // Pre-generate column ids for recreated columns so we don't reuse pane ids as column ids.
+    let new_col_detached = ColumnId(state.session.next_id());
+    let new_col_removed = ColumnId(state.session.next_id());
+
     match item {
         crate::sidebar::SidebarItem::Pane { pane_id } => {
             // Drop on sidebar pane.
@@ -425,69 +431,72 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
 
             if shift_held {
                 // SWAP: detached ↔ target pane.
-                // 1. Remove target pane from layout.
-                // 2. Insert detached pane at target's location.
-                // 3. Insert target pane at detached's original location.
-                let target = crate::find_pane_location(&state.session, pane_id);
-                match target {
-                    Some((t_ws, t_col, t_pi))
-                        if t_ws < state.session.workspaces.len()
-                            && t_col < state.session.workspaces[t_ws].scrolling.columns.len() =>
-                    {
+                eprintln!("[mouse-swap-sidebar] detached id={} orig_ws={} orig_col_id={:?} orig_pi={}", detached_id, det.original_ws, det.original_col_id, det.original_pane);
+                if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, pane_id) {
+                    eprintln!("[mouse-swap-sidebar] target pane {} at ws={} col={} idx={}", pane_id, t_ws, t_col, t_pi);
+                    if t_ws < state.session.workspaces.len() {
+                        // Remember column count before removal to detect if a column was deleted.
+                        let col_count_before = state.session.workspaces[t_ws].scrolling.columns.len();
+
                         // Remove target pane.
-                        let target_pane = state.session.workspaces[t_ws]
+                        let removed_target = state.session.workspaces[t_ws]
                             .scrolling
                             .remove_pane(t_col, t_pi);
-                        if let Some(target_pane) = target_pane {
-                            // Cannot borrow ws again while also holding target_pane.
-                            // Insert detached at target's location.
-                            let ws_idx = t_ws;
-                            let col_idx = t_col;
-                            if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                                ws.scrolling.add_pane_to_column(
-                                    col_idx,
-                                    Some(t_pi),
-                                    det.pane,
-                                    true,
-                                );
-                            }
-                            // Insert target pane at detached's original location.
-                            let orig_ws = det.original_ws;
-                            let orig_col = det.original_col.min(
-                                state
-                                    .session
-                                    .workspaces
-                                    .get(orig_ws)
-                                    .map(|w| w.scrolling.columns.len())
-                                    .unwrap_or(0)
-                                    .saturating_sub(1),
-                            );
-                            if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
-                                if orig_col < ws.scrolling.columns.len() {
-                                    let orig_pi = det
-                                        .original_pane
-                                        .min(ws.scrolling.columns[orig_col].panes.len());
-                                    ws.scrolling.add_pane_to_column(
-                                        orig_col,
-                                        Some(orig_pi),
-                                        target_pane,
-                                        true,
-                                    );
+
+                        let col_count_after = state.session.workspaces[t_ws].scrolling.columns.len();
+                        let column_removed = col_count_after < col_count_before;
+                        eprintln!("[mouse-swap-sidebar] removed_target.is_some={} column_removed={}", removed_target.is_some(), column_removed);
+
+                        if let Some(removed_target) = removed_target {
+                            let removed_target_id = removed_target.id.0;
+                            eprintln!("[mouse-swap-sidebar] removed target id={}", removed_target_id);
+                            // Insert detached pane at target location (create column if needed).
+                            if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
+                                if t_col < ws.scrolling.columns.len() {
+                                    ws.scrolling.add_pane_to_column(t_col, Some(t_pi), det.pane, true);
+                                    eprintln!("[mouse-swap-sidebar] inserted detached id={} at ws={} col={} idx={}", detached_id, t_ws, t_col, t_pi);
                                 } else {
-                                    ws.scrolling.add_pane_to_column(
-                                        orig_col.min(ws.scrolling.columns.len().saturating_sub(1)),
-                                        None,
-                                        target_pane,
-                                        true,
-                                    );
+                                    ws.scrolling.add_column(Some(t_col), Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
+                                    eprintln!("[mouse-swap-sidebar] created column and inserted detached id={} at ws={} new_col_idx={}", detached_id, t_ws, t_col);
                                 }
+                            } else {
+                                // Fallback: add to active workspace
+                                state.session.add_pane(det.pane, None, true);
+                                eprintln!("[mouse-swap-sidebar] fallback inserted detached to active workspace");
                             }
+
+                            // Insert removed target at detached's original location (or create new column).
+                            let orig_ws = det.original_ws;
+                            if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
+                                // Find the original column by ColumnId so re-insertion is robust to
+                                // index shifts while the pane was detached.
+                                if let Some(orig_idx) = ws.scrolling.columns.iter().position(|c| c.id == det.original_col_id) {
+                                    let orig_pi = det.original_pane.min(ws.scrolling.columns[orig_idx].panes.len());
+                                    ws.scrolling.add_pane_to_column(orig_idx, Some(orig_pi), removed_target, true);
+                                    eprintln!("[mouse-swap-sidebar] inserted removed target id={} at ws={} col={} idx={}", removed_target_id, orig_ws, orig_idx, orig_pi);
+                                } else {
+                                    // Original column was removed — create a new column with the target pane.
+                                    ws.scrolling.add_column(None, Column::new(new_col_removed, removed_target, ColumnWidth::Proportion(0.5)), true);
+                                    eprintln!("[mouse-swap-sidebar] original column missing — created new column with target id={}", removed_target_id);
+                                }
+                            } else {
+                                state.session.add_pane(removed_target, None, true);
+                                eprintln!("[mouse-swap-sidebar] fallback added removed target to active workspace");
+                            }
+                        } else {
+                            // Couldn't remove target — fallback: add detached to active workspace.
+                            state.session.add_pane(det.pane, None, true);
+                            eprintln!("[mouse-swap-sidebar] remove_pane returned None; fallback insert detached");
                         }
-                    }
-                    _ => {
-                        // Fallback: add to active workspace.
+                    } else {
+                        // Invalid target workspace → fallback.
                         state.session.add_pane(det.pane, None, true);
+                        eprintln!("[mouse-swap-sidebar] invalid target workspace {}; fallback inserted detached", t_ws);
                     }
+                } else {
+                    // Target not found → fallback.
+                    state.session.add_pane(det.pane, None, true);
+                    eprintln!("[mouse-swap-sidebar] target not found in find_pane_location; fallback inserted detached");
                 }
             } else {
                 // MOVE: insert detached just after target pane.
@@ -506,10 +515,8 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                 };
                 if let Some((ws_idx, col_idx, pane_idx)) = target {
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                        let insert_idx =
-                            (pane_idx + 1).min(ws.scrolling.columns[col_idx].panes.len());
-                        ws.scrolling
-                            .add_pane_to_column(col_idx, Some(insert_idx), det.pane, true);
+                        let insert_idx = (pane_idx + 1).min(ws.scrolling.columns[col_idx].panes.len());
+                        ws.scrolling.add_pane_to_column(col_idx, Some(insert_idx), det.pane, true);
                     }
                 } else {
                     // Fallback: add to active workspace.
@@ -610,6 +617,10 @@ fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32
         pane.interactive_move_offset = Point::default();
     }
 
+    // Capture the original column id (for robust re-insertion even if
+    // column indices change while the pane is detached). Capture BEFORE removal.
+    let original_col_id = ws.scrolling.columns.get(col_idx).map(|c| c.id).unwrap_or(ColumnId(0));
+
     // Remove the pane from layout.
     let _old_render_x = col_x;
     let _old_render_y = pane_y;
@@ -635,6 +646,7 @@ fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32
         size,
         original_ws,
         original_col: col_idx,
+        original_col_id,
         original_pane: pane_idx,
     });
 
@@ -652,13 +664,11 @@ fn cancel_interactive_move(state: &mut AppState) {
             .original_ws
             .min(state.session.workspaces.len().saturating_sub(1));
         if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-            let col_idx = det.original_col.min(ws.scrolling.columns.len());
-            if col_idx < ws.scrolling.columns.len() {
-                let pane_idx = det
-                    .original_pane
-                    .min(ws.scrolling.columns[col_idx].panes.len());
-                ws.scrolling
-                    .add_pane_to_column(col_idx, Some(pane_idx), det.pane, true);
+            // Prefer to find the original column by ColumnId so re-insertion
+            // survives index shifts while the pane was detached.
+            if let Some(orig_idx) = ws.scrolling.columns.iter().position(|c| c.id == det.original_col_id) {
+                let pane_idx = det.original_pane.min(ws.scrolling.columns[orig_idx].panes.len());
+                ws.scrolling.add_pane_to_column(orig_idx, Some(pane_idx), det.pane, true);
             } else {
                 state.session.add_pane(det.pane, None, true);
             }
@@ -688,93 +698,98 @@ fn drop_pane(state: &mut AppState) {
         }
     };
 
+    // Capture detached pane id early because det.pane will be moved when
+    // reinserting; use detached_id in diagnostic logs after move.
+    let detached_id = det.pane.id.0;
+    // Pre-generate new ColumnIds for any recreated columns used during reinsertion.
+    let new_col_detached = ColumnId(state.session.next_id());
+    let new_col_removed = ColumnId(state.session.next_id());
+
     let shift_held = state.modifiers.shift_key();
 
     if shift_held {
-        // Shift+drop: swap with pane under cursor, or cancel on empty space.
+        // SWAP: Shift+drop in content area.
+        eprintln!("[mouse-swap] detached id={} orig_ws={} orig_col_id={:?} orig_pi={}", detached_id, det.original_ws, det.original_col_id, det.original_pane);
         let target_pane_id = hit_test_pane(state, state.mouse.pos);
         if let Some(target_id) = target_pane_id {
-            // Find target pane location across all workspaces.
-            let target_loc = crate::find_pane_location(&state.session, target_id);
-            if let Some((t_ws, t_col, t_pi)) = target_loc {
-                // Generate fresh IDs before borrowing.
-                let fresh_id = state.session.next_id();
-                let fresh_id_2 = state.session.next_id();
+            eprintln!("[mouse-swap] hit_test_pane -> target_id={}", target_id);
+            if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_id) {
+                eprintln!("[mouse-swap] target located at ws={} col={} idx={}", t_ws, t_col, t_pi);
+                let target_col_id = state
+                    .session
+                    .workspaces
+                    .get(t_ws)
+                    .and_then(|ws| ws.scrolling.columns.get(t_col).map(|c| c.id));
 
-                // Remove target pane from its workspace/column.
+                let col_count_before = state.session.workspaces[t_ws].scrolling.columns.len();
                 let removed_target = state.session.workspaces[t_ws]
                     .scrolling
                     .remove_pane(t_col, t_pi);
+                let col_count_after = state.session.workspaces[t_ws].scrolling.columns.len();
+                eprintln!("[mouse-swap] remove_pane returned is_some={} col_count_before={} col_count_after={}", removed_target.is_some(), col_count_before, col_count_after);
 
                 if let Some(removed_target) = removed_target {
-                    // Insert detached pane at target's position (use target's ws).
-                    if let Some(ws) = state.session.workspaces.get_mut(t_ws)
-                        && t_col < ws.scrolling.columns.len()
-                    {
-                        ws.scrolling.add_pane_to_column(
-                            t_col, Some(t_pi), det.pane, true,
-                        );
-                    }
-                    // Insert removed target at detached's original position.
-                    let orig_ws = det.original_ws;
-                    let orig_col = det.original_col.min(
-                        state
-                            .session
-                            .workspaces
-                            .get(orig_ws)
-                            .map(|w| w.scrolling.columns.len())
-                            .unwrap_or(0)
-                            .saturating_sub(1),
-                    );
-                    if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
-                        if orig_col < ws.scrolling.columns.len() {
-                            let orig_pi = det
-                                .original_pane
-                                .min(ws.scrolling.columns[orig_col].panes.len());
-                            ws.scrolling.add_pane_to_column(
-                                orig_col,
-                                Some(orig_pi),
-                                removed_target,
-                                true,
-                            );
+                    let removed_target_id = removed_target.id.0;
+                    eprintln!("[mouse-swap] removed target id={}", removed_target_id);
+                    if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
+                        if let Some(tc_id) = target_col_id {
+                            if let Some(target_idx) = ws.scrolling.columns.iter().position(|c| c.id == tc_id) {
+                                let insert_idx = t_pi.min(ws.scrolling.columns[target_idx].panes.len());
+                                ws.scrolling.add_pane_to_column(target_idx, Some(insert_idx), det.pane, true);
+                                eprintln!("[mouse-swap] inserted detached id={} at ws={} col={} idx={}", detached_id, t_ws, target_idx, insert_idx);
+                            } else {
+                                ws.scrolling.add_column(None, Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
+                                eprintln!("[mouse-swap] target column id missing; created new column and inserted detached id={}", detached_id);
+                            }
                         } else {
-                            // Original column gone — new column at end.
-                            let col = Column::new(
-                                ColumnId(fresh_id),
-                                removed_target,
-                                ColumnWidth::Proportion(0.5),
-                            );
-                            ws.scrolling.add_column(None, col, true);
+                            if t_col < ws.scrolling.columns.len() {
+                                ws.scrolling.add_pane_to_column(t_col, Some(t_pi), det.pane, true);
+                                eprintln!("[mouse-swap] fallback numeric insert detached id={} at ws={} col={} idx={}", detached_id, t_ws, t_col, t_pi);
+                            } else {
+                                ws.scrolling.add_column(Some(t_col), Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
+                                eprintln!("[mouse-swap] fallback created column and inserted detached id={}", detached_id);
+                            }
                         }
+                    } else {
+                        state.session.add_pane(det.pane, None, true);
+                        eprintln!("[mouse-swap] fallback added detached to active workspace");
+                    }
+
+                    // Re-insert removed target into original location identified by ColumnId
+                    let orig_ws = det.original_ws;
+                    if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
+                        if let Some(orig_idx) = ws.scrolling.columns.iter().position(|c| c.id == det.original_col_id) {
+                            let orig_pi = det.original_pane.min(ws.scrolling.columns[orig_idx].panes.len());
+                            ws.scrolling.add_pane_to_column(orig_idx, Some(orig_pi), removed_target, true);
+                            eprintln!("[mouse-swap] reinserted removed target id={} at ws={} col={} idx={}", removed_target_id, orig_ws, orig_idx, orig_pi);
+                        } else {
+                            ws.scrolling.add_column(None, Column::new(new_col_removed, removed_target, ColumnWidth::Proportion(0.5)), true);
+                            eprintln!("[mouse-swap] original column missing; created new column with target id={}", removed_target_id);
+                        }
+                    } else {
+                        state.session.add_pane(removed_target, None, true);
+                        eprintln!("[mouse-swap] fallback added removed target to active workspace");
                     }
                 } else {
-                    // Couldn't remove target — fallback: regular insert.
+                    eprintln!("[mouse-swap] remove_pane failed; performing fallback insert of detached");
+                    let fresh_id = state.session.next_id();
+                    let fresh_id_2 = state.session.next_id();
                     if let Some(ws) = state.session.active_workspace_mut() {
                         match hint {
                             InsertPosition::NewColumn(col_idx) => {
-                                let col = Column::new(
-                                    ColumnId(fresh_id),
-                                    det.pane,
-                                    ColumnWidth::Proportion(0.5),
-                                );
+                                let col = Column::new(ColumnId(fresh_id), det.pane, ColumnWidth::Proportion(0.5));
                                 ws.scrolling.add_column(Some(col_idx), col, true);
                             }
                             InsertPosition::InColumn { col_idx, pane_idx } => {
                                 if col_idx < ws.scrolling.columns.len() {
                                     ws.scrolling.add_pane_to_column(
                                         col_idx,
-                                        Some(
-                                            pane_idx.min(ws.scrolling.columns[col_idx].panes.len()),
-                                        ),
+                                        Some(pane_idx.min(ws.scrolling.columns[col_idx].panes.len())),
                                         det.pane,
                                         true,
                                     );
                                 } else {
-                                    let col = Column::new(
-                                        ColumnId(fresh_id_2),
-                                        det.pane,
-                                        ColumnWidth::Proportion(0.5),
-                                    );
+                                    let col = Column::new(ColumnId(fresh_id_2), det.pane, ColumnWidth::Proportion(0.5));
                                     ws.scrolling.add_column(None, col, true);
                                 }
                             }
@@ -782,13 +797,13 @@ fn drop_pane(state: &mut AppState) {
                     }
                 }
             } else {
-                // Target not found — cancel.
+                eprintln!("[mouse-swap] target not found on find_pane_location; cancelling");
                 cancel_interactive_move(state);
                 state.needs_redraw = true;
                 return;
             }
         } else {
-            // Shift+drop on empty space → cancel.
+            eprintln!("[mouse-swap] shift+drop on empty space; cancelling");
             cancel_interactive_move(state);
             state.needs_redraw = true;
             return;
@@ -883,28 +898,21 @@ pub fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32, f32))
 
     let (rx, ry, rw, rh) = match hint {
         InsertPosition::NewColumn(col_idx) => {
-            // Convert column_x from space coords to screen coords.
-            // `NewColumn(col_idx)` means insert at list index `col_idx`
-            // (before the existing column at that index, or after the last).
+            // Compute the x position in space coordinates for the new column insertion.
             let space_x = if col_idx == 0 {
-                // Before first column → left edge.
                 0.0
             } else if col_idx < ws.scrolling.columns.len() {
-                // Between columns: gap after col_idx-1.
                 let prev_x = ws.scrolling.column_x(col_idx - 1);
-                let prev_w = ws
-                    .scrolling
-                    .column_widths
-                    .get(col_idx - 1)
-                    .copied()
-                    .unwrap_or(0.0);
+                let prev_w = ws.scrolling.column_widths.get(col_idx - 1).copied().unwrap_or(0.0);
                 prev_x + prev_w + gaps * 0.5
+            } else if ws.scrolling.columns.is_empty() {
+                0.0
             } else {
-                // After last column.
                 let last_x = ws.scrolling.column_x(ws.scrolling.columns.len() - 1);
                 let last_w = ws.scrolling.column_widths.last().copied().unwrap_or(0.0);
                 last_x + last_w - gaps * 0.5
             };
+
             let x = space_x - view_pos;
             let y = wa.loc.y + wa.size.h * 0.2;
             let w = 24.0f64;
@@ -913,14 +921,31 @@ pub fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32, f32))
         }
         InsertPosition::InColumn { col_idx, pane_idx } => {
             // Full column width × 24px at the insertion point.
-            let space_x = ws.scrolling.column_x(col_idx);
-            let col_w = ws
-                .scrolling
-                .column_widths
-                .get(col_idx)
-                .copied()
-                .unwrap_or(0.0);
-            let space_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
+            let col_len = ws.scrolling.columns.len();
+            let space_x = if col_idx < col_len {
+                ws.scrolling.column_x(col_idx)
+            } else if col_len == 0 {
+                0.0
+            } else {
+                ws.scrolling.column_x(col_len - 1)
+            };
+
+            let col_w = ws.scrolling.column_widths.get(col_idx).copied().unwrap_or(0.0);
+
+            let space_y = if col_idx < ws.scrolling.columns.len() {
+                let col = &ws.scrolling.columns[col_idx];
+                if pane_idx == col.panes.len() && pane_idx > 0 {
+                    let last_pane_idx = pane_idx - 1;
+                    let last_pane_y = ws.scrolling.pane_y_in_column(col_idx, last_pane_idx);
+                    let last_pane_h = col.pane_sizes.get(last_pane_idx).map(|s| s.h).unwrap_or(0.0);
+                    last_pane_y + last_pane_h
+                } else {
+                    ws.scrolling.pane_y_in_column(col_idx, pane_idx)
+                }
+            } else {
+                0.0
+            };
+
             let x = space_x - view_pos;
             let y = space_y;
             let w = col_w;
