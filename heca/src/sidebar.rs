@@ -426,8 +426,11 @@ pub fn render_sidebar_expanded(
     cursor_bg: [f32; 4],
     visited_color: [f32; 4],
     candidates: Option<&[(char, u64)]>,
+    focused_pane: Option<u64>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
+    // Flat index being hovered during drag (for highlight).
+    drag_hover_fi: Option<usize>,
 ) {
     let scroll = tree.scroll_offset;
     let mut line_y = y + 4.0;
@@ -459,6 +462,7 @@ pub fn render_sidebar_expanded(
             SidebarItem::Pane { pane_id } => {
                 let mut label = pane_name_short(*pane_id, &tree.workspaces);
                 if let Some(cands) = candidates
+                    && focused_pane != Some(*pane_id)
                     && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id) {
                         label = format!("[{}] {}", ch, label);
                     }
@@ -466,9 +470,16 @@ pub fn render_sidebar_expanded(
             }
         };
 
-        // Cursor background
+        // Cursor background (sidebar nav mode)
         if is_cursor {
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
+        }
+
+        // Drag hover highlight (lighter accent)
+        if drag_hover_fi == Some(fi) {
+            let mut drag_bg = accent;
+            drag_bg[3] = 0.25; // more transparent than cursor
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
         }
 
         // Determine color based on state
@@ -533,8 +544,11 @@ pub fn render_sidebar_collapsed(
     visited_color: [f32; 4],
     cursor_bg: [f32; 4],
     candidates: Option<&[(char, u64)]>,
+    focused_pane: Option<u64>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
+    // Flat index being hovered during drag (for highlight).
+    drag_hover_fi: Option<usize>,
 ) {
     let font_size = 13.0; // slightly smaller for compact fit
     let activity_bar_w = 4.0;
@@ -572,6 +586,13 @@ pub fn render_sidebar_collapsed(
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
         }
 
+        // Drag hover highlight (workspace)
+        if drag_hover_fi == Some(flat_idx - 1) {
+            let mut drag_bg = accent;
+            drag_bg[3] = 0.25;
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
+        }
+
         // Workspace number/identifier (first 2 chars)
         let ws_label = ws.name.chars().take(2).collect::<String>();
         let ws_color = if is_ws_cursor {
@@ -599,13 +620,23 @@ pub fn render_sidebar_collapsed(
                         primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, cursor_bg);
                     }
 
+                    // Drag hover highlight (pane or column)
+                    if drag_hover_fi == Some(flat_idx) {
+                        let mut drag_bg = accent;
+                        drag_bg[3] = 0.25;
+                        primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
+                    }
+
                     let mut pane_char = pane.name.chars().next()
                         .unwrap_or('?').to_string();
                     // Show candidate letter during PaneSwap / PaneSelect
+                    // but NOT for the focused pane — no need to swap with yourself.
                     if let Some(cands) = candidates
-                        && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id) {
-                            pane_char = ch.to_string();
-                        }
+                        && focused_pane != Some(pane.pane_id)
+                        && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id)
+                    {
+                        pane_char = ch.to_string();
+                    }
 
                     let pane_color = if is_pane_cursor {
                         accent
@@ -649,7 +680,7 @@ mod tests {
 
     fn make_test_session() -> (Session, Vec<u64>) {
         let viewport = Size::new(1280.0, 800.0);
-        let mut session = Session::new(SessionId(1), viewport, 2.0);
+        let mut session = Session::new(SessionId(1), viewport, 2.0, heca_core::layout::types::LayoutOptions::default());
 
         // Create 3 panes in the first workspace
         let _ids: Vec<u64> = (1..=4).map(|i| {
@@ -807,7 +838,7 @@ mod tests {
     #[test]
     fn test_empty_session() {
         let viewport = Size::new(1280.0, 800.0);
-        let session = Session::new(SessionId(1), viewport, 2.0);
+        let session = Session::new(SessionId(1), viewport, 2.0, heca_core::layout::types::LayoutOptions::default());
         let mut tree = SidebarTree::new();
 
         tree.rebuild(&session, None, None, &[]);

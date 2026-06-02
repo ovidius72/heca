@@ -178,8 +178,8 @@ fn default_mouse()        -> bool   { true }
 fn default_window_width() -> u32    { 1280 }
 fn default_window_height()-> u32    { 800 }
 fn default_prefix_key()   -> String { "ctrl+b".to_string() }
-fn default_focus_follows_mouse() -> bool { true }
 fn default_auto_scroll_edge()    -> bool { true }
+fn default_always_center_single_column()  -> bool { false }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SettingsConfig {
@@ -187,14 +187,15 @@ pub struct SettingsConfig {
     #[serde(default = "default_mouse")]         pub mouse: bool,
     #[serde(default = "default_window_width")]  pub window_width: u32,
     #[serde(default = "default_window_height")] pub window_height: u32,
-    #[serde(default = "default_focus_follows_mouse")]
-    pub focus_follows_mouse: bool,
     /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
     #[serde(default = "default_auto_scroll_edge")]
     pub auto_scroll_edge: bool,
     /// Modifier key that must be held to initiate an interactive pane drag with the mouse.
     #[serde(default)]
     pub interactive_move_modifier: ModifierKey,
+    /// Center a single column even when it fits within the viewport.
+    #[serde(default = "default_always_center_single_column")]
+    pub always_center_single_column: bool,
 }
 
 impl Default for SettingsConfig {
@@ -204,9 +205,9 @@ impl Default for SettingsConfig {
             mouse: default_mouse(),
             window_width: default_window_width(),
             window_height: default_window_height(),
-            focus_follows_mouse: true,
             auto_scroll_edge: true,
             interactive_move_modifier: ModifierKey::default(),
+            always_center_single_column: false,
         }
     }
 }

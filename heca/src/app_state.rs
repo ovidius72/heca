@@ -68,6 +68,68 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
+/// State for the interactive drag-and-drop system.
+#[derive(Clone, Debug)]
+pub enum DragState {
+    None,
+    /// Phase 1: rubberband — pane still in layout.
+    InteractiveMoveStarting {
+        pane_id: u64,
+        /// Workspace where the drag originated.
+        original_ws: usize,
+        start_mouse: (f32, f32),
+        threshold_sq: f32,
+    },
+    /// Phase 2: detached — pane follows pointer.
+    InteractiveMove {
+        pane_id: u64,
+        /// Workspace where the drag originated.
+        original_ws: usize,
+        /// Mouse offset from pane top-left at grab time.
+        offset: (f32, f32),
+    },
+}
+
+/// A pane that has been removed from the layout for interactive move.
+#[derive(Clone, Debug)]
+pub struct DetachedPane {
+    pub pane: heca_core::layout::Pane,
+    pub render_pos: heca_core::layout::types::Point,
+    pub size: heca_core::layout::types::Size,
+    pub original_ws: usize,
+    pub original_col: usize,
+    pub original_pane: usize,
+}
+
+/// All mouse-related runtime state.
+#[derive(Clone, Debug)]
+pub struct MouseState {
+    pub pos: (f32, f32),
+    /// Current drag state machine.
+    pub drag_state: DragState,
+    /// Pane being dragged (detached from layout).
+    pub detached_pane: Option<DetachedPane>,
+    /// Computed drop target during drag.
+    pub insert_hint: Option<heca_core::layout::types::InsertPosition>,
+    /// Last time edge scroll was processed (for frame-rate independence).
+    pub last_edge_scroll_time: Option<std::time::Instant>,
+    /// Flat index of sidebar item being hovered during drag (for visual highlight).
+    pub drag_hover_sidebar_fi: Option<usize>,
+}
+
+impl MouseState {
+    pub fn new() -> Self {
+        Self {
+            pos: (0.0, 0.0),
+            drag_state: DragState::None,
+            detached_pane: None,
+            insert_hint: None,
+            last_edge_scroll_time: None,
+            drag_hover_sidebar_fi: None,
+        }
+    }
+}
+
 pub struct AppState {
     pub window: Arc<Window>,
     pub surface: wgpu::Surface<'static>,
@@ -89,7 +151,7 @@ pub struct AppState {
     pub sidebar_tree: SidebarTree,
     pub active_tab: usize,
     pub tab_names: Vec<String>,
-    pub mouse_pos: (f32, f32),
+    pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<u64>,
@@ -99,6 +161,10 @@ pub struct AppState {
     pub last_visited_pane_per_ws: Vec<Option<u64>>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
+    /// Whether auto edge scroll is enabled.
+    pub auto_scroll_edge: bool,
+    /// Modifier key for interactive pane drag.
+    pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).
     pub prefix_entered_at: Option<std::time::Instant>,
     /// The configured prefix key combo (e.g. Ctrl+b).

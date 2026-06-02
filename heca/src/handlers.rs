@@ -8,7 +8,7 @@ use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
 use crate::{
-    collect_all_column_candidates, collect_all_pane_candidates, destroy_empty_workspace,
+    collect_all_pane_candidates, destroy_empty_workspace,
     find_pane_location, focus_pane_by_id, move_pane_to_column, move_pane_to_workspace_column,
     pane_name, switch_workspace_tracked, sync_focus, update_session_viewport,
 };
@@ -289,17 +289,92 @@ pub fn handle_move_pane_right(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     let WmAction::Swap { a_id, b_id } = action else { return };
-    if let Some((aws, acol, _)) = find_pane_location(&state.session, *a_id)
-        && let Some((bws, bcol, _)) = find_pane_location(&state.session, *b_id)
-    {
-        if aws == bws && acol == bcol {
-            // Same column — no-op
-        } else if aws == bws {
-            move_pane_to_column(state, *a_id, acol, bcol);
+    if a_id == b_id { return; }
+
+    // Find both panes' locations.
+    let a_loc = find_pane_location(&state.session, *a_id);
+    let b_loc = find_pane_location(&state.session, *b_id);
+    let ((aws, acol, api), (bws, bcol, bpi)) = match (a_loc, b_loc) {
+        (Some(a), Some(b)) => (a, b),
+        _ => return,
+    };
+
+    // True swap: exchange positions of both panes.
+    // Same workspace: remove both (higher index first to avoid shift), then re-insert.
+    // Different workspaces: remove A, remove B, insert A at B's pos, insert B at A's pos.
+    if aws == bws {
+        // Same workspace.
+        if acol == bcol {
+            // Same column: remove higher index first.
+            let (first_pi, second_pi) = if api < bpi { (api, bpi) } else { (bpi, api) };
+            if let Some(ws) = state.session.workspaces.get_mut(aws) {
+                if acol >= ws.scrolling.columns.len() { return; }
+                // Remove pane at higher index first so removal doesn't shift the other.
+                let pane_b = ws.scrolling.remove_pane(acol, second_pi);
+                let pane_a = ws.scrolling.remove_pane(acol, first_pi);
+                // column now has 2 fewer panes at first_pi and second_pi-1
+                if let (Some(a), Some(b)) = (pane_a, pane_b) {
+                    let insert_b = (second_pi - 2).min(ws.scrolling.columns[acol].panes.len());
+                    ws.scrolling.add_pane_to_column(acol, Some(insert_b), b, true);
+                    let insert_a = first_pi.min(ws.scrolling.columns[acol].panes.len());
+                    ws.scrolling.add_pane_to_column(acol, Some(insert_a), a, true);
+                }
+            }
         } else {
-            move_pane_to_workspace_column(state, *a_id, bws, bcol);
+            // Different columns, same workspace: remove both, then cross-insert.
+            // Remove from higher column index first to avoid index shift.
+            let (first_col, second_col, first_pi, second_pi) = if acol < bcol {
+                (acol, bcol, api, bpi)
+            } else {
+                (bcol, acol, bpi, api)
+            };
+            if let Some(ws) = state.session.workspaces.get_mut(aws) {
+                let pane2 = ws.scrolling.remove_pane(second_col, second_pi);
+                let pane1 = ws.scrolling.remove_pane(first_col, first_pi);
+                if let (Some(a), Some(b)) = (pane1, pane2) {
+                    let target_col_a = if acol < bcol { bcol - 1 } else { bcol };
+                    let target_col_b = if acol < bcol { acol } else { acol - 1 };
+                    let tca = target_col_a.min(ws.scrolling.columns.len().saturating_sub(1));
+                    let tcb = target_col_b.min(ws.scrolling.columns.len().saturating_sub(1));
+                    ws.scrolling.add_pane_to_column(tca, None, a, true);
+                    ws.scrolling.add_pane_to_column(tcb, None, b, true);
+                }
+            }
+        }
+    } else {
+        // Different workspaces: move A to B's workspace, B to A's workspace.
+        let pane_a = {
+            let ws = state.session.workspaces.get_mut(aws);
+            ws.and_then(|ws| {
+                if acol < ws.scrolling.columns.len() {
+                    ws.scrolling.remove_pane(acol, api)
+                } else { None }
+            })
+        };
+        if pane_a.is_none() { return; }
+        let pane_b = {
+            let ws = state.session.workspaces.get_mut(bws);
+            ws.and_then(|ws| {
+                if bcol < ws.scrolling.columns.len() {
+                    ws.scrolling.remove_pane(bcol, bpi)
+                } else { None }
+            })
+        };
+        if pane_b.is_none() { return; }
+        if let (Some(a), Some(b)) = (pane_a, pane_b) {
+            // Insert A at B's original column in B's workspace.
+            if let Some(ws) = state.session.workspaces.get_mut(bws) {
+                let col = bcol.min(ws.scrolling.columns.len().saturating_sub(1));
+                ws.scrolling.add_pane_to_column(col, None, a, true);
+            }
+            // Insert B at A's original column in A's workspace.
+            if let Some(ws) = state.session.workspaces.get_mut(aws) {
+                let col = acol.min(ws.scrolling.columns.len().saturating_sub(1));
+                ws.scrolling.add_pane_to_column(col, None, b, true);
+            }
         }
     }
+
     state.needs_redraw = true;
 }
 
@@ -307,6 +382,28 @@ pub fn handle_move_param(state: &mut AppState, action: &WmAction) {
     let WmAction::Move { pane_id, target_col } = action else { return };
     if let Some((_ws_idx, col_idx, _)) = find_pane_location(&state.session, *pane_id) {
         move_pane_to_column(state, *pane_id, col_idx, *target_col);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_move_pane_to_workspace(state: &mut AppState, action: &WmAction) {
+    let WmAction::MovePaneToWorkspace { pane_id, ws_idx } = action else { return };
+    if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id)
+        && current_ws != *ws_idx
+    {
+        move_pane_to_workspace_column(state, *pane_id, *ws_idx, current_col);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
+    let WmAction::MovePaneToColumn { pane_id, ws_idx, col_idx } = action else { return };
+    if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id) {
+        if current_ws == *ws_idx {
+            move_pane_to_column(state, *pane_id, current_col, *col_idx);
+        } else {
+            move_pane_to_workspace_column(state, *pane_id, *ws_idx, *col_idx);
+        }
     }
     state.needs_redraw = true;
 }
@@ -485,7 +582,7 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
-    let candidates = collect_all_column_candidates(&state.session);
+    let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap { candidates, focus_after: false };
         state.needs_redraw = true;
@@ -493,7 +590,7 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
-    let candidates = collect_all_column_candidates(&state.session);
+    let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap { candidates, focus_after: true };
         state.needs_redraw = true;
