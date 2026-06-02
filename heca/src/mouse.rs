@@ -368,9 +368,15 @@ fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option<u64> {
     let sidebar_h = sidebar_bottom - sidebar_top;
     let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)?;
     let item = state.sidebar_tree.flat_items.get(fi);
-    eprintln!("[sidebar-drag] hit_test: pos=({:.0},{:.0}) fi={} item={:?}", pos.0, pos.1, fi, item);
     match item? {
         crate::sidebar::SidebarItem::Pane { pane_id } => Some(*pane_id),
+        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+            // Drag the first pane in this column.
+            state.session.workspaces.get(*ws_idx)
+                .and_then(|ws| ws.scrolling.columns.get(*col_idx))
+                .and_then(|col| col.panes.first())
+                .map(|p| p.id.0)
+        }
         _ => None,
     }
 }
