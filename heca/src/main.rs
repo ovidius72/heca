@@ -1599,10 +1599,13 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::SwapDown, handle_swap_down);
     registry.register(&WmAction::MovePaneLeft, handle_move_pane_left);
     registry.register(&WmAction::MovePaneRight, handle_move_pane_right);
+    registry.register(&WmAction::MoveColumnUp, handle_move_column_up);
+    registry.register(&WmAction::MoveColumnDown, handle_move_column_down);
     registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, handle_swap_param);
     registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, handle_move_param);
     registry.register(&WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 }, handle_move_pane_to_workspace);
     registry.register(&WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 }, handle_move_pane_to_column);
+    registry.register(&WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: true }, handle_move_column_to_workspace);
     registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, axis: input::ResizeAxis::X, amount: 0.0 }, handle_resize);
     registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, handle_resize_to);
 
@@ -1746,45 +1749,95 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
 }
 
 
-/// Swap two panes' positions. Works within the same workspace.
-/// If panes are in the same column, swaps their indices.
-/// If in different columns, swaps the Pane values using split_at_mut.
-/// Currently unused (Swap action does one-way move); kept for future two-way swap use.
-#[allow(dead_code)]
-pub(crate) fn swap_panes(state: &mut AppState, a_id: u64, b_id: u64) {
-    let loc_a = find_pane_location(&state.session, a_id);
-    let loc_b = find_pane_location(&state.session, b_id);
-    let (aws, acol, aidx) = match loc_a {
-        Some(l) => l,
-        None => return,
-    };
-    let (bws, bcol, bidx) = match loc_b {
-        Some(l) => l,
-        None => return,
-    };
+/// Move a column from its current workspace to a target workspace.
+/// If `focus` is true, switches to the target workspace after the move.
+/// If the source workspace becomes empty, destroys it or adds a placeholder pane.
+pub(crate) fn move_column_to_workspace(
+    state: &mut AppState,
+    col_idx: usize,
+    target_ws: usize,
+    focus: bool,
+) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == target_ws { return; }
+    if target_ws >= state.session.workspaces.len() { return; }
 
-    if aws != bws {
-        // Cross-workspace swap: fall back to move for now.
-        move_pane_to_workspace_column(state, a_id, bws, bcol);
-        return;
-    }
-
-    let ws = &mut state.session.workspaces[aws];
-    if acol == bcol {
-        ws.scrolling.columns[acol].panes.swap(aidx, bidx);
-    } else {
-        let (col_a, col_b) = if acol < bcol {
-            let (left, right) = ws.scrolling.columns.split_at_mut(bcol);
-            (&mut left[acol], &mut right[0])
-        } else {
-            let (left, right) = ws.scrolling.columns.split_at_mut(acol);
-            (&mut right[0], &mut left[bcol])
+    // 1. Remove the column from the source workspace.
+    let removed_column = {
+        let ws = match state.session.workspaces.get_mut(current_ws) {
+            Some(ws) => ws,
+            None => return,
         };
-        std::mem::swap(&mut col_a.panes[aidx], &mut col_b.panes[bidx]);
+        if col_idx >= ws.scrolling.columns.len() { return; }
+        ws.scrolling.remove_column(col_idx)
+    };
+
+    let Some(column) = removed_column else { return };
+
+    eprintln!("[move-col-ws] removed column id={:?} from ws={}", column.id, current_ws);
+
+    // 2. If source workspace is empty after removal, handle it.
+    let source_empty = state.session.workspaces.get(current_ws)
+        .map(|ws| ws.scrolling.columns.is_empty())
+        .unwrap_or(false);
+
+    let mut target_ws = target_ws;
+    let mut source_destroyed = false;
+
+    if source_empty && state.session.workspaces.len() > 1 {
+        // Destroy empty workspace. If current_ws < target_ws, removing
+        // a workspace below shifts target_ws down by 1.
+        if current_ws < target_ws {
+            target_ws -= 1;
+        }
+        destroy_empty_workspace(state, current_ws);
+        source_destroyed = true;
+        eprintln!("[move-col-ws] destroyed empty source workspace (was ws={})", current_ws);
+    } else if source_empty {
+        // Last workspace — create a placeholder pane so it's never truly empty.
+        let next_id = state.session.next_id();
+        let placeholder_pane = heca_core::layout::Pane::new(
+            heca_core::layout::PaneId(next_id),
+            format!("pane{}", next_id),
+        );
+        let placeholder_col = heca_core::layout::Column::new(
+            heca_core::layout::ColumnId(state.session.next_id()),
+            placeholder_pane,
+            heca_core::layout::ColumnWidth::Proportion(0.5),
+        );
+        if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
+            ws.scrolling.add_column(None, placeholder_col, true);
+        }
+        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        eprintln!("[move-col-ws] created placeholder pane in last workspace");
     }
-    sync_focus(state);
+
+    // 3. Insert the column into the target workspace.
+    state.session.switch_to_workspace(target_ws);
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.add_column(None, column, true);
+        eprintln!("[move-col-ws] inserted column into ws={}", target_ws);
+    }
+
+    // 4. Focus behavior.
+    if focus {
+        sync_focus(state);
+    } else {
+        // Switch back to source workspace. If source was destroyed, everything
+        // above it shifted down by 1, so current_ws now points to what was
+        // current_ws+1. If source was not destroyed, current_ws is still valid.
+        let source_ws = if source_destroyed {
+            current_ws.min(state.session.workspaces.len().saturating_sub(1))
+        } else {
+            current_ws
+        };
+        state.session.switch_to_workspace(source_ws);
+        sync_focus(state);
+    }
+
     state.needs_redraw = true;
 }
+
 
 /// Remove a workspace if it is empty and there are other workspaces.
 /// Adjusts tracking indices after removal.
