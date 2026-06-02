@@ -379,8 +379,8 @@ impl Default for KeysConfig {
         bindings.insert("move_pane_right".to_string(), Single("prefix+Ctrl+]".to_string()));
 
         // ── Move column to workspace (vertical movement) ──
-        bindings.insert("move_column_up".to_string(),   Single("prefix+Ctrl+u".to_string()));
-        bindings.insert("move_column_down".to_string(), Single("prefix+Ctrl+d".to_string()));
+        bindings.insert("move_column_up".to_string(),   Single("prefix+Ctrl+k".to_string()));
+        bindings.insert("move_column_down".to_string(), Single("prefix+Ctrl+j".to_string()));
 
         // ── Swap position (Ctrl+nav) ──
         bindings.insert("swap_left".to_string(),  Single("prefix+Ctrl+h".to_string()));
