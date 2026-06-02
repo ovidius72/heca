@@ -455,6 +455,7 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 - **Do NOT add a webview.** All chrome renders via `wgpu` primitives.
 - **Do NOT add tokio to the main event loop** without careful thought. winit events must not block. Use `pollster` for async init.
 - **Do NOT create registry bypasses.** All focus/workspace/layout changes must go through `registry.execute()`.
+- **Do NOT repeat yourself.** Prefer reusable components, modules, and functions. If you find yourself writing the same pattern multiple times (e.g., button rendering, hit testing, animation logic), extract it into a shared function or struct. Duplication breeds bugs and makes maintenance harder.
 
 ### Prefix Mode Design Rules
 
