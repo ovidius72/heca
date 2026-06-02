@@ -505,7 +505,7 @@ pub fn render_sidebar_expanded(
         };
         primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
         let tw = 2.0 * button_font_size * 0.55;
-        text_renderer.queue_text("+w", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+        text_renderer.queue_text("+w", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
         tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::CreateWorkspace, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
     }
     line_y += ITEM_HEIGHT;
@@ -597,7 +597,7 @@ pub fn render_sidebar_expanded(
         };
 
         let text_x = x + indent;
-        let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 1.0;
+        let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 2.0;
         text_renderer.queue_text(&label, text_x, text_y, label_font_size, color);
 
         // Buttons on the right side of each item.
@@ -614,7 +614,7 @@ pub fn render_sidebar_expanded(
             };
             primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
             let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
             tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
@@ -628,7 +628,7 @@ pub fn render_sidebar_expanded(
             };
             primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
             let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
             tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitVertical, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
@@ -642,7 +642,7 @@ pub fn render_sidebar_expanded(
             };
             primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
             let tw = 1.0 * button_font_size * 0.55;
-            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
             tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
