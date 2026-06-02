@@ -36,6 +36,10 @@ pub enum BackendRenderData {
         lines: Vec<TerminalLine>,
         cursor_col: usize,
         cursor_row: usize,
+        /// Logical cell width for coordinate conversion.
+        cell_w: f32,
+        /// Logical cell height for coordinate conversion.
+        cell_h: f32,
     },
     Neovim,
     Browser,
@@ -68,4 +72,11 @@ pub trait PaneBackend: Send {
 
     /// Whether the backend has exited and the pane should be closed.
     fn should_close(&self) -> bool;
+
+    /// Logical cell size for this backend, used for mouse→SGR coordinate conversion
+    /// and terminal rendering. Returns (cell_w, cell_h) in logical pixels.
+    /// Default: (8.4, 14.0) — a reasonable monospace approximation.
+    fn cell_size(&self) -> (f32, f32) {
+        (8.4, 14.0)
+    }
 }

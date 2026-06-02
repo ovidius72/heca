@@ -181,7 +181,7 @@ impl Default for LayoutOptions {
         Self {
             gaps: 8.0,
             center_focused_column: CenterFocusedColumn::OnOverflow,
-            always_center_single_column: true,
+            always_center_single_column: false,
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
             overview_scale: 0.25,
             overview_gap: 16.0,

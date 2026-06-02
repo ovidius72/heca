@@ -644,10 +644,13 @@ impl PaneBackend for TerminalBackend {
             lines.push(TerminalLine { cells });
         }
 
+        let (cell_w, cell_h) = self.cell_size();
         BackendRenderData::Terminal {
             lines,
             cursor_col: self.grid.cursor_col,
             cursor_row: self.grid.cursor_row,
+            cell_w,
+            cell_h,
         }
     }
 

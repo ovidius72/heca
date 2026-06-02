@@ -66,8 +66,7 @@ pub enum WorkspaceSwitch {
 }
 
 impl Session {
-    pub fn new(id: SessionId, viewport_size: Size, scale: f64) -> Self {
-        let options = LayoutOptions::default();
+    pub fn new(id: SessionId, viewport_size: Size, scale: f64, options: LayoutOptions) -> Self {
         let working_area = Rectangle::new(
             Point::new(0.0, 0.0),
             viewport_size,
@@ -351,7 +350,7 @@ mod tests {
 
     fn make_session_with_workspaces(count: usize) -> Session {
         let viewport = Size::new(1280.0, 800.0);
-        let mut session = Session::new(SessionId(1), viewport, 2.0);
+        let mut session = Session::new(SessionId(1), viewport, 2.0, LayoutOptions::default());
         // Session::new creates one workspace; add more if needed.
         for _ in 1..count {
             let wa = session.active_workspace().map(|ws| {

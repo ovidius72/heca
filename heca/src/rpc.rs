@@ -8,6 +8,8 @@
 //!   float | float-at <pane_id> <x> <y> <w> <h>
 //!   resize <column|pane> <axis> <amount>
 //!   move-pane <pane_id> <target_col>
+//!   move-pane-to-workspace <pane_id> <ws_idx>
+//!   move-pane-to-column <pane_id> <ws_idx> <col_idx>
 //!   swap <a_id> <b_id>
 //!   focus-left | focus-right | focus-up | focus-down
 //!   workspace-next | workspace-prev
@@ -192,6 +194,22 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let target_col = parse_usize!(col_arg, "target_col");
             Ok(WmAction::Move { pane_id, target_col })
         }
+        "move-pane-to-workspace" => {
+            let pane_arg = expect_arg!("pane_id");
+            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let ws_arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(ws_arg, "ws_idx");
+            Ok(WmAction::MovePaneToWorkspace { pane_id, ws_idx })
+        }
+        "move-pane-to-column" => {
+            let pane_arg = expect_arg!("pane_id");
+            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let ws_arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(ws_arg, "ws_idx");
+            let col_arg = expect_arg!("col_idx");
+            let col_idx = parse_usize!(col_arg, "col_idx");
+            Ok(WmAction::MovePaneToColumn { pane_id, ws_idx, col_idx })
+        }
         "swap" => {
             let a_arg = expect_arg!("a_id");
             let a_id = parse_u64!(a_arg, "a_id");
@@ -331,6 +349,22 @@ mod tests {
         assert_eq!(
             parse_rpc_command("swap 1 2"),
             Ok(WmAction::Swap { a_id: 1, b_id: 2 }),
+        );
+    }
+
+    #[test]
+    fn test_move_pane_to_workspace() {
+        assert_eq!(
+            parse_rpc_command("move-pane-to-workspace 5 1"),
+            Ok(WmAction::MovePaneToWorkspace { pane_id: 5, ws_idx: 1 }),
+        );
+    }
+
+    #[test]
+    fn test_move_pane_to_column() {
+        assert_eq!(
+            parse_rpc_command("move-pane-to-column 5 0 2"),
+            Ok(WmAction::MovePaneToColumn { pane_id: 5, ws_idx: 0, col_idx: 2 }),
         );
     }
 

@@ -81,6 +81,8 @@ pub enum WmAction {
     // ── Layout (parameterized) ──
     Swap { a_id: u64, b_id: u64 },
     Move { pane_id: u64, target_col: usize },
+    MovePaneToWorkspace { pane_id: u64, ws_idx: usize },
+    MovePaneToColumn { pane_id: u64, ws_idx: usize, col_idx: usize },
     Resize { target: ResizeTarget, axis: ResizeAxis, amount: f64 },
     ResizeTo { target: ResizeTarget, width: f64, height: f64 },
 
@@ -167,6 +169,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "swap_down" => Some(WmAction::SwapDown),
         "move_pane_left" => Some(WmAction::MovePaneLeft),
         "move_pane_right" => Some(WmAction::MovePaneRight),
+        "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 }),
+        "move_pane_to_column" => Some(WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 }),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         "workspace_next" => Some(WmAction::WorkspaceNext),
@@ -239,6 +243,15 @@ pub fn build_action(name: &str, args: &std::collections::HashMap<String, String>
             pane_id: get_u64(args, "pane_id")?,
             target_col: get_usize(args, "target_col")?,
         }),
+        "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
+            pane_id: get_u64(args, "pane_id")?,
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
+        "move_pane_to_column" => Some(WmAction::MovePaneToColumn {
+            pane_id: get_u64(args, "pane_id")?,
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
         "resize" => Some(WmAction::Resize {
             target: get_enum(args, "target")?,
             axis: get_enum(args, "axis")?,
@@ -309,6 +322,8 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::FocusWorkspace { .. }
         | WmAction::Swap { .. }
         | WmAction::Move { .. }
+        | WmAction::MovePaneToWorkspace { .. }
+        | WmAction::MovePaneToColumn { .. }
         | WmAction::Resize { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::FloatAt { .. }
@@ -417,6 +432,8 @@ mod tests {
         let _ = WmAction::FocusWorkspace { ws_idx: 0 };
         let _ = WmAction::Swap { a_id: 1, b_id: 2 };
         let _ = WmAction::Move { pane_id: 1, target_col: 0 };
+        let _ = WmAction::MovePaneToWorkspace { pane_id: 1, ws_idx: 0 };
+        let _ = WmAction::MovePaneToColumn { pane_id: 1, ws_idx: 0, col_idx: 0 };
         let _ = WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 10.0 };
         let _ = WmAction::ResizeTo { target: ResizeTarget::Pane, width: 100.0, height: 200.0 };
         let _ = WmAction::FloatAt { pane_id: 1, x: 0.0, y: 0.0, width: 100.0, height: 100.0 };

@@ -64,10 +64,13 @@ impl PaneBackend for FakeBackend {
         }
         lines.push(TerminalLine { cells });
 
+        let (cell_w, cell_h) = self.cell_size();
         BackendRenderData::Terminal {
             lines,
             cursor_col: 0,
             cursor_row: 0,
+            cell_w,
+            cell_h,
         }
     }
 
