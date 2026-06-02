@@ -179,23 +179,90 @@ impl PrimitiveRenderer {
         self.draw_rect(x + w - width, y + width, width, h - 2.0 * width, color);
     }
 
-    /// Queue a filled rectangle with a border.
-    #[allow(clippy::too_many_arguments)]
+    /// Queue a filled rectangle with rounded corners and optional gradient.
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
         y: f32,
         w: f32,
         h: f32,
-        fill: [f32; 4],
-        border: [f32; 4],
-        border_width: f32,
-        _radius: f32,
+        color_start: [f32; 4],
+        color_end: [f32; 4],
+        radius: f32,
     ) {
-        // For Phase 1, draw filled rect + border (true rounded corners in Phase 2+)
-        self.draw_rect(x, y, w, h, fill);
-        self.draw_border(x, y, w, h, border, border_width);
+        let r = radius.min(w / 2.0).min(h / 2.0);
+        let base = self.vertices.len() as u16;
+
+        // 8 vertices for the rounded corners
+        // Top-left
+        self.vertices.push(Vertex { position: [x + r, y], color: color_start });
+        self.vertices.push(Vertex { position: [x, y + r], color: color_start });
+        // Top-right
+        self.vertices.push(Vertex { position: [x + w - r, y], color: color_start });
+        self.vertices.push(Vertex { position: [x + w, y + r], color: color_start });
+        // Bottom-right
+        self.vertices.push(Vertex { position: [x + w - r, y + h], color: color_end });
+        self.vertices.push(Vertex { position: [x + w, y + h - r], color: color_end });
+        // Bottom-left
+        self.vertices.push(Vertex { position: [x + r, y + h], color: color_end });
+        self.vertices.push(Vertex { position: [x, y + h - r], color: color_end });
+
+        // Indices for the center and 4 corners
+        // This is a simplified representation; for perfect arcs we'd need more vertices.
+        // For the "Tron" look, 8 vertices + center usually suffice for small radii.
+        self.indices.push(base);
+        self.indices.push(base + 1);
+        self.indices.push(base + 2);
+        self.indices.push(base + 1);
+        self.indices.push(base + 2);
+        self.indices.push(base + 3);
+        self.indices.push(base + 2);
+        self.indices.push(base + 3);
+        self.indices.push(base + 4);
+        self.indices.push(base + 3);
+        self.indices.push(base + 4);
+        self.indices.push(base + 5);
+        self.indices.push(base + 4);
+        self.indices.push(base + 5);
+        self.indices.push(base + 6);
+        self.indices.push(base + 5);
+        self.indices.push(base + 6);
+        self.indices.push(base + 7);
+        self.indices.push(base + 6);
+        self.indices.push(base + 7);
+        self.indices.push(base);
+        self.indices.push(base + 7);
+        self.indices.push(base);
+        self.indices.push(base + 1);
     }
+
+    /// Queue a "glow" effect by layering multiple semi-transparent rounded rects.
+    pub fn draw_glow_rounded_rect(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: [f32; 4],
+        radius: f32,
+        glow_radius: f32,
+    ) {
+        let layers = 4;
+        for i in 1..=layers {
+            let offset = (i as f32 / layers as f32) * glow_radius;
+            let alpha = color[3] * (1.0 - (i as f32 / layers as f32));
+            let mut layer_color = color;
+            layer_color[3] = alpha;
+            
+            self.draw_rounded_rect(
+                x - offset, y - offset, 
+                w + 2.0 * offset, h + 2.0 * offset, 
+                layer_color, layer_color, 
+                radius + offset
+            );
+        }
+    }
+
 
     /// Submit all queued primitives to the GPU.
     pub fn render(&mut self, device: &wgpu::Device, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {

@@ -7,6 +7,7 @@ mod keymap;
 mod mouse;
 mod rpc;
 mod sidebar;
+mod ui;
 
 use sidebar::SidebarTree;
 
@@ -614,9 +615,6 @@ impl HecaApp {
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
 
         // ── PANE CONTENT AREA ──
-        let theme_border = theme.border.to_f32x4();
-        let border_width = theme.border_width;
-        let accent_color = theme.accent.to_f32x4();
 
         // Get pane positions from NIRI layout engine
         let pane_positions = state.session.active_workspace()
@@ -636,38 +634,30 @@ impl HecaApp {
             let pw = rect.size.w as f32;
             let ph = rect.size.h as f32;
             let is_active = state.focused_pane == Some(pane_id.0);
-            let bcolor = if is_active { accent_color } else {
-                [theme_border[0], theme_border[1], theme_border[2], 0.5]
-            };
 
-            if let Some(backend) = state.backends.get(&pane_id.0) {
-                let data = backend.render_data();
-                render_backend_data(
-                    &data, px, py, pw, ph,
-                    &mut state.text_renderer, &mut state.primitive_renderer, theme,
-                );
-            } else {
-                state.primitive_renderer.draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
-            }
-
-            // Draw pane name as large centered label so you can tell panes apart
             let pane_name = state.session.active_workspace()
                 .and_then(|ws| ws.find_pane(*pane_id))
                 .map(|p| p.title.as_str())
                 .unwrap_or("?");
-            let name_size = (pw.min(ph) * 0.25).clamp(24.0, 72.0);
-            let name_color = if is_active {
-                [1.0, 1.0, 1.0, 0.9]
-            } else {
-                [1.0, 1.0, 1.0, 0.4]
-            };
-            // Center the text
-            let name_w = name_size * pane_name.len() as f32 * 0.6;
-            let name_x = px + (pw - name_w) / 2.0;
-            let name_y = py + (ph - name_size) / 2.0;
-            state.text_renderer.queue_text(pane_name, name_x, name_y, name_size, name_color);
 
-            state.primitive_renderer.draw_border(px, py, pw, ph, bcolor, border_width);
+            // Use the PaneFrame component for Tron-style rendering
+            let frame = ui::pane_frame::PaneFrame {
+                total_rect: [px, py, pw, ph],
+            };
+            let [inner_x, inner_y, inner_w, inner_h] = frame.render(
+                theme, is_active, pane_name,
+                &mut state.primitive_renderer, &mut state.text_renderer,
+            );
+
+            if let Some(backend) = state.backends.get(&pane_id.0) {
+                let data = backend.render_data();
+                render_backend_data(
+                    &data, inner_x, inner_y, inner_w, inner_h,
+                    &mut state.text_renderer, &mut state.primitive_renderer, theme,
+                );
+            } else {
+                state.primitive_renderer.draw_rect(inner_x, inner_y, inner_w, inner_h, [0.118, 0.118, 0.180, 1.0]);
+            }
         }
         state.primitive_renderer.render(&state.device, &view, &mut encoder);
         state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
@@ -770,21 +760,23 @@ impl HecaApp {
                 let fw = float.size.w as f32;
                 let fh = float.size.h as f32;
                 let is_focused = state.focused_pane == Some(float.pane.id.0);
-                let fborder = if is_focused { theme.float_focus.to_f32x4() } else { theme.float_accent.to_f32x4() };
-                state.primitive_renderer.draw_rect(fx, fy, fw, fh, theme.float_background.to_f32x4());
-                state.primitive_renderer.draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
+
+                let pane_name = &float.pane.title;
+
+                let frame = ui::pane_frame::PaneFrame {
+                    total_rect: [fx, fy, fw, fh],
+                };
+                let [inner_x, inner_y, inner_w, inner_h] = frame.render(
+                    theme, is_focused, pane_name,
+                    &mut state.primitive_renderer, &mut state.text_renderer,
+                );
+
                 if let Some(backend) = state.backends.get(&float.pane.id.0) {
                     let data = backend.render_data();
-                    render_backend_data(&data, fx, fy, fw, fh, &mut state.text_renderer, &mut state.primitive_renderer, theme);
+                    render_backend_data(&data, inner_x, inner_y, inner_w, inner_h, &mut state.text_renderer, &mut state.primitive_renderer, theme);
+                } else {
+                    state.primitive_renderer.draw_rect(inner_x, inner_y, inner_w, inner_h, [0.118, 0.118, 0.180, 1.0]);
                 }
-                // Draw floating pane name centered
-                let float_name = &float.pane.title;
-                let f_name_size = (fw.min(fh) * 0.25).clamp(24.0, 72.0);
-                let f_name_color = if is_focused { [1.0, 1.0, 1.0, 0.9] } else { [1.0, 1.0, 1.0, 0.4] };
-                let f_name_w = f_name_size * float_name.len() as f32 * 0.6;
-                let f_name_x = fx + (fw - f_name_w) / 2.0;
-                let f_name_y = fy + (fh - f_name_size) / 2.0;
-                state.text_renderer.queue_text(float_name, f_name_x, f_name_y, f_name_size, f_name_color);
             }
         }
 

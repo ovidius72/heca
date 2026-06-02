@@ -76,6 +76,55 @@ impl Default for Shadow {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PaneStyle {
+    pub border_width: f32,
+    pub border_radius: f32,
+    pub border_color: Color,
+    pub active_border_color: Color,
+    pub glow_color: Color,
+    pub glow_radius: f32,
+    pub bg_gradient_start: Color,
+    pub bg_gradient_end: Color,
+    pub shadow_gradient_start: Color,
+    pub shadow_gradient_end: Color,
+    pub show_title_bar: bool,
+    pub title_bar_height: f32,
+    pub title_bar_bg_color: Color,
+    pub title_font_size: f32,
+    pub title_color: Color,
+    pub title_active_color: Color,
+    pub padding: f32,
+    pub close_btn_color: Color,
+    pub close_btn_hover_color: Color,
+}
+
+impl Default for PaneStyle {
+    fn default() -> Self {
+        Self {
+            border_width: 1.0,
+            border_radius: 4.0,
+            border_color: Color::new(49, 50, 68, 255),
+            active_border_color: Color::new(137, 180, 250, 255),
+            glow_color: Color::new(137, 180, 250, 50),
+            glow_radius: 10.0,
+            bg_gradient_start: Color::new(20, 20, 30, 255),
+            bg_gradient_end: Color::new(30, 30, 46, 255),
+            shadow_gradient_start: Color::new(0, 0, 0, 150),
+            shadow_gradient_end: Color::new(0, 0, 0, 0),
+            show_title_bar: true,
+            title_bar_height: 24.0,
+            title_bar_bg_color: Color::new(40, 40, 60, 255),
+            title_font_size: 11.0,
+            title_color: Color::new(150, 150, 180, 255),
+            title_active_color: Color::new(205, 214, 244, 255),
+            padding: 8.0,
+            close_btn_color: Color::new(100, 100, 120, 255),
+            close_btn_hover_color: Color::new(255, 100, 100, 255),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Theme {
     pub name: String,
     pub background: Color,
@@ -87,9 +136,11 @@ pub struct Theme {
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
+    pub pane_style: PaneStyle,
     #[serde(default = "default_float_bg")]     pub float_background: Color,
     #[serde(default = "default_float_accent")] pub float_accent: Color,
     #[serde(default = "default_float_focus")]  pub float_focus: Color,
+
     // ── Sidebar drag-and-drop colors ──
     #[serde(default = "default_drag_ghost_bg")]    pub sidebar_drag_ghost_bg: Color,
     #[serde(default = "default_drag_ghost_fg")]    pub sidebar_drag_ghost_fg: Color,
@@ -120,9 +171,17 @@ impl Theme {
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow::default(),
+            pane_style: PaneStyle {
+                active_border_color: Color::new(137, 180, 250, 255),
+                glow_color: Color::new(137, 180, 250, 60),
+                bg_gradient_start: Color::new(20, 20, 35, 255),
+                bg_gradient_end: Color::new(35, 35, 55, 255),
+                ..PaneStyle::default()
+            },
             float_background: Color::new(49, 50, 68, 255),
             float_accent: Color::new(137, 180, 250, 255),
             float_focus: Color::new(250, 179, 135, 255),
+
             sidebar_drag_ghost_bg: Color::new(137, 180, 250, 217),
             sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
             sidebar_drag_source_bg: Color::new(137, 180, 250, 38),
@@ -142,9 +201,17 @@ impl Theme {
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow { color: "#000000".to_string(), alpha: 0.15, blur: 8.0 },
+            pane_style: PaneStyle {
+                active_border_color: Color::new(30, 102, 245, 255),
+                glow_color: Color::new(30, 102, 245, 60),
+                bg_gradient_start: Color::new(245, 245, 250, 255),
+                bg_gradient_end: Color::new(230, 230, 240, 255),
+                ..PaneStyle::default()
+            },
             float_background: Color::new(204, 208, 218, 255),
             float_accent: Color::new(30, 102, 245, 255),
             float_focus: Color::new(230, 126, 34, 255),
+
             sidebar_drag_ghost_bg: Color::new(30, 102, 245, 217),
             sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
             sidebar_drag_source_bg: Color::new(30, 102, 245, 38),
