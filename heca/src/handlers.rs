@@ -608,6 +608,8 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     }
 
 
+    // Update AppState.focused_pane and sidebar after the swap, then log final locations.
+    sync_focus(state);
     eprintln!("[swap] final locations: a_loc={:?} b_loc={:?}", find_pane_location(&state.session, *a_id), find_pane_location(&state.session, *b_id));
     state.needs_redraw = true;
 }
