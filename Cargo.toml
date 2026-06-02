@@ -1,5 +1,5 @@
 [workspace]
-members = ["heca-core", "heca-renderer", "heca-config", "heca", "heca_ui"]
+members = ["heca-core", "heca-renderer", "heca-config", "heca"]
 resolver = "3"
 
 [workspace.package]
