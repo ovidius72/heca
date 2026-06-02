@@ -705,7 +705,7 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
-                state.mouse.sidebar_hovered_button.as_ref(),
+                state.mouse.sidebar_hovered_btn_idx,
                 theme.sidebar_label_font_size,
                 theme.sidebar_button_font_size,
             );
@@ -726,7 +726,7 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
-                state.mouse.sidebar_hovered_button.as_ref(),
+                state.mouse.sidebar_hovered_btn_idx,
                 theme.sidebar_label_font_size,
                 theme.sidebar_button_font_size,
             );

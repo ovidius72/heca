@@ -127,8 +127,8 @@ pub struct MouseState {
     pub sidebar_drag_source_fi: Option<usize>,
     /// Label text and position of the item being dragged (for ghost label rendering).
     pub sidebar_drag_label: Option<SidebarDragLabel>,
-    /// Button currently hovered in the sidebar (for hover visual effect).
-    pub sidebar_hovered_button: Option<crate::input::WmAction>,
+    /// Index of the button currently hovered in the sidebar (for hover visual effect).
+    pub sidebar_hovered_btn_idx: Option<usize>,
 }
 
 /// Visual info for a sidebar drag ghost label.
@@ -152,7 +152,7 @@ impl MouseState {
             drag_hover_sidebar_fi: None,
             sidebar_drag_source_fi: None,
             sidebar_drag_label: None,
-            sidebar_hovered_button: None,
+            sidebar_hovered_btn_idx: None,
         }
     }
 }

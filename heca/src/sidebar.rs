@@ -419,12 +419,12 @@ pub fn sidebar_button_hit_test(
     tree: &SidebarTree,
     mouse_x: f32,
     mouse_y: f32,
-) -> Option<WmAction> {
-    for hitbox in &tree.button_hitboxes {
+) -> Option<(usize, WmAction)> {
+    for (i, hitbox) in tree.button_hitboxes.iter().enumerate() {
         if mouse_x >= hitbox.x && mouse_x <= hitbox.x + hitbox.width
             && mouse_y >= hitbox.y && mouse_y <= hitbox.y + hitbox.height
         {
-            return Some(hitbox.action.clone());
+            return Some((i, hitbox.action.clone()));
         }
     }
     None
@@ -471,8 +471,8 @@ pub fn render_sidebar_expanded(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
-    // Hovered button for hover effect.
-    hovered_button: Option<&WmAction>,
+    // Hovered button index for hover effect.
+    hovered_btn_idx: Option<usize>,
     // Font sizes from theme.
     label_font_size: f32,
     button_font_size: f32,
@@ -489,7 +489,8 @@ pub fn render_sidebar_expanded(
     {
         let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-        let is_hov = matches!(hovered_button, Some(WmAction::CreateWorkspace));
+        let btn_idx = tree.button_hitboxes.len();
+        let is_hov = hovered_btn_idx == Some(btn_idx);
         let (bg, brd, tc) = if is_hov {
             ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
         } else {
@@ -597,7 +598,8 @@ pub fn render_sidebar_expanded(
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
 
         if let SidebarItem::Workspace { ws_idx } = flat_item {
-            let is_hov = matches!(hovered_button, Some(WmAction::SplitHorizontal));
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
             let (bg, brd, tc) = if is_hov {
                 ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
             } else {
@@ -610,7 +612,8 @@ pub fn render_sidebar_expanded(
         }
 
         if let SidebarItem::Column { ws_idx, col_idx: _ } = flat_item {
-            let is_hov = matches!(hovered_button, Some(WmAction::SplitVertical));
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
             let (bg, brd, tc) = if is_hov {
                 ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
             } else {
@@ -623,7 +626,8 @@ pub fn render_sidebar_expanded(
         }
 
         if let SidebarItem::Pane { pane_id } = flat_item {
-            let is_hov = hovered_button.as_ref().is_some_and(|a| matches!(a, WmAction::ClosePaneById { pane_id: p } if *p == *pane_id));
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
             let (bg, brd, tc) = if is_hov {
                 ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
             } else {
@@ -668,8 +672,8 @@ pub fn render_sidebar_collapsed(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
-    // Hovered button (unused in collapsed — no buttons).
-    _hovered_button: Option<&WmAction>,
+    // Hovered button index (unused in collapsed — no buttons).
+    _hovered_btn_idx: Option<usize>,
     // Font sizes from theme.
     label_font_size: f32,
     _button_font_size: f32,
