@@ -431,6 +431,8 @@ pub fn render_sidebar_expanded(
     primitive_renderer: &mut PrimitiveRenderer,
     // Flat index being hovered during drag (for highlight).
     drag_hover_fi: Option<usize>,
+    // Flat index of the item being dragged (for drag source visual effect).
+    drag_source_fi: Option<usize>,
 ) {
     let scroll = tree.scroll_offset;
     let mut line_y = y + 4.0;
@@ -480,6 +482,15 @@ pub fn render_sidebar_expanded(
             let mut drag_bg = accent;
             drag_bg[3] = 0.25; // more transparent than cursor
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
+        }
+
+        // Drag source effect — the item being dragged gets a dashed border.
+        if drag_source_fi == Some(fi) {
+            primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, accent, 1.0);
+            // Draw a subtle background to indicate "this is being dragged".
+            let mut source_bg = accent;
+            source_bg[3] = 0.15;
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, source_bg);
         }
 
         // Determine color based on state
@@ -549,6 +560,8 @@ pub fn render_sidebar_collapsed(
     primitive_renderer: &mut PrimitiveRenderer,
     // Flat index being hovered during drag (for highlight).
     drag_hover_fi: Option<usize>,
+    // Flat index of the item being dragged (for drag source visual effect).
+    drag_source_fi: Option<usize>,
 ) {
     let font_size = 13.0; // slightly smaller for compact fit
     let activity_bar_w = 4.0;
@@ -593,6 +606,14 @@ pub fn render_sidebar_collapsed(
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
         }
 
+        // Drag source effect for workspace items.
+        if drag_source_fi == Some(flat_idx - 1) {
+            primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, accent, 1.0);
+            let mut source_bg = accent;
+            source_bg[3] = 0.15;
+            primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, source_bg);
+        }
+
         // Workspace number/identifier (first 2 chars)
         let ws_label = ws.name.chars().take(2).collect::<String>();
         let ws_color = if is_ws_cursor {
@@ -625,6 +646,14 @@ pub fn render_sidebar_collapsed(
                         let mut drag_bg = accent;
                         drag_bg[3] = 0.25;
                         primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
+                    }
+
+                    // Drag source effect for pane items.
+                    if drag_source_fi == Some(flat_idx) {
+                        primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, accent, 1.0);
+                        let mut source_bg = accent;
+                        source_bg[3] = 0.15;
+                        primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, source_bg);
                     }
 
                     let mut pane_char = pane.name.chars().next()

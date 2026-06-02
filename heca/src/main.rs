@@ -685,6 +685,7 @@ impl HecaApp {
         );
         let candidates = state.input_mode.candidates();
         let drag_hover_fi = state.mouse.drag_hover_sidebar_fi;
+        let drag_source_fi = state.mouse.sidebar_drag_source_fi;
         if chrome.left_sidebar_width >= 80.0 {
             sidebar::render_sidebar_expanded(
                 &state.sidebar_tree,
@@ -699,6 +700,7 @@ impl HecaApp {
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
                 drag_hover_fi,
+                drag_source_fi,
             );
         } else {
             sidebar::render_sidebar_collapsed(
@@ -714,6 +716,7 @@ impl HecaApp {
                 &mut state.text_renderer,
                 &mut state.primitive_renderer,
                 drag_hover_fi,
+                drag_source_fi,
             );
         }
 

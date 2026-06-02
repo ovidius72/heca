@@ -169,6 +169,10 @@ pub fn on_mouse_input(
                         cancel_interactive_move(state);
                     }
                 }
+                DragState::SidebarDrag { pane_id, original_ws } => {
+                    // Sidebar drag release — move the pane to the target.
+                    sidebar_drag_drop(state, pane_id, original_ws, pos);
+                }
                 _ => {}
             }
         }
@@ -368,6 +372,9 @@ fn start_sidebar_drag(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32))
     if matches!(state.mouse.drag_state, DragState::InteractiveMoveStarting { .. } | DragState::InteractiveMove { .. }) {
         cancel_interactive_move(state);
     }
+    if matches!(state.mouse.drag_state, DragState::SidebarDrag { .. }) {
+        state.mouse.drag_state = DragState::None;
+    }
 
     // Find which workspace contains this pane.
     let (ws_idx, _col_idx, _pane_idx) = match crate::find_pane_location(&state.session, pane_id) {
@@ -383,8 +390,19 @@ fn start_sidebar_drag(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32))
         crate::switch_workspace_tracked(state, ws_idx);
     }
 
-    // Start the drag the same as content-initiated drag.
-    start_interactive_move(state, pane_id, mouse_pos);
+    // Enter sidebar drag state — pane stays in layout, no floating ghost.
+    // Record the sidebar flat index for the drag visual effect.
+    state.mouse.sidebar_drag_source_fi = crate::sidebar::sidebar_hit_test(
+        &state.sidebar_tree,
+        chrome_config(state).tab_bar_height,
+        window_logical_size(state).1 - chrome_config(state).status_bar_height,
+        if state.sidebar.left_visible { chrome_config(state).left_sidebar_width } else { 40.0 },
+        mouse_pos.1,
+    );
+    state.mouse.drag_state = DragState::SidebarDrag {
+        pane_id,
+        original_ws: ws_idx,
+    };
 }
 
 /// Handle a click on the sidebar. Returns a WmAction if the click targets
@@ -423,6 +441,132 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     }
 
     None
+}
+
+/// Handle a drop during sidebar drag.
+/// Removes the pane from its original position and inserts it at the target
+/// (sidebar item or content area), with animation from original to new position.
+fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, pos: (f32, f32)) {
+    state.mouse.drag_state = DragState::None;
+    state.mouse.drag_hover_sidebar_fi = None;
+    state.mouse.sidebar_drag_source_fi = None;
+
+    // 1. Capture original position for animation BEFORE removing.
+    let old_rect = state.session.workspaces.get(original_ws)
+        .and_then(|ws| ws.scrolling.panes_with_positions().into_iter()
+            .find(|(pid, _)| *pid == heca_core::layout::PaneId(pane_id))
+            .map(|(_, r)| r));
+
+    // 2. Remove the pane from its original workspace.
+    let removed_pane = {
+        let ws = match state.session.workspaces.get_mut(original_ws) {
+            Some(ws) => ws,
+            None => return,
+        };
+        let mut found = None;
+        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+            if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+                found = Some((ci, pi));
+                break;
+            }
+        }
+        match found {
+            Some((ci, pi)) => ws.scrolling.remove_pane(ci, pi),
+            None => return,
+        }
+    };
+
+    let Some(removed_pane) = removed_pane else {
+        eprintln!("[sidebar-drag-drop] remove_pane returned None for pane_id={}", pane_id);
+        return;
+    };
+
+    eprintln!("[sidebar-drag-drop] removed pane_id={} from ws={}", pane_id, original_ws);
+
+    // 3. Determine drop target.
+    let (_win_w, win_h) = window_logical_size(state);
+    let chrome = chrome_config(state);
+    let sidebar_top = chrome.tab_bar_height;
+    let sidebar_bottom = win_h - chrome.status_bar_height;
+    let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { 40.0 };
+
+    let on_sidebar = pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom;
+
+    if on_sidebar {
+        // Drop on sidebar item.
+        let sidebar_h = sidebar_bottom - sidebar_top;
+        let fi = crate::sidebar::sidebar_hit_test(
+            &state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1,
+        );
+
+        if let Some(fi) = fi {
+            if let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned() {
+                match item {
+                    crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
+                        // Insert after the target pane in the same column/workspace.
+                        if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_pid) {
+                            if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
+                                let insert_idx = (t_pi + 1).min(ws.scrolling.columns[t_col].panes.len());
+                                ws.scrolling.add_pane_to_column(t_col, Some(insert_idx), removed_pane, true);
+                                eprintln!("[sidebar-drag-drop] inserted after target pane at ws={} col={} idx={}", t_ws, t_col, insert_idx);
+                            }
+                        } else {
+                            // Target not found — add to active workspace.
+                            state.session.add_pane(removed_pane, None, true);
+                        }
+                        state.focused_pane = Some(target_pid);
+                    }
+                    crate::sidebar::SidebarItem::Workspace { ws_idx } => {
+                        // Add to target workspace as new column.
+                        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+                            let width = state.session.options.default_column_width
+                                .unwrap_or(heca_core::layout::ColumnWidth::Proportion(0.85));
+                            ws.add_pane(removed_pane, None, true, width);
+                        }
+                        eprintln!("[sidebar-drag-drop] added to workspace ws={}", ws_idx);
+                    }
+                    crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+                        // Add to target column.
+                        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+                            let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
+                            ws.scrolling.add_pane_to_column(target_col, None, removed_pane, true);
+                        }
+                        eprintln!("[sidebar-drag-drop] added to column ws={} col={}", ws_idx, col_idx);
+                    }
+                }
+            }
+        } else {
+            // Missed sidebar items — add to active workspace.
+            state.session.add_pane(removed_pane, None, true);
+        }
+    } else {
+        // Drop in content area — add to active workspace.
+        state.session.add_pane(removed_pane, None, true);
+        eprintln!("[sidebar-drag-drop] added to active workspace (content drop)");
+    }
+
+    // 4. Animate the pane from its old position to new position.
+    let new_ws = state.session.active_workspace_idx;
+    if let Some(old_rect) = old_rect
+        && let Some(ws) = state.session.workspaces.get_mut(new_ws)
+            && let Some((_, new_rect)) = ws.scrolling.panes_with_positions().into_iter()
+                .find(|(pid, _)| *pid == heca_core::layout::PaneId(pane_id)) {
+                let dx = old_rect.loc.x - new_rect.loc.x;
+                let dy = old_rect.loc.y - new_rect.loc.y;
+                // Find the pane and animate it.
+                for col in &mut ws.scrolling.columns {
+                    for pane in &mut col.panes {
+                        if pane.id.0 == pane_id {
+                            pane.animate_move_from(Point::new(dx, dy), heca_core::layout::animation::AnimationConfig::default());
+                            eprintln!("[sidebar-drag-drop] animated pane from ({:.1},{:.1}) to ({:.1},{:.1})", old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y);
+                            break;
+                        }
+                    }
+                }
+            }
+
+    crate::sync_focus(state);
+    state.needs_redraw = true;
 }
 
 /// Handle a drop on the sidebar during interactive move.
@@ -466,6 +610,7 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
         None => {
             state.mouse.drag_state = DragState::None;
             state.mouse.drag_hover_sidebar_fi = None;
+            state.mouse.sidebar_drag_source_fi = None;
             return true;
         }
     };
@@ -730,6 +875,7 @@ fn cancel_interactive_move(state: &mut AppState) {
     }
     state.mouse.drag_state = DragState::None;
     state.mouse.insert_hint = None;
+    state.mouse.sidebar_drag_source_fi = None;
     crate::sync_focus(state);
     state.needs_redraw = true;
 }

@@ -1,4 +1,4 @@
-# heca
+# heca (form Hecatoncheires)
 
 A GPU-native terminal workspace compositor for developers. Inspired by [NIRI](https://github.com/YaLTeR/niri)'s scrollable-tiling model, powered by [wgpu](https://wgpu.rs/) and [cosmic-text](https://github.com/pop-os/cosmic-text).
 
@@ -325,9 +325,11 @@ Every WM command in heca is an **action**. Actions are the core abstraction — 
 ### Action Types
 
 **Unit actions** — Simple commands with no arguments:
+
 - `focus_left`, `focus_right`, `split_horizontal`, `close`, `float`
 
 **Parameterized actions** — Commands with arguments:
+
 - `FocusPane { pane_id }` — Focus a specific pane by ID
 - `FocusWorkspace { ws_idx }` — Focus a workspace by index
 - `Swap { a_id, b_id }` — Swap two panes
@@ -343,6 +345,7 @@ Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry �
 ```
 
 This design means:
+
 - Every action is traceable and hookable
 - Future scripting/IPC can trigger any action by name
 - Actions can be composed and chained
@@ -352,6 +355,7 @@ This design means:
 To add a new action to heca:
 
 1. **Add to `WmAction` enum** in `heca/src/input.rs`:
+
 ```rust
 pub enum WmAction {
     // ... existing variants
@@ -359,17 +363,20 @@ pub enum WmAction {
 }
 ```
 
-2. **Add name mapping** in `action_from_name()`:
+1. **Add name mapping** in `action_from_name()`:
+
 ```rust
 "my_custom_action" => Some(WmAction::MyCustomAction),
 ```
 
-3. **Add priority** in `action_priority()`:
+1. **Add priority** in `action_priority()`:
+
 ```rust
 WmAction::MyCustomAction => 1,  // Lower = higher priority
 ```
 
-4. **Create handler** in `heca/src/handlers.rs`:
+1. **Create handler** in `heca/src/handlers.rs`:
+
 ```rust
 pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
     // Your logic here
@@ -377,12 +384,14 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 }
 ```
 
-5. **Register** in `build_registry()` in `heca/src/main.rs`:
+1. **Register** in `build_registry()` in `heca/src/main.rs`:
+
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
 
-6. **Add default binding** in `heca-config/src/theme.rs`:
+1. **Add default binding** in `heca-config/src/theme.rs`:
+
 ```rust
 bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
 ```
@@ -428,6 +437,7 @@ To remove a default keybinding, add it to `[keys.unbind]`:
 ```
 
 **Why unbind?**
+
 - Free up keys for custom bindings
 - Disable features you don't use
 - Resolve conflicts with custom bindings
@@ -462,6 +472,7 @@ keys = "l"
 ```
 
 **Sticky vs Non-sticky modes:**
+
 - **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
 - **Non-sticky** (`sticky = false`, or chord): Execute one action then exit. Like `prefix+w` → `1` creates workspace 1.
 
