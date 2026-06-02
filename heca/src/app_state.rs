@@ -88,13 +88,6 @@ pub enum DragState {
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
     },
-    /// Sidebar drag — pane stays in layout, no floating ghost.
-    /// The sidebar label shows a drag effect; pane animates on drop.
-    SidebarDrag {
-        pane_id: u64,
-        /// Workspace where the pane lives.
-        original_ws: usize,
-    },
 }
 
 /// A pane that has been removed from the layout for interactive move.
@@ -123,8 +116,6 @@ pub struct MouseState {
     pub last_edge_scroll_time: Option<std::time::Instant>,
     /// Flat index of sidebar item being hovered during drag (for visual highlight).
     pub drag_hover_sidebar_fi: Option<usize>,
-    /// Flat index of sidebar item being dragged (for drag source visual effect).
-    pub sidebar_drag_source_fi: Option<usize>,
 }
 
 impl MouseState {
@@ -136,7 +127,6 @@ impl MouseState {
             insert_hint: None,
             last_edge_scroll_time: None,
             drag_hover_sidebar_fi: None,
-            sidebar_drag_source_fi: None,
         }
     }
 }
