@@ -360,7 +360,11 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
             if let Some(ws) = state.session.workspaces.get_mut(aws) {
                 // Insert placeholders in descending column index order to avoid shifting column indices
                 // when creating new columns.
-                let mut inserts = vec![(acol, api, placeholder_a_pid, new_col_for_a), (bcol, bpi, placeholder_b_pid, new_col_for_b)];
+                // We need to insert placeholders at the TARGET positions: A should land at B's slot,
+                // and B should land at A's slot. This avoids replacing the placeholder with the
+                // same pane and makes the swap effective.
+                let mut inserts = vec![(bcol, bpi, placeholder_a_pid, new_col_for_a), (acol, api, placeholder_b_pid, new_col_for_b)];
+                // Insert in descending col index order so earlier inserts don't shift later targets.
                 inserts.sort_by(|a, b| b.0.cmp(&a.0));
 
                 for (col_pos, pane_idx, ph_pid, new_cid) in inserts {
@@ -368,12 +372,12 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                         let insert_idx = pane_idx.min(ws.scrolling.columns[col_pos].panes.len());
                         let placeholder = LayoutPane::new(PaneId(ph_pid), pane_name(ph_pid));
                         ws.scrolling.add_pane_to_column(col_pos, Some(insert_idx), placeholder, true);
-                        eprintln!("[swap] inserted placeholder id={} at col {} idx {}", ph_pid, col_pos, insert_idx);
+                        eprintln!("[swap] inserted placeholder id={} at col {} idx {} (target)", ph_pid, col_pos, insert_idx);
                     } else {
                         let pos = col_pos.min(ws.scrolling.columns.len());
                         let placeholder = LayoutPane::new(PaneId(ph_pid), pane_name(ph_pid));
                         ws.scrolling.add_column(Some(pos), Column::new(new_cid, placeholder, ColumnWidth::Proportion(0.5)), true);
-                        eprintln!("[swap] created placeholder column at pos {} with id {:?} (placeholder id={})", pos, new_cid, ph_pid);
+                        eprintln!("[swap] created placeholder column at pos {} with id {:?} (placeholder id={}) (target)", pos, new_cid, ph_pid);
                     }
                 }
 
@@ -408,7 +412,12 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 }
 
                 // Now replace placeholders with the removed panes and animate from old positions.
-                // Helper to find placeholder by pane id.
+                // Helper to find placeholder by pane id. Clamp large dx/dy for cross-workspace cases.
+                let vw = state.session.viewport_size.w;
+                let vh = state.session.viewport_size.h;
+                let max_dx = vw * 0.9;
+                let max_dy = vh * 0.9;
+
                 let replace_placeholder = |ws: &mut heca_core::layout::workspace::Workspace, ph_id: u64, new_pane: LayoutPane, old_rect_opt: Option<heca_core::layout::types::Rectangle>| {
                     let mut found = None;
                     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
@@ -425,8 +434,12 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
 
                         if let Some(old_rect) = old_rect_opt {
                             if let Some((_, new_rect)) = ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws.scrolling.columns[ci].panes[pi].id) {
-                                let dx = old_rect.loc.x - new_rect.loc.x;
-                                let dy = old_rect.loc.y - new_rect.loc.y;
+                                let mut dx = old_rect.loc.x - new_rect.loc.x;
+                                let mut dy = old_rect.loc.y - new_rect.loc.y;
+                                // Clamp extreme values so panes don't dash across the whole window when
+                                // swapping between workspaces (coordinate frames may differ).
+                                if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
+                                if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
                                 ws.scrolling.columns[ci].panes[pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
                                 eprintln!("[swap] animated pane id={} from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", ws.scrolling.columns[ci].panes[pi].id.0, old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
                             }
