@@ -14,7 +14,7 @@ impl PaneFrame {
 
         let bw = style.border_width;
         let th = style.title_bar_height;
-        let close_btn_size = 16.0;
+        let close_btn_size = (th * 0.7).clamp(12.0, 18.0);
         let btn_x = x + w - bw - close_btn_size - style.padding;
         let btn_y = y + bw + (th - close_btn_size) / 2.0;
         
@@ -83,7 +83,7 @@ impl PaneFrame {
             );
             
             // Close Button [x]
-            let close_btn_size = 16.0;
+            let close_btn_size = (th * 0.7).clamp(12.0, 18.0);
             let btn_x = x + w - active_bw - close_btn_size - style.padding;
             let btn_y = inner_y + (th - close_btn_size) / 2.0;
             
@@ -93,7 +93,7 @@ impl PaneFrame {
             );
             
             // Precisely center the 'x' character
-            text.queue_text("×", btn_x + 5.0, btn_y + 3.0, 10.0, title_color);
+            text.queue_text("×", btn_x + (close_btn_size / 2.0) - 2.5, btn_y + (close_btn_size / 2.0) - 3.5, 10.0, title_color);
             
             inner_y += th;
         }
