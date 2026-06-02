@@ -1668,9 +1668,11 @@ pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, 
         // Insert the pane into the target workspace. Treat `target_col` as the desired
         // insertion index for a new column so moving between workspaces preserves
         // the pane-as-single-column layout (rather than joining an existing column).
+        // Generate a fresh ColumnId before mutably borrowing the workspace.
+        let new_col_id = ColumnId(state.session.next_id());
         if let Some(ws) = state.session.active_workspace_mut() {
             let insert_pos = target_col.min(ws.scrolling.columns.len());
-            ws.scrolling.add_column(Some(insert_pos), Column::new(ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5)), true);
+            ws.scrolling.add_column(Some(insert_pos), Column::new(new_col_id, pane, ColumnWidth::Proportion(0.5)), true);
             state.focused_pane = Some(pane_id);
         }
 

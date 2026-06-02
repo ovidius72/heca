@@ -418,6 +418,9 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
 
     // Capture detached pane id for logging (det.pane will be moved later).
     let detached_id = det.pane.id.0;
+    // Pre-generate column ids for recreated columns so we don't reuse pane ids as column ids.
+    let new_col_detached = ColumnId(state.session.next_id());
+    let new_col_removed = ColumnId(state.session.next_id());
 
     match item {
         crate::sidebar::SidebarItem::Pane { pane_id } => {
@@ -453,7 +456,7 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                                     ws.scrolling.add_pane_to_column(t_col, Some(t_pi), det.pane, true);
                                     eprintln!("[mouse-swap-sidebar] inserted detached id={} at ws={} col={} idx={}", detached_id, t_ws, t_col, t_pi);
                                 } else {
-                                    ws.scrolling.add_column(Some(t_col), Column::new(ColumnId(detached_id), det.pane, ColumnWidth::Proportion(0.5)), true);
+                                    ws.scrolling.add_column(Some(t_col), Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
                                     eprintln!("[mouse-swap-sidebar] created column and inserted detached id={} at ws={} new_col_idx={}", detached_id, t_ws, t_col);
                                 }
                             } else {
@@ -473,7 +476,7 @@ fn sidebar_handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                                     eprintln!("[mouse-swap-sidebar] inserted removed target id={} at ws={} col={} idx={}", removed_target_id, orig_ws, orig_idx, orig_pi);
                                 } else {
                                     // Original column was removed — create a new column with the target pane.
-                                    ws.scrolling.add_column(None, Column::new(ColumnId(removed_target_id), removed_target, ColumnWidth::Proportion(0.5)), true);
+                                    ws.scrolling.add_column(None, Column::new(new_col_removed, removed_target, ColumnWidth::Proportion(0.5)), true);
                                     eprintln!("[mouse-swap-sidebar] original column missing — created new column with target id={}", removed_target_id);
                                 }
                             } else {
@@ -698,6 +701,9 @@ fn drop_pane(state: &mut AppState) {
     // Capture detached pane id early because det.pane will be moved when
     // reinserting; use detached_id in diagnostic logs after move.
     let detached_id = det.pane.id.0;
+    // Pre-generate new ColumnIds for any recreated columns used during reinsertion.
+    let new_col_detached = ColumnId(state.session.next_id());
+    let new_col_removed = ColumnId(state.session.next_id());
 
     let shift_held = state.modifiers.shift_key();
 
@@ -732,7 +738,7 @@ fn drop_pane(state: &mut AppState) {
                                 ws.scrolling.add_pane_to_column(target_idx, Some(insert_idx), det.pane, true);
                                 eprintln!("[mouse-swap] inserted detached id={} at ws={} col={} idx={}", detached_id, t_ws, target_idx, insert_idx);
                             } else {
-                                ws.scrolling.add_column(None, Column::new(ColumnId(detached_id), det.pane, ColumnWidth::Proportion(0.5)), true);
+                                ws.scrolling.add_column(None, Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
                                 eprintln!("[mouse-swap] target column id missing; created new column and inserted detached id={}", detached_id);
                             }
                         } else {
@@ -740,7 +746,7 @@ fn drop_pane(state: &mut AppState) {
                                 ws.scrolling.add_pane_to_column(t_col, Some(t_pi), det.pane, true);
                                 eprintln!("[mouse-swap] fallback numeric insert detached id={} at ws={} col={} idx={}", detached_id, t_ws, t_col, t_pi);
                             } else {
-                                ws.scrolling.add_column(Some(t_col), Column::new(ColumnId(detached_id), det.pane, ColumnWidth::Proportion(0.5)), true);
+                                ws.scrolling.add_column(Some(t_col), Column::new(new_col_detached, det.pane, ColumnWidth::Proportion(0.5)), true);
                                 eprintln!("[mouse-swap] fallback created column and inserted detached id={}", detached_id);
                             }
                         }
@@ -757,7 +763,7 @@ fn drop_pane(state: &mut AppState) {
                             ws.scrolling.add_pane_to_column(orig_idx, Some(orig_pi), removed_target, true);
                             eprintln!("[mouse-swap] reinserted removed target id={} at ws={} col={} idx={}", removed_target_id, orig_ws, orig_idx, orig_pi);
                         } else {
-                            ws.scrolling.add_column(None, Column::new(ColumnId(removed_target_id), removed_target, ColumnWidth::Proportion(0.5)), true);
+                            ws.scrolling.add_column(None, Column::new(new_col_removed, removed_target, ColumnWidth::Proportion(0.5)), true);
                             eprintln!("[mouse-swap] original column missing; created new column with target id={}", removed_target_id);
                         }
                     } else {

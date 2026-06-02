@@ -458,6 +458,10 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
             let b_id = b.id.0;
             eprintln!("[swap] removed A.id={} B.id={}", a_id, b_id);
 
+            // Pre-generate new ColumnIds to use for recreated columns when needed.
+            let new_col_for_a = ColumnId(state.session.next_id());
+            let new_col_for_b = ColumnId(state.session.next_id());
+
             // Insert A into B's workspace at B's original column id/position.
             if let Some(ws) = state.session.workspaces.get_mut(bws) {
                 if b_col_len > 1 {
@@ -469,7 +473,7 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 } else {
                     // Original B column was single-pane (or missing) — create a new column at the original position.
                     let pos = b_col_pos.min(ws.scrolling.columns.len());
-                    let cid = b_col_id.unwrap_or(ColumnId(a_id));
+                    let cid = b_col_id.unwrap_or(new_col_for_a);
                     ws.scrolling.add_column(Some(pos), Column::new(cid, a, ColumnWidth::Proportion(0.5)), true);
                     eprintln!("[swap] recreated/created column id {:?} at pos {} and inserted A.id={} (ws {})", cid, pos, a_id, bws);
                 }
@@ -486,7 +490,7 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                     eprintln!("[swap] inserted B.id={} into existing column idx {} at pane idx {} (ws {})", b_id, target_col, insert_idx, aws);
                 } else {
                     let pos = a_col_pos.min(ws.scrolling.columns.len());
-                    let cid = a_col_id.unwrap_or(ColumnId(b_id));
+                    let cid = a_col_id.unwrap_or(new_col_for_b);
                     ws.scrolling.add_column(Some(pos), Column::new(cid, b, ColumnWidth::Proportion(0.5)), true);
                     eprintln!("[swap] recreated/created column id {:?} at pos {} and inserted B.id={} (ws {})", cid, pos, b_id, aws);
                 }
