@@ -705,6 +705,9 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
+                state.mouse.sidebar_hovered_button.as_ref(),
+                theme.sidebar_label_font_size,
+                theme.sidebar_button_font_size,
             );
         } else {
             sidebar::render_sidebar_collapsed(
@@ -723,6 +726,9 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
+                state.mouse.sidebar_hovered_button.as_ref(),
+                theme.sidebar_label_font_size,
+                theme.sidebar_button_font_size,
             );
         }
 

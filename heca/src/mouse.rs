@@ -90,6 +90,9 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
             label.y = pos.1;
         }
 
+    // ── Button hover detection ──
+    state.mouse.sidebar_hovered_button = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1);
+
     None
 }
 
@@ -459,25 +462,13 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         // Check buttons first.
         if let Some(button) = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1) {
-            match button {
-                crate::sidebar::SidebarButton::CreateWorkspace => {
-                    return Some(WmAction::CreateWorkspace);
-                }
-                crate::sidebar::SidebarButton::AddColumn { ws_idx } => {
-                    // Switch to the target workspace and split horizontal.
-                    if ws_idx != state.session.active_workspace_idx {
+            // Switch to the target workspace if specified.
+            if let Some(hitbox) = state.sidebar_tree.button_hitboxes.iter().find(|h| h.action == button)
+                && let Some(ws_idx) = hitbox.ws_idx
+                    && ws_idx != state.session.active_workspace_idx {
                         crate::switch_workspace_tracked(state, ws_idx);
                     }
-                    return Some(WmAction::SplitHorizontal);
-                }
-                crate::sidebar::SidebarButton::AddPane { ws_idx, col_idx: _ } => {
-                    // Switch to the target workspace and split vertical.
-                    if ws_idx != state.session.active_workspace_idx {
-                        crate::switch_workspace_tracked(state, ws_idx);
-                    }
-                    return Some(WmAction::SplitVertical);
-                }
-            }
+            return Some(button);
         }
 
         let sidebar_h = sidebar_bottom - sidebar_top;

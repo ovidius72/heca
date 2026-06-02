@@ -307,6 +307,10 @@ sidebar_drag_ghost_fg = "#ffffff"        # Ghost label text (white)
 sidebar_drag_source_bg = "#89b4fa26"     # Source item background (accent @ 15%)
 sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
 
+# Sidebar font sizes
+sidebar_label_font_size = 14.0    # Workspace/column/pane labels
+sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
+
 [shadow]
 color = "#000000"
 alpha = 0.3

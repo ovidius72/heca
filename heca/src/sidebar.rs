@@ -1,4 +1,5 @@
 use crate::app_state::SidebarItemState;
+use crate::input::WmAction;
 use heca_core::layout::session::Session;
 
 /// A flat item in the sidebar navigation list.
@@ -64,21 +65,12 @@ pub struct SidebarTree {
     pub button_hitboxes: Vec<SidebarButtonHitbox>,
 }
 
-/// A clickable button in the sidebar.
-#[derive(Debug, Clone)]
-pub enum SidebarButton {
-    /// [+w] — create new workspace.
-    CreateWorkspace,
-    /// [+c] — add column to workspace.
-    AddColumn { ws_idx: usize },
-    /// [+p] — add pane to column.
-    AddPane { ws_idx: usize, col_idx: usize },
-}
-
 /// Hitbox for a sidebar button.
 #[derive(Debug, Clone)]
 pub struct SidebarButtonHitbox {
-    pub button: SidebarButton,
+    pub action: WmAction,
+    /// Optional workspace index — used to switch workspace before dispatching.
+    pub ws_idx: Option<usize>,
     pub x: f32,
     pub y: f32,
     pub width: f32,
@@ -427,12 +419,12 @@ pub fn sidebar_button_hit_test(
     tree: &SidebarTree,
     mouse_x: f32,
     mouse_y: f32,
-) -> Option<SidebarButton> {
+) -> Option<WmAction> {
     for hitbox in &tree.button_hitboxes {
         if mouse_x >= hitbox.x && mouse_x <= hitbox.x + hitbox.width
             && mouse_y >= hitbox.y && mouse_y <= hitbox.y + hitbox.height
         {
-            return Some(hitbox.button.clone());
+            return Some(hitbox.action.clone());
         }
     }
     None
@@ -446,12 +438,12 @@ use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
 const ITEM_HEIGHT: f32 = 24.0;
-const LABEL_FONT_SIZE: f32 = 14.0;
 const INDENT_WS: f32 = 8.0;
 const INDENT_COL: f32 = 26.0;
 const INDENT_PANE: f32 = 44.0;
-const BTN_SIZE: f32 = 16.0;
-const BTN_FONT_SIZE: f32 = 10.0;
+const BTN_SIZE: f32 = 20.0;
+const BTN_PAD_X: f32 = 2.0;
+const BTN_RADIUS: f32 = 4.0;
 
 /// Render the expanded sidebar tree (width >= 80px).
 /// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
@@ -479,6 +471,11 @@ pub fn render_sidebar_expanded(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
+    // Hovered button for hover effect.
+    hovered_button: Option<&WmAction>,
+    // Font sizes from theme.
+    label_font_size: f32,
+    button_font_size: f32,
 ) {
     // Clear and collect button hitboxes.
     tree.button_hitboxes.clear();
@@ -487,27 +484,21 @@ pub fn render_sidebar_expanded(
     let mut line_y = y + 4.0;
     let visible_lines = (height / ITEM_HEIGHT) as usize;
     let mut drawn = 0usize;
-    let font_size = LABEL_FONT_SIZE;
 
     // [+w] button at the top of the sidebar.
     {
-        let btn_x = x + width - BTN_SIZE - 4.0;
+        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-        let btn_label = "+w";
-        // Button background — use foreground with low alpha for contrast.
-        let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
-        let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
-        primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
-        // Button text — centered.
-        let text_w = btn_label.len() as f32 * BTN_FONT_SIZE * 0.6;
-        let text_h = BTN_FONT_SIZE;
-        let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
-        let text_y = btn_y + (BTN_SIZE - text_h) / 2.0;
-        text_renderer.queue_text(btn_label, text_x, text_y, BTN_FONT_SIZE, foreground);
-        tree.button_hitboxes.push(SidebarButtonHitbox {
-            button: SidebarButton::CreateWorkspace,
-            x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
-        });
+        let is_hov = matches!(hovered_button, Some(WmAction::CreateWorkspace));
+        let (bg, brd, tc) = if is_hov {
+            ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+        } else {
+            ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+        };
+        primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+        let tw = 2.0 * button_font_size * 0.55;
+        text_renderer.queue_text("+w", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+        tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::CreateWorkspace, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
     }
     line_y += ITEM_HEIGHT;
     drawn += 1;
@@ -598,41 +589,50 @@ pub fn render_sidebar_expanded(
         };
 
         let text_x = x + indent;
-        let text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
-        text_renderer.queue_text(&label, text_x, text_y, font_size, color);
+        let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 1.0;
+        text_renderer.queue_text(&label, text_x, text_y, label_font_size, color);
 
-        // [+c] button next to workspace items.
+        // Buttons on the right side of each item.
+        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
+        let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+
         if let SidebarItem::Workspace { ws_idx } = flat_item {
-            let btn_x = x + width - BTN_SIZE - 4.0;
-            let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-            let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
-            let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
-            let text_w = 2.0 * BTN_FONT_SIZE * 0.6;
-            let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
-            let text_y = btn_y + (BTN_SIZE - BTN_FONT_SIZE) / 2.0;
-            text_renderer.queue_text("+c", text_x, text_y, BTN_FONT_SIZE, foreground);
-            tree.button_hitboxes.push(SidebarButtonHitbox {
-                button: SidebarButton::AddColumn { ws_idx: *ws_idx },
-                x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
-            });
+            let is_hov = matches!(hovered_button, Some(WmAction::SplitHorizontal));
+            let (bg, brd, tc) = if is_hov {
+                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            } else {
+                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 2.0 * button_font_size * 0.55;
+            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
-        // [+p] button next to column items.
-        if let SidebarItem::Column { ws_idx, col_idx } = flat_item {
-            let btn_x = x + width - BTN_SIZE - 4.0;
-            let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-            let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
-            let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
-            let text_w = 2.0 * BTN_FONT_SIZE * 0.6;
-            let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
-            let text_y = btn_y + (BTN_SIZE - BTN_FONT_SIZE) / 2.0;
-            text_renderer.queue_text("+p", text_x, text_y, BTN_FONT_SIZE, foreground);
-            tree.button_hitboxes.push(SidebarButtonHitbox {
-                button: SidebarButton::AddPane { ws_idx: *ws_idx, col_idx: *col_idx },
-                x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
-            });
+        if let SidebarItem::Column { ws_idx, col_idx: _ } = flat_item {
+            let is_hov = matches!(hovered_button, Some(WmAction::SplitVertical));
+            let (bg, brd, tc) = if is_hov {
+                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            } else {
+                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 2.0 * button_font_size * 0.55;
+            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitVertical, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
+
+        if let SidebarItem::Pane { pane_id } = flat_item {
+            let is_hov = hovered_button.as_ref().is_some_and(|a| matches!(a, WmAction::ClosePaneById { pane_id: p } if *p == *pane_id));
+            let (bg, brd, tc) = if is_hov {
+                ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
+            } else {
+                ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 1.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
         line_y += ITEM_HEIGHT;
@@ -668,8 +668,13 @@ pub fn render_sidebar_collapsed(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
+    // Hovered button (unused in collapsed — no buttons).
+    _hovered_button: Option<&WmAction>,
+    // Font sizes from theme.
+    label_font_size: f32,
+    _button_font_size: f32,
 ) {
-    let font_size = 13.0; // slightly smaller for compact fit
+    let font_size = label_font_size;
     let activity_bar_w = 4.0;
     let text_x = x + activity_bar_w + 4.0; // 4px gap after activity bar
     let mut line_y = y + 4.0;
