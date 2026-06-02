@@ -494,14 +494,16 @@ pub fn render_sidebar_expanded(
         let btn_x = x + width - BTN_SIZE - 4.0;
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
         let btn_label = "+w";
-        // Button background.
-        let mut btn_bg = accent;
-        btn_bg[3] = 0.3;
-        primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
-        // Button border.
-        primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
-        // Button text.
-        text_renderer.queue_text(btn_label, btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+        // Button background — use foreground with low alpha for contrast.
+        let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
+        let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
+        primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
+        // Button text — centered.
+        let text_w = btn_label.len() as f32 * BTN_FONT_SIZE * 0.6;
+        let text_h = BTN_FONT_SIZE;
+        let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
+        let text_y = btn_y + (BTN_SIZE - text_h) / 2.0;
+        text_renderer.queue_text(btn_label, text_x, text_y, BTN_FONT_SIZE, foreground);
         tree.button_hitboxes.push(SidebarButtonHitbox {
             button: SidebarButton::CreateWorkspace,
             x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
@@ -603,11 +605,13 @@ pub fn render_sidebar_expanded(
         if let SidebarItem::Workspace { ws_idx } = flat_item {
             let btn_x = x + width - BTN_SIZE - 4.0;
             let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-            let mut btn_bg = accent;
-            btn_bg[3] = 0.3;
-            primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
-            primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
-            text_renderer.queue_text("+c", btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+            let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
+            let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
+            let text_w = 2.0 * BTN_FONT_SIZE * 0.6;
+            let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
+            let text_y = btn_y + (BTN_SIZE - BTN_FONT_SIZE) / 2.0;
+            text_renderer.queue_text("+c", text_x, text_y, BTN_FONT_SIZE, foreground);
             tree.button_hitboxes.push(SidebarButtonHitbox {
                 button: SidebarButton::AddColumn { ws_idx: *ws_idx },
                 x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
@@ -618,11 +622,13 @@ pub fn render_sidebar_expanded(
         if let SidebarItem::Column { ws_idx, col_idx } = flat_item {
             let btn_x = x + width - BTN_SIZE - 4.0;
             let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
-            let mut btn_bg = accent;
-            btn_bg[3] = 0.3;
-            primitive_renderer.draw_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg);
-            primitive_renderer.draw_border(btn_x, btn_y, BTN_SIZE, BTN_SIZE, accent, 1.0);
-            text_renderer.queue_text("+p", btn_x + 2.0, btn_y + 2.0, BTN_FONT_SIZE, accent);
+            let btn_bg = [foreground[0], foreground[1], foreground[2], 0.15];
+            let btn_border = [foreground[0], foreground[1], foreground[2], 0.4];
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, btn_bg, btn_border, 1.0, 3.0);
+            let text_w = 2.0 * BTN_FONT_SIZE * 0.6;
+            let text_x = btn_x + (BTN_SIZE - text_w) / 2.0;
+            let text_y = btn_y + (BTN_SIZE - BTN_FONT_SIZE) / 2.0;
+            text_renderer.queue_text("+p", text_x, text_y, BTN_FONT_SIZE, foreground);
             tree.button_hitboxes.push(SidebarButtonHitbox {
                 button: SidebarButton::AddPane { ws_idx: *ws_idx, col_idx: *col_idx },
                 x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE,
