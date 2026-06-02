@@ -91,7 +91,10 @@ impl PaneFrame {
                 btn_x, btn_y, close_btn_size, close_btn_size,
                 [0.2, 0.2, 0.2, 1.0], [0.4, 0.4, 0.4, 1.0], 2.0
             );
-            text.queue_text("×", btn_x + 4.0, btn_y + 2.0, 10.0, title_color);
+            
+            let x_text = "×";
+            let x_w = x_text.len() as f32 * 6.0; // Approximate
+            text.queue_text(x_text, btn_x + (close_btn_size - x_w) / 2.0, btn_y + 2.0, 10.0, title_color);
             
             inner_y += th;
         }

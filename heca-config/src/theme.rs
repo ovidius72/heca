@@ -101,12 +101,12 @@ pub struct PaneStyle {
 impl Default for PaneStyle {
     fn default() -> Self {
         Self {
-            border_width: 1.0,
+            border_width: 0.8,
             border_radius: 4.0,
             border_color: Color::new(49, 50, 68, 255),
             active_border_color: Color::new(137, 180, 250, 255),
-            glow_color: Color::new(137, 180, 250, 50),
-            glow_radius: 10.0,
+            glow_color: Color::new(137, 180, 250, 120),
+            glow_radius: 4.0,
             bg_gradient_start: Color::new(20, 20, 30, 255),
             bg_gradient_end: Color::new(30, 30, 46, 255),
             shadow_gradient_start: Color::new(0, 0, 0, 150),
@@ -117,7 +117,7 @@ impl Default for PaneStyle {
             title_font_size: 11.0,
             title_color: Color::new(150, 150, 180, 255),
             title_active_color: Color::new(205, 214, 244, 255),
-            padding: 8.0,
+            padding: 4.0,
             close_btn_color: Color::new(100, 100, 120, 255),
             close_btn_hover_color: Color::new(255, 100, 100, 255),
         }
