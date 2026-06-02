@@ -388,7 +388,13 @@ pub fn sidebar_hit_test(
         return None;
     }
 
-    let line_index = (relative_y / ITEM_HEIGHT) as usize;
+    // Account for the [+w] button row at the top.
+    let adjusted_y = relative_y - BTN_ROW_HEIGHT;
+    if adjusted_y < 0.0 {
+        return None; // Clicked on the button row itself.
+    }
+
+    let line_index = (adjusted_y / ITEM_HEIGHT) as usize;
 
     if is_collapsed {
         // In collapsed mode columns are invisible; map visible line to flat idx.
@@ -444,6 +450,7 @@ const INDENT_PANE: f32 = 44.0;
 const BTN_SIZE: f32 = 20.0;
 const BTN_PAD_X: f32 = 2.0;
 const BTN_RADIUS: f32 = 4.0;
+const BTN_ROW_HEIGHT: f32 = ITEM_HEIGHT; // [+w] button row at top
 
 /// Render the expanded sidebar tree (width >= 80px).
 /// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
