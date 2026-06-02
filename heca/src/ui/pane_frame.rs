@@ -92,9 +92,8 @@ impl PaneFrame {
                 [0.2, 0.2, 0.2, 1.0], [0.4, 0.4, 0.4, 1.0], 2.0
             );
             
-            let x_text = "×";
-            let x_w = x_text.len() as f32 * 6.0; // Approximate
-            text.queue_text(x_text, btn_x + (close_btn_size - x_w) / 2.0, btn_y + 2.0, 10.0, title_color);
+            // Precisely center the 'x' character
+            text.queue_text("×", btn_x + 4.5, btn_y + 2.5, 10.0, title_color);
             
             inner_y += th;
         }
