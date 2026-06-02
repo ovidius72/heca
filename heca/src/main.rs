@@ -1122,11 +1122,21 @@ impl ApplicationHandler for HecaApp {
                         if let Some(ch) = typed
                             && let Some(current_id) = current_id
                             && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
-                            && let Some((cws, ccol, cidx)) = find_pane_location(&state.session, current_id)
-                            && let Some((tws, tcol, tidx)) = find_pane_location(&state.session, *target_id)
+                            && let Some((_, _, _)) = find_pane_location(&state.session, current_id)
+                            && let Some((_, _, _)) = find_pane_location(&state.session, *target_id)
                         {
-                            // True two-way swap: exchange positions of both panes.
-                            pane_swap(state, (cws, ccol, cidx), (tws, tcol, tidx), should_focus);
+                            // Both panes are present in scrolling columns — dispatch Swap.
+                            eprintln!("[pane-swap] dispatching Swap a={} b={}", current_id, *target_id);
+                            self.registry.execute(&WmAction::Swap { a_id: current_id, b_id: *target_id }, state);
+
+                            // Apply focus semantics.
+                            if should_focus {
+                                eprintln!("[pane-swap] focusing original pane a={}", current_id);
+                                self.registry.execute(&WmAction::FocusPane { pane_id: current_id }, state);
+                            } else {
+                                eprintln!("[pane-swap] focusing target pane b={}", *target_id);
+                                self.registry.execute(&WmAction::FocusPane { pane_id: *target_id }, state);
+                            }
                         }
                         state.needs_redraw = true;
                     }
@@ -1655,13 +1665,12 @@ pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, 
     if let Some(pane) = removed_pane {
         state.session.switch_to_workspace(target_ws);
 
-        // Add to target column if it exists, otherwise create a new column.
+        // Insert the pane into the target workspace. Treat `target_col` as the desired
+        // insertion index for a new column so moving between workspaces preserves
+        // the pane-as-single-column layout (rather than joining an existing column).
         if let Some(ws) = state.session.active_workspace_mut() {
-            if target_col < ws.scrolling.columns.len() {
-                ws.scrolling.add_pane_to_column(target_col, None, pane, true);
-            } else {
-                state.session.add_pane(pane, None, true);
-            }
+            let insert_pos = target_col.min(ws.scrolling.columns.len());
+            ws.scrolling.add_column(Some(insert_pos), Column::new(ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5)), true);
             state.focused_pane = Some(pane_id);
         }
 
@@ -1678,11 +1687,11 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
 
     let ws_idx = state.session.active_workspace_idx;
 
-    // Validate indices before mutation.
+    // Validate indices before mutation. Allow `dst_col == col_count_before` to mean "append/new column".
     let col_count_before = state.session.workspaces.get(ws_idx)
         .map(|ws| ws.scrolling.columns.len())
         .unwrap_or(0);
-    if src_col >= col_count_before || dst_col >= col_count_before {
+    if src_col >= col_count_before || dst_col > col_count_before {
         return;
     }
 
@@ -1711,14 +1720,21 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
             dst_col
         };
 
+        // Determine current column count (immutable borrow) so we can call next_id() if we need to create a column.
+        let col_count_now = state.session.workspaces.get(ws_idx).map(|ws| ws.scrolling.columns.len()).unwrap_or(0);
+        // Clamp adjusted_dst to [0..=col_count_now]
+        let target_pos = if adjusted_dst <= col_count_now { adjusted_dst } else { col_count_now };
+        let need_new_column = target_pos >= col_count_now;
+        let new_col_id = if need_new_column { Some(ColumnId(state.session.next_id())) } else { None };
+
         if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-            let target_col = adjusted_dst.min(ws.scrolling.columns.len().saturating_sub(1));
-            if target_col < ws.scrolling.columns.len() {
-                ws.scrolling.add_pane_to_column(target_col, None, pane, true);
+            if target_pos < ws.scrolling.columns.len() {
+                // Insert into existing column at target_pos
+                ws.scrolling.add_pane_to_column(target_pos, None, pane, true);
             } else {
-                ws.scrolling.add_column(None, Column::new(
-                    ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5),
-                ), true);
+                // Create a new column at target_pos (append if equal to current len)
+                let cid = new_col_id.unwrap_or(ColumnId(pane.id.0));
+                ws.scrolling.add_column(Some(target_pos), Column::new(cid, pane, ColumnWidth::Proportion(0.5)), true);
             }
             state.focused_pane = Some(pane_id);
         }
@@ -1727,89 +1743,6 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
     sync_focus(state);
 }
 
-/// True two-way swap: exchange positions of two panes (PaneSwap mode).
-///
-/// A goes to B's position, B goes to A's position.
-/// - `follow = true`: focus follows A (the originally focused pane).
-/// - `follow = false`: focus stays at A's original position (now showing B).
-fn pane_swap(
-    state: &mut AppState,
-    src: (usize, usize, usize),
-    dst: (usize, usize, usize),
-    follow: bool,
-) {
-    let (src_ws, src_col, src_idx) = src;
-    let (dst_ws, dst_col, dst_idx) = dst;
-    if src_ws == dst_ws && src_col == dst_col && src_idx == dst_idx {
-        return; // same pane
-    }
-
-    // 1. Remove both panes safely.
-    // If in the same column, remove the higher index first to avoid invalidating the lower index.
-    let removals = if src_ws == dst_ws && src_col == dst_col {
-        if src_idx < dst_idx {
-            vec![(dst_ws, dst_col, dst_idx), (src_ws, src_col, src_idx)]
-        } else {
-            vec![(src_ws, src_col, src_idx), (dst_ws, dst_col, dst_idx)]
-        }
-    } else {
-        vec![(src_ws, src_col, src_idx), (dst_ws, dst_col, dst_idx)]
-    };
-
-    let mut panes = Vec::new();
-    for (ws_idx, col_idx, pane_idx) in removals {
-        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-            panes.push(ws.scrolling.remove_pane(col_idx, pane_idx));
-        }
-    }
-    
-    // We expect two panes
-    let (pane_a, pane_b) = (panes.pop().flatten(), panes.pop().flatten());
-    let (Some(pane_a), Some(pane_b)) = (pane_a, pane_b) else { return };
-
-    // 2. Re-insert A at dst, B at src.
-    // We re-insert them into their new locations.
-    let reinserts = vec![
-        (dst_ws, dst_col, dst_idx, pane_a),
-        (src_ws, src_col, src_idx, pane_b),
-    ];
-
-    for (ws_idx, col_idx, pane_idx, pane) in reinserts {
-        if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-            // Ensure column exists or create new one if needed
-            let col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
-            if col < ws.scrolling.columns.len() {
-                ws.scrolling.add_pane_to_column(col, Some(pane_idx), pane, false);
-            } else {
-                ws.scrolling.add_column(None, heca_core::layout::Column::new(
-                    heca_core::layout::ColumnId(pane.id.0), 
-                    pane, 
-                    heca_core::layout::ColumnWidth::Proportion(0.5)
-                ), false);
-            }
-        }
-    }
-
-    // 3. Cleanup and Focus.
-    destroy_empty_workspace(state, src_ws);
-    destroy_empty_workspace(state, dst_ws);
-
-    if follow {
-        // Find where pane A ended up and focus it.
-        // For simplicity, just focus the location A is now at.
-        if state.session.active_workspace_idx != dst_ws {
-            state.session.switch_to_workspace(dst_ws);
-        }
-        sync_focus(state);
-    } else {
-        // Focus stays at original workspace
-        if state.session.active_workspace_idx != src_ws {
-            state.session.switch_to_workspace(src_ws);
-        }
-        sync_focus(state);
-    }
-    state.needs_redraw = true;
-}
 
 /// Swap two panes' positions. Works within the same workspace.
 /// If panes are in the same column, swaps their indices.

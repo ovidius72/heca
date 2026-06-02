@@ -98,6 +98,7 @@ pub struct DetachedPane {
     pub size: heca_core::layout::types::Size,
     pub original_ws: usize,
     pub original_col: usize,
+    pub original_col_id: heca_core::layout::ColumnId,
     pub original_pane: usize,
 }
 
