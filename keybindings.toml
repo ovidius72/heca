@@ -57,8 +57,8 @@ float = "prefix+f"   # Toggle pane floating (detach/attach)
 # Quick Select / Swap
 # -----------------------------------------------------------------------------
 pane_select         = "prefix+q"        # Show letters on panes, pick to focus
-swap_pane           = "prefix+Shift+q"  # Show letters, swap panes (stay here)
-swap_and_focus_pane = "prefix+m"        # Show letters, swap panes (follow)
+swap_pane           = "prefix+m"        # Show letters, swap panes (stay here)
+swap_and_focus_pane = "prefix+Shift+m"  # Show letters, swap panes (follow)
 
 # -----------------------------------------------------------------------------
 # Pane Cycling (within column)

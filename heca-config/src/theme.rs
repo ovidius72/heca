@@ -321,10 +321,10 @@ impl Default for KeysConfig {
 
         // ── Quick select / swap ──
         bindings.insert("pane_select".to_string(),     Single("prefix+q".to_string()));
-        // Swap (keyboard): Shift+M swaps panes
-        bindings.insert("swap_pane".to_string(),     Single("prefix+Shift+m".to_string()));
-        // Swap + focus (keyboard): M swaps and then focuses the swapped pane
-        bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+m".to_string()));
+        // Swap (keyboard): M swaps panes
+        bindings.insert("swap_pane".to_string(),     Single("prefix+m".to_string()));
+        // Swap + focus (keyboard): Shift+M swaps and then focuses the swapped pane
+        bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+Shift+m".to_string()));
 
         // ── Tabs ──
         bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));

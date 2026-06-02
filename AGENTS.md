@@ -73,8 +73,8 @@ Ctrl+B → v    Split vertical (new pane in current column)
 Ctrl+B → x    Close active pane
 Ctrl+B → f    Toggle pane floating
 Ctrl+B → q    Quick-select pane (overlay letters, all workspaces)
-Ctrl+B → Shift+q  Quick-swap pane (stay at current position)
-Ctrl+B → m    Swap and focus (follow to destination)
+Ctrl+B → m    Swap pane (stay at current position)
+Ctrl+B → Shift+m  Swap and focus (follow to destination)
 Ctrl+B → =    Increase column width
 Ctrl+B → -    Decrease column width
 Ctrl+B → [    Move pane to column left
