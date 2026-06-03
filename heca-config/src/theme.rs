@@ -113,8 +113,8 @@ impl Default for PaneStyle {
             shadow_gradient_end: Color::new(0, 0, 0, 0),
             show_pane_title: true,
             pane_title_font_size: 14.0,
-            pane_title_color: Color::new(150, 150, 180, 255),
-            pane_title_active_color: Color::new(205, 214, 244, 255),
+            pane_title_color: Color::new(180, 180, 200, 60),
+            pane_title_active_color: Color::new(137, 180, 250, 255),
             padding: 0.0,
             close_btn_color: Color::new(100, 100, 120, 255),
             close_btn_hover_color: Color::new(255, 100, 100, 255),
@@ -450,8 +450,6 @@ impl Default for KeysConfig {
         // ── Swap position (Ctrl+nav) ──
         bindings.insert("swap_left".to_string(),  Single("prefix+Ctrl+h".to_string()));
         bindings.insert("swap_right".to_string(), Single("prefix+Ctrl+l".to_string()));
-        bindings.insert("swap_up".to_string(),    Single("prefix+Ctrl+k".to_string()));
-        bindings.insert("swap_down".to_string(),  Single("prefix+Ctrl+j".to_string()));
 
         // ── Default resize mode ──
         let mut mode = Vec::new();
