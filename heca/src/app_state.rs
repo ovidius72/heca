@@ -56,12 +56,20 @@ pub enum InputMode {
         message: String,
         action: Box<WmAction>,
     },
+    /// Take-pane letter selection mode.
+    /// User picks a pane which gets moved to the active column bottom.
+    PaneTake {
+        candidates: Vec<(char, u64)>,
+        focus_after: bool,
+    },
 }
 
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, u64)]> {
         match self {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates, .. } => Some(candidates),
+            InputMode::PaneSelect { candidates }
+            | InputMode::PaneSwap { candidates, .. }
+            | InputMode::PaneTake { candidates, .. } => Some(candidates),
             _ => None,
         }
     }
