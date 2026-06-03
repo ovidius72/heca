@@ -73,9 +73,12 @@ impl PaneFrame {
             // Both sit on top border, covering it
             let text_y = y - fs / 2.0 + 1.0;
             
-            // Background strip behind title + [x] to "cut" the border
-            let strip_w = (close_x + x_w + 2.0) - (title_x - 2.0);
-            primitive.draw_rect(title_x - 2.0, text_y, strip_w, fs, bg);
+            // Background strip behind title to "cut" the border
+            let title_w = pane_name.len() as f32 * fs * 0.6;
+            primitive.draw_rect(title_x - 2.0, text_y, title_w + 4.0, fs, bg);
+            
+            // Background strip behind [x]
+            primitive.draw_rect(close_x - 2.0, text_y, x_w + 4.0, fs, bg);
             
             // Title text (left)
             text.queue_text(pane_name, title_x, text_y, fs, title_color);
