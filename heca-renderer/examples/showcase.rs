@@ -70,7 +70,22 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
         let mut cx = PaintCx::new(&mut scene, theme);
         root.paint(&mut cx);
     }
-    add_brackets(&mut scene, root, theme);
+    // Corner brackets on the cards (first row) only — not the small buttons.
+    if let Some(card_row) = root.base().children.first() {
+        for card in &card_row.base().children {
+            scene.push(DrawCommand::Brackets(BracketCmd {
+                rect: card.base().bounds,
+                color: theme.accent,
+                len: 14.0,
+                thickness: 1.5,
+                glow: Some(Glow {
+                    color: theme.glow,
+                    radius: 6.0,
+                    intensity: 1.0,
+                }),
+            }));
+        }
+    }
     scene.push(DrawCommand::Scanline(ScanlineCmd {
         rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
         color: theme.accent,
@@ -78,26 +93,6 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
         opacity: theme.intensity.scanline_opacity().max(0.05),
     }));
     scene
-}
-
-/// Recursively frame any bordered surface with corner brackets.
-fn add_brackets(scene: &mut Scene, c: &dyn Component, theme: &Theme) {
-    if c.base().style.border.is_some() {
-        scene.push(DrawCommand::Brackets(BracketCmd {
-            rect: c.base().bounds,
-            color: theme.accent,
-            len: 12.0,
-            thickness: 1.5,
-            glow: Some(Glow {
-                color: theme.glow,
-                radius: 6.0,
-                intensity: 1.0,
-            }),
-        }));
-    }
-    for child in &c.base().children {
-        add_brackets(scene, child.as_ref(), theme);
-    }
 }
 
 struct GpuState {

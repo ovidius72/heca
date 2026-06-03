@@ -8,7 +8,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::TextAlign;
 use crate::style::Length;
-use heca_core::layout::Point;
+use heca_core::layout::{Point, Rectangle};
 
 /// A clickable button with a text label.
 pub struct Button {
@@ -22,7 +22,7 @@ impl Button {
     /// A button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.padding = 10.0;
+        base.style.padding = 12.0;
         let mut button = Self {
             base,
             label: signal(label.into()),
@@ -49,7 +49,9 @@ impl Button {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.style.font_size;
         let pad = self.base.style.padding * 2.0;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + pad);
+        // Width estimate is naive (no shaping yet), so add ~2 chars of slack plus
+        // horizontal padding so the label never kisses or overflows the edge.
+        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
         self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
     }
 
@@ -77,11 +79,19 @@ impl Component for Button {
         } else {
             cx.theme().muted
         };
+        // Vertically center the single line within the button.
+        let b = self.base.bounds;
+        let fs = self.base.style.font_size;
+        let line_h = (fs * MONO_LINE_RATIO) as f64;
+        let centered = Rectangle::new(
+            Point::new(b.loc.x, b.loc.y + (b.size.h - line_h) / 2.0),
+            b.size,
+        );
         cx.text(
-            self.base.bounds,
+            centered,
             &self.label.get_untracked(),
             fg,
-            self.base.style.font_size,
+            fs,
             TextAlign::Center,
         );
     }
