@@ -25,6 +25,7 @@
 //!
 //! See `grid-ui-plan.md` for the full phase plan.
 
+pub mod builders;
 pub mod color;
 pub mod component;
 pub mod font;
@@ -39,21 +40,23 @@ pub mod widgets;
 /// API (which uses `Rectangle`/`Size`) need no direct `heca-core` dependency.
 pub use heca_core::layout::{Point, Rectangle, Size};
 
+pub use builders::{LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{Base, Component, Event, Handled, PaintCx};
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, Scene};
 pub use style::{Align, Direction, Justify, Length, Style};
 pub use theme::{Intensity, Theme};
-pub use widgets::{container, Container, Flex, Label};
+pub use widgets::{container, Button, Card, Container, Flex, Label, Surface};
 
 /// Common imports for building UIs.
 pub mod prelude {
+    pub use crate::builders::{LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, Handled};
     pub use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
     pub use crate::scene::TextAlign;
     pub use crate::style::{Align, Direction, Justify, Length};
     pub use crate::theme::{Intensity, Theme};
-    pub use crate::widgets::{container, Container, Flex, Label};
+    pub use crate::widgets::{container, Button, Card, Container, Flex, Label, Surface};
 }

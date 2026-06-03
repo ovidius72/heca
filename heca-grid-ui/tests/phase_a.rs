@@ -1,7 +1,7 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, LayoutEngine, PaintCx, Scene, Size, Theme};
+use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size, Theme};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -98,6 +98,85 @@ fn paint_emits_background_rect_and_label_text() {
         .count();
     assert_eq!(rects, 1, "container background should emit one rect");
     assert_eq!(texts, 1, "label should emit one text run");
+}
+
+// ── Phase C: surface components ──
+
+#[test]
+fn surface_paints_styled_rect_with_border() {
+    let theme = Theme::grid_tron();
+    let surface = Surface::new()
+        .background(Color::rgb(12, 18, 24))
+        .border(theme.accent, 1.5)
+        .glow(theme.glow);
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        surface.paint(&mut cx);
+    }
+    let has_bordered = scene
+        .iter()
+        .any(|c| matches!(c, DrawCommand::Rect(r) if r.border.is_some() && r.glow.is_some()));
+    assert!(has_bordered, "surface should emit a bordered, glowing rect");
+}
+
+#[test]
+fn card_carries_title_label() {
+    let theme = Theme::grid_tron();
+    let card = Card::new("UPLINK").child(Label::new("ONLINE"));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        card.paint(&mut cx);
+    }
+    let texts: Vec<&str> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.contains(&"UPLINK"), "card title should render");
+    assert!(texts.contains(&"ONLINE"), "card body should render");
+}
+
+#[test]
+fn button_click_fires_within_bounds() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicked = Rc::new(Cell::new(false));
+    let flag = clicked.clone();
+    let mut button = Button::new("DEREZ").on_click(move || flag.set(true));
+    LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
+
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let outside = Point::new(b.loc.x + b.size.w + 100.0, b.loc.y);
+
+    button.event(&Event::PointerPressed { pos: outside });
+    assert!(!clicked.get(), "click outside bounds must not fire");
+    button.event(&Event::PointerPressed { pos: center });
+    assert!(clicked.get(), "click inside bounds must fire");
+}
+
+#[test]
+fn button_hover_tracks_pointer() {
+    let mut button = Button::new("HOVER");
+    LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
+    let hovered = button.hovered();
+    let b = button.base().bounds;
+
+    button.event(&Event::PointerMoved {
+        pos: Point::new(b.loc.x + 2.0, b.loc.y + 2.0),
+    });
+    assert!(hovered.get_untracked(), "entering bounds sets hover");
+    button.event(&Event::PointerMoved {
+        pos: Point::new(b.loc.x + b.size.w + 50.0, b.loc.y),
+    });
+    assert!(!hovered.get_untracked(), "leaving bounds clears hover");
 }
 
 #[test]
