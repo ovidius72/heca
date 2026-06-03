@@ -1,0 +1,84 @@
+//! Layout engine: drives `taffy` over the component tree.
+//!
+//! Each layout pass (Phase A: a full rebuild, not yet incremental):
+//! 1. Walk the tree, creating a `taffy` node per component from its [`Style`].
+//! 2. `taffy.compute_layout` over the available space.
+//! 3. Walk again, copying each node's computed rect into `Base.bounds`
+//!    (accumulating parent origins, since taffy locations are parent-relative).
+//!
+//! [`Style`]: crate::style::Style
+
+use crate::component::Component;
+use heca_core::layout::{Point, Rectangle, Size};
+use taffy::prelude::*;
+
+/// Computes layout for a component tree using `taffy`.
+pub struct LayoutEngine {
+    tree: TaffyTree<()>,
+}
+
+impl LayoutEngine {
+    /// A fresh layout engine.
+    pub fn new() -> Self {
+        Self {
+            tree: TaffyTree::new(),
+        }
+    }
+
+    /// Lay out `root` within `available` (logical pixels) and write the computed
+    /// absolute bounds into every component's `Base.bounds`.
+    pub fn compute(&mut self, root: &mut dyn Component, available: Size) {
+        self.tree.clear();
+        let node = self.build(root);
+        let space = taffy::Size {
+            width: AvailableSpace::Definite(available.w as f32),
+            height: AvailableSpace::Definite(available.h as f32),
+        };
+        self.tree
+            .compute_layout(node, space)
+            .expect("taffy layout should not fail for a well-formed tree");
+        self.assign(root, Point::new(0.0, 0.0));
+    }
+
+    /// Recursively create taffy nodes for `c` and its children.
+    fn build(&mut self, c: &mut dyn Component) -> taffy::NodeId {
+        let style = c.base().style.to_taffy();
+        let child_count = c.base().children.len();
+        let mut child_nodes = Vec::with_capacity(child_count);
+        for i in 0..child_count {
+            let child = &mut c.base_mut().children[i];
+            child_nodes.push(self.build(child.as_mut()));
+        }
+        let node = self
+            .tree
+            .new_with_children(style, &child_nodes)
+            .expect("taffy node creation should succeed");
+        c.base_mut().node = Some(node);
+        node
+    }
+
+    /// Recursively copy computed layout into `Base.bounds`, accumulating origin.
+    fn assign(&mut self, c: &mut dyn Component, origin: Point) {
+        let node = c.base().node.expect("node assigned during build");
+        let layout = self.tree.layout(node).expect("layout computed");
+        let abs = Point::new(
+            origin.x + layout.location.x as f64,
+            origin.y + layout.location.y as f64,
+        );
+        c.base_mut().bounds = Rectangle::new(
+            abs,
+            Size::new(layout.size.width as f64, layout.size.height as f64),
+        );
+        let child_count = c.base().children.len();
+        for i in 0..child_count {
+            let child = &mut c.base_mut().children[i];
+            self.assign(child.as_mut(), abs);
+        }
+    }
+}
+
+impl Default for LayoutEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
