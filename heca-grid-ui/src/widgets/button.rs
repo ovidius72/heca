@@ -30,7 +30,7 @@ const HOVER_DURATION: f32 = 0.10;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
 const GLOW_RADIUS: f32 = 30.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
-const GLOW_INTENSITY: f32 = 0.22;
+const GLOW_INTENSITY: f32 = 0.12;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
