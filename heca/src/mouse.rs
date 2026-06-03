@@ -51,6 +51,72 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
             transition_to_moving(state, pane_id, pos);
         }
 
+    // ── SidebarDragStarting → SidebarDrag (threshold exceeded) ──
+    if let DragState::SidebarDragStarting {
+        pane_id,
+        original_ws,
+        start_mouse,
+        threshold_sq,
+        swap,
+        ..
+    } = state.mouse.drag_state
+    {
+        let dx = pos.0 - start_mouse.0;
+        let dy = pos.1 - start_mouse.1;
+        let sq_dist = dx * dx + dy * dy;
+
+        if sq_dist > threshold_sq {
+            // Create ghost label and transition to SidebarDrag
+            let label = state.sidebar_tree.flat_items.iter()
+                .find(|item| matches!(item, crate::sidebar::SidebarItem::Pane { pane_id: pid } if *pid == pane_id))
+                .and_then(|item| {
+                    if let crate::sidebar::SidebarItem::Pane { pane_id: pid } = item {
+                        for ws in &state.sidebar_tree.workspaces {
+                            for col in &ws.columns {
+                                for p in &col.panes {
+                                    if p.pane_id == *pid {
+                                        return Some(p.name.clone());
+                                    }
+                                }
+                            }
+                        }
+                        Some(format!("pane{}", pid))
+                    } else { None }
+                })
+                .unwrap_or_else(|| format!("pane{}", pane_id));
+
+            let chrome = chrome_config(state);
+            let (_win_w, win_h) = window_logical_size(state);
+            let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { 40.0 };
+            let sidebar_top = chrome.tab_bar_height;
+            let sidebar_bottom = win_h - chrome.status_bar_height;
+
+            state.mouse.sidebar_drag_source_fi = crate::sidebar::sidebar_hit_test(
+                &state.sidebar_tree, sidebar_top, sidebar_bottom - sidebar_top, sw, pos.1,
+            );
+            state.mouse.sidebar_drag_label = Some(crate::app_state::SidebarDragLabel {
+                text: label,
+                x: pos.0,
+                y: pos.1,
+                width: sw,
+                height: 20.0,
+            });
+
+            state.mouse.drag_state = DragState::SidebarDrag {
+                pane_id,
+                original_ws,
+                swap,
+            };
+        }
+    }
+
+    // ── Sidebar drag: update ghost label position ──
+    if let DragState::SidebarDrag { .. } = state.mouse.drag_state
+        && let Some(label) = &mut state.mouse.sidebar_drag_label {
+            label.x = pos.0;
+            label.y = pos.1;
+        }
+
     // ── Phase 2: detached (Moving) ──
     if matches!(state.mouse.drag_state, DragState::InteractiveMove { .. }) {
         let offset = match state.mouse.drag_state {
@@ -139,13 +205,6 @@ pub fn on_mouse_input(
 
     match (button, button_state) {
         (MouseButton::Left, ElementState::Pressed) => {
-            // Meta+click on sidebar pane → start drag from sidebar.
-            if interactive_move_modifier_held(state)
-                && let Some(pane_id) = sidebar_pane_hit_test(state, pos) {
-                start_sidebar_drag(state, pane_id, pos);
-                return None;
-            }
-
             // Meta+click on content pane → start drag from content.
             if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos) {
@@ -153,8 +212,37 @@ pub fn on_mouse_input(
                     return None;
                 }
 
-            // Sidebar click (no modifier) → focus.
-            if let Some(action) = sidebar_click(state, pos) {
+            // Sidebar click.
+            let sidebar_action = sidebar_click(state, pos);
+
+            // Check if this is a sidebar pane hit (no button) → start drag detection.
+            let is_pane_item = sidebar_pane_hit_test(state, pos).is_some();
+
+            if is_pane_item {
+                // Start drag detection — if mouse moves beyond threshold it becomes SidebarDrag.
+                if let Some(pane_id) = sidebar_pane_hit_test(state, pos) {
+                    let (ws_idx, _, _) = match crate::find_pane_location(&state.session, pane_id) {
+                        Some(loc) => loc,
+                        None => return sidebar_action,
+                    };
+                    let swap = state.modifiers.shift_key();
+                    let click_action = sidebar_action.clone().unwrap_or(
+                        WmAction::FocusPane { pane_id },
+                    );
+                    state.mouse.drag_state = DragState::SidebarDragStarting {
+                        pane_id,
+                        original_ws: ws_idx,
+                        start_mouse: pos,
+                        threshold_sq: 100.0, // 10px threshold
+                        swap,
+                        click_action: Box::new(click_action),
+                    };
+                    return None;
+                }
+            }
+
+            // Sidebar button clicks / non-pane item clicks dispatch immediately.
+            if let Some(action) = sidebar_action {
                 return Some(action);
             }
 
@@ -179,8 +267,16 @@ pub fn on_mouse_input(
                         cancel_interactive_move(state);
                     }
                 }
-                DragState::SidebarDrag { pane_id, original_ws } => {
-                    sidebar_drag_drop(state, pane_id, original_ws, pos);
+                DragState::SidebarDrag { pane_id, original_ws, swap } => {
+                    sidebar_drag_drop(state, pane_id, original_ws, swap, pos);
+                }
+                DragState::SidebarDragStarting { .. } => {
+                    // Released before threshold: execute the click action.
+                    if let DragState::SidebarDragStarting { click_action, .. } = &state.mouse.drag_state {
+                        let action = click_action.as_ref().clone();
+                        state.mouse.drag_state = DragState::None;
+                        return Some(action);
+                    }
                 }
                 _ => {}
             }
@@ -381,78 +477,6 @@ fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option<u64> {
     }
 }
 
-/// Start a drag from a sidebar pane item.
-/// Switches to the pane's source workspace if needed, then starts the same
-/// interactive move state machine as content-initiated drags.
-fn start_sidebar_drag(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
-    // Cancel any previous incomplete drag.
-    if matches!(state.mouse.drag_state, DragState::InteractiveMoveStarting { .. } | DragState::InteractiveMove { .. }) {
-        cancel_interactive_move(state);
-    }
-    if matches!(state.mouse.drag_state, DragState::SidebarDrag { .. }) {
-        state.mouse.drag_state = DragState::None;
-    }
-
-    // Find which workspace contains this pane.
-    let (ws_idx, _col_idx, _pane_idx) = match crate::find_pane_location(&state.session, pane_id) {
-        Some(loc) => loc,
-        None => return,
-    };
-
-    // Get the label text from the sidebar tree.
-    let label = state.sidebar_tree.flat_items.iter()
-        .find(|item| matches!(item, crate::sidebar::SidebarItem::Pane { pane_id: pid } if *pid == pane_id))
-        .and_then(|item| {
-            if let crate::sidebar::SidebarItem::Pane { pane_id: pid } = item {
-                // Find the pane name from the tree.
-                for ws in &state.sidebar_tree.workspaces {
-                    for col in &ws.columns {
-                        for p in &col.panes {
-                            if p.pane_id == *pid {
-                                return Some(p.name.clone());
-                            }
-                        }
-                    }
-                }
-                Some(format!("pane{}", pid))
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| format!("pane{}", pane_id));
-
-    eprintln!("[sidebar-drag] starting drag for pane_id={} from ws={} label='{}'", pane_id, ws_idx, label);
-
-    // Switch to the source workspace if needed.
-    if state.session.active_workspace_idx != ws_idx {
-        eprintln!("[sidebar-drag] switching to source workspace {}", ws_idx);
-        crate::switch_workspace_tracked(state, ws_idx);
-    }
-
-    // Record the sidebar flat index and drag label for visual effect.
-    let chrome = chrome_config(state);
-    let sidebar_top = chrome.tab_bar_height;
-    let (_win_w, win_h) = window_logical_size(state);
-    let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { 40.0 };
-    state.mouse.sidebar_drag_source_fi = crate::sidebar::sidebar_hit_test(
-        &state.sidebar_tree, sidebar_top, sidebar_bottom - sidebar_top, sw, mouse_pos.1,
-    );
-    state.mouse.sidebar_drag_label = Some(crate::app_state::SidebarDragLabel {
-        text: label,
-        x: mouse_pos.0,
-        y: mouse_pos.1,
-        width: sw,
-        height: 20.0, // approximate item height
-    });
-
-    // Enter sidebar drag state — pane stays in layout, no floating ghost.
-    state.mouse.drag_state = DragState::SidebarDrag {
-        pane_id,
-        original_ws: ws_idx,
-    };
-}
-
 /// Handle a click on the sidebar. Returns a WmAction if the click targets
 /// a pane or workspace, or None if the click missed the sidebar.
 fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
@@ -538,7 +562,8 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
 /// Handle a drop during sidebar drag.
 /// Removes the pane from its original position and inserts it at the target
 /// (sidebar item or content area), with animation from original to new position.
-fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, pos: (f32, f32)) {
+/// If `swap` is true, performs a swap instead of a move.
+fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, swap: bool, pos: (f32, f32)) {
     state.mouse.drag_state = DragState::None;
     state.mouse.drag_hover_sidebar_fi = None;
     state.mouse.sidebar_drag_source_fi = None;
@@ -596,6 +621,12 @@ fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, pos
             if let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned() {
                 match item {
                     crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
+                        if swap {
+                            // Swap with target pane instead of moving.
+                            eprintln!("[sidebar-drag-drop] swap pane_id={} with target_pid={}", pane_id, target_pid);
+                            crate::handlers::handle_swap_param(state, &crate::input::WmAction::Swap { a_id: pane_id, b_id: target_pid });
+                            return;
+                        }
                         // Insert after the target pane in the same column/workspace.
                         if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_pid) {
                             if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
