@@ -219,8 +219,8 @@ impl Button {
         );
         let g = self.show_glow.then_some(Glow {
             color: glow,
-            radius: 26.0 * p,
-            intensity: 1.4,
+            radius: 30.0,
+            intensity: 1.1,
         });
         cx.rect(rect, fill, None, 0.0, g);
     }
@@ -286,8 +286,8 @@ impl Component for Button {
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
                         color: danger,
-                        radius: 26.0,
-                        intensity: 1.4 * p,
+                        radius: 30.0,
+                        intensity: 1.1 * p,
                     });
                     cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
                 }
@@ -301,8 +301,8 @@ impl Component for Button {
                 let fill = accent.with_alpha(alpha(p * 0.1));
                 let g = (self.show_glow && p > 0.0).then_some(Glow {
                     color: glow_c,
-                    radius: 18.0,
-                    intensity: p,
+                    radius: 22.0,
+                    intensity: 0.8 * p,
                 });
                 cx.rect(b, fill, self.animated_border(muted.lerp(accent, p), p), 0.0, g);
                 self.paint_label(cx, muted.lerp(foreground, p));

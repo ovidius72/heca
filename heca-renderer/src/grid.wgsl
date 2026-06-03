@@ -75,24 +75,33 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // DPI or zoom (fwidth gives the change in `d` per fragment).
     let fw = max(fwidth(d), 1e-5);
 
-    // Fill coverage — crisp ~1px edge.
+    // Straight (non-premultiplied) surface color + coverage alpha.
     let inside = clamp(0.5 - d / fw, 0.0, 1.0);
-    var color = vec4<f32>(in.fill.rgb, in.fill.a * inside);
+    var rgb = in.fill.rgb;
+    var a = in.fill.a * inside;
 
     // Border: a band of width `border_width` just inside the edge.
     if (in.border_width > 0.0 && in.border.a > 0.0) {
         let outer = clamp(0.5 - d / fw, 0.0, 1.0);
         let inner = clamp(0.5 - (d + in.border_width) / fw, 0.0, 1.0);
         let band = clamp(outer - inner, 0.0, 1.0);
-        color = mix(color, vec4<f32>(in.border.rgb, in.border.a), band);
+        rgb = mix(rgb, in.border.rgb, band);
+        a = max(a, in.border.a * band);
     }
 
-    // Glow: additive exponential falloff outside the shape.
+    // Premultiply for premultiplied-alpha blending (src = One, dst = 1-srcA).
+    var out_rgb = rgb * a;
+    let out_a = a;
+
+    // Glow: additive light with a smooth compact falloff (0 by `glow_radius`,
+    // so it fully fades inside the expanded quad — no hard cutoff). It adds
+    // color but NOT alpha, so it brightens the background through itself like a
+    // real glow instead of painting a solid block.
     if (in.glow_radius > 0.0 && in.glow_intensity > 0.0 && d > 0.0) {
-        let g = exp(-d / in.glow_radius) * in.glow_intensity;
-        let ga = clamp(g, 0.0, 1.0) * in.glow.a;
-        color = vec4<f32>(color.rgb + in.glow.rgb * ga, max(color.a, ga));
+        let t = clamp(1.0 - d / in.glow_radius, 0.0, 1.0);
+        let g = t * t * in.glow_intensity * in.glow.a;
+        out_rgb = out_rgb + in.glow.rgb * g;
     }
 
-    return color;
+    return vec4<f32>(out_rgb, out_a);
 }
