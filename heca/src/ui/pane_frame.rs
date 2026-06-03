@@ -64,8 +64,6 @@ impl PaneFrame {
             let title_color = if focused { style.pane_title_active_color.to_f32x4() } else { style.pane_title_color.to_f32x4() };
             let bg = theme.background.to_f32x4();
             
-            // Calculate title width (approximate)
-            let title_w = pane_name.len() as f32 * fs * 0.6;
             let x_w = fs * 0.7; // width of the × character
             
             // Title at left, [x] at right — both with corner margin
