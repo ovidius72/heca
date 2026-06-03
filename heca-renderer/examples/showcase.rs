@@ -55,12 +55,12 @@ fn build_ui(theme: &Theme) -> Flex {
             Flex::row()
                 .gap(14.0)
                 .align(Align::Center)
-                .child(Button::primary("EXECUTE").on_click(click("EXECUTE")))
-                .child(Button::secondary("STANDBY"))
-                .child(Button::outline("RECONFIGURE"))
-                .child(Button::ghost("DETAILS"))
-                .child(Button::link("DOCS"))
-                .child(Button::destructive("DEREZ").on_click(click("DEREZ"))),
+                .child(Button::primary("DEFAULT").on_click(click("DEFAULT")))
+                .child(Button::secondary("SECONDARY"))
+                .child(Button::outline("OUTLINE"))
+                .child(Button::ghost("GHOST"))
+                .child(Button::link("LINK"))
+                .child(Button::destructive("DESTRUCTIVE").on_click(click("DESTRUCTIVE"))),
         )
 }
 

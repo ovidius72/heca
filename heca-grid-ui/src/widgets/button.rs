@@ -294,15 +294,18 @@ impl Component for Button {
                 self.paint_label(cx, danger.lerp(background, p));
             }
             ButtonVariant::Secondary => {
-                cx.rect(b, surface, self.animated_border(border_c, p), 0.0, None);
+                // Border becomes more vivid on hover (brighter + solid).
+                let bc = border_c.lerp(foreground, 0.4 * p);
+                cx.rect(b, surface, self.animated_border(bc, p), 0.0, None);
                 self.paint_label(cx, foreground);
             }
             ButtonVariant::Outline => {
+                // Hover: vivid accent border, text → primary (accent), lightest glow.
                 let fill = accent.with_alpha(alpha(p * 0.1));
                 let g = (self.show_glow && p > 0.0).then_some(Glow {
                     color: glow_c,
                     radius: GLOW_RADIUS * 0.8,
-                    intensity: GLOW_INTENSITY * 0.8 * p,
+                    intensity: GLOW_INTENSITY * 0.6 * p,
                 });
                 cx.rect(
                     b,
@@ -311,7 +314,7 @@ impl Component for Button {
                     0.0,
                     g,
                 );
-                self.paint_label(cx, muted.lerp(foreground, p));
+                self.paint_label(cx, muted.lerp(accent, p));
             }
             ButtonVariant::Ghost => {
                 let border = if self.show_border && p > 0.0 {
@@ -326,10 +329,10 @@ impl Component for Button {
                 self.paint_label(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
-                let color = accent.lerp(foreground, p);
-                self.paint_label(cx, color);
+                // Color stays constant; only the underline animates in on hover.
+                self.paint_label(cx, accent);
                 if p > 0.0 {
-                    self.paint_underline(cx, color.with_alpha(alpha(p)));
+                    self.paint_underline(cx, accent.with_alpha(alpha(p)));
                 }
             }
         }
