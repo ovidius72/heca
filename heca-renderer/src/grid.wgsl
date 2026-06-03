@@ -71,16 +71,18 @@ fn sd_round_box(p: vec2<f32>, b: vec2<f32>, r: f32) -> f32 {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let p = in.world - in.center;
     let d = sd_round_box(p, in.half_size, in.radius);
-    let aa = 1.0; // ~1px edge antialias
+    // Resolution-independent antialiasing: ~1 physical pixel wide regardless of
+    // DPI or zoom (fwidth gives the change in `d` per fragment).
+    let fw = max(fwidth(d), 1e-5);
 
-    // Fill coverage (1 inside, fading to 0 across the edge).
-    let inside = 1.0 - smoothstep(-aa, aa, d);
+    // Fill coverage — crisp ~1px edge.
+    let inside = clamp(0.5 - d / fw, 0.0, 1.0);
     var color = vec4<f32>(in.fill.rgb, in.fill.a * inside);
 
     // Border: a band of width `border_width` just inside the edge.
     if (in.border_width > 0.0 && in.border.a > 0.0) {
-        let outer = 1.0 - smoothstep(-aa, aa, d);
-        let inner = 1.0 - smoothstep(-aa, aa, d + in.border_width);
+        let outer = clamp(0.5 - d / fw, 0.0, 1.0);
+        let inner = clamp(0.5 - (d + in.border_width) / fw, 0.0, 1.0);
         let band = clamp(outer - inner, 0.0, 1.0);
         color = mix(color, vec4<f32>(in.border.rgb, in.border.a), band);
     }
