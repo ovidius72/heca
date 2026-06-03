@@ -26,17 +26,20 @@ pub enum RenameTarget {
     Pane(u64),
 }
 
-
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
     Prefix,
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
-    PaneSelect { candidates: Vec<(char, u64)> },
+    PaneSelect {
+        candidates: Vec<(char, u64)>,
+    },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
     /// `focus_after` determines whether focus follows the swapped pane.
-    PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },
+    PaneSwap {
+        candidates: Vec<(char, u64)>,
+        focus_after: bool,
+    },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
     /// Text input mode for renaming workspaces / panes.
@@ -46,10 +49,14 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
-    Chord { sequence: Vec<String> },
+    Chord {
+        sequence: Vec<String>,
+    },
     /// Custom mode (e.g. resize mode). Stay in mode until Esc.
     /// `name` is the mode identifier from config.
-    Mode { name: String },
+    Mode {
+        name: String,
+    },
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
     ConfirmDelete {
@@ -244,11 +251,18 @@ mod tests {
     fn test_input_mode_candidates_some() {
         let cands = vec![('a', 1), ('b', 2)];
         assert_eq!(
-            InputMode::PaneSelect { candidates: cands.clone() }.candidates(),
+            InputMode::PaneSelect {
+                candidates: cands.clone()
+            }
+            .candidates(),
             Some(cands.as_slice())
         );
         assert_eq!(
-            InputMode::PaneSwap { candidates: cands.clone(), focus_after: false }.candidates(),
+            InputMode::PaneSwap {
+                candidates: cands.clone(),
+                focus_after: false
+            }
+            .candidates(),
             Some(cands.as_slice())
         );
     }

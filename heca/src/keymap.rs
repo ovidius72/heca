@@ -3,8 +3,8 @@
 //! Replaces the monolithic `KeyBindings` struct with a clean separation
 //! between key representation (`KeyCombo`) and mode-specific maps.
 
-use std::collections::HashMap;
 use crate::input::WmAction;
+use std::collections::HashMap;
 
 /// Normalized representation of a key press.
 /// Equality and hashing are case-insensitive on the `key` field so that
@@ -89,7 +89,13 @@ impl KeyCombo {
                 }
             }
         }
-        Self { key, ctrl, shift, alt, super_ }
+        Self {
+            key,
+            ctrl,
+            shift,
+            alt,
+            super_,
+        }
     }
 }
 
@@ -126,7 +132,8 @@ impl KeymapRegistry {
     #[allow(dead_code)]
     pub fn rebind(&mut self, mode: &str, old: &KeyCombo, new: KeyCombo) {
         if let Some(map) = self.modes.get_mut(mode)
-            && let Some(action) = map.remove(old) {
+            && let Some(action) = map.remove(old)
+        {
             map.insert(new, action);
         }
     }
@@ -215,9 +222,18 @@ mod tests {
         // Config stores "enter" (lowercased by parse), event sends "Enter".
         let mut reg = KeymapRegistry::new();
         let config_combo = KeyCombo::parse("Enter");
-        let event_combo = KeyCombo { key: "Enter".to_string(), ctrl: false, shift: false, alt: false, super_: false };
+        let event_combo = KeyCombo {
+            key: "Enter".to_string(),
+            ctrl: false,
+            shift: false,
+            alt: false,
+            super_: false,
+        };
         reg.bind("normal", config_combo, WmAction::SplitHorizontal);
-        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SplitHorizontal));
+        assert_eq!(
+            reg.resolve("normal", &event_combo),
+            Some(&WmAction::SplitHorizontal)
+        );
     }
 
     #[test]
@@ -225,8 +241,17 @@ mod tests {
         // Shift+Q produces "Q" but config stores "q".
         let mut reg = KeymapRegistry::new();
         let config_combo = KeyCombo::parse("Shift+q");
-        let event_combo = KeyCombo { key: "Q".to_string(), ctrl: false, shift: true, alt: false, super_: false };
+        let event_combo = KeyCombo {
+            key: "Q".to_string(),
+            ctrl: false,
+            shift: true,
+            alt: false,
+            super_: false,
+        };
         reg.bind("normal", config_combo, WmAction::SwapPane);
-        assert_eq!(reg.resolve("normal", &event_combo), Some(&WmAction::SwapPane));
+        assert_eq!(
+            reg.resolve("normal", &event_combo),
+            Some(&WmAction::SwapPane)
+        );
     }
 }

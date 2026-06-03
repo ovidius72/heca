@@ -29,11 +29,7 @@ pub struct Animation {
 }
 
 impl Animation {
-    pub fn new(
-        start: f64,
-        end: f64,
-        config: AnimationConfig,
-    ) -> Self {
+    pub fn new(start: f64, end: f64, config: AnimationConfig) -> Self {
         Self {
             start,
             end,
@@ -89,7 +85,11 @@ impl Animation {
 #[derive(Debug, Clone)]
 pub enum Animated<T> {
     Static(T),
-    Animating { animation: Animation, from: T, to: T },
+    Animating {
+        animation: Animation,
+        from: T,
+        to: T,
+    },
 }
 
 impl Animated<f64> {
@@ -126,7 +126,11 @@ impl Animated<super::types::Point> {
         use super::types::Point;
         match self {
             Self::Static(v) => *v,
-            Self::Animating { from, to, animation } => {
+            Self::Animating {
+                from,
+                to,
+                animation,
+            } => {
                 let progress = animation.progress();
                 Point::new(
                     from.x + (to.x - from.x) * progress,

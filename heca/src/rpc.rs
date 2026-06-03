@@ -74,12 +74,10 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
 
     macro_rules! expect_arg {
         ($name:literal) => {
-            parts
-                .next()
-                .ok_or_else(|| RpcError::MissingArgument {
-                    cmd: cmd.clone(),
-                    arg: $name.to_string(),
-                })?
+            parts.next().ok_or_else(|| RpcError::MissingArgument {
+                cmd: cmd.clone(),
+                arg: $name.to_string(),
+            })?
         };
     }
 
@@ -164,7 +162,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     return Err(RpcError::ParseInt {
                         cmd: cmd.clone(),
                         value: target_arg.to_string(),
-                    })
+                    });
                 }
             };
             let axis_arg = expect_arg!("axis");
@@ -175,7 +173,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     return Err(RpcError::ParseInt {
                         cmd: cmd.clone(),
                         value: axis_arg.to_string(),
-                    })
+                    });
                 }
             };
             let amount_arg = expect_arg!("amount");
@@ -185,14 +183,21 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                     cmd: cmd.clone(),
                     value: amount_arg.to_string(),
                 })?;
-            Ok(WmAction::Resize { target, axis, amount })
+            Ok(WmAction::Resize {
+                target,
+                axis,
+                amount,
+            })
         }
         "move-pane" => {
             let pane_arg = expect_arg!("pane_id");
             let pane_id = parse_u64!(pane_arg, "pane_id");
             let col_arg = expect_arg!("target_col");
             let target_col = parse_usize!(col_arg, "target_col");
-            Ok(WmAction::Move { pane_id, target_col })
+            Ok(WmAction::Move {
+                pane_id,
+                target_col,
+            })
         }
         "move-pane-to-workspace" => {
             let pane_arg = expect_arg!("pane_id");
@@ -208,7 +213,11 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let ws_idx = parse_usize!(ws_arg, "ws_idx");
             let col_arg = expect_arg!("col_idx");
             let col_idx = parse_usize!(col_arg, "col_idx");
-            Ok(WmAction::MovePaneToColumn { pane_id, ws_idx, col_idx })
+            Ok(WmAction::MovePaneToColumn {
+                pane_id,
+                ws_idx,
+                col_idx,
+            })
         }
         "swap" => {
             let a_arg = expect_arg!("a_id");
@@ -356,7 +365,10 @@ mod tests {
     fn test_move_pane_to_workspace() {
         assert_eq!(
             parse_rpc_command("move-pane-to-workspace 5 1"),
-            Ok(WmAction::MovePaneToWorkspace { pane_id: 5, ws_idx: 1 }),
+            Ok(WmAction::MovePaneToWorkspace {
+                pane_id: 5,
+                ws_idx: 1
+            }),
         );
     }
 
@@ -364,7 +376,11 @@ mod tests {
     fn test_move_pane_to_column() {
         assert_eq!(
             parse_rpc_command("move-pane-to-column 5 0 2"),
-            Ok(WmAction::MovePaneToColumn { pane_id: 5, ws_idx: 0, col_idx: 2 }),
+            Ok(WmAction::MovePaneToColumn {
+                pane_id: 5,
+                ws_idx: 0,
+                col_idx: 2
+            }),
         );
     }
 
@@ -379,10 +395,7 @@ mod tests {
 
     #[test]
     fn test_sidebar_commands() {
-        assert_eq!(
-            parse_rpc_command("sidebar-left"),
-            Ok(WmAction::SidebarLeft)
-        );
+        assert_eq!(parse_rpc_command("sidebar-left"), Ok(WmAction::SidebarLeft));
         assert_eq!(
             parse_rpc_command("sidebar-right"),
             Ok(WmAction::SidebarRight)
@@ -444,10 +457,7 @@ mod tests {
     #[test]
     fn test_empty_input() {
         assert!(
-            matches!(
-                parse_rpc_command(""),
-                Err(RpcError::UnknownCommand(_)),
-            ),
+            matches!(parse_rpc_command(""), Err(RpcError::UnknownCommand(_)),),
             "expected UnknownCommand for empty input"
         );
     }

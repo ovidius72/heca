@@ -8,14 +8,14 @@ use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
 use crate::{
-    collect_all_pane_candidates, destroy_empty_workspace,
-    find_pane_location, focus_pane_by_id, move_pane_to_column, move_pane_to_workspace_column,
-    pane_name, switch_workspace_tracked, sync_focus, update_session_viewport,
+    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, focus_pane_by_id,
+    move_pane_to_column, move_pane_to_workspace_column, pane_name, switch_workspace_tracked,
+    sync_focus, update_session_viewport,
 };
 use heca_core::backend::FakeBackend;
 use heca_core::layout::animation::AnimationConfig;
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane as LayoutPane, PaneId};
 use heca_core::layout::types::Point;
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane as LayoutPane, PaneId};
 
 // ── Navigation ──
 
@@ -81,7 +81,12 @@ pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_focus_toggle_local(state: &mut AppState, _action: &WmAction) {
     let ws_idx = state.session.active_workspace_idx;
-    if let Some(prev_pane) = state.last_visited_pane_per_ws.get(ws_idx).copied().flatten() {
+    if let Some(prev_pane) = state
+        .last_visited_pane_per_ws
+        .get(ws_idx)
+        .copied()
+        .flatten()
+    {
         if Some(prev_pane) != state.focused_pane {
             focus_pane_by_id(state, prev_pane);
         }
@@ -101,12 +106,16 @@ pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
-    let WmAction::FocusPane { pane_id } = action else { return };
+    let WmAction::FocusPane { pane_id } = action else {
+        return;
+    };
     focus_pane_by_id(state, *pane_id);
 }
 
 pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
-    let WmAction::FocusWorkspace { ws_idx } = action else { return };
+    let WmAction::FocusWorkspace { ws_idx } = action else {
+        return;
+    };
     if *ws_idx < state.session.workspaces.len() {
         switch_workspace_tracked(state, *ws_idx);
         sync_focus(state);
@@ -121,7 +130,9 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
     let backend_id = next_id;
     state.session.add_pane(pane, None, true);
-    state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+    state
+        .backends
+        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
     sync_focus(state);
     state.needs_redraw = true;
 }
@@ -136,10 +147,11 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling
-            .add_pane_to_column(col_idx, None, pane, true);
+        ws.scrolling.add_pane_to_column(col_idx, None, pane, true);
     }
-    state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+    state
+        .backends
+        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
     sync_focus(state);
     state.needs_redraw = true;
 }
@@ -290,9 +302,13 @@ pub fn handle_move_pane_right(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_move_column_up(state: &mut AppState, _action: &WmAction) {
     let current_ws = state.session.active_workspace_idx;
-    if current_ws == 0 { return; }
+    if current_ws == 0 {
+        return;
+    }
     let target_ws = current_ws - 1;
-    let col_idx = state.session.active_workspace()
+    let col_idx = state
+        .session
+        .active_workspace()
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     crate::move_column_to_workspace(state, col_idx, target_ws, true);
@@ -300,33 +316,44 @@ pub fn handle_move_column_up(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_move_column_down(state: &mut AppState, _action: &WmAction) {
     let current_ws = state.session.active_workspace_idx;
-    if current_ws >= state.session.workspaces.len().saturating_sub(1) { return; }
+    if current_ws >= state.session.workspaces.len().saturating_sub(1) {
+        return;
+    }
     let target_ws = current_ws + 1;
-    let col_idx = state.session.active_workspace()
+    let col_idx = state
+        .session
+        .active_workspace()
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     crate::move_column_to_workspace(state, col_idx, target_ws, true);
 }
 
 pub fn handle_move_column_to_workspace(state: &mut AppState, action: &WmAction) {
-    let WmAction::MoveColumnToWorkspace { col_idx, ws_idx, focus } = action else { return };
+    let WmAction::MoveColumnToWorkspace {
+        col_idx,
+        ws_idx,
+        focus,
+    } = action
+    else {
+        return;
+    };
     crate::move_column_to_workspace(state, *col_idx, *ws_idx, *focus);
 }
 
 pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
-    let WmAction::Swap { a_id, b_id } = action else { return };
-    if a_id == b_id { return; }
-
-    eprintln!("[swap] handler called: a={} b={}", a_id, b_id);
+    let WmAction::Swap { a_id, b_id } = action else {
+        return;
+    };
+    if a_id == b_id {
+        return;
+    }
 
     // Find both panes' locations.
     let a_loc = find_pane_location(&state.session, *a_id);
     let b_loc = find_pane_location(&state.session, *b_id);
-    eprintln!("[swap] a_loc={:?} b_loc={:?}", a_loc, b_loc);
     let ((aws, acol, api), (bws, bcol, bpi)) = match (a_loc, b_loc) {
         (Some(a), Some(b)) => (a, b),
         _ => {
-            eprintln!("[swap] one or both panes not found; aborting");
             return;
         }
     };
@@ -339,11 +366,13 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
         if acol == bcol {
             // Same column: swap panes in-place (robust & avoids index-shift pitfalls).
             let (first_pi, second_pi) = if api < bpi { (api, bpi) } else { (bpi, api) };
-            eprintln!("[swap] same workspace & same column: col={} first_pi={} second_pi={}", acol, first_pi, second_pi);
             if let Some(ws) = state.session.workspaces.get_mut(aws) {
-                if acol >= ws.scrolling.columns.len() { eprintln!("[swap] column index out of range"); return; }
-                if second_pi >= ws.scrolling.columns[acol].panes.len() || first_pi >= ws.scrolling.columns[acol].panes.len() {
-                    eprintln!("[swap] pane indices out of range for column");
+                if acol >= ws.scrolling.columns.len() {
+                    return;
+                }
+                if second_pi >= ws.scrolling.columns[acol].panes.len()
+                    || first_pi >= ws.scrolling.columns[acol].panes.len()
+                {
                     return;
                 }
                 // Animate vertical motion (approximate) then swap.
@@ -358,22 +387,31 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 col.panes.swap(first_pi, second_pi);
                 col.active_pane_idx = second_pi;
                 col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
-                eprintln!("[swap] swapped panes in column {} at indices {} and {}", acol, first_pi, second_pi);
             }
         } else {
             // Different columns, same workspace: perform reinsert-first to avoid column deletion
             // (which causes a slide animation). We insert placeholders at both target spots,
             // then remove the original panes and replace placeholders with the real panes,
             // animating each pane from its old position to its new position.
-            eprintln!("[swap] same workspace different columns (reinsert-first): acol={} bcol={} (api={},bpi={})", acol, bcol, api, bpi);
 
             let a_pid = *a_id;
             let b_pid = *b_id;
 
             // Capture old positions (immutable borrow) so we can animate from them later.
-            let old_rects = state.session.workspaces.get(aws).map(|ws| ws.scrolling.panes_with_positions()).unwrap_or_default();
-            let old_a_rect = old_rects.iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(a_pid)).map(|(_, r)| *r);
-            let old_b_rect = old_rects.iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(b_pid)).map(|(_, r)| *r);
+            let old_rects = state
+                .session
+                .workspaces
+                .get(aws)
+                .map(|ws| ws.scrolling.panes_with_positions())
+                .unwrap_or_default();
+            let old_a_rect = old_rects
+                .iter()
+                .find(|(pid, _)| *pid == heca_core::layout::PaneId(a_pid))
+                .map(|(_, r)| *r);
+            let old_b_rect = old_rects
+                .iter()
+                .find(|(pid, _)| *pid == heca_core::layout::PaneId(b_pid))
+                .map(|(_, r)| *r);
 
             // Pre-generate placeholder pane ids and new column ids before mutably borrowing the workspace.
             let placeholder_a_pid = state.session.next_id();
@@ -388,7 +426,10 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 // We need to insert placeholders at the TARGET positions: A should land at B's slot,
                 // and B should land at A's slot. This avoids replacing the placeholder with the
                 // same pane and makes the swap effective.
-                let mut inserts = vec![(bcol, bpi, placeholder_a_pid, new_col_for_a), (acol, api, placeholder_b_pid, new_col_for_b)];
+                let mut inserts = vec![
+                    (bcol, bpi, placeholder_a_pid, new_col_for_a),
+                    (acol, api, placeholder_b_pid, new_col_for_b),
+                ];
                 // Insert in descending col index order so earlier inserts don't shift later targets.
                 inserts.sort_by_key(|b| std::cmp::Reverse(b.0));
 
@@ -396,13 +437,20 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                     if col_pos < ws.scrolling.columns.len() {
                         let insert_idx = pane_idx.min(ws.scrolling.columns[col_pos].panes.len());
                         let placeholder = LayoutPane::new(PaneId(ph_pid), pane_name(ph_pid));
-                        ws.scrolling.add_pane_to_column(col_pos, Some(insert_idx), placeholder, true);
-                        eprintln!("[swap] inserted placeholder id={} at col {} idx {} (target)", ph_pid, col_pos, insert_idx);
+                        ws.scrolling.add_pane_to_column(
+                            col_pos,
+                            Some(insert_idx),
+                            placeholder,
+                            true,
+                        );
                     } else {
                         let pos = col_pos.min(ws.scrolling.columns.len());
                         let placeholder = LayoutPane::new(PaneId(ph_pid), pane_name(ph_pid));
-                        ws.scrolling.add_column(Some(pos), Column::new(new_cid, placeholder, ColumnWidth::Proportion(0.5)), true);
-                        eprintln!("[swap] created placeholder column at pos {} with id {:?} (placeholder id={}) (target)", pos, new_cid, ph_pid);
+                        ws.scrolling.add_column(
+                            Some(pos),
+                            Column::new(new_cid, placeholder, ColumnWidth::Proportion(0.5)),
+                            true,
+                        );
                     }
                 }
 
@@ -412,15 +460,23 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 let mut found_b = None;
                 for (ci, col) in ws.scrolling.columns.iter().enumerate() {
                     for (pi, pane) in col.panes.iter().enumerate() {
-                        if pane.id == heca_core::layout::PaneId(a_pid) { found_a = Some((ci, pi)); }
-                        if pane.id == heca_core::layout::PaneId(b_pid) { found_b = Some((ci, pi)); }
+                        if pane.id == heca_core::layout::PaneId(a_pid) {
+                            found_a = Some((ci, pi));
+                        }
+                        if pane.id == heca_core::layout::PaneId(b_pid) {
+                            found_b = Some((ci, pi));
+                        }
                     }
                 }
 
                 // Decide removal order by column index (descending)
                 let mut removes = vec![];
-                if let Some((ci, pi)) = found_a { removes.push((ci, pi, a_pid)); }
-                if let Some((ci, pi)) = found_b { removes.push((ci, pi, b_pid)); }
+                if let Some((ci, pi)) = found_a {
+                    removes.push((ci, pi, a_pid));
+                }
+                if let Some((ci, pi)) = found_b {
+                    removes.push((ci, pi, b_pid));
+                }
                 removes.sort_by_key(|y| std::cmp::Reverse(y.0));
 
                 let mut removed_a: Option<LayoutPane> = None;
@@ -428,11 +484,14 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
 
                 for (ci, pi, pid) in removes {
                     if ci < ws.scrolling.columns.len()
-                        && let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                            eprintln!("[swap] removed original pane id={} from col {} idx {}", pid, ci, pi);
-                            if pid == a_pid { removed_a = Some(removed); }
-                            else if pid == b_pid { removed_b = Some(removed); }
+                        && let Some(removed) = ws.scrolling.remove_pane(ci, pi)
+                    {
+                        if pid == a_pid {
+                            removed_a = Some(removed);
+                        } else if pid == b_pid {
+                            removed_b = Some(removed);
                         }
+                    }
                 }
 
                 // Now replace placeholders with the removed panes and animate from old positions.
@@ -442,39 +501,66 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
                 let max_dx = vw * 0.9;
                 let max_dy = vh * 0.9;
 
-                let replace_placeholder = |ws: &mut heca_core::layout::workspace::Workspace, ph_id: u64, new_pane: LayoutPane, old_rect_opt: Option<heca_core::layout::types::Rectangle>| {
+                let replace_placeholder = |ws: &mut heca_core::layout::workspace::Workspace,
+                                           ph_id: u64,
+                                           new_pane: LayoutPane,
+                                           old_rect_opt: Option<
+                    heca_core::layout::types::Rectangle,
+                >| {
                     let mut found = None;
                     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
                         for (pi, pane) in col.panes.iter().enumerate() {
-                            if pane.id.0 == ph_id { found = Some((ci, pi)); break; }
+                            if pane.id.0 == ph_id {
+                                found = Some((ci, pi));
+                                break;
+                            }
                         }
-                        if found.is_some() { break; }
+                        if found.is_some() {
+                            break;
+                        }
                     }
                     if let Some((ci, pi)) = found {
                         ws.scrolling.columns[ci].panes[pi] = new_pane;
                         ws.scrolling.columns[ci].active_pane_idx = pi;
-                        ws.scrolling.columns[ci].compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+                        ws.scrolling.columns[ci].compute_pane_sizes(
+                            ws.scrolling.working_area.size.h,
+                            ws.scrolling.options.gaps,
+                        );
                         ws.scrolling.update_all_column_widths();
 
                         if let Some(old_rect) = old_rect_opt
-                            && let Some((_, new_rect)) = ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == ws.scrolling.columns[ci].panes[pi].id) {
-                                let mut dx = old_rect.loc.x - new_rect.loc.x;
-                                let mut dy = old_rect.loc.y - new_rect.loc.y;
-                                // Clamp extreme values so panes don't dash across the whole window when
-                                // swapping between workspaces (coordinate frames may differ).
-                                if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
-                                if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
-                                ws.scrolling.columns[ci].panes[pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
-                                eprintln!("[swap] animated pane id={} from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", ws.scrolling.columns[ci].panes[pi].id.0, old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
+                            && let Some((_, new_rect)) = ws
+                                .scrolling
+                                .panes_with_positions()
+                                .into_iter()
+                                .find(|(pid, _)| *pid == ws.scrolling.columns[ci].panes[pi].id)
+                        {
+                            let mut dx = old_rect.loc.x - new_rect.loc.x;
+                            let mut dy = old_rect.loc.y - new_rect.loc.y;
+                            // Clamp extreme values so panes don't dash across the whole window when
+                            // swapping between workspaces (coordinate frames may differ).
+                            if dx > max_dx {
+                                dx = max_dx;
+                            } else if dx < -max_dx {
+                                dx = -max_dx;
                             }
-                        eprintln!("[swap] replaced placeholder {} at ws col {} idx {}", ph_id, ci, pi);
-                    } else {
-                        eprintln!("[swap] placeholder {} not found for replacement", ph_id);
+                            if dy > max_dy {
+                                dy = max_dy;
+                            } else if dy < -max_dy {
+                                dy = -max_dy;
+                            }
+                            ws.scrolling.columns[ci].panes[pi]
+                                .animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+                        }
                     }
                 };
 
-                if let Some(a_pane) = removed_a { replace_placeholder(ws, placeholder_a_pid, a_pane, old_a_rect); }
-                if let Some(b_pane) = removed_b { replace_placeholder(ws, placeholder_b_pid, b_pane, old_b_rect); }
+                if let Some(a_pane) = removed_a {
+                    replace_placeholder(ws, placeholder_a_pid, a_pane, old_a_rect);
+                }
+                if let Some(b_pane) = removed_b {
+                    replace_placeholder(ws, placeholder_b_pid, b_pane, old_b_rect);
+                }
             }
         }
     } else {
@@ -488,23 +574,53 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
         // New approach: remove both panes by ID (searching for them), then insert each at
         // the other's target position. If removing a pane deletes its column (it was the only
         // pane), we recreate the column for the incoming pane.
-        eprintln!("[swap] cross-workspace (remove-then-insert): A ws={} col={} idx={}  B ws={} col={} idx={}", aws, acol, api, bws, bcol, bpi);
 
         // Capture working area info for column recreation.
-        let a_wa = state.session.workspaces.get(aws).map(|ws| ws.scrolling.working_area);
-        let b_wa = state.session.workspaces.get(bws).map(|ws| ws.scrolling.working_area);
-        let a_gaps = state.session.workspaces.get(aws).map(|ws| ws.scrolling.options.gaps).unwrap_or(0.0);
-        let b_gaps = state.session.workspaces.get(bws).map(|ws| ws.scrolling.options.gaps).unwrap_or(0.0);
+        let a_wa = state
+            .session
+            .workspaces
+            .get(aws)
+            .map(|ws| ws.scrolling.working_area);
+        let b_wa = state
+            .session
+            .workspaces
+            .get(bws)
+            .map(|ws| ws.scrolling.working_area);
+        let a_gaps = state
+            .session
+            .workspaces
+            .get(aws)
+            .map(|ws| ws.scrolling.options.gaps)
+            .unwrap_or(0.0);
+        let b_gaps = state
+            .session
+            .workspaces
+            .get(bws)
+            .map(|ws| ws.scrolling.options.gaps)
+            .unwrap_or(0.0);
 
         // Capture old pane render positions (used to compute animation offsets).
-        let old_a_rect = state.session.workspaces.get(aws)
-            .and_then(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id)).map(|(_, r)| r));
-        let old_b_rect = state.session.workspaces.get(bws)
-            .and_then(|ws| ws.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id)).map(|(_, r)| r));
+        let old_a_rect = state.session.workspaces.get(aws).and_then(|ws| {
+            ws.scrolling
+                .panes_with_positions()
+                .into_iter()
+                .find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id))
+                .map(|(_, r)| r)
+        });
+        let old_b_rect = state.session.workspaces.get(bws).and_then(|ws| {
+            ws.scrolling
+                .panes_with_positions()
+                .into_iter()
+                .find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id))
+                .map(|(_, r)| r)
+        });
 
         // Helper: remove pane by ID from a workspace. Returns (removed_pane, was_only_pane_in_column, column_id).
         // If the column was deleted (pane was alone), was_only_pane_in_column is true.
-        let remove_pane_by_id = |session: &mut heca_core::layout::session::Session, ws_idx: usize, pane_id_val: u64| -> Option<(LayoutPane, bool, ColumnId)> {
+        let remove_pane_by_id = |session: &mut heca_core::layout::session::Session,
+                                 ws_idx: usize,
+                                 pane_id_val: u64|
+         -> Option<(LayoutPane, bool, ColumnId)> {
             let ws = session.workspaces.get_mut(ws_idx)?;
             for (ci, col) in ws.scrolling.columns.iter().enumerate() {
                 if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id_val) {
@@ -518,16 +634,22 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
         };
 
         // Step 1: Remove A from its workspace.
-        let (removed_a, a_was_only, a_original_col_id) = match remove_pane_by_id(&mut state.session, aws, *a_id) {
-            Some(r) => { eprintln!("[swap] removed A (id={}) from ws={}, was_only={}", *a_id, aws, r.1); r }
-            None => { eprintln!("[swap] failed to remove pane A from ws={}", aws); return; }
-        };
+        let (removed_a, a_was_only, a_original_col_id) =
+            match remove_pane_by_id(&mut state.session, aws, *a_id) {
+                Some(r) => r,
+                None => {
+                    return;
+                }
+            };
 
         // Step 2: Remove B from its workspace.
-        let (removed_b, b_was_only, b_original_col_id) = match remove_pane_by_id(&mut state.session, bws, *b_id) {
-            Some(r) => { eprintln!("[swap] removed B (id={}) from ws={}, was_only={}", *b_id, bws, r.1); r }
-            None => { eprintln!("[swap] failed to remove pane B from ws={}", bws); return; }
-        };
+        let (removed_b, b_was_only, b_original_col_id) =
+            match remove_pane_by_id(&mut state.session, bws, *b_id) {
+                Some(r) => r,
+                None => {
+                    return;
+                }
+            };
 
         // Step 3: Insert A into B's old position in B's workspace.
         // If B's column was deleted (was_only), recreate it.
@@ -540,158 +662,206 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
             if b_was_only {
                 // B's column was deleted when B was removed. Recreate it with A.
                 let insert_pos = bcol.min(ws_b.scrolling.columns.len());
-                let mut new_col = Column::new(b_original_col_id, removed_a, ColumnWidth::Proportion(0.5));
-                if let Some(wa) = b_wa { new_col.compute_pane_sizes(wa.size.h, b_gaps); }
+                let mut new_col =
+                    Column::new(b_original_col_id, removed_a, ColumnWidth::Proportion(0.5));
+                if let Some(wa) = b_wa {
+                    new_col.compute_pane_sizes(wa.size.h, b_gaps);
+                }
                 ws_b.scrolling.add_column(Some(insert_pos), new_col, true);
-                eprintln!("[swap] recreated column for A in ws={} at pos={} (col_id={:?})", bws, insert_pos, b_original_col_id);
             } else {
                 // B's column still exists. Find it by ID and insert A at the same index.
-                let target_ci = ws_b.scrolling.columns.iter().position(|c| c.id == b_original_col_id).unwrap_or(bcol.min(ws_b.scrolling.columns.len().saturating_sub(1)));
+                let target_ci = ws_b
+                    .scrolling
+                    .columns
+                    .iter()
+                    .position(|c| c.id == b_original_col_id)
+                    .unwrap_or(bcol.min(ws_b.scrolling.columns.len().saturating_sub(1)));
                 let insert_idx = bpi.min(ws_b.scrolling.columns[target_ci].panes.len());
-                ws_b.scrolling.add_pane_to_column(target_ci, Some(insert_idx), removed_a, true);
-                eprintln!("[swap] inserted A into ws={} col={} at idx={}", bws, target_ci, insert_idx);
+                ws_b.scrolling
+                    .add_pane_to_column(target_ci, Some(insert_idx), removed_a, true);
             }
         }
 
         // Animate A from old position to new (separate borrow scope).
         if let Some(old_rect) = old_a_rect
-            && let Some(ws_b) = state.session.workspaces.get_mut(bws) {
-                // Find A's new position in its workspace.
-                let mut found = None;
-                for (ci, col) in ws_b.scrolling.columns.iter().enumerate() {
-                    for (pi, p) in col.panes.iter().enumerate() {
-                        if p.id.0 == *a_id { found = Some((ci, pi)); break; }
+            && let Some(ws_b) = state.session.workspaces.get_mut(bws)
+        {
+            // Find A's new position in its workspace.
+            let mut found = None;
+            for (ci, col) in ws_b.scrolling.columns.iter().enumerate() {
+                for (pi, p) in col.panes.iter().enumerate() {
+                    if p.id.0 == *a_id {
+                        found = Some((ci, pi));
+                        break;
                     }
-                    if found.is_some() { break; }
                 }
-                if let Some((new_ci, new_pi)) = found
-                    && let Some((_, new_rect)) = ws_b.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id)) {
-                        let mut dx = old_rect.loc.x - new_rect.loc.x;
-                        let mut dy = old_rect.loc.y - new_rect.loc.y;
-                        if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
-                        if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
-                        ws_b.scrolling.columns[new_ci].panes[new_pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
-                        eprintln!("[swap] animated A from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
-                    }
+                if found.is_some() {
+                    break;
+                }
             }
+            if let Some((new_ci, new_pi)) = found
+                && let Some((_, new_rect)) = ws_b
+                    .scrolling
+                    .panes_with_positions()
+                    .into_iter()
+                    .find(|(pid, _)| *pid == heca_core::layout::PaneId(*a_id))
+            {
+                let mut dx = old_rect.loc.x - new_rect.loc.x;
+                let mut dy = old_rect.loc.y - new_rect.loc.y;
+                if dx > max_dx {
+                    dx = max_dx;
+                } else if dx < -max_dx {
+                    dx = -max_dx;
+                }
+                if dy > max_dy {
+                    dy = max_dy;
+                } else if dy < -max_dy {
+                    dy = -max_dy;
+                }
+                ws_b.scrolling.columns[new_ci].panes[new_pi]
+                    .animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+            }
+        }
 
         // Step 4: Insert B into A's old position in A's workspace.
         if let Some(ws_a) = state.session.workspaces.get_mut(aws) {
             if a_was_only {
                 // A's column was deleted when A was removed. Recreate it with B.
                 let insert_pos = acol.min(ws_a.scrolling.columns.len());
-                let mut new_col = Column::new(a_original_col_id, removed_b, ColumnWidth::Proportion(0.5));
-                if let Some(wa) = a_wa { new_col.compute_pane_sizes(wa.size.h, a_gaps); }
+                let mut new_col =
+                    Column::new(a_original_col_id, removed_b, ColumnWidth::Proportion(0.5));
+                if let Some(wa) = a_wa {
+                    new_col.compute_pane_sizes(wa.size.h, a_gaps);
+                }
                 ws_a.scrolling.add_column(Some(insert_pos), new_col, true);
-                eprintln!("[swap] recreated column for B in ws={} at pos={} (col_id={:?})", aws, insert_pos, a_original_col_id);
             } else {
                 // A's column still exists. Find it by ID and insert B at the same index.
-                let target_ci = ws_a.scrolling.columns.iter().position(|c| c.id == a_original_col_id).unwrap_or(acol.min(ws_a.scrolling.columns.len().saturating_sub(1)));
+                let target_ci = ws_a
+                    .scrolling
+                    .columns
+                    .iter()
+                    .position(|c| c.id == a_original_col_id)
+                    .unwrap_or(acol.min(ws_a.scrolling.columns.len().saturating_sub(1)));
                 let insert_idx = api.min(ws_a.scrolling.columns[target_ci].panes.len());
-                ws_a.scrolling.add_pane_to_column(target_ci, Some(insert_idx), removed_b, true);
-                eprintln!("[swap] inserted B into ws={} col={} at idx={}", aws, target_ci, insert_idx);
+                ws_a.scrolling
+                    .add_pane_to_column(target_ci, Some(insert_idx), removed_b, true);
             }
         }
 
         // Animate B from old position to new (separate borrow scope).
         if let Some(old_rect) = old_b_rect
-            && let Some(ws_a) = state.session.workspaces.get_mut(aws) {
-                let mut found = None;
-                for (ci, col) in ws_a.scrolling.columns.iter().enumerate() {
-                    for (pi, p) in col.panes.iter().enumerate() {
-                        if p.id.0 == *b_id { found = Some((ci, pi)); break; }
+            && let Some(ws_a) = state.session.workspaces.get_mut(aws)
+        {
+            let mut found = None;
+            for (ci, col) in ws_a.scrolling.columns.iter().enumerate() {
+                for (pi, p) in col.panes.iter().enumerate() {
+                    if p.id.0 == *b_id {
+                        found = Some((ci, pi));
+                        break;
                     }
-                    if found.is_some() { break; }
                 }
-                if let Some((new_ci, new_pi)) = found
-                    && let Some((_, new_rect)) = ws_a.scrolling.panes_with_positions().into_iter().find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id)) {
-                        let mut dx = old_rect.loc.x - new_rect.loc.x;
-                        let mut dy = old_rect.loc.y - new_rect.loc.y;
-                        if dx > max_dx { dx = max_dx; } else if dx < -max_dx { dx = -max_dx; }
-                        if dy > max_dy { dy = max_dy; } else if dy < -max_dy { dy = -max_dy; }
-                        ws_a.scrolling.columns[new_ci].panes[new_pi].animate_move_from(Point::new(dx, dy), AnimationConfig::default());
-                        eprintln!("[swap] animated B from ({:.1},{:.1}) to ({:.1},{:.1}) offset=({:.1},{:.1})", old_rect.loc.x, old_rect.loc.y, new_rect.loc.x, new_rect.loc.y, dx, dy);
-                    }
+                if found.is_some() {
+                    break;
+                }
             }
+            if let Some((new_ci, new_pi)) = found
+                && let Some((_, new_rect)) = ws_a
+                    .scrolling
+                    .panes_with_positions()
+                    .into_iter()
+                    .find(|(pid, _)| *pid == heca_core::layout::PaneId(*b_id))
+            {
+                let mut dx = old_rect.loc.x - new_rect.loc.x;
+                let mut dy = old_rect.loc.y - new_rect.loc.y;
+                if dx > max_dx {
+                    dx = max_dx;
+                } else if dx < -max_dx {
+                    dx = -max_dx;
+                }
+                if dy > max_dy {
+                    dy = max_dy;
+                } else if dy < -max_dy {
+                    dy = -max_dy;
+                }
+                ws_a.scrolling.columns[new_ci].panes[new_pi]
+                    .animate_move_from(Point::new(dx, dy), AnimationConfig::default());
+            }
+        }
     }
-
 
     // Update AppState.focused_pane and sidebar after the swap, then log final locations.
     sync_focus(state);
-    eprintln!("[swap] final locations: a_loc={:?} b_loc={:?}", find_pane_location(&state.session, *a_id), find_pane_location(&state.session, *b_id));
     state.needs_redraw = true;
 }
 
 pub fn handle_move_param(state: &mut AppState, action: &WmAction) {
-    let WmAction::Move { pane_id, target_col } = action else { return };
-    eprintln!("[move] handler called: pane={} target_col={}", pane_id, target_col);
+    let WmAction::Move {
+        pane_id,
+        target_col,
+    } = action
+    else {
+        return;
+    };
     if let Some((ws_idx, col_idx, _)) = find_pane_location(&state.session, *pane_id) {
-        eprintln!("[move] found pane at ws={} col_idx={}", ws_idx, col_idx);
         // Ensure the source workspace is active before calling move_pane_to_column,
         // which operates on the active workspace.
         if state.session.active_workspace_idx != ws_idx {
-            eprintln!("[move] switching active workspace from {} to {}", state.session.active_workspace_idx, ws_idx);
             switch_workspace_tracked(state, ws_idx);
         }
-        eprintln!("[move] calling move_pane_to_column pane={} src_col={} dst_col={}", pane_id, col_idx, target_col);
         move_pane_to_column(state, *pane_id, col_idx, *target_col);
-        eprintln!("[move] move_pane_to_column completed for pane={}", pane_id);
-    } else {
-        eprintln!("[move] pane not found: {}", pane_id);
     }
     state.needs_redraw = true;
 }
 
 pub fn handle_move_pane_to_workspace(state: &mut AppState, action: &WmAction) {
-    let WmAction::MovePaneToWorkspace { pane_id, ws_idx } = action else { return };
-    eprintln!("[move-ws] handler called: pane={} target_ws={}", pane_id, ws_idx);
+    let WmAction::MovePaneToWorkspace { pane_id, ws_idx } = action else {
+        return;
+    };
     if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id)
         && current_ws != *ws_idx
     {
-        eprintln!("[move-ws] found pane at ws={} col={}", current_ws, current_col);
         if state.session.active_workspace_idx != current_ws {
-            eprintln!("[move-ws] switching active workspace from {} to {}", state.session.active_workspace_idx, current_ws);
             switch_workspace_tracked(state, current_ws);
         }
-        eprintln!("[move-ws] calling move_pane_to_workspace_column pane={} target_ws={} target_col={}", pane_id, ws_idx, current_col);
         move_pane_to_workspace_column(state, *pane_id, *ws_idx, current_col);
-        eprintln!("[move-ws] move_pane_to_workspace_column completed for pane={}", pane_id);
-    } else {
-        eprintln!("[move-ws] pane not found or already in target workspace: pane={} target_ws={}", pane_id, ws_idx);
     }
     state.needs_redraw = true;
 }
 
 pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
-    let WmAction::MovePaneToColumn { pane_id, ws_idx, col_idx } = action else { return };
-    eprintln!("[move-col] handler called: pane={} target_ws={} target_col={}", pane_id, ws_idx, col_idx);
+    let WmAction::MovePaneToColumn {
+        pane_id,
+        ws_idx,
+        col_idx,
+    } = action
+    else {
+        return;
+    };
     if let Some((current_ws, current_col, _)) = find_pane_location(&state.session, *pane_id) {
-        eprintln!("[move-col] found pane at ws={} col={}", current_ws, current_col);
         if current_ws == *ws_idx {
             if state.session.active_workspace_idx != current_ws {
-                eprintln!("[move-col] switching active workspace from {} to {}", state.session.active_workspace_idx, current_ws);
                 switch_workspace_tracked(state, current_ws);
             }
-            eprintln!("[move-col] calling move_pane_to_column pane={} src_col={} dst_col={}", pane_id, current_col, col_idx);
             move_pane_to_column(state, *pane_id, current_col, *col_idx);
-            eprintln!("[move-col] move_pane_to_column completed for pane={}", pane_id);
         } else {
             if state.session.active_workspace_idx != current_ws {
-                eprintln!("[move-col] switching active workspace from {} to {}", state.session.active_workspace_idx, current_ws);
                 switch_workspace_tracked(state, current_ws);
             }
-            eprintln!("[move-col] calling move_pane_to_workspace_column pane={} target_ws={} target_col={}", pane_id, ws_idx, col_idx);
             move_pane_to_workspace_column(state, *pane_id, *ws_idx, *col_idx);
-            eprintln!("[move-col] move_pane_to_workspace_column completed for pane={}", pane_id);
         }
-    } else {
-        eprintln!("[move-col] pane not found: {}", pane_id);
     }
     state.needs_redraw = true;
 }
 
 pub fn handle_resize(state: &mut AppState, action: &WmAction) {
-    let WmAction::Resize { target, axis, amount } = action else { return };
+    let WmAction::Resize {
+        target,
+        axis,
+        amount,
+    } = action
+    else {
+        return;
+    };
     if let Some(ws) = state.session.active_workspace_mut() {
         match (target, axis) {
             (crate::input::ResizeTarget::Column, crate::input::ResizeAxis::X) => {
@@ -712,7 +882,14 @@ pub fn handle_resize(state: &mut AppState, action: &WmAction) {
 }
 
 pub fn handle_resize_to(state: &mut AppState, action: &WmAction) {
-    let WmAction::ResizeTo { target, width, height } = action else { return };
+    let WmAction::ResizeTo {
+        target,
+        width,
+        height,
+    } = action
+    else {
+        return;
+    };
     if let Some(ws) = state.session.active_workspace_mut() {
         match target {
             crate::input::ResizeTarget::Column => {
@@ -747,16 +924,23 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
         let is_floating = ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id);
 
         if is_floating {
-            if let Some(idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
+            if let Some(idx) = ws
+                .floating_panes
+                .iter()
+                .position(|f| f.pane.id.0 == pane_id)
+            {
                 let float = ws.floating_panes.remove(idx);
                 let orig_col = float.original_column_idx;
                 let orig_pane = float.original_pane_idx;
+                ws.deactivate_floating_panes();
                 if let Some(col_idx) = orig_col {
                     if col_idx < ws.scrolling.columns.len() {
                         let target_idx = orig_pane
                             .unwrap_or(0)
                             .min(ws.scrolling.columns[col_idx].panes.len());
-                        ws.scrolling.columns[col_idx].panes.insert(target_idx, float.pane);
+                        ws.scrolling.columns[col_idx]
+                            .panes
+                            .insert(target_idx, float.pane);
                         ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
                         ws.scrolling.active_column_idx = col_idx;
                     } else {
@@ -773,11 +957,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                 } else {
                     ws.scrolling.add_column(
                         None,
-                        Column::new(
-                            ColumnId(pane_id),
-                            float.pane,
-                            ColumnWidth::Proportion(0.5),
-                        ),
+                        Column::new(ColumnId(pane_id), float.pane, ColumnWidth::Proportion(0.5)),
                         true,
                     );
                 }
@@ -799,18 +979,20 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
             if let Some((col_idx, pane_idx)) = found
                 && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
             {
-                let fw = wa.size.w * 0.75;
-                let fh = wa.size.h * 0.75;
+                let fw = wa.size.w * 0.95;
+                let fh = wa.size.h * 0.95;
                 let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
                 let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
-                ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-                    pane: removed,
-                    position: heca_core::layout::types::Point::new(fx, fy),
-                    size: heca_core::layout::types::Size::new(fw, fh),
-                    is_active: true,
-                    original_column_idx: Some(col_idx),
-                    original_pane_idx: Some(pane_idx),
-                });
+                ws.deactivate_floating_panes();
+                ws.floating_panes
+                    .push(heca_core::layout::workspace::FloatingPane {
+                        pane: removed,
+                        position: heca_core::layout::types::Point::new(fx, fy),
+                        size: heca_core::layout::types::Size::new(fw, fh),
+                        is_active: true,
+                        original_column_idx: Some(col_idx),
+                        original_pane_idx: Some(pane_idx),
+                    });
                 ws.floating_is_active = true;
             }
         }
@@ -847,7 +1029,9 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         let next_id = state.session.next_id();
         let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
         state.session.add_pane(pane, None, true);
-        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        state
+            .backends
+            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
         sync_focus(state);
     } else {
         sync_focus(state);
@@ -866,7 +1050,10 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap { candidates, focus_after: false };
+        state.input_mode = InputMode::PaneSwap {
+            candidates,
+            focus_after: false,
+        };
         state.needs_redraw = true;
     }
 }
@@ -874,7 +1061,10 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::PaneSwap { candidates, focus_after: true };
+        state.input_mode = InputMode::PaneSwap {
+            candidates,
+            focus_after: true,
+        };
         state.needs_redraw = true;
     }
 }
@@ -896,7 +1086,16 @@ pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
-    let WmAction::FloatAt { pane_id, x, y, width, height } = action else { return };
+    let WmAction::FloatAt {
+        pane_id,
+        x,
+        y,
+        width,
+        height,
+    } = action
+    else {
+        return;
+    };
     if let Some(ws) = state.session.active_workspace_mut() {
         let mut found = None;
         for (ci, col) in ws.scrolling.columns.iter().enumerate() {
@@ -913,14 +1112,16 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
         if let Some((col_idx, pane_idx)) = found
             && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
         {
-            ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-                pane: removed,
-                position: heca_core::layout::types::Point::new(*x, *y),
-                size: heca_core::layout::types::Size::new(*width, *height),
-                is_active: true,
-                original_column_idx: Some(col_idx),
-                original_pane_idx: Some(pane_idx),
-            });
+            ws.deactivate_floating_panes();
+            ws.floating_panes
+                .push(heca_core::layout::workspace::FloatingPane {
+                    pane: removed,
+                    position: heca_core::layout::types::Point::new(*x, *y),
+                    size: heca_core::layout::types::Size::new(*width, *height),
+                    is_active: true,
+                    original_column_idx: Some(col_idx),
+                    original_pane_idx: Some(pane_idx),
+                });
             ws.floating_is_active = true;
         }
     }
@@ -929,7 +1130,9 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
 }
 
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
-    let WmAction::ClosePaneById { pane_id } = action else { return };
+    let WmAction::ClosePaneById { pane_id } = action else {
+        return;
+    };
     if let Some(ws) = state.session.active_workspace_mut() {
         let mut found = None;
         for (ci, col) in ws.scrolling.columns.iter().enumerate() {
@@ -960,7 +1163,9 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         let next_id = state.session.next_id();
         let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
         state.session.add_pane(pane, None, true);
-        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        state
+            .backends
+            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
         sync_focus(state);
     } else {
         sync_focus(state);
@@ -969,7 +1174,9 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
 }
 
 pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
-    let WmAction::RenameTarget { pane_id, name } = action else { return };
+    let WmAction::RenameTarget { pane_id, name } = action else {
+        return;
+    };
     if let Some(ws) = state.session.active_workspace_mut()
         && let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(*pane_id))
     {
@@ -988,7 +1195,9 @@ pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
 /// Add a pane to a specific column in a specific workspace.
 /// Switches to the target workspace first.
 pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
-    let WmAction::AddPaneToColumn { ws_idx, col_idx } = action else { return };
+    let WmAction::AddPaneToColumn { ws_idx, col_idx } = action else {
+        return;
+    };
     let target_ws = *ws_idx;
     if target_ws >= state.session.workspaces.len() {
         return;
@@ -1003,16 +1212,21 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
     let col = *col_idx;
     if let Some(ws) = state.session.active_workspace_mut() {
         let capped_col = col.min(ws.scrolling.columns.len().saturating_sub(1));
-        ws.scrolling.add_pane_to_column(capped_col, None, pane, true);
+        ws.scrolling
+            .add_pane_to_column(capped_col, None, pane, true);
     }
-    state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+    state
+        .backends
+        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
     sync_focus(state);
     state.needs_redraw = true;
 }
 
 /// Delete a column and all its panes (destructive).
 pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
-    let WmAction::DeleteColumn { ws_idx, col_idx } = action else { return };
+    let WmAction::DeleteColumn { ws_idx, col_idx } = action else {
+        return;
+    };
     let target_ws = *ws_idx;
     if target_ws >= state.session.workspaces.len() {
         return;
@@ -1044,7 +1258,9 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
 /// Delete a workspace and all its columns/panes (destructive).
 /// The last workspace cannot be deleted.
 pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
-    let WmAction::DeleteWorkspace { ws_idx } = action else { return };
+    let WmAction::DeleteWorkspace { ws_idx } = action else {
+        return;
+    };
     let target_ws = *ws_idx;
     if target_ws >= state.session.workspaces.len() || state.session.workspaces.len() <= 1 {
         return;
@@ -1114,7 +1330,13 @@ pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
 
 /// Move a pane from wherever it is to the bottom of the active column.
 pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
-    let WmAction::TakePane { pane_id, focus_after } = action else { return };
+    let WmAction::TakePane {
+        pane_id,
+        focus_after,
+    } = action
+    else {
+        return;
+    };
     let target = *pane_id;
     let should_focus = *focus_after;
 
@@ -1122,7 +1344,11 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
     if let Some(ws) = state.session.active_workspace() {
         let active_col = ws.scrolling.active_column_idx;
         if active_col < ws.scrolling.columns.len()
-            && ws.scrolling.columns[active_col].panes.last().map(|p| p.id.0) == Some(target)
+            && ws.scrolling.columns[active_col]
+                .panes
+                .last()
+                .map(|p| p.id.0)
+                == Some(target)
         {
             return;
         }
@@ -1131,9 +1357,12 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
     let active_ws_idx = state.session.active_workspace_idx;
 
     // 2. Try to find and remove from scrolling columns.
-    let removed = crate::find_pane_location(&state.session, target)
-        .and_then(|(src_ws, src_col, src_idx)| {
-            state.session.workspaces.get_mut(src_ws)
+    let removed =
+        crate::find_pane_location(&state.session, target).and_then(|(src_ws, src_col, src_idx)| {
+            state
+                .session
+                .workspaces
+                .get_mut(src_ws)
                 .and_then(|ws| {
                     if src_col < ws.scrolling.columns.len() {
                         ws.scrolling.remove_pane(src_col, src_idx)
@@ -1152,6 +1381,8 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
             for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
                 if let Some(pos) = ws.floating_panes.iter().position(|f| f.pane.id.0 == target) {
                     let fp = ws.floating_panes.remove(pos);
+                    ws.deactivate_floating_panes();
+                    ws.floating_is_active = false;
                     found = Some((ws_idx, fp.pane));
                     break;
                 }
@@ -1164,14 +1395,17 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
     };
 
     // 4. Add to active workspace's active column at the bottom.
-    let active_col = state.session.active_workspace()
+    let active_col = state
+        .session
+        .active_workspace()
         .map(|ws| ws.scrolling.active_column_idx)
         .unwrap_or(0);
     // Need next_id for potential new column; grab before mutable borrow.
     let new_col_id = ColumnId(state.session.next_id());
     if let Some(ws) = state.session.active_workspace_mut() {
         if active_col < ws.scrolling.columns.len() {
-            ws.scrolling.add_pane_to_column(active_col, None, pane, should_focus);
+            ws.scrolling
+                .add_pane_to_column(active_col, None, pane, should_focus);
         } else if ws.scrolling.columns.is_empty() {
             // No columns at all — create one.
             let col = Column::new(new_col_id, pane, ColumnWidth::Proportion(0.85));
@@ -1179,7 +1413,8 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
         } else {
             // Fallback: add to last column.
             let last = ws.scrolling.columns.len() - 1;
-            ws.scrolling.add_pane_to_column(last, None, pane, should_focus);
+            ws.scrolling
+                .add_pane_to_column(last, None, pane, should_focus);
         }
     }
 
@@ -1214,7 +1449,9 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
     state.session.add_pane(pane, None, true);
-    state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+    state
+        .backends
+        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
@@ -1314,6 +1551,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 }
                 // Stay in sidebar mode; only Enter/Esc exit
             }
+            Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             Some(sidebar::SidebarItem::Workspace { .. }) => {
                 let ws_idx = state
                     .sidebar_tree
@@ -1325,7 +1563,9 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 let next_id = state.session.next_id();
                 let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
                 state.session.add_pane(pane, None, true);
-                state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+                state
+                    .backends
+                    .insert(next_id, Box::new(FakeBackend::new(80, 24)));
                 sync_focus(state);
                 // Stay in sidebar mode; only Enter/Esc exit
             }
@@ -1356,6 +1596,7 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
                 }
                 state.input_mode = InputMode::Normal;
             }
+            Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
                 state.sidebar_tree.toggle_expand();
             }
@@ -1367,20 +1608,23 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
 // ── System ──
 
 pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
-    eprintln!("Command palette triggered (not yet implemented)");
     state.needs_redraw = true;
 }
 
 // ── External commands ──
 
 pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
-    let WmAction::SpawnCommand { command } = action else { return };
+    let WmAction::SpawnCommand { command } = action else {
+        return;
+    };
     // Create a new pane with the command as its title.
     // In the future this will spawn a real PTY via portable-pty.
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), command.clone());
     state.session.add_pane(pane, None, true);
-    state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
+    state
+        .backends
+        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
     sync_focus(state);
     state.needs_redraw = true;
 }
@@ -1388,7 +1632,9 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
 // ── Mode ──
 
 pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
-    let WmAction::EnterMode { name } = action else { return };
+    let WmAction::EnterMode { name } = action else {
+        return;
+    };
     state.input_mode = InputMode::Mode { name: name.clone() };
     state.needs_redraw = true;
 }
@@ -1396,6 +1642,5 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
 // ── Config ──
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
-    eprintln!("[config] reload requested");
     state.pending_reload = true;
 }

@@ -26,7 +26,12 @@ const ANSI_COLORS: [[u8; 3]; 16] = [
 
 fn ansi_to_rgba(idx: u8) -> [f32; 4] {
     let c = ANSI_COLORS[(idx % 16) as usize];
-    [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, 1.0]
+    [
+        c[0] as f32 / 255.0,
+        c[1] as f32 / 255.0,
+        c[2] as f32 / 255.0,
+        1.0,
+    ]
 }
 
 fn default_fg() -> [f32; 4] {
@@ -89,7 +94,11 @@ impl Grid {
 
     fn resize(&mut self, width: usize, height: usize) {
         let mut new_cells = vec![vec![Cell::default(); width]; height];
-        for (row, new_row) in new_cells.iter_mut().enumerate().take(self.height.min(height)) {
+        for (row, new_row) in new_cells
+            .iter_mut()
+            .enumerate()
+            .take(self.height.min(height))
+        {
             for (col, cell) in new_row.iter_mut().enumerate().take(self.width.min(width)) {
                 *cell = self.cells[row][col];
             }
@@ -111,7 +120,11 @@ impl Grid {
                 fg[1] = (fg[1] * 1.2).min(1.0);
                 fg[2] = (fg[2] * 1.2).min(1.0);
             }
-            self.cells[self.cursor_row][self.cursor_col] = Cell { c, fg, bg: self.current_bg };
+            self.cells[self.cursor_row][self.cursor_col] = Cell {
+                c,
+                fg,
+                bg: self.current_bg,
+            };
             self.cursor_col += 1;
             if self.cursor_col >= self.width {
                 self.cursor_col = 0;
@@ -287,7 +300,13 @@ impl vte::Perform for Grid {
         }
     }
 
-    fn csi_dispatch(&mut self, params: &vte::Params, _intermediates: &[u8], _ignore: bool, c: char) {
+    fn csi_dispatch(
+        &mut self,
+        params: &vte::Params,
+        _intermediates: &[u8],
+        _ignore: bool,
+        c: char,
+    ) {
         let values: Vec<u16> = params.iter().map(|p| p[0]).collect();
         match c {
             'A' => {
@@ -355,9 +374,7 @@ impl vte::Perform for Grid {
 /// Cross-platform PTY handle.
 enum PtyHandle {
     #[cfg(unix)]
-    Unix {
-        master: std::os::fd::RawFd,
-    },
+    Unix { master: std::os::fd::RawFd },
     #[cfg(not(unix))]
     Stub {
         child: std::process::Child,
@@ -441,7 +458,11 @@ impl PtyHandle {
         let stdin = child.stdin.take().ok_or("no stdin")?;
         let stdout = child.stdout.take().ok_or("no stdout")?;
 
-        Ok(Self::Stub { child, stdin, stdout })
+        Ok(Self::Stub {
+            child,
+            stdin,
+            stdout,
+        })
     }
 
     fn new(cols: u16, rows: u16) -> Result<Self, String> {

@@ -1,4 +1,4 @@
-use super::animation::{Animation, AnimationConfig, Animated};
+use super::animation::{Animated, Animation, AnimationConfig};
 use super::column::Pane;
 use super::types::*;
 use super::workspace::Workspace;
@@ -67,10 +67,7 @@ pub enum WorkspaceSwitch {
 
 impl Session {
     pub fn new(id: SessionId, viewport_size: Size, scale: f64, options: LayoutOptions) -> Self {
-        let working_area = Rectangle::new(
-            Point::new(0.0, 0.0),
-            viewport_size,
-        );
+        let working_area = Rectangle::new(Point::new(0.0, 0.0), viewport_size);
 
         let mut session = Self {
             id,
@@ -201,7 +198,10 @@ impl Session {
         if !self.overview.is_active() {
             // Normal mode: only active workspace visible.
             if self.active_workspace().is_some() {
-                vec![(self.active_workspace_idx, Rectangle::new(Point::default(), self.viewport_size))]
+                vec![(
+                    self.active_workspace_idx,
+                    Rectangle::new(Point::default(), self.viewport_size),
+                )]
             } else {
                 vec![]
             }
@@ -213,10 +213,7 @@ impl Session {
 
     fn overview_workspace_geometries(&self) -> Vec<(usize, Rectangle)> {
         let zoom = self.overview_zoom();
-        let ws_size = Size::new(
-            self.viewport_size.w * zoom,
-            self.viewport_size.h * zoom,
-        );
+        let ws_size = Size::new(self.viewport_size.w * zoom, self.viewport_size.h * zoom);
         let gap = self.options.overview_gap * zoom;
         let ws_height = ws_size.h + gap;
 
@@ -231,10 +228,7 @@ impl Session {
             .enumerate()
             .map(|(idx, _)| {
                 let y = start_y + idx as f64 * ws_height;
-                let rect = Rectangle::new(
-                    Point::new(center_x, y),
-                    ws_size,
-                );
+                let rect = Rectangle::new(Point::new(center_x, y), ws_size);
                 (idx, rect)
             })
             .collect()
@@ -279,7 +273,10 @@ impl Session {
 
     /// Add a pane to the active workspace.
     pub fn add_pane(&mut self, pane: Pane, column_idx: Option<usize>, activate: bool) {
-        let width = self.options.default_column_width.unwrap_or(ColumnWidth::Proportion(0.85));
+        let width = self
+            .options
+            .default_column_width
+            .unwrap_or(ColumnWidth::Proportion(0.85));
         if let Some(ws) = self.active_workspace_mut() {
             ws.add_pane(pane, column_idx, activate, width);
         }
@@ -331,7 +328,6 @@ impl Session {
             ws.update_working_area(working_area);
         }
     }
-
 }
 
 impl OverviewState {
@@ -353,9 +349,15 @@ mod tests {
         let mut session = Session::new(SessionId(1), viewport, 2.0, LayoutOptions::default());
         // Session::new creates one workspace; add more if needed.
         for _ in 1..count {
-            let wa = session.active_workspace().map(|ws| {
-                Rectangle::new(ws.scrolling.working_area.loc, ws.scrolling.working_area.size)
-            }).unwrap_or_else(|| Rectangle::new(Point::default(), viewport));
+            let wa = session
+                .active_workspace()
+                .map(|ws| {
+                    Rectangle::new(
+                        ws.scrolling.working_area.loc,
+                        ws.scrolling.working_area.size,
+                    )
+                })
+                .unwrap_or_else(|| Rectangle::new(Point::default(), viewport));
             session.add_workspace(wa);
         }
         session

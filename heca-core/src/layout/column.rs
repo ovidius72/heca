@@ -1,4 +1,4 @@
-use super::animation::{Animation, AnimationConfig, Animated};
+use super::animation::{Animated, Animation, AnimationConfig};
 use super::types::*;
 
 /// A column of panes arranged according to a layout mode.
@@ -100,7 +100,8 @@ impl Column {
         if self.active_pane_idx == 0 {
             return false;
         }
-        self.panes.swap(self.active_pane_idx, self.active_pane_idx - 1);
+        self.panes
+            .swap(self.active_pane_idx, self.active_pane_idx - 1);
         self.active_pane_idx -= 1;
         true
     }
@@ -110,7 +111,8 @@ impl Column {
         if self.active_pane_idx + 1 >= self.panes.len() {
             return false;
         }
-        self.panes.swap(self.active_pane_idx, self.active_pane_idx + 1);
+        self.panes
+            .swap(self.active_pane_idx, self.active_pane_idx + 1);
         self.active_pane_idx += 1;
         true
     }
