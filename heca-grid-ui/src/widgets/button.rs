@@ -197,18 +197,15 @@ impl Button {
         })
     }
 
-    /// Vertically centered label in `color`.
+    /// Bold label, centered in the button box by the renderer (real metrics).
     fn paint_label(&self, cx: &mut PaintCx, color: Color) {
-        let b = self.base.bounds;
-        let fs = self.base.style.font_size;
-        let line_h = (fs * 1.2) as f64;
-        let ty = b.loc.y + (b.size.h - line_h) / 2.0 + (fs as f64 * 0.10);
         cx.text(
-            Rectangle::new(Point::new(b.loc.x, ty), b.size),
+            self.base.bounds,
             &self.label.get_untracked(),
             color,
-            fs,
+            self.base.style.font_size,
             TextAlign::Center,
+            true,
         );
     }
 
@@ -236,8 +233,7 @@ impl Button {
         let chars = self.label.get_untracked().chars().count() as f32;
         let tw = (chars * fs * MONO_ADVANCE_RATIO) as f64;
         let x = b.loc.x + (b.size.w - tw) / 2.0;
-        let line_h = (fs * 1.2) as f64;
-        let y = b.loc.y + (b.size.h - line_h) / 2.0 + (fs as f64 * 1.15);
+        let y = b.loc.y + b.size.h / 2.0 + (fs as f64 * 0.5);
         cx.rect(
             Rectangle::new(Point::new(x, y), Size::new(tw, 1.5)),
             color,

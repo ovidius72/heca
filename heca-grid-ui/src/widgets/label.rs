@@ -85,6 +85,7 @@ impl Component for Label {
             color,
             self.base.style.font_size,
             self.align,
+            false,
         );
     }
 }

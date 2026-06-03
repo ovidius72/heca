@@ -1,4 +1,5 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, Weight};
+use heca_grid_ui::scene::TextAlign;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -18,10 +19,15 @@ struct Uniforms {
 
 struct TextCommand {
     text: String,
+    /// Target box (logical px) the text is centered within.
     x: f32,
     y: f32,
+    w: f32,
+    h: f32,
     font_size: f32,
     color: [f32; 4],
+    bold: bool,
+    align: TextAlign,
 }
 
 /// A GPU-ready text label: texture + quad.
@@ -219,13 +225,31 @@ impl TextRenderer {
         self.font_family = family.to_string();
     }
 
-    pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
+    /// Queue text to be centered within the box `(x, y, w, h)` (logical px):
+    /// horizontally per `align`, always centered vertically.
+    #[allow(clippy::too_many_arguments)]
+    pub fn queue_text(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        font_size: f32,
+        color: [f32; 4],
+        bold: bool,
+        align: TextAlign,
+    ) {
         self.commands.push(TextCommand {
             text: text.to_string(),
             x,
             y,
+            w,
+            h,
             font_size,
             color,
+            bold,
+            align,
         });
     }
 
@@ -252,7 +276,10 @@ impl TextRenderer {
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
             // Very large wrap size to prevent any line wrapping for single-line labels
             buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-            let attrs = Attrs::new().family(Family::Name(&self.font_family));
+            let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+            let attrs = Attrs::new()
+                .family(Family::Name(&self.font_family))
+                .weight(weight);
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -392,10 +419,17 @@ impl TextRenderer {
 
             // 5. Build quad
             // cmd.x/cmd.y is the TOP-LEFT of where text should appear
-            let screen_x = cmd.x;
-            let screen_y = cmd.y;
+            // Center the measured glyph box within the target box: horizontally
+            // per `align`, vertically always centered (exact, real metrics).
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
+            let screen_x = cmd.x
+                + match cmd.align {
+                    TextAlign::Start => 0.0,
+                    TextAlign::Center => (cmd.w - screen_w) * 0.5,
+                    TextAlign::End => cmd.w - screen_w,
+                };
+            let screen_y = cmd.y + (cmd.h - screen_h) * 0.5;
 
             vertices.push(TextVertex { position: [screen_x, screen_y], texcoord: [0.0, 0.0], color: cmd.color });
             vertices.push(TextVertex { position: [screen_x + screen_w, screen_y], texcoord: [1.0, 0.0], color: cmd.color });

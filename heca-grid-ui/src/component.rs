@@ -155,14 +155,26 @@ impl<'a> PaintCx<'a> {
         }));
     }
 
-    /// Queue a text run within `rect` at an explicit logical `size`.
-    pub fn text(&mut self, rect: Rectangle, text: &str, color: Color, size: f32, align: TextAlign) {
+    /// Queue a text run within `rect` at an explicit logical `size`. The renderer
+    /// centers the text within `rect` (per `align` horizontally, always centered
+    /// vertically) using real glyph metrics.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text(
+        &mut self,
+        rect: Rectangle,
+        text: &str,
+        color: Color,
+        size: f32,
+        align: TextAlign,
+        bold: bool,
+    ) {
         self.scene.push(DrawCommand::Text(TextCmd {
             rect,
             text: text.to_string(),
             color,
             size,
             align,
+            bold,
         }));
     }
 

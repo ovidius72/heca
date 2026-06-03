@@ -126,6 +126,8 @@ pub struct TextCmd {
     pub color: Color,
     pub size: f32,
     pub align: TextAlign,
+    /// Render with the bold weight.
+    pub bold: bool,
 }
 
 /// A scanline overlay confined to a region.

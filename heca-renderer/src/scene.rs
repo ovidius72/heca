@@ -6,7 +6,7 @@
 
 use crate::grid::{GlowRect, GridRenderer};
 use crate::text::TextRenderer;
-use heca_grid_ui::scene::{BracketCmd, DrawCommand, ScanlineCmd, TextAlign};
+use heca_grid_ui::scene::{BracketCmd, DrawCommand, ScanlineCmd};
 use heca_grid_ui::{Rectangle, Scene};
 
 const NO_BORDER: [f32; 4] = [0.0; 4];
@@ -70,15 +70,18 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
             DrawCommand::Brackets(b) => draw_brackets(grid, b),
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
-                let (x, y, w, _h) = xywh(&t.rect);
-                let advance = t.size * 0.6; // monospace approximation (Phase B)
-                let text_w = t.text.chars().count() as f32 * advance;
-                let tx = match t.align {
-                    TextAlign::Start => x,
-                    TextAlign::Center => x + (w - text_w) * 0.5,
-                    TextAlign::End => x + (w - text_w),
-                };
-                text.queue_text(&t.text, tx, y, t.size, t.color.to_f32x4());
+                let (x, y, w, h) = xywh(&t.rect);
+                text.queue_text(
+                    &t.text,
+                    x,
+                    y,
+                    w,
+                    h,
+                    t.size,
+                    t.color.to_f32x4(),
+                    t.bold,
+                    t.align,
+                );
             }
             // Clipping isn't supported by the renderers yet (planned).
             DrawCommand::PushClip(_) | DrawCommand::PopClip => {}
