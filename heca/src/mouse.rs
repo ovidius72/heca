@@ -569,6 +569,34 @@ fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, swa
     state.mouse.sidebar_drag_source_fi = None;
     state.mouse.sidebar_drag_label = None;
 
+    // ── SWAP: handled before removal, both panes must exist in layout. ──
+    if swap {
+        let (_win_w, win_h) = window_logical_size(state);
+        let chrome = chrome_config(state);
+        let sidebar_top = chrome.tab_bar_height;
+        let sidebar_bottom = win_h - chrome.status_bar_height;
+        let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { 40.0 };
+
+        if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+            let sidebar_h = sidebar_bottom - sidebar_top;
+            if let Some(fi) = crate::sidebar::sidebar_hit_test(
+                &state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1,
+            )
+                && let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned()
+                && let crate::sidebar::SidebarItem::Pane { pane_id: target_pid } = item
+            {
+                eprintln!("[sidebar-drag-drop] swap pane_id={} with target_pid={}", pane_id, target_pid);
+                crate::handlers::handle_swap_param(state, &crate::input::WmAction::Swap { a_id: pane_id, b_id: target_pid });
+                crate::sync_focus(state);
+                state.needs_redraw = true;
+                return;
+            }
+        }
+        // If target wasn't a pane item, fall through to move behavior.
+    }
+
+    // ── MOVE: remove pane from source, then insert at target. ──
+
     // 1. Capture original position for animation BEFORE removing.
     let old_rect = state.session.workspaces.get(original_ws)
         .and_then(|ws| ws.scrolling.panes_with_positions().into_iter()
@@ -621,12 +649,7 @@ fn sidebar_drag_drop(state: &mut AppState, pane_id: u64, original_ws: usize, swa
             if let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned() {
                 match item {
                     crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
-                        if swap {
-                            // Swap with target pane instead of moving.
-                            eprintln!("[sidebar-drag-drop] swap pane_id={} with target_pid={}", pane_id, target_pid);
-                            crate::handlers::handle_swap_param(state, &crate::input::WmAction::Swap { a_id: pane_id, b_id: target_pid });
-                            return;
-                        }
+                        // Insert after the target pane in the same column/workspace.
                         // Insert after the target pane in the same column/workspace.
                         if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_pid) {
                             if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
