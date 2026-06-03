@@ -72,7 +72,7 @@ impl FocusManager {
                 }
             }
         };
-        self.apply(root, Some(next));
+        self.apply(root, Some(next), true); // keyboard focus → show ring
     }
 
     /// Deliver a key press to the focused component. Returns whether it consumed it.
@@ -92,7 +92,7 @@ impl FocusManager {
 
     /// Clear focus (e.g. on Escape).
     pub fn clear(&mut self, root: &mut dyn Component) {
-        self.apply(root, None);
+        self.apply(root, None, false);
     }
 
     /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
@@ -105,19 +105,19 @@ impl FocusManager {
                 hit = Some(i); // last match wins = top-most in z-order
             }
         });
-        self.apply(root, hit);
+        self.apply(root, hit, false); // mouse focus → no ring (focus-visible)
     }
 
     /// Apply a target focus index across the tree. Fires `on_blur`/`on_focus`
     /// only on the components that actually change — those events add/remove the
-    /// focus effect.
-    fn apply(&mut self, root: &mut dyn Component, target: Option<usize>) {
+    /// focus effect. `visible` = keyboard focus (ring shown) vs mouse.
+    fn apply(&mut self, root: &mut dyn Component, target: Option<usize>, visible: bool) {
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
             let want = Some(i) == target;
             let has = c.base().focused.get_untracked();
             if want && !has {
-                c.on_focus();
+                c.on_focus(visible);
             } else if !want && has {
                 c.on_blur();
             }

@@ -68,6 +68,8 @@ pub struct Theme {
     pub font_size: f32,
     pub radius: f32,
     pub intensity: Intensity,
+    /// Show the keyboard focus ring (focus-visible indicator).
+    pub show_focus_border: bool,
 }
 
 impl Default for Theme {
@@ -95,6 +97,7 @@ impl Theme {
             font_size: 15.0,
             radius: 2.0,
             intensity: Intensity::Medium,
+            show_focus_border: true,
         }
     }
 
@@ -116,6 +119,7 @@ impl Theme {
             font_size: 15.0,
             radius: 2.0,
             intensity: Intensity::Medium,
+            show_focus_border: true,
         }
     }
 }

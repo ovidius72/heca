@@ -27,6 +27,9 @@ pub struct Base {
     pub visible: Signal<bool>,
     /// Whether this component currently holds keyboard focus.
     pub focused: Signal<bool>,
+    /// Whether the focus ring should show — true for keyboard focus, false for
+    /// mouse focus (focus-visible behavior).
+    pub focus_visible: Signal<bool>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
 }
@@ -40,6 +43,7 @@ impl Base {
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
             focused: signal(false),
+            focus_visible: signal(false),
             children: Vec::new(),
         }
     }
@@ -122,13 +126,16 @@ pub trait Component {
 
     /// Called when this component gains keyboard focus. Default: set the focus
     /// flag (which drives the focus ring). Override to add behaviour.
-    fn on_focus(&mut self) {
+    /// `visible` is true for keyboard focus (show the ring), false for mouse.
+    fn on_focus(&mut self, visible: bool) {
         self.base_mut().focused.set(true);
+        self.base_mut().focus_visible.set(visible);
     }
 
     /// Called when this component loses keyboard focus. Default: clear it.
     fn on_blur(&mut self) {
         self.base_mut().focused.set(false);
+        self.base_mut().focus_visible.set(false);
     }
 
     /// Advance time-based animations by `dt` seconds. Returns `true` if still

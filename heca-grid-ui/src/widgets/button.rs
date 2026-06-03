@@ -341,8 +341,8 @@ impl Component for Button {
             }
         }
 
-        // Keyboard focus ring.
-        if self.base.focused.get_untracked() {
+        // Focus ring — only for keyboard focus (focus-visible) and when enabled.
+        if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
             cx.corner_brackets(b, accent);
         }
     }
