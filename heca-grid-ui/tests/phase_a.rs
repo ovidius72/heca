@@ -193,9 +193,11 @@ fn button_variants_paint_distinct_fills() {
             _ => None,
         })
     };
+    // At rest: primary is a dark surface (neon border, not a bright fill);
+    // ghost is fully transparent.
     let primary = fill_of(Button::primary("X"));
     let ghost = fill_of(Button::ghost("X"));
-    assert_eq!(primary, Some(theme.accent), "primary fills with accent");
+    assert_eq!(primary, Some(theme.surface), "primary rests on a dark surface");
     assert_eq!(ghost, Some(Color::TRANSPARENT), "ghost is transparent at rest");
     assert_ne!(primary, ghost);
 }
