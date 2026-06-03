@@ -11,7 +11,7 @@ mod flex;
 mod label;
 mod surface;
 
-pub use button::Button;
+pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
 pub use flex::{container, Container, Flex};
 pub use label::Label;

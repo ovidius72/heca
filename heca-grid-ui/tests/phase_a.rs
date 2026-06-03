@@ -180,6 +180,27 @@ fn button_hover_tracks_pointer() {
 }
 
 #[test]
+fn button_variants_paint_distinct_fills() {
+    let theme = Theme::grid_tron();
+    let fill_of = |button: Button| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            button.paint(&mut cx);
+        }
+        scene.iter().find_map(|c| match c {
+            DrawCommand::Rect(r) => Some(r.fill),
+            _ => None,
+        })
+    };
+    let primary = fill_of(Button::primary("X"));
+    let ghost = fill_of(Button::ghost("X"));
+    assert_eq!(primary, Some(theme.accent), "primary fills with accent");
+    assert_eq!(ghost, Some(Color::TRANSPARENT), "ghost is transparent at rest");
+    assert_ne!(primary, ghost);
+}
+
+#[test]
 fn intensity_off_suppresses_glow() {
     let mut theme = Theme::grid_tron();
     theme.intensity = Intensity::Off;

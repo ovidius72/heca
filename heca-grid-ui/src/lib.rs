@@ -47,7 +47,9 @@ pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, Scene};
 pub use style::{Align, Direction, Justify, Length, Style};
 pub use theme::{Intensity, Theme};
-pub use widgets::{container, Button, Card, Container, Flex, Label, Surface};
+pub use widgets::{
+    container, Button, ButtonSize, ButtonVariant, Card, Container, Flex, Label, Surface,
+};
 
 /// Common imports for building UIs.
 pub mod prelude {
@@ -58,5 +60,7 @@ pub mod prelude {
     pub use crate::scene::TextAlign;
     pub use crate::style::{Align, Direction, Justify, Length};
     pub use crate::theme::{Intensity, Theme};
-    pub use crate::widgets::{container, Button, Card, Container, Flex, Label, Surface};
+    pub use crate::widgets::{
+        container, Button, ButtonSize, ButtonVariant, Card, Container, Flex, Label, Surface,
+    };
 }

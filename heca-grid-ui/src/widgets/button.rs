@@ -1,36 +1,130 @@
-//! [`Button`] — an interactive surface with a centered label. Tracks hover via a
-//! [`Signal`] and invokes a click callback. Demonstrates the event path; it is a
-//! surface, so it accepts [`StyleExt`] decoration.
+//! [`Button`] — an interactive surface whose look is driven by a [`ButtonVariant`]
+//! and [`ButtonSize`], mapped to theme tokens (the GridCN/shadcn model: 6
+//! variants × sizes). Tracks hover via a [`Signal`] and fires a click callback.
 
-use crate::builders::{LayoutExt, StyleExt};
+use crate::builders::LayoutExt;
+use crate::color::Color;
 use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::TextAlign;
+use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
+use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle};
 
-/// A clickable button with a text label.
+/// Visual variant of a [`Button`] (GridCN/shadcn set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonVariant {
+    /// Filled with the accent color — the primary call to action.
+    #[default]
+    Primary,
+    /// Filled with a muted surface; supporting action.
+    Secondary,
+    /// Filled with the danger color; irreversible / destructive action.
+    Destructive,
+    /// Transparent with an accent border; outlined action.
+    Outline,
+    /// No chrome until hover; low-emphasis action.
+    Ghost,
+    /// Text-only, accent-colored; inline link-style action.
+    Link,
+}
+
+/// Size of a [`Button`] — controls font size and padding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+impl ButtonSize {
+    fn font_size(self) -> f32 {
+        match self {
+            ButtonSize::Small => 12.0,
+            ButtonSize::Medium => 14.0,
+            ButtonSize::Large => 16.0,
+        }
+    }
+    fn padding(self) -> f32 {
+        match self {
+            ButtonSize::Small => 7.0,
+            ButtonSize::Medium => 10.0,
+            ButtonSize::Large => 13.0,
+        }
+    }
+}
+
+/// Resolved per-frame appearance for the current variant + state.
+struct Look {
+    fill: Color,
+    text: Color,
+    border: Option<Border>,
+    glow: Option<Glow>,
+}
+
+/// A clickable button. Its look comes from its [`ButtonVariant`].
 pub struct Button {
     base: Base,
     label: Signal<String>,
+    variant: ButtonVariant,
+    size: ButtonSize,
     hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
 
 impl Button {
-    /// A button showing `label`.
+    /// A primary button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.padding = 12.0;
+        base.style.font_size = ButtonSize::Medium.font_size();
+        base.style.padding = ButtonSize::Medium.padding();
         let mut button = Self {
             base,
             label: signal(label.into()),
+            variant: ButtonVariant::Primary,
+            size: ButtonSize::Medium,
             hovered: signal(false),
             on_click: None,
         };
         button.remeasure();
         button
+    }
+
+    /// Convenience constructors, one per variant.
+    pub fn primary(label: impl Into<String>) -> Self {
+        Self::new(label)
+    }
+    pub fn secondary(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Secondary)
+    }
+    pub fn destructive(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Destructive)
+    }
+    pub fn outline(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Outline)
+    }
+    pub fn ghost(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Ghost)
+    }
+    pub fn link(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Link)
+    }
+
+    /// Set the variant.
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    /// Set the size (updates font size + padding).
+    pub fn size(mut self, size: ButtonSize) -> Self {
+        self.size = size;
+        self.base.style.font_size = size.font_size();
+        self.base.style.padding = size.padding();
+        self.remeasure();
+        self
     }
 
     /// Set the click callback.
@@ -39,24 +133,92 @@ impl Button {
         self
     }
 
-    /// The hover-state signal (true while the pointer is over the button).
+    /// The hover-state signal.
     pub fn hovered(&self) -> Signal<bool> {
         self.hovered
     }
 
-    /// Naive monospace sizing (Phase B parity); replaced by real shaping later.
+    /// Naive monospace sizing (real shaping later). Width gets ~2 chars of slack
+    /// so the centered label never overflows.
     fn remeasure(&mut self) {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.style.font_size;
         let pad = self.base.style.padding * 2.0;
-        // Width estimate is naive (no shaping yet), so add ~2 chars of slack plus
-        // horizontal padding so the label never kisses or overflows the edge.
         self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
         self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
     }
 
     fn contains(&self, p: Point) -> bool {
         self.base.bounds.contains(p)
+    }
+
+    /// Map variant + hover state onto concrete colors from the theme.
+    fn look(&self, t: &Theme, hover: bool) -> Look {
+        let white = Color::rgb(255, 255, 255);
+        match self.variant {
+            ButtonVariant::Primary => Look {
+                fill: if hover { t.accent.lerp(white, 0.14) } else { t.accent },
+                text: t.background,
+                border: None,
+                glow: Some(Glow {
+                    color: t.glow,
+                    radius: if hover { 12.0 } else { 8.0 },
+                    intensity: if hover { 1.3 } else { 0.9 },
+                }),
+            },
+            ButtonVariant::Secondary => Look {
+                fill: if hover {
+                    t.surface.lerp(t.foreground, 0.08)
+                } else {
+                    t.surface
+                },
+                text: t.foreground,
+                border: Some(Border {
+                    color: t.border,
+                    width: 1.0,
+                }),
+                glow: None,
+            },
+            ButtonVariant::Destructive => Look {
+                fill: if hover { t.danger.lerp(white, 0.12) } else { t.danger },
+                text: t.background,
+                border: None,
+                glow: Some(Glow {
+                    color: t.danger,
+                    radius: if hover { 12.0 } else { 8.0 },
+                    intensity: if hover { 1.3 } else { 0.9 },
+                }),
+            },
+            ButtonVariant::Outline => Look {
+                fill: if hover {
+                    t.accent.with_alpha(30)
+                } else {
+                    Color::TRANSPARENT
+                },
+                text: if hover { t.foreground } else { t.accent },
+                border: Some(Border {
+                    color: t.accent,
+                    width: 1.2,
+                }),
+                glow: Some(Glow {
+                    color: t.glow,
+                    radius: 8.0,
+                    intensity: if hover { 1.0 } else { 0.45 },
+                }),
+            },
+            ButtonVariant::Ghost => Look {
+                fill: if hover { t.surface } else { Color::TRANSPARENT },
+                text: if hover { t.foreground } else { t.muted },
+                border: None,
+                glow: None,
+            },
+            ButtonVariant::Link => Look {
+                fill: Color::TRANSPARENT,
+                text: if hover { t.foreground } else { t.accent },
+                border: None,
+                glow: None,
+            },
+        }
     }
 }
 
@@ -72,14 +234,12 @@ impl Component for Button {
         if !self.base.visible.get_untracked() {
             return;
         }
-        cx.paint_base(&self.base);
-        // Brighten the label on hover.
-        let fg = if self.hovered.get_untracked() {
-            cx.theme().foreground
-        } else {
-            cx.theme().muted
-        };
-        // Vertically center the single line within the button.
+        let hover = self.hovered.get_untracked();
+        let look = self.look(cx.theme(), hover);
+        let radius = cx.theme().radius.max(4.0);
+        cx.rect(self.base.bounds, look.fill, look.border, radius, look.glow);
+
+        // Vertically + horizontally centered label.
         let b = self.base.bounds;
         let fs = self.base.style.font_size;
         let line_h = (fs * MONO_LINE_RATIO) as f64;
@@ -90,7 +250,7 @@ impl Component for Button {
         cx.text(
             centered,
             &self.label.get_untracked(),
-            fg,
+            look.text,
             fs,
             TextAlign::Center,
         );
@@ -117,4 +277,3 @@ impl Component for Button {
 }
 
 impl LayoutExt for Button {}
-impl StyleExt for Button {}

@@ -33,14 +33,9 @@ fn build_ui(theme: &Theme) -> Flex {
             .radius(4.0)
             .child(Label::new(value).color(theme.foreground).font_size(32.0))
     };
-    let button = |label: &str| {
+    let click = |label: &str| {
         let name = label.to_string();
-        Button::new(label)
-            .background(theme.surface)
-            .border(theme.accent, 1.2)
-            .glow_with(theme.glow, 6.0, 0.8)
-            .radius(4.0)
-            .on_click(move || println!("[showcase] {name} clicked"))
+        move || println!("[showcase] {name} clicked")
     };
 
     Flex::column()
@@ -54,11 +49,17 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(card("POWER", "98%"))
                 .child(card("GRID NODES", "1024")),
         )
+        // One button per GridCN variant.
         .child(
             Flex::row()
-                .gap(18.0)
-                .child(button("DEREZ"))
-                .child(button("RECONFIGURE")),
+                .gap(14.0)
+                .align(Align::Center)
+                .child(Button::primary("EXECUTE").on_click(click("EXECUTE")))
+                .child(Button::secondary("STANDBY"))
+                .child(Button::outline("RECONFIGURE"))
+                .child(Button::ghost("DETAILS"))
+                .child(Button::link("DOCS"))
+                .child(Button::destructive("DEREZ").on_click(click("DEREZ"))),
         )
 }
 

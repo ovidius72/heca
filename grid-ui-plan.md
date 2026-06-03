@@ -190,7 +190,7 @@ Prioritized by what heca actually needs. Each extends `Base`.
 | Tier | Components |
 |------|-----------|
 | **Primitives** | `Flex`/`Container` (layout-only), `Surface` (base styled box), `Grid`, `Stack`, `Spacer`, `Label` |
-| **Interactive** | `Button`, `IconButton`, `Toggle`, `Tabs` |
+| **Interactive** | `Button` (6 variants: primary/secondary/destructive/outline/ghost/link × sm/md/lg — ref <https://thegridcn.com/components#button-example>), `IconButton`, `Toggle`, `Tabs` |
 | **Display** | `Card`/`DataCard`, `Panel`/`Hud`, `Separator`, `Badge`, `StatusBar` |
 | **Tron-flavor** | `CornerBrackets` (decorator), `Reticle`, `Gauge`, `EnergyMeter`, `SignalIndicator`, `ScanlineOverlay`, `CoordinateDisplay` |
 | **heca-specific** | `Sidebar` (tree nav), `Pane` (frame + HUD header) |
@@ -235,7 +235,7 @@ Build order: **A → B → C standalone; D adopts into the app** (lowest risk; "
 
 **Goal:** The reusable Tron component set heca will consume.
 
-- [~] C1. `Button` **done** (hover signal + click callback via the event path); `IconButton`/`Toggle` pending.
+- [x] C1. `Button` **done** — 6 GridCN variants (primary/secondary/destructive/outline/ghost/link) × 3 sizes, variant-driven look from theme tokens, hover + click. `IconButton`/`Toggle` still pending.
 - [~] C2. `Surface` (base styled box) + `Card` **done**; `DataCard`/`Panel`/`Hud`/`Separator`/`Badge` pending.
 - [x] C0. Builder traits `LayoutExt`/`StyleExt`/`Parent` enforcing layout-vs-surface separation; `Flex` made layout-only; showcase migrated to `Card`/`Button` with live hover/click.
 - [ ] C3. `Gauge`, `EnergyMeter`, `SignalIndicator` (value-driven via signals).
