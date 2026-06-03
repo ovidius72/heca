@@ -17,6 +17,7 @@
 use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow, TextAlign};
@@ -27,8 +28,6 @@ use heca_core::layout::{Point, Rectangle, Size};
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
-/// Seconds for the press flash to fade out.
-const FLASH_DURATION: f32 = 0.18;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
 const GLOW_RADIUS: f32 = 30.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
@@ -92,8 +91,8 @@ pub struct Button {
     show_border: bool,
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
     progress: f32,
-    /// Press flash amount — set to 1.0 on press, decays to 0.0.
-    flash: f32,
+    /// Press flash effect (brightens on press, fades out).
+    flash: Flash,
     hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
@@ -112,7 +111,7 @@ impl Button {
             show_glow: true,
             show_border: true,
             progress: 0.0,
-            flash: 0.0,
+            flash: Flash::new(),
             hovered: signal(false),
             on_click: None,
         };
@@ -338,17 +337,18 @@ impl Component for Button {
                 self.paint_label(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
-                // Color stays constant; only the underline animates in on hover.
-                self.paint_label(cx, accent);
+                // Color stays constant on hover; press flashes the TEXT (no bg).
+                let white = Color::rgb(255, 255, 255);
+                self.paint_label(cx, accent.lerp(white, self.flash.amount() * 0.7));
                 if p > 0.0 {
                     self.paint_underline(cx, accent.with_alpha(alpha(p)));
                 }
             }
         }
 
-        // Press flash — a quick brightening overlay that fades out.
-        if self.flash > 0.0 {
-            cx.rect(b, foreground.with_alpha(alpha(self.flash * 0.35)), None, 0.0, None);
+        // Press flash — brightening overlay (Link flashes its text above instead).
+        if !matches!(self.variant, ButtonVariant::Link) {
+            cx.flash(b, self.flash.amount());
         }
 
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
@@ -367,7 +367,7 @@ impl Component for Button {
                 Handled::No
             }
             Event::PointerPressed { pos } if self.contains(*pos) => {
-                self.flash = 1.0;
+                self.flash.trigger();
                 if let Some(f) = &self.on_click {
                     f();
                 }
@@ -378,7 +378,7 @@ impl Component for Button {
                 key: GridKey::Enter | GridKey::Space,
                 pressed: true,
             } => {
-                self.flash = 1.0;
+                self.flash.trigger();
                 if let Some(f) = &self.on_click {
                     f();
                 }
@@ -406,10 +406,7 @@ impl Component for Button {
         }
 
         // Press flash fades out.
-        if self.flash > 0.0 {
-            self.flash = (self.flash - dt / FLASH_DURATION).max(0.0);
-            animating = true;
-        }
+        animating |= self.flash.tick(dt);
 
         animating
     }

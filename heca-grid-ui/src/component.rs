@@ -224,6 +224,16 @@ impl<'a> PaintCx<'a> {
         }));
     }
 
+    /// Queue a brightening "press flash" overlay over `rect`. `amount` is the
+    /// flash strength in `0.0..=1.0` (see [`Flash`](crate::effects::Flash)).
+    pub fn flash(&mut self, rect: Rectangle, amount: f32) {
+        if amount <= 0.0 {
+            return;
+        }
+        let a = (amount.clamp(0.0, 1.0) * 0.5 * 255.0).round() as u8;
+        self.rect(rect, Color::rgb(255, 255, 255).with_alpha(a), None, 0.0, None);
+    }
+
     /// Paint the shared chrome for a component's base (background/border/glow).
     pub fn paint_base(&mut self, base: &Base) {
         let s = &base.style;
