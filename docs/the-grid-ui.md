@@ -803,18 +803,25 @@ struct Rect { x: f32, y: f32, w: f32, h: f32 }
 /// Interaction state.
 enum ComponentState { Normal, Hovered, Pressed, Disabled, Focused, Selected }
 
-/// Common visual properties — shared by every component.
-struct Style {
-    bg: Color, fg: Color,
-    border: Color, border_width: f32, border_radius: f32,
-    font_size: f32,
-    glow: Color, glow_radius: f32,
-}
-
 /// Base data embedded in every component.
+///
+/// NOTE: Style is NOT stored here. Components derive style from the global
+/// GridTheme during render(). `set_grid_theme()` + `request_redraw()` makes
+/// every component use the new colors/radii/font sizes on the next frame —
+/// no iteration, no refresh loops, no stale references.
 struct ComponentBase {
-    rect: Rect, style: Style, state: ComponentState, visible: bool,
+    rect: Rect, state: ComponentState, visible: bool,
 }
+```
+
+A global, thread-local theme backs this (single-threaded GPU renderer):
+
+```rust
+thread_local! {
+    static GRID_THEME: RefCell<GridTheme> = const { RefCell::new(GridTheme::tron()) };
+}
+pub fn set_grid_theme(t: GridTheme) { GRID_THEME.with(|c| *c.borrow_mut() = t); }
+pub fn grid_theme() -> GridTheme   { GRID_THEME.with(|c| c.borrow().clone()) }
 ```
 
 ### Trait System (no repeated fields)
@@ -878,6 +885,128 @@ fn draw_scanlines(dl, x, y, w, h, color, spacing);
 fn draw_neon_border(dl, x, y, w, h, color, glow_color, thickness);
 ```
 
+---
+
+## Event & Input Model
+
+> **Strict directions for the event system.** Every component manages its own
+> visual state internally; the app receives only **semantic actions**
+> (`Option<String>`). Components must be **keyboard-accessible**.
+
+### Component Trait — Full Event API
+
+```rust
+pub trait Component: AsComponent {
+    // ── Layout / Rendering ──
+    fn render(&self, dl: &mut DrawList, rast: &mut TextRasterizer);
+    fn layout(&mut self, x: f32, y: f32, w: f32, h: f32) {
+        self.component_base_mut().rect = Rect::new(x, y, w, h);
+    }
+    fn hit_test(&self, mx: f32, my: f32) -> bool {
+        self.component_base().visible && self.component_base().rect.contains(mx, my)
+    }
+    fn z_index(&self) -> i32 { 0 }
+
+    // ── Pointer (return Option<String> = action id for the app) ──
+    fn on_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
+    fn on_right_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
+    fn on_double_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
+    fn on_mouse_enter(&mut self) { self.component_base_mut().state = ComponentState::Hovered; }
+    fn on_mouse_leave(&mut self) { self.component_base_mut().state = ComponentState::Normal; }
+    fn on_wheel(&mut self, _delta: f32) -> Option<String> { None }
+    fn on_scroll(&mut self, _dx: f32, _dy: f32) -> Option<String> { None }
+
+    // ── Focus & Keyboard (accessibility — see below) ──
+    fn focusable(&self) -> bool { false }   // interactive widgets override → true
+    fn on_focus(&mut self) { self.component_base_mut().state = ComponentState::Focused; }
+    fn on_blur(&mut self)  { self.component_base_mut().state = ComponentState::Normal; }
+    fn on_key_down(&mut self, _key: &GridKey) -> Option<String> { None }
+    fn on_key_up(&mut self, _key: &GridKey) -> Option<String> { None }
+    fn on_key_press(&mut self, _key: &GridKey) -> Option<String> { None }
+    /// Activation via Space/Enter on a focused widget — same result as on_click.
+    fn on_activate(&mut self) -> Option<String> { None }
+
+    // ── Lifecycle / value ──
+    fn on_resize(&mut self, _w: f32, _h: f32) {}
+    fn on_mounted(&mut self) {}
+    fn on_unmounted(&mut self) {}
+    fn on_change(&mut self, _value: &str) -> Option<String> { None }
+
+    // ── Signals ──
+    fn on_signal(&mut self, _signal: &str, _data: &SignalData) {}
+    fn listens_to(&self, _signal: &str) -> bool { false }
+}
+```
+
+All event handlers return `Option<String>` — an **action identifier** the app maps
+to behaviour. Components manage their own visual state; the app only receives
+semantic actions.
+
+`GridKey` is a **renderer-agnostic** key enum — do NOT leak `winit::Key` into
+`heca-grid-ui` (keeps the crate decoupled from the windowing layer):
+
+```rust
+pub enum GridKey {
+    Char(char), Enter, Space, Tab, Escape, Backspace, Delete,
+    ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
+}
+```
+
+### Accessibility — Focus & Keyboard (REQUIRED)
+
+Components must be operable without a mouse:
+
+- **Tab / Shift+Tab** move focus through the focusable set (`focusable() == true`)
+  in z-order; focus **wraps** at the ends. The newly focused component gets
+  `on_focus` (state → `Focused`); the previous gets `on_blur` (→ `Normal`).
+- **Space / Enter** on the focused component call `on_activate()`. For a `Button`,
+  `on_activate()` returns the **same action id** as `on_click` — i.e. mouse-click
+  and keyboard-activate are equivalent.
+- The `Focused` state renders a visible **focus ring** (glow / corner brackets) so
+  keyboard users can see the active control.
+- Pointer hover/press updates state but does **not** steal keyboard focus.
+
+### Event Dispatch (reverse z-order)
+
+Pointer events are dispatched to the top-most component first; dispatch stops at
+the first handler that returns a non-`None` action:
+
+```rust
+fn dispatch_click(components: &mut [Box<dyn Component>], mx: f32, my: f32) {
+    for comp in components.iter_mut().rev() {
+        if comp.hit_test(mx, my) {
+            if let Some(action) = comp.on_click(mx, my) {
+                dispatch_action(&action);
+                return;
+            }
+        }
+    }
+}
+```
+
+Keyboard events go to the **focused** component only (not hit-tested).
+
+### Signals — Cross-Component Communication
+
+```rust
+pub enum SignalData { None, Bool(bool), Int(i64), Float(f64), String(String), Usize(usize) }
+
+pub struct SignalBus {
+    listeners: HashMap<String, Vec<ComponentId>>,  // signal name → subscriber ids
+}
+// emit(signal, data) routes to every component whose listens_to(signal) is true.
+```
+
+> Subscribers are keyed by a stable **`ComponentId(u64)`** (assigned at creation),
+> **not** vec indices — indices shift when components are added/removed and would
+> deliver to the wrong component.
+
+Example: a `TreeView` emits `"item-selected"`; a `Pane` that `listens_to` it
+receives `on_signal("item-selected", &SignalData::String("node-42".into()))` and
+switches its active tab.
+
+---
+
 ## Theme
 
 ### GridTheme (domain-specific, not heca_ui Theme)
@@ -914,19 +1043,81 @@ struct GridTheme {
 
 ## Component Catalog
 
-### Core Components
+### Reference Links (GridCN)
+
+Each component is modeled on its GridCN counterpart:
+
+| Component | GridCN reference |
+|-----------|------------------|
+| Button | <https://thegridcn.com/components#button-example> |
+| Button Group | <https://thegridcn.com/components#button-group-example> |
+| Label | <https://thegridcn.com/components#label-example> |
+| Input | <https://thegridcn.com/components#text-input> |
+| Checkbox | <https://thegridcn.com/components#checkbox-example> |
+| Toggle | <https://thegridcn.com/components#toggle> |
+| Select | <https://thegridcn.com/components#select> |
+| Badge | <https://thegridcn.com/components#badge> |
+| Tag | <https://thegridcn.com/components#tag> |
+| Chip | <https://thegridcn.com/components#chip> |
+| Status Dot | <https://thegridcn.com/components#status-dot> |
+| Divider | <https://thegridcn.com/components#divider> |
+| Spinner | <https://thegridcn.com/components#spinner-example> |
+| Tooltip | <https://thegridcn.com/components#tooltip> |
+| Alert | <https://thegridcn.com/components#alert-banner> |
+| Announcement Bar | <https://thegridcn.com/components#announcement-bar> |
+| Notification | <https://thegridcn.com/components#notification> |
+| Toast | <https://thegridcn.com/components#toast> |
+| Sonner | <https://thegridcn.com/components#sonner-example> |
+| Modal | <https://thegridcn.com/components#modal> |
+| Dialog | <https://thegridcn.com/components#dialog-example> |
+| Command Palette | <https://thegridcn.com/components#command-menu> |
+| Menu Bar | <https://thegridcn.com/components#menubar-example> |
+| Floating Panel | <https://thegridcn.com/components#floating-panel> |
+| Glow Container | <https://thegridcn.com/components#glow-container> |
+| Sidebar | <https://thegridcn.com/components#sidebar-nav> |
+| Status Bar | <https://thegridcn.com/components#status-bar> |
+| **App view (sidebar + panes)** | <https://thegridcn.com/templates/dashboard> — grid-nodes container is used for panes |
+
+### Initial Components (heca-grid-ui)
+
+All follow the same pattern: embed `ComponentBase`, implement `Component`, use the
+`impl_component!` macro. Style is derived from the global theme during `render()`.
+
+| Component | File | Description | Variants / Props |
+|-----------|------|-------------|------------------|
+| Button | `button.rs` | Clickable element with text label. Manages hover/pressed/focus state internally. | variant: primary, secondary, ghost, danger, outline · size: sm, md, lg, icon |
+| ButtonGroup | `button.rs` | Joined buttons with shared borders, rounded only on outer edges. | position: first, middle, last, single |
+| Label | `label.rs` | Single-line text display. Uses theme font_size from render context. | variant: default, muted, dim · weight: normal, bold |
+| Input | `input.rs` | Single-line text entry with cursor, placeholder, focus border. | variant: default, ghost · state: focused, disabled |
+| Toggle | `toggle.rs` | On/off switch with animated thumb. | variant: primary, success, danger |
+| Checkbox | `checkbox.rs` | Square toggle with checkmark; click area includes label. | variant: primary, success, danger |
+| Select | `select.rs` | Dropdown — trigger button + popup overlay with items. | variant: default, ghost · items: Vec<SelectItem> |
+| Badge | `badge.rs` | Small label/tag — rounded, compact, theme-colored. | variant: default, success, warning, danger · size: sm, md |
+| Tag | `tag.rs` | Dismissible filter pill with optional X button. | variant: default, success, warning, danger, outline · size: sm, md · dismissible |
+| Chip | `chip.rs` | Selectable filter button — toggles selected, hover glow. | variant: default, success, warning, danger · size: sm, md |
+| StatusDot | `statusdot.rs` | Colored circle indicator with optional pulse. | status: online, offline, busy, away, error · size: sm, md, lg |
+| Divider | `divider.rs` | Horizontal/vertical separator with optional centered label. | variant: default, glow, dashed · orientation: horizontal, vertical |
+| Spinner | `spinner.rs` | Rotating animated loading indicator. | variant: primary, muted · size: sm, md, lg |
+| Tooltip | `tooltip.rs` | Hover-activated text popup near a target. | position: top, bottom, left, right |
+| Alert | `alert.rs` | Colored banner with bracket decorations + icon. | variant: info, success, warning, danger |
+| AnnouncementBar | `announcement.rs` | Full-width top banner for system messages. | variant: info, success, warning, danger · dismissible |
+| Notification | `notification.rs` | Slide-in toast: title, description, timestamp, dismiss. | variant: info, success, warning, error |
+| Toast / Sonner | `toast.rs` | Stackable popups — auto-dismiss, close button. | variant: info, success, warning, error · position |
+| Modal | `modal.rs` | Overlay dialog with backdrop; closes on Escape / backdrop click. | size: sm, md, lg |
+| Dialog | `dialog.rs` | Confirmation with title, message, confirm/cancel. | variant: default, destructive |
+| CommandPalette | `command.rs` | Cmd+K overlay: search input, filtered list, keyboard nav. | items: Vec<CommandItem> · max_visible |
+| FloatingPanel | `floating_panel.rs` | Data overlay panel with title, subtitle, rows, corner brackets. | position: left, right · data: Vec<(label, value)> |
+| GlowContainer | `glow_container.rs` | Wrapper adding neon glow + border to children. | intensity: sm, md, lg · pulse · hover |
+| Sidebar | `sidebar.rs` | Vertical nav panel: logo, collapsible items, active state. | items: Vec<SidebarItem> · collapsed |
+| StatusBar | `statusbar.rs` | Thin bottom/top bar with left/right section content. | variant: default, alert, info |
+| MenuBar | `menubar.rs` | Horizontal app menu (File, Edit, View…). | items: Vec<MenuItem> |
+
+### Layout / Container Components
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `Pane` | `pane.rs` | Titled container with optional tab bar. Renders bg, border glow, title, tabs, corner brackets, scanlines. Returns `content_bounds()` for content rendering. |
-| `Tab` | `pane.rs` | Tab data struct (label, id, alert flag). Sized by pane width. Active tab has glowing underline indicator. |
-| `Sidebar` | `sidebar.rs` | Vertical navigation panel. Renders logo/title area at top, nav items with icons, active indicator, optional collapse. |
-| `SidebarItem` | `sidebar.rs` | Nav item with label, optional icon, active/hover state. |
-| `KpiCard` | `kpi.rs` | Metric card showing value, label, delta (▲/▼ percentage), background glow. Compact, designed for row layout. |
-| `DataTable` | `table.rs` | Scrollable data table with header row, aligned columns, row hover, status cells. |
-| `UplinkHeader` | `header.rs` | Top system status bar — left text (system ID), right text (status/version). Thin, monospace, uppercase. |
-| `ActivityFeed` | `activity.rs` | Vertical list of activity entries with timestamp, description, color-coded status dot. |
-| `StatusBar` | `statusbar.rs` | Bottom bar with left/right section labels. Thin, bordered top. |
+| Pane | `pane.rs` | Titled container with optional tab bar. Renders bg, border glow, title, tabs, corner brackets, scanlines. Returns `content_bounds()`. The **grid-nodes container** used for panes in the dashboard app view. |
+| Tab | `pane.rs` | Tab data struct (label, id, alert flag). Active tab has a glowing underline. |
 
 ### Reference: The GridCN Dashboard Template
 
