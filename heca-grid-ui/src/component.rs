@@ -91,6 +91,16 @@ pub trait Component {
         }
         Handled::No
     }
+
+    /// Advance time-based animations by `dt` seconds. Returns `true` if still
+    /// animating, so the host can schedule another frame. Default: recurse.
+    fn tick(&mut self, dt: f32) -> bool {
+        let mut animating = false;
+        for child in self.base_mut().children.iter_mut() {
+            animating |= child.tick(dt);
+        }
+        animating
+    }
 }
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the

@@ -1,7 +1,18 @@
 //! [`Button`] — an interactive surface whose look is driven by a [`ButtonVariant`]
-//! and [`ButtonSize`], mapped to theme tokens (the GridCN/shadcn model). Tron
-//! treatment: sharp corners, dark interior + neon border at rest, the border
-//! firms up and a glow bloom appears on hover. Glow and border are toggleable.
+//! and [`ButtonSize`] (GridCN/shadcn model), with an **animated** hover that
+//! differs per variant:
+//!
+//! | Variant | Hover behavior |
+//! |---------|----------------|
+//! | Primary (default) | solid border + accent fill that **sweeps bottom→top** with a glow |
+//! | Secondary | no glow; border **firms up** (rest semi-opaque → solid) |
+//! | Destructive | like default but red, **fades in** (no sweep) |
+//! | Outline | dim border → accent, faint fill + glow |
+//! | Ghost | no border/bg at rest → **opaque bg + border fade in** |
+//! | Link | text only → **underline** appears |
+//!
+//! Hover progress animates over time via [`Component::tick`]. Glow and border
+//! are toggleable (`.glow(bool)`, `.bordered(bool)`).
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
@@ -10,27 +21,28 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
-use crate::theme::Theme;
-use heca_core::layout::{Point, Rectangle};
+use heca_core::layout::{Point, Rectangle, Size};
 
 /// Border alpha at rest (semi-opaque); firms to fully solid on hover.
-const REST_BORDER_ALPHA: u8 = 150;
+const REST_BORDER_ALPHA: f32 = 150.0;
+/// Seconds for a full hover transition.
+const HOVER_DURATION: f32 = 0.16;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ButtonVariant {
-    /// Accent border + accent text at rest; fills with the accent on hover.
+    /// Accent border; fill sweeps in from the bottom on hover.
     #[default]
     Primary,
-    /// Muted surface with a dim border; supporting action.
+    /// Muted surface; border firms up on hover (no glow).
     Secondary,
-    /// Danger border + danger text; fills red on hover.
+    /// Danger colors; fades in on hover.
     Destructive,
     /// Dim outline that brightens to accent on hover.
     Outline,
-    /// No chrome until hover; low-emphasis action.
+    /// No chrome until hover (bg + border fade in).
     Ghost,
-    /// Text-only, accent-colored; inline link-style action.
+    /// Text only; underline appears on hover.
     Link,
 }
 
@@ -60,12 +72,8 @@ impl ButtonSize {
     }
 }
 
-/// Resolved per-frame appearance for the current variant + state.
-struct Look {
-    fill: Color,
-    text: Color,
-    border: Option<Border>,
-    glow: Option<Glow>,
+fn alpha(p: f32) -> u8 {
+    (p.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 /// A clickable button. Its look comes from its [`ButtonVariant`].
@@ -76,6 +84,8 @@ pub struct Button {
     size: ButtonSize,
     show_glow: bool,
     show_border: bool,
+    /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
+    progress: f32,
     hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
@@ -93,6 +103,7 @@ impl Button {
             size: ButtonSize::Medium,
             show_glow: true,
             show_border: true,
+            progress: 0.0,
             hovered: signal(false),
             on_click: None,
         };
@@ -135,7 +146,7 @@ impl Button {
         self
     }
 
-    /// Enable or disable the hover glow bloom (default: enabled).
+    /// Enable or disable the hover glow (default: enabled).
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
         self
@@ -158,8 +169,6 @@ impl Button {
         self.hovered
     }
 
-    /// Naive monospace sizing (real shaping later). Width gets ~2 chars of slack
-    /// so the centered label never overflows.
     fn remeasure(&mut self) {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.style.font_size;
@@ -172,70 +181,66 @@ impl Button {
         self.base.bounds.contains(p)
     }
 
-    /// Map variant + hover state onto concrete colors from the theme.
-    fn look(&self, t: &Theme, hover: bool) -> Look {
-        // Border eases from semi-opaque (rest) to fully solid (hover).
-        let border_of = |c: Color, w: f32| -> Option<Border> {
-            if !self.show_border {
-                return None;
-            }
-            let color = if hover { c } else { c.with_alpha(REST_BORDER_ALPHA) };
-            Some(Border { color, width: w })
-        };
-        let glow_of = |c: Color, radius: f32, intensity: f32| -> Option<Glow> {
-            (self.show_glow && hover).then_some(Glow {
-                color: c,
-                radius,
-                intensity,
-            })
-        };
-
-        match self.variant {
-            ButtonVariant::Primary => Look {
-                fill: if hover { t.accent } else { t.surface },
-                text: if hover { t.background } else { t.accent },
-                border: border_of(t.accent, 1.5),
-                glow: glow_of(t.glow, 28.0, 1.4),
-            },
-            ButtonVariant::Secondary => Look {
-                fill: if hover {
-                    t.surface.lerp(t.foreground, 0.06)
-                } else {
-                    t.surface
-                },
-                text: t.foreground,
-                border: border_of(t.border, 1.5),
-                glow: glow_of(t.glow, 14.0, 0.6),
-            },
-            ButtonVariant::Destructive => Look {
-                fill: if hover { t.danger } else { t.surface },
-                text: if hover { t.background } else { t.danger },
-                border: border_of(t.danger, 1.5),
-                glow: glow_of(t.danger, 28.0, 1.4),
-            },
-            ButtonVariant::Outline => Look {
-                fill: if hover {
-                    t.accent.with_alpha(26)
-                } else {
-                    Color::TRANSPARENT
-                },
-                text: if hover { t.foreground } else { t.muted },
-                border: border_of(if hover { t.accent } else { t.muted }, 1.5),
-                glow: glow_of(t.glow, 18.0, 1.0),
-            },
-            ButtonVariant::Ghost => Look {
-                fill: if hover { t.surface } else { Color::TRANSPARENT },
-                text: if hover { t.foreground } else { t.muted },
-                border: None,
-                glow: None,
-            },
-            ButtonVariant::Link => Look {
-                fill: Color::TRANSPARENT,
-                text: if hover { t.foreground } else { t.accent },
-                border: None,
-                glow: None,
-            },
+    /// Border that eases from semi-opaque (rest) to solid (hover) by `p`.
+    fn animated_border(&self, c: Color, p: f32) -> Option<Border> {
+        if !self.show_border {
+            return None;
         }
+        let a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p.clamp(0.0, 1.0);
+        Some(Border {
+            color: c.with_alpha(a.round() as u8),
+            width: 1.5,
+        })
+    }
+
+    /// Vertically centered label in `color`.
+    fn paint_label(&self, cx: &mut PaintCx, color: Color) {
+        let b = self.base.bounds;
+        let fs = self.base.style.font_size;
+        let line_h = (fs * 1.2) as f64;
+        let ty = b.loc.y + (b.size.h - line_h) / 2.0 + (fs as f64 * 0.10);
+        cx.text(
+            Rectangle::new(Point::new(b.loc.x, ty), b.size),
+            &self.label.get_untracked(),
+            color,
+            fs,
+            TextAlign::Center,
+        );
+    }
+
+    /// A fill rising from the bottom by fraction `p`, with a glow (the
+    /// bottom-to-top sweep).
+    fn paint_rising_fill(&self, cx: &mut PaintCx, fill: Color, glow: Color, p: f32) {
+        let b = self.base.bounds;
+        let fh = b.size.h * p as f64;
+        let rect = Rectangle::new(
+            Point::new(b.loc.x, b.loc.y + b.size.h - fh),
+            Size::new(b.size.w, fh),
+        );
+        let g = self.show_glow.then_some(Glow {
+            color: glow,
+            radius: 26.0 * p,
+            intensity: 1.4,
+        });
+        cx.rect(rect, fill, None, 0.0, g);
+    }
+
+    /// A thin underline beneath the centered label.
+    fn paint_underline(&self, cx: &mut PaintCx, color: Color) {
+        let b = self.base.bounds;
+        let fs = self.base.style.font_size;
+        let chars = self.label.get_untracked().chars().count() as f32;
+        let tw = (chars * fs * MONO_ADVANCE_RATIO) as f64;
+        let x = b.loc.x + (b.size.w - tw) / 2.0;
+        let line_h = (fs * 1.2) as f64;
+        let y = b.loc.y + (b.size.h - line_h) / 2.0 + (fs as f64 * 1.15);
+        cx.rect(
+            Rectangle::new(Point::new(x, y), Size::new(tw, 1.5)),
+            color,
+            None,
+            0.0,
+            None,
+        );
     }
 }
 
@@ -251,26 +256,77 @@ impl Component for Button {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let hover = self.hovered.get_untracked();
-        let look = self.look(cx.theme(), hover);
-        // GridCN buttons are sharp-cornered.
-        cx.rect(self.base.bounds, look.fill, look.border, 0.0, look.glow);
-
-        // Vertically center the label. The renderer draws a ~1.2*fs line box from
-        // the top, so center on that and nudge down slightly (caps have no
-        // descenders, so they otherwise read a touch high).
+        // Snapshot theme colors so we can call &mut cx methods afterwards.
+        let (surface, accent, glow_c, danger, background, foreground, muted, border_c) = {
+            let t = cx.theme();
+            (
+                t.surface,
+                t.accent,
+                t.glow,
+                t.danger,
+                t.background,
+                t.foreground,
+                t.muted,
+                t.border,
+            )
+        };
+        let p = self.progress.clamp(0.0, 1.0);
         let b = self.base.bounds;
-        let fs = self.base.style.font_size;
-        let line_h = (fs * 1.2) as f64;
-        let ty = b.loc.y + (b.size.h - line_h) / 2.0 + (fs as f64 * 0.10);
-        let centered = Rectangle::new(Point::new(b.loc.x, ty), b.size);
-        cx.text(
-            centered,
-            &self.label.get_untracked(),
-            look.text,
-            fs,
-            TextAlign::Center,
-        );
+
+        match self.variant {
+            ButtonVariant::Primary => {
+                cx.rect(b, surface, self.animated_border(accent, p), 0.0, None);
+                if p > 0.0 {
+                    self.paint_rising_fill(cx, accent, glow_c, p);
+                }
+                self.paint_label(cx, accent.lerp(background, p));
+            }
+            ButtonVariant::Destructive => {
+                cx.rect(b, surface, self.animated_border(danger, p), 0.0, None);
+                if p > 0.0 {
+                    let g = self.show_glow.then_some(Glow {
+                        color: danger,
+                        radius: 26.0,
+                        intensity: 1.4 * p,
+                    });
+                    cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
+                }
+                self.paint_label(cx, danger.lerp(background, p));
+            }
+            ButtonVariant::Secondary => {
+                cx.rect(b, surface, self.animated_border(border_c, p), 0.0, None);
+                self.paint_label(cx, foreground);
+            }
+            ButtonVariant::Outline => {
+                let fill = accent.with_alpha(alpha(p * 0.1));
+                let g = (self.show_glow && p > 0.0).then_some(Glow {
+                    color: glow_c,
+                    radius: 18.0,
+                    intensity: p,
+                });
+                cx.rect(b, fill, self.animated_border(muted.lerp(accent, p), p), 0.0, g);
+                self.paint_label(cx, muted.lerp(foreground, p));
+            }
+            ButtonVariant::Ghost => {
+                let border = if self.show_border && p > 0.0 {
+                    Some(Border {
+                        color: border_c.with_alpha(alpha(p)),
+                        width: 1.5,
+                    })
+                } else {
+                    None
+                };
+                cx.rect(b, surface.with_alpha(alpha(p)), border, 0.0, None);
+                self.paint_label(cx, muted.lerp(foreground, p));
+            }
+            ButtonVariant::Link => {
+                let color = accent.lerp(foreground, p);
+                self.paint_label(cx, color);
+                if p > 0.0 {
+                    self.paint_underline(cx, color.with_alpha(alpha(p)));
+                }
+            }
+        }
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
@@ -290,6 +346,21 @@ impl Component for Button {
             }
             _ => Handled::No,
         }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        if (self.progress - target).abs() < 1e-3 {
+            self.progress = target;
+            return false;
+        }
+        let step = dt / HOVER_DURATION;
+        if self.progress < target {
+            self.progress = (self.progress + step).min(target);
+        } else {
+            self.progress = (self.progress - step).max(target);
+        }
+        true
     }
 }
 

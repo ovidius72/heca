@@ -8,6 +8,7 @@
 //! Run: `cargo run -p heca-renderer --example showcase`
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
@@ -108,6 +109,7 @@ struct GpuState {
     theme: Theme,
     ui: Flex,
     cursor: Point,
+    last_frame: Instant,
 }
 
 impl GpuState {
@@ -181,6 +183,7 @@ impl GpuState {
             theme,
             ui,
             cursor: Point::new(-1.0, -1.0),
+            last_frame: Instant::now(),
         }
     }
 
@@ -192,6 +195,11 @@ impl GpuState {
     }
 
     fn render(&mut self) {
+        let now = Instant::now();
+        let dt = (now - self.last_frame).as_secs_f32().min(0.05);
+        self.last_frame = now;
+        let animating = self.ui.tick(dt);
+
         let phys = self.window.inner_size();
         let scale = self.scale_factor as f32;
         let (w, h) = (phys.width as f32 / scale, phys.height as f32 / scale);
@@ -248,6 +256,11 @@ impl GpuState {
         self.text.render(&self.device, &self.queue, &view, &mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
+
+        // Keep redrawing while a hover animation is in flight.
+        if animating {
+            self.window.request_redraw();
+        }
     }
 }
 
