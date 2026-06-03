@@ -100,10 +100,10 @@ pub struct PaneStyle {
 impl Default for PaneStyle {
     fn default() -> Self {
         Self {
-            border_width: 0.5,
+            border_width: 1.5,
             active_border_width: 1.5,
             border_radius: 3.0,
-            border_color: Color::new(49, 50, 68, 255),
+            border_color: Color::new(180, 180, 200, 255),
             active_border_color: Color::new(137, 180, 250, 255),
             glow_color: Color::new(137, 180, 250, 90),
             glow_radius: 5.0,
