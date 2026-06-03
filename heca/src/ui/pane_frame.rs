@@ -11,11 +11,11 @@ impl PaneFrame {
         let [x, y, w, _h] = self.total_rect;
         let style = &theme.pane_style;
         if !style.show_pane_title { return None; }
-
-        let bw = style.border_width;
+        
+        let active_bw = 0.0; // approximate
         let fs = style.pane_title_font_size;
-        let btn_x = x + w - bw - style.padding - fs * 1.0;
-        let btn_y = y - bw - fs + 2.0;
+        let btn_x = x + w - style.padding - fs;
+        let btn_y = y - fs - active_bw;
         
         Some([btn_x, btn_y, fs, fs])
     }
@@ -27,7 +27,7 @@ impl PaneFrame {
         pane_name: &str,
         primitive: &mut PrimitiveRenderer,
         text: &mut TextRenderer,
-    ) -> [f32; 4] { // Returns the inner content rectangle
+    ) -> [f32; 4] {
         let [x, y, w, h] = self.total_rect;
         let style = &theme.pane_style;
         
@@ -37,54 +37,61 @@ impl PaneFrame {
         // 1. Draw Body (Flat)
         primitive.draw_rounded_rect(
             x, y, w, h,
-            style.bg_gradient_start.to_f32x4(), 
-            style.bg_gradient_end.to_f32x4(), 
+            theme.background.to_f32x4(),
+            theme.background.to_f32x4(),
             style.border_radius
         );
         
-        // 2. Draw Border (Solid)
+        // 2. Draw Border (solid rounded)
         primitive.draw_rounded_rect(
             x, y, w, h,
             border_color, border_color,
             style.border_radius
         );
         
-        // 3. Hollow out the border with a solid color
-        primitive.draw_rounded_rect(
-            x + active_bw, y + active_bw, w - 2.0 * active_bw, h - 2.0 * active_bw,
-            theme.background.to_f32x4(), theme.background.to_f32x4(),
-            style.border_radius - active_bw
-        );
-
-        // 4. Floating Title (above the border)
-        if style.show_pane_title {
-            let title_color = if focused { style.pane_title_active_color.to_f32x4() } else { style.pane_title_color.to_f32x4() };
-            let fs = style.pane_title_font_size;
-            
-            // Title text at the top-left, floating above border
-            text.queue_text(
-                pane_name,
-                x + style.padding,
-                y - fs,
-                fs,
-                title_color,
-            );
-            
-            // Close button [x] at the top-right, floating above border, no background
-            text.queue_text(
-                "×",
-                x + w - style.padding - fs + 2.0,
-                y - fs + 2.0,
-                fs,
-                title_color,
+        // 3. Hollow out border interior
+        if active_bw > 0.0 {
+            primitive.draw_rounded_rect(
+                x + active_bw, y + active_bw, w - 2.0 * active_bw, h - 2.0 * active_bw,
+                theme.background.to_f32x4(), theme.background.to_f32x4(),
+                style.border_radius - active_bw
             );
         }
 
-        // 5. Content Area Calculation
+        // 4. Title & close [x] — right-aligned, sitting on the top border
+        if style.show_pane_title {
+            let fs = style.pane_title_font_size;
+            let title_color = if focused { style.pane_title_active_color.to_f32x4() } else { style.pane_title_color.to_f32x4() };
+            let bg = theme.background.to_f32x4();
+            
+            // Calculate title width (approximate)
+            let title_w = pane_name.len() as f32 * fs * 0.6;
+            let x_w = fs * 0.7; // width of the × character
+            
+            // Right-aligned position: [title] [×]
+            let close_x = x + w - style.padding - x_w;
+            let title_x = close_x - title_w - 4.0;
+            
+            // Y position: sits ON the top border (covers it)
+            let text_y = y - fs / 2.0 + 1.0;
+            
+            // Draw background strip behind title + [x] to "cut" the border
+            let strip_w = title_w + 4.0 + x_w + 4.0;
+            primitive.draw_rect(title_x - 2.0, text_y, strip_w + 2.0, fs, bg);
+            
+            // Title text
+            text.queue_text(pane_name, title_x, text_y, fs, title_color);
+            
+            // Close button [x] — no background, just the character
+            text.queue_text("×", close_x, text_y, fs * 1.1, title_color);
+        }
+
+        // 5. Content area
         let inner_x = x + active_bw + style.padding;
+        let inner_y = y + active_bw + style.padding;
         let inner_w = w - 2.0 * (active_bw + style.padding);
-        let inner_h = (h - 2.0 * active_bw) - 2.0 * style.padding;
+        let inner_h = h - 2.0 * (active_bw + style.padding);
         
-        [inner_x, y + active_bw + style.padding, inner_w, inner_h]
+        [inner_x, inner_y, inner_w, inner_h]
     }
 }
