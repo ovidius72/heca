@@ -908,29 +908,29 @@ pub trait Component: AsComponent {
     fn z_index(&self) -> i32 { 0 }
 
     // ── Pointer (return Option<String> = action id for the app) ──
-    fn on_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
-    fn on_right_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
-    fn on_double_click(&mut self, _mx: f32, _my: f32) -> Option<String> { None }
+    fn on_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
+    fn on_right_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
+    fn on_double_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
     fn on_mouse_enter(&mut self) { self.component_base_mut().state = ComponentState::Hovered; }
     fn on_mouse_leave(&mut self) { self.component_base_mut().state = ComponentState::Normal; }
-    fn on_wheel(&mut self, _delta: f32) -> Option<String> { None }
-    fn on_scroll(&mut self, _dx: f32, _dy: f32) -> Option<String> { None }
+    fn on_wheel(&mut self, _delta: f32) -> Option<Action> { None }
+    fn on_scroll(&mut self, _dx: f32, _dy: f32) -> Option<Action> { None }
 
     // ── Focus & Keyboard (accessibility — see below) ──
     fn focusable(&self) -> bool { false }   // interactive widgets override → true
     fn on_focus(&mut self) { self.component_base_mut().state = ComponentState::Focused; }
     fn on_blur(&mut self)  { self.component_base_mut().state = ComponentState::Normal; }
-    fn on_key_down(&mut self, _key: &GridKey) -> Option<String> { None }
-    fn on_key_up(&mut self, _key: &GridKey) -> Option<String> { None }
-    fn on_key_press(&mut self, _key: &GridKey) -> Option<String> { None }
+    fn on_key_down(&mut self, _key: &GridKey) -> Option<Action> { None }
+    fn on_key_up(&mut self, _key: &GridKey) -> Option<Action> { None }
+    fn on_key_press(&mut self, _key: &GridKey) -> Option<Action> { None }
     /// Activation via Space/Enter on a focused widget — same result as on_click.
-    fn on_activate(&mut self) -> Option<String> { None }
+    fn on_activate(&mut self) -> Option<Action> { None }
 
     // ── Lifecycle / value ──
     fn on_resize(&mut self, _w: f32, _h: f32) {}
     fn on_mounted(&mut self) {}
     fn on_unmounted(&mut self) {}
-    fn on_change(&mut self, _value: &str) -> Option<String> { None }
+    fn on_change(&mut self, _value: &str) -> Option<Action> { None }
 
     // ── Signals ──
     fn on_signal(&mut self, _signal: &str, _data: &SignalData) {}
@@ -938,9 +938,58 @@ pub trait Component: AsComponent {
 }
 ```
 
-All event handlers return `Option<String>` — an **action identifier** the app maps
-to behaviour. Components manage their own visual state; the app only receives
-semantic actions.
+Every event handler returns `Option<Action>` — a semantic action the app maps to
+behaviour. Components manage their own visual state; the app receives only the
+action.
+
+```rust
+/// Result of an event: a named action plus an optional payload.
+pub struct Action {
+    pub name: String,      // event/action id: "click", "toggle-change", "input-change", …
+    pub data: SignalData,  // payload — carries the NEW VALUE for change events
+}
+
+impl Action {
+    /// A value-less action (e.g. a button click).
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), data: SignalData::None }
+    }
+    /// An action carrying a new value (input / checkbox / toggle / slider change…).
+    pub fn value(name: impl Into<String>, data: SignalData) -> Self {
+        Self { name: name.into(), data }
+    }
+}
+```
+
+`Action.data` reuses [`SignalData`](#signals--cross-component-communication), so the
+same payload type flows through both events and signals.
+
+**Change events carry the new value.** Inputs, checkboxes, toggles, selects,
+sliders, etc. report their updated value in `Action.data` — the app reads it
+without having to query the component:
+
+```rust
+// Toggle flips and reports the new boolean state
+fn on_activate(&mut self) -> Option<Action> {
+    self.on = !self.on;
+    Some(Action::value("toggle-change", SignalData::Bool(self.on)))
+}
+
+// Input reports its new text after each edit
+fn on_key_down(&mut self, key: &GridKey) -> Option<Action> {
+    self.edit(key);
+    Some(Action::value("input-change", SignalData::String(self.text.clone())))
+}
+
+// Checkbox reports checked / unchecked
+fn on_click(&mut self, _mx: f32, _my: f32) -> Option<Action> {
+    self.checked = !self.checked;
+    Some(Action::value("checkbox-change", SignalData::Bool(self.checked)))
+}
+```
+
+Value-less actions (a plain button) use `Action::new("save")` with `data =
+SignalData::None`.
 
 `GridKey` is a **renderer-agnostic** key enum — do NOT leak `winit::Key` into
 `heca-grid-ui` (keeps the crate decoupled from the windowing layer):
@@ -976,7 +1025,13 @@ fn dispatch_click(components: &mut [Box<dyn Component>], mx: f32, my: f32) {
     for comp in components.iter_mut().rev() {
         if comp.hit_test(mx, my) {
             if let Some(action) = comp.on_click(mx, my) {
-                dispatch_action(&action);
+                match action.name.as_str() {
+                    "save" => save_document(),
+                    "input-change" => {
+                        if let SignalData::String(v) = &action.data { update_field(v); }
+                    }
+                    _ => dispatch_action(&action),
+                }
                 return;
             }
         }
