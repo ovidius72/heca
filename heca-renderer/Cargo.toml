@@ -14,3 +14,9 @@ bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 naga = { version = "25", features = ["wgsl-in"] }
+winit = { workspace = true }
+pollster = { workspace = true }
+
+[[example]]
+name = "showcase"
+path = "examples/showcase.rs"
