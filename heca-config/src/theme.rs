@@ -112,7 +112,7 @@ impl Default for PaneStyle {
             shadow_gradient_start: Color::new(0, 0, 0, 150),
             shadow_gradient_end: Color::new(0, 0, 0, 0),
             show_pane_title: true,
-            pane_title_font_size: 11.0,
+            pane_title_font_size: 14.0,
             pane_title_color: Color::new(150, 150, 180, 255),
             pane_title_active_color: Color::new(205, 214, 244, 255),
             padding: 0.0,
