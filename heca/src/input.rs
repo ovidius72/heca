@@ -142,6 +142,10 @@ pub enum WmAction {
         name: String,
     },
 
+    // ── Quick take (unit) ──
+    PaneTake,
+    PaneTakeAndFocus,
+
     // ── Workspace (unit) ──
     CreateWorkspace,
     RenameWorkspace,
@@ -182,6 +186,12 @@ pub enum WmAction {
     },
     DeleteWorkspace {
         ws_idx: usize,
+    },
+
+    // ── Take pane (parameterized) ──
+    TakePane {
+        pane_id: u64,
+        focus_after: bool,
     },
 
     // ── Config ──
@@ -226,6 +236,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
         "swap_pane" => Some(WmAction::SwapPane),
+        "pane_take" => Some(WmAction::PaneTake),
+        "pane_take_and_focus" => Some(WmAction::PaneTakeAndFocus),
         "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
         "swap_left" => Some(WmAction::SwapLeft),
         "swap_right" => Some(WmAction::SwapRight),
@@ -369,6 +381,10 @@ pub fn build_action(
             pane_id: get_u64(args, "pane_id")?,
             name: get_string(args, "name")?,
         }),
+        "take_pane" => Some(WmAction::TakePane {
+            pane_id: get_u64(args, "pane_id")?,
+            focus_after: args.get("focus_after").and_then(|v| v.parse().ok()).unwrap_or(false),
+        }),
         "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
@@ -458,7 +474,10 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ReloadConfig
         | WmAction::AddPaneToColumn { .. }
         | WmAction::DeleteColumn { .. }
-        | WmAction::DeleteWorkspace { .. } => 6,
+        | WmAction::DeleteWorkspace { .. }
+        | WmAction::TakePane { .. }
+        | WmAction::PaneTake
+        | WmAction::PaneTakeAndFocus => 6,
     }
 }
 
@@ -626,7 +645,10 @@ mod tests {
                 | WmAction::ReloadConfig
                 | WmAction::AddPaneToColumn { .. }
                 | WmAction::DeleteColumn { .. }
-                | WmAction::DeleteWorkspace { .. } => 6,
+                | WmAction::DeleteWorkspace { .. }
+                | WmAction::TakePane { .. }
+                | WmAction::PaneTake
+                | WmAction::PaneTakeAndFocus => 6,
             }
         };
         // Smoke test that all branches compile
@@ -689,6 +711,12 @@ mod tests {
             col_idx: 0,
         };
         let _ = WmAction::DeleteWorkspace { ws_idx: 0 };
+        let _ = WmAction::TakePane {
+            pane_id: 1,
+            focus_after: false,
+        };
+        let _ = WmAction::PaneTake;
+        let _ = WmAction::PaneTakeAndFocus;
     }
 
     #[test]

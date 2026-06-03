@@ -605,6 +605,13 @@ impl HecaApp {
             InputMode::ConfirmDelete { message, .. } => {
                 ("CONFIRM", format!(" {} ", message))
             }
+            InputMode::PaneTake { focus_after, .. } => {
+                if *focus_after {
+                    ("TAKE+", " pick a pane → ".to_string())
+                } else {
+                    ("TAKE", " pick a pane → ".to_string())
+                }
+            }
         };
         let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -1199,6 +1206,29 @@ impl ApplicationHandler for HecaApp {
                         }
                         state.needs_redraw = true;
                     }
+                    InputMode::PaneTake { candidates, focus_after } => {
+                        let candidates = candidates.clone();
+                        let should_focus = *focus_after;
+                        state.input_mode = InputMode::Normal;
+
+                        let typed = key_text.chars().next()
+                            .or_else(|| {
+                                match event.physical_key {
+                                    winit::keyboard::PhysicalKey::Code(c) => {
+                                        let s = format!("{:?}", c);
+                                        s.strip_prefix("Key").and_then(|n| n.chars().next())
+                                    }
+                                    _ => None,
+                                }
+                            })
+                            .map(|c| c.to_ascii_lowercase());
+                        if let Some(ch) = typed
+                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
+                                eprintln!("[pane-take] taking pane={}", *target_id);
+                                self.registry.execute(&WmAction::TakePane { pane_id: *target_id, focus_after: should_focus }, state);
+                            }
+                        state.needs_redraw = true;
+                    }
                     InputMode::SidebarNav => {
                         let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
                         let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
@@ -1245,12 +1275,9 @@ impl ApplicationHandler for HecaApp {
                             }
                         }
                     }
-                    InputMode::Rename { .. } => {
-                        // Handled by early return before this match
-                    }
-                    InputMode::ConfirmDelete { .. } => {
-                        // Handled by early return before this match
-                    }
+                    // Rename, ConfirmDelete, and PaneTake are handled by early
+                    // return before this match — use a wildcard for the rest.
+                    _ => {}
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
@@ -1677,6 +1704,9 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::PaneSelect, handle_pane_select);
     registry.register(&WmAction::SwapPane, handle_swap_pane);
     registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
+    registry.register(&WmAction::PaneTake, handle_pane_take);
+    registry.register(&WmAction::PaneTakeAndFocus, handle_pane_take_and_focus);
+    registry.register(&WmAction::TakePane { pane_id: 0, focus_after: false }, handle_take_pane);
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, handle_float_at);
     registry.register(&WmAction::ClosePaneById { pane_id: 0 }, handle_close_pane_by_id);
@@ -1707,6 +1737,9 @@ pub fn build_registry() -> actions::ActionRegistry {
     // ── Destructive ──
     registry.register(&WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 }, handle_delete_column);
     registry.register(&WmAction::DeleteWorkspace { ws_idx: 0 }, handle_delete_workspace);
+
+    // ── Take ──
+    // (registered above with PaneTake/PaneTakeAndFocus)
 
     // ── Mode ──
     registry.register(&WmAction::EnterMode { name: String::new() }, handle_enter_mode);
