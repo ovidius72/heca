@@ -71,7 +71,7 @@ impl ScrollingSpace {
     /// X position of each column (cumulative, starting at 0).
     fn column_xs(&self) -> impl Iterator<Item = f64> + '_ {
         let gaps = self.options.gaps;
-        let mut x = gaps;
+        let mut x = 0.0;
         let widths = self.column_widths.iter().copied().chain(std::iter::once(0.0));
         widths.map(move |width| {
             let rv = x;
@@ -461,10 +461,34 @@ impl ScrollingSpace {
             };
             col.width = new_width;
             col.is_full_width = false;
+
+            // Save old column positions before update.
+            let old_xs: Vec<(ColumnId, f64)> = self.column_xs()
+                .zip(self.columns.iter())
+                .map(|(x, c)| (c.id, x))
+                .collect();
+
             self.update_all_column_widths();
-            // Recompute view offset so the active column stays visible.
-            let offset = self.compute_view_offset_for_column(self.active_column_idx, None);
-            self.view_offset = ViewOffset::Static(offset);
+
+            // Preserve view position so layout stays visually fixed during resize.
+            let old_view_pos = self.view_pos();
+            let new_view_pos = self.view_pos();
+            let view_delta = old_view_pos - new_view_pos;
+            self.view_offset.offset(view_delta);
+
+            // Animate columns to their new positions.
+            let new_xs: Vec<f64> = self.column_xs().collect();
+            for (i, col) in self.columns.iter_mut().enumerate() {
+                let old_x = old_xs
+                    .iter()
+                    .find(|(id, _)| *id == col.id)
+                    .map(|(_, x)| *x)
+                    .unwrap_or(new_xs[i]);
+                let diff = old_x - new_xs[i];
+                if diff.abs() > 0.5 {
+                    col.animate_move_from(diff, AnimationConfig::default());
+                }
+            }
         }
     }
 
