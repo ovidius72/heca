@@ -68,21 +68,21 @@ impl PaneFrame {
             let title_w = pane_name.len() as f32 * fs * 0.6;
             let x_w = fs * 0.7; // width of the × character
             
-            // Right-aligned position: [title] [×]
-            let close_x = x + w - style.padding - x_w;
-            let title_x = close_x - title_w - 4.0;
+            // Title at left, [x] at right — both with corner margin
+            let title_x = x + style.padding + 2.0;
+            let close_x = x + w - style.padding - x_w - 2.0;
             
-            // Y position: sits ON the top border (covers it)
+            // Both sit on top border, covering it
             let text_y = y - fs / 2.0 + 1.0;
             
-            // Draw background strip behind title + [x] to "cut" the border
-            let strip_w = title_w + 4.0 + x_w + 4.0;
-            primitive.draw_rect(title_x - 2.0, text_y, strip_w + 2.0, fs, bg);
+            // Background strip behind title + [x] to "cut" the border
+            let strip_w = (close_x + x_w + 2.0) - (title_x - 2.0);
+            primitive.draw_rect(title_x - 2.0, text_y, strip_w, fs, bg);
             
-            // Title text
+            // Title text (left)
             text.queue_text(pane_name, title_x, text_y, fs, title_color);
             
-            // Close button [x] — no background, just the character
+            // Close [x] (right)
             text.queue_text("×", close_x, text_y, fs * 1.1, title_color);
         }
 
