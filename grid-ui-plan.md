@@ -1,7 +1,9 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Branch: **`heca-grid-ui`** · Status: **Phase A complete; Phase B in progress** · Last updated: 2026-06-03
+> Branch: **`heca-grid-ui`** · Status: **Phase A done; B done; C in progress** · Last updated: 2026-06-03
+>
+> `Flex` is now **layout-only**; visual styling lives on surface components (`Surface`/`Card`/`Button`) via the `StyleExt` trait. The showcase is migrated to these.
 >
 > Locked deps: `floem_reactive 0.2.0`, `taffy 0.7.7`. Q1 resolved (local `Color`), Q3 resolved (standalone example).
 
@@ -187,7 +189,7 @@ Prioritized by what heca actually needs. Each extends `Base`.
 
 | Tier | Components |
 |------|-----------|
-| **Primitives** | `Container`, `Flex`, `Grid`, `Stack`, `Spacer`, `Label` |
+| **Primitives** | `Flex`/`Container` (layout-only), `Surface` (base styled box), `Grid`, `Stack`, `Spacer`, `Label` |
 | **Interactive** | `Button`, `IconButton`, `Toggle`, `Tabs` |
 | **Display** | `Card`/`DataCard`, `Panel`/`Hud`, `Separator`, `Badge`, `StatusBar` |
 | **Tron-flavor** | `CornerBrackets` (decorator), `Reticle`, `Gauge`, `EnergyMeter`, `SignalIndicator`, `ScanlineOverlay`, `CoordinateDisplay` |
@@ -233,8 +235,9 @@ Build order: **A → B → C standalone; D adopts into the app** (lowest risk; "
 
 **Goal:** The reusable Tron component set heca will consume.
 
-- [ ] C1. `Button`, `IconButton`, `Toggle` (hover/press/focus signals, glow on focus).
-- [ ] C2. `Card`/`DataCard`, `Panel`/`Hud`, `Separator`, `Badge`.
+- [~] C1. `Button` **done** (hover signal + click callback via the event path); `IconButton`/`Toggle` pending.
+- [~] C2. `Surface` (base styled box) + `Card` **done**; `DataCard`/`Panel`/`Hud`/`Separator`/`Badge` pending.
+- [x] C0. Builder traits `LayoutExt`/`StyleExt`/`Parent` enforcing layout-vs-surface separation; `Flex` made layout-only; showcase migrated to `Card`/`Button` with live hover/click.
 - [ ] C3. `Gauge`, `EnergyMeter`, `SignalIndicator` (value-driven via signals).
 - [ ] C4. `CornerBrackets` decorator + `Reticle` (shared, used by Pane/focus chrome).
 - [ ] C5. `StatusBar` (segmented `Flex`, signal-bound segments).

@@ -77,7 +77,7 @@ fn label_signal_drives_text() {
 
 #[test]
 fn paint_emits_background_rect_and_label_text() {
-    let root = Flex::column()
+    let root = Surface::new()
         .background(Color::rgb(10, 10, 10))
         .child(Label::new("HI"));
 
@@ -184,7 +184,7 @@ fn intensity_off_suppresses_glow() {
     let mut theme = Theme::grid_tron();
     theme.intensity = Intensity::Off;
 
-    let root = Flex::column().glow(Color::rgb(64, 224, 255));
+    let root = Surface::new().glow(Color::rgb(64, 224, 255));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);

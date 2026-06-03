@@ -1,66 +1,92 @@
-//! Grid UI showcase — the first runnable visual proof of Phase B.
+//! Grid UI showcase — runnable visual proof of the component library.
 //!
-//! Builds a small `heca-grid-ui` component tree (a row of glowing HUD cards),
-//! lays it out with the layout engine, paints it into a `Scene`, and renders the
-//! `Scene` via the GPU backend (SDF glow + corner brackets + scanline) on a dark
-//! Grid theme.
+//! Builds a retained `heca-grid-ui` component tree (HUD cards + interactive
+//! buttons), lays it out each frame, paints it into a `Scene`, and renders via
+//! the GPU backend (SDF glow + corner brackets + scanline) on the dark Grid
+//! theme. Buttons respond to pointer hover and click.
 //!
 //! Run: `cargo run -p heca-renderer --example showcase`
 
 use std::sync::Arc;
 
+use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
-use heca_grid_ui::{
-    Align, Component, Flex, Label, LayoutEngine, Length, PaintCx, Rectangle, Scene, Size, Theme,
-};
+use heca_grid_ui::{Component, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size};
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-/// Build the showcase UI for the current logical window size.
-fn build_ui(w: f32, h: f32, theme: &Theme) -> Flex {
+/// Build the retained UI tree. `Flex` is layout-only; `Card`/`Button` are the
+/// styled surfaces.
+fn build_ui(theme: &Theme) -> Flex {
     let card = |title: &str, value: &str| {
-        Flex::column()
-            .width(Length::Px(240.0))
-            .height(Length::Px(150.0))
-            .padding(18.0)
-            .gap(10.0)
+        Card::new(title)
+            .width(Length::Px(220.0))
+            .height(Length::Px(140.0))
             .background(theme.surface)
             .border(theme.accent, 1.5)
             .glow(theme.glow)
             .radius(4.0)
-            .child(Label::new(title).color(theme.muted).font_size(13.0))
-            .child(Label::new(value).color(theme.foreground).font_size(34.0))
+            .child(Label::new(value).color(theme.foreground).font_size(32.0))
+    };
+    let button = |label: &str| {
+        let name = label.to_string();
+        Button::new(label)
+            .background(theme.surface)
+            .border(theme.accent, 1.2)
+            .glow_with(theme.glow, 6.0, 0.8)
+            .radius(4.0)
+            .on_click(move || println!("[showcase] {name} clicked"))
     };
 
-    Flex::row()
-        .width(Length::Px(w))
-        .height(Length::Px(h))
-        .padding(48.0)
+    Flex::column()
+        .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
-        .child(card("UPLINK", "ONLINE"))
-        .child(card("POWER", "98%"))
-        .child(card("GRID NODES", "1024"))
+        .child(
+            Flex::row()
+                .gap(28.0)
+                .child(card("UPLINK", "ONLINE"))
+                .child(card("POWER", "98%"))
+                .child(card("GRID NODES", "1024")),
+        )
+        .child(
+            Flex::row()
+                .gap(18.0)
+                .child(button("DEREZ"))
+                .child(button("RECONFIGURE")),
+        )
 }
 
-/// Paint the UI tree into a scene, then decorate with brackets + scanlines.
-fn build_scene(root: &Flex, theme: &Theme, w: f32, h: f32) -> Scene {
+/// Paint the tree, then decorate bordered surfaces with corner brackets and add
+/// a full-window scanline overlay.
+fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, theme);
         root.paint(&mut cx);
     }
-    // Corner brackets framing each card.
-    for card in &root.base().children {
+    add_brackets(&mut scene, root, theme);
+    scene.push(DrawCommand::Scanline(ScanlineCmd {
+        rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
+        color: theme.accent,
+        spacing: 3.0,
+        opacity: theme.intensity.scanline_opacity().max(0.05),
+    }));
+    scene
+}
+
+/// Recursively frame any bordered surface with corner brackets.
+fn add_brackets(scene: &mut Scene, c: &dyn Component, theme: &Theme) {
+    if c.base().style.border.is_some() {
         scene.push(DrawCommand::Brackets(BracketCmd {
-            rect: card.base().bounds,
+            rect: c.base().bounds,
             color: theme.accent,
-            len: 14.0,
+            len: 12.0,
             thickness: 1.5,
             glow: Some(Glow {
                 color: theme.glow,
@@ -69,14 +95,9 @@ fn build_scene(root: &Flex, theme: &Theme, w: f32, h: f32) -> Scene {
             }),
         }));
     }
-    // Full-window scanline overlay.
-    scene.push(DrawCommand::Scanline(ScanlineCmd {
-        rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
-        color: theme.accent,
-        spacing: 3.0,
-        opacity: theme.intensity.scanline_opacity().max(0.05),
-    }));
-    scene
+    for child in &c.base().children {
+        add_brackets(scene, child.as_ref(), theme);
+    }
 }
 
 struct GpuState {
@@ -89,13 +110,15 @@ struct GpuState {
     text: TextRenderer,
     scale_factor: f64,
     theme: Theme,
+    ui: Flex,
+    cursor: Point,
 }
 
 impl GpuState {
     async fn new(event_loop: &ActiveEventLoop) -> Self {
         let attrs = Window::default_attributes()
             .with_title("heca-grid-ui showcase")
-            .with_inner_size(winit::dpi::LogicalSize::new(900.0, 360.0));
+            .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         let scale_factor = window.scale_factor();
 
@@ -148,6 +171,7 @@ impl GpuState {
         let mut text = TextRenderer::new(&device, format);
         text.set_scale_factor(scale_factor);
         text.set_font_family(&theme.font_family);
+        let ui = build_ui(&theme);
 
         Self {
             window,
@@ -159,6 +183,8 @@ impl GpuState {
             text,
             scale_factor,
             theme,
+            ui,
+            cursor: Point::new(-1.0, -1.0),
         }
     }
 
@@ -177,9 +203,12 @@ impl GpuState {
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
 
-        let mut root = build_ui(w, h, &self.theme);
-        LayoutEngine::new().compute(&mut root, Size::new(w as f64, h as f64));
-        let scene = build_scene(&root, &self.theme, w, h);
+        // Relayout the retained tree to fill the window.
+        self.ui.base_mut().style.width = Length::Px(w);
+        self.ui.base_mut().style.height = Length::Px(h);
+        LayoutEngine::new().compute(&mut self.ui, Size::new(w as f64, h as f64));
+
+        let scene = build_scene(&self.ui, &self.theme, w, h);
         enqueue_scene(&mut self.grid, &mut self.text, &scene);
 
         let frame = match self.surface.get_current_texture() {
@@ -196,7 +225,6 @@ impl GpuState {
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("showcase") });
 
-        // Clear to the theme background.
         let bg = self.theme.background.to_f32x4();
         {
             let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -248,6 +276,23 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            WindowEvent::CursorMoved { position, .. } => {
+                state.cursor = Point::new(
+                    position.x / state.scale_factor,
+                    position.y / state.scale_factor,
+                );
+                state.ui.event(&Event::PointerMoved { pos: state.cursor });
+                state.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Left,
+                ..
+            } => {
+                let pos = state.cursor;
+                state.ui.event(&Event::PointerPressed { pos });
+                state.window.request_redraw();
+            }
             WindowEvent::RedrawRequested => state.render(),
             _ => {}
         }
