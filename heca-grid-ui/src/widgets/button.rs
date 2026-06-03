@@ -162,8 +162,8 @@ impl Button {
                 border: None,
                 glow: Some(Glow {
                     color: t.glow,
-                    radius: if hover { 12.0 } else { 8.0 },
-                    intensity: if hover { 1.3 } else { 0.9 },
+                    radius: if hover { 28.0 } else { 14.0 },
+                    intensity: if hover { 1.4 } else { 0.8 },
                 }),
             },
             ButtonVariant::Secondary => Look {
@@ -185,8 +185,8 @@ impl Button {
                 border: None,
                 glow: Some(Glow {
                     color: t.danger,
-                    radius: if hover { 12.0 } else { 8.0 },
-                    intensity: if hover { 1.3 } else { 0.9 },
+                    radius: if hover { 28.0 } else { 14.0 },
+                    intensity: if hover { 1.4 } else { 0.8 },
                 }),
             },
             ButtonVariant::Outline => Look {
@@ -202,8 +202,8 @@ impl Button {
                 }),
                 glow: Some(Glow {
                     color: t.glow,
-                    radius: 8.0,
-                    intensity: if hover { 1.0 } else { 0.45 },
+                    radius: if hover { 20.0 } else { 10.0 },
+                    intensity: if hover { 1.1 } else { 0.4 },
                 }),
             },
             ButtonVariant::Ghost => Look {
