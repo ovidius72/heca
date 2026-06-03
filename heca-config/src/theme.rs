@@ -409,8 +409,12 @@ impl Default for KeysConfig {
         bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+m".to_string()));
 
         // ── Tabs ──
-        bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
-        bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
+        bindings.insert("workspace_prev".to_string(), Single("prefix+p".to_string()));
+        bindings.insert("workspace_next".to_string(), Single("prefix+n".to_string()));
+
+        // ── Tabs (pane cycling) ──
+        bindings.insert("next_pane".to_string(), Single("prefix+d".to_string()));
+        bindings.insert("prev_pane".to_string(), Single("prefix+u".to_string()));
 
         // ── Sidebars ──
         // Note: sidebar navigation (h/j/k/l) is ONLY active in SidebarNav mode.
@@ -421,8 +425,7 @@ impl Default for KeysConfig {
         bindings.insert("sidebar_expand_toggle".to_string(), Single("prefix+Tab".to_string()));
 
         // ── Workspace navigation ──
-        bindings.insert("workspace_prev".to_string(), Single("prefix+u".to_string()));
-        bindings.insert("workspace_next".to_string(), Single("prefix+d".to_string()));
+        // (now at prefix+p/n — see Tabs section above)
 
         // ── Focus toggle ──
         bindings.insert("focus_toggle_local".to_string(),  Single("prefix+i".to_string()));
