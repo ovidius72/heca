@@ -27,6 +27,8 @@ use heca_core::layout::{Point, Rectangle, Size};
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
+/// Seconds for the press flash to fade out.
+const FLASH_DURATION: f32 = 0.18;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
 const GLOW_RADIUS: f32 = 30.0;
 /// Hover glow peak intensity — how bright (smaller = thinner/fainter).
@@ -90,6 +92,8 @@ pub struct Button {
     show_border: bool,
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
     progress: f32,
+    /// Press flash amount — set to 1.0 on press, decays to 0.0.
+    flash: f32,
     hovered: Signal<bool>,
     on_click: Option<Box<dyn Fn()>>,
 }
@@ -108,6 +112,7 @@ impl Button {
             show_glow: true,
             show_border: true,
             progress: 0.0,
+            flash: 0.0,
             hovered: signal(false),
             on_click: None,
         };
@@ -341,6 +346,11 @@ impl Component for Button {
             }
         }
 
+        // Press flash — a quick brightening overlay that fades out.
+        if self.flash > 0.0 {
+            cx.rect(b, foreground.with_alpha(alpha(self.flash * 0.35)), None, 0.0, None);
+        }
+
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
         if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
             cx.corner_brackets(b, accent);
@@ -357,6 +367,7 @@ impl Component for Button {
                 Handled::No
             }
             Event::PointerPressed { pos } if self.contains(*pos) => {
+                self.flash = 1.0;
                 if let Some(f) = &self.on_click {
                     f();
                 }
@@ -367,6 +378,7 @@ impl Component for Button {
                 key: GridKey::Enter | GridKey::Space,
                 pressed: true,
             } => {
+                self.flash = 1.0;
                 if let Some(f) = &self.on_click {
                     f();
                 }
@@ -377,22 +389,29 @@ impl Component for Button {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
-        let target = if self.hovered.get_untracked() {
-            1.0
+        let mut animating = false;
+
+        // Hover progress eases toward the hovered target.
+        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        if (self.progress - target).abs() >= 1e-3 {
+            let step = dt / HOVER_DURATION;
+            self.progress = if self.progress < target {
+                (self.progress + step).min(target)
+            } else {
+                (self.progress - step).max(target)
+            };
+            animating = true;
         } else {
-            0.0
-        };
-        if (self.progress - target).abs() < 1e-3 {
             self.progress = target;
-            return false;
         }
-        let step = dt / HOVER_DURATION;
-        if self.progress < target {
-            self.progress = (self.progress + step).min(target);
-        } else {
-            self.progress = (self.progress - step).max(target);
+
+        // Press flash fades out.
+        if self.flash > 0.0 {
+            self.flash = (self.flash - dt / FLASH_DURATION).max(0.0);
+            animating = true;
         }
-        true
+
+        animating
     }
 }
 
