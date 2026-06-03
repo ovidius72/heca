@@ -71,7 +71,7 @@ impl ScrollingSpace {
     /// X position of each column (cumulative, starting at 0).
     fn column_xs(&self) -> impl Iterator<Item = f64> + '_ {
         let gaps = self.options.gaps;
-        let mut x = 0.0;
+        let mut x = gaps;
         let widths = self.column_widths.iter().copied().chain(std::iter::once(0.0));
         widths.map(move |width| {
             let rv = x;
