@@ -237,6 +237,32 @@ fn focus_traversal_and_keyboard_activation() {
 }
 
 #[test]
+fn click_focuses_hit_widget_and_misses_clear() {
+    use heca_grid_ui::FocusManager;
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    // Center of the second button (focus index 1).
+    let b = ui.base().children[1].base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+
+    let mut focus = FocusManager::new();
+    focus.focus_at(&mut ui, center);
+    assert_eq!(focus.focused(), Some(1), "click focuses the hit button");
+    assert!(
+        ui.base().children[1].base().focused.get_untracked(),
+        "hit button shows focus"
+    );
+
+    // A click that misses every focusable clears focus.
+    focus.focus_at(&mut ui, Point::new(9999.0, 9999.0));
+    assert_eq!(focus.focused(), None, "missed click clears focus");
+}
+
+#[test]
 fn intensity_off_suppresses_glow() {
     let mut theme = Theme::grid_tron();
     theme.intensity = Intensity::Off;
