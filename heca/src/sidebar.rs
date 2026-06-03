@@ -1,4 +1,5 @@
 use crate::app_state::SidebarItemState;
+use crate::input::WmAction;
 use heca_core::layout::session::Session;
 
 /// A flat item in the sidebar navigation list.
@@ -60,6 +61,20 @@ pub struct SidebarTree {
     pub scroll_offset: usize,
     /// Flat navigation list (built from tree, skipping collapsed items).
     pub flat_items: Vec<SidebarItem>,
+    /// Button hitboxes for [+w], [+c], [+p] buttons (set during render).
+    pub button_hitboxes: Vec<SidebarButtonHitbox>,
+}
+
+/// Hitbox for a sidebar button.
+#[derive(Debug, Clone)]
+pub struct SidebarButtonHitbox {
+    pub action: WmAction,
+    /// Optional workspace index — used to switch workspace before dispatching.
+    pub ws_idx: Option<usize>,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 impl SidebarTree {
@@ -70,6 +85,7 @@ impl SidebarTree {
             item_count: 0,
             scroll_offset: 0,
             flat_items: Vec::new(),
+            button_hitboxes: Vec::new(),
         }
     }
 
@@ -372,7 +388,13 @@ pub fn sidebar_hit_test(
         return None;
     }
 
-    let line_index = (relative_y / ITEM_HEIGHT) as usize;
+    // Account for the [+w] button row at the top.
+    let adjusted_y = relative_y - BTN_ROW_HEIGHT;
+    if adjusted_y < 0.0 {
+        return None; // Clicked on the button row itself.
+    }
+
+    let line_index = (adjusted_y / ITEM_HEIGHT) as usize;
 
     if is_collapsed {
         // In collapsed mode columns are invisible; map visible line to flat idx.
@@ -397,6 +419,23 @@ pub fn sidebar_hit_test(
     None
 }
 
+/// Check if a mouse position hits any sidebar button.
+/// Returns the button if hit, None otherwise.
+pub fn sidebar_button_hit_test(
+    tree: &SidebarTree,
+    mouse_x: f32,
+    mouse_y: f32,
+) -> Option<(usize, WmAction)> {
+    for (i, hitbox) in tree.button_hitboxes.iter().enumerate() {
+        if mouse_x >= hitbox.x && mouse_x <= hitbox.x + hitbox.width
+            && mouse_y >= hitbox.y && mouse_y <= hitbox.y + hitbox.height
+        {
+            return Some((i, hitbox.action.clone()));
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Sidebar rendering functions
 // ---------------------------------------------------------------------------
@@ -405,17 +444,20 @@ use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
 const ITEM_HEIGHT: f32 = 24.0;
-const LABEL_FONT_SIZE: f32 = 14.0;
 const INDENT_WS: f32 = 8.0;
 const INDENT_COL: f32 = 26.0;
 const INDENT_PANE: f32 = 44.0;
+const BTN_SIZE: f32 = 20.0;
+const BTN_PAD_X: f32 = 2.0;
+const BTN_RADIUS: f32 = 4.0;
+const BTN_ROW_HEIGHT: f32 = ITEM_HEIGHT; // [+w] button row at top
 
 /// Render the expanded sidebar tree (width >= 80px).
 /// If `candidates` is provided, pane letters are shown during PaneSelect/PaneSwap.
 // Each param is a distinct render input; grouping would hurt call-site readability.
 #[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_expanded(
-    tree: &SidebarTree,
+    tree: &mut SidebarTree,
     x: f32,
     y: f32,
     width: f32,
@@ -436,12 +478,38 @@ pub fn render_sidebar_expanded(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
+    // Hovered button index for hover effect.
+    hovered_btn_idx: Option<usize>,
+    // Font sizes from theme.
+    label_font_size: f32,
+    button_font_size: f32,
 ) {
+    // Clear and collect button hitboxes.
+    tree.button_hitboxes.clear();
+
     let scroll = tree.scroll_offset;
     let mut line_y = y + 4.0;
     let visible_lines = (height / ITEM_HEIGHT) as usize;
     let mut drawn = 0usize;
-    let font_size = LABEL_FONT_SIZE;
+
+    // [+w] button at the top of the sidebar.
+    {
+        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
+        let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+        let btn_idx = tree.button_hitboxes.len();
+        let is_hov = hovered_btn_idx == Some(btn_idx);
+        let (bg, brd, tc) = if is_hov {
+            ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+        } else {
+            ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+        };
+        primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+        let tw = 2.0 * button_font_size * 0.55;
+        text_renderer.queue_text("+w", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
+        tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::CreateWorkspace, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+    }
+    line_y += ITEM_HEIGHT;
+    drawn += 1;
 
     for (fi, flat_item) in tree.flat_items.iter().enumerate() {
         if fi < scroll {
@@ -529,8 +597,54 @@ pub fn render_sidebar_expanded(
         };
 
         let text_x = x + indent;
-        let text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
-        text_renderer.queue_text(&label, text_x, text_y, font_size, color);
+        let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 2.0;
+        text_renderer.queue_text(&label, text_x, text_y, label_font_size, color);
+
+        // Buttons on the right side of each item.
+        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
+        let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
+
+        if let SidebarItem::Workspace { ws_idx } = flat_item {
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
+            let (bg, brd, tc) = if is_hov {
+                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            } else {
+                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 2.0 * button_font_size * 0.55;
+            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
+
+        if let SidebarItem::Column { ws_idx, col_idx: _ } = flat_item {
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
+            let (bg, brd, tc) = if is_hov {
+                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            } else {
+                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 2.0 * button_font_size * 0.55;
+            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitVertical, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
+
+        if let SidebarItem::Pane { pane_id } = flat_item {
+            let btn_idx = tree.button_hitboxes.len();
+            let is_hov = hovered_btn_idx == Some(btn_idx);
+            let (bg, brd, tc) = if is_hov {
+                ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
+            } else {
+                ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
+            };
+            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            let tw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
 
         line_y += ITEM_HEIGHT;
         drawn += 1;
@@ -544,7 +658,7 @@ pub fn render_sidebar_expanded(
 // Each param is a distinct render input; grouping would hurt call-site readability.
 #[allow(clippy::too_many_arguments)]
 pub fn render_sidebar_collapsed(
-    tree: &SidebarTree,
+    tree: &mut SidebarTree,
     x: f32,
     y: f32,
     width: f32,
@@ -565,8 +679,13 @@ pub fn render_sidebar_collapsed(
     // Drag source colors from theme.
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
+    // Hovered button index (unused in collapsed — no buttons).
+    _hovered_btn_idx: Option<usize>,
+    // Font sizes from theme.
+    label_font_size: f32,
+    _button_font_size: f32,
 ) {
-    let font_size = 13.0; // slightly smaller for compact fit
+    let font_size = label_font_size;
     let activity_bar_w = 4.0;
     let text_x = x + activity_bar_w + 4.0; // 4px gap after activity bar
     let mut line_y = y + 4.0;

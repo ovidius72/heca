@@ -690,7 +690,7 @@ impl HecaApp {
         let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
         if chrome.left_sidebar_width >= 80.0 {
             sidebar::render_sidebar_expanded(
-                &state.sidebar_tree,
+                &mut state.sidebar_tree,
                 0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
                 matches!(state.input_mode, InputMode::SidebarNav),
                 theme.accent.to_f32x4(),
@@ -705,10 +705,13 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
+                state.mouse.sidebar_hovered_btn_idx,
+                theme.sidebar_label_font_size,
+                theme.sidebar_button_font_size,
             );
         } else {
             sidebar::render_sidebar_collapsed(
-                &state.sidebar_tree,
+                &mut state.sidebar_tree,
                 0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
                 matches!(state.input_mode, InputMode::SidebarNav),
                 theme.accent.to_f32x4(),
@@ -723,6 +726,9 @@ impl HecaApp {
                 drag_source_fi,
                 drag_source_bg,
                 drag_source_border,
+                state.mouse.sidebar_hovered_btn_idx,
+                theme.sidebar_label_font_size,
+                theme.sidebar_button_font_size,
             );
         }
 

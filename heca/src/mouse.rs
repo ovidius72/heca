@@ -90,6 +90,9 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
             label.y = pos.1;
         }
 
+    // ── Button hover detection ──
+    state.mouse.sidebar_hovered_btn_idx = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1).map(|(i, _)| i);
+
     None
 }
 
@@ -364,8 +367,16 @@ fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option<u64> {
 
     let sidebar_h = sidebar_bottom - sidebar_top;
     let fi = crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)?;
-    match state.sidebar_tree.flat_items.get(fi)? {
+    let item = state.sidebar_tree.flat_items.get(fi);
+    match item? {
         crate::sidebar::SidebarItem::Pane { pane_id } => Some(*pane_id),
+        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+            // Drag the first pane in this column.
+            state.session.workspaces.get(*ws_idx)
+                .and_then(|ws| ws.scrolling.columns.get(*col_idx))
+                .and_then(|col| col.panes.first())
+                .map(|p| p.id.0)
+        }
         _ => None,
     }
 }
@@ -457,6 +468,17 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
         40.0
     };
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+        // Check buttons first.
+        if let Some((btn_idx, button)) = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1) {
+            // Switch to the target workspace if specified.
+            if let Some(hitbox) = state.sidebar_tree.button_hitboxes.get(btn_idx)
+                && let Some(ws_idx) = hitbox.ws_idx
+                    && ws_idx != state.session.active_workspace_idx {
+                        crate::switch_workspace_tracked(state, ws_idx);
+                    }
+            return Some(button);
+        }
+
         let sidebar_h = sidebar_bottom - sidebar_top;
         if let Some(fi) =
             crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)
