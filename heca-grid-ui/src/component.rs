@@ -7,7 +7,7 @@
 //! once on [`PaintCx`], so every component reuses it (DRY).
 
 use crate::color::Color;
-use crate::reactive::{signal, Signal, SignalGet};
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{
     Border, BracketCmd, DrawCommand, Glow, RectCmd, Scene, TextAlign, TextCmd,
 };
@@ -118,6 +118,17 @@ pub trait Component {
             }
         }
         Handled::No
+    }
+
+    /// Called when this component gains keyboard focus. Default: set the focus
+    /// flag (which drives the focus ring). Override to add behaviour.
+    fn on_focus(&mut self) {
+        self.base_mut().focused.set(true);
+    }
+
+    /// Called when this component loses keyboard focus. Default: clear it.
+    fn on_blur(&mut self) {
+        self.base_mut().focused.set(false);
     }
 
     /// Advance time-based animations by `dt` seconds. Returns `true` if still

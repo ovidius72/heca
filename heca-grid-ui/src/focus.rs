@@ -6,7 +6,8 @@
 //! lives in `Base.focused`, so widgets can render a focus ring reactively.
 
 use crate::component::{Component, Event, GridKey, Handled};
-use crate::reactive::{SignalGet, SignalUpdate};
+use crate::reactive::SignalGet;
+use heca_core::layout::Point;
 
 /// Visit every focusable component depth-first, calling `f(index, component)`.
 fn for_each_focusable(
@@ -71,14 +72,7 @@ impl FocusManager {
                 }
             }
         };
-        let mut idx = 0;
-        for_each_focusable(root, &mut idx, &mut |i, c| {
-            let want = i == next;
-            if c.base().focused.get_untracked() != want {
-                c.base_mut().focused.set(want);
-            }
-        });
-        self.focused = Some(next);
+        self.apply(root, Some(next));
     }
 
     /// Deliver a key press to the focused component. Returns whether it consumed it.
@@ -98,12 +92,36 @@ impl FocusManager {
 
     /// Clear focus (e.g. on Escape).
     pub fn clear(&mut self, root: &mut dyn Component) {
+        self.apply(root, None);
+    }
+
+    /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
+    /// click); clears focus if the click misses every focusable.
+    pub fn focus_at(&mut self, root: &mut dyn Component, pos: Point) {
+        let mut hit = None;
         let mut idx = 0;
-        for_each_focusable(root, &mut idx, &mut |_, c| {
-            if c.base().focused.get_untracked() {
-                c.base_mut().focused.set(false);
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            if c.base().bounds.contains(pos) {
+                hit = Some(i); // last match wins = top-most in z-order
             }
         });
-        self.focused = None;
+        self.apply(root, hit);
+    }
+
+    /// Apply a target focus index across the tree. Fires `on_blur`/`on_focus`
+    /// only on the components that actually change — those events add/remove the
+    /// focus effect.
+    fn apply(&mut self, root: &mut dyn Component, target: Option<usize>) {
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            let want = Some(i) == target;
+            let has = c.base().focused.get_untracked();
+            if want && !has {
+                c.on_focus();
+            } else if !want && has {
+                c.on_blur();
+            }
+        });
+        self.focused = target;
     }
 }

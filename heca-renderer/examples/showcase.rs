@@ -322,6 +322,8 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 let pos = state.cursor;
+                // A click focuses the clicked widget (clears focus if it misses).
+                state.focus.focus_at(&mut state.ui, pos);
                 state.ui.event(&Event::PointerPressed { pos });
                 state.window.request_redraw();
             }
