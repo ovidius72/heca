@@ -476,6 +476,20 @@ impl ScrollingSpace {
             let view_delta = old_view_pos - new_view_pos;
             self.view_offset.offset(view_delta);
 
+            // Ensure the active column stays visible after resize.
+            let target_offset = self.compute_view_offset_for_column(self.active_column_idx, None);
+            let pixel = 1.0 / self.scale;
+            let diff = target_offset - self.view_offset.target();
+            if diff.abs() < pixel {
+                self.view_offset.offset(diff);
+            } else {
+                self.view_offset = ViewOffset::Animation(Animation::new(
+                    self.view_offset.current(),
+                    target_offset,
+                    AnimationConfig::default(),
+                ));
+            }
+
             // Animate columns to their new positions.
             let new_xs: Vec<f64> = self.column_xs().collect();
             for (i, col) in self.columns.iter_mut().enumerate() {

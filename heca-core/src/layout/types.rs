@@ -180,7 +180,7 @@ impl Default for LayoutOptions {
     fn default() -> Self {
         Self {
             gaps: 8.0,
-            center_focused_column: CenterFocusedColumn::OnOverflow,
+            center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
             overview_scale: 0.25,
