@@ -11,6 +11,7 @@
 
 use crate::color::Color;
 use crate::component::Component;
+use crate::reactive::SignalUpdate;
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 
@@ -54,6 +55,11 @@ pub trait LayoutExt: Component + Sized {
     /// Flex grow factor (share of remaining space).
     fn grow(mut self, g: f32) -> Self {
         self.base_mut().style.flex_grow = g;
+        self
+    }
+    /// Disable the widget: dimmed, non-interactive, skipped by focus traversal.
+    fn disabled(mut self, disabled: bool) -> Self {
+        self.base_mut().disabled.set(disabled);
         self
     }
 }

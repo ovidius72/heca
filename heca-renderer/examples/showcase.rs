@@ -57,6 +57,15 @@ fn build_ui(theme: &Theme) -> Flex {
         let name = label.to_string();
         move || println!("[showcase] {name} clicked")
     };
+    // A toggle sitting to the left of its (state-colored) label.
+    let toggle_row = |toggle: Toggle, label: &str, color: Color| {
+        Flex::row()
+            .gap(16.0)
+            .align(Align::Center)
+            .child(toggle)
+            .child(Label::new(label).color(color).font_size(15.0))
+    };
+    let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
 
     Flex::column()
         .padding(40.0)
@@ -80,6 +89,33 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Button::ghost("GHOST"))
                 .child(Button::link("LINK"))
                 .child(Button::destructive("DESTRUCTIVE").on_click(click("DESTRUCTIVE"))),
+        )
+        // Change widgets: Toggles across their states (on / off / disabled).
+        .child(
+            Flex::column()
+                .gap(16.0)
+                .child(toggle_row(
+                    Toggle::new().on(true).on_change(report),
+                    "GRID UPLINK",
+                    theme.accent,
+                ))
+                .child(toggle_row(
+                    Toggle::new().on(true).on_change(report),
+                    "AUTO-SCAN",
+                    theme.accent,
+                ))
+                // Disabled + off: stealth look, muted ("opaque") label.
+                .child(toggle_row(
+                    Toggle::new().disabled(true),
+                    "STEALTH MODE",
+                    theme.muted,
+                ))
+                // Disabled + on: active-but-locked, colored label.
+                .child(toggle_row(
+                    Toggle::new().on(true).disabled(true),
+                    "LOCKED OUT",
+                    theme.accent,
+                )),
         )
 }
 

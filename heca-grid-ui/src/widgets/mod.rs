@@ -10,9 +10,11 @@ mod card;
 mod flex;
 mod label;
 mod surface;
+mod toggle;
 
 pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
 pub use flex::{container, Container, Flex};
 pub use label::Label;
 pub use surface::Surface;
+pub use toggle::Toggle;

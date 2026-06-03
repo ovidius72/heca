@@ -257,7 +257,7 @@ impl Component for Button {
     }
 
     fn focusable(&self) -> bool {
-        true
+        !self.base.disabled.get_untracked()
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -353,7 +353,12 @@ impl Component for Button {
                 ButtonVariant::Primary | ButtonVariant::Destructive => 0.95,
                 _ => 0.6,
             };
-            cx.flash(b, self.flash.amount() * strength);
+            cx.flash(b, self.flash.amount() * strength, 0.0);
+        }
+
+        // Dim the whole button when disabled.
+        if self.base.disabled.get_untracked() {
+            cx.dim(b, 0.0);
         }
 
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
@@ -363,6 +368,9 @@ impl Component for Button {
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
         match ev {
             Event::PointerMoved { pos } => {
                 let inside = self.contains(*pos);

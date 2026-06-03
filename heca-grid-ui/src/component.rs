@@ -25,6 +25,9 @@ pub struct Base {
     pub bounds: Rectangle,
     /// Whether this component is rendered.
     pub visible: Signal<bool>,
+    /// Whether this component is disabled — dimmed, non-interactive, and skipped
+    /// by focus traversal. A common, base-level property every widget inherits.
+    pub disabled: Signal<bool>,
     /// Whether this component currently holds keyboard focus.
     pub focused: Signal<bool>,
     /// Whether the focus ring should show — true for keyboard focus, false for
@@ -42,6 +45,7 @@ impl Base {
             node: None,
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
+            disabled: signal(false),
             focused: signal(false),
             focus_visible: signal(false),
             children: Vec::new(),
@@ -149,6 +153,9 @@ pub trait Component {
     }
 }
 
+/// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].
+const DISABLED_SCRIM: f32 = 0.55;
+
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
 pub struct PaintCx<'a> {
@@ -225,13 +232,24 @@ impl<'a> PaintCx<'a> {
     }
 
     /// Queue a brightening "press flash" overlay over `rect`. `amount` is the
-    /// flash strength in `0.0..=1.0` (see [`Flash`](crate::effects::Flash)).
-    pub fn flash(&mut self, rect: Rectangle, amount: f32) {
+    /// flash strength in `0.0..=1.0` (see [`Flash`](crate::effects::Flash));
+    /// `radius` must match the widget's corner radius so the overlay follows a
+    /// rounded shape instead of poking square corners past it.
+    pub fn flash(&mut self, rect: Rectangle, amount: f32, radius: f32) {
         if amount <= 0.0 {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(rect, Color::rgb(255, 255, 255).with_alpha(a), None, 0.0, None);
+        self.rect(rect, Color::rgb(255, 255, 255).with_alpha(a), None, radius, None);
+    }
+
+    /// Dim `rect` with a background-colored scrim — the standard look for a
+    /// **disabled** widget. `radius` must match the widget's corner radius so the
+    /// scrim follows its rounded shape. DRY: every widget reuses this instead of
+    /// dimming each color by hand.
+    pub fn dim(&mut self, rect: Rectangle, radius: f32) {
+        let a = (DISABLED_SCRIM * 255.0).round() as u8;
+        self.rect(rect, self.theme.background.with_alpha(a), None, radius, None);
     }
 
     /// Paint the shared chrome for a component's base (background/border/glow).

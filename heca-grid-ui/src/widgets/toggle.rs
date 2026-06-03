@@ -1,0 +1,242 @@
+//! [`Toggle`] — a Tron switch: a rounded track with a knob that **slides**
+//! left (off) → right (on). It is the first **change widget**: flipping it emits
+//! a semantic [`Action::value("toggle-change", …)`](Action::value) carrying the
+//! new boolean state to an [`on_change`](Toggle::on_change) handler — the same
+//! "app receives only semantic actions" model the catalog prescribes.
+//!
+//! Like [`Button`](super::Button) it is [`focusable`](Component::focusable),
+//! activates on Space/Enter, shows a focus-visible ring, and reuses the shared
+//! [`Flash`] press effect. The knob position animates over time via
+//! [`Component::tick`].
+
+use crate::action::{Action, SignalData};
+use crate::builders::LayoutExt;
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::effects::Flash;
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::scene::{Border, Glow};
+use crate::style::Length;
+use heca_core::layout::{Point, Rectangle, Size};
+
+/// Track width (logical px).
+const TRACK_W: f64 = 44.0;
+/// Track height (logical px); also drives the pill radius.
+const TRACK_H: f64 = 24.0;
+/// Gap between the knob and the track edge.
+const KNOB_PAD: f64 = 3.0;
+/// Seconds for a full off↔on slide.
+const ANIM_DURATION: f32 = 0.12;
+/// On-state glow spread radius (px).
+const GLOW_RADIUS: f32 = 16.0;
+/// On-state glow peak intensity.
+const GLOW_INTENSITY: f32 = 0.09;
+/// Border alpha at rest; firms to solid as the toggle turns on.
+const REST_BORDER_ALPHA: f32 = 150.0;
+/// Track fill alpha at full-on — a translucent (~50%) accent wash, not a solid.
+const ON_FILL_ALPHA: u8 = 128;
+
+/// A sliding on/off switch. Emits `toggle-change` with the new [`bool`] when
+/// flipped (pointer press or Space/Enter while focused).
+pub struct Toggle {
+    base: Base,
+    /// On/off state, exposed reactively via [`state`](Toggle::state).
+    on: Signal<bool>,
+    /// Animated knob position, 0.0 (off) → 1.0 (on).
+    progress: f32,
+    /// Press flash (brightens on flip, fades out).
+    flash: Flash,
+    hovered: Signal<bool>,
+    on_change: Option<Box<dyn Fn(Action)>>,
+}
+
+impl Toggle {
+    /// A new toggle, off by default.
+    pub fn new() -> Self {
+        let mut base = Base::new();
+        base.style.width = Length::Px(TRACK_W as f32);
+        base.style.height = Length::Px(TRACK_H as f32);
+        Self {
+            base,
+            on: signal(false),
+            progress: 0.0,
+            flash: Flash::new(),
+            hovered: signal(false),
+            on_change: None,
+        }
+    }
+
+    /// Set the initial on-state (starts the knob at that end, no animation).
+    pub fn on(mut self, on: bool) -> Self {
+        self.on.set(on);
+        self.progress = if on { 1.0 } else { 0.0 };
+        self
+    }
+
+    /// Set the change handler. Receives `Action::value("toggle-change",
+    /// SignalData::Bool(new_state))` each time the toggle flips.
+    pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
+        self.on_change = Some(Box::new(f));
+        self
+    }
+
+    /// The on/off state signal — bind UI to it reactively.
+    pub fn state(&self) -> Signal<bool> {
+        self.on
+    }
+
+    /// Current on/off state (untracked read).
+    pub fn is_on(&self) -> bool {
+        self.on.get_untracked()
+    }
+
+    /// Flip the state: animate the knob, flash, and emit `toggle-change`.
+    fn flip(&mut self) {
+        let new = !self.on.get_untracked();
+        self.on.set(new);
+        self.flash.trigger();
+        if let Some(f) = &self.on_change {
+            f(Action::value("toggle-change", SignalData::Bool(new)));
+        }
+    }
+
+    fn contains(&self, p: Point) -> bool {
+        self.base.bounds.contains(p)
+    }
+}
+
+impl Component for Toggle {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn focusable(&self) -> bool {
+        !self.base.disabled.get_untracked()
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        let disabled = self.base.disabled.get_untracked();
+        let (surface, accent, glow_c, muted, foreground) = {
+            let t = cx.theme();
+            (t.surface, t.accent, t.glow, t.muted, t.foreground)
+        };
+        let p = self.progress.clamp(0.0, 1.0);
+        let track = self.base.bounds;
+
+        // Track: dark (off) → translucent accent wash (on). The border firms
+        // muted → solid accent (active border stays 100% opaque, unlike the
+        // fill); a glow rises as it turns on.
+        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let border = Border {
+            color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
+            width: 1.5,
+        };
+        let track_glow = (!disabled && p > 0.0).then_some(Glow {
+            color: glow_c,
+            radius: GLOW_RADIUS,
+            intensity: GLOW_INTENSITY * p,
+        });
+        let radius = (TRACK_H / 2.0) as f32;
+        let fill = surface.lerp(accent.with_alpha(ON_FILL_ALPHA), p);
+        cx.rect(track, fill, Some(border), radius, track_glow);
+
+        // Knob: muted gray (off) → light (on) so it reads against the accent
+        // fill; slides across the track and glows on.
+        let knob_d = TRACK_H - 2.0 * KNOB_PAD;
+        let travel = TRACK_W - 2.0 * KNOB_PAD - knob_d;
+        let knob = Rectangle::new(
+            Point::new(
+                track.loc.x + KNOB_PAD + travel * p as f64,
+                track.loc.y + KNOB_PAD,
+            ),
+            Size::new(knob_d, knob_d),
+        );
+        let knob_glow = (!disabled && p > 0.0).then_some(Glow {
+            color: glow_c,
+            radius: GLOW_RADIUS * 0.6,
+            intensity: GLOW_INTENSITY * 1.5 * p,
+        });
+        cx.rect(
+            knob,
+            muted.lerp(foreground, p),
+            None,
+            (knob_d / 2.0) as f32,
+            knob_glow,
+        );
+
+        // Press flash over the track (active widgets only) — rounded to the pill.
+        if !disabled {
+            cx.flash(track, self.flash.amount() * 0.6, radius);
+        }
+
+        // Dim the whole control when disabled.
+        if disabled {
+            cx.dim(track, radius);
+        }
+
+        // Focus-visible ring (keyboard focus only).
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+            cx.corner_brackets(track, accent);
+        }
+    }
+
+    fn event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::PointerMoved { pos } => {
+                let inside = self.contains(*pos);
+                if self.hovered.get_untracked() != inside {
+                    self.hovered.set(inside);
+                }
+                Handled::No
+            }
+            Event::PointerPressed { pos } if self.contains(*pos) => {
+                self.flip();
+                Handled::Yes
+            }
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
+                self.flip();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let mut animating = false;
+
+        let target = if self.on.get_untracked() { 1.0 } else { 0.0 };
+        if (self.progress - target).abs() >= 1e-3 {
+            let step = dt / ANIM_DURATION;
+            self.progress = if self.progress < target {
+                (self.progress + step).min(target)
+            } else {
+                (self.progress - step).max(target)
+            };
+            animating = true;
+        } else {
+            self.progress = target;
+        }
+
+        animating |= self.flash.tick(dt);
+        animating
+    }
+}
+
+impl Default for Toggle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LayoutExt for Toggle {}

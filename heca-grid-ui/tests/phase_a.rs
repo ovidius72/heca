@@ -281,3 +281,145 @@ fn intensity_off_suppresses_glow() {
     });
     assert!(!glow_present, "glow must be suppressed when intensity is Off");
 }
+
+#[test]
+fn toggle_flip_emits_change_action_with_new_value() {
+    use heca_grid_ui::{Action, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut toggle = Toggle::new().on_change(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut toggle, Size::new(200.0, 80.0));
+
+    let b = toggle.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let outside = Point::new(b.loc.x + b.size.w + 100.0, b.loc.y);
+
+    // A press outside the track does nothing.
+    toggle.event(&Event::PointerPressed { pos: outside });
+    assert!(!toggle.is_on());
+    assert!(log.borrow().is_empty(), "missed press emits no action");
+
+    // A press inside flips it on and reports the new value.
+    toggle.event(&Event::PointerPressed { pos: center });
+    assert!(toggle.is_on(), "press flips the toggle on");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("toggle-change", SignalData::Bool(true))),
+    );
+
+    // Pressing again flips it back off.
+    toggle.event(&Event::PointerPressed { pos: center });
+    assert!(!toggle.is_on());
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("toggle-change", SignalData::Bool(false))),
+    );
+}
+
+#[test]
+fn toggle_keyboard_activation_flips_via_focus() {
+    use heca_grid_ui::FocusManager;
+
+    let mut ui = Flex::row().child(Toggle::new().on(true));
+    LayoutEngine::new().compute(&mut ui, Size::new(200.0, 80.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(0), "toggle is focusable");
+
+    // Space toggles the focused switch off (it started on).
+    focus.deliver_key(&mut ui, GridKey::Space);
+    let on = ui.base().children[0].base().focused.get_untracked();
+    assert!(on, "toggle holds focus after activation");
+}
+
+#[test]
+fn toggle_knob_slides_toward_target_on_tick() {
+    let mut toggle = Toggle::new();
+    LayoutEngine::new().compute(&mut toggle, Size::new(200.0, 80.0));
+
+    let knob_x = |t: &Toggle| {
+        let theme = Theme::grid_tron();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            t.paint(&mut cx);
+        }
+        // The knob is the smaller of the two rects (the second emitted).
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect.loc.x),
+                _ => None,
+            })
+            .nth(1)
+            .unwrap()
+    };
+
+    let off_x = knob_x(&toggle);
+    toggle.event(&Event::PointerPressed {
+        pos: Point::new(
+            toggle.base().bounds.loc.x + 1.0,
+            toggle.base().bounds.loc.y + 1.0,
+        ),
+    });
+    // Advance enough frames to complete the slide.
+    for _ in 0..30 {
+        toggle.tick(0.016);
+    }
+    let on_x = knob_x(&toggle);
+    assert!(on_x > off_x, "knob slides right when turned on");
+}
+
+#[test]
+fn disabled_toggle_is_inert_and_unfocusable() {
+    let mut toggle = Toggle::new().disabled(true);
+    LayoutEngine::new().compute(&mut toggle, Size::new(200.0, 80.0));
+    assert!(
+        !toggle.focusable(),
+        "disabled widgets drop out of focus traversal"
+    );
+
+    let b = toggle.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    toggle.event(&Event::PointerPressed { pos: center });
+    assert!(!toggle.is_on(), "disabled toggle ignores presses");
+}
+
+#[test]
+fn disabled_button_ignores_clicks_and_focus() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicked = Rc::new(Cell::new(false));
+    let flag = clicked.clone();
+    let mut button = Button::new("X")
+        .disabled(true)
+        .on_click(move || flag.set(true));
+    LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
+
+    let b = button.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    button.event(&Event::PointerPressed { pos: center });
+    assert!(!clicked.get(), "disabled button ignores clicks");
+    assert!(!button.focusable(), "disabled button is unfocusable");
+}
+
+#[test]
+fn disabled_widget_skipped_by_focus_traversal() {
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Toggle::new().disabled(true))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(0), "first button focuses");
+    // The disabled toggle is not focusable, so Tab lands on the second button.
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(1), "disabled toggle is skipped");
+}
