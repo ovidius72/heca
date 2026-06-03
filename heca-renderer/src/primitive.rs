@@ -180,6 +180,7 @@ impl PrimitiveRenderer {
     }
 
     /// Queue a filled rectangle with smooth rounded corners and optional gradient.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
@@ -240,34 +241,29 @@ impl PrimitiveRenderer {
         }
     }
 
-    /// Queue a "glow" effect by layering multiple semi-transparent rounded rects.
-    pub fn draw_glow_rounded_rect(
+    /// Queue a filled rectangle with a rounded border (avoids hollow-out duplication).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_rounded_border(
         &mut self,
         x: f32,
         y: f32,
         w: f32,
         h: f32,
-        color: [f32; 4],
+        border_color: [f32; 4],
+        border_width: f32,
         radius: f32,
-        glow_radius: f32,
+        fill_color: [f32; 4],
     ) {
-        let layers = 4;
-        for i in 1..=layers {
-            let offset = (i as f32 / layers as f32) * glow_radius;
-            let alpha = color[3] * (1.0 - (i as f32 / layers as f32));
-            let mut layer_color = color;
-            layer_color[3] = alpha;
-            
+        self.draw_rounded_rect(x, y, w, h, border_color, border_color, radius);
+        if border_width > 0.0 {
+            let inner_r = (radius - border_width).max(0.0);
             self.draw_rounded_rect(
-                x - offset, y - offset, 
-                w + 2.0 * offset, h + 2.0 * offset, 
-                layer_color, layer_color, 
-                radius + offset
+                x + border_width, y + border_width,
+                w - 2.0 * border_width, h - 2.0 * border_width,
+                fill_color, fill_color, inner_r,
             );
         }
     }
-
-
     /// Submit all queued primitives to the GPU.
     pub fn render(&mut self, device: &wgpu::Device, view: &wgpu::TextureView, encoder: &mut wgpu::CommandEncoder) {
         if self.vertices.is_empty() {
