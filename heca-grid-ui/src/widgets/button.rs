@@ -219,8 +219,8 @@ impl Button {
         );
         let g = self.show_glow.then_some(Glow {
             color: glow,
-            radius: 26.0,
-            intensity: 0.7,
+            radius: 44.0,
+            intensity: 0.28,
         });
         cx.rect(rect, fill, None, 0.0, g);
     }
@@ -286,8 +286,8 @@ impl Component for Button {
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
                         color: danger,
-                        radius: 26.0,
-                        intensity: 0.7 * p,
+                        radius: 40.0,
+                        intensity: 0.3 * p,
                     });
                     cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
                 }
@@ -301,10 +301,16 @@ impl Component for Button {
                 let fill = accent.with_alpha(alpha(p * 0.1));
                 let g = (self.show_glow && p > 0.0).then_some(Glow {
                     color: glow_c,
-                    radius: 20.0,
-                    intensity: 0.55 * p,
+                    radius: 30.0,
+                    intensity: 0.25 * p,
                 });
-                cx.rect(b, fill, self.animated_border(muted.lerp(accent, p), p), 0.0, g);
+                cx.rect(
+                    b,
+                    fill,
+                    self.animated_border(muted.lerp(accent, p), p),
+                    0.0,
+                    g,
+                );
                 self.paint_label(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Ghost => {
@@ -349,7 +355,11 @@ impl Component for Button {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
-        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        let target = if self.hovered.get_untracked() {
+            1.0
+        } else {
+            0.0
+        };
         if (self.progress - target).abs() < 1e-3 {
             self.progress = target;
             return false;
