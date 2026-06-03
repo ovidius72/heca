@@ -596,54 +596,106 @@ pub fn render_sidebar_expanded(
             } else { foreground }
         };
 
+        // Pane background: active gets a prominent tint, visited gets a subtle tint.
+        if let SidebarItem::Pane { pane_id } = flat_item
+            && let Some(pane) = tree.workspaces.iter().find_map(|ws| {
+                ws.columns.iter().find_map(|c| c.panes.iter().find(|p| p.pane_id == *pane_id))
+            })
+        {
+                match pane.state {
+                    crate::app_state::SidebarItemState::Active => {
+                        let mut bg = accent;
+                        bg[3] = 0.18;
+                        primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, bg);
+                    }
+                    crate::app_state::SidebarItemState::Visited => {
+                        let mut bg = visited_color;
+                        bg[3] = 0.10;
+                        primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, bg);
+                    }
+                    crate::app_state::SidebarItemState::None => {}
+                }
+            }
+
         let text_x = x + indent;
         let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 2.0;
         text_renderer.queue_text(&label, text_x, text_y, label_font_size, color);
 
         // Buttons on the right side of each item.
-        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
+        // Workspace and column items get two buttons (add + delete), pane gets one (delete).
+        let btn_x_right = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
 
         if let SidebarItem::Workspace { ws_idx } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
+            // Add button [+c]
+            let add_x = btn_x_right - BTN_SIZE - BTN_PAD_X;
+            let add_idx = tree.button_hitboxes.len();
+            let add_hov = hovered_btn_idx == Some(add_idx);
+            let (abg, abrd, atc) = if add_hov {
                 ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
             } else {
                 ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
             };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            primitive_renderer.draw_rounded_rect(add_x, btn_y, BTN_SIZE, BTN_SIZE, abg, abrd, 1.0, BTN_RADIUS);
             let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
-        }
+            text_renderer.queue_text("+c", add_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, atc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: add_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
 
-        if let SidebarItem::Column { ws_idx, col_idx: _ } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
-                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
-            } else {
-                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
-            };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
-            let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitVertical, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
-        }
-
-        if let SidebarItem::Pane { pane_id } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
+            // Delete button [-]
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
                 ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
             } else {
                 ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
             };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
-            let tw = 1.0 * button_font_size * 0.55;
-            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+            primitive_renderer.draw_rounded_rect(btn_x_right, btn_y, BTN_SIZE, BTN_SIZE, dbg, dbrd, 1.0, BTN_RADIUS);
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text("-", btn_x_right + (BTN_SIZE - dw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, dtc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::DeleteWorkspace { ws_idx: *ws_idx }, ws_idx: Some(*ws_idx), x: btn_x_right, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
+
+        if let SidebarItem::Column { ws_idx, col_idx } = flat_item {
+            // Add button [+p]
+            let add_x = btn_x_right - BTN_SIZE - BTN_PAD_X;
+            let add_idx = tree.button_hitboxes.len();
+            let add_hov = hovered_btn_idx == Some(add_idx);
+            let (abg, abrd, atc) = if add_hov {
+                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            } else {
+                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            };
+            primitive_renderer.draw_rounded_rect(add_x, btn_y, BTN_SIZE, BTN_SIZE, abg, abrd, 1.0, BTN_RADIUS);
+            let tw = 2.0 * button_font_size * 0.55;
+            text_renderer.queue_text("+p", add_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, atc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::AddPaneToColumn { ws_idx: *ws_idx, col_idx: *col_idx }, ws_idx: Some(*ws_idx), x: add_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+
+            // Delete button [-]
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
+                ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
+            } else {
+                ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
+            };
+            primitive_renderer.draw_rounded_rect(btn_x_right, btn_y, BTN_SIZE, BTN_SIZE, dbg, dbrd, 1.0, BTN_RADIUS);
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text("-", btn_x_right + (BTN_SIZE - dw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, dtc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::DeleteColumn { ws_idx: *ws_idx, col_idx: *col_idx }, ws_idx: Some(*ws_idx), x: btn_x_right, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        }
+
+        if let SidebarItem::Pane { pane_id } = flat_item {
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
+                ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
+            } else {
+                ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
+            };
+            primitive_renderer.draw_rounded_rect(btn_x_right, btn_y, BTN_SIZE, BTN_SIZE, dbg, dbrd, 1.0, BTN_RADIUS);
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text("-", btn_x_right + (BTN_SIZE - dw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, dtc);
+            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x_right, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
         }
 
         line_y += ITEM_HEIGHT;
@@ -1094,12 +1146,17 @@ mod tests {
         let mut tree = tree;
         tree.rebuild(&session, None, Some(1), &[]);
 
-        // Click on first item line (just below top padding).
-        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 36.0 + 4.0 + 2.0);
+        // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
+        // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 60.0 + ITEM_HEIGHT / 2.0);
         assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
 
         // Click above sidebar should miss.
         assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 10.0), None);
+
+        // Click in the [+w] button row area should miss (returns None).
+        let btn_row = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
+        assert_eq!(btn_row, None, "click on [+w] button row should miss items");
     }
 
     #[test]
@@ -1109,8 +1166,12 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Collapsed mode (width < 80). Click on second visible line.
-        // In collapsed mode visible lines are: WS, Pane, Pane... (columns hidden).
-        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, 36.0 + 4.0 + 2.0 + ITEM_HEIGHT);
+        // Rows: 4px pad, [+w] row (24px), then visible lines.
+        // Visible line 0 = WS (flat idx 0, column idx 1 skipped)
+        // Visible line 1 = first Pane (flat idx 2)
+        // First pane starts at y = 32 + 4 + 24 + 24 = 84.
+        let first_pane_y = 32.0 + 4.0 + BTN_ROW_HEIGHT + ITEM_HEIGHT + ITEM_HEIGHT / 2.0;
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, first_pane_y);
         // Second visible line should be the first Pane (skipping the Column).
         assert_eq!(fi, Some(2), "second visible line in collapsed mode should be first Pane (flat idx 2)");
     }

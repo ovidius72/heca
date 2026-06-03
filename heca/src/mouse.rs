@@ -470,6 +470,39 @@ fn sidebar_click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         // Check buttons first.
         if let Some((btn_idx, button)) = crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1) {
+            // Destructive delete actions require confirmation.
+            let is_delete = matches!(&button, WmAction::DeleteWorkspace { .. } | WmAction::DeleteColumn { .. });
+            if is_delete {
+                let message = match &button {
+                    WmAction::DeleteWorkspace { ws_idx } => {
+                        let ws_label = if let Some(ws) = state.session.workspaces.get(*ws_idx)
+                            && let Some(ref name) = ws.name
+                        {
+                            name.clone()
+                        } else {
+                            format!("workspace {}", ws_idx + 1)
+                        };
+                        format!("Delete {}? (y/n)", ws_label)
+                    }
+                    WmAction::DeleteColumn { ws_idx, col_idx } => {
+                        let ws_label = if let Some(ws) = state.session.workspaces.get(*ws_idx)
+                            && let Some(ref name) = ws.name
+                        {
+                            name.clone()
+                        } else {
+                            format!("ws {}", ws_idx + 1)
+                        };
+                        format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label)
+                    }
+                    _ => unreachable!(),
+                };
+                state.input_mode = crate::app_state::InputMode::ConfirmDelete {
+                    message,
+                    action: Box::new(button),
+                };
+                return None;
+            }
+
             // Switch to the target workspace if specified.
             if let Some(hitbox) = state.sidebar_tree.button_hitboxes.get(btn_idx)
                 && let Some(ws_idx) = hitbox.ws_idx

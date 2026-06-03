@@ -1,3 +1,4 @@
+use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
@@ -49,6 +50,12 @@ pub enum InputMode {
     /// Custom mode (e.g. resize mode). Stay in mode until Esc.
     /// `name` is the mode identifier from config.
     Mode { name: String },
+    /// Confirmation prompt for destructive operations.
+    /// `y` executes the stored action, `n` or `Esc` cancels.
+    ConfirmDelete {
+        message: String,
+        action: Box<WmAction>,
+    },
 }
 
 impl InputMode {

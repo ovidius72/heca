@@ -602,6 +602,9 @@ impl HecaApp {
             InputMode::Mode { name } => {
                 ("MODE", format!(" {} → ?", name))
             }
+            InputMode::ConfirmDelete { message, .. } => {
+                ("CONFIRM", format!(" {} ", message))
+            }
         };
         let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
@@ -976,6 +979,24 @@ impl ApplicationHandler for HecaApp {
                     return;
                 }
 
+                // Handle ConfirmDelete mode — y/n/esc
+                if let InputMode::ConfirmDelete { action, .. } = &state.input_mode {
+                    let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                    let is_y = key_text == "y" || key_text == "Y";
+                    let is_n = key_text == "n" || key_text == "N";
+
+                    if is_escape || is_n {
+                        state.input_mode = InputMode::Normal;
+                    } else if is_y {
+                        // Extract the action to execute (clone it out)
+                        let action = action.as_ref().clone();
+                        state.input_mode = InputMode::Normal;
+                        self.registry.execute(&action, state);
+                    }
+                    state.needs_redraw = true;
+                    return;
+                }
+
                 // Detect Ctrl+C, Ctrl+D etc. for future pane forwarding
                 // Detect arrow keys via physical_key
                 match &state.input_mode {
@@ -1225,6 +1246,9 @@ impl ApplicationHandler for HecaApp {
                         }
                     }
                     InputMode::Rename { .. } => {
+                        // Handled by early return before this match
+                    }
+                    InputMode::ConfirmDelete { .. } => {
                         // Handled by early return before this match
                     }
                 }
@@ -1676,6 +1700,13 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::CommandPalette, handle_command_palette);
     registry.register(&WmAction::SpawnCommand { command: String::new() }, handle_spawn_command);
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
+
+    // ── Sidebar-specific (parameterized) ──
+    registry.register(&WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 }, handle_add_pane_to_column);
+
+    // ── Destructive ──
+    registry.register(&WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 }, handle_delete_column);
+    registry.register(&WmAction::DeleteWorkspace { ws_idx: 0 }, handle_delete_workspace);
 
     // ── Mode ──
     registry.register(&WmAction::EnterMode { name: String::new() }, handle_enter_mode);
