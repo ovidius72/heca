@@ -351,6 +351,10 @@ impl Default for KeysConfig {
         bindings.insert("swap_pane".to_string(),     Single("prefix+Shift+m".to_string()));
         // Swap + focus (keyboard): M swaps and then focuses the swapped pane
         bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+m".to_string()));
+        // Take: move target pane to bottom of active column
+        bindings.insert("pane_take".to_string(),     Single("prefix+t".to_string()));
+        // Take + focus: same but focuses the moved pane
+        bindings.insert("pane_take_and_focus".to_string(), Single("prefix+Shift+t".to_string()));
 
         // ── Tabs ──
         bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));

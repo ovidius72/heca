@@ -985,6 +985,213 @@ pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
 
 // ── Workspace ──
 
+/// Add a pane to a specific column in a specific workspace.
+/// Switches to the target workspace first.
+pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
+    let WmAction::AddPaneToColumn { ws_idx, col_idx } = action else { return };
+    let target_ws = *ws_idx;
+    if target_ws >= state.session.workspaces.len() {
+        return;
+    }
+    // Switch to target workspace if needed
+    if state.session.active_workspace_idx != target_ws {
+        crate::switch_workspace_tracked(state, target_ws);
+    }
+    let next_id = state.session.next_id();
+    let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
+    let backend_id = next_id;
+    let col = *col_idx;
+    if let Some(ws) = state.session.active_workspace_mut() {
+        let capped_col = col.min(ws.scrolling.columns.len().saturating_sub(1));
+        ws.scrolling.add_pane_to_column(capped_col, None, pane, true);
+    }
+    state.backends.insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+    sync_focus(state);
+    state.needs_redraw = true;
+}
+
+/// Delete a column and all its panes (destructive).
+pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
+    let WmAction::DeleteColumn { ws_idx, col_idx } = action else { return };
+    let target_ws = *ws_idx;
+    if target_ws >= state.session.workspaces.len() {
+        return;
+    }
+    // Collect pane IDs from the column, remove backends, then remove the column.
+    let pane_ids: Vec<u64> = state
+        .session
+        .workspaces
+        .get(target_ws)
+        .and_then(|ws| ws.scrolling.columns.get(*col_idx))
+        .map(|col| col.panes.iter().map(|p| p.id.0).collect())
+        .unwrap_or_default();
+
+    // Remove backends
+    for pid in &pane_ids {
+        state.backends.remove(pid);
+    }
+
+    // Remove the column
+    if let Some(ws) = state.session.workspaces.get_mut(target_ws) {
+        let capped_col = (*col_idx).min(ws.scrolling.columns.len().saturating_sub(1));
+        ws.scrolling.remove_column(capped_col);
+    }
+
+    sync_focus(state);
+    state.needs_redraw = true;
+}
+
+/// Delete a workspace and all its columns/panes (destructive).
+/// The last workspace cannot be deleted.
+pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
+    let WmAction::DeleteWorkspace { ws_idx } = action else { return };
+    let target_ws = *ws_idx;
+    if target_ws >= state.session.workspaces.len() || state.session.workspaces.len() <= 1 {
+        return;
+    }
+
+    // Collect all pane IDs from the workspace to clean up backends
+    let pane_ids: Vec<u64> = state
+        .session
+        .workspaces
+        .get(target_ws)
+        .map(|ws| {
+            ws.scrolling
+                .columns
+                .iter()
+                .flat_map(|col| col.panes.iter().map(|p| p.id.0))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Remove backends
+    for pid in &pane_ids {
+        state.backends.remove(pid);
+    }
+
+    // Remove the workspace
+    state.session.remove_workspace(target_ws);
+
+    // Fix up tracking indices (same logic as destroy_empty_workspace)
+    if state.last_visited_ws_idx == Some(target_ws) {
+        state.last_visited_ws_idx = None;
+    } else if let Some(ref mut idx) = state.last_visited_ws_idx
+        && *idx > target_ws
+    {
+        *idx -= 1;
+    }
+    if target_ws < state.last_visited_pane_per_ws.len() {
+        state.last_visited_pane_per_ws.remove(target_ws);
+    }
+
+    sync_focus(state);
+    state.needs_redraw = true;
+}
+
+// ── Take pane ──
+
+pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
+    let candidates = crate::collect_all_pane_candidates(&state.session);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::PaneTake {
+            candidates,
+            focus_after: false,
+        };
+        state.needs_redraw = true;
+    }
+}
+
+pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
+    let candidates = crate::collect_all_pane_candidates(&state.session);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::PaneTake {
+            candidates,
+            focus_after: true,
+        };
+        state.needs_redraw = true;
+    }
+}
+
+/// Move a pane from wherever it is to the bottom of the active column.
+pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
+    let WmAction::TakePane { pane_id, focus_after } = action else { return };
+    let target = *pane_id;
+    let should_focus = *focus_after;
+
+    // 1. If already at the bottom of the active column → no-op.
+    if let Some(ws) = state.session.active_workspace() {
+        let active_col = ws.scrolling.active_column_idx;
+        if active_col < ws.scrolling.columns.len()
+            && ws.scrolling.columns[active_col].panes.last().map(|p| p.id.0) == Some(target)
+        {
+            return;
+        }
+    }
+
+    let active_ws_idx = state.session.active_workspace_idx;
+
+    // 2. Try to find and remove from scrolling columns.
+    let removed = crate::find_pane_location(&state.session, target)
+        .and_then(|(src_ws, src_col, src_idx)| {
+            state.session.workspaces.get_mut(src_ws)
+                .and_then(|ws| {
+                    if src_col < ws.scrolling.columns.len() {
+                        ws.scrolling.remove_pane(src_col, src_idx)
+                    } else {
+                        None
+                    }
+                })
+                .map(|pane| (src_ws, pane))
+        });
+
+    let (src_ws, pane) = match removed {
+        Some(r) => r,
+        None => {
+            // 3. Not in scrolling → try floating panes.
+            let mut found: Option<(usize, heca_core::layout::column::Pane)> = None;
+            for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
+                if let Some(pos) = ws.floating_panes.iter().position(|f| f.pane.id.0 == target) {
+                    let fp = ws.floating_panes.remove(pos);
+                    found = Some((ws_idx, fp.pane));
+                    break;
+                }
+            }
+            match found {
+                Some(r) => r,
+                None => return,
+            }
+        }
+    };
+
+    // 4. Add to active workspace's active column at the bottom.
+    let active_col = state.session.active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx)
+        .unwrap_or(0);
+    // Need next_id for potential new column; grab before mutable borrow.
+    let new_col_id = ColumnId(state.session.next_id());
+    if let Some(ws) = state.session.active_workspace_mut() {
+        if active_col < ws.scrolling.columns.len() {
+            ws.scrolling.add_pane_to_column(active_col, None, pane, should_focus);
+        } else if ws.scrolling.columns.is_empty() {
+            // No columns at all — create one.
+            let col = Column::new(new_col_id, pane, ColumnWidth::Proportion(0.85));
+            ws.scrolling.add_column(None, col, should_focus);
+        } else {
+            // Fallback: add to last column.
+            let last = ws.scrolling.columns.len() - 1;
+            ws.scrolling.add_pane_to_column(last, None, pane, should_focus);
+        }
+    }
+
+    // 5. Clean up empty source workspace if cross-workspace.
+    if src_ws != active_ws_idx {
+        crate::destroy_empty_workspace(state, src_ws);
+    }
+
+    sync_focus(state);
+    state.needs_redraw = true;
+}
+
 pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     let working_area = state
         .session

@@ -1,3 +1,4 @@
+use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
@@ -49,12 +50,26 @@ pub enum InputMode {
     /// Custom mode (e.g. resize mode). Stay in mode until Esc.
     /// `name` is the mode identifier from config.
     Mode { name: String },
+    /// Confirmation prompt for destructive operations.
+    /// `y` executes the stored action, `n` or `Esc` cancels.
+    ConfirmDelete {
+        message: String,
+        action: Box<WmAction>,
+    },
+    /// Take-pane letter selection mode.
+    /// User picks a pane which gets moved to the active column bottom.
+    PaneTake {
+        candidates: Vec<(char, u64)>,
+        focus_after: bool,
+    },
 }
 
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, u64)]> {
         match self {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates, .. } => Some(candidates),
+            InputMode::PaneSelect { candidates }
+            | InputMode::PaneSwap { candidates, .. }
+            | InputMode::PaneTake { candidates, .. } => Some(candidates),
             _ => None,
         }
     }
@@ -88,12 +103,25 @@ pub enum DragState {
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
     },
-    /// Sidebar drag — pane stays in layout, no floating ghost.
-    /// Ghost label follows cursor; pane animates on drop.
+    /// Phase 0: potential sidebar drag — mouse pressed, waiting for threshold.
+    /// On threshold exceeded → transitions to SidebarDrag (move) or SwapSidebarDrag.
+    /// On release without threshold → executes click_action instead.
+    SidebarDragStarting {
+        pane_id: u64,
+        original_ws: usize,
+        start_mouse: (f32, f32),
+        threshold_sq: f32,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
+        /// The click action (e.g. FocusPane) to execute if released without dragging.
+        click_action: Box<WmAction>,
+    },
+    /// Sidebar drag — move: pane stays in layout, ghost follows cursor.
     SidebarDrag {
         pane_id: u64,
         /// Workspace where the pane lives.
         original_ws: usize,
+        swap: bool,
     },
 }
 
