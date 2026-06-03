@@ -115,7 +115,7 @@ impl Default for PaneStyle {
             pane_title_font_size: 11.0,
             pane_title_color: Color::new(150, 150, 180, 255),
             pane_title_active_color: Color::new(205, 214, 244, 255),
-            padding: 6.0,
+            padding: 0.0,
             close_btn_color: Color::new(100, 100, 120, 255),
             close_btn_hover_color: Color::new(255, 100, 100, 255),
         }

@@ -67,11 +67,11 @@ impl PaneFrame {
             let x_w = fs * 0.7; // width of the × character
             
             // Title at left, [x] at right — with corner margin
-            let title_x = x + style.padding + 6.0;
-            let close_x = x + w - style.padding - x_w - 6.0;
+            let title_x = x + 8.0;
+            let close_x = x + w - x_w - 8.0;
             
-            // Both sit ON the top border line, slightly lower
-            let text_y = y + 2.0;
+            // Both sit on the top border edge
+            let text_y = y - fs / 2.0 + 1.0;
             
             // Background strip behind title to "cut" the border
             let title_w = pane_name.len() as f32 * fs * 0.6;
