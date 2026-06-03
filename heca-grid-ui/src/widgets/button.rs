@@ -347,8 +347,13 @@ impl Component for Button {
         }
 
         // Press flash — brightening overlay (Link flashes its text above instead).
+        // Filled variants need a stronger flash to read over their bright fill.
         if !matches!(self.variant, ButtonVariant::Link) {
-            cx.flash(b, self.flash.amount());
+            let strength = match self.variant {
+                ButtonVariant::Primary | ButtonVariant::Destructive => 0.95,
+                _ => 0.6,
+            };
+            cx.flash(b, self.flash.amount() * strength);
         }
 
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
