@@ -25,6 +25,8 @@ pub struct Base {
     pub bounds: Rectangle,
     /// Whether this component is rendered.
     pub visible: Signal<bool>,
+    /// Whether this component currently holds keyboard focus.
+    pub focused: Signal<bool>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
 }
@@ -37,6 +39,7 @@ impl Base {
             node: None,
             bounds: Rectangle::from_size(Size::new(0.0, 0.0)),
             visible: signal(true),
+            focused: signal(false),
             children: Vec::new(),
         }
     }
@@ -55,12 +58,31 @@ pub enum Handled {
     No,
 }
 
+/// A renderer-agnostic keyboard key. No `winit` types leak into this crate; the
+/// host maps its platform keys onto this enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GridKey {
+    Char(char),
+    Enter,
+    Space,
+    Tab,
+    Escape,
+    Backspace,
+    Delete,
+    ArrowLeft,
+    ArrowRight,
+    ArrowUp,
+    ArrowDown,
+}
+
 /// An input event delivered to the component tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     PointerMoved { pos: Point },
     PointerPressed { pos: Point },
     PointerReleased { pos: Point },
+    /// Keyboard event — delivered to the focused component only.
+    Key { key: GridKey, pressed: bool },
 }
 
 /// Behavior shared by all components. Implementors provide access to their
@@ -70,6 +92,12 @@ pub trait Component {
     fn base(&self) -> &Base;
     /// Mutably borrow this component's base.
     fn base_mut(&mut self) -> &mut Base;
+
+    /// Whether this component participates in keyboard focus traversal
+    /// (Tab/Shift+Tab). Interactive widgets override this to `true`.
+    fn focusable(&self) -> bool {
+        false
+    }
 
     /// Emit draw commands. Default: paint the base chrome, then children.
     fn paint(&self, cx: &mut PaintCx) {

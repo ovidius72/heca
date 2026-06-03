@@ -18,6 +18,25 @@ use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::keyboard::{Key, NamedKey};
+
+/// Map a winit logical key onto the renderer-agnostic `GridKey`.
+fn to_grid_key(key: &Key) -> Option<GridKey> {
+    Some(match key {
+        Key::Named(NamedKey::Tab) => GridKey::Tab,
+        Key::Named(NamedKey::Enter) => GridKey::Enter,
+        Key::Named(NamedKey::Space) => GridKey::Space,
+        Key::Named(NamedKey::Escape) => GridKey::Escape,
+        Key::Named(NamedKey::Backspace) => GridKey::Backspace,
+        Key::Named(NamedKey::Delete) => GridKey::Delete,
+        Key::Named(NamedKey::ArrowLeft) => GridKey::ArrowLeft,
+        Key::Named(NamedKey::ArrowRight) => GridKey::ArrowRight,
+        Key::Named(NamedKey::ArrowUp) => GridKey::ArrowUp,
+        Key::Named(NamedKey::ArrowDown) => GridKey::ArrowDown,
+        Key::Character(s) => GridKey::Char(s.chars().next()?),
+        _ => return None,
+    })
+}
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
@@ -110,6 +129,8 @@ struct GpuState {
     ui: Flex,
     cursor: Point,
     last_frame: Instant,
+    focus: FocusManager,
+    shift: bool,
 }
 
 impl GpuState {
@@ -184,6 +205,8 @@ impl GpuState {
             ui,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
+            focus: FocusManager::new(),
+            shift: false,
         }
     }
 
@@ -301,6 +324,25 @@ impl ApplicationHandler for App {
                 let pos = state.cursor;
                 state.ui.event(&Event::PointerPressed { pos });
                 state.window.request_redraw();
+            }
+            WindowEvent::ModifiersChanged(m) => {
+                state.shift = m.state().shift_key();
+            }
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed =>
+            {
+                if let Some(gk) = to_grid_key(&event.logical_key) {
+                    match gk {
+                        // Tab / Shift+Tab move keyboard focus across buttons.
+                        GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
+                        GridKey::Escape => state.focus.clear(&mut state.ui),
+                        // Space/Enter (and others) go to the focused widget.
+                        other => {
+                            state.focus.deliver_key(&mut state.ui, other);
+                        }
+                    }
+                    state.window.request_redraw();
+                }
             }
             WindowEvent::RedrawRequested => state.render(),
             _ => {}

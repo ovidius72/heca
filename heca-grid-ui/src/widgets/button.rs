@@ -16,7 +16,7 @@
 
 use crate::builders::LayoutExt;
 use crate::color::Color;
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow, TextAlign};
@@ -252,6 +252,10 @@ impl Component for Button {
         &mut self.base
     }
 
+    fn focusable(&self) -> bool {
+        true
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -336,6 +340,11 @@ impl Component for Button {
                 }
             }
         }
+
+        // Keyboard focus ring.
+        if self.base.focused.get_untracked() {
+            cx.corner_brackets(b, accent);
+        }
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
@@ -348,6 +357,16 @@ impl Component for Button {
                 Handled::No
             }
             Event::PointerPressed { pos } if self.contains(*pos) => {
+                if let Some(f) = &self.on_click {
+                    f();
+                }
+                Handled::Yes
+            }
+            // Keyboard activation: Space/Enter on the focused button == a click.
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 if let Some(f) = &self.on_click {
                     f();
                 }

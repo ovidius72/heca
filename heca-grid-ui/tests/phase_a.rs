@@ -203,6 +203,40 @@ fn button_variants_paint_distinct_fills() {
 }
 
 #[test]
+fn focus_traversal_and_keyboard_activation() {
+    use heca_grid_ui::FocusManager;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicked = Rc::new(Cell::new(0u32));
+    let (a, b) = (clicked.clone(), clicked.clone());
+    let mut ui = Flex::row()
+        .child(Button::primary("A").on_click(move || a.set(a.get() + 1)))
+        .child(Button::secondary("B").on_click(move || b.set(b.get() + 1)));
+
+    let mut focus = FocusManager::new();
+    assert_eq!(focus.focused(), None);
+
+    // Tab → first focusable; Space activates it.
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(0));
+    focus.deliver_key(&mut ui, GridKey::Space);
+    assert_eq!(clicked.get(), 1);
+
+    // Tab → second; Enter activates it.
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(1));
+    focus.deliver_key(&mut ui, GridKey::Enter);
+    assert_eq!(clicked.get(), 2);
+
+    // Forward wraps to first; backward wraps to last.
+    focus.advance(&mut ui, true);
+    assert_eq!(focus.focused(), Some(0));
+    focus.advance(&mut ui, false);
+    assert_eq!(focus.focused(), Some(1));
+}
+
+#[test]
 fn intensity_off_suppresses_glow() {
     let mut theme = Theme::grid_tron();
     theme.intensity = Intensity::Off;
