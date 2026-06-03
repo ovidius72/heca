@@ -1,9 +1,38 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Branch: **`heca-grid-ui`** · Status: **Phase A done; B done; C in progress** · Last updated: 2026-06-03
->
-> `Flex` is now **layout-only**; visual styling lives on surface components (`Surface`/`Card`/`Button`) via the `StyleExt` trait. The showcase is migrated to these.
+> Branch: **`heca-grid-ui`** · Status: **A done · B done · C in progress** · Last updated: 2026-06-03
+
+---
+
+## ▶ Resume Here
+
+**Where we are:** A polished `Button` + the full component foundation are built, tested, and committed on branch `heca-grid-ui`. The renderer + glow + text + accessibility all work. Next is building the rest of the catalog widgets.
+
+**Run / verify:**
+```bash
+cargo run -p heca-renderer --example showcase          # the live demo (needs a display)
+cargo test -p heca-grid-ui                              # 6 unit + 14 integration + doctests
+cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
+```
+
+**Done (committed):**
+- **Phase A** — `heca-grid-ui` crate: `reactive` facade (`floem_reactive`), `taffy` layout, `Scene`/`DrawCommand`, `Component` trait + `Base` (composition), `Style`/`Theme` (dark `grid_tron` default), `Flex`/`Container`/`Label`.
+- **Phase B** — `heca-renderer`: SDF rounded-rect pipeline `grid.rs`/`grid.wgsl` with **premultiplied additive glow** (real translucent halo), `scene.rs` bridge (`enqueue_scene`), embedded **Geist Mono Regular+Bold**, bold + **metric-based text centering** in `text.rs`, `examples/showcase.rs`.
+- **Phase C (partial)** — builder traits `LayoutExt`/`StyleExt`/`Parent`; `Flex` is layout-only; `Surface`, `Card`, **`Button`** (6 GridCN variants × 3 sizes; animated per-variant hover; tuned glow; per-variant **press `Flash`**; focus-visible ring).
+- **Accessibility** — `GridKey`, `Event::Key`, `FocusManager` (Tab/Shift+Tab + `focus_at` click-focus + wrap), `on_focus`/`on_blur`, Space/Enter activation, **focus-visible** (ring on keyboard focus only), `Theme.show_focus_border`.
+- **Foundations** — `Action`/`SignalData` (`action.rs`, for change-event values — not yet wired), `Flash` (`effects.rs`, reusable press effect + `PaintCx::flash`).
+
+**Key files (`heca-grid-ui/src/`):** `component.rs` (Component/Base/PaintCx/Event/GridKey/on_focus), `focus.rs` (FocusManager), `effects.rs` (Flash), `action.rs`, `builders.rs`, `theme.rs`, `style.rs`, `scene.rs`, `layout.rs`, `widgets/{flex,label,surface,card,button}.rs`. **Renderer:** `heca-renderer/src/{grid.rs,grid.wgsl,scene.rs,text.rs}` + `examples/showcase.rs`.
+
+**Next steps (in priority order):**
+1. **`Toggle`, `Checkbox`, `Input`** — they reuse `Flash` + `focusable()` for free, and are the first **change widgets**: return `Action::value("…-change", SignalData::…)` with the new value. This is when the `Action`/`SignalData` model gets wired into `event()` returns.
+2. Then the rest of the catalog (`Badge`, `Tag`, `Chip`, `StatusDot`, `Separator`/`Divider`, `Spinner`, `Tooltip`, `Alert`, `Select`, `Modal`/`Dialog`, `CommandPalette`, `Sidebar`, `StatusBar`, `MenuBar`, …) — full list + GridCN reference links in `docs/the-grid-ui.md`.
+3. **Phase D** — app adoption (dark grid theme default, real `Sidebar` + `Pane` shells over the niri layout).
+
+**⚠️ Two-doc reconciliation (open):** `docs/the-grid-ui.md` holds the GridCN reference + the canonical **component catalog, reference links, and event/accessibility spec** — but it describes an *older architecture* (`ComponentBase` + `impl_component!` macro + `SignalBus` + manual layout). **The implemented code follows THIS plan's architecture** (signals + taffy + `Event`/`Handled` + builder traits). The doc's event/accessibility *directions* were implemented, mapped onto the real architecture. When convenient, reconcile the two docs into one.
+
+---
 >
 > Locked deps: `floem_reactive 0.2.0`, `taffy 0.7.7`. Q1 resolved (local `Color`), Q3 resolved (standalone example).
 
