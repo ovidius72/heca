@@ -71,7 +71,7 @@ impl PaneFrame {
             let close_x = x + w - x_w - 8.0;
             
             // Both sit on the top border edge
-            let text_y = y - fs / 2.0 + 1.0;
+            let text_y = y - fs / 2.0 + 3.0;
             
             // Background strip behind title to "cut" the border
             let title_w = pane_name.len() as f32 * fs * 0.6;
