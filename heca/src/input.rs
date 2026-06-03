@@ -383,7 +383,10 @@ pub fn build_action(
         }),
         "take_pane" => Some(WmAction::TakePane {
             pane_id: get_u64(args, "pane_id")?,
-            focus_after: args.get("focus_after").and_then(|v| v.parse().ok()).unwrap_or(false),
+            focus_after: args
+                .get("focus_after")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(false),
         }),
         "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
             ws_idx: get_usize(args, "ws_idx")?,

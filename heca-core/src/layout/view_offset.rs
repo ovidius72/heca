@@ -35,8 +35,7 @@ impl ViewOffset {
             Self::Static(offset) => *offset,
             Self::Animation(anim) => anim.value(),
             Self::Gesture(gesture) => {
-                gesture.current_view_offset
-                    + gesture.animation.as_ref().map_or(0.0, |a| a.value())
+                gesture.current_view_offset + gesture.animation.as_ref().map_or(0.0, |a| a.value())
             }
         }
     }
@@ -83,7 +82,6 @@ impl ViewOffset {
             }
         }
     }
-
 }
 
 impl ViewGesture {
@@ -97,8 +95,6 @@ impl ViewGesture {
             is_touchpad,
         }
     }
-
-
 }
 
 /// Compute the new view offset to ensure a column at `col_x` with `col_width`

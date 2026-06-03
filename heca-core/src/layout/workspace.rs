@@ -35,7 +35,12 @@ pub struct FloatingPane {
 }
 
 impl Workspace {
-    pub fn new(id: WorkspaceId, working_area: Rectangle, scale: f64, options: LayoutOptions) -> Self {
+    pub fn new(
+        id: WorkspaceId,
+        working_area: Rectangle,
+        scale: f64,
+        options: LayoutOptions,
+    ) -> Self {
         let scrolling = ScrollingSpace::new(working_area, scale, options);
         Self {
             id,
@@ -54,10 +59,32 @@ impl Workspace {
 
     pub fn active_pane(&self) -> Option<&super::column::Pane> {
         if self.floating_is_active {
-            self.floating_panes.iter().find(|p| p.is_active).map(|p| &p.pane)
+            self.floating_panes
+                .iter()
+                .find(|p| p.is_active)
+                .map(|p| &p.pane)
         } else {
             self.scrolling.active_pane()
         }
+    }
+
+    /// Clear active state from all floating panes.
+    pub fn deactivate_floating_panes(&mut self) {
+        for float in &mut self.floating_panes {
+            float.is_active = false;
+        }
+    }
+
+    /// Activate exactly one floating pane by id.
+    pub fn activate_floating_pane(&mut self, pane_id: PaneId) -> bool {
+        let mut found = false;
+        for float in &mut self.floating_panes {
+            let is_target = float.pane.id == pane_id;
+            float.is_active = is_target;
+            found |= is_target;
+        }
+        self.floating_is_active = found;
+        found
     }
 
     /// Find any pane by ID across both scrolling and floating.
@@ -77,7 +104,11 @@ impl Workspace {
 
     pub fn find_pane_mut(&mut self, pane_id: PaneId) -> Option<&mut super::column::Pane> {
         // Check floating panes first
-        if let Some(f) = self.floating_panes.iter_mut().find(|f| f.pane.id == pane_id) {
+        if let Some(f) = self
+            .floating_panes
+            .iter_mut()
+            .find(|f| f.pane.id == pane_id)
+        {
             return Some(&mut f.pane);
         }
         // Check scrolling columns
