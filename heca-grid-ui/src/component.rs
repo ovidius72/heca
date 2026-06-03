@@ -230,7 +230,7 @@ impl<'a> PaintCx<'a> {
         if amount <= 0.0 {
             return;
         }
-        let a = (amount.clamp(0.0, 1.0) * 0.5 * 255.0).round() as u8;
+        let a = (amount.clamp(0.0, 1.0) * 0.65 * 255.0).round() as u8;
         self.rect(rect, Color::rgb(255, 255, 255).with_alpha(a), None, 0.0, None);
     }
 
