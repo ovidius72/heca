@@ -95,6 +95,9 @@ pub struct Theme {
     #[serde(default = "default_drag_ghost_fg")]    pub sidebar_drag_ghost_fg: Color,
     #[serde(default = "default_drag_source_bg")]   pub sidebar_drag_source_bg: Color,
     #[serde(default = "default_drag_source_border")] pub sidebar_drag_source_border: Color,
+    // ── Sidebar font sizes ──
+    #[serde(default = "default_sidebar_label_font_size")]  pub sidebar_label_font_size: f32,
+    #[serde(default = "default_sidebar_button_font_size")] pub sidebar_button_font_size: f32,
 }
 
 fn default_float_bg()    -> Color { Color::new(49, 50, 68, 255) }
@@ -104,6 +107,8 @@ fn default_drag_ghost_bg()    -> Color { Color::new(137, 180, 250, 217) } // acc
 fn default_drag_ghost_fg()    -> Color { Color::new(255, 255, 255, 255) } // white
 fn default_drag_source_bg()   -> Color { Color::new(137, 180, 250, 38)  } // accent @ 15%
 fn default_drag_source_border() -> Color { Color::new(137, 180, 250, 255) } // accent
+fn default_sidebar_label_font_size() -> f32 { 14.0 }
+fn default_sidebar_button_font_size() -> f32 { 11.0 }
 
 impl Default for Theme { fn default() -> Self { Self::catppuccin_mocha() } }
 
@@ -127,6 +132,8 @@ impl Theme {
             sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
             sidebar_drag_source_bg: Color::new(137, 180, 250, 38),
             sidebar_drag_source_border: Color::new(137, 180, 250, 255),
+            sidebar_label_font_size: 14.0,
+            sidebar_button_font_size: 11.0,
         }
     }
 
@@ -149,6 +156,8 @@ impl Theme {
             sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
             sidebar_drag_source_bg: Color::new(30, 102, 245, 38),
             sidebar_drag_source_border: Color::new(30, 102, 245, 255),
+            sidebar_label_font_size: 14.0,
+            sidebar_button_font_size: 11.0,
         }
     }
 
