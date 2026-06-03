@@ -27,6 +27,10 @@ use heca_core::layout::{Point, Rectangle, Size};
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
+/// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
+const GLOW_RADIUS: f32 = 30.0;
+/// Hover glow peak intensity — how bright (smaller = thinner/fainter).
+const GLOW_INTENSITY: f32 = 0.22;
 
 /// Visual variant of a [`Button`] (GridCN/shadcn set).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -219,8 +223,8 @@ impl Button {
         );
         let g = self.show_glow.then_some(Glow {
             color: glow,
-            radius: 44.0,
-            intensity: 0.28,
+            radius: GLOW_RADIUS,
+            intensity: GLOW_INTENSITY,
         });
         cx.rect(rect, fill, None, 0.0, g);
     }
@@ -286,8 +290,8 @@ impl Component for Button {
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
                         color: danger,
-                        radius: 40.0,
-                        intensity: 0.3 * p,
+                        radius: GLOW_RADIUS,
+                        intensity: GLOW_INTENSITY * p,
                     });
                     cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
                 }
@@ -301,8 +305,8 @@ impl Component for Button {
                 let fill = accent.with_alpha(alpha(p * 0.1));
                 let g = (self.show_glow && p > 0.0).then_some(Glow {
                     color: glow_c,
-                    radius: 30.0,
-                    intensity: 0.25 * p,
+                    radius: GLOW_RADIUS * 0.8,
+                    intensity: GLOW_INTENSITY * 0.8 * p,
                 });
                 cx.rect(
                     b,
