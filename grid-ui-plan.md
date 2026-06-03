@@ -1,7 +1,7 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Branch: **`heca-grid-ui`** · Status: **Phase A complete** · Last updated: 2026-06-03
+> Branch: **`heca-grid-ui`** · Status: **Phase A complete; Phase B in progress** · Last updated: 2026-06-03
 >
 > Locked deps: `floem_reactive 0.2.0`, `taffy 0.7.7`. Q1 resolved (local `Color`), Q3 resolved (standalone example).
 
@@ -219,12 +219,12 @@ Build order: **A → B → C standalone; D adopts into the app** (lowest risk; "
 
 **Goal:** First pixels. The Grid look is visible.
 
-- [ ] B1. `heca-renderer`: SDF rounded-rect + glow pipeline (`grid.wgsl`) — instanced quads carrying rect params + glow params; rounded-rect signed distance; interior fill + additive exponential outer falloff. Keep the existing flat pipeline intact.
-- [ ] B2. `heca-renderer`: scanline pass (full-region fragment shader over `frag_coord.y`, intensity-gated).
-- [ ] B3. `heca-renderer`: corner-bracket rendering (reuse SDF pipeline or draw glowing quads).
-- [ ] B4. `heca-renderer::render_scene(&Scene, scale_factor)`: map each `DrawCommand` → pipeline; convert logical→physical at the boundary; integrate with existing text renderer for `Text`.
+- [x] B1. `heca-renderer`: SDF rounded-rect + glow pipeline (`grid.wgsl`) — instanced quads carrying rect params + glow params; rounded-rect signed distance; interior fill + additive exponential outer falloff. Keep the existing flat pipeline intact.
+- [~] B2. Scanlines — **basic** version done (thin glowing rects via the grid pipeline, intensity-gated through theme); dedicated full-region scanline shader still TODO.
+- [x] B3. Corner-bracket rendering — 8 glowing arm-rects via the SDF pipeline (`scene::draw_brackets`).
+- [x] B4. `heca-renderer::scene::enqueue_scene(grid, text, &Scene)`: maps every `DrawCommand` → grid/text renderer; basic text alignment. (Clip commands stubbed — see B-clip TODO.)
 - [ ] B5. Physical-pixel alignment for crisp 1px borders on fractional scale (`docs/niri-wiki/04-development/fractional-layout.md`).
-- [ ] B7. **Embed default mono font** — vendor `heca-grid-ui/assets/GeistMono-Regular.ttf` (Geist Mono, OFL 1.1, free to embed); expose `font::DEFAULT_MONO_BYTES` via `include_bytes!`; load it into the renderer's `cosmic-text` `FontSystem` so `Geist Mono` renders without a system install. *(Phase A wired the family-name token + naive measure; this adds the bytes + real shaping.)*
+- [x] B7. **Embed default mono font** — Regular + Bold vendored (OFL 1.1), `DEFAULT_MONO_BYTES`/`DEFAULT_MONO_BOLD_BYTES`, loaded into `TextRenderer`'s `cosmic-text` font system; family stays theme-configurable. Italic = synthesized oblique (`OBLIQUE_SKEW`); Geist Mono has no italic face and no coding ligatures (`calt`/`dlig` absent).
 - [ ] B6. **Showcase** example (`heca-grid-ui/examples/showcase.rs` driving a winit+wgpu window, or a `--showcase` flag in `heca`): a `Flex` of glowing `Card`s with brackets + scanline over a dark background.
 
 **Exit:** `cargo run` shows the showcase: glowing rounded borders, corner brackets, scanline overlay, crisp text on retina.

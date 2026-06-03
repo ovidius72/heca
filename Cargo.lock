@@ -724,6 +724,8 @@ dependencies = [
  "cosmic-text",
  "heca-config",
  "heca-core",
+ "heca-grid-ui",
+ "naga",
  "wgpu",
 ]
 

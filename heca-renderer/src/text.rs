@@ -176,8 +176,19 @@ impl TextRenderer {
             mapped_at_creation: false,
         });
 
+        // Embed the default mono font (Geist Mono) so the Grid look renders
+        // without a system install. This is a default, not a lock-in:
+        // `set_font_family` still overrides it from the theme.
+        let mut font_system = FontSystem::new();
+        font_system
+            .db_mut()
+            .load_font_data(heca_grid_ui::font::DEFAULT_MONO_BYTES.to_vec());
+        font_system
+            .db_mut()
+            .load_font_data(heca_grid_ui::font::DEFAULT_MONO_BOLD_BYTES.to_vec());
+
         Self {
-            font_system: FontSystem::new(),
+            font_system,
             swash_cache: SwashCache::new(),
             pipeline,
             vertex_buffer,
@@ -188,7 +199,7 @@ impl TextRenderer {
             scale_factor: 1.0,
             commands: Vec::new(),
             _atlas_size: (0, 0),
-            font_family: "monospace".to_string(),
+            font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
         }
     }
 

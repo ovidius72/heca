@@ -7,6 +7,10 @@ license.workspace = true
 [dependencies]
 heca-core = { path = "../heca-core" }
 heca-config = { path = "../heca-config" }
+heca-grid-ui = { path = "../heca-grid-ui" }
 wgpu = { workspace = true }
 cosmic-text = "0.14"
 bytemuck = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+naga = { version = "25", features = ["wgsl-in"] }
