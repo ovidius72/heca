@@ -891,7 +891,7 @@ fn draw_neon_border(dl, x, y, w, h, color, glow_color, thickness);
 
 > **Strict directions for the event system.** Every component manages its own
 > visual state internally; the app receives only **semantic actions**
-> (`Option<String>`). Components must be **keyboard-accessible**.
+> (`Option<Action>`). Components must be **keyboard-accessible**.
 
 ### Component Trait — Full Event API
 
@@ -907,7 +907,7 @@ pub trait Component: AsComponent {
     }
     fn z_index(&self) -> i32 { 0 }
 
-    // ── Pointer (return Option<String> = action id for the app) ──
+    // ── Pointer (return Option<Action> = named action + payload) ──
     fn on_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
     fn on_right_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
     fn on_double_click(&mut self, _mx: f32, _my: f32) -> Option<Action> { None }
