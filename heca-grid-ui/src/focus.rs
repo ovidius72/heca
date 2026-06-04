@@ -102,6 +102,41 @@ impl FocusManager {
         handled
     }
 
+    /// Index of the first focusable with an open overlay, if any.
+    fn overlay_index(root: &mut dyn Component) -> Option<usize> {
+        let mut found = None;
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            if found.is_none() && c.overlay_active() {
+                found = Some(i);
+            }
+        });
+        found
+    }
+
+    /// Whether any focusable currently has an open overlay (dropdown/popover).
+    /// The host checks this to give the overlay first dibs on pointer/key input.
+    pub fn overlay_active(&self, root: &mut dyn Component) -> bool {
+        Self::overlay_index(root).is_some()
+    }
+
+    /// Deliver an event to the overlay-active focusable (if any) so it can
+    /// capture input outside its layout bounds (e.g. clicks on dropdown rows).
+    /// Returns `Handled::Yes` if consumed.
+    pub fn deliver_to_overlay(&self, root: &mut dyn Component, ev: &Event) -> Handled {
+        let Some(target) = Self::overlay_index(root) else {
+            return Handled::No;
+        };
+        let mut handled = Handled::No;
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            if i == target {
+                handled = c.event(ev);
+            }
+        });
+        handled
+    }
+
     /// Clear focus (e.g. on Escape).
     pub fn clear(&mut self, root: &mut dyn Component) {
         self.apply(root, None, false);

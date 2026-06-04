@@ -17,7 +17,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
@@ -69,6 +69,9 @@ fn build_ui(theme: &Theme) -> Flex {
     };
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
 
+    // 20-entry list so the dropdown caps its height and shows a scrollbar.
+    let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
+
     Flex::column()
         .padding(40.0)
         .gap(28.0)
@@ -79,6 +82,16 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(card("UPLINK", "ONLINE"))
                 .child(card("POWER", "98%"))
                 .child(card("GRID NODES", "1024")),
+        )
+        // Dropdowns near the top: open downward and must overlap the rows below.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("MODE").color(theme.muted).font_size(13.0))
+                .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
+                .child(Label::new("WORKSPACE").color(theme.muted).font_size(13.0))
+                .child(Select::new(workspaces).selected(3).on_change(report)),
         )
         // One button per GridCN variant.
         .child(
@@ -174,6 +187,14 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Label::new("POWER").color(theme.muted).font_size(13.0))
                 .child(ProgressBar::new().value(0.72))
                 .child(Gauge::new().value(0.85)),
+        )
+        // Dropdown (overlay layer): opens over the content below it.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("INTENSITY").color(theme.muted).font_size(13.0))
+                .child(Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(2).on_change(report)),
         )
 }
 
@@ -330,7 +351,6 @@ impl GpuState {
         LayoutEngine::new().compute(&mut self.ui, Size::new(w as f64, h as f64));
 
         let scene = build_scene(&self.ui, &self.theme, w, h);
-        enqueue_scene(&mut self.grid, &mut self.text, &scene);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -369,8 +389,17 @@ impl GpuState {
             });
         }
 
+        // Two layers, each a rects-then-text pass: base first, then the overlay
+        // (dropdowns) on top — so overlay content occludes base *text* too, not
+        // just base rects (the renderer draws all rects then all text per pass).
+        enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
         self.grid.render(&self.device, &view, &mut encoder);
         self.text.render(&self.device, &self.queue, &view, &mut encoder);
+        if scene.has_overlay() {
+            enqueue_scene(&mut self.grid, &mut self.text, &scene.overlay_layer());
+            self.grid.render(&self.device, &view, &mut encoder);
+            self.text.render(&self.device, &self.queue, &view, &mut encoder);
+        }
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
@@ -416,10 +445,30 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 let pos = state.cursor;
-                // A click focuses the clicked widget (clears focus if it misses).
-                state.focus.focus_at(&mut state.ui, pos);
-                state.ui.event(&Event::PointerPressed { pos });
+                let press = Event::PointerPressed { pos };
+                // An open overlay (e.g. a Select dropdown) gets first dibs so it
+                // can capture clicks on rows outside its layout bounds.
+                let consumed = state.focus.overlay_active(&mut state.ui)
+                    && state.focus.deliver_to_overlay(&mut state.ui, &press) == Handled::Yes;
+                if !consumed {
+                    // A click focuses the clicked widget (clears focus if it misses).
+                    state.focus.focus_at(&mut state.ui, pos);
+                    state.ui.event(&press);
+                }
                 state.window.request_redraw();
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Lines to scroll the open dropdown (positive = down the list).
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => -y,
+                    MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
+                };
+                if state.focus.overlay_active(&mut state.ui) {
+                    state
+                        .focus
+                        .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
+                    state.window.request_redraw();
+                }
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
@@ -439,6 +488,10 @@ impl ApplicationHandler for App {
                     match gk {
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
+                        // Escape closes an open overlay first, else clears focus.
+                        GridKey::Escape if state.focus.overlay_active(&mut state.ui) => {
+                            state.focus.deliver_key(&mut state.ui, GridKey::Escape);
+                        }
                         GridKey::Escape => state.focus.clear(&mut state.ui),
                         // Space/Enter (and others) go to the focused widget.
                         other => {
