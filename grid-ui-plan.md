@@ -15,14 +15,16 @@
 | Phase B — renderer (SDF glow) + showcase | DONE | — |
 | Phase C — component catalog (Button, Toggle, Checkbox, Input, Tabs, Badge, StatusDot, Separator, Spinner, Alert, ProgressBar, Gauge; `disabled`, `tab_index`, full Input keyboard model) | DONE | [#21](https://github.com/ovidius72/heca/pull/21) ✅ merged |
 | Docs reconciliation — `docs/widgets.md` (per-widget API + examples), `AGENTS.md` agent guide, `docs/the-grid-ui.md` reconcile | DONE | [#22](https://github.com/ovidius72/heca/pull/22) |
-| Overlay / popover layer (infra for Select/Tooltip/Modal) | PENDING | — |
+| Overlay / popover layer (infra for Select/Tooltip/Modal) | IN PROGRESS | — |
 | `Select` dropdown (needs overlay) | PENDING | — |
 | `Tooltip`, `Modal`/`Dialog` (need overlay) | PENDING | — |
 | Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
 | Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |
 | Reconcile `docs/the-grid-ui.md` with implemented architecture | PENDING | — |
 
-**Resume notes (active):** _none._
+**Resume notes (active):**
+
+- **Overlay/popover layer** — *Design phase.* Proposal in `docs/overlay-design.md`; awaiting user approval before implementing. Recommended approach: deferred overlay paint pass on `PaintCx` + `Component::overlay_active()` poll for overlay-aware pointer routing in `FocusManager`; `Select` owns its dropdown content and hit-tests its expanded region (no portal manager yet). Open questions pending (outside-click consume vs pass-through; single-select first; defer modal scrim; below-only positioning). **Resume:** once approved, implement the paint pass + routing, then `Select`; PR the lot; delete this note.
 
 ---
 
