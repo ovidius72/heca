@@ -145,6 +145,15 @@ fn build_ui(theme: &Theme) -> Flex {
                     theme.muted,
                 )),
         )
+        // Text inputs: empty-with-placeholder, pre-filled, and disabled.
+        .child(
+            Flex::row()
+                .gap(20.0)
+                .align(Align::Center)
+                .child(Input::new().placeholder("CALLSIGN").on_change(report))
+                .child(Input::new().value("GRID-7").on_change(report))
+                .child(Input::new().value("LOCKED").disabled(true)),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add

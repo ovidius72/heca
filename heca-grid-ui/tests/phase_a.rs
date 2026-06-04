@@ -477,3 +477,95 @@ fn disabled_widget_skipped_by_focus_traversal() {
     focus.advance(&mut ui, true);
     assert_eq!(focus.focused(), Some(1), "disabled toggle is skipped");
 }
+
+#[test]
+fn input_typing_emits_change_and_builds_text() {
+    use heca_grid_ui::{Action, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut input = Input::new().on_change(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+
+    for key in [GridKey::Char('H'), GridKey::Char('i')] {
+        input.event(&Event::Key { key, pressed: true });
+    }
+    input.event(&Event::Key {
+        key: GridKey::Space,
+        pressed: true,
+    });
+    input.event(&Event::Key {
+        key: GridKey::Char('5'),
+        pressed: true,
+    });
+
+    assert_eq!(input.value_str(), "Hi 5");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("input-change", SignalData::String("Hi 5".into()))),
+    );
+}
+
+#[test]
+fn input_backspace_and_midword_insert_respect_cursor() {
+    let mut input = Input::new().value("abc");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+
+    // Caret starts at end (after 'c'). Move left → between 'b' and 'c'.
+    input.event(&Event::Key {
+        key: GridKey::ArrowLeft,
+        pressed: true,
+    });
+    input.event(&Event::Key {
+        key: GridKey::Backspace,
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "ac", "backspace removes char before caret");
+
+    input.event(&Event::Key {
+        key: GridKey::Char('X'),
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "aXc", "insert lands at the caret");
+}
+
+#[test]
+fn input_placeholder_shows_only_when_empty_and_unfocused() {
+    let theme = Theme::grid_tron();
+    let texts = |input: &Input| -> Vec<String> {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            input.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let mut empty = Input::new().placeholder("CALLSIGN");
+    LayoutEngine::new().compute(&mut empty, Size::new(300.0, 60.0));
+    assert_eq!(texts(&empty), vec!["CALLSIGN".to_string()]);
+
+    let mut filled = Input::new().value("ZED");
+    LayoutEngine::new().compute(&mut filled, Size::new(300.0, 60.0));
+    assert_eq!(texts(&filled), vec!["ZED".to_string()]);
+}
+
+#[test]
+fn disabled_input_ignores_typing() {
+    let mut input = Input::new().disabled(true);
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    input.event(&Event::Key {
+        key: GridKey::Char('x'),
+        pressed: true,
+    });
+    assert!(input.value_str().is_empty(), "disabled input ignores keys");
+    assert!(!input.focusable(), "disabled input is unfocusable");
+}

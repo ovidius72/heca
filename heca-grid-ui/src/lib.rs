@@ -54,8 +54,8 @@ pub use scene::{DrawCommand, Scene};
 pub use style::{Align, Direction, Justify, Length, Style};
 pub use theme::{Intensity, Theme};
 pub use widgets::{
-    container, Button, ButtonSize, ButtonVariant, Card, Checkbox, Container, Flex, Label, Surface,
-    Toggle,
+    container, Button, ButtonSize, ButtonVariant, Card, Checkbox, Container, Flex, Input, Label,
+    Surface, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -70,7 +70,7 @@ pub mod prelude {
     pub use crate::style::{Align, Direction, Justify, Length};
     pub use crate::theme::{Intensity, Theme};
     pub use crate::widgets::{
-        container, Button, ButtonSize, ButtonVariant, Card, Checkbox, Container, Flex, Label,
+        container, Button, ButtonSize, ButtonVariant, Card, Checkbox, Container, Flex, Input, Label,
         Surface, Toggle,
     };
 }
