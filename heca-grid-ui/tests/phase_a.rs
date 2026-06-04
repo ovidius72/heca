@@ -463,6 +463,32 @@ fn checkbox_paints_indicator_only_when_checked() {
 }
 
 #[test]
+fn tab_index_orders_traversal_before_position() {
+    // Visual order A, B, C — but B has tab_index 1, A has 2, C is unindexed.
+    // Tab order: indexed ascending (B, A) then unindexed by position (C).
+    let mut ui = Flex::row()
+        .child(Button::primary("A").tab_index(2))
+        .child(Button::primary("B").tab_index(1))
+        .child(Button::primary("C"));
+    LayoutEngine::new().compute(&mut ui, Size::new(600.0, 100.0));
+
+    let focused_child = |ui: &Flex| -> Option<usize> {
+        // Returns which child (by position) holds focus.
+        (0..3).find(|&i| ui.base().children[i].base().focused.get_untracked())
+    };
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut ui, true);
+    assert_eq!(focused_child(&ui), Some(1), "first Tab → B (tab_index 1)");
+    focus.advance(&mut ui, true);
+    assert_eq!(focused_child(&ui), Some(0), "next → A (tab_index 2)");
+    focus.advance(&mut ui, true);
+    assert_eq!(focused_child(&ui), Some(2), "then unindexed C by position");
+    focus.advance(&mut ui, true);
+    assert_eq!(focused_child(&ui), Some(1), "wraps back to B");
+}
+
+#[test]
 fn disabled_widget_skipped_by_focus_traversal() {
     let mut ui = Flex::row()
         .child(Button::primary("A"))

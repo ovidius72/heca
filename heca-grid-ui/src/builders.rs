@@ -62,6 +62,12 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().disabled.set(disabled);
         self
     }
+    /// Explicit Tab-order index (like HTML `tabindex`): indexed widgets are
+    /// visited first in ascending order, then unindexed ones in tree position.
+    fn tab_index(mut self, index: i32) -> Self {
+        self.base_mut().tab_index = Some(index);
+        self
+    }
 }
 
 /// Visual decoration builders — **surfaces only**.

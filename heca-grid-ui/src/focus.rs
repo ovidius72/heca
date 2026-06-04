@@ -26,12 +26,6 @@ fn for_each_focusable(
     }
 }
 
-fn count_focusable(root: &mut dyn Component) -> usize {
-    let mut idx = 0;
-    for_each_focusable(root, &mut idx, &mut |_, _| {});
-    idx
-}
-
 /// Tracks and moves keyboard focus across a component tree.
 #[derive(Default)]
 pub struct FocusManager {
@@ -48,15 +42,33 @@ impl FocusManager {
         self.focused
     }
 
-    /// Move focus to the next (`forward = true`) or previous focusable component,
-    /// wrapping at the ends. Updates each component's `focused` signal.
+    /// The visit indices of all focusables in **Tab order**: those with an
+    /// explicit `tab_index` first (ascending), then unindexed ones in tree
+    /// position order. Returns visit indices (as used by [`apply`](Self::apply)).
+    fn tab_order(root: &mut dyn Component) -> Vec<usize> {
+        let mut items: Vec<(usize, i32)> = Vec::new();
+        let mut idx = 0;
+        for_each_focusable(root, &mut idx, &mut |i, c| {
+            items.push((i, c.base().tab_index.unwrap_or(i32::MAX)));
+        });
+        // Sort by (tab_index, visit position); both keys are already in `items`.
+        items.sort_by_key(|&(visit, ti)| (ti, visit));
+        items.into_iter().map(|(visit, _)| visit).collect()
+    }
+
+    /// Move focus to the next (`forward = true`) or previous focusable component
+    /// in Tab order, wrapping at the ends. Updates each component's `focused`
+    /// signal.
     pub fn advance(&mut self, root: &mut dyn Component, forward: bool) {
-        let n = count_focusable(root);
+        let order = Self::tab_order(root);
+        let n = order.len();
         if n == 0 {
             self.focused = None;
             return;
         }
-        let next = match self.focused {
+        // Current position within the Tab order (by visit index identity).
+        let pos = self.focused.and_then(|f| order.iter().position(|&v| v == f));
+        let next_pos = match pos {
             None => {
                 if forward {
                     0
@@ -64,15 +76,15 @@ impl FocusManager {
                     n - 1
                 }
             }
-            Some(i) => {
+            Some(p) => {
                 if forward {
-                    (i + 1) % n
+                    (p + 1) % n
                 } else {
-                    (i + n - 1) % n
+                    (p + n - 1) % n
                 }
             }
         };
-        self.apply(root, Some(next), true); // keyboard focus → show ring
+        self.apply(root, Some(order[next_pos]), true); // keyboard focus → show ring
     }
 
     /// Deliver a key press to the focused component. Returns whether it consumed it.

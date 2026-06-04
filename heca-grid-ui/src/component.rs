@@ -33,6 +33,10 @@ pub struct Base {
     /// Whether the focus ring should show — true for keyboard focus, false for
     /// mouse focus (focus-visible behavior).
     pub focus_visible: Signal<bool>,
+    /// Explicit Tab-order index (like HTML `tabindex`). Focusables with an index
+    /// are visited first in ascending order; those without (`None`) follow in
+    /// tree position order. Set via [`LayoutExt::tab_index`](crate::builders::LayoutExt::tab_index).
+    pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
 }
@@ -48,6 +52,7 @@ impl Base {
             disabled: signal(false),
             focused: signal(false),
             focus_visible: signal(false),
+            tab_index: None,
             children: Vec::new(),
         }
     }
