@@ -19,7 +19,7 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 **Done (committed):**
 - **Phase A** — `heca-grid-ui` crate: `reactive` facade (`floem_reactive`), `taffy` layout, `Scene`/`DrawCommand`, `Component` trait + `Base` (composition), `Style`/`Theme` (dark `grid_tron` default), `Flex`/`Container`/`Label`.
 - **Phase B** — `heca-renderer`: SDF rounded-rect pipeline `grid.rs`/`grid.wgsl` with **premultiplied additive glow** (real translucent halo), `scene.rs` bridge (`enqueue_scene`), embedded **Geist Mono Regular+Bold**, bold + **metric-based text centering** in `text.rs`, `examples/showcase.rs`.
-- **Phase C (partial)** — builder traits `LayoutExt`/`StyleExt`/`Parent`; `Flex` is layout-only; `Surface`, `Card`, **`Button`** (6 GridCN variants × 3 sizes; animated per-variant hover; tuned glow; per-variant **press `Flash`**; focus-visible ring), **`Toggle`** (sliding switch: accent-filled-on track, light knob + glow; `on_change(Action)`; `disabled`), **`Checkbox`** (box + pop-in glowing accent indicator; `checkbox-change`), **`Input`** (single-line editable buffer, blinking caret, placeholder; `input-change`).
+- **Phase C (partial)** — builder traits `LayoutExt`/`StyleExt`/`Parent`; `Flex` is layout-only; `Surface`, `Card`, **`Button`** (6 GridCN variants × 3 sizes; animated per-variant hover; tuned glow; per-variant **press `Flash`**; focus-visible ring), **`Toggle`** (sliding switch: accent-filled-on track, light knob + glow; `on_change(Action)`; `disabled`), **`Checkbox`** (box + pop-in glowing accent indicator; `checkbox-change`), **`Input`** (single-line editable buffer, blinking caret, placeholder; `input-change`); display widgets **`Separator`**, **`Badge`** (6 variants), **`StatusDot`**.
 - **Accessibility** — `GridKey`, `Event::Key`, `FocusManager` (Tab/Shift+Tab + `focus_at` click-focus + wrap), `on_focus`/`on_blur`, Space/Enter activation, **focus-visible** (ring on keyboard focus only), `Theme.show_focus_border`. **`disabled`** widgets are skipped by traversal (`focusable()` returns `!disabled`).
 - **Foundations** — `Action`/`SignalData` (`action.rs`) **wired** via `on_change(Fn(Action))` callbacks on change widgets; `Flash` (`effects.rs`, reusable press effect); **`Base.disabled`** common property + `LayoutExt::disabled` builder. `PaintCx::flash`/`PaintCx::dim` both take a **corner `radius`** so overlays follow rounded shapes (no square corners poking past a pill).
 
@@ -29,8 +29,11 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 
 **Change widgets done:** `Toggle`, `Checkbox`, `Input` — all three emit `…-change` Actions via `on_change(Fn(Action))`, honor `disabled`, and are keyboard-operable. `Input` has an editable buffer, a click-to-place + blinking caret (monospace advance), and a placeholder.
 
+**Display widgets done:** `Separator` (cross-axis stretch + `.length()`), `Badge` (6 theme-mapped variants, neon chip), `StatusDot` (semantic glowing dot).
+
 **Next steps (in priority order):**
-1. **Display widgets** (no input, quick): `Separator`/`Divider`, `Badge`, `Tag`/`Chip`, `StatusDot`, `Spinner`. Then interactive `Select` (dropdown — needs an overlay/popover layer + `select-change`), `Tabs`, `Alert`, `Tooltip`, `Modal`/`Dialog`. Full list + GridCN reference links in `docs/the-grid-ui.md`.
+1. More display: `Tag`/`Chip` (badge + optional remove affordance), `Spinner` (animated via `tick`), `Alert` (icon + title + body surface). Then interactive `Tabs` (segmented, `tab-change`), `Select` (dropdown — **needs an overlay/popover layer** + `select-change`), `Tooltip`, `Modal`/`Dialog`. Full list + GridCN reference links in `docs/the-grid-ui.md`.
+2. **Overlay/popover layer** is the first real infra gap (Select/Tooltip/Modal all need it): a way to paint above the tree + route events to the topmost layer. Design before building Select.
 2. Then the rest of the catalog (`Badge`, `Tag`, `Chip`, `StatusDot`, `Separator`/`Divider`, `Spinner`, `Tooltip`, `Alert`, `Select`, `Modal`/`Dialog`, `CommandPalette`, `Sidebar`, `StatusBar`, `MenuBar`, …) — full list + GridCN reference links in `docs/the-grid-ui.md`.
 3. **Phase D** — app adoption (dark grid theme default, real `Sidebar` + `Pane` shells over the niri layout).
 
@@ -269,7 +272,7 @@ Build order: **A → B → C standalone; D adopts into the app** (lowest risk; "
 **Goal:** The reusable Tron component set heca will consume.
 
 - [x] C1. `Button` **done** — 6 GridCN variants (primary/secondary/destructive/outline/ghost/link) × 3 sizes, variant-driven look from theme tokens, hover + click. `Toggle` **done** (sliding switch + `on_change(Action)` + `disabled`). `Checkbox` **done** (box + pop-in accent indicator + `checkbox-change`). `Input` **done** (editable buffer, blinking caret, placeholder, `input-change`). `IconButton` still pending.
-- [~] C2. `Surface` (base styled box) + `Card` **done**; `DataCard`/`Panel`/`Hud`/`Separator`/`Badge` pending.
+- [~] C2. `Surface` (base styled box) + `Card` + `Separator` + `Badge` (6 variants) + `StatusDot` **done**; `DataCard`/`Panel`/`Hud` pending.
 - [x] C0. Builder traits `LayoutExt`/`StyleExt`/`Parent` enforcing layout-vs-surface separation; `Flex` made layout-only; showcase migrated to `Card`/`Button` with live hover/click.
 - [ ] C3. `Gauge`, `EnergyMeter`, `SignalIndicator` (value-driven via signals).
 - [ ] C4. `CornerBrackets` decorator + `Reticle` (shared, used by Pane/focus chrome).

@@ -569,3 +569,89 @@ fn disabled_input_ignores_typing() {
     assert!(input.value_str().is_empty(), "disabled input ignores keys");
     assert!(!input.focusable(), "disabled input is unfocusable");
 }
+
+// ── Phase C: display widgets ──
+
+#[test]
+fn badge_colored_has_fill_outline_has_none() {
+    let theme = Theme::grid_tron();
+    let fill_of = |badge: Badge| {
+        let mut badge = badge;
+        LayoutEngine::new().compute(&mut badge, Size::new(200.0, 80.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            badge.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.fill),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert!(fill_of(Badge::success("OK")).a > 0, "colored badge has a translucent fill");
+    assert_eq!(fill_of(Badge::outline("OK")).a, 0, "outline badge has no fill");
+}
+
+#[test]
+fn badge_renders_its_label() {
+    let theme = Theme::grid_tron();
+    let mut badge = Badge::new("LIVE");
+    LayoutEngine::new().compute(&mut badge, Size::new(200.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        badge.paint(&mut cx);
+    }
+    assert!(
+        scene
+            .iter()
+            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "LIVE")),
+        "badge renders its label"
+    );
+}
+
+#[test]
+fn status_dot_color_and_glow_track_status() {
+    let theme = Theme::grid_tron();
+    let probe = |dot: StatusDot| {
+        let mut dot = dot;
+        LayoutEngine::new().compute(&mut dot, Size::new(50.0, 50.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            dot.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Rect(r) => Some((r.fill, r.glow.is_some())),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let (online, online_glow) = probe(StatusDot::online());
+    let (offline, offline_glow) = probe(StatusDot::offline());
+    assert_eq!(online, theme.success);
+    assert!(online_glow, "active dot glows");
+    assert_eq!(offline, theme.muted);
+    assert!(!offline_glow, "offline dot does not glow");
+}
+
+#[test]
+fn horizontal_separator_spans_container_width() {
+    let mut col = Flex::column()
+        .width(Length::Px(120.0))
+        .height(Length::Px(40.0))
+        .child(Separator::horizontal());
+    LayoutEngine::new().compute(&mut col, Size::new(120.0, 40.0));
+    let sep = &col.base().children[0];
+    assert_eq!(
+        sep.base().bounds.size.w,
+        120.0,
+        "horizontal separator stretches to the container width"
+    );
+    assert!(sep.base().bounds.size.h <= 1.0, "separator is thin");
+}

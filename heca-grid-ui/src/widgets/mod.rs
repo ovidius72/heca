@@ -5,20 +5,26 @@
 //! aliased as [`Container`]) and [`Label`]. Interactive and Tron-flavored
 //! widgets (Button, Card, Hud, Gauge, Sidebar, Pane, …) arrive in Phase C.
 
+mod badge;
 mod button;
 mod card;
 mod checkbox;
 mod flex;
 mod input;
 mod label;
+mod separator;
+mod status_dot;
 mod surface;
 mod toggle;
 
+pub use badge::{Badge, BadgeVariant};
 pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
 pub use checkbox::Checkbox;
 pub use flex::{container, Container, Flex};
 pub use input::Input;
 pub use label::Label;
+pub use separator::{Orientation, Separator};
+pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
 pub use toggle::Toggle;

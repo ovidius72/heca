@@ -154,6 +154,19 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Input::new().value("GRID-7").on_change(report))
                 .child(Input::new().value("LOCKED").disabled(true)),
         )
+        .child(Separator::horizontal().length(440.0))
+        // Display widgets: status dot + badges across variants.
+        .child(
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(StatusDot::online())
+                .child(Badge::success("ONLINE"))
+                .child(Badge::warning("DEGRADED"))
+                .child(Badge::danger("OFFLINE"))
+                .child(Badge::accent("v2.0"))
+                .child(Badge::outline("BETA")),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
