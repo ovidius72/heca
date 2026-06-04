@@ -1364,11 +1364,11 @@ fn item_label_color_tracks_selected_state() {
 
     let mut plain = Item::new("PROGRAMS");
     LayoutEngine::new().compute(&mut plain, Size::new(260.0, 40.0));
-    let mut sel = Item::new("DASHBOARD").selected(true);
+    let mut sel = Item::new("DASHBOARD").active(true);
     LayoutEngine::new().compute(&mut sel, Size::new(260.0, 40.0));
 
     assert_eq!(label_color(&plain), Some(theme.foreground), "plain label uses foreground");
-    assert_eq!(label_color(&sel), Some(theme.accent), "selected label uses accent");
+    assert_eq!(label_color(&sel), Some(theme.accent), "active label uses accent");
 }
 
 #[test]

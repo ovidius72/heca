@@ -27,10 +27,12 @@ const PAD_H: f64 = 14.0;
 const GAP: f64 = 10.0;
 /// Label font size.
 const FONT_SIZE: f32 = 15.0;
-/// Width of the left accent bar shown when selected.
-const SEL_BAR_W: f64 = 3.0;
-/// Selected-row fill alpha.
-const SEL_FILL_ALPHA: u8 = 30;
+/// Width of the left accent bar shown when active.
+const ACTIVE_BAR_W: f64 = 3.0;
+/// Active left bar height as a fraction of the row (centered, not full height).
+const ACTIVE_BAR_FRAC: f64 = 0.65;
+/// Active-row fill alpha.
+const ACTIVE_FILL_ALPHA: u8 = 30;
 /// Hover-row fill alpha.
 const HOVER_FILL_ALPHA: u8 = 16;
 /// Padding the optional slot border adds around the slot content.
@@ -47,8 +49,9 @@ const TRAILING: usize = 1;
 pub struct Item {
     base: Base,
     label: Signal<String>,
-    /// Active/selected styling (accent bar + tinted bg + accent label).
-    selected: Signal<bool>,
+    /// Active (clicked-and-stays current item): vivid left bar + tinted bg +
+    /// accent label.
+    active: Signal<bool>,
     /// Render the label in the muted color (e.g. a section header).
     muted: bool,
     /// Draw a rounded border around the leading / trailing slot (chip style).
@@ -79,7 +82,7 @@ impl Item {
         Self {
             base,
             label: signal(label.into()),
-            selected: signal(false),
+            active: signal(false),
             muted: false,
             leading_border: false,
             trailing_border: false,
@@ -101,9 +104,10 @@ impl Item {
         self
     }
 
-    /// Set the initial selected/active state.
-    pub fn selected(self, selected: bool) -> Self {
-        self.selected.set(selected);
+    /// Set the active state — the clicked-and-stays current item (vivid left bar
+    /// + tinted bg + accent label).
+    pub fn active(self, active: bool) -> Self {
+        self.active.set(active);
         self
     }
 
@@ -132,9 +136,9 @@ impl Item {
         self
     }
 
-    /// The selected-state signal — bind UI to it reactively.
+    /// The active-state signal — bind UI to it reactively.
     pub fn state(&self) -> Signal<bool> {
-        self.selected
+        self.active
     }
 
     /// The label text signal (set it to update reactively).
@@ -187,26 +191,28 @@ impl Component for Item {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let selected = self.selected.get_untracked();
+        let active = self.active.get_untracked();
         let (accent, glow_c, foreground, muted_c, border_c) = {
             let t = cx.theme();
             (t.accent, t.glow, t.foreground, t.muted, t.border)
         };
         let b = self.base.bounds;
 
-        // Row background: tinted when selected, faint on hover.
-        if selected {
-            cx.rect(b, accent.with_alpha(SEL_FILL_ALPHA), None, 0.0, None);
-            // Left accent bar with a glow.
+        // Row background: tinted when active, faint on hover.
+        if active {
+            cx.rect(b, accent.with_alpha(ACTIVE_FILL_ALPHA), None, 0.0, None);
+            // Vivid left bar — centered, ~65% of the row height (not full).
+            let bar_h = b.size.h * ACTIVE_BAR_FRAC;
+            let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
             cx.rect(
-                Rectangle::new(b.loc, Size::new(SEL_BAR_W, b.size.h)),
+                Rectangle::new(Point::new(b.loc.x, bar_y), Size::new(ACTIVE_BAR_W, bar_h)),
                 accent,
                 None,
-                0.0,
+                (ACTIVE_BAR_W / 2.0) as f32,
                 Some(Glow {
                     color: glow_c,
-                    radius: 10.0,
-                    intensity: 0.14,
+                    radius: 8.0,
+                    intensity: 0.16,
                 }),
             );
         } else if self.hovered.get_untracked() {
@@ -214,7 +220,7 @@ impl Component for Item {
         }
 
         // Label (state-driven color).
-        let color = if selected {
+        let color = if active {
             accent
         } else if self.muted {
             muted_c
@@ -227,7 +233,7 @@ impl Component for Item {
             color,
             self.base.style.font_size,
             TextAlign::Start,
-            selected,
+            active,
         );
 
         // Optional chip border around a present slot (drawn behind its content).

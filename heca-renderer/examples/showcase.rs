@@ -203,7 +203,7 @@ fn build_ui(theme: &Theme) -> Flex {
                 .width(Length::Px(320.0))
                 .gap(2.0)
                 .background(theme.surface)
-                .child(Item::new("DASHBOARD").leading(StatusDot::online()).selected(true))
+                .child(Item::new("DASHBOARD").leading(StatusDot::online()).active(true))
                 .child(
                     Item::new("VIEW PROFILE")
                         .trailing(Label::new("CMD P").color(theme.muted).font_size(12.0))
