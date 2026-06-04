@@ -187,6 +187,58 @@ Current problems:
 - `heca/src/app/focus.rs`
 - `heca/src/app/mutations.rs`
 
+**Status update — 2026-06-04**
+
+Already extracted:
+- `heca/src/app/registry.rs`
+  - `build_registry()`
+  - `build_keymap()`
+  - `build_modes()`
+- `heca/src/app/focus.rs`
+  - `find_pane_workspace()`
+  - `focus_pane_by_id()`
+  - `switch_workspace_tracked()`
+  - `sync_focus()`
+- `heca/src/app/mutations.rs`
+  - `move_pane_to_workspace_column()`
+  - `move_pane_to_column()`
+  - `move_column_to_workspace()`
+  - `destroy_empty_workspace()`
+- `heca/src/app/render.rs`
+  - `render_backend_data()`
+  - `update_session_viewport()`
+  - `status_mode_parts()`
+- `heca/src/app/selection.rs`
+  - `collect_all_pane_candidates()`
+  - `find_pane_location()`
+- `heca/src/app/keyboard.rs`
+  - `normalize_key_text()`
+  - `event_combo_matches()`
+  - `build_event_combo()`
+  - `is_prefix_match()`
+  - `typed_candidate_char()`
+  - `winit_key_to_terminal_input()`
+- `heca/src/app/startup.rs`
+  - first-launch window / wgpu / session / fake-backend initialization
+- `heca/src/app/input.rs`
+  - rename / confirm-delete / prefix / chord / custom-mode / pane-select / pane-swap / pane-take / sidebar-nav keyboard handling
+
+Current state:
+- `heca/src/main.rs` is down to **168 LOC**.
+- `render()` has been extracted into `app/render.rs`.
+- `window_event()` has been extracted into `app/events.rs`.
+- `about_to_wait()` has been extracted into `app/lifecycle.rs`.
+- Validation passes with:
+  - `cargo fmt`
+  - `cargo check -q`
+  - `cargo clippy --workspace --all-targets --all-features --quiet`
+
+Remaining work in this phase:
+- Optional cleanup only:
+  - move `pane_name()` into a tiny helper if desired
+  - further split `app/render.rs` internally if navigation becomes hard
+- Treat the main acceptance target for Phase 1.1 as **met** and move to the next phase unless a follow-up cleanup is needed.
+
 **Tasks**
 - Move `render_backend_data()` into `app/render.rs`
 - Move the frame `render()` implementation into `app/render.rs`
@@ -734,15 +786,19 @@ The roadmap is succeeding when:
 
 ## 7. Recommended Immediate Next Step
 
-**Start with Phase 1.1: split `main.rs`.**
+**Start Phase 1.2: split `heca/src/mouse.rs`.**
+
+Immediate next slices:
+1. extract hit testing into `heca/src/mouse/hit_test.rs`
+2. extract drag-state transitions into `heca/src/mouse/drag.rs`
+3. extract drop logic into `heca/src/mouse/drop.rs`
+4. keep public entrypoints in `mouse/mod.rs` thin
 
 Reason:
-- it unlocks every later refactor
-- it improves readability immediately
-- it has low semantic risk if done carefully
-- it removes the biggest "where does this live?" pain point in the project
-
-After that, do `mouse.rs` and `sidebar.rs` before touching swap/move semantics.
+- Phase 1.1 has reached its main acceptance target (`main.rs` is now well below 400 LOC)
+- `mouse.rs` is the next largest interaction hotspot
+- splitting mouse logic should reduce risk before deeper semantic cleanup
+- it continues the structure-first refactor order already agreed in this plan
 
 ---
 

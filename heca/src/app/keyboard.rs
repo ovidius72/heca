@@ -4,7 +4,52 @@
 //! logic out of `main.rs`.
 
 use crate::keymap::KeyCombo;
-use winit::keyboard::{Key, NamedKey, PhysicalKey};
+use winit::keyboard::{Key, ModifiersState, NamedKey, PhysicalKey};
+
+/// Build a normalized key combo from the current key event and modifiers.
+pub(crate) fn build_event_combo(
+    logical_key: &Key,
+    physical_key: &PhysicalKey,
+    key_text: &str,
+    modifiers: ModifiersState,
+) -> KeyCombo {
+    KeyCombo {
+        key: normalize_key_text(
+            logical_key,
+            key_text,
+            modifiers.shift_key(),
+            modifiers.control_key(),
+            physical_key,
+        ),
+        ctrl: modifiers.control_key(),
+        shift: modifiers.shift_key(),
+        alt: modifiers.alt_key(),
+        super_: modifiers.super_key(),
+    }
+}
+
+/// Check if the current event matches the configured prefix combo.
+pub(crate) fn is_prefix_match(
+    event_combo: &KeyCombo,
+    prefix_combo: &KeyCombo,
+    logical_key: &Key,
+    key_text: &str,
+) -> bool {
+    event_combo_matches(event_combo, prefix_combo)
+        || (prefix_combo.ctrl
+            && prefix_combo.key.len() == 1
+            && prefix_combo
+                .key
+                .chars()
+                .next()
+                .expect("single-char prefix key")
+                .is_ascii_lowercase()
+            && {
+                let expected_ctrl = (prefix_combo.key.as_bytes()[0] - b'a' + 1) as char;
+                key_text == String::from(expected_ctrl)
+                    || matches!(logical_key, Key::Character(c) if c.starts_with(expected_ctrl))
+            })
+}
 
 /// Check if a key event's combo matches a configured KeyCombo.
 /// Case-insensitive for alphabetic keys; exact otherwise.
@@ -122,6 +167,21 @@ pub(crate) fn normalize_key_text(
     key
 }
 
+/// Resolve a typed letter candidate from key text or physical key fallback.
+pub(crate) fn typed_candidate_char(key_text: &str, physical_key: &PhysicalKey) -> Option<char> {
+    key_text
+        .chars()
+        .next()
+        .or_else(|| match physical_key {
+            PhysicalKey::Code(code) => {
+                let s = format!("{:?}", code);
+                s.strip_prefix("Key").and_then(|n| n.chars().next())
+            }
+            _ => None,
+        })
+        .map(|c| c.to_ascii_lowercase())
+}
+
 /// Convert a winit key event to terminal input bytes.
 pub(crate) fn winit_key_to_terminal_input(key: &Key, text: &str, ctrl: bool) -> Vec<u8> {
     if ctrl && text.len() == 1 {
@@ -148,5 +208,27 @@ pub(crate) fn winit_key_to_terminal_input(key: &Key, text: &str, ctrl: bool) -> 
         Key::Named(NamedKey::Space) => vec![b' '],
         Key::Character(c) => c.as_bytes().to_vec(),
         _ => vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::typed_candidate_char;
+    use winit::keyboard::{KeyCode, PhysicalKey};
+
+    #[test]
+    fn typed_candidate_char_prefers_key_text() {
+        assert_eq!(
+            typed_candidate_char("Q", &PhysicalKey::Code(KeyCode::KeyA)),
+            Some('q')
+        );
+    }
+
+    #[test]
+    fn typed_candidate_char_falls_back_to_physical_key() {
+        assert_eq!(
+            typed_candidate_char("", &PhysicalKey::Code(KeyCode::KeyZ)),
+            Some('z')
+        );
     }
 }
