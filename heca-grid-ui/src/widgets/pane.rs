@@ -1,0 +1,68 @@
+//! [`Pane`] — a generic container framed by **prominent flat corner brackets**
+//! (no glow, no shadow). The shell for sidebars and panes: a dark surface with a
+//! subtle border and accent corner angles; its children (e.g. [`Item`](super::Item)
+//! rows in a sidebar) stack inside.
+//!
+//! Like [`Surface`](super::Surface) it is a styled, child-holding container
+//! (`LayoutExt` + `StyleExt` + `Parent`), but it always draws the corner
+//! brackets and defaults to a vertical (column) layout.
+
+use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::component::{Base, Component, PaintCx};
+use crate::reactive::SignalGet;
+use crate::style::Direction;
+
+/// A bracket-framed container for sidebars / panes.
+pub struct Pane {
+    base: Base,
+}
+
+impl Pane {
+    /// A new vertical (column) pane. Add content with `.child(...)`.
+    pub fn new() -> Self {
+        let mut base = Base::new();
+        base.style.direction = Direction::Column;
+        Self { base }
+    }
+
+    /// A horizontal (row) pane.
+    pub fn row() -> Self {
+        let mut pane = Self::new();
+        pane.base.style.direction = Direction::Row;
+        pane
+    }
+}
+
+impl Component for Pane {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        // Background / border from style (no glow set by default → flat).
+        cx.paint_base(&self.base);
+        // Prominent flat corner brackets (no glow / shadow).
+        let accent = cx.theme().accent;
+        cx.corner_brackets_plain(self.base.bounds, accent);
+        // Children (sidebar Items, pane content, …).
+        for child in &self.base.children {
+            child.paint(cx);
+        }
+    }
+}
+
+impl Default for Pane {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LayoutExt for Pane {}
+impl StyleExt for Pane {}
+impl Parent for Pane {}

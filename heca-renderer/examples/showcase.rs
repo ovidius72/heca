@@ -210,6 +210,36 @@ fn build_ui(theme: &Theme) -> Flex {
                         .on_change(report),
                 ),
         )
+        // Item rows: a menu panel — leading slot (dot), label, trailing slot
+        // (kbd hint / chevron), selected + clickable states.
+        .child(
+            Pane::new()
+                .width(Length::Px(320.0))
+                .gap(2.0)
+                .background(theme.surface)
+                .child(
+                    Item::new("DASHBOARD")
+                        .leading(StatusDot::online())
+                        .active(true),
+                )
+                .child(
+                    Item::new("VIEW PROFILE")
+                        .trailing(Label::new("CMD P").color(theme.muted).font_size(12.0))
+                        .trailing_bordered(true)
+                        .on_activate(click("VIEW PROFILE")),
+                )
+                .child(
+                    Item::new("SETTINGS")
+                        .trailing(Label::new("CMD ,").color(theme.muted).font_size(12.0))
+                        .trailing_bordered(true)
+                        .on_activate(click("SETTINGS")),
+                )
+                .child(
+                    Item::new("SYSTEM")
+                        .muted(true)
+                        .trailing(Label::new(">").color(theme.muted)),
+                ),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
