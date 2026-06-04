@@ -363,6 +363,24 @@ To remove a default binding, add it to `[keys.unbind]`:
 - **Coordinates**: `Scene` carries `f32` logical pixels; the renderer scales to physical by `scale_factor` (HiDPI crispness preserved at the GPU boundary).
 - The existing chrome (sidebar, tab/status bar, pane frames) becomes a **consumer** of `heca-grid-ui`; panes render as Grid-styled `Pane` shells over the unchanged layout engine.
 
+### Using the widgets
+
+**Full per-widget API reference + examples: [`docs/widgets.md`](docs/widgets.md)** — read it before using the library. Quick orientation:
+
+- Import via `use heca_grid_ui::prelude::*;` (widgets, builder traits, `Theme`, `Color`, signals, events).
+- Build a retained tree (`Flex`/`Card`/`Button`/…), then each frame: `LayoutEngine::new().compute(&mut root, size)` → paint into a `Scene` with `PaintCx` → `heca_renderer::scene::enqueue_scene(grid, text, &scene)`.
+- Widgets opt into builder methods via marker traits: **`LayoutExt`** (`.width/.height/.padding/.gap/.justify/.align/.grow/.disabled/.tab_index`), **`StyleExt`** (surfaces only: `.background/.border/.glow/.radius`), **`Parent`** (`.child`).
+- **Change widgets report via callbacks**, not return values: `.on_change(|action: Action| …)` carrying `Action::value("<name>-change", SignalData::…)` (`toggle-change`/Bool, `checkbox-change`/Bool, `input-change`/String, `tab-change`/Usize). Buttons use `.on_click(|| …)`.
+- **`Base.disabled`** (dim+inert+unfocusable) and **`Base.tab_index`** are common to all widgets. Focus via one `FocusManager` (Tab/Shift+Tab, click-focus, `deliver_key`). Animations via `tick(dt) -> bool`.
+
+**Catalog (implemented):** layout `Flex`/`Container`, `Surface`, `Card`; text `Label`; interactive `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox` (optional clickable label), `Input` (full keyboard/selection model), `Tabs`; display `Badge`, `StatusDot`, `Separator`, `Spinner`, `Alert`, `ProgressBar`, `Gauge`. Foundations: `Base`, `Component`, `Theme`/`Intensity`, `Color`, `Action`/`SignalData`, `GridKey`/`Modifiers`/`Event`, `FocusManager`, `Flash`, `Scene`/`DrawCommand`/`PaintCx`.
+
+### Gotchas
+
+- **Don't run `cargo fmt`** in this repo — the local rustfmt reflows many files (no pinned `rustfmt.toml`); hand-format to match and verify with `cargo clippy --all-targets`.
+- **Renderer text API**: `TextRenderer::queue_text(text, x, y, size, color)` positions at a top-left point (used across the app); `queue_text_in_box(text, x, y, w, h, size, color, bold, align)` centers within a box (used by the grid scene). Don't conflate them.
+- **Never hard-code font family/size** — read `theme.font_family` / `theme.font_size`.
+
 ### Extra dependencies (in `heca-grid-ui` only)
 
 | Crate | Purpose |
