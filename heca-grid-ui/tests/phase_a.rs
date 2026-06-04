@@ -438,6 +438,35 @@ fn checkbox_toggle_emits_change_action_with_new_value() {
 }
 
 #[test]
+fn checkbox_label_is_clickable_and_side_positions_the_box() {
+    use heca_grid_ui::LabelSide;
+
+    // Right label (default): clicking far right (on the label) toggles.
+    let mut cb = Checkbox::new().label("ENABLE");
+    LayoutEngine::new().compute(&mut cb, Size::new(400.0, 40.0));
+    let b = cb.base().bounds;
+    let far_right = Point::new(b.loc.x + b.size.w - 4.0, b.loc.y + b.size.h / 2.0);
+    cb.event(&Event::PointerPressed { pos: far_right });
+    assert!(cb.is_checked(), "clicking the (right) label toggles the box");
+
+    // Left label: the label text command sits left of the box.
+    let theme = Theme::grid_tron();
+    let mut left = Checkbox::new().label("ENABLE").label_side(LabelSide::Left);
+    LayoutEngine::new().compute(&mut left, Size::new(400.0, 40.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        left.paint(&mut cx);
+    }
+    let text_x = scene.iter().find_map(|c| match c {
+        DrawCommand::Text(t) => Some(t.rect.loc.x),
+        _ => None,
+    });
+    let lb = left.base().bounds;
+    assert_eq!(text_x, Some(lb.loc.x), "left label starts at the control's left edge");
+}
+
+#[test]
 fn checkbox_paints_indicator_only_when_checked() {
     let theme = Theme::grid_tron();
     let rect_count = |cb: &Checkbox| {

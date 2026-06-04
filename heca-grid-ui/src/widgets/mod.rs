@@ -26,7 +26,7 @@ pub use alert::{Alert, AlertVariant};
 pub use badge::{Badge, BadgeVariant};
 pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
-pub use checkbox::Checkbox;
+pub use checkbox::{Checkbox, LabelSide};
 pub use flex::{container, Container, Flex};
 pub use gauge::Gauge;
 pub use input::Input;
