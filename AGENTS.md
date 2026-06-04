@@ -92,8 +92,13 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 ```
 
 **Key rules:**
+
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
 - The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
+- All keybingings should be configurable in config.toml.
+- All actions should be registered in the action refistry  and accessible with keybingings and from the RPC
+- Actions can be assigned to more keys in config.toml.
+- No harcoded keybinging or color, style and theme related data must be defined in the code. They must be configurable in config.toml.
 - In Normal mode, all key events are forwarded to the focused backend (terminal/nvim).
 - Only the prefix key and explicitly bound keys trigger WM actions.
 - **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
@@ -194,6 +199,7 @@ pub enum InputMode {
 ```
 
 **Mode triggers**: Config defines how to enter modes:
+
 ```toml
 [[keys.mode]]
 name = "resize"
@@ -291,6 +297,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ```
 
 **How it works:**
+
 - During config loading, all defaults are bound first
 - Then `[keys.unbind]` entries are processed
 - `keymap.unbind("normal", &combo)` removes the binding from the normal mode keymap
@@ -298,6 +305,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 - The action itself still exists — you can rebind it to a different combo
 
 **Use cases:**
+
 - Free up a key for a custom binding
 - Disable features you don't use
 - Resolve conflicts between default and custom bindings
@@ -305,6 +313,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ### Config Reload
 
 `WmAction::ReloadConfig` triggers `reload_config()` on `HecaApp`:
+
 - Rebuilds keymaps from config file
 - Reloads theme
 - Updates settings (mouse, focus_follows_mouse, etc.)
@@ -406,9 +415,11 @@ myvim/
 ## Available Skills
 
 ### `niri` (`.agents/skills/niri/SKILL.md`)
+
 **Activate when:** Working on layout engine, ViewOffset, scrolling, workspaces, overview mode, or any feature inspired by niri's scrollable-tiling model.
 
 Contains:
+
 - Complete niri architecture reference (ScrollingSpace, Column, ViewOffset, Workspace)
 - Scrolling model (horizontal continuous + snap, vertical discrete)
 - Column width management (no normalization)
@@ -422,9 +433,11 @@ Contains:
 - Source file references into niri's actual codebase
 
 ### `pi-intercom` (for multi-session coordination)
+
 Use when delegating tasks to other pi sessions.
 
 ### `pi-subagents` (for subagent workflows)
+
 Use for multi-step analysis, advisory review, or parallel implementation tasks.
 
 ---
@@ -589,6 +602,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 ## Agent Rules
 
 ### When Reading Code
+
 1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.
 2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
 3. Check `heca/src/input.rs` and `heca-config/src/theme.rs` for keybinding concerns.
@@ -596,6 +610,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 5. Run `cargo check` before and after changes — the project must compile.
 
 ### When Writing Code
+
 1. Use the NIRI layout engine, not BSP (`pane.rs` is dead reference code).
 2. Always use `Rectangle` from `layout/types.rs`, not `Rect` from `types.rs`.
 3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
@@ -606,6 +621,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 8. **After every task, run `cargo clippy --workspace --all-targets --all-features` and fix all warnings.** The codebase must stay clippy-clean. Use `cargo clippy --fix` for auto-fixable issues.
 
 ### When Reviewing
+
 1. Check for BSP tree references that should be NIRI scrolling columns.
 2. Verify `update_all_column_widths()` isn't called unnecessarily.
 3. **Verify no registry bypasses** — all state changes go through `registry.execute()`.

@@ -1,509 +1,773 @@
-# Heca — Bugs, Bad Practices and Refactoring Roadmap
+# Heca — Bugs, Gaps, and Refactoring Roadmap
 
-**Scope:** `heca-core`, `heca-renderer`, `heca-config`, `heca/src` (read-only analysis)  
+**Scope:** `heca-core`, `heca-renderer`, `heca-config`, `heca/src`  
 **Excluded:** `heca-grid-ui`, `heca-ui`  
-**Date:** 2026-06-03
+**Date:** 2026-06-04
 
 ---
 
 ## 1. Executive Summary
 
-The core data model is architecturally sound — the NIRI-inspired `Session → Workspace → ScrollingSpace → Column → Pane` hierarchy is correctly structured. The critical problem is that **all behavior lives outside the types**, in ~1,400 lines of free functions in `handlers.rs` and `main.rs`. This creates deep index chains, makes correctness hard to enforce, and causes the `SidebarTree` (a complete second copy of the workspace/column/pane hierarchy) to drift from the live session state.
+The codebase is in a **better state than the 2026-06-03 review** suggested, but it is still hard to reason about because too much behavior is spread across a few very large files and functions.
+
+The layout model is still the right one:
+
+```text
+Session -> Workspace -> ScrollingSpace -> Column -> Pane
+```
+
+That part remains a good NIRI-inspired foundation.
+
+What is no longer the main problem:
+- production debug logging in the touched paths was removed
+- floating border rendering and "multiple active floating panes" were fixed
+- behavior is **not** entirely outside the domain types anymore: `Session`, `Workspace`, and especially `ScrollingSpace` already own meaningful behavior
+
+What is now the main problem:
+- **module and function bloat**
+- **unclear ownership boundaries** between layout state, UI state, backend lifecycle, and event handling
+- **duplicated interaction logic** between keyboard handlers, mouse drag/drop, and sidebar activation flows
+- **sidebar projection drift** and UI-state rebuild issues
+
+The biggest readability and maintainability win is **reorganizing the code first**, then moving the remaining cross-cutting behavior behind clearer boundaries.
 
 ---
 
-## 2. Critical: No Domain Encapsulation
+## 2. What Changed Since the Previous Review
 
-### Problem
+## Resolved / no longer accurate as written
 
-Every window-manager operation is a top-level `fn` that reaches into `AppState` internals:
+| Previous finding | Current status | Notes |
+|---|---|---|
+| Production `eprintln!()` spam in hot paths | **Fixed** | The debug logging called out in the prior review is gone from the touched app paths. |
+| "All behavior lives outside the types" | **Partially stale** | `ScrollingSpace` now owns substantial behavior: focus changes, add/remove column/pane, insert positions, pane moves, resize logic, etc. `Session` and `Workspace` also own more behavior than before. |
+| Floating border visibility / active float state inconsistency | **Fixed** | Border draw order is corrected and floating active state now has a dedicated normalization path. |
+| "Interaction code is almost untested" | **No longer accurate** | There are focused unit tests in `sidebar.rs`, `mouse.rs`, `session.rs`, `keymap.rs`, `input.rs`, etc. The problem is more about **coverage shape** than total test count. |
 
-```rust
-// handers.rs — the canonical pattern
-pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
-    if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-        ws.scrolling.columns[ci].panes[pi]           // bare index access
-    }
-}
-```
+## Still valid, but severity/shape changed
 
-`main.rs` also exposes standalone helpers like `destroy_empty_workspace()`, `focus_pane_by_id()`, `find_pane_location()`, `move_pane_to_column()`, `move_pane_to_workspace_column()`, `pane_name()`, `collect_all_pane_candidates()`, `switch_workspace_tracked()`, `sync_focus()`, `update_session_viewport()`.
-
-No domain type owns its own operations:
-
-| Operation | Lives in | Should live in |
-|-----------|----------|----------------|
-| focus left/right/up/down | `handlers.rs` | `ScrollingSpace` / `Workspace` |
-| add/remove pane or column | `handlers.rs` | `ScrollingSpace`, `Workspace` |
-| resize column / pane | `handlers.rs` | `ScrollingSpace`, `Column` |
-| rename pane / workspace | `handlers.rs` | `Pane`, `Workspace` |
-| swap / move panes between columns | `handlers.rs` | `ScrollingSpace` |
-| destroy empty workspace | `handlers.rs` | `Workspace` |
-
-### Impact
-
-- Callers must know the exact indexing scheme (`workspaces[].scrolling.columns[].panes[]`).
-- Any structural change to the hierarchy ripples across every handler.
-- Impossible to enforce invariants (e.g. "destroy column when empty") because there is no single owner.
-
-### Target shape
-
-```rust
-// ScrollingSpace
-pub fn focus_left(&mut self);
-pub fn focus_right(&mut self);
-pub fn move_active_pane_left(&mut self);
-pub fn swap_columns(&mut self, a: usize, b: usize);
-pub fn move_pane_to_column(&mut self, src_col: usize, pane: Pane, dst_col: usize);
-
-// Workspace
-pub fn add_pane(&mut self, pane: Pane, backend: Box<dyn PaneBackend>);
-pub fn remove_column(&mut self, idx: usize);
-pub fn maybe_destroy_if_empty(&mut self) -> bool;
-pub fn rename(&mut self, new_name: String);
-pub fn is_empty(&self) -> bool;
-
-// Session
-pub fn handle_focus_pane(&mut self, pane_id: u64);
-pub fn handle_swap_panes(&mut self, a_id: u64, b_id: u64);
-```
+| Previous finding | Current status | Updated interpretation |
+|---|---|---|
+| Sidebar drift / rebuild resets collapse | **Still valid** | Still a real bug and now more important because floating sidebar rows added more special cases. |
+| `AppState` is a god object | **Still valid** | Slightly smaller than before, but responsibility boundaries are still blurred. |
+| `#[allow(dead_code)]` overuse | **Partially valid** | Some suppressions now have comments/reasons, but the broad ones are still a smell. |
+| `Rect` vs `Rectangle` split | **Still valid** | `heca-core/src/types.rs::Rect` is still dead legacy baggage. |
+| manual `backends` lifecycle | **Still valid** | Pane removal and backend removal are still coupled only by discipline. |
+| typed errors missing | **Still valid** | `Result<_, String>` still appears in key infrastructure. |
+| unsafe blocks lack `// SAFETY:` comments | **Still valid** | This has not been cleaned up. |
 
 ---
 
-## 3. High: Sidebar Duplication — Two Representations of the Same Tree
+## 3. Current High-Priority Findings
 
-### Problem
+## A1. The code is dominated by a handful of oversized files and functions
 
-The session hierarchy exists in two full copies:
+### Current file sizes
 
-1. **Scrolling area (source of truth)**
-   ```
-   Session.workspaces[usize]
-     .scrolling.columns[Vec<Column>]
-       .panes[Vec<Pane>]
-   ```
+| File | LOC |
+|---|---:|
+| `heca/src/main.rs` | 2440 |
+| `heca/src/mouse.rs` | 1782 |
+| `heca/src/handlers.rs` | 1646 |
+| `heca/src/sidebar.rs` | 1564 |
+| `heca-config/src/theme.rs` | 854 |
+| `heca-core/src/layout/scrolling.rs` | 966 |
 
-2. **Sidebar (derived copy)**
-   ```
-   SidebarTree.workspaces[Vec<SidebarWsEntry>]
-     .columns[Vec<SidebarColEntry>]
-       .panes[Vec<SidebarPaneEntry>]
-   ```
+### Largest functions right now
 
-And the sidebar adds a parallel navigation state (`cursor`, `scroll_offset`, `flat_items`).
+| Function | LOC | File |
+|---|---:|---|
+| `window_event` | 558 | `heca/src/main.rs` |
+| `render` | 543 | `heca/src/main.rs` |
+| `handle_swap_param` | 453 | `heca/src/handlers.rs` |
+| `sidebar_handle_drop` | 209 | `heca/src/mouse.rs` |
+| `sidebar_drag_drop` | 205 | `heca/src/mouse.rs` |
+| `drop_pane` | 195 | `heca/src/mouse.rs` |
+| `render_sidebar_expanded` | 421 | `heca/src/sidebar.rs` |
+| `render_sidebar_collapsed` | 195 | `heca/src/sidebar.rs` |
+| `build_registry` | 184 | `heca/src/main.rs` |
 
-### Symptoms
+### Why this matters
 
-| Symptom | Root cause |
-|---------|-----------|
-| Forgetting to call `tree.rebuild()` after a mutation | No enforced sync point |
-| `rebuild()` unconditionally sets `collapsed: false` | UI forgetfulness bug |
-| Sidebar rendering has O(n) `find()` calls per pane per frame for drag highlight | No index by pane_id |
-| Workspace/column rename must update two separate tree traversals | Duplicated data |
-| Panic risk: sidebar `ws_idx`/`col_idx` diverging from session indices | Two independent `Vec` containers |
+This is the clearest maintainability problem in the repo.
 
-### Recommended approach: Option A — Sidebar as View
+These functions mix:
+- domain mutation
+- input interpretation
+- UI state transitions
+- rendering decisions
+- post-mutation synchronization
+- backend bookkeeping
 
-`SidebarTree` becomes a transient render state. It holds only **UI-only** state (cursor, scroll, collapse flags) and rebuilds its `workspaces[]` / `flat_items[]` from `Session` on every sync.
+That makes local changes expensive and increases the chance of subtle regressions.
 
-```rust
-impl SidebarTree {
-    pub fn sync(&mut self, session: &Session, focused_pane: Option<u64>, ...) {
-        // Preserve collapsed state keyed by (ws_idx) / (ws_idx, col_idx)
-        // Rebuild workspaces[] and flat_items[] from session
-        // Clamp cursor to new item count
-    }
-}
-```
+### Recommendation
 
-**Contract:**
+**First refactor for shape, then for semantics.**
 
-| Event | Mechanism |
-|-------|-----------|
-| Sidebar → Session | Sidebar interaction emits `WmAction` → `ActionRegistry::execute()` → handler mutates `Session` |
-| Session → Sidebar | After every handler runs, a single `sidebar_tree.sync(&session)` call is guaranteed |
-
-This leverages the existing `ActionRegistry` as the shared integration point — no new coupling needed.
-
-### Bonus fix: preserve collapsed state
-
-```rust
-let old_collapsed_ws: HashMap<usize, bool> =
-    self.workspaces.iter().map(|ws| (ws.ws_idx, ws.collapsed)).collect();
-let old_collapsed_col: HashMap<(usize, usize), bool> =
-    self.workspaces.iter().flat_map(|ws| {
-        ws.columns.iter().map(move |col| ((ws.ws_idx, col.col_idx), col.collapsed))
-    }).collect();
-```
-
-Apply `old_collapsed_*` values during rebuild instead of hardcoding `false`.
+Do not start by rewriting behavior. Start by splitting these files into smaller modules with stable public seams.
 
 ---
 
-## 4. High: `AppState` Is a God Object
+## A2. Ownership boundaries are still blurry
 
-`AppState` holds 25+ fields:
+`AppState` still carries too many unrelated concerns at once:
+- GPU and window objects
+- layout/session state
+- pane backends
+- sidebar UI state
+- input mode state
+- focus history
+- mouse drag state
+- config-driven runtime flags
 
-```rust
-pub struct AppState {
-    pub window: Arc<Window>,
-    pub surface: wgpu::Surface<'static>,
-    pub device: wgpu::Device>,
-    pub queue: wgpu::Queue,
-    pub primitive_renderer: PrimitiveRenderer,
-    pub text_renderer: TextRenderer,
-    pub session: Session,
-    pub backends: HashMap<u64, Box<dyn PaneBackend>>,
-    pub theme: Theme,
-    pub input_mode: InputMode,
-    pub sidebar: SidebarState,
-    pub sidebar_tree: SidebarTree,
-    pub mouse: MouseState,
-    pub modifiers: ModifiersState,
-    pub focused_pane: Option<u64>,
-    pub last_focused: Option<u64>,
-    pub last_visited_ws_idx: Option<usize>,
-    pub last_visited_pane_per_ws: Vec<Option<u64>>,
-    pub mouse_enabled: bool,
-    pub auto_scroll_edge: bool,
-    pub interactive_move_modifier: ModifierKey,
-    pub prefix_entered_at: Option<Instant>,
-    pub prefix_combo: KeyCombo,
-    pub pending_reload: bool,
-    pub needs_redraw: bool,
-    pub scale_factor: f64,
-    pub active_tab: usize,
-    pub tab_names: Vec<String>,
-}
-```
+This is not just "too many fields". The deeper issue is that **mutation ownership is unclear**.
 
-Every handler receives all of this and reaches into it directly. Once behavior moves onto the domain types (`Session`, `Workspace`, etc.), handlers will shrink to:
+Examples:
+- `Session` owns layout topology
+- `Workspace` owns tiled + floating pane placement
+- `AppState.backends` owns backend runtime objects
+- `sync_focus()` updates focus bookkeeping **and** rebuilds the sidebar
+- `main.rs` still owns helpers like `focus_pane_by_id()`, `move_pane_to_column()`, `move_pane_to_workspace_column()`, `destroy_empty_workspace()`
 
-```rust
-pub fn handle_split_horizontal(state: &mut AppState, _: &WmAction) {
-    let pane = state.session.next_pane();
-    state.session.add_pane(pane);
-    state.backends.insert(pane.id.0, Box::new(FakeBackend::new(80, 24)));
-    state.sidebar_tree.sync(&state.session, ...);
-    state.needs_redraw = true;
-}
-```
+### Recommendation
 
-`AppState` then becomes a composition of smaller state objects rather than a flat grab bag.
+Introduce a clearer split:
+
+| Concern | Suggested owner |
+|---|---|
+| layout topology and geometry | `Session` / `Workspace` / `ScrollingSpace` |
+| pane runtime lifecycle | `BackendStore` or `PaneRuntimeStore` |
+| focus history + sidebar sync bookkeeping | `FocusTracker` / `UiState` |
+| input mode, prefix/chord/sidebar mode | `UiState` |
+| GPU render resources | `RenderState` |
+| orchestration across all of the above | `AppController` / `WmRuntime` |
+
+This keeps the NIRI-like layout core pure without forcing all app-specific concerns into it.
 
 ---
 
-## 5. High: `#[allow(dead_code)]` Pervasiveness
+## A3. Session mutation still depends on scattered post-hooks
 
-AGENTS.md: *"NEVER add `#[allow(dead_code)]` without a clear reason."*
+A large amount of behavior still relies on remembering to call:
+- `sync_focus(state)`
+- `state.sidebar_tree.rebuild(...)`
+- `state.needs_redraw = true`
 
-Current violations:
+`sync_focus(state)` appears in many handler and mouse paths, and `sidebar_tree.rebuild(...)` still happens manually.
 
-| File | Line | Item suppressed |
-|------|------|-----------------|
-| `actions.rs` | 9 | `#![allow(dead_code)]` on the entire module |
-| `actions.rs` | 205 | `action_discriminant()` |
-| `keymap.rs` | 119 | `unbind()` |
-| `keymap.rs` | 126 | `rebind()` |
-| `keymap.rs` | 141 | `bindings_in_mode()` |
-| `keymap.rs` | 148 | `has_mode()` |
-| `input.rs` | 48 | `WmAction` |
-| `input.rs` | 205 | `build_action()` |
-| `input.rs` | 486 | `parse_key()` |
-| `input.rs` | 407 | `action_priority()` |
+### Why this matters
 
-Suggested policy:
-- Remove unused items entirely, **or**
-- Add a `// Reason:` comment above each `#[allow(dead_code)]` explaining why it's needed for a future phase.
-
-Items gated by features should use `#[cfg(feature = "rpc")]` instead.
-
----
-
-## 6. Medium: Debug `eprintln!()` in Production Paths
-
-`handlers.rs` contains ~40 unconditional `eprintln!()` calls in swap, move, and close handlers:
+The layout mutation itself is not the full operation. The real mutation contract is more like:
 
 ```rust
-eprintln!("[swap] handler called: a={} b={}", a_id, b_id);
-eprintln!("[swap] a_loc={:?} b_loc={:?}", a_loc, b_loc);
-eprintln!("[move-ws] pane not found or already in target workspace: pane={} target_ws={}", pane_id, ws_idx);
+mutate_session();
+normalize_focus();
+update_focus_history();
+rebuild_sidebar_projection();
+request_redraw();
 ```
 
-These fire on every user-triggered operation.
+Right now that contract is implicit.
 
-**Replace with a compile-time-gated macro:**
-```rust
-#[cfg(debug_assertions)]
-macro_rules! wm_debug { ($($arg:tt)*) => (eprintln!($($arg)*)); }
-#[cfg(not(debug_assertions))]
-macro_rules! wm_debug { ($($arg:tt)*) => {}; }
-```
+### Recommendation
 
-Or gate behind a runtime `state.settings.verbose` flag via `AppState::debug_log(&self, ...)`.
-
----
-
-## 7. Medium: `SidebarTree::rebuild()` Bugs and Performance
-
-### Bug: collapses are reset
+Create a single post-mutation hook, e.g.:
 
 ```rust
-// sidebar.rs:120 — runs on every rebuild
-let mut ws_entry = SidebarWsEntry {
-    ws_idx,
-    name: ...,
-    collapsed: false,    // <-- always resets to expanded
-    state,
-    columns: Vec::new(),
-};
-```
-
-This means if the user collapses a workspace, **one subsequent rebuild collapses it back to expanded**. With Option A's enforced `sync()`, this will trigger on every action — making collapse literally unusable.
-
-### Performance: full rebuild on every change
-
-`rebuild()` does `workspaces.clear(); flat_items.clear()` and allocates new `Vec`s + clones every `pane.title` `String`. In a typical frame loop or after every keystroke in sidebar nav mode this is unnecessary allocation pressure.
-
-**Mitigations:**
-- Pre-allocate with `Vec::with_capacity(session.pane_count())`.
-- Avoid re-cloning stable strings when names haven't changed.
-- Track a `dirty` flag and skip rebuilds when nothing changed.
-
----
-
-## 8. Medium: Inconsistent Rectangle Types
-
-Three rectangle representations exist:
-
-| Type | Location | Precision |
-|------|----------|-----------|
-| `Rect { x, y, w, h: f32 }` | `heca-core/src/types.rs` | f32 |
-| `Rectangle { loc: Point<f64>, size: Size<f64> }` | `heca-core/src/layout/types.rs` | f64 |
-| (wgpu internal) | renderer | f32 |
-
-`Rect` in `types.rs` is dead code from an earlier design — nothing uses it.
-
-**Action:** Remove `Rect` and `Point` from `heca-core/src/types.rs`. All layout math lives in `layout/types.rs` with `f64` for sub-pixel correctness.
-
----
-
-## 9. Medium: `PaneBackend` Lifecycle — No Ownership
-
-`AppState.backends: HashMap<u64, Box<dyn PaneBackend>>` is maintained manually:
-
-```rust
-// handlers.rs — every close handler remembers to do this:
-if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-    state.backends.remove(&removed.id.0);  // manual cleanup
-}
-```
-
-If any future code path removes a pane without updating `backends`, the backend leaks. There is no compile-time guarantee that the two stay in sync.
-
-**Suggestion:**
-```rust
-// Column::remove_pane() takes ownership of the backend
-fn remove_pane(&mut self, idx: usize) -> Option<(Pane, Box<dyn PaneBackend>)> {
-    ...
-}
-```
-
-Call it as:
-```rust
-let (pane, backend) = col.remove_pane(idx)?;
-drop(backend); // always runs when `(pane, backend)` is dropped
-```
-
----
-
-## 10. Low-Medium: Error Handling Strategy
-
-`PtyHandle::new_unix()` returns `Result<String, String>` — errors are generic `String`s.
-
-**Suggestion: use `thiserror` for domain errors:**
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum LayoutError {
-    #[error("pane not found: {id}")]
-    PaneNotFound { id: u64 },
-    #[error("column index out of range: {idx}")]
-    ColumnOutOfRange { idx: usize },
-    #[error("workspace index out of range: {idx}")]
-    WorkspaceOutOfRange { idx: usize },
-}
-```
-
-`ActionRegistry::execute()` silently does nothing when no handler is registered:
-```rust
-// actions.rs:96-103
-pub fn execute(...) {
-    if let Some(handler) = self.handlers.get(&disc) {
-        handler(state, action);
-    } else {
-        eprintln!("No handler registered for {:?}", action); // only stderr
-    }
-}
-```
-
-This should at minimum propagate an error or set a `state.error` flag that the status bar displays.
-
----
-
-## 11. Low: Magic Numbers
-
-Scattered unnamed constants:
-
-| Value | File | Meaning |
-|-------|------|---------|
-| `vw * 0.9`, `vh * 0.9` | `handlers.rs` | Max animation delta ratio for cross-workspace swap |
-| `500ms` | various | Prefix timeout |
-| `50.0` | `column.rs` | Minimum pane height |
-| `200.0` | `column.rs` | Default preferred pane height |
-| `velocity * 0.3` | `animation.rs` | Deceleration projection factor |
-| `ITEM_HEIGHT = 24.0` | `sidebar.rs` | Sidebar row height |
-| `BTN_SIZE = 20.0` | `sidebar.rs` | Plus/minus button size |
-| `BTN_RADIUS = 4.0` | `sidebar.rs` | Button corner radius |
-| `40.0` | `handlers.rs` | Pane height resize step (px) |
-| `0.05` | `handlers.rs` | Column width resize step (fraction) |
-
-**Collect into named constants in a shared `consts.rs` or at the top of each module:**
-```rust
-const SWAP_MAX_DELTA_RATIO: f64 = 0.9;
-const PREFIX_TIMEOUT: Duration = Duration::from_millis(500);
-const MIN_PANE_HEIGHT: f64 = 50.0;
-```
-
----
-
-## 12. Low: Unsafe Without `// SAFETY:` Comments
-
-`heca-core/src/backend/terminal.rs` uses `unsafe` for:
-- `openpty()` — fork/exec safety
-- `dup()` — FD duplication invariants
-- `from_raw_fd()` — ownership transfer
-- `ioctl(fd, TIOCSWINSZ, ...)` — FD must be valid PTY master
-
-Every `unsafe` block must have a `// SAFETY:` comment explaining which invariants it relies on. This is required by the Rust API guidelines and `clippy::undocumented_unsafe_blocks`.
-
----
-
-## 13. What Is Well-Designed
-
-| Component | Strength |
-|-----------|----------|
-| `ActionRegistry` | Clean discriminant-based `HashMap` dispatch, extensible registry, static metadata catalog for command palette |
-| `KeymapRegistry` | Per-mode keymaps, case-insensitive matching via custom `Hash`/`PartialEq` on `KeyCombo` |
-| `WmAction` enum | Comprehensive, organized by category (Navigation, Layout, Pane, Workspace, Chrome, System) |
-| `Animated<T>` | Generic "tweenable" wrapper with spring easing; cleanly separated from domain types |
-| `ViewOffset` | Three-state (Static / Animation / Gesture) scroll model matching NIRI exactly |
-| `ScrollingSpace` / `Workspace` / `Session` hierarchy | Correct NIRI structure; data model is sound |
-
----
-
-## 14. Refactoring Roadmap
-
-### Phase 1: Sidebar sync fix (stops drift)
-
-```rust
-impl SidebarTree {
-    pub fn sync(&mut self, session: &Session, focused_pane: Option<u64>, ...) {
-        let old_collapsed_ws: HashMap<usize, bool> = ...;
-        let old_collapsed_col: HashMap<(usize,usize),bool> = ...;
-
-        self.workspaces.clear();
-        self.flat_items.clear();
-        for (ws_idx, ws) in session.workspaces.iter().enumerate() {
-            let collapsed = *old_collapsed_ws.get(&ws_idx).unwrap_or(&false);
-            // rebuild preserving collapsed flag
-        }
-        self.rebuild_flat_items();
-        self.clamp_cursor();
-    }
-}
-```
-
-Then commit to: **every mutation of `session` must be followed by `sidebar_tree.sync(&session)`** before the frame renders. This can be enforced by making `sync()` part of a single post-mutation hook in the event loop.
-
-### Phase 2: Move behaviors onto domain types
-
-Target: handlers drop from 1,400 lines to ~200 lines.
-
-**`Session`** should own:
-- `focus_left()`, `focus_right()`, `focus_up()`, `focus_down()`
-- `focus_pane(pane_id: u64)`
-- `handle_swap_panes(a_id: u64, b_id: u64)`
-- `switch_to_workspace(idx: usize)`
-
-**`Workspace`** should own:
-- `is_empty()`, `maybe_destroy_if_empty() -> bool`
-- `rename(&mut self, name: String)`
-- `find_pane(&self, id: PaneId) -> Option<&Pane>`
-- `find_pane_mut(&mut self, id: PaneId) -> Option<&mut Pane>`
-
-**`ScrollingSpace`** should own:
-- `add_column(pos, col)`, `add_pane_to_column(col_idx, pane, focus)`
-- `remove_pane(col_idx, pane_idx) -> Option<Pane>`
-- `focus_left()`, `focus_right()`, `focus_up()`, `focus_down()`
-- `move_active_pane_left()`, `move_active_pane_right()`
-- `swap_columns(a, b)`
-- `resize_active_column(delta: f64)`
-- `move_pane_to_column(src_col, pane, dst_col)`
-
-**`Column`** should own:
-- `remove_pane(idx: usize) -> Option<Pane>`
-- `swap_panes(a: usize, b: usize)`
-- `rename_pane(id: PaneId, name: String)`
-
-This removes the need for `find_pane_location()`, `focus_pane_by_id()`, `destroy_empty_workspace()`, `move_pane_to_column()`, `move_pane_to_workspace_column()` from `main.rs`.
-
-### Phase 3: Thin handlers
-
-After Phase 2, each handler is a 5-15 line dispatch:
-
-```rust
-pub fn handle_focus_pane(state: &mut AppState, action: &WmAction) {
-    let WmAction::FocusPane { pane_id } = action else { return };
-    state.session.focus_pane(*pane_id);
+fn after_layout_change(state: &mut AppState) {
     sync_focus(state);
-    state.sidebar_tree.sync(&state.session, ...);
     state.needs_redraw = true;
 }
 ```
 
-Cross-workspace swap logic would become `Session::swap_panes(a_id, b_id)` — a single 50-line method instead of 300 lines spread across `handlers.rs`.
+Then evolve that into a more explicit controller boundary.
 
-### Phase 4: Cleanup
-
-- Remove `Rect`, `Point` from `heca-core/src/types.rs`
-- Remove empty `Neovim` / `Browser` variants from `BackendRenderData`
-- Replace all `eprintln!()` debug calls with `wm_debug!()` macro
-- Add `// SAFETY:` comments to all `unsafe` blocks in `terminal.rs`
-- Consolidate magic numbers into named constants
-- Replace `String` errors with `thiserror` enums
-- Split `heca-config/src/theme.rs` into submodules (`color.rs`, `settings.rs`, `keys.rs`) — 676 lines is doing too much
+This will dramatically reduce the mental overhead of changing behavior.
 
 ---
 
-## 15. Summary Table: All Findings
+## A4. `SidebarTree` is still a duplicated projection, and it still forgets UI state
 
-| ID | Severity | Category | Description |
-|----|----------|----------|-------------|
-| D1 | Critical | Architecture | All domain behavior in free functions; none on Session/Workspace/ScrollingSpace/Column/Pane |
-| S1 | High | Sync | SidebarTree drifts from Session; no enforced sync point; `rebuild()` resets `collapsed` |
-| S2 | High | Sync | Sidebar rendering does O(n) std::find lookups per frame for drag highlights |
-| A1 | High | God Object | AppState is a flat 25-field struct with no ownership boundaries |
-| A2 | High | Lifecycle | PaneBackend cleanup is manual; leak risk if any code path forgets |
-| L1 | High | Dead code | `#[allow(dead_code)]` on 10 items violates AGENTS.md rule |
-| L2 | High | Dead code | `Rect` type in `heca-core/src/types.rs` is unused |
-| L3 | High | Dead code | `Neovim` / `Browser` variants in `BackendRenderData` are empty placeholders |
-| D2 | Medium | Debug | ~40 `eprintln!()` calls in production handler paths |
-| E1 | Medium | Errors | `Result<String, String>` errors instead of typed `thiserror` enums |
-| E2 | Medium | Errors | `ActionRegistry::execute()` silently swallows missing handlers |
-| T1 | Medium | Types | `Rect` (f32) coexists with `Rectangle` (f64) — one must go |
-| M1 | Medium | Perf | `SidebarTree::rebuild()` allocates+clones on every sync; no capacity hints |
-| P1 | Medium | Precision | wgpu uses f32, layout math uses f64 — no clear boundary |
-| U1 | Low | Safety | Unsafe blocks in terminal.rs lack `// SAFETY:` comments |
-| C1 | Low | Hygiene | 15+ magic numbers scattered across handlers, sidebar, animation |
-| T2 | Low | Traits | `Rectangle`, `Point`, `Size` could implement `Default`, `Add`, `Sub` for ergonomics |
-| R1 | Low | Render | `draw_rounded_rect()` accepts `_radius` parameter that is ignored |
+`SidebarTree::rebuild()` still clears and reconstructs the sidebar model from scratch:
+
+- `self.workspaces.clear()`
+- `self.flat_items.clear()`
+- pane/workspace names are cloned again
+- `collapsed: false` is still hardcoded for rebuilt workspace/column entries
+
+### Confirmed current bug
+
+Collapsed state is still reset on rebuild.
+
+That means the previous review’s warning is still valid.
+
+### New maintainability wrinkle
+
+Floating pane rows are now shown in the sidebar as **display-only** rows, but the sidebar model still stores them in `flat_items` alongside navigable/selectable items.
+
+That forces the code to special-case them in multiple places:
+- `is_navigable()`
+- `is_navigable_collapsed()`
+- `sidebar_hit_test()`
+- sidebar handlers in `handlers.rs`
+
+This is a design smell: the model cannot clearly express the difference between:
+- selectable tree nodes
+- display-only rows
+- drag/drop targets
+
+### Recommendation
+
+Keep the sidebar as a projection, but make that explicit:
+
+```rust
+SidebarTree = projection + UI state
+```
+
+Split it into:
+- **projection data** derived from `Session`
+- **UI state** preserved across rebuilds (`cursor`, `scroll_offset`, collapsed maps)
+- **row kind metadata** (`Selectable`, `DisplayOnly`, `DropTarget`, etc.)
+
+That removes the current "rebuild then patch behavior with ad hoc skip logic" pattern.
+
+---
+
+## A5. Interaction logic is duplicated across keyboard, mouse, and sidebar flows
+
+The same conceptual operations are implemented in multiple places:
+- pane focus by id
+- sidebar activation behavior
+- swap/move logic
+- cross-workspace pane relocation
+- drag-drop insertion
+
+Examples:
+- `handle_swap_param()` in `handlers.rs` is very large and owns swap semantics
+- `drop_pane()`, `sidebar_drag_drop()`, and `sidebar_handle_drop()` in `mouse.rs` reimplement related placement logic
+- sidebar activation behavior exists in both `main.rs` and `handlers.rs`
+
+### Why this matters
+
+Even when behavior is "correct", it is hard to know which path is canonical.
+
+This is where readability is currently lost the most.
+
+### Recommendation
+
+Extract pure operation units first, e.g.:
+- `swap_panes_same_column(...)`
+- `swap_panes_same_workspace(...)`
+- `swap_panes_cross_workspace(...)`
+- `insert_pane_after_target(...)`
+- `reinsert_detached_pane(...)`
+- `activate_sidebar_item(...)`
+
+Then let handlers and mouse code call those shared operations.
+
+---
+
+## A6. `main.rs` still owns too much application behavior
+
+`main.rs` currently mixes:
+- `HecaApp` initialization
+- WGPU rendering
+- key event handling
+- mouse event forwarding
+- prefix/chord/sidebar mode control
+- config reload flow
+- session/layout helper functions
+- registry construction
+- some pane/workspace mutation helpers
+
+This is the single biggest readability problem after the giant swap/drag functions.
+
+### Recommendation
+
+Split `main.rs` by concern before changing logic:
+
+```text
+heca/src/app/
+  mod.rs
+  lifecycle.rs      // HecaApp init/resume/about_to_wait
+  events.rs         // window_event and key/mouse dispatch
+  render.rs         // frame rendering
+  focus.rs          // sync_focus, focus tracking
+  mutations.rs      // post-mutation hooks / helper orchestration
+  registry.rs       // build_registry
+```
+
+This keeps the event loop intact while making the code searchable and reviewable.
+
+---
+
+## A7. Action metadata has started to drift from real actions
+
+`ActionRegistry::ALL` still contains descriptors like:
+- `tab_next`
+- `tab_prev`
+- `swap_select`
+- `swap_and_focus`
+
+But these do not match the current `WmAction` / `action_from_name()` surface cleanly.
+
+At the same time, the real action surface includes more programmatic actions not represented in the catalog.
+
+### Why this matters
+
+This will create confusion in:
+- command palette integration
+- docs generation
+- future config validation
+- keybinding discoverability
+
+### Recommendation
+
+Treat action metadata as a real contract.
+
+Either:
+1. keep only user-facing/configurable actions in `ActionRegistry::ALL`, or
+2. generate descriptors from a single authoritative action definition layer
+
+But do not let the metadata catalog drift independently.
+
+---
+
+## 4. Medium-Priority Findings
+
+## M1. Domain behavior is better encapsulated than before, but the boundary is incomplete
+
+This is the main place where the previous review must be corrected.
+
+`ScrollingSpace` already owns meaningful operations:
+- `add_column`
+- `add_pane_to_column`
+- `remove_pane`
+- `remove_column`
+- `move_active_pane_to_column`
+- `move_active_pane_to_new_column`
+- `move_column_to`
+- `resize_active_column`
+- `insert_position`
+- focus and view-offset behavior
+
+`Session` and `Workspace` also own non-trivial behavior.
+
+So the problem is **not** "behavior lives nowhere".
+
+The problem is that the remaining app-level orchestration is still too spread out and too large.
+
+### Updated recommendation
+
+Do **not** force every operation into `Session` just because it mutates layout.
+
+Instead:
+- keep pure layout invariants in layout types
+- move app-specific orchestration into a dedicated controller/runtime layer
+- stop leaving important orchestration in `main.rs`
+
+This better matches heca’s architecture as a GPU app with PTY backends, not a literal NIRI clone.
+
+---
+
+## M2. Manual backend lifecycle is still fragile
+
+`AppState.backends: HashMap<u64, Box<dyn PaneBackend>>` is still kept in sync manually.
+
+There are still explicit `backends.remove(...)` calls in close/delete flows.
+
+### Why this matters
+
+The layout tree and runtime backend store are still coupled by convention.
+
+### Recommendation
+
+Create an explicit backend owner abstraction:
+
+```rust
+struct BackendStore {
+    by_pane: HashMap<u64, Box<dyn PaneBackend>>,
+}
+```
+
+Then expose narrow operations like:
+- `insert_backend_for_pane(...)`
+- `remove_backend_for_pane(...)`
+- `backend_for_pane(...)`
+
+That does not fully solve ownership coupling, but it removes raw `HashMap` mutation from unrelated code paths.
+
+---
+
+## M3. `BackendRenderData` and `PaneType` still carry dead placeholders
+
+Still present:
+- `PaneType::Neovim`
+- `PaneType::Browser`
+- `BackendRenderData::Neovim`
+- `BackendRenderData::Browser`
+
+These are not integrated into real behavior yet.
+
+### Recommendation
+
+Until those backends exist, remove the unused variants or gate them behind a future feature/phase boundary.
+
+---
+
+## M4. Legacy dead state and placeholder state remain in the model
+
+Confirmed examples:
+- `heca-core/src/types.rs::Rect` is still legacy dead code
+- `Workspace::floating_visible` appears unused
+- `Workspace::is_pinned` appears unused
+- `AppState::active_tab` / `tab_names` are only used for drawing a placeholder tab bar
+
+These fields increase cognitive load because readers have to keep asking "is this real state or future state?"
+
+### Recommendation
+
+Decide field-by-field:
+- remove it now, or
+- gate it explicitly for a future milestone, or
+- document it as intentionally dormant
+
+---
+
+## M5. `theme.rs` is still a monolith
+
+`heca-config/src/theme.rs` still mixes:
+- color types
+- theme palettes
+- settings schema
+- keybinding schema
+- config loading
+- defaults
+- tests
+
+### Recommendation
+
+Split into at least:
+
+```text
+heca-config/src/
+  color.rs
+  theme.rs
+  settings.rs
+  keys.rs
+  loader.rs
+  defaults.rs
+```
+
+This is a readability refactor with very low semantic risk.
+
+---
+
+## M6. Hardcoded sidebar bindings live in app code
+
+`build_keymap()` still hardcodes the sidebar-mode bindings.
+
+That is okay temporarily, but it creates another source of truth outside config defaults and action metadata.
+
+### Recommendation
+
+Move sidebar bindings into the same declarative config/default system as the rest of the keymap, even if they are still mode-scoped.
+
+---
+
+## M7. Typed error handling is still missing in core paths
+
+Still present:
+- `theme.rs::load_config_file() -> Result<Config, String>`
+- PTY/terminal construction returning `Result<_, String>`
+- `execute_rpc_command() -> Result<WmAction, String>`
+- `ActionRegistry::execute()` silently doing nothing when a handler is missing
+
+### Recommendation
+
+Move toward typed error enums where the subsystem boundary is stable:
+- config loader errors
+- PTY/backend startup errors
+- RPC parse/dispatch errors
+- invalid action dispatch
+
+At minimum, `ActionRegistry::execute()` should not silently swallow missing handlers.
+
+---
+
+## M8. Terminal rendering still clones the full grid every frame
+
+`TerminalBackend::render_data()` still constructs a new `Vec<TerminalLine>` and clones each visible cell on every call.
+
+That is not the first refactor to do, but it remains an important performance/ownership issue.
+
+### Recommendation
+
+After structural cleanup, redesign backend rendering around:
+- borrowed render views, or
+- row iterators, or
+- a renderer-owned staging/cache model
+
+Do not optimize this before untangling ownership boundaries.
+
+---
+
+## 5. Low-Priority but Worth Cleaning Up
+
+| ID | Issue | Why it matters |
+|---|---|---|
+| L1 | Broad `#![allow(dead_code)]` in `actions.rs` | The reason comment is stale now that `registry.execute()` is already used. |
+| L2 | Several targeted `#[allow(dead_code)]` items remain | Some are justified, but they should be reviewed against actual roadmap state. |
+| L3 | `unsafe` blocks in `terminal.rs` still lack `// SAFETY:` comments | Important for Rust hygiene and future auditing. |
+| L4 | magic numbers remain scattered (`500ms`, `16ms`, `40.0`, row/button sizes, etc.) | Makes tuning and review harder. |
+| L5 | `draw_rounded_rect()` still ignores its radius parameter | API suggests behavior that does not exist. |
+
+---
+
+## 6. Updated Target Architecture
+
+The target should be clearer than "move everything into the layout types".
+
+Because heca is **not** a 1:1 niri port, a better target is:
+
+```text
+layout core          -> Session / Workspace / ScrollingSpace / Column
+backend runtime      -> BackendStore / pane runtime management
+ui state             -> sidebar state, input mode, focus history, prefix/chord
+mouse interaction    -> drag state + hit testing + drop routing
+rendering            -> GPU/frame composition only
+app controller       -> orchestrates mutations and post-hooks
+```
+
+### Suggested module layout
+
+```text
+heca/src/
+  app/
+    mod.rs
+    lifecycle.rs
+    events.rs
+    render.rs
+    registry.rs
+    focus.rs
+    mutations.rs
+  sidebar/
+    mod.rs
+    model.rs
+    projection.rs
+    render.rs
+    nav.rs
+  mouse/
+    mod.rs
+    hit_test.rs
+    drag.rs
+    drop.rs
+    render.rs
+```
+
+And for config:
+
+```text
+heca-config/src/
+  color.rs
+  theme.rs
+  settings.rs
+  keys.rs
+  loader.rs
+  defaults.rs
+```
+
+This is the reorganization that will make the code feel clear.
+
+---
+
+## 7. Refactoring Plan
+
+## Phase 0 — Lock in behavior before moving code
+
+Goal: make refactoring safe.
+
+- add or extend tests for:
+  - sidebar collapse persistence across rebuilds
+  - same-column / same-workspace / cross-workspace swaps
+  - floating ↔ tiled transitions
+  - sidebar display-only floating rows
+- add a few integration-style tests around the current session mutation helpers
+
+This phase should avoid architectural changes.
+
+---
+
+## Phase 1 — Pure file/module split, no semantic changes
+
+Goal: make the code navigable.
+
+### 1A. Split `main.rs`
+Extract:
+- rendering
+- event handling
+- registry build
+- focus/sync helpers
+- mutation helpers
+
+### 1B. Split `mouse.rs`
+Extract:
+- hit testing
+- drag state machine
+- drop logic
+- drag rendering helpers
+
+### 1C. Split `sidebar.rs`
+Extract:
+- projection/model
+- hit testing
+- rendering
+- navigation helpers
+
+### 1D. Split `theme.rs`
+Extract config schema and loader from palette/default definitions.
+
+**Success criteria:** no behavior changes, just smaller files and smaller diffs.
+
+---
+
+## Phase 2 — Introduce a central mutation boundary
+
+Goal: stop scattering post-mutation bookkeeping.
+
+Create a narrow orchestration layer, e.g. `AppController` / `WmRuntime`, which owns:
+- session mutation entry points
+- backend lifecycle updates
+- focus/sidebar synchronization
+- redraw requests
+
+This lets callers stop doing manual sequences like:
+
+```rust
+mutate session
+sync_focus
+sidebar rebuild
+needs_redraw = true
+```
+
+and instead call one operation.
+
+---
+
+## Phase 3 — Unify pane move/swap/focus operations
+
+Goal: remove duplicated interaction logic.
+
+Extract shared pure operations for:
+- focusing a pane by id
+- moving panes between columns
+- moving panes between workspaces
+- swapping panes in the 3 main cases:
+  - same column
+  - same workspace, different columns
+  - different workspaces
+- detaching/reinserting panes during mouse drag
+
+Then make:
+- keyboard handlers
+- sidebar handlers
+- mouse drop code
+
+all call the same shared operations.
+
+This is the phase that will most improve correctness.
+
+---
+
+## Phase 4 — Fix sidebar projection design
+
+Goal: make sidebar state explicit and stable.
+
+- preserve collapsed state across rebuilds
+- split projection data from UI state
+- represent row interactivity explicitly
+- remove the need for ad hoc floating-row skip logic scattered across multiple functions
+
+This also makes future sidebar features much easier.
+
+---
+
+## Phase 5 — Remove stale and placeholder state
+
+Goal: reduce cognitive noise.
+
+Candidates:
+- `Rect` in `heca-core/src/types.rs`
+- unused workspace flags
+- placeholder tab state in `AppState`
+- dead backend enum variants
+- stale action metadata entries
+- outdated `dead_code` suppressions
+
+Do this only after the structural split, so removal is easy and low-risk.
+
+---
+
+## Phase 6 — Polish and performance
+
+Goal: tighten code quality after the architecture is clearer.
+
+- replace `Result<_, String>` with typed errors where stable
+- add `// SAFETY:` comments to all unsafe blocks
+- centralize constants / magic numbers
+- redesign terminal render-data cloning path
+- decide whether `draw_rounded_rect()` should be real or renamed
+
+---
+
+## 8. Recommended Order of Work
+
+If the goal is **clarity first**, the best order is:
+
+1. **Phase 1** — split giant files
+2. **Phase 2** — central mutation boundary
+3. **Phase 3** — unify swap/move/focus logic
+4. **Phase 4** — sidebar projection cleanup
+5. **Phase 5** — remove stale state and placeholder APIs
+6. **Phase 6** — typed errors / safety / perf
+
+That order gives the biggest readability win earliest.
+
+---
+
+## 9. Summary Table
+
+| ID | Severity | Area | Finding |
+|---|---|---|---|
+| A1 | Critical | Structure | File/function bloat is now the dominant maintainability issue |
+| A2 | High | Architecture | Ownership boundaries between layout, UI, backends, and orchestration are blurry |
+| A3 | High | Synchronization | Post-mutation bookkeeping is implicit and scattered |
+| A4 | High | Sidebar | Sidebar projection still duplicates state and forgets collapsed UI state |
+| A5 | High | Interactions | Swap/move/drag behavior is duplicated across handlers and mouse flows |
+| A6 | High | Actions | Action metadata has drifted from the actual action surface |
+| M1 | Medium | Layout/app boundary | Domain behavior is improved, but the app-layer boundary is incomplete |
+| M2 | Medium | Lifecycle | Backend ownership is still manual |
+| M3 | Medium | Dead state | Placeholder backend variants remain |
+| M4 | Medium | Dead state | Legacy `Rect` and other dormant fields still add noise |
+| M5 | Medium | Config | `theme.rs` remains too large and overloaded |
+| M6 | Medium | Input | Sidebar bindings are hardcoded outside the normal declarative keymap flow |
+| M7 | Medium | Errors | Typed error handling is still missing in core paths |
+| M8 | Medium | Perf | Terminal render data still clones the visible grid every frame |
+| L1 | Low | Hygiene | Broad `dead_code` suppressions should be narrowed or removed |
+| L2 | Low | Safety | `unsafe` blocks still need `// SAFETY:` comments |
+| L3 | Low | API clarity | `draw_rounded_rect()` still ignores radius |
+| L4 | Low | Hygiene | Magic numbers should be collected into named constants |
+
+---
+
+## 10. Bottom Line
+
+The codebase does **not** need a wholesale rewrite.
+
+It needs:
+1. **reorganization first**
+2. **clear mutation ownership second**
+3. **deduplication of interaction logic third**
+
+That path will make the code far easier to read and maintain without forcing heca into an architecture that only makes sense for a pure compositor.
