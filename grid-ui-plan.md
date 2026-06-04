@@ -1,13 +1,33 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Branch: **`heca-grid-ui`** · Status: **A done · B done · C in progress** · Last updated: 2026-06-03
+> Status: **A done · B done · C ~mostly done · D pending** · Last updated: 2026-06-04
+
+---
+
+## ✅ Task Board
+
+**Workflow** (agreed 2026-06-04): one **feature branch per task** off up-to-date `main`; **PR after each task**; mark a task **IN PROGRESS** before starting and **DONE** when finished; on stopping mid-task add a **Resume note** (what/why/agreed/how-to-continue) and delete it once resumed-and-completed.
+
+| Task | Status | PR |
+|------|--------|----|
+| Phase A — crate skeleton + core model | DONE | — |
+| Phase B — renderer (SDF glow) + showcase | DONE | — |
+| Phase C — component catalog (Button, Toggle, Checkbox, Input, Tabs, Badge, StatusDot, Separator, Spinner, Alert, ProgressBar, Gauge; `disabled`, `tab_index`, full Input keyboard model) | DONE | [#21](https://github.com/ovidius72/heca/pull/21) (awaiting merge) |
+| Overlay / popover layer (infra for Select/Tooltip/Modal) | PENDING | — |
+| `Select` dropdown (needs overlay) | PENDING | — |
+| `Tooltip`, `Modal`/`Dialog` (need overlay) | PENDING | — |
+| Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
+| Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |
+| Reconcile `docs/the-grid-ui.md` with implemented architecture | PENDING | — |
+
+**Resume notes (active):** _none._
 
 ---
 
 ## ▶ Resume Here
 
-**Where we are:** A polished `Button` + the full component foundation are built, tested, and committed on branch `heca-grid-ui`. The renderer + glow + text + accessibility all work. Next is building the rest of the catalog widgets.
+**Where we are:** Phases A–C are complete (full widget catalog + renderer) and up for review in [PR #21](https://github.com/ovidius72/heca/pull/21). See the **Task Board** above for what's done vs pending. Next up: the overlay/popover layer (then `Select`), or Phase D app adoption.
 
 **Run / verify:**
 ```bash
