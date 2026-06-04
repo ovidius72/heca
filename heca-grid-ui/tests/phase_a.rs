@@ -735,3 +735,50 @@ fn horizontal_separator_spans_container_width() {
     );
     assert!(sep.base().bounds.size.h <= 1.0, "separator is thin");
 }
+
+#[test]
+fn spinner_animates_and_paints_its_ring() {
+    let theme = Theme::grid_tron();
+    let mut spinner = Spinner::new();
+    LayoutEngine::new().compute(&mut spinner, Size::new(40.0, 40.0));
+    assert!(spinner.tick(0.016), "spinner keeps requesting frames");
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        spinner.paint(&mut cx);
+    }
+    let dots = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Rect(_)))
+        .count();
+    assert_eq!(dots, 8, "the ring paints 8 dots");
+}
+
+#[test]
+fn alert_renders_title_body_and_accent_bar() {
+    let theme = Theme::grid_tron();
+    let mut alert = Alert::success("DEPLOYED").body("grid online");
+    LayoutEngine::new().compute(&mut alert, Size::new(400.0, 100.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        alert.paint(&mut cx);
+    }
+    let texts: Vec<&str> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.contains(&"DEPLOYED"), "alert renders its title");
+    assert!(texts.contains(&"grid online"), "alert renders its body");
+
+    let rects = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Rect(_)))
+        .count();
+    assert_eq!(rects, 2, "alert paints a surface + accent bar");
+}

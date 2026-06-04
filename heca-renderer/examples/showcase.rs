@@ -169,6 +169,14 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Badge::accent("v2.0"))
                 .child(Badge::outline("BETA")),
         )
+        // Spinner + Alert.
+        .child(
+            Flex::row()
+                .gap(20.0)
+                .align(Align::Center)
+                .child(Spinner::new())
+                .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
