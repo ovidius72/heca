@@ -938,11 +938,12 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         let target_idx = orig_pane
                             .unwrap_or(0)
                             .min(ws.scrolling.columns[col_idx].panes.len());
-                        ws.scrolling.columns[col_idx]
-                            .panes
-                            .insert(target_idx, float.pane);
-                        ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
-                        ws.scrolling.active_column_idx = col_idx;
+                        ws.scrolling.add_pane_to_column(
+                            col_idx,
+                            Some(target_idx),
+                            float.pane,
+                            true,
+                        );
                     } else {
                         ws.scrolling.add_column(
                             None,
