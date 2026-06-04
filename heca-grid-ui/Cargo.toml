@@ -1,0 +1,11 @@
+[package]
+name = "heca-grid-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GPU-free, signal-driven, composable Grid/Tron UI component library for heca"
+
+[dependencies]
+heca-core = { path = "../heca-core" }
+floem_reactive = "0.2"
+taffy = "0.7"

@@ -1,0 +1,311 @@
+//! [`Checkbox`] — a boolean change widget: a bordered square that fills with a
+//! glowing accent indicator (popping in from the center) when checked. Shares
+//! the change-widget pattern with [`Toggle`](super::Toggle): flipping it emits
+//! `Action::value("checkbox-change", SignalData::Bool(new))` to an
+//! [`on_change`](Checkbox::on_change) handler.
+//!
+//! An optional [`label`](Checkbox::label) can sit on either side
+//! ([`LabelSide`]); clicking anywhere on the box **or** label toggles it. Like
+//! the other interactive widgets it reuses [`Flash`], is
+//! [`focusable`](Component::focusable), activates on Space/Enter, honors
+//! [`Base::disabled`](crate::component::Base), and shows a focus-visible ring.
+
+use crate::action::{Action, SignalData};
+use crate::builders::LayoutExt;
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::effects::Flash;
+use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::scene::{Border, Glow, TextAlign};
+use crate::style::Length;
+use heca_core::layout::{Point, Rectangle, Size};
+
+/// Box side length (logical px).
+const BOX_SIZE: f64 = 22.0;
+/// Box corner radius (a softened square, distinct from a round radio).
+const BOX_RADIUS: f32 = 4.0;
+/// Checked indicator size as a fraction of the box at full-on.
+const INNER_FRAC: f64 = 0.55;
+/// Indicator corner radius.
+const INNER_RADIUS: f32 = 2.0;
+/// Gap between the box and its label.
+const LABEL_GAP: f64 = 8.0;
+/// Label font size.
+const LABEL_FS: f32 = 14.0;
+/// Seconds for a full check/uncheck pop.
+const ANIM_DURATION: f32 = 0.10;
+/// Checked-state glow spread radius (px).
+const GLOW_RADIUS: f32 = 14.0;
+/// Checked-state glow peak intensity.
+const GLOW_INTENSITY: f32 = 0.09;
+/// Border alpha at rest; firms to solid as the box is checked.
+const REST_BORDER_ALPHA: f32 = 150.0;
+
+/// Which side of the box the [`Checkbox`] label sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LabelSide {
+    /// Label to the right of the box (default).
+    #[default]
+    Right,
+    /// Label to the left of the box.
+    Left,
+}
+
+/// A boolean checkbox with an optional, clickable label. Emits `checkbox-change`
+/// with the new [`bool`] when toggled (pointer press on box or label, or
+/// Space/Enter while focused).
+pub struct Checkbox {
+    base: Base,
+    /// Checked state, exposed reactively via [`state`](Checkbox::state).
+    checked: Signal<bool>,
+    label: Option<String>,
+    label_side: LabelSide,
+    /// Animated indicator amount, 0.0 (empty) → 1.0 (checked).
+    progress: f32,
+    /// Press flash (brightens on toggle, fades out).
+    flash: Flash,
+    hovered: Signal<bool>,
+    on_change: Option<Box<dyn Fn(Action)>>,
+}
+
+impl Checkbox {
+    /// A new checkbox, unchecked and label-less by default.
+    pub fn new() -> Self {
+        let mut base = Base::new();
+        base.style.width = Length::Px(BOX_SIZE as f32);
+        base.style.height = Length::Px(BOX_SIZE as f32);
+        Self {
+            base,
+            checked: signal(false),
+            label: None,
+            label_side: LabelSide::Right,
+            progress: 0.0,
+            flash: Flash::new(),
+            hovered: signal(false),
+            on_change: None,
+        }
+    }
+
+    /// Set the initial checked state (no animation).
+    pub fn checked(mut self, checked: bool) -> Self {
+        self.checked.set(checked);
+        self.progress = if checked { 1.0 } else { 0.0 };
+        self
+    }
+
+    /// Add a label next to the box. Clicking the label toggles the checkbox.
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self.remeasure();
+        self
+    }
+
+    /// Choose which side the label sits on (default [`LabelSide::Right`]).
+    pub fn label_side(mut self, side: LabelSide) -> Self {
+        self.label_side = side;
+        self
+    }
+
+    /// Set the change handler. Receives `Action::value("checkbox-change",
+    /// SignalData::Bool(new_state))` each time the box is toggled.
+    pub fn on_change(mut self, f: impl Fn(Action) + 'static) -> Self {
+        self.on_change = Some(Box::new(f));
+        self
+    }
+
+    /// The checked-state signal — bind UI to it reactively.
+    pub fn state(&self) -> Signal<bool> {
+        self.checked
+    }
+
+    /// Current checked state (untracked read).
+    pub fn is_checked(&self) -> bool {
+        self.checked.get_untracked()
+    }
+
+    fn remeasure(&mut self) {
+        match &self.label {
+            Some(label) => {
+                let text_w = label.chars().count() as f32 * LABEL_FS * MONO_ADVANCE_RATIO;
+                let line = LABEL_FS * MONO_LINE_RATIO;
+                self.base.style.width = Length::Px(BOX_SIZE as f32 + LABEL_GAP as f32 + text_w);
+                self.base.style.height = Length::Px((BOX_SIZE as f32).max(line));
+            }
+            None => {
+                self.base.style.width = Length::Px(BOX_SIZE as f32);
+                self.base.style.height = Length::Px(BOX_SIZE as f32);
+            }
+        }
+    }
+
+    /// The box rect (vertically centered), positioned per the label side.
+    fn box_rect(&self) -> Rectangle {
+        let b = self.base.bounds;
+        let y = b.loc.y + (b.size.h - BOX_SIZE) / 2.0;
+        let x = if self.label.is_some() && self.label_side == LabelSide::Left {
+            b.loc.x + b.size.w - BOX_SIZE
+        } else {
+            b.loc.x
+        };
+        Rectangle::new(Point::new(x, y), Size::new(BOX_SIZE, BOX_SIZE))
+    }
+
+    /// The label text rect (renderer centers vertically).
+    fn label_rect(&self) -> Rectangle {
+        let b = self.base.bounds;
+        let x = match self.label_side {
+            LabelSide::Left => b.loc.x,
+            LabelSide::Right => b.loc.x + BOX_SIZE + LABEL_GAP,
+        };
+        let w = (b.size.w - BOX_SIZE - LABEL_GAP).max(0.0);
+        Rectangle::new(Point::new(x, b.loc.y), Size::new(w, b.size.h))
+    }
+
+    fn contains(&self, p: Point) -> bool {
+        self.base.bounds.contains(p)
+    }
+
+    /// Flip the state: animate the indicator, flash, and emit `checkbox-change`.
+    fn flip(&mut self) {
+        let new = !self.checked.get_untracked();
+        self.checked.set(new);
+        self.flash.trigger();
+        if let Some(f) = &self.on_change {
+            f(Action::value("checkbox-change", SignalData::Bool(new)));
+        }
+    }
+}
+
+impl Component for Checkbox {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn focusable(&self) -> bool {
+        !self.base.disabled.get_untracked()
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        let disabled = self.base.disabled.get_untracked();
+        let (surface, accent, glow_c, muted, foreground) = {
+            let t = cx.theme();
+            (t.surface, t.accent, t.glow, t.muted, t.foreground)
+        };
+        let p = self.progress.clamp(0.0, 1.0);
+        let bx = self.box_rect();
+
+        // Box: dark fill, border firms muted → accent.
+        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let border = Border {
+            color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
+            width: 1.5,
+        };
+        cx.rect(bx, surface, Some(border), BOX_RADIUS, None);
+
+        // Checked indicator: an accent square that pops in from the box center.
+        if p > 0.0 {
+            let inner = BOX_SIZE * INNER_FRAC * p as f64;
+            let indicator = Rectangle::new(
+                Point::new(
+                    bx.loc.x + (BOX_SIZE - inner) / 2.0,
+                    bx.loc.y + (BOX_SIZE - inner) / 2.0,
+                ),
+                Size::new(inner, inner),
+            );
+            let glow = (!disabled).then_some(Glow {
+                color: glow_c,
+                radius: GLOW_RADIUS,
+                intensity: GLOW_INTENSITY * p,
+            });
+            cx.rect(indicator, accent, None, INNER_RADIUS, glow);
+        }
+
+        // Label text.
+        if let Some(label) = &self.label {
+            cx.text(
+                self.label_rect(),
+                label,
+                foreground,
+                LABEL_FS,
+                TextAlign::Start,
+                false,
+            );
+        }
+
+        // Press flash over the box (active widgets only).
+        if !disabled {
+            cx.flash(bx, self.flash.amount() * 0.6, BOX_RADIUS);
+        }
+
+        // Dim the whole control (box + label) when disabled.
+        if disabled {
+            cx.dim(self.base.bounds, 0.0);
+        }
+
+        // Focus-visible ring around the whole control (keyboard focus only).
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+            cx.corner_brackets(self.base.bounds, accent);
+        }
+    }
+
+    fn event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::PointerMoved { pos } => {
+                let inside = self.contains(*pos);
+                if self.hovered.get_untracked() != inside {
+                    self.hovered.set(inside);
+                }
+                Handled::No
+            }
+            Event::PointerPressed { pos } if self.contains(*pos) => {
+                self.flip();
+                Handled::Yes
+            }
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
+                self.flip();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let mut animating = false;
+
+        let target = if self.checked.get_untracked() { 1.0 } else { 0.0 };
+        if (self.progress - target).abs() >= 1e-3 {
+            let step = dt / ANIM_DURATION;
+            self.progress = if self.progress < target {
+                (self.progress + step).min(target)
+            } else {
+                (self.progress - step).max(target)
+            };
+            animating = true;
+        } else {
+            self.progress = target;
+        }
+
+        animating |= self.flash.tick(dt);
+        animating
+    }
+}
+
+impl Default for Checkbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LayoutExt for Checkbox {}

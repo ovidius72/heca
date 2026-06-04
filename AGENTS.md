@@ -339,6 +339,30 @@ To remove a default binding, add it to `[keys.unbind]`:
 
 ---
 
+## heca-grid-ui — Grid UI Component Library
+
+> Full plan: `grid-ui-plan.md`. Developed on the **`heca-grid-ui`** branch.
+
+`heca-grid-ui` is a **GPU-free, signal-driven, composable component library** that gives heca a *Tron/GridCN* visual identity (glow, corner brackets, scanlines, HUD typography). It is a *component framework*, not a theme.
+
+### Rules
+
+- **No GPU in `heca-grid-ui`.** It emits a `Scene` (a `DrawCommand` display list); `heca-renderer` rasterizes it. `heca-grid-ui` must NOT depend on `wgpu`, `winit`, or `heca-renderer`. Same boundary as `heca-core` — headless and unit-testable.
+- **Composition, not inheritance.** Every component embeds a `Base` struct and implements the `Component` trait. "Extends base" = embed `Base` + impl trait, with builder-style styling.
+- **Reactivity** via `floem_reactive`, hidden behind the `heca_grid_ui::reactive` facade — component code never names the dependency (swappable).
+- **Component layout** via `taffy` (Flexbox/Grid/Block). This is *intra-component* layout (widgets inside a sidebar/panel/pane). It is **NOT** a second WM layout engine — `taffy` never positions panes or columns; the niri scrolling engine remains canonical for that.
+- **Coordinates**: `Scene` carries `f32` logical pixels; the renderer scales to physical by `scale_factor` (HiDPI crispness preserved at the GPU boundary).
+- The existing chrome (sidebar, tab/status bar, pane frames) becomes a **consumer** of `heca-grid-ui`; panes render as Grid-styled `Pane` shells over the unchanged layout engine.
+
+### Extra dependencies (in `heca-grid-ui` only)
+
+| Crate | Purpose |
+|-------|---------|
+| `floem_reactive` | Fine-grained signals/memos/effects (behind facade). |
+| `taffy` | Flexbox/Grid/Block component layout. |
+
+---
+
 ## Project Structure
 
 ```
@@ -386,6 +410,16 @@ myvim/
 │   ├── src/
 │   │   ├── lib.rs         ← Module exports
 │   │   └── theme.rs       ← Config, AppConfig, Theme, keybinding defaults
+│   └── Cargo.toml
+├── heca-grid-ui/                ← Grid UI component library (GPU-free, signals + taffy) [heca-grid-ui branch]
+│   ├── src/
+│   │   ├── reactive/      ← Signal/Memo/Effect facade over floem_reactive
+│   │   ├── scene.rs       ← Scene + DrawCommand display list (visual vocabulary)
+│   │   ├── style.rs       ← Style (taffy::Style wrapper) + Theme tokens + builders
+│   │   ├── component.rs   ← Component trait + Base struct + Layout/Paint contexts
+│   │   ├── layout.rs      ← taffy tree sync + compute → Base.bounds
+│   │   └── widgets/       ← Flex, Grid, Stack, Label, Button, Card, Hud, Gauge,
+│   │                        CornerBrackets, StatusBar, Sidebar, Pane, ...
 │   └── Cargo.toml
 ├── docs/
 │   └── niri-wiki/          ← NIRI documentation (structured wiki reference)
@@ -447,7 +481,7 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 
 ### Don't
 
-- **Do NOT add a second layout engine.** The NIRI-inspired scrolling-column engine is canonical. Old BSP code in `heca-core/src/pane.rs` is kept for reference only — do not wire it in.
+- **Do NOT add a second WM layout engine.** The NIRI-inspired scrolling-column engine is canonical for arranging panes/columns. Old BSP code in `heca-core/src/pane.rs` is kept for reference only — do not wire it in. (Note: `taffy` in `heca-grid-ui` is *component-internal* widget layout — a different altitude — and does not count; it never positions panes/columns.)
 - **Do NOT call `update_all_column_widths()` more than necessary.** Prefer stored column widths.
 - **Do NOT use BSP tree concepts** (split direction, child ratios, etc.). NIRI layout is a flat column list with vertical pane stacks.
 - **Do NOT hardcode `ctrl=false` in prefix mode.** The prefix key is a mechanism, not a modifier eraser.

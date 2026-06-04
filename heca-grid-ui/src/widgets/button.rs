@@ -1,0 +1,428 @@
+//! [`Button`] — an interactive surface whose look is driven by a [`ButtonVariant`]
+//! and [`ButtonSize`] (GridCN/shadcn model), with an **animated** hover that
+//! differs per variant:
+//!
+//! | Variant | Hover behavior |
+//! |---------|----------------|
+//! | Primary (default) | solid border + accent fill that **sweeps bottom→top** with a glow |
+//! | Secondary | no glow; border **firms up** (rest semi-opaque → solid) |
+//! | Destructive | like default but red, **fades in** (no sweep) |
+//! | Outline | dim border → accent, faint fill + glow |
+//! | Ghost | no border/bg at rest → **opaque bg + border fade in** |
+//! | Link | text only → **underline** appears |
+//!
+//! Hover progress animates over time via [`Component::tick`]. Glow and border
+//! are toggleable (`.glow(bool)`, `.bordered(bool)`).
+
+use crate::builders::LayoutExt;
+use crate::color::Color;
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::effects::Flash;
+use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::scene::{Border, Glow, TextAlign};
+use crate::style::Length;
+use heca_core::layout::{Point, Rectangle, Size};
+
+/// Border alpha at rest (semi-opaque); firms to fully solid on hover.
+const REST_BORDER_ALPHA: f32 = 150.0;
+/// Seconds for a full hover transition.
+const HOVER_DURATION: f32 = 0.10;
+/// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
+const GLOW_RADIUS: f32 = 30.0;
+/// Hover glow peak intensity — how bright (smaller = thinner/fainter).
+const GLOW_INTENSITY: f32 = 0.12;
+
+/// Visual variant of a [`Button`] (GridCN/shadcn set).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonVariant {
+    /// Accent border; fill sweeps in from the bottom on hover.
+    #[default]
+    Primary,
+    /// Muted surface; border firms up on hover (no glow).
+    Secondary,
+    /// Danger colors; fades in on hover.
+    Destructive,
+    /// Dim outline that brightens to accent on hover.
+    Outline,
+    /// No chrome until hover (bg + border fade in).
+    Ghost,
+    /// Text only; underline appears on hover.
+    Link,
+}
+
+/// Size of a [`Button`] — controls font size and padding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ButtonSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+impl ButtonSize {
+    fn font_size(self) -> f32 {
+        match self {
+            ButtonSize::Small => 12.0,
+            ButtonSize::Medium => 14.0,
+            ButtonSize::Large => 16.0,
+        }
+    }
+    fn padding(self) -> f32 {
+        match self {
+            ButtonSize::Small => 7.0,
+            ButtonSize::Medium => 10.0,
+            ButtonSize::Large => 13.0,
+        }
+    }
+}
+
+fn alpha(p: f32) -> u8 {
+    (p.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+/// A clickable button. Its look comes from its [`ButtonVariant`].
+pub struct Button {
+    base: Base,
+    label: Signal<String>,
+    variant: ButtonVariant,
+    size: ButtonSize,
+    show_glow: bool,
+    show_border: bool,
+    /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
+    progress: f32,
+    /// Press flash effect (brightens on press, fades out).
+    flash: Flash,
+    hovered: Signal<bool>,
+    on_click: Option<Box<dyn Fn()>>,
+}
+
+impl Button {
+    /// A primary button showing `label`.
+    pub fn new(label: impl Into<String>) -> Self {
+        let mut base = Base::new();
+        base.style.font_size = ButtonSize::Medium.font_size();
+        base.style.padding = ButtonSize::Medium.padding();
+        let mut button = Self {
+            base,
+            label: signal(label.into()),
+            variant: ButtonVariant::Primary,
+            size: ButtonSize::Medium,
+            show_glow: true,
+            show_border: true,
+            progress: 0.0,
+            flash: Flash::new(),
+            hovered: signal(false),
+            on_click: None,
+        };
+        button.remeasure();
+        button
+    }
+
+    /// Convenience constructors, one per variant.
+    pub fn primary(label: impl Into<String>) -> Self {
+        Self::new(label)
+    }
+    pub fn secondary(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Secondary)
+    }
+    pub fn destructive(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Destructive)
+    }
+    pub fn outline(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Outline)
+    }
+    pub fn ghost(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Ghost)
+    }
+    pub fn link(label: impl Into<String>) -> Self {
+        Self::new(label).variant(ButtonVariant::Link)
+    }
+
+    /// Set the variant.
+    pub fn variant(mut self, variant: ButtonVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    /// Set the size (updates font size + padding).
+    pub fn size(mut self, size: ButtonSize) -> Self {
+        self.size = size;
+        self.base.style.font_size = size.font_size();
+        self.base.style.padding = size.padding();
+        self.remeasure();
+        self
+    }
+
+    /// Enable or disable the hover glow (default: enabled).
+    pub fn glow(mut self, enabled: bool) -> Self {
+        self.show_glow = enabled;
+        self
+    }
+
+    /// Show or hide the border (default: shown for bordered variants).
+    pub fn bordered(mut self, enabled: bool) -> Self {
+        self.show_border = enabled;
+        self
+    }
+
+    /// Set the click callback.
+    pub fn on_click(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_click = Some(Box::new(f));
+        self
+    }
+
+    /// The hover-state signal.
+    pub fn hovered(&self) -> Signal<bool> {
+        self.hovered
+    }
+
+    fn remeasure(&mut self) {
+        let chars = self.label.get_untracked().chars().count() as f32;
+        let fs = self.base.style.font_size;
+        let pad = self.base.style.padding * 2.0;
+        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
+    }
+
+    fn contains(&self, p: Point) -> bool {
+        self.base.bounds.contains(p)
+    }
+
+    /// Border that eases from semi-opaque (rest) to solid (hover) by `p`.
+    fn animated_border(&self, c: Color, p: f32) -> Option<Border> {
+        if !self.show_border {
+            return None;
+        }
+        let a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p.clamp(0.0, 1.0);
+        Some(Border {
+            color: c.with_alpha(a.round() as u8),
+            width: 1.5,
+        })
+    }
+
+    /// Bold label, centered in the button box by the renderer (real metrics).
+    fn paint_label(&self, cx: &mut PaintCx, color: Color) {
+        cx.text(
+            self.base.bounds,
+            &self.label.get_untracked(),
+            color,
+            self.base.style.font_size,
+            TextAlign::Center,
+            true,
+        );
+    }
+
+    /// A fill rising from the bottom by fraction `p`, with a glow (the
+    /// bottom-to-top sweep).
+    fn paint_rising_fill(&self, cx: &mut PaintCx, fill: Color, glow: Color, p: f32) {
+        let b = self.base.bounds;
+        let fh = b.size.h * p as f64;
+        let rect = Rectangle::new(
+            Point::new(b.loc.x, b.loc.y + b.size.h - fh),
+            Size::new(b.size.w, fh),
+        );
+        let g = self.show_glow.then_some(Glow {
+            color: glow,
+            radius: GLOW_RADIUS,
+            intensity: GLOW_INTENSITY,
+        });
+        cx.rect(rect, fill, None, 0.0, g);
+    }
+
+    /// A thin underline beneath the centered label.
+    fn paint_underline(&self, cx: &mut PaintCx, color: Color) {
+        let b = self.base.bounds;
+        let fs = self.base.style.font_size;
+        let chars = self.label.get_untracked().chars().count() as f32;
+        let tw = (chars * fs * MONO_ADVANCE_RATIO) as f64;
+        let x = b.loc.x + (b.size.w - tw) / 2.0;
+        let y = b.loc.y + b.size.h / 2.0 + (fs as f64 * 0.5);
+        cx.rect(
+            Rectangle::new(Point::new(x, y), Size::new(tw, 1.5)),
+            color,
+            None,
+            0.0,
+            None,
+        );
+    }
+}
+
+impl Component for Button {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn focusable(&self) -> bool {
+        !self.base.disabled.get_untracked()
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        // Snapshot theme colors so we can call &mut cx methods afterwards.
+        let (surface, accent, glow_c, danger, background, foreground, muted, border_c) = {
+            let t = cx.theme();
+            (
+                t.surface,
+                t.accent,
+                t.glow,
+                t.danger,
+                t.background,
+                t.foreground,
+                t.muted,
+                t.border,
+            )
+        };
+        let p = self.progress.clamp(0.0, 1.0);
+        let b = self.base.bounds;
+
+        match self.variant {
+            ButtonVariant::Primary => {
+                cx.rect(b, surface, self.animated_border(accent, p), 0.0, None);
+                if p > 0.0 {
+                    self.paint_rising_fill(cx, accent, glow_c, p);
+                }
+                self.paint_label(cx, accent.lerp(background, p));
+            }
+            ButtonVariant::Destructive => {
+                cx.rect(b, surface, self.animated_border(danger, p), 0.0, None);
+                if p > 0.0 {
+                    let g = self.show_glow.then_some(Glow {
+                        color: danger,
+                        radius: GLOW_RADIUS,
+                        intensity: GLOW_INTENSITY * p,
+                    });
+                    cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
+                }
+                self.paint_label(cx, danger.lerp(background, p));
+            }
+            ButtonVariant::Secondary => {
+                // Border becomes more vivid on hover (brighter + solid).
+                let bc = border_c.lerp(foreground, 0.4 * p);
+                cx.rect(b, surface, self.animated_border(bc, p), 0.0, None);
+                self.paint_label(cx, foreground);
+            }
+            ButtonVariant::Outline => {
+                // Hover: vivid accent border, text → primary (accent), lightest glow.
+                let fill = accent.with_alpha(alpha(p * 0.1));
+                let g = (self.show_glow && p > 0.0).then_some(Glow {
+                    color: glow_c,
+                    radius: GLOW_RADIUS * 0.8,
+                    intensity: GLOW_INTENSITY * 0.6 * p,
+                });
+                cx.rect(
+                    b,
+                    fill,
+                    self.animated_border(muted.lerp(accent, p), p),
+                    0.0,
+                    g,
+                );
+                self.paint_label(cx, muted.lerp(accent, p));
+            }
+            ButtonVariant::Ghost => {
+                let border = if self.show_border && p > 0.0 {
+                    Some(Border {
+                        color: border_c.with_alpha(alpha(p)),
+                        width: 1.5,
+                    })
+                } else {
+                    None
+                };
+                cx.rect(b, surface.with_alpha(alpha(p)), border, 0.0, None);
+                self.paint_label(cx, muted.lerp(foreground, p));
+            }
+            ButtonVariant::Link => {
+                // Color stays constant on hover; press flashes the TEXT (no bg).
+                let white = Color::rgb(255, 255, 255);
+                self.paint_label(cx, accent.lerp(white, self.flash.amount() * 0.7));
+                if p > 0.0 {
+                    self.paint_underline(cx, accent.with_alpha(alpha(p)));
+                }
+            }
+        }
+
+        // Press flash — brightening overlay (Link flashes its text above instead).
+        // Filled variants need a stronger flash to read over their bright fill.
+        if !matches!(self.variant, ButtonVariant::Link) {
+            let strength = match self.variant {
+                ButtonVariant::Primary | ButtonVariant::Destructive => 0.95,
+                _ => 0.6,
+            };
+            cx.flash(b, self.flash.amount() * strength, 0.0);
+        }
+
+        // Dim the whole button when disabled.
+        if self.base.disabled.get_untracked() {
+            cx.dim(b, 0.0);
+        }
+
+        // Focus ring — only for keyboard focus (focus-visible) and when enabled.
+        if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+            cx.corner_brackets(b, accent);
+        }
+    }
+
+    fn event(&mut self, ev: &Event) -> Handled {
+        if self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::PointerMoved { pos } => {
+                let inside = self.contains(*pos);
+                if self.hovered.get_untracked() != inside {
+                    self.hovered.set(inside);
+                }
+                Handled::No
+            }
+            Event::PointerPressed { pos } if self.contains(*pos) => {
+                self.flash.trigger();
+                if let Some(f) = &self.on_click {
+                    f();
+                }
+                Handled::Yes
+            }
+            // Keyboard activation: Space/Enter on the focused button == a click.
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
+                self.flash.trigger();
+                if let Some(f) = &self.on_click {
+                    f();
+                }
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let mut animating = false;
+
+        // Hover progress eases toward the hovered target.
+        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        if (self.progress - target).abs() >= 1e-3 {
+            let step = dt / HOVER_DURATION;
+            self.progress = if self.progress < target {
+                (self.progress + step).min(target)
+            } else {
+                (self.progress - step).max(target)
+            };
+            animating = true;
+        } else {
+            self.progress = target;
+        }
+
+        // Press flash fades out.
+        animating |= self.flash.tick(dt);
+
+        animating
+    }
+}
+
+impl LayoutExt for Button {}
