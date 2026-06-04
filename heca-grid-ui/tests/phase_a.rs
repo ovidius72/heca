@@ -701,6 +701,92 @@ fn input_alt_delete_removes_next_word() {
 }
 
 #[test]
+fn shift_arrow_extends_and_shrinks_char_selection() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("hello");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    let left = |i: &mut Input| {
+        i.event(&Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        })
+    };
+    let right = |i: &mut Input| {
+        i.event(&Event::Key {
+            key: GridKey::ArrowRight,
+            pressed: true,
+        })
+    };
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        shift: true,
+        ..Default::default()
+    }));
+    left(&mut input);
+    assert_eq!(input.selected_text().as_deref(), Some("o"));
+    left(&mut input);
+    assert_eq!(input.selected_text().as_deref(), Some("lo"));
+    right(&mut input);
+    assert_eq!(input.selected_text().as_deref(), Some("o"));
+    right(&mut input);
+    assert_eq!(input.selection(), None, "shrinking onto the anchor deselects");
+}
+
+#[test]
+fn shift_ctrl_arrow_selects_to_boundary() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("alpha beta");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        ctrl: true,
+        shift: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::ArrowLeft,
+        pressed: true,
+    });
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("alpha beta"),
+        "shift+ctrl+left selects to the start"
+    );
+    input.event(&Event::Key {
+        key: GridKey::ArrowRight,
+        pressed: true,
+    });
+    assert_eq!(input.selection(), None, "extending back to the end deselects");
+}
+
+#[test]
+fn shift_alt_arrow_selects_by_word() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("alpha beta gamma");
+    LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        alt: true,
+        shift: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::ArrowLeft,
+        pressed: true,
+    });
+    assert_eq!(input.selected_text().as_deref(), Some("gamma"), "first word back");
+    input.event(&Event::Key {
+        key: GridKey::ArrowLeft,
+        pressed: true,
+    });
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("beta gamma"),
+        "extends by another word"
+    );
+}
+
+#[test]
 fn disabled_input_ignores_typing() {
     let mut input = Input::new().disabled(true);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));

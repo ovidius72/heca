@@ -44,10 +44,12 @@ pub struct Input {
     text: Signal<String>,
     /// Shown (muted) when empty and unfocused.
     placeholder: String,
-    /// Caret position as a char index in `0..=text.chars().count()`.
+    /// Caret position as a char index in `0..=text.chars().count()` (the moving
+    /// head of a selection).
     cursor: usize,
-    /// Selected char range `(start, end)` with `start < end`, if any.
-    selection: Option<(usize, usize)>,
+    /// The fixed end of an active selection. The selection spans `anchor..cursor`
+    /// (ordered); `None` (or `anchor == cursor`) means no selection.
+    anchor: Option<usize>,
     /// Blink accumulator (seconds, wrapped to [`BLINK_PERIOD`]).
     blink: f32,
     /// Monotonic clock (seconds) advanced while focused, for click timing.
@@ -73,7 +75,7 @@ impl Input {
             text: signal(String::new()),
             placeholder: String::new(),
             cursor: 0,
-            selection: None,
+            anchor: None,
             blink: 0.0,
             clock: 0.0,
             last_click: f32::NEG_INFINITY,
@@ -114,14 +116,17 @@ impl Input {
         self.text.get_untracked()
     }
 
-    /// The selected char range `(start, end)`, if any.
+    /// The selected char range `(start, end)` with `start < end`, if any.
     pub fn selection(&self) -> Option<(usize, usize)> {
-        self.selection
+        match self.anchor {
+            Some(a) if a != self.cursor => Some((a.min(self.cursor), a.max(self.cursor))),
+            _ => None,
+        }
     }
 
     /// The selected text, if any.
     pub fn selected_text(&self) -> Option<String> {
-        self.selection
+        self.selection()
             .map(|(s, e)| self.text.get_untracked().chars().skip(s).take(e - s).collect())
     }
 
@@ -168,11 +173,12 @@ impl Input {
     /// Remove the selected range (if any) from `chars`, moving the caret to its
     /// start. Returns whether anything was removed. Does not commit.
     fn drain_selection(&mut self, chars: &mut Vec<char>) -> bool {
-        if let Some((s, e)) = self.selection.take() {
+        if let Some((s, e)) = self.selection() {
             let e = e.min(chars.len());
             let s = s.min(e);
             chars.drain(s..e);
             self.cursor = s;
+            self.anchor = None;
             true
         } else {
             false
@@ -245,26 +251,71 @@ impl Input {
             GridKey::Space => self.insert(' '),
             GridKey::Backspace => self.backspace(self.mods.word()),
             GridKey::Delete => self.delete(self.mods.word()),
-            GridKey::ArrowLeft => {
-                self.cursor = match self.selection.take() {
-                    Some((s, _)) => s,
-                    None => self.cursor.saturating_sub(1),
-                };
-                self.blink = 0.0;
-                self.clicks = 0;
-            }
-            GridKey::ArrowRight => {
-                self.cursor = match self.selection.take() {
-                    Some((_, e)) => e,
-                    None => (self.cursor + 1).min(self.char_count()),
-                };
-                self.blink = 0.0;
-                self.clicks = 0;
-            }
+            GridKey::ArrowLeft => self.move_caret(true),
+            GridKey::ArrowRight => self.move_caret(false),
             _ => return Handled::No,
         }
         Handled::Yes
     }
+
+    /// Movement granularity from the current modifiers: Ctrl/Cmd → to start/end,
+    /// Alt → by word, otherwise by character.
+    fn granularity(&self) -> Granularity {
+        if self.mods.ctrl || self.mods.meta {
+            Granularity::Line
+        } else if self.mods.alt {
+            Granularity::Word
+        } else {
+            Granularity::Char
+        }
+    }
+
+    /// Move the caret left/right at the current granularity. With Shift held the
+    /// move **extends/shrinks** the selection (anchoring at the start position);
+    /// without Shift it collapses any selection and moves the caret.
+    fn move_caret(&mut self, left: bool) {
+        self.blink = 0.0;
+        self.clicks = 0;
+        let gran = self.granularity();
+
+        if self.mods.shift {
+            // Begin anchoring at the caret if no selection is active yet.
+            if self.anchor.is_none() {
+                self.anchor = Some(self.cursor);
+            }
+        } else if let Some((s, e)) = self.selection() {
+            // Plain arrow with a selection: collapse to the near edge, no move.
+            self.cursor = if left { s } else { e };
+            self.anchor = None;
+            return;
+        } else {
+            self.anchor = None;
+        }
+
+        let chars = self.chars_vec();
+        let n = chars.len();
+        self.cursor = match (left, gran) {
+            (true, Granularity::Char) => self.cursor.saturating_sub(1),
+            (false, Granularity::Char) => (self.cursor + 1).min(n),
+            (true, Granularity::Word) => prev_word_boundary(&chars, self.cursor),
+            (false, Granularity::Word) => next_word_boundary(&chars, self.cursor),
+            (true, Granularity::Line) => 0,
+            (false, Granularity::Line) => n,
+        };
+
+        // Shrinking back onto the anchor clears the selection ("deselect").
+        if self.anchor == Some(self.cursor) {
+            self.anchor = None;
+        }
+    }
+}
+
+/// How far a caret move travels.
+#[derive(Clone, Copy)]
+enum Granularity {
+    Char,
+    Word,
+    Line,
 }
 
 /// The `(start, end)` char range of the word at `idx`: a maximal run of
@@ -356,9 +407,7 @@ impl Component for Input {
         let advance = (fs * MONO_ADVANCE_RATIO) as f64;
 
         // Selection highlight behind the text.
-        if let Some((sel_s, sel_e)) = self.selection
-            && sel_e > sel_s
-        {
+        if let Some((sel_s, sel_e)) = self.selection() {
             let ch = fs as f64;
             let sel = Rectangle::new(
                 Point::new(
@@ -378,7 +427,7 @@ impl Component for Input {
         }
 
         // Caret: a thin accent bar at the cursor (hidden while text is selected).
-        if focused && !disabled && self.selection.is_none() && self.caret_visible() {
+        if focused && !disabled && self.selection().is_none() && self.caret_visible() {
             let caret_x = text_left + self.cursor as f64 * advance;
             let ch = fs as f64;
             let caret = Rectangle::new(
@@ -420,22 +469,22 @@ impl Component for Input {
                         let chars = self.chars_vec();
                         let idx = self.char_index_at_x(pos.x, chars.len());
                         let (s, e) = word_bounds(&chars, idx);
-                        self.selection = (e > s).then_some((s, e));
+                        self.anchor = (e > s).then_some(s);
                         self.cursor = e;
                     }
                     3 => {
                         let n = self.char_count();
-                        self.selection = (n > 0).then_some((0, n));
+                        self.anchor = (n > 0).then_some(0);
                         self.cursor = n;
                     }
                     n if n >= 4 => {
                         // Deselect and restart the cycle.
-                        self.selection = None;
+                        self.anchor = None;
                         self.cursor = self.caret_index_at_x(pos.x);
                         self.clicks = 0;
                     }
                     _ => {
-                        self.selection = None;
+                        self.anchor = None;
                         self.cursor = self.caret_index_at_x(pos.x);
                     }
                 }
