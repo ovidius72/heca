@@ -27,7 +27,7 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 
 **Established pattern (Toggle, done):** change widgets flip a `Signal<T>` and fire `on_change(Fn(Action))` carrying `Action::value("…-change", SignalData::…)` with the new value. **Decision:** the `Action` model is wired via a callback (consistent with `Button.on_click`), *not* by changing `event() -> Handled` (which `focus.rs` depends on). All interactive widgets honor `Base.disabled` (dimmed via `PaintCx::dim`, inert, unfocusable) and reuse `Flash` + `focusable()`.
 
-**Change widgets done:** `Toggle`, `Checkbox`, `Input` — all three emit `…-change` Actions via `on_change(Fn(Action))`, honor `disabled`, and are keyboard-operable. `Input` has an editable buffer, a click-to-place + blinking caret (monospace advance), and a placeholder.
+**Change widgets done:** `Toggle`, `Checkbox`, `Input` — all three emit `…-change` Actions via `on_change(Fn(Action))`, honor `disabled`, and are keyboard-operable. `Input` has an editable buffer, a click-to-place + blinking caret (monospace advance), a placeholder, and a **multi-click selection cycle** (double=word, triple=all, fourth=clear; typing/backspace replace the selection). `Checkbox` has an optional **clickable label** with configurable side (`LabelSide`). Focus traversal honors an optional **`Base.tab_index`** (HTML-like), else tree position.
 
 **Display widgets done:** `Separator` (cross-axis stretch + `.length()`), `Badge` (6 theme-mapped variants, neon chip), `StatusDot` (semantic glowing dot).
 

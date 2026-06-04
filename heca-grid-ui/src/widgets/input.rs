@@ -31,6 +31,10 @@ const RADIUS: f32 = 4.0;
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Caret blink period (seconds): visible for the first half, hidden the second.
 const BLINK_PERIOD: f32 = 1.0;
+/// Max gap (seconds) between clicks counted as part of one multi-click cycle.
+const MULTI_CLICK: f32 = 0.4;
+/// Selection highlight alpha.
+const SELECTION_ALPHA: u8 = 70;
 
 /// A single-line text input. Emits `input-change` with the full new text on each
 /// edit.
@@ -42,8 +46,16 @@ pub struct Input {
     placeholder: String,
     /// Caret position as a char index in `0..=text.chars().count()`.
     cursor: usize,
+    /// Selected char range `(start, end)` with `start < end`, if any.
+    selection: Option<(usize, usize)>,
     /// Blink accumulator (seconds, wrapped to [`BLINK_PERIOD`]).
     blink: f32,
+    /// Monotonic clock (seconds) advanced while focused, for click timing.
+    clock: f32,
+    /// Clock value at the last pointer press.
+    last_click: f32,
+    /// Consecutive-click counter driving the select cycle (word → all → clear).
+    clicks: u8,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -59,7 +71,11 @@ impl Input {
             text: signal(String::new()),
             placeholder: String::new(),
             cursor: 0,
+            selection: None,
             blink: 0.0,
+            clock: 0.0,
+            last_click: f32::NEG_INFINITY,
+            clicks: 0,
             on_change: None,
         }
     }
@@ -95,6 +111,17 @@ impl Input {
         self.text.get_untracked()
     }
 
+    /// The selected char range `(start, end)`, if any.
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        self.selection
+    }
+
+    /// The selected text, if any.
+    pub fn selected_text(&self) -> Option<String> {
+        self.selection
+            .map(|(s, e)| self.text.get_untracked().chars().skip(s).take(e - s).collect())
+    }
+
     fn char_count(&self) -> usize {
         self.text.get_untracked().chars().count()
     }
@@ -107,17 +134,62 @@ impl Input {
         self.blink.rem_euclid(BLINK_PERIOD) < BLINK_PERIOD / 2.0
     }
 
-    /// Commit new text: store it, reset the blink, and emit `input-change`.
+    fn chars_vec(&self) -> Vec<char> {
+        self.text.get_untracked().chars().collect()
+    }
+
+    /// Char index nearest pointer x (rounded, for caret placement).
+    fn caret_index_at_x(&self, x: f64) -> usize {
+        let advance = (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64;
+        let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
+        let idx = if advance > 0.0 {
+            (rel / advance).round() as usize
+        } else {
+            0
+        };
+        idx.min(self.char_count())
+    }
+
+    /// Char index under pointer x (floored, for word hit-testing).
+    fn char_index_at_x(&self, x: f64, len: usize) -> usize {
+        let advance = (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64;
+        let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
+        let idx = if advance > 0.0 {
+            (rel / advance).floor() as usize
+        } else {
+            0
+        };
+        idx.min(len.saturating_sub(1))
+    }
+
+    /// Remove the selected range (if any) from `chars`, moving the caret to its
+    /// start. Returns whether anything was removed. Does not commit.
+    fn drain_selection(&mut self, chars: &mut Vec<char>) -> bool {
+        if let Some((s, e)) = self.selection.take() {
+            let e = e.min(chars.len());
+            let s = s.min(e);
+            chars.drain(s..e);
+            self.cursor = s;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Commit new text: store it, reset the blink, restart the click cycle, and
+    /// emit `input-change`.
     fn commit(&mut self, text: String) {
         self.text.set(text.clone());
         self.blink = 0.0;
+        self.clicks = 0;
         if let Some(f) = &self.on_change {
             f(Action::value("input-change", SignalData::String(text)));
         }
     }
 
     fn insert(&mut self, c: char) {
-        let mut chars: Vec<char> = self.text.get_untracked().chars().collect();
+        let mut chars = self.chars_vec();
+        self.drain_selection(&mut chars);
         let i = self.cursor.min(chars.len());
         chars.insert(i, c);
         self.cursor = i + 1;
@@ -125,10 +197,14 @@ impl Input {
     }
 
     fn backspace(&mut self) {
+        let mut chars = self.chars_vec();
+        if self.drain_selection(&mut chars) {
+            self.commit(chars.into_iter().collect());
+            return;
+        }
         if self.cursor == 0 {
             return;
         }
-        let mut chars: Vec<char> = self.text.get_untracked().chars().collect();
         let i = self.cursor - 1;
         if i < chars.len() {
             chars.remove(i);
@@ -138,7 +214,11 @@ impl Input {
     }
 
     fn delete(&mut self) {
-        let mut chars: Vec<char> = self.text.get_untracked().chars().collect();
+        let mut chars = self.chars_vec();
+        if self.drain_selection(&mut chars) {
+            self.commit(chars.into_iter().collect());
+            return;
+        }
         if self.cursor < chars.len() {
             chars.remove(self.cursor);
             self.commit(chars.into_iter().collect());
@@ -153,17 +233,44 @@ impl Input {
             GridKey::Backspace => self.backspace(),
             GridKey::Delete => self.delete(),
             GridKey::ArrowLeft => {
-                self.cursor = self.cursor.saturating_sub(1);
+                self.cursor = match self.selection.take() {
+                    Some((s, _)) => s,
+                    None => self.cursor.saturating_sub(1),
+                };
                 self.blink = 0.0;
+                self.clicks = 0;
             }
             GridKey::ArrowRight => {
-                self.cursor = (self.cursor + 1).min(self.char_count());
+                self.cursor = match self.selection.take() {
+                    Some((_, e)) => e,
+                    None => (self.cursor + 1).min(self.char_count()),
+                };
                 self.blink = 0.0;
+                self.clicks = 0;
             }
             _ => return Handled::No,
         }
         Handled::Yes
     }
+}
+
+/// The `(start, end)` char range of the word at `idx`: a maximal run of
+/// like-classed (whitespace vs non-whitespace) characters.
+fn word_bounds(chars: &[char], idx: usize) -> (usize, usize) {
+    if chars.is_empty() {
+        return (0, 0);
+    }
+    let i = idx.min(chars.len() - 1);
+    let target = !chars[i].is_whitespace();
+    let mut start = i;
+    while start > 0 && chars[start - 1].is_whitespace() != target {
+        start -= 1;
+    }
+    let mut end = i + 1;
+    while end < chars.len() && chars[end].is_whitespace() != target {
+        end += 1;
+    }
+    (start, end)
 }
 
 impl Component for Input {
@@ -207,6 +314,23 @@ impl Component for Input {
             Point::new(text_left, b.loc.y),
             Size::new((b.size.w - 2.0 * PAD).max(0.0), b.size.h),
         );
+        let advance = (fs * MONO_ADVANCE_RATIO) as f64;
+
+        // Selection highlight behind the text.
+        if let Some((sel_s, sel_e)) = self.selection
+            && sel_e > sel_s
+        {
+            let ch = fs as f64;
+            let sel = Rectangle::new(
+                Point::new(
+                    text_left + sel_s as f64 * advance,
+                    b.loc.y + (b.size.h - ch) / 2.0,
+                ),
+                Size::new((sel_e - sel_s) as f64 * advance, ch),
+            );
+            cx.rect(sel, accent.with_alpha(SELECTION_ALPHA), None, 1.0, None);
+        }
+
         let s = self.text.get_untracked();
         if s.is_empty() && !focused && !self.placeholder.is_empty() {
             cx.text(text_rect, &self.placeholder, muted, fs, TextAlign::Start, false);
@@ -214,9 +338,8 @@ impl Component for Input {
             cx.text(text_rect, &s, foreground, fs, TextAlign::Start, false);
         }
 
-        // Caret: a thin accent bar at the cursor (monospace advance).
-        if focused && !disabled && self.caret_visible() {
-            let advance = (fs * MONO_ADVANCE_RATIO) as f64;
+        // Caret: a thin accent bar at the cursor (hidden while text is selected).
+        if focused && !disabled && self.selection.is_none() && self.caret_visible() {
             let caret_x = text_left + self.cursor as f64 * advance;
             let ch = fs as f64;
             let caret = Rectangle::new(
@@ -243,16 +366,35 @@ impl Component for Input {
         }
         match ev {
             Event::PointerPressed { pos } if self.contains(*pos) => {
-                // Place the caret by x (nearest character boundary).
-                let advance = (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64;
-                let rel = (pos.x - (self.base.bounds.loc.x + PAD)).max(0.0);
-                let idx = if advance > 0.0 {
-                    (rel / advance).round() as usize
-                } else {
-                    0
-                };
-                self.cursor = idx.min(self.char_count());
+                // Multi-click cycle: 1 = caret, 2 = word, 3 = all, 4 = clear.
+                let multi = (self.clock - self.last_click) <= MULTI_CLICK;
+                self.last_click = self.clock;
+                self.clicks = if multi { self.clicks + 1 } else { 1 };
                 self.blink = 0.0;
+                match self.clicks {
+                    2 => {
+                        let chars = self.chars_vec();
+                        let idx = self.char_index_at_x(pos.x, chars.len());
+                        let (s, e) = word_bounds(&chars, idx);
+                        self.selection = (e > s).then_some((s, e));
+                        self.cursor = e;
+                    }
+                    3 => {
+                        let n = self.char_count();
+                        self.selection = (n > 0).then_some((0, n));
+                        self.cursor = n;
+                    }
+                    n if n >= 4 => {
+                        // Deselect and restart the cycle.
+                        self.selection = None;
+                        self.cursor = self.caret_index_at_x(pos.x);
+                        self.clicks = 0;
+                    }
+                    _ => {
+                        self.selection = None;
+                        self.cursor = self.caret_index_at_x(pos.x);
+                    }
+                }
                 Handled::Yes
             }
             Event::Key { key, pressed: true } => self.handle_key(*key),
@@ -262,6 +404,7 @@ impl Component for Input {
 
     fn tick(&mut self, dt: f32) -> bool {
         if self.base.focused.get_untracked() {
+            self.clock += dt;
             self.blink = (self.blink + dt).rem_euclid(BLINK_PERIOD);
             true
         } else {

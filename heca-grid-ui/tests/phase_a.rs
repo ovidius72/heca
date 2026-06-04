@@ -614,6 +614,48 @@ fn input_placeholder_shows_only_when_empty_and_unfocused() {
 }
 
 #[test]
+fn input_click_cycle_selects_word_then_all_then_clears() {
+    let mut input = Input::new().value("alpha beta gamma");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    let y = input.base().bounds.loc.y + 5.0;
+    // x inside the word "beta" (chars 6..10) — ~char 7 at advance 8.4, PAD 10.
+    let x = input.base().bounds.loc.x + 10.0 + 60.0;
+    // Consecutive presses with no tick share the clock → counted as multi-click.
+    let press = |i: &mut Input| i.event(&Event::PointerPressed { pos: Point::new(x, y) });
+
+    press(&mut input); // 1: caret
+    assert_eq!(input.selection(), None, "single click places a caret");
+    press(&mut input); // 2: word
+    assert_eq!(input.selected_text().as_deref(), Some("beta"), "double-click selects the word");
+    press(&mut input); // 3: all
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("alpha beta gamma"),
+        "triple-click selects all"
+    );
+    press(&mut input); // 4: clear
+    assert_eq!(input.selection(), None, "fourth click clears the selection");
+}
+
+#[test]
+fn input_typing_replaces_selection() {
+    let mut input = Input::new().value("hello");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    let pos = Point::new(input.base().bounds.loc.x + 14.0, input.base().bounds.loc.y + 5.0);
+
+    input.event(&Event::PointerPressed { pos }); // caret
+    input.event(&Event::PointerPressed { pos }); // word = whole "hello"
+    assert_eq!(input.selected_text().as_deref(), Some("hello"));
+
+    input.event(&Event::Key {
+        key: GridKey::Char('X'),
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "X", "typing replaces the selection");
+    assert_eq!(input.selection(), None, "selection cleared after replace");
+}
+
+#[test]
 fn disabled_input_ignores_typing() {
     let mut input = Input::new().disabled(true);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
