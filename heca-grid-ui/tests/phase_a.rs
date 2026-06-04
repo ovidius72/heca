@@ -782,3 +782,59 @@ fn alert_renders_title_body_and_accent_bar() {
         .count();
     assert_eq!(rects, 2, "alert paints a surface + accent bar");
 }
+
+#[test]
+fn progress_bar_fill_eases_toward_value() {
+    let theme = Theme::grid_tron();
+    let fill_w = |bar: &ProgressBar| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            bar.paint(&mut cx);
+        }
+        // Track is the first Rect; the fill (if any) is the second.
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect.size.w),
+                _ => None,
+            })
+            .nth(1)
+    };
+
+    let mut bar = ProgressBar::new().width(Length::Px(200.0));
+    LayoutEngine::new().compute(&mut bar, Size::new(200.0, 20.0));
+    assert_eq!(fill_w(&bar), None, "no fill at zero");
+
+    bar.set(0.5);
+    for _ in 0..40 {
+        bar.tick(0.016);
+    }
+    let w = fill_w(&bar).expect("fill present after raising value");
+    assert!(w > 90.0 && w < 110.0, "fill eases to ~half the 200px track, got {w}");
+}
+
+#[test]
+fn gauge_lights_segments_by_value() {
+    let theme = Theme::grid_tron();
+    let lit = |g: &Gauge| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            g.paint(&mut cx);
+        }
+        // Lit segments carry a glow; unlit do not.
+        scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()))
+            .count()
+    };
+
+    let mut empty = Gauge::new();
+    LayoutEngine::new().compute(&mut empty, Size::new(168.0, 18.0));
+    let mut full = Gauge::new().value(1.0);
+    LayoutEngine::new().compute(&mut full, Size::new(168.0, 18.0));
+
+    assert_eq!(lit(&empty), 0, "empty gauge lights nothing");
+    assert_eq!(lit(&full), 12, "full gauge lights all 12 segments");
+}

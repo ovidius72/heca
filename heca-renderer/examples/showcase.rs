@@ -177,6 +177,15 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Spinner::new())
                 .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
         )
+        // Value displays: progress bar + energy gauge.
+        .child(
+            Flex::row()
+                .gap(24.0)
+                .align(Align::Center)
+                .child(Label::new("POWER").color(theme.muted).font_size(13.0))
+                .child(ProgressBar::new().value(0.72))
+                .child(Gauge::new().value(0.85)),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
