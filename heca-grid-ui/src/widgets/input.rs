@@ -14,7 +14,7 @@ use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -126,8 +126,14 @@ impl Input {
 
     /// The selected text, if any.
     pub fn selected_text(&self) -> Option<String> {
-        self.selection()
-            .map(|(s, e)| self.text.get_untracked().chars().skip(s).take(e - s).collect())
+        self.selection().map(|(s, e)| {
+            self.text
+                .get_untracked()
+                .chars()
+                .skip(s)
+                .take(e - s)
+                .collect()
+        })
     }
 
     fn char_count(&self) -> usize {
@@ -451,7 +457,14 @@ impl Component for Input {
 
         let s = self.text.get_untracked();
         if s.is_empty() && !focused && !self.placeholder.is_empty() {
-            cx.text(text_rect, &self.placeholder, muted, fs, TextAlign::Start, false);
+            cx.text(
+                text_rect,
+                &self.placeholder,
+                muted,
+                fs,
+                TextAlign::Start,
+                false,
+            );
         } else if !s.is_empty() {
             cx.text(text_rect, &s, foreground, fs, TextAlign::Start, false);
         }

@@ -431,6 +431,7 @@ impl Default for KeysConfig {
             Single("prefix+Enter".to_string()),
         );
         bindings.insert("split_vertical".to_string(), Single("prefix+v".to_string()));
+        bindings.insert("zoom_column".to_string(), Single("prefix+z".to_string()));
 
         // ── Resize ──
         bindings.insert(
@@ -512,9 +513,10 @@ impl Default for KeysConfig {
             "rename_workspace".to_string(),
             Single("prefix+Shift+w".to_string()),
         );
+        bindings.insert("rename_pane".to_string(), Single("prefix+$".to_string()));
         bindings.insert(
-            "rename_pane".to_string(),
-            Single("prefix+Shift+p".to_string()),
+            "rename_column".to_string(),
+            Single("prefix+Shift+c".to_string()),
         );
 
         // ── Command palette ──
@@ -809,6 +811,8 @@ mod tests {
         let cfg = Config::default();
         assert!(cfg.keys.bindings.contains_key("focus_left"));
         assert!(cfg.keys.bindings.contains_key("split_horizontal"));
+        assert!(cfg.keys.bindings.contains_key("zoom_column"));
+        assert!(cfg.keys.bindings.contains_key("rename_column"));
         assert!(cfg.keys.bindings.contains_key("close"));
     }
 

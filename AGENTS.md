@@ -82,7 +82,8 @@ Ctrl+B → ]    Move pane to column right
 Ctrl+B → e    Enter sidebar navigation mode
 Ctrl+B → w    Create workspace + pane
 Ctrl+B → Shift+w  Rename workspace
-Ctrl+B → Shift+p  Rename pane
+Ctrl+B → Shift+c  Rename active column
+Ctrl+B → $    Rename active pane/tab
 Ctrl+B → i    Toggle focus (local, same workspace)
 Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
 Ctrl+B → b    Toggle left sidebar
@@ -276,6 +277,71 @@ action = "resize"
 keys = "h"
 args = { target = "column", axis = "x", amount = "-50" }
 ```
+
+### Planned parameterized binding contract
+
+When implementing richer spawning / geometry-aware bindings, keep these rules:
+
+- **Both** normal keybindings and mode bindings should support parameterized actions.
+- Keep simple flat bindings for unit actions:
+
+```toml
+[keys]
+focus_left = "prefix+h"
+float = "prefix+f"
+```
+
+- Add `[[keys.bind]]` for parameterized non-mode bindings:
+
+```toml
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+```
+
+- Mode bindings should keep using `[[keys.mode.bindings]]` with `args`:
+
+```toml
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "800", height = "400" }
+```
+
+- Size parsing contract:
+  - `800` → `800px`
+  - `800px` → explicit pixels
+  - `80%` → percentage of available content area
+- Floating spawns should open **centered by default** when no `x/y` are provided.
+- `spawn_pane` should be **future-ready by kind**:
+  - `terminal`
+  - `browser`
+  - `nvim_gui`
+  - temporary/mock fallback when a real backend is not implemented yet
+- For terminal-like panes, use structured command fields:
+  - `program = "nvim"`
+  - `argv = ["."]`
+  instead of shell-only strings.
 
 ### Config Loading
 
@@ -547,11 +613,35 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 
 1. Add variant to `WmAction` in `heca/src/input.rs`
 2. Add string mapping in `action_from_name()`
-3. Add priority in `action_priority()`
-4. Create handler in `heca/src/handlers.rs`
-5. Register in `build_registry()` in `heca/src/main.rs`
-6. Add default binding in `heca-config/src/theme.rs`
-7. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+3. Add builder support in `build_action()` when the action is parameterized
+4. Add priority in `action_priority()`
+5. Create handler in `heca/src/handlers.rs`
+6. Register in `build_registry()` in `heca/src/main.rs`
+7. Add default binding in `heca-config/src/theme.rs`
+8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+9. Add RPC parser support in `heca/src/rpc.rs`
+10. Document examples in `README.md` and `keybindings.toml`
+
+For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
+
+```rust
+WmAction::ZoomColumn
+WmAction::FloatActiveAt { width: SizeSpec, height: SizeSpec }
+WmAction::SpawnPane {
+    kind: PaneKind,
+    program: Option<String>,
+    argv: Vec<String>,
+    float: bool,
+    width: Option<SizeSpec>,
+    height: Option<SizeSpec>,
+}
+```
+
+Behavior contract for float/unfloat:
+- `prefix+f` stays the float toggle
+- if a pane was originally tiled, unfloat restores it
+- if it was spawned directly as floating with no original slot, unfloat should place it into a **new column**
+- `prefix+z` should be reserved for column zoom toggle, not float/unfloat
 
 ---
 

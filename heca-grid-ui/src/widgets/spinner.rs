@@ -78,7 +78,13 @@ impl Component for Spinner {
                 radius: 6.0,
                 intensity: 0.12 * brightness,
             });
-            cx.rect(dot, accent.with_alpha(alpha), None, (dot_r / 2.0) as f32, glow);
+            cx.rect(
+                dot,
+                accent.with_alpha(alpha),
+                None,
+                (dot_r / 2.0) as f32,
+                glow,
+            );
         }
     }
 

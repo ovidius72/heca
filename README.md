@@ -243,16 +243,20 @@ focus_up = "prefix+k"
 focus_down = "prefix+j"
 split_horizontal = "prefix+Enter"
 split_vertical = "prefix+v"
+zoom_column = "prefix+z"
 close = "prefix+x"
 float = "prefix+f"
 pane_select = "prefix+q"
 swap_pane = "prefix+Shift+q"
 swap_and_focus_pane = "prefix+m"
+rename_workspace = "prefix+Shift+w"
+rename_column = "prefix+Shift+c"
+rename_pane = "prefix+$"
 ```
 
 ### Config File Format
 
-The config uses TOML with a flat `[keys]` table:
+The config uses TOML with a flat `[keys]` table for simple actions, plus structured tables for richer bindings:
 
 ```toml
 [keys]
@@ -269,6 +273,134 @@ Alt+Enter = "spawn_lazygit"   # Requires [[keys.command]]
 # Unbind defaults
 [keys.unbind]
 "prefix+f" = true   # Remove float toggle
+```
+
+### Planned parameterized keybindings contract
+
+The agreed next-step config shape for richer actions is:
+
+```toml
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+```
+
+Mode bindings should support the same action+args structure:
+
+```toml
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "t"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+```
+
+Size parsing contract:
+- `800` → `800px`
+- `800px` → explicit pixels
+- `80%` → percentage of available content area
+
+Floating spawns should open **centered by default** when `x/y` are omitted.
+
+Complete example set:
+
+```toml
+[keys]
+focus_left = "prefix+h"
+float = "prefix+f"
+
+# Unit action via parameterized-normal-binding syntax
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+# Tiled terminal pane
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Floating terminal pane with implicit px values
+[[keys.bind]]
+keys = "prefix+Shift+t"
+action = "spawn_pane"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+
+# Floating terminal pane with explicit px suffix
+[[keys.bind]]
+keys = "prefix+Shift+y"
+action = "spawn_pane"
+args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+
+# Floating terminal pane with percent sizing
+[[keys.bind]]
+keys = "prefix+Shift+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Floating browser pane
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+# Floating nvim GUI pane
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+# Float active pane with geometry helper
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+# Tiled spawn from a mode
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "g"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Floating percent-sized spawn from a mode
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Zoom from a mode
+[[keys.mode.bindings]]
+action = "zoom_column"
+keys = "z"
 ```
 
 ### Key Combo Syntax
@@ -420,6 +552,7 @@ prefix = "ctrl+a"
 # Rebind actions
 focus_left = "prefix+h"
 focus_right = "prefix+l"
+zoom_column = "prefix+z"
 
 # Multiple bindings for same action
 focus_left = ["prefix+h", "prefix+ArrowLeft"]
@@ -427,6 +560,19 @@ focus_left = ["prefix+h", "prefix+ArrowLeft"]
 # Global bindings (no prefix needed)
 # Checked before forwarding to terminal
 Alt+Enter = "spawn_terminal"
+```
+
+For richer bindings with arguments, use `[[keys.bind]]` (planned contract):
+
+```toml
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
 ```
 
 ### Unbinding Defaults
@@ -446,6 +592,15 @@ To remove a default keybinding, add it to `[keys.unbind]`:
 - Resolve conflicts with custom bindings
 
 The action still exists — you can rebind it to a different key in `[keys]`. For example, if you unbind `prefix+f` (float), you can rebind it to `prefix+Shift+f`.
+
+### Zooming the active column
+
+By default, `prefix+z` toggles the active column between:
+- its normal stored width
+- a viewport-wide zoomed width
+
+Each column tracks its own zoom state, so you can zoom multiple columns independently.
+Press `prefix+z` again on the active column to restore that column's previous width.
 
 ### Modes
 
@@ -491,7 +646,7 @@ heca checks bindings in this order:
 
 ## Spawning Applications
 
-Launch external applications in new panes using `[[keys.command]]`:
+Today, heca can launch simple command-bound panes using `[[keys.command]]`:
 
 ```toml
 [[keys.command]]
@@ -507,7 +662,96 @@ keys = "Alt+Enter"
 command = "alacritty"
 ```
 
-This creates a new pane with the command as its title. When PTY support is fully implemented, the application will run inside heca with full terminal emulation.
+This currently creates a new pane with the command as its title; real backend execution is still evolving.
+
+### Planned `spawn_pane` action contract
+
+The agreed future-ready action model is `spawn_pane`, designed for multiple pane kinds:
+
+- `terminal`
+- `browser`
+- `nvim_gui`
+- temporary/mock fallback while a backend is not implemented
+
+Examples:
+
+```toml
+# Terminal-like pane, tiled
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Terminal-like pane, floating, centered, 800x400 with implicit px
+[[keys.bind]]
+keys = "prefix+Shift+t"
+action = "spawn_pane"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+
+# Terminal-like pane, floating, centered, 800px x 400px with explicit px suffix
+[[keys.bind]]
+keys = "prefix+Shift+y"
+action = "spawn_pane"
+args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+
+# Terminal-like pane, floating, centered, 80% of content area
+[[keys.bind]]
+keys = "prefix+Shift+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Future browser pane
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+# Future nvim GUI pane
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+# Float the active pane using explicit geometry
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+
+# Zoom toggle on a normal binding
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+# Same spawn ideas inside a mode
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "g"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.mode.bindings]]
+action = "zoom_column"
+keys = "z"
+```
+
+### Float / unfloat contract
+
+The agreed behavior for float toggling is:
+
+- `prefix+f` remains the float/unfloat toggle
+- if a pane was originally tiled, unfloat restores it to its original tiled position
+- if a pane was spawned directly as floating with no original tiled slot, unfloat should place it into a **new column**
+- `prefix+z` is reserved for **column zoom toggle**
 
 ---
 

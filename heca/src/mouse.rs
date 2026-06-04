@@ -108,7 +108,7 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
                 x: pos.0,
                 y: pos.1,
                 width: sw,
-                height: 20.0,
+                _height: 20.0,
             });
 
             state.mouse.drag_state = DragState::SidebarDrag {
@@ -1126,14 +1126,14 @@ fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32
         render_pos: Point::new(col_screen_x, pane_y),
         size,
         original_ws,
-        original_col: col_idx,
+        _original_col: col_idx,
         original_col_id,
         original_pane: pane_idx,
     });
 
     state.mouse.drag_state = DragState::InteractiveMove {
-        pane_id,
-        original_ws,
+        _pane_id: pane_id,
+        _original_ws: original_ws,
         offset,
     };
 }

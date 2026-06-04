@@ -236,8 +236,20 @@ impl GridRenderer {
             usage: wgpu::BufferUsages::COPY_SRC,
         });
 
-        encoder.copy_buffer_to_buffer(&staging_vertex, 0, &self.vertex_buffer, 0, vertex_data.len() as u64);
-        encoder.copy_buffer_to_buffer(&staging_index, 0, &self.index_buffer, 0, index_data.len() as u64);
+        encoder.copy_buffer_to_buffer(
+            &staging_vertex,
+            0,
+            &self.vertex_buffer,
+            0,
+            vertex_data.len() as u64,
+        );
+        encoder.copy_buffer_to_buffer(
+            &staging_index,
+            0,
+            &self.index_buffer,
+            0,
+            index_data.len() as u64,
+        );
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("grid_render_pass"),

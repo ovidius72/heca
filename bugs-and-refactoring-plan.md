@@ -119,6 +119,7 @@ And the main runtime responsibilities should be split into:
 | 6 | Dead state and metadata cleanup | Remove stale types, fields, placeholders |
 | 7 | Error handling and safety hygiene | Typed errors and `// SAFETY:` comments |
 | 8 | Constants, polish, and perf follow-ups | Better ergonomics and targeted perf work |
+| 9 | Focus-domain routing correctness | Floating vs tiled action targeting becomes explicit and reliable |
 
 ---
 
@@ -333,6 +334,104 @@ fn after_layout_change(state: &mut AppState) {
 **Acceptance criteria**
 - session-changing paths do not manually duplicate sync/redraw behavior
 - number of direct `sync_focus(state)` call sites drops significantly
+
+---
+
+## Phase 9 — Fix Floating vs Tiled Focus-Domain Routing
+
+**Goal:** make the active mutation target explicit so floating focus cannot accidentally mutate the tiled layout underneath.
+
+Current problem:
+- the app can correctly track that a floating pane is focused
+- but many handlers still mutate `ws.scrolling...` directly
+- this creates a mismatch between **visual/logical focus** and **action target**
+
+### 9.1 Define the focus domain explicitly
+**Tasks**
+- introduce a small authoritative concept such as:
+  - `FocusDomain::Tiled`
+  - `FocusDomain::Floating`
+- make `Workspace` and/or the app controller expose the current domain cleanly
+- document how domain is derived from:
+  - `floating_is_active`
+  - active floating pane state
+  - active tiled selection state
+
+**Acceptance criteria**
+- code can ask one authoritative question: "what domain is active right now?"
+- handler code no longer infers that ad hoc from scattered state
+
+### 9.2 Define action policy by domain
+**Tasks**
+- classify actions into categories:
+  - focus/navigation
+  - pane-local actions
+  - tiled-layout-only actions
+  - future floating-layout actions
+- define expected behavior when `FocusDomain::Floating` is active:
+  - close should target the focused floating pane
+  - rename should target the focused floating pane
+  - tiled-only actions such as column zoom/column resize/swap/move should no-op unless explicitly designed otherwise
+- document the policy near the code, not only in roadmap notes
+
+**Acceptance criteria**
+- there is one written policy for what actions do in floating vs tiled context
+- new handlers have a clear contract to follow
+
+### 9.3 Route handlers through the domain guard
+**Tasks**
+- audit handlers that currently access:
+  - `ws.scrolling.active_column_idx`
+  - `ws.scrolling.active_column()`
+  - `ws.scrolling.columns[...]`
+  as the assumed target
+- update them to branch through the active focus domain first
+- begin with confirmed risky handlers:
+  - `handle_zoom_column`
+  - `handle_resize_increase`
+  - `handle_resize_decrease`
+  - `handle_pane_height_increase`
+  - `handle_pane_height_decrease`
+  - `handle_swap_left`
+  - `handle_swap_right`
+  - `handle_swap_up`
+  - `handle_swap_down`
+  - `handle_move_pane_left`
+  - `handle_move_pane_right`
+  - `handle_close_pane`
+  - `handle_close_pane_by_id`
+
+**Acceptance criteria**
+- a focused floating pane cannot trigger tiled mutations underneath by accident
+- tiled handlers become explicit about whether they no-op or retarget in floating context
+
+### 9.4 Centralize focused-pane targeting helpers
+**Tasks**
+- add helpers for operations that should target the truly focused pane regardless of domain
+- candidates include:
+  - `focused_pane_id(...)`
+  - `close_focused_pane(...)`
+  - `rename_focused_pane(...)`
+  - `remove_focused_pane(...)`
+- reduce duplicated "scan tiled, else scan floating" logic in handlers
+
+**Acceptance criteria**
+- pane-local actions no longer depend on the tiled active column as a proxy for focus
+- focused-pane behavior is consistent across tiled and floating states
+
+### 9.5 Add regression tests for domain routing
+**Tasks**
+- add tests proving:
+  - floating focus is visually and logically active
+  - zoom/resize/move/swap do not mutate the tiled target underneath when floating is focused
+  - close removes the floating pane when the floating pane is focused
+  - restoring tiled focus re-enables tiled handlers
+- prefer a combination of:
+  - unit tests in layout/app helpers where possible
+  - focused handler-level tests for action routing
+
+**Acceptance criteria**
+- the current bug becomes impossible to reintroduce silently
 
 ---
 
@@ -599,6 +698,10 @@ To keep reviewable PRs, use this order:
 ### PR 10 — Typed errors + `// SAFETY:` comments
 
 ### PR 11 — Constants + renderer API polish + render-data follow-ups
+
+### PR 12 — Fix focus-domain routing for floating vs tiled
+- add explicit focus-domain guard
+- make floating-focused actions stop mutating tiled targets underneath
 
 ---
 

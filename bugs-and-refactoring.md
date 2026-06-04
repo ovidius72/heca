@@ -28,6 +28,7 @@ What is now the main problem:
 - **unclear ownership boundaries** between layout state, UI state, backend lifecycle, and event handling
 - **duplicated interaction logic** between keyboard handlers, mouse drag/drop, and sidebar activation flows
 - **sidebar projection drift** and UI-state rebuild issues
+- **focus-domain drift** between floating focus state and tiled action targeting
 
 The biggest readability and maintainability win is **reorganizing the code first**, then moving the remaining cross-cutting behavior behind clearer boundaries.
 
@@ -268,7 +269,137 @@ Then let handlers and mouse code call those shared operations.
 
 ---
 
-## A6. `main.rs` still owns too much application behavior
+## A6. Floating panes have a focus-domain / action-targeting bug
+
+The current floating model has improved, but there is still a real correctness bug:
+
+- a floating pane can be visually and logically focused
+- `AppState.focused_pane` can point at that floating pane
+- `Workspace::active_pane()` can correctly report the active floating pane
+- mouse hit testing checks floating panes first
+
+However, many handlers still perform mutations directly against the tiled scrolling layout underneath the float.
+
+### Root cause
+
+There are effectively **two active-state domains** in the current design:
+
+1. **Focused-pane domain**
+   - `AppState.focused_pane`
+   - `Workspace::floating_is_active`
+   - `FloatingPane::is_active`
+   - `Workspace::active_pane()`
+
+2. **Tiled-layout active selection domain**
+   - `ScrollingSpace::active_column_idx`
+   - `Column::active_pane_idx`
+
+When a pane is floated, the focused-pane domain switches to floating state, but the tiled active selection remains alive underneath.
+
+That is not inherently wrong — it can be useful state to preserve. The bug is that many actions ignore which domain is active and go straight to `ws.scrolling...`.
+
+### Observed symptom
+
+When a floating pane is focused, actions like:
+- zoom column
+- resize column
+- resize pane height
+- move pane left/right
+- swap column / swap pane
+- close pane
+
+can affect the tiled pane/column underneath instead of the focused floating pane, or can otherwise mutate the wrong domain.
+
+This makes the floating pane look "not really focused" even though focus rendering and `focused_pane` bookkeeping are largely correct.
+
+### Confirmed supporting evidence
+
+These parts already work as intended:
+- `focus_pane_by_id()` activates floating panes correctly
+- `sync_focus()` reads focus from the workspace active pane
+- `Workspace::active_pane()` prefers floating when `floating_is_active`
+- `mouse::hit_test_pane()` tests floating panes before scrolling panes
+
+So the bug is **not primarily focus painting**.
+It is **action targeting**.
+
+### Confirmed affected handler shape
+
+A large class of handlers currently do this pattern:
+
+```rust
+if let Some(ws) = state.session.active_workspace_mut() {
+    ws.scrolling.some_mutation(...);
+}
+```
+
+without first checking whether the active domain is floating.
+
+Confirmed examples include:
+- `handle_zoom_column`
+- `handle_resize_increase`
+- `handle_resize_decrease`
+- `handle_pane_height_increase`
+- `handle_pane_height_decrease`
+- `handle_swap_left`
+- `handle_swap_right`
+- `handle_swap_up`
+- `handle_swap_down`
+- `handle_move_pane_left`
+- `handle_move_pane_right`
+- `handle_close_pane`
+- `handle_close_pane_by_id`
+
+There are likely more in the same category anywhere handlers access:
+- `ws.scrolling.active_column_idx`
+- `ws.scrolling.active_column()`
+- `ws.scrolling.columns[...]`
+
+as the assumed target.
+
+### Why this is architecturally important
+
+This is not just a one-off floating bug. It exposes a missing boundary in the app model:
+
+- the code can answer **which pane is focused**
+- but many mutations still assume **the tiled layout is the active target**
+
+In other words, the app lacks an explicit **active focus domain / active mutation target** concept.
+
+### Recommendation
+
+Introduce a small routing concept before fixing handlers one by one.
+
+For example, make the workspace or app controller answer something like:
+
+```rust
+enum FocusDomain {
+    Tiled,
+    Floating,
+}
+```
+
+Then apply a clear policy:
+
+- if `Floating` is active:
+  - pane-local actions should target the focused floating pane
+  - tiled-layout-only actions should no-op, or explicitly switch semantics if desired
+- if `Tiled` is active:
+  - existing `ws.scrolling...` behavior remains valid
+
+### Recommended product behavior
+
+The safest behavior is:
+- a focused floating pane should behave as actually focused
+- tiled layout actions should **not** mutate panes/columns underneath a floating pane by accident
+- close/rename/focus-sensitive actions should operate on the focused pane, whether tiled or floating
+- layout-only tiled actions should no-op while floating focus is active unless a future explicit floating equivalent exists
+
+This should be treated as a correctness phase, not merely polish.
+
+---
+
+## A7. `main.rs` still owns too much application behavior
 
 `main.rs` currently mixes:
 - `HecaApp` initialization
@@ -476,7 +607,38 @@ Move sidebar bindings into the same declarative config/default system as the res
 
 ---
 
-## M7. Typed error handling is still missing in core paths
+## M7. Floating focus navigation is safer than mutation routing, but the policy is still implicit
+
+Some navigation code is already more careful than the mutation handlers.
+
+For example, `Workspace::focus_left/right/up/down()` checks `floating_is_active` and currently avoids blindly mutating the tiled layout when floating is active.
+
+That means the floating bug shape is asymmetric:
+- navigation is partially guarded
+- mutation handlers are often not
+
+### Why this matters
+
+This makes the current behavior harder to reason about because there is no explicit documented policy for:
+- what should happen when a floating pane is focused
+- which actions are valid in floating context
+- which actions should no-op
+- which actions should target floating vs tiled domains
+
+### Recommendation
+
+Document and centralize the policy instead of relying on scattered conditionals.
+
+The system should have one authoritative answer for:
+- current focus domain
+- current mutation target
+- allowed actions for that domain
+
+Until then, floating behavior will continue to regress as new handlers are added.
+
+---
+
+## M8. Typed error handling is still missing in core paths
 
 Still present:
 - `theme.rs::load_config_file() -> Result<Config, String>`

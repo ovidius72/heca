@@ -7,10 +7,8 @@
 //! once on [`PaintCx`], so every component reuses it (DRY).
 
 use crate::color::Color;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{
-    Border, BracketCmd, DrawCommand, Glow, RectCmd, Scene, TextAlign, TextCmd,
-};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::scene::{Border, BracketCmd, DrawCommand, Glow, RectCmd, Scene, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -104,17 +102,28 @@ pub struct Modifiers {
 /// An input event delivered to the component tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
-    PointerMoved { pos: Point },
-    PointerPressed { pos: Point },
-    PointerReleased { pos: Point },
+    PointerMoved {
+        pos: Point,
+    },
+    PointerPressed {
+        pos: Point,
+    },
+    PointerReleased {
+        pos: Point,
+    },
     /// Keyboard event — delivered to the focused component only.
-    Key { key: GridKey, pressed: bool },
+    Key {
+        key: GridKey,
+        pressed: bool,
+    },
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
     /// Wheel/scroll by `delta` lines (positive = scroll down the content). The
     /// host routes this to the open overlay, or to the widget under the cursor.
-    Scroll { delta: f32 },
+    Scroll {
+        delta: f32,
+    },
 }
 
 /// Behavior shared by all components. Implementors provide access to their
@@ -280,7 +289,13 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(rect, Color::rgb(255, 255, 255).with_alpha(a), None, radius, None);
+        self.rect(
+            rect,
+            Color::rgb(255, 255, 255).with_alpha(a),
+            None,
+            radius,
+            None,
+        );
     }
 
     /// Dim `rect` with a background-colored scrim — the standard look for a
@@ -289,7 +304,13 @@ impl<'a> PaintCx<'a> {
     /// dimming each color by hand.
     pub fn dim(&mut self, rect: Rectangle, radius: f32) {
         let a = (DISABLED_SCRIM * 255.0).round() as u8;
-        self.rect(rect, self.theme.background.with_alpha(a), None, radius, None);
+        self.rect(
+            rect,
+            self.theme.background.with_alpha(a),
+            None,
+            radius,
+            None,
+        );
     }
 
     /// Paint the shared chrome for a component's base (background/border/glow).

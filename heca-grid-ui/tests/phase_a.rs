@@ -197,7 +197,11 @@ fn button_variants_paint_distinct_fills() {
     // fill); ghost is invisible (alpha 0).
     let primary = fill_of(Button::primary("X"));
     let ghost = fill_of(Button::ghost("X"));
-    assert_eq!(primary, Some(theme.surface), "primary rests on a dark surface");
+    assert_eq!(
+        primary,
+        Some(theme.surface),
+        "primary rests on a dark surface"
+    );
     assert_eq!(ghost.map(|c| c.a), Some(0), "ghost is invisible at rest");
     assert_ne!(primary, ghost);
 }
@@ -279,7 +283,10 @@ fn intensity_off_suppresses_glow() {
         DrawCommand::Rect(r) => r.glow.is_some(),
         _ => false,
     });
-    assert!(!glow_present, "glow must be suppressed when intensity is Off");
+    assert!(
+        !glow_present,
+        "glow must be suppressed when intensity is Off"
+    );
 }
 
 #[test]
@@ -447,7 +454,10 @@ fn checkbox_label_is_clickable_and_side_positions_the_box() {
     let b = cb.base().bounds;
     let far_right = Point::new(b.loc.x + b.size.w - 4.0, b.loc.y + b.size.h / 2.0);
     cb.event(&Event::PointerPressed { pos: far_right });
-    assert!(cb.is_checked(), "clicking the (right) label toggles the box");
+    assert!(
+        cb.is_checked(),
+        "clicking the (right) label toggles the box"
+    );
 
     // Left label: the label text command sits left of the box.
     let theme = Theme::grid_tron();
@@ -463,7 +473,11 @@ fn checkbox_label_is_clickable_and_side_positions_the_box() {
         _ => None,
     });
     let lb = left.base().bounds;
-    assert_eq!(text_x, Some(lb.loc.x), "left label starts at the control's left edge");
+    assert_eq!(
+        text_x,
+        Some(lb.loc.x),
+        "left label starts at the control's left edge"
+    );
 }
 
 #[test]
@@ -559,7 +573,10 @@ fn input_typing_emits_change_and_builds_text() {
     assert_eq!(input.value_str(), "Hi 5");
     assert_eq!(
         log.borrow().last(),
-        Some(&Action::value("input-change", SignalData::String("Hi 5".into()))),
+        Some(&Action::value(
+            "input-change",
+            SignalData::String("Hi 5".into())
+        )),
     );
 }
 
@@ -577,7 +594,11 @@ fn input_backspace_and_midword_insert_respect_cursor() {
         key: GridKey::Backspace,
         pressed: true,
     });
-    assert_eq!(input.value_str(), "ac", "backspace removes char before caret");
+    assert_eq!(
+        input.value_str(),
+        "ac",
+        "backspace removes char before caret"
+    );
 
     input.event(&Event::Key {
         key: GridKey::Char('X'),
@@ -621,12 +642,20 @@ fn input_click_cycle_selects_word_then_all_then_clears() {
     // x inside the word "beta" (chars 6..10) — ~char 7 at advance 8.4, PAD 10.
     let x = input.base().bounds.loc.x + 10.0 + 60.0;
     // Consecutive presses with no tick share the clock → counted as multi-click.
-    let press = |i: &mut Input| i.event(&Event::PointerPressed { pos: Point::new(x, y) });
+    let press = |i: &mut Input| {
+        i.event(&Event::PointerPressed {
+            pos: Point::new(x, y),
+        })
+    };
 
     press(&mut input); // 1: caret
     assert_eq!(input.selection(), None, "single click places a caret");
     press(&mut input); // 2: word
-    assert_eq!(input.selected_text().as_deref(), Some("beta"), "double-click selects the word");
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("beta"),
+        "double-click selects the word"
+    );
     press(&mut input); // 3: all
     assert_eq!(
         input.selected_text().as_deref(),
@@ -641,7 +670,10 @@ fn input_click_cycle_selects_word_then_all_then_clears() {
 fn input_typing_replaces_selection() {
     let mut input = Input::new().value("hello");
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
-    let pos = Point::new(input.base().bounds.loc.x + 14.0, input.base().bounds.loc.y + 5.0);
+    let pos = Point::new(
+        input.base().bounds.loc.x + 14.0,
+        input.base().bounds.loc.y + 5.0,
+    );
 
     input.event(&Event::PointerPressed { pos }); // caret
     input.event(&Event::PointerPressed { pos }); // word = whole "hello"
@@ -674,7 +706,11 @@ fn input_ctrl_backspace_deletes_previous_word() {
         key: GridKey::Backspace,
         pressed: true,
     });
-    assert_eq!(input.value_str(), "", "again removes the word + preceding space");
+    assert_eq!(
+        input.value_str(),
+        "",
+        "again removes the word + preceding space"
+    );
 }
 
 #[test]
@@ -697,7 +733,11 @@ fn input_alt_delete_removes_next_word() {
         key: GridKey::Delete,
         pressed: true,
     });
-    assert_eq!(input.value_str(), " beta", "forward word delete from the start");
+    assert_eq!(
+        input.value_str(),
+        " beta",
+        "forward word delete from the start"
+    );
 }
 
 #[test]
@@ -772,7 +812,11 @@ fn shift_arrow_extends_and_shrinks_char_selection() {
     right(&mut input);
     assert_eq!(input.selected_text().as_deref(), Some("o"));
     right(&mut input);
-    assert_eq!(input.selection(), None, "shrinking onto the anchor deselects");
+    assert_eq!(
+        input.selection(),
+        None,
+        "shrinking onto the anchor deselects"
+    );
 }
 
 #[test]
@@ -799,7 +843,11 @@ fn shift_ctrl_arrow_selects_to_boundary() {
         key: GridKey::ArrowRight,
         pressed: true,
     });
-    assert_eq!(input.selection(), None, "extending back to the end deselects");
+    assert_eq!(
+        input.selection(),
+        None,
+        "extending back to the end deselects"
+    );
 }
 
 #[test]
@@ -817,7 +865,11 @@ fn shift_alt_arrow_selects_by_word() {
         key: GridKey::ArrowLeft,
         pressed: true,
     });
-    assert_eq!(input.selected_text().as_deref(), Some("gamma"), "first word back");
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("gamma"),
+        "first word back"
+    );
     input.event(&Event::Key {
         key: GridKey::ArrowLeft,
         pressed: true,
@@ -843,7 +895,11 @@ fn cmd_a_selects_all_without_typing() {
         key: GridKey::Char('a'),
         pressed: true,
     });
-    assert_eq!(input.selected_text().as_deref(), Some("hello world"), "Cmd+A selects all");
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("hello world"),
+        "Cmd+A selects all"
+    );
     assert_eq!(input.value_str(), "hello world", "the 'a' is not typed");
 }
 
@@ -860,7 +916,11 @@ fn home_end_move_caret_to_bounds() {
         key: GridKey::Char('X'),
         pressed: true,
     });
-    assert_eq!(input.value_str(), "Xhello", "Home moves the caret to the start");
+    assert_eq!(
+        input.value_str(),
+        "Xhello",
+        "Home moves the caret to the start"
+    );
 
     input.event(&Event::Key {
         key: GridKey::End,
@@ -870,7 +930,11 @@ fn home_end_move_caret_to_bounds() {
         key: GridKey::Char('Y'),
         pressed: true,
     });
-    assert_eq!(input.value_str(), "XhelloY", "End moves the caret to the end");
+    assert_eq!(
+        input.value_str(),
+        "XhelloY",
+        "End moves the caret to the end"
+    );
 }
 
 #[test]
@@ -887,12 +951,20 @@ fn shift_home_end_select_to_bounds() {
         key: GridKey::Home,
         pressed: true,
     });
-    assert_eq!(input.selected_text().as_deref(), Some("hello"), "Shift+Home selects to start");
+    assert_eq!(
+        input.selected_text().as_deref(),
+        Some("hello"),
+        "Shift+Home selects to start"
+    );
     input.event(&Event::Key {
         key: GridKey::End,
         pressed: true,
     });
-    assert_eq!(input.selection(), None, "Shift+End back to the end deselects");
+    assert_eq!(
+        input.selection(),
+        None,
+        "Shift+End back to the end deselects"
+    );
 }
 
 #[test]
@@ -928,8 +1000,15 @@ fn badge_colored_has_fill_outline_has_none() {
             })
             .unwrap()
     };
-    assert!(fill_of(Badge::success("OK")).a > 0, "colored badge has a translucent fill");
-    assert_eq!(fill_of(Badge::outline("OK")).a, 0, "outline badge has no fill");
+    assert!(
+        fill_of(Badge::success("OK")).a > 0,
+        "colored badge has a translucent fill"
+    );
+    assert_eq!(
+        fill_of(Badge::outline("OK")).a,
+        0,
+        "outline badge has no fill"
+    );
 }
 
 #[test]
@@ -1000,14 +1079,21 @@ fn select_opens_and_paints_options_in_overlay_layer() {
 
     // Closed: only the selected label shows; not overlay-active.
     assert!(!sel.overlay_active(), "closed select is not overlay-active");
-    assert_eq!(texts(&sel), vec!["LOW".to_string()], "closed shows only the trigger label");
+    assert_eq!(
+        texts(&sel),
+        vec!["LOW".to_string()],
+        "closed shows only the trigger label"
+    );
 
     // Open via click on the trigger.
     let b = sel.base().bounds;
     sel.event(&Event::PointerPressed {
         pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
     });
-    assert!(sel.overlay_active(), "clicking the trigger opens + grabs input");
+    assert!(
+        sel.overlay_active(),
+        "clicking the trigger opens + grabs input"
+    );
     let open_texts = texts(&sel);
     assert!(open_texts.contains(&"MEDIUM".to_string()) && open_texts.contains(&"HIGH".to_string()));
 }
@@ -1020,7 +1106,8 @@ fn select_click_row_commits_and_closes() {
 
     let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = log.clone();
-    let mut sel = Select::new(["LOW", "MEDIUM", "HIGH"]).on_change(move |a| sink.borrow_mut().push(a));
+    let mut sel =
+        Select::new(["LOW", "MEDIUM", "HIGH"]).on_change(move |a| sink.borrow_mut().push(a));
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
 
     let b = sel.base().bounds;
@@ -1088,7 +1175,10 @@ fn select_keyboard_navigates_and_escape_closes() {
     let mut sel = Select::new(["A", "B", "C"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
     let key = |s: &mut Select, k: GridKey| {
-        s.event(&Event::Key { key: k, pressed: true })
+        s.event(&Event::Key {
+            key: k,
+            pressed: true,
+        })
     };
 
     key(&mut sel, GridKey::Enter); // open
@@ -1102,7 +1192,10 @@ fn select_keyboard_navigates_and_escape_closes() {
     key(&mut sel, GridKey::Enter); // reopen
     assert!(sel.overlay_active());
     key(&mut sel, GridKey::Escape);
-    assert!(!sel.overlay_active(), "Escape closes without changing selection");
+    assert!(
+        !sel.overlay_active(),
+        "Escape closes without changing selection"
+    );
     assert_eq!(sel.index(), 2);
 }
 
@@ -1277,7 +1370,10 @@ fn progress_bar_fill_eases_toward_value() {
         bar.tick(0.016);
     }
     let w = fill_w(&bar).expect("fill present after raising value");
-    assert!(w > 90.0 && w < 110.0, "fill eases to ~half the 200px track, got {w}");
+    assert!(
+        w > 90.0 && w < 110.0,
+        "fill eases to ~half the 200px track, got {w}"
+    );
 }
 
 #[test]

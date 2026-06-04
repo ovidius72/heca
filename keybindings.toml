@@ -7,6 +7,12 @@
 #   action_name = "combo"                    # Single binding
 #   action_name = ["combo1", "combo2"]       # Multiple bindings
 #
+# Planned richer syntax (implementation contract):
+#   [[keys.bind]]
+#   keys = "prefix+g"
+#   action = "spawn_pane"
+#   args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+#
 # Combo syntax:
 #   "prefix+h"        → prefix key (Ctrl+B) then h
 #   "prefix+Shift+q"  → prefix key then Shift+q
@@ -52,6 +58,7 @@ pane_height_decrease = "prefix+Shift+-" # Shrink active pane height
 # -----------------------------------------------------------------------------
 close = "prefix+x"   # Close active pane
 float = "prefix+f"   # Toggle pane floating (detach/attach)
+zoom_column = "prefix+z"  # Toggle active column full-width / restore previous width
 
 # -----------------------------------------------------------------------------
 # Quick Select / Swap
@@ -100,7 +107,8 @@ focus_toggle_global = "prefix+Shift+l"  # Toggle last pane (cross-workspace)
 # -----------------------------------------------------------------------------
 create_workspace  = "prefix+w"        # Create new workspace + pane
 rename_workspace  = "prefix+Shift+w"  # Rename current workspace
-rename_pane       = "prefix+Shift+p"  # Rename current pane
+rename_column     = "prefix+Shift+c"  # Rename active column
+rename_pane       = "prefix+$"        # Rename current pane/tab
 
 # -----------------------------------------------------------------------------
 # Move / Swap (adjacent)
@@ -138,11 +146,57 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # action = "resize"
 # keys = "l"
 # args = { target = "column", axis = "x", amount = "50" }
+#
+# Planned richer mode examples:
+#
+# [[keys.mode]]
+# name = "spawn"
+# trigger = "prefix+s"
+# sticky = true
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "g"
+# args = { kind = "terminal", program = "lazygit", argv = [] }
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "t"
+# args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "y"
+# args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "n"
+# args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "b"
+# args = { kind = "browser", float = true, width = "1200", height = "800" }
+#
+# [[keys.mode.bindings]]
+# action = "spawn_pane"
+# keys = "v"
+# args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+#
+# [[keys.mode.bindings]]
+# action = "float_active_at"
+# keys = "f"
+# args = { width = "95%", height = "95%" }
+#
+# [[keys.mode.bindings]]
+# action = "zoom_column"
+# keys = "z"
 
 # -----------------------------------------------------------------------------
-# Spawn Commands
+# Spawn Commands / Planned SpawnPane
 # -----------------------------------------------------------------------------
-# Launch external applications in new panes:
+# Launch external applications in new panes today:
 #
 # [[keys.command]]
 # keys = "prefix+g"
@@ -151,6 +205,66 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # [[keys.command]]
 # keys = "Alt+Enter"
 # command = "alacritty"
+#
+# Planned richer parameterized bindings for normal mode:
+#
+# zoom toggle
+# [[keys.bind]]
+# keys = "prefix+z"
+# action = "zoom_column"
+#
+# tiled terminal spawn
+# [[keys.bind]]
+# keys = "prefix+g"
+# action = "spawn_pane"
+# args = { kind = "terminal", program = "lazygit", argv = [] }
+#
+# floating terminal spawn with implicit px values
+# [[keys.bind]]
+# keys = "prefix+Shift+t"
+# action = "spawn_pane"
+# args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+#
+# floating terminal spawn with explicit px suffix
+# [[keys.bind]]
+# keys = "prefix+Shift+y"
+# action = "spawn_pane"
+# args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+#
+# floating terminal spawn with percent sizing
+# [[keys.bind]]
+# keys = "prefix+Shift+g"
+# action = "spawn_pane"
+# args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+#
+# floating browser spawn
+# [[keys.bind]]
+# keys = "prefix+Shift+b"
+# action = "spawn_pane"
+# args = { kind = "browser", float = true, width = "1200", height = "800" }
+#
+# floating nvim_gui spawn
+# [[keys.bind]]
+# keys = "prefix+Shift+n"
+# action = "spawn_pane"
+# args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+#
+# float geometry helper
+# [[keys.bind]]
+# keys = "prefix+Shift+f"
+# action = "float_active_at"
+# args = { width = "95%", height = "95%" }
+#
+# Size parsing contract for the planned implementation:
+#   width = "800"    -> 800px
+#   width = "800px"  -> explicit px
+#   width = "80%"    -> percent of available content area
+#
+# Floating behavior contract:
+#   - float = true opens centered by default
+#   - prefix+f remains float/unfloat
+#   - originally tiled panes restore to their old slot when un-floated
+#   - born-floating panes unfloat into a new column
 
 # -----------------------------------------------------------------------------
 # Unbind (remove default bindings)

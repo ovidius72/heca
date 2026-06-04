@@ -20,7 +20,8 @@ impl Card {
         base.style.padding = 18.0;
         base.style.gap = 10.0;
         base.style.radius = 4.0;
-        base.children.push(Box::new(Label::new(title).font_size(13.0)));
+        base.children
+            .push(Box::new(Label::new(title).font_size(13.0)));
         Self { base }
     }
 }

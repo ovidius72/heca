@@ -126,6 +126,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "workspace-next" => Ok(WmAction::WorkspaceNext),
         "workspace-prev" => Ok(WmAction::WorkspacePrev),
         "split-h" | "split-horizontal" => Ok(WmAction::SplitHorizontal),
+        "zoom-column" | "zoom-col" => Ok(WmAction::ZoomColumn),
         "split-v" | "split-vertical" => Ok(WmAction::SplitVertical),
         "close-pane" => Ok(WmAction::ClosePane),
         "close-pane-id" => {
@@ -227,6 +228,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             Ok(WmAction::Swap { a_id, b_id })
         }
         "rename-pane" => Ok(WmAction::RenamePane),
+        "rename-column" => Ok(WmAction::RenameColumn),
         "rename-workspace" => Ok(WmAction::RenameWorkspace),
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
@@ -288,6 +290,20 @@ mod tests {
             parse_rpc_command("split-vertical"),
             Ok(WmAction::SplitVertical)
         );
+    }
+
+    #[test]
+    fn test_rename_column_command() {
+        assert_eq!(
+            parse_rpc_command("rename-column"),
+            Ok(WmAction::RenameColumn)
+        );
+    }
+
+    #[test]
+    fn test_zoom_column_commands() {
+        assert_eq!(parse_rpc_command("zoom-column"), Ok(WmAction::ZoomColumn));
+        assert_eq!(parse_rpc_command("zoom-col"), Ok(WmAction::ZoomColumn));
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub use badge::{Badge, BadgeVariant};
 pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
 pub use checkbox::{Checkbox, LabelSide};
-pub use flex::{container, Container, Flex};
+pub use flex::{Container, Flex, container};
 pub use gauge::Gauge;
 pub use input::Input;
 pub use label::Label;

@@ -298,7 +298,11 @@ impl TextRenderer {
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
             // Very large wrap size to prevent any line wrapping for single-line labels
             buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-            let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+            let weight = if cmd.bold {
+                Weight::BOLD
+            } else {
+                Weight::NORMAL
+            };
             let attrs = Attrs::new()
                 .family(Family::Name(&self.font_family))
                 .weight(weight);

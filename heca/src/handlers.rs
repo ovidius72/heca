@@ -170,6 +170,13 @@ pub fn handle_resize_decrease(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.toggle_active_column_zoom();
+    }
+    state.needs_redraw = true;
+}
+
 pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         let col_idx = ws.scrolling.active_column_idx;
@@ -1081,6 +1088,24 @@ pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
         state.input_mode = InputMode::Rename {
             target: RenameTarget::Pane(pane_id),
             buffer: current_title,
+        };
+        state.needs_redraw = true;
+    }
+}
+
+pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
+    let ws_idx = state.session.active_workspace_idx;
+    if let Some(ws) = state.session.active_workspace() {
+        let col_idx = ws.scrolling.active_column_idx;
+        let current_name = ws
+            .scrolling
+            .columns
+            .get(col_idx)
+            .and_then(|col| col.name.clone())
+            .unwrap_or_default();
+        state.input_mode = InputMode::Rename {
+            target: RenameTarget::Column { ws_idx, col_idx },
+            buffer: current_name,
         };
         state.needs_redraw = true;
     }

@@ -14,7 +14,7 @@ use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::MONO_LINE_RATIO;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -136,7 +136,10 @@ impl Select {
     fn panel_rect(&self) -> Rectangle {
         let b = self.base.bounds;
         let h = 2.0 * PANEL_PAD + self.visible_count() as f64 * ROW_H;
-        Rectangle::new(Point::new(b.loc.x, self.panel_top()), Size::new(b.size.w, h))
+        Rectangle::new(
+            Point::new(b.loc.x, self.panel_top()),
+            Size::new(b.size.w, h),
+        )
     }
 
     /// The rect of the `slot`-th *visible* row (0-based from the top of the list).
@@ -268,7 +271,16 @@ impl Component for Select {
                     radius: GLOW_RADIUS,
                     intensity: GLOW_INTENSITY,
                 });
-                cx.rect(panel, surface, Some(Border { color: accent, width: 1.5 }), RADIUS, glow);
+                cx.rect(
+                    panel,
+                    surface,
+                    Some(Border {
+                        color: accent,
+                        width: 1.5,
+                    }),
+                    RADIUS,
+                    glow,
+                );
                 let selected = self.selected.get_untracked();
                 let scrollbar = self.scrollable();
                 // Render only the visible window of rows (no clipping needed).
@@ -279,13 +291,24 @@ impl Component for Select {
                         cx.rect(row, accent.with_alpha(HILITE_ALPHA), None, 2.0, None);
                     }
                     // Leave room for the scrollbar on the right when present.
-                    let right_pad = if scrollbar { PAD_H + SCROLLBAR_W } else { PAD_H };
+                    let right_pad = if scrollbar {
+                        PAD_H + SCROLLBAR_W
+                    } else {
+                        PAD_H
+                    };
                     let row_text = Rectangle::new(
                         Point::new(row.loc.x + PAD_H, row.loc.y),
                         Size::new((row.size.w - PAD_H - right_pad).max(0.0), row.size.h),
                     );
                     let color = if i == selected { accent } else { foreground };
-                    cx.text(row_text, &self.options[i], color, fs, TextAlign::Start, i == selected);
+                    cx.text(
+                        row_text,
+                        &self.options[i],
+                        color,
+                        fs,
+                        TextAlign::Start,
+                        i == selected,
+                    );
                 }
                 // Scrollbar: a thumb sized/positioned by the visible window.
                 if scrollbar {
@@ -316,7 +339,9 @@ impl Component for Select {
         }
         match ev {
             Event::PointerMoved { pos } => {
-                if self.open && let Some(i) = self.row_at(*pos) {
+                if self.open
+                    && let Some(i) = self.row_at(*pos)
+                {
                     self.highlight = i;
                 }
                 Handled::No

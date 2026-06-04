@@ -230,6 +230,13 @@ impl ActionRegistry {
             default_binding: "v",
         },
         ActionDescriptor {
+            name: "zoom_column",
+            label: "Toggle Column Zoom",
+            description: "Toggle the active column between viewport-wide zoom and its previous width.",
+            category: ActionCategory::Layout,
+            default_binding: "z",
+        },
+        ActionDescriptor {
             name: "resize_increase",
             label: "Increase Column Width",
             description: "Widen the active column.",
@@ -338,9 +345,16 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "rename_pane",
             label: "Rename Pane",
-            description: "Rename the active pane.",
+            description: "Rename the active pane/tab.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+p",
+            default_binding: "$",
+        },
+        ActionDescriptor {
+            name: "rename_column",
+            label: "Rename Column",
+            description: "Rename the active column.",
+            category: ActionCategory::Layout,
+            default_binding: "Shift+c",
         },
         // ── Workspace ──
         ActionDescriptor {

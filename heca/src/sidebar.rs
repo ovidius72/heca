@@ -37,6 +37,7 @@ pub struct SidebarPaneEntry {
 #[derive(Debug, Clone)]
 pub struct SidebarColEntry {
     pub col_idx: usize,
+    pub name: String,
     pub collapsed: bool,
     pub panes: Vec<SidebarPaneEntry>,
 }
@@ -141,6 +142,10 @@ impl SidebarTree {
                     let _is_active_col = col_idx == ws.scrolling.active_column_idx && is_active;
                     let mut col_entry = SidebarColEntry {
                         col_idx,
+                        name: col
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("Col {}", col_idx + 1)),
                         collapsed: false,
                         panes: Vec::new(),
                     };
@@ -616,8 +621,14 @@ pub fn render_sidebar_expanded(
                     (INDENT_WS, format!("WS {}", ws_idx), true)
                 }
             }
-            SidebarItem::Column { ws_idx: _, col_idx } => {
-                (INDENT_COL, format!("Col {}", col_idx + 1), false)
+            SidebarItem::Column { ws_idx, col_idx } => {
+                let label = tree
+                    .workspaces
+                    .get(*ws_idx)
+                    .and_then(|ws| ws.columns.get(*col_idx))
+                    .map(|col| col.name.clone())
+                    .unwrap_or_else(|| format!("Col {}", col_idx + 1));
+                (INDENT_COL, label, false)
             }
             SidebarItem::Pane { pane_id } => {
                 let mut label = pane_name_short(*pane_id, &tree.workspaces);
