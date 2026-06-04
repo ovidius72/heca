@@ -46,7 +46,7 @@ pub use heca_core::layout::{Point, Rectangle, Size};
 pub use action::{Action, SignalData};
 pub use builders::{LayoutExt, Parent, StyleExt};
 pub use color::Color;
-pub use component::{Base, Component, Event, GridKey, Handled, PaintCx};
+pub use component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 pub use effects::Flash;
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -64,7 +64,7 @@ pub mod prelude {
     pub use crate::action::{Action, SignalData};
     pub use crate::builders::{LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
-    pub use crate::component::{Component, Event, GridKey, Handled};
+    pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
     pub use crate::scene::TextAlign;

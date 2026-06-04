@@ -88,6 +88,25 @@ pub enum GridKey {
     ArrowDown,
 }
 
+/// Keyboard modifier state, renderer-agnostic. The host maps its platform
+/// modifiers onto this and broadcasts changes via [`Event::ModifiersChanged`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    /// The Cmd/Super/Windows key.
+    pub meta: bool,
+}
+
+impl Modifiers {
+    /// Whether the "delete by word" modifier is held. Cross-platform: Ctrl on
+    /// Windows/Linux, Option (Alt) on macOS — we accept either.
+    pub fn word(&self) -> bool {
+        self.ctrl || self.alt
+    }
+}
+
 /// An input event delivered to the component tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
@@ -96,6 +115,9 @@ pub enum Event {
     PointerReleased { pos: Point },
     /// Keyboard event — delivered to the focused component only.
     Key { key: GridKey, pressed: bool },
+    /// Modifier keys changed — broadcast to the whole tree so widgets can track
+    /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
+    ModifiersChanged(Modifiers),
 }
 
 /// Behavior shared by all components. Implementors provide access to their

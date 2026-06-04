@@ -12,7 +12,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, TextAlign};
@@ -56,6 +56,8 @@ pub struct Input {
     last_click: f32,
     /// Consecutive-click counter driving the select cycle (word → all → clear).
     clicks: u8,
+    /// Latest modifier state (tracked via [`Event::ModifiersChanged`]).
+    mods: Modifiers,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -76,6 +78,7 @@ impl Input {
             clock: 0.0,
             last_click: f32::NEG_INFINITY,
             clicks: 0,
+            mods: Modifiers::default(),
             on_change: None,
         }
     }
@@ -196,7 +199,8 @@ impl Input {
         self.commit(chars.into_iter().collect());
     }
 
-    fn backspace(&mut self) {
+    /// Delete left of the caret: one char, or a whole word when `word`.
+    fn backspace(&mut self, word: bool) {
         let mut chars = self.chars_vec();
         if self.drain_selection(&mut chars) {
             self.commit(chars.into_iter().collect());
@@ -205,24 +209,33 @@ impl Input {
         if self.cursor == 0 {
             return;
         }
-        let i = self.cursor - 1;
-        if i < chars.len() {
-            chars.remove(i);
-            self.cursor = i;
-            self.commit(chars.into_iter().collect());
-        }
+        let start = if word {
+            prev_word_boundary(&chars, self.cursor)
+        } else {
+            self.cursor - 1
+        };
+        chars.drain(start..self.cursor.min(chars.len()));
+        self.cursor = start;
+        self.commit(chars.into_iter().collect());
     }
 
-    fn delete(&mut self) {
+    /// Delete right of the caret: one char, or a whole word when `word`.
+    fn delete(&mut self, word: bool) {
         let mut chars = self.chars_vec();
         if self.drain_selection(&mut chars) {
             self.commit(chars.into_iter().collect());
             return;
         }
-        if self.cursor < chars.len() {
-            chars.remove(self.cursor);
-            self.commit(chars.into_iter().collect());
+        if self.cursor >= chars.len() {
+            return;
         }
+        let end = if word {
+            next_word_boundary(&chars, self.cursor)
+        } else {
+            self.cursor + 1
+        };
+        chars.drain(self.cursor..end.min(chars.len()));
+        self.commit(chars.into_iter().collect());
     }
 
     /// Handle an editing key. Returns whether it was consumed.
@@ -230,8 +243,8 @@ impl Input {
         match key {
             GridKey::Char(c) => self.insert(c),
             GridKey::Space => self.insert(' '),
-            GridKey::Backspace => self.backspace(),
-            GridKey::Delete => self.delete(),
+            GridKey::Backspace => self.backspace(self.mods.word()),
+            GridKey::Delete => self.delete(self.mods.word()),
             GridKey::ArrowLeft => {
                 self.cursor = match self.selection.take() {
                     Some((s, _)) => s,
@@ -271,6 +284,32 @@ fn word_bounds(chars: &[char], idx: usize) -> (usize, usize) {
         end += 1;
     }
     (start, end)
+}
+
+/// The start of the word before `cursor`: skip whitespace, then the word, going
+/// left (so Ctrl/Alt+Backspace removes the word plus any space before the caret).
+fn prev_word_boundary(chars: &[char], cursor: usize) -> usize {
+    let mut i = cursor.min(chars.len());
+    while i > 0 && chars[i - 1].is_whitespace() {
+        i -= 1;
+    }
+    while i > 0 && !chars[i - 1].is_whitespace() {
+        i -= 1;
+    }
+    i
+}
+
+/// The end of the word after `cursor`: skip whitespace, then the word, going
+/// right (so Ctrl/Alt+Delete removes the word plus following space).
+fn next_word_boundary(chars: &[char], cursor: usize) -> usize {
+    let mut i = cursor;
+    while i < chars.len() && chars[i].is_whitespace() {
+        i += 1;
+    }
+    while i < chars.len() && !chars[i].is_whitespace() {
+        i += 1;
+    }
+    i
 }
 
 impl Component for Input {
@@ -361,6 +400,11 @@ impl Component for Input {
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
+        // Track modifiers even when disabled is irrelevant; observe, don't consume.
+        if let Event::ModifiersChanged(m) = ev {
+            self.mods = *m;
+            return Handled::No;
+        }
         if self.base.disabled.get_untracked() {
             return Handled::No;
         }

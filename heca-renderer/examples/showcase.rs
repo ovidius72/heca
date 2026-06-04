@@ -420,7 +420,15 @@ impl ApplicationHandler for App {
                 state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
-                state.shift = m.state().shift_key();
+                let s = m.state();
+                state.shift = s.shift_key();
+                // Broadcast to the tree so text widgets can do word-wise editing.
+                state.ui.event(&Event::ModifiersChanged(Modifiers {
+                    ctrl: s.control_key(),
+                    alt: s.alt_key(),
+                    shift: s.shift_key(),
+                    meta: s.super_key(),
+                }));
             }
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed =>

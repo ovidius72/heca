@@ -656,6 +656,51 @@ fn input_typing_replaces_selection() {
 }
 
 #[test]
+fn input_ctrl_backspace_deletes_previous_word() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("alpha beta");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        ctrl: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::Backspace,
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "alpha ", "deletes the word at the caret");
+    input.event(&Event::Key {
+        key: GridKey::Backspace,
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "", "again removes the word + preceding space");
+}
+
+#[test]
+fn input_alt_delete_removes_next_word() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("alpha beta");
+    LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
+    for _ in 0..20 {
+        input.event(&Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        });
+    }
+    // On macOS the word modifier is Alt/Option — accepted cross-platform.
+    input.event(&Event::ModifiersChanged(Modifiers {
+        alt: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::Delete,
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), " beta", "forward word delete from the start");
+}
+
+#[test]
 fn disabled_input_ignores_typing() {
     let mut input = Input::new().disabled(true);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));
