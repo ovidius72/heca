@@ -701,6 +701,49 @@ fn input_alt_delete_removes_next_word() {
 }
 
 #[test]
+fn meta_backspace_and_delete_clear_to_boundary() {
+    use heca_grid_ui::Modifiers;
+    let arrow_left = |i: &mut Input| {
+        i.event(&Event::Key {
+            key: GridKey::ArrowLeft,
+            pressed: true,
+        });
+    };
+
+    // Meta+Backspace deletes from the caret to the start.
+    let mut a = Input::new().value("alpha beta");
+    LayoutEngine::new().compute(&mut a, Size::new(400.0, 60.0));
+    for _ in 0..4 {
+        arrow_left(&mut a); // caret 10 → 6 (start of "beta")
+    }
+    a.event(&Event::ModifiersChanged(Modifiers {
+        meta: true,
+        ..Default::default()
+    }));
+    a.event(&Event::Key {
+        key: GridKey::Backspace,
+        pressed: true,
+    });
+    assert_eq!(a.value_str(), "beta", "meta+backspace deletes to start");
+
+    // Meta+Delete deletes from the caret to the end.
+    let mut b = Input::new().value("alpha beta");
+    LayoutEngine::new().compute(&mut b, Size::new(400.0, 60.0));
+    for _ in 0..5 {
+        arrow_left(&mut b); // caret 10 → 5 (after "alpha")
+    }
+    b.event(&Event::ModifiersChanged(Modifiers {
+        meta: true,
+        ..Default::default()
+    }));
+    b.event(&Event::Key {
+        key: GridKey::Delete,
+        pressed: true,
+    });
+    assert_eq!(b.value_str(), "alpha", "meta+delete deletes to end");
+}
+
+#[test]
 fn shift_arrow_extends_and_shrinks_char_selection() {
     use heca_grid_ui::Modifiers;
     let mut input = Input::new().value("hello");

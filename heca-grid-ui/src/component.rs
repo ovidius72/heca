@@ -99,14 +99,6 @@ pub struct Modifiers {
     pub meta: bool,
 }
 
-impl Modifiers {
-    /// Whether the "delete by word" modifier is held. Cross-platform: Ctrl on
-    /// Windows/Linux, Option (Alt) on macOS — we accept either.
-    pub fn word(&self) -> bool {
-        self.ctrl || self.alt
-    }
-}
-
 /// An input event delivered to the component tree.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {

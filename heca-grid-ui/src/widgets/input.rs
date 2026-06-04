@@ -205,8 +205,20 @@ impl Input {
         self.commit(chars.into_iter().collect());
     }
 
-    /// Delete left of the caret: one char, or a whole word when `word`.
-    fn backspace(&mut self, word: bool) {
+    /// Granularity for delete keys: Meta (Cmd) → to start/end, Ctrl/Alt → word,
+    /// otherwise a single character.
+    fn delete_granularity(&self) -> Granularity {
+        if self.mods.meta {
+            Granularity::Line
+        } else if self.mods.ctrl || self.mods.alt {
+            Granularity::Word
+        } else {
+            Granularity::Char
+        }
+    }
+
+    /// Delete left of the caret at `gran` (char / word / to start).
+    fn backspace(&mut self, gran: Granularity) {
         let mut chars = self.chars_vec();
         if self.drain_selection(&mut chars) {
             self.commit(chars.into_iter().collect());
@@ -215,18 +227,18 @@ impl Input {
         if self.cursor == 0 {
             return;
         }
-        let start = if word {
-            prev_word_boundary(&chars, self.cursor)
-        } else {
-            self.cursor - 1
+        let start = match gran {
+            Granularity::Char => self.cursor - 1,
+            Granularity::Word => prev_word_boundary(&chars, self.cursor),
+            Granularity::Line => 0,
         };
         chars.drain(start..self.cursor.min(chars.len()));
         self.cursor = start;
         self.commit(chars.into_iter().collect());
     }
 
-    /// Delete right of the caret: one char, or a whole word when `word`.
-    fn delete(&mut self, word: bool) {
+    /// Delete right of the caret at `gran` (char / word / to end).
+    fn delete(&mut self, gran: Granularity) {
         let mut chars = self.chars_vec();
         if self.drain_selection(&mut chars) {
             self.commit(chars.into_iter().collect());
@@ -235,10 +247,10 @@ impl Input {
         if self.cursor >= chars.len() {
             return;
         }
-        let end = if word {
-            next_word_boundary(&chars, self.cursor)
-        } else {
-            self.cursor + 1
+        let end = match gran {
+            Granularity::Char => self.cursor + 1,
+            Granularity::Word => next_word_boundary(&chars, self.cursor),
+            Granularity::Line => chars.len(),
         };
         chars.drain(self.cursor..end.min(chars.len()));
         self.commit(chars.into_iter().collect());
@@ -249,8 +261,8 @@ impl Input {
         match key {
             GridKey::Char(c) => self.insert(c),
             GridKey::Space => self.insert(' '),
-            GridKey::Backspace => self.backspace(self.mods.word()),
-            GridKey::Delete => self.delete(self.mods.word()),
+            GridKey::Backspace => self.backspace(self.delete_granularity()),
+            GridKey::Delete => self.delete(self.delete_granularity()),
             GridKey::ArrowLeft => self.move_caret(true),
             GridKey::ArrowRight => self.move_caret(false),
             _ => return Handled::No,
