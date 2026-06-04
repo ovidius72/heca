@@ -1416,3 +1416,27 @@ fn item_trailing_border_draws_a_flat_frame_no_glow() {
     assert_eq!(frames(&plain), 0, "no frame without trailing_bordered");
     assert_eq!(frames(&bordered), 1, "trailing_bordered draws one flat frame");
 }
+
+#[test]
+fn pane_draws_flat_corner_brackets_no_glow() {
+    let theme = Theme::grid_tron();
+    let pane = Pane::new().background(theme.surface).child(Label::new("X"));
+    let mut pane = pane;
+    LayoutEngine::new().compute(&mut pane, Size::new(200.0, 300.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        pane.paint(&mut cx);
+    }
+    let plain_brackets = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Brackets(b) if b.glow.is_none()))
+        .count();
+    let glowing = scene
+        .iter()
+        .filter(|c| matches!(c, DrawCommand::Brackets(b) if b.glow.is_some()))
+        .count();
+    assert_eq!(plain_brackets, 1, "pane draws one set of flat (no-glow) brackets");
+    assert_eq!(glowing, 0, "no glowing brackets");
+}

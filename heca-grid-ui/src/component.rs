@@ -232,6 +232,18 @@ impl<'a> PaintCx<'a> {
         }));
     }
 
+    /// Queue **flat** L-shaped corner brackets framing `rect` — prominent angles
+    /// with no glow (for container/pane chrome, vs the glowing focus ring).
+    pub fn corner_brackets_plain(&mut self, rect: Rectangle, color: Color) {
+        self.scene.push(DrawCommand::Brackets(BracketCmd {
+            rect,
+            color,
+            len: 16.0,
+            thickness: 1.5,
+            glow: None,
+        }));
+    }
+
     /// Queue L-shaped corner brackets framing `rect` (a Tron reticle).
     pub fn corner_brackets(&mut self, rect: Rectangle, color: Color) {
         let glow = self.scaled_glow(Some(Glow {

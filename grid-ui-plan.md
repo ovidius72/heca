@@ -21,6 +21,7 @@
 | `Item` widget — generic row (leading · label · trailing slots, selected/hover/activate) for menus/options/sidebar | DONE | [#24](https://github.com/ovidius72/heca/pull/24) |
 | Wire `Item` into `Select` options (label + `value: SignalData` + slots) | PENDING | — |
 | Icon support (icon-font glyphs, no renderer texture work) | PENDING | — |
+| `Pane` container — prominent corner brackets, **no glow/shadow**; wraps sidebars/panes (rows = `Item`s) | DONE | (extends #24) |
 | `Tooltip`, `Modal`/`Dialog` (need overlay) | PENDING | — |
 | Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
 | Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |
