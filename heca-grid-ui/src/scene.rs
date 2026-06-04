@@ -15,9 +15,18 @@ use crate::color::Color;
 use heca_core::layout::Rectangle;
 
 /// A retained list of draw commands, rebuilt each repaint.
+///
+/// Commands are split into two layers: the **base** layer and an **overlay**
+/// layer drawn entirely on top of it (popovers/dropdowns). [`iter`](Scene::iter)
+/// yields base commands first, then overlay — so the renderer naturally draws
+/// overlays last. Widgets route draws to the overlay layer via
+/// [`PaintCx::with_overlay`](crate::component::PaintCx::with_overlay).
 #[derive(Debug, Default, Clone)]
 pub struct Scene {
     commands: Vec<DrawCommand>,
+    overlay: Vec<DrawCommand>,
+    /// When set, [`push`](Scene::push) targets the overlay layer.
+    to_overlay: bool,
 }
 
 impl Scene {
@@ -26,29 +35,46 @@ impl Scene {
         Self::default()
     }
 
-    /// Append a command.
+    /// Append a command to the active layer (base, or overlay while in
+    /// [`begin_overlay`](Scene::begin_overlay)).
     pub fn push(&mut self, cmd: DrawCommand) {
-        self.commands.push(cmd);
+        if self.to_overlay {
+            self.overlay.push(cmd);
+        } else {
+            self.commands.push(cmd);
+        }
+    }
+
+    /// Route subsequent pushes to the overlay layer (drawn on top).
+    pub fn begin_overlay(&mut self) {
+        self.to_overlay = true;
+    }
+
+    /// Stop routing to the overlay layer.
+    pub fn end_overlay(&mut self) {
+        self.to_overlay = false;
     }
 
     /// Clear all commands (reuse the allocation across frames).
     pub fn clear(&mut self) {
         self.commands.clear();
+        self.overlay.clear();
+        self.to_overlay = false;
     }
 
-    /// Number of queued commands.
+    /// Total number of queued commands (base + overlay).
     pub fn len(&self) -> usize {
-        self.commands.len()
+        self.commands.len() + self.overlay.len()
     }
 
     /// Whether the scene has no commands.
     pub fn is_empty(&self) -> bool {
-        self.commands.is_empty()
+        self.commands.is_empty() && self.overlay.is_empty()
     }
 
-    /// Iterate the commands in submission order (consumed by the renderer).
+    /// Iterate commands in draw order: base layer first, then overlay (on top).
     pub fn iter(&self) -> impl Iterator<Item = &DrawCommand> {
-        self.commands.iter()
+        self.commands.iter().chain(self.overlay.iter())
     }
 }
 

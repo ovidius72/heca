@@ -175,6 +175,14 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(ProgressBar::new().value(0.72))
                 .child(Gauge::new().value(0.85)),
         )
+        // Dropdown (overlay layer): opens over the content below it.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("INTENSITY").color(theme.muted).font_size(13.0))
+                .child(Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(2).on_change(report)),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
@@ -416,9 +424,16 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 let pos = state.cursor;
-                // A click focuses the clicked widget (clears focus if it misses).
-                state.focus.focus_at(&mut state.ui, pos);
-                state.ui.event(&Event::PointerPressed { pos });
+                let press = Event::PointerPressed { pos };
+                // An open overlay (e.g. a Select dropdown) gets first dibs so it
+                // can capture clicks on rows outside its layout bounds.
+                let consumed = state.focus.overlay_active(&mut state.ui)
+                    && state.focus.deliver_to_overlay(&mut state.ui, &press) == Handled::Yes;
+                if !consumed {
+                    // A click focuses the clicked widget (clears focus if it misses).
+                    state.focus.focus_at(&mut state.ui, pos);
+                    state.ui.event(&press);
+                }
                 state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
@@ -439,6 +454,10 @@ impl ApplicationHandler for App {
                     match gk {
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
+                        // Escape closes an open overlay first, else clears focus.
+                        GridKey::Escape if state.focus.overlay_active(&mut state.ui) => {
+                            state.focus.deliver_key(&mut state.ui, GridKey::Escape);
+                        }
                         GridKey::Escape => state.focus.clear(&mut state.ui),
                         // Space/Enter (and others) go to the focused widget.
                         other => {
