@@ -76,7 +76,14 @@ fn build_ui(theme: &Theme) -> Flex {
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
-        // Top-of-page dropdowns: open downward and must overlap the rows below.
+        .child(
+            Flex::row()
+                .gap(28.0)
+                .child(card("UPLINK", "ONLINE"))
+                .child(card("POWER", "98%"))
+                .child(card("GRID NODES", "1024")),
+        )
+        // Dropdowns near the top: open downward and must overlap the rows below.
         .child(
             Flex::row()
                 .gap(16.0)
@@ -85,13 +92,6 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
                 .child(Label::new("WORKSPACE").color(theme.muted).font_size(13.0))
                 .child(Select::new(workspaces).selected(3).on_change(report)),
-        )
-        .child(
-            Flex::row()
-                .gap(28.0)
-                .child(card("UPLINK", "ONLINE"))
-                .child(card("POWER", "98%"))
-                .child(card("GRID NODES", "1024")),
         )
         // One button per GridCN variant.
         .child(
@@ -351,7 +351,6 @@ impl GpuState {
         LayoutEngine::new().compute(&mut self.ui, Size::new(w as f64, h as f64));
 
         let scene = build_scene(&self.ui, &self.theme, w, h);
-        enqueue_scene(&mut self.grid, &mut self.text, &scene);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -390,8 +389,17 @@ impl GpuState {
             });
         }
 
+        // Two layers, each a rects-then-text pass: base first, then the overlay
+        // (dropdowns) on top — so overlay content occludes base *text* too, not
+        // just base rects (the renderer draws all rects then all text per pass).
+        enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
         self.grid.render(&self.device, &view, &mut encoder);
         self.text.render(&self.device, &self.queue, &view, &mut encoder);
+        if scene.has_overlay() {
+            enqueue_scene(&mut self.grid, &mut self.text, &scene.overlay_layer());
+            self.grid.render(&self.device, &view, &mut encoder);
+            self.text.render(&self.device, &self.queue, &view, &mut encoder);
+        }
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 

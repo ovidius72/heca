@@ -76,6 +76,31 @@ impl Scene {
     pub fn iter(&self) -> impl Iterator<Item = &DrawCommand> {
         self.commands.iter().chain(self.overlay.iter())
     }
+
+    /// Whether the overlay layer has any commands.
+    pub fn has_overlay(&self) -> bool {
+        !self.overlay.is_empty()
+    }
+
+    /// A scene containing only the **base** layer's commands. Hosts that draw in
+    /// two passes (rects then text) render this first, then [`overlay_layer`](Scene::overlay_layer)
+    /// on top — so overlay content occludes base text, not just base rects.
+    pub fn base_layer(&self) -> Scene {
+        Scene {
+            commands: self.commands.clone(),
+            overlay: Vec::new(),
+            to_overlay: false,
+        }
+    }
+
+    /// A scene containing only the **overlay** layer's commands (drawn on top).
+    pub fn overlay_layer(&self) -> Scene {
+        Scene {
+            commands: self.overlay.clone(),
+            overlay: Vec::new(),
+            to_overlay: false,
+        }
+    }
 }
 
 /// One drawable element. Adding a new effect is one variant here plus one branch
