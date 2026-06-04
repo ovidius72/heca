@@ -6,6 +6,26 @@
 
 ---
 
+> ## ⚠️ Status: reference & vision, not the implemented API
+>
+> This document is the **external GridCN reference** (the web/React project) plus the
+> **original design vision** for `heca-grid-ui` — its visual language (glow, brackets,
+> scanlines, palette), full component wishlist, and reference links. Keep it for that.
+>
+> **It does NOT describe the implemented Rust API.** For what actually exists — every
+> widget's properties/methods/events and usage examples — see **[`widgets.md`](./widgets.md)**
+> (canonical). The "Event & Input Model" section below sketched an *earlier* architecture
+> (`ComponentBase` + `impl_component!` macro + `SignalBus`, event handlers returning
+> `Option<Action>`); the shipped code instead uses **embed-`Base` + impl-`Component`**,
+> **builder traits** (`LayoutExt`/`StyleExt`/`Parent`), `event(&Event) -> Handled` for
+> routing, and **`on_change(Fn(Action))` callbacks** for change values. The accessibility
+> directions (Tab/Shift+Tab focus, Space/Enter activation, focus-visible ring, `GridKey`)
+> *were* implemented, mapped onto that real architecture.
+>
+> Component coverage so far is tracked in `grid-ui-plan.md` (Task Board).
+
+---
+
 ## Table of Contents
 
 1. [Overview](#overview)
