@@ -12,12 +12,15 @@ mod sidebar;
 use sidebar::SidebarTree;
 
 pub(crate) use app::focus::{focus_pane_by_id, switch_workspace_tracked, sync_focus};
+use app::keyboard::{event_combo_matches, normalize_key_text, winit_key_to_terminal_input};
 pub(crate) use app::mutations::{
-    destroy_empty_workspace, move_pane_to_column, move_pane_to_workspace_column,
+    destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
+    move_pane_to_workspace_column,
 };
 use app::registry::{build_keymap, build_modes, build_registry};
 use app::render::render_backend_data;
 pub(crate) use app::render::update_session_viewport;
+pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app_state::{AppState, DragState, InputMode, RenameTarget, SidebarState};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
@@ -31,18 +34,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, WindowEvent};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::NamedKey;
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 
 use winit::window::{Window, WindowId};
-
-/// Extended alphabet for pane/column candidate labels (52 chars).
-const CANDIDATE_ALPHABET: &[char] = &[
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
-    't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-    'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-];
 
 /// Distinct pane names so you can visually identify what's moving.
 const PANE_NAMES: &[&str] = &[
@@ -55,153 +51,6 @@ pub(crate) fn pane_name(id: u64) -> String {
         .get((id as usize).saturating_sub(1) % PANE_NAMES.len())
         .unwrap_or(&"?")
         .to_string()
-}
-
-/// Check if a key event's combo matches a configured KeyCombo.
-/// Case-insensitive for alphabetic keys; exact otherwise.
-fn event_combo_matches(event: &keymap::KeyCombo, configured: &keymap::KeyCombo) -> bool {
-    if event.ctrl != configured.ctrl
-        || event.shift != configured.shift
-        || event.alt != configured.alt
-        || event.super_ != configured.super_
-    {
-        return false;
-    }
-    // Case-insensitive match for single alphabetic characters.
-    if event.key.len() == 1 && configured.key.len() == 1 {
-        let e = event.key.chars().next().unwrap();
-        let c = configured.key.chars().next().unwrap();
-        e.eq_ignore_ascii_case(&c)
-    } else {
-        event.key.eq_ignore_ascii_case(&configured.key)
-    }
-}
-
-/// Normalize a winit key event into a config-compatible key string.
-/// Named keys become their canonical name (Enter, Tab, ArrowLeft, etc.).
-/// Character keys are lowercased so 'Q' from Shift+q matches config 'q'.
-/// When `shift` is true, shifted symbols are mapped back to their unshifted
-/// base key so that config "Shift+=" matches the event from Shift+Equal.
-fn normalize_key_text(
-    logical_key: &winit::keyboard::Key,
-    key_text: &str,
-    shift: bool,
-    ctrl: bool,
-    physical_key: &winit::keyboard::PhysicalKey,
-) -> String {
-    // Ctrl+special keys may produce control characters (e.g. Ctrl+[ → \u{1b}).
-    // Use the physical key to recover the original printable key.
-    if ctrl && let winit::keyboard::PhysicalKey::Code(code) = physical_key {
-        let mapped = match code {
-            winit::keyboard::KeyCode::BracketLeft => "[",
-            winit::keyboard::KeyCode::BracketRight => "]",
-            winit::keyboard::KeyCode::Semicolon => ";",
-            winit::keyboard::KeyCode::Quote => "'",
-            winit::keyboard::KeyCode::Comma => ",",
-            winit::keyboard::KeyCode::Period => ".",
-            winit::keyboard::KeyCode::Slash => "/",
-            winit::keyboard::KeyCode::Backslash => "\\",
-            winit::keyboard::KeyCode::Minus => "-",
-            winit::keyboard::KeyCode::Equal => "=",
-            winit::keyboard::KeyCode::Backquote => "`",
-            winit::keyboard::KeyCode::Digit0 => "0",
-            winit::keyboard::KeyCode::Digit1 => "1",
-            winit::keyboard::KeyCode::Digit2 => "2",
-            winit::keyboard::KeyCode::Digit3 => "3",
-            winit::keyboard::KeyCode::Digit4 => "4",
-            winit::keyboard::KeyCode::Digit5 => "5",
-            winit::keyboard::KeyCode::Digit6 => "6",
-            winit::keyboard::KeyCode::Digit7 => "7",
-            winit::keyboard::KeyCode::Digit8 => "8",
-            winit::keyboard::KeyCode::Digit9 => "9",
-            _ => "",
-        };
-        if !mapped.is_empty() {
-            return mapped.to_string();
-        }
-    }
-
-    let mut key = match logical_key {
-        // Ctrl+[ produces Escape on some systems; recover the original key
-        // via physical key so the binding still matches.
-        winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape) if ctrl => {
-            if let winit::keyboard::PhysicalKey::Code(code) = physical_key {
-                let mapped = match code {
-                    winit::keyboard::KeyCode::BracketLeft => "[",
-                    winit::keyboard::KeyCode::BracketRight => "]",
-                    _ => "",
-                };
-                if !mapped.is_empty() {
-                    return mapped.to_string();
-                }
-            }
-            return "Escape".to_string();
-        }
-        winit::keyboard::Key::Named(n) => return format!("{:?}", n),
-        winit::keyboard::Key::Character(c) => c.to_lowercase().to_string(),
-        _ if !key_text.is_empty() => key_text.to_lowercase(),
-        _ => return String::new(),
-    };
-    if shift {
-        // Map shifted symbols back to their unshifted base key.
-        key = match key.as_str() {
-            "+" => "=".to_string(),
-            "_" => "-".to_string(),
-            "{" => "[".to_string(),
-            "}" => "]".to_string(),
-            "|" => "\\".to_string(),
-            ":" => ";".to_string(),
-            "\"" => "'".to_string(),
-            "<" => ",".to_string(),
-            ">" => ".".to_string(),
-            "?" => "/".to_string(),
-            "!" => "1".to_string(),
-            "@" => "2".to_string(),
-            "#" => "3".to_string(),
-            "$" => "4".to_string(),
-            "%" => "5".to_string(),
-            "^" => "6".to_string(),
-            "&" => "7".to_string(),
-            "*" => "8".to_string(),
-            "(" => "9".to_string(),
-            ")" => "0".to_string(),
-            "~" => "`".to_string(),
-            _ => key,
-        };
-    }
-    key
-}
-
-/// Convert a winit key event to terminal input bytes.
-fn winit_key_to_terminal_input(key: &winit::keyboard::Key, text: &str, ctrl: bool) -> Vec<u8> {
-    use winit::keyboard::NamedKey;
-
-    // Ctrl+letter -> control character
-    if ctrl && text.len() == 1 {
-        let c = text.as_bytes()[0];
-        if c.is_ascii_lowercase() {
-            return vec![c - b'a' + 1];
-        }
-    }
-
-    match key {
-        Key::Named(NamedKey::Enter) => vec![b'\r'],
-        Key::Named(NamedKey::Backspace) => vec![0x7f],
-        Key::Named(NamedKey::Tab) => vec![b'\t'],
-        Key::Named(NamedKey::Escape) => vec![0x1b],
-        Key::Named(NamedKey::ArrowUp) => b"\x1b[A".to_vec(),
-        Key::Named(NamedKey::ArrowDown) => b"\x1b[B".to_vec(),
-        Key::Named(NamedKey::ArrowRight) => b"\x1b[C".to_vec(),
-        Key::Named(NamedKey::ArrowLeft) => b"\x1b[D".to_vec(),
-        Key::Named(NamedKey::Home) => b"\x1b[H".to_vec(),
-        Key::Named(NamedKey::End) => b"\x1b[F".to_vec(),
-        Key::Named(NamedKey::PageUp) => b"\x1b[5~".to_vec(),
-        Key::Named(NamedKey::PageDown) => b"\x1b[6~".to_vec(),
-        Key::Named(NamedKey::Delete) => b"\x1b[3~".to_vec(),
-        Key::Named(NamedKey::Space) => vec![b' '],
-        Key::Character(c) => c.as_bytes().to_vec(),
-        _ => vec![],
-    }
 }
 
 struct HecaApp {
@@ -1610,140 +1459,6 @@ impl ApplicationHandler for HecaApp {
             }
         }
     }
-}
-
-/// Collect ALL panes across ALL workspaces as letter candidates.
-/// Hard-capped at 52 unique labels (a–z, A–Z). Beyond that, use sidebar
-/// navigation instead of letter selection.
-pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)> {
-    let mut candidates = Vec::new();
-    for ws in &session.workspaces {
-        for col in &ws.scrolling.columns {
-            for pane in &col.panes {
-                if candidates.len() >= CANDIDATE_ALPHABET.len() {
-                    return candidates;
-                }
-                let ch = CANDIDATE_ALPHABET[candidates.len()];
-                candidates.push((ch, pane.id.0));
-            }
-        }
-        for float in &ws.floating_panes {
-            if candidates.len() >= CANDIDATE_ALPHABET.len() {
-                return candidates;
-            }
-            let ch = CANDIDATE_ALPHABET[candidates.len()];
-            candidates.push((ch, float.pane.id.0));
-        }
-    }
-    candidates
-}
-
-/// Find the (workspace_index, column_index, pane_index) containing a pane.
-pub(crate) fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usize, usize, usize)> {
-    let target = heca_core::layout::PaneId(pane_id);
-    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
-        for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
-            if let Some(pane_idx) = col.panes.iter().position(|p| p.id == target) {
-                return Some((ws_idx, col_idx, pane_idx));
-            }
-        }
-    }
-    None
-}
-
-/// Move a column from its current workspace to a target workspace.
-/// If `focus` is true, switches to the target workspace after the move.
-/// If the source workspace becomes empty, destroys it or adds a placeholder pane.
-pub(crate) fn move_column_to_workspace(
-    state: &mut AppState,
-    col_idx: usize,
-    target_ws: usize,
-    focus: bool,
-) {
-    let current_ws = state.session.active_workspace_idx;
-    if current_ws == target_ws {
-        return;
-    }
-    if target_ws >= state.session.workspaces.len() {
-        return;
-    }
-
-    // 1. Remove the column from the source workspace.
-    let removed_column = {
-        let ws = match state.session.workspaces.get_mut(current_ws) {
-            Some(ws) => ws,
-            None => return,
-        };
-        if col_idx >= ws.scrolling.columns.len() {
-            return;
-        }
-        ws.scrolling.remove_column(col_idx)
-    };
-
-    let Some(column) = removed_column else { return };
-
-    // 2. If source workspace is empty after removal, handle it.
-    let source_empty = state
-        .session
-        .workspaces
-        .get(current_ws)
-        .map(|ws| ws.scrolling.columns.is_empty())
-        .unwrap_or(false);
-
-    let mut target_ws = target_ws;
-    let mut source_destroyed = false;
-
-    if source_empty && state.session.workspaces.len() > 1 {
-        // Destroy empty workspace. If current_ws < target_ws, removing
-        // a workspace below shifts target_ws down by 1.
-        if current_ws < target_ws {
-            target_ws -= 1;
-        }
-        destroy_empty_workspace(state, current_ws);
-        source_destroyed = true;
-    } else if source_empty {
-        // Last workspace — create a placeholder pane so it's never truly empty.
-        let next_id = state.session.next_id();
-        let placeholder_pane = heca_core::layout::Pane::new(
-            heca_core::layout::PaneId(next_id),
-            format!("pane{}", next_id),
-        );
-        let placeholder_col = heca_core::layout::Column::new(
-            heca_core::layout::ColumnId(state.session.next_id()),
-            placeholder_pane,
-            heca_core::layout::ColumnWidth::Proportion(0.5),
-        );
-        if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
-            ws.scrolling.add_column(None, placeholder_col, true);
-        }
-        state
-            .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
-    }
-
-    // 3. Insert the column into the target workspace.
-    state.session.switch_to_workspace(target_ws);
-    if let Some(ws) = state.session.active_workspace_mut() {
-        ws.scrolling.add_column(None, column, true);
-    }
-
-    // 4. Focus behavior.
-    if focus {
-        sync_focus(state);
-    } else {
-        // Switch back to source workspace. If source was destroyed, everything
-        // above it shifted down by 1, so current_ws now points to what was
-        // current_ws+1. If source was not destroyed, current_ws is still valid.
-        let source_ws = if source_destroyed {
-            current_ws.min(state.session.workspaces.len().saturating_sub(1))
-        } else {
-            current_ws
-        };
-        state.session.switch_to_workspace(source_ws);
-        sync_focus(state);
-    }
-
-    state.needs_redraw = true;
 }
 
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right

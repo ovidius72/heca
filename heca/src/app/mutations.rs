@@ -5,7 +5,8 @@
 
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
-use heca_core::layout::{Column, ColumnId, ColumnWidth};
+use heca_core::backend::FakeBackend;
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
 
 /// Move a pane from one workspace into a new/existing column position in another workspace.
 pub(crate) fn move_pane_to_workspace_column(
@@ -161,6 +162,88 @@ pub(crate) fn move_pane_to_column(
 
 /// Remove a workspace if it is empty and there are other workspaces.
 /// Adjusts tracking indices after removal.
+/// Move a column from its current workspace to a target workspace.
+/// If `focus` is true, switches to the target workspace after the move.
+/// If the source workspace becomes empty, destroys it or adds a placeholder pane.
+pub(crate) fn move_column_to_workspace(
+    state: &mut AppState,
+    col_idx: usize,
+    target_ws: usize,
+    focus: bool,
+) {
+    let current_ws = state.session.active_workspace_idx;
+    if current_ws == target_ws {
+        return;
+    }
+    if target_ws >= state.session.workspaces.len() {
+        return;
+    }
+
+    let removed_column = {
+        let ws = match state.session.workspaces.get_mut(current_ws) {
+            Some(ws) => ws,
+            None => return,
+        };
+        if col_idx >= ws.scrolling.columns.len() {
+            return;
+        }
+        ws.scrolling.remove_column(col_idx)
+    };
+
+    let Some(column) = removed_column else { return };
+
+    let source_empty = state
+        .session
+        .workspaces
+        .get(current_ws)
+        .map(|ws| ws.scrolling.columns.is_empty())
+        .unwrap_or(false);
+
+    let mut target_ws = target_ws;
+    let mut source_destroyed = false;
+
+    if source_empty && state.session.workspaces.len() > 1 {
+        if current_ws < target_ws {
+            target_ws -= 1;
+        }
+        destroy_empty_workspace(state, current_ws);
+        source_destroyed = true;
+    } else if source_empty {
+        let next_id = state.session.next_id();
+        let placeholder_pane = Pane::new(PaneId(next_id), format!("pane{}", next_id));
+        let placeholder_col = Column::new(
+            ColumnId(state.session.next_id()),
+            placeholder_pane,
+            ColumnWidth::Proportion(0.5),
+        );
+        if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
+            ws.scrolling.add_column(None, placeholder_col, true);
+        }
+        state
+            .backends
+            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+    }
+
+    state.session.switch_to_workspace(target_ws);
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.add_column(None, column, true);
+    }
+
+    if focus {
+        sync_focus(state);
+    } else {
+        let source_ws = if source_destroyed {
+            current_ws.min(state.session.workspaces.len().saturating_sub(1))
+        } else {
+            current_ws
+        };
+        state.session.switch_to_workspace(source_ws);
+        sync_focus(state);
+    }
+
+    state.needs_redraw = true;
+}
+
 pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
     let is_empty = state
         .session

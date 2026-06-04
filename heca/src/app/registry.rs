@@ -309,3 +309,56 @@ pub fn build_registry() -> ActionRegistry {
 
     registry
 }
+
+#[cfg(test)]
+mod tests {
+    use super::build_keymap;
+    use crate::input::WmAction;
+    use crate::keymap::KeyCombo;
+
+    #[test]
+    fn default_ctrl_k_binding_stays_swap_up() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+k")),
+            Some(&WmAction::SwapUp)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+j")),
+            Some(&WmAction::SwapDown)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+            Some(&WmAction::MoveColumnUp)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+j")),
+            Some(&WmAction::MoveColumnDown)
+        );
+    }
+
+    #[test]
+    fn default_workspace_aliases_include_ctrl_p_and_ctrl_n() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("u")),
+            Some(&WmAction::WorkspacePrev)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("d")),
+            Some(&WmAction::WorkspaceNext)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+p")),
+            Some(&WmAction::WorkspacePrev)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+n")),
+            Some(&WmAction::WorkspaceNext)
+        );
+    }
+}

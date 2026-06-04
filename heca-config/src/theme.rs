@@ -491,8 +491,14 @@ impl Default for KeysConfig {
         );
 
         // ── Workspace navigation ──
-        bindings.insert("workspace_prev".to_string(), Single("prefix+u".to_string()));
-        bindings.insert("workspace_next".to_string(), Single("prefix+d".to_string()));
+        bindings.insert(
+            "workspace_prev".to_string(),
+            Many(vec!["prefix+u".to_string(), "prefix+Ctrl+p".to_string()]),
+        );
+        bindings.insert(
+            "workspace_next".to_string(),
+            Many(vec!["prefix+d".to_string(), "prefix+Ctrl+n".to_string()]),
+        );
 
         // ── Focus toggle ──
         bindings.insert(
@@ -544,11 +550,11 @@ impl Default for KeysConfig {
         // ── Move column to workspace (vertical movement) ──
         bindings.insert(
             "move_column_up".to_string(),
-            Single("prefix+Ctrl+k".to_string()),
+            Single("prefix+Ctrl+Shift+k".to_string()),
         );
         bindings.insert(
             "move_column_down".to_string(),
-            Single("prefix+Ctrl+j".to_string()),
+            Single("prefix+Ctrl+Shift+j".to_string()),
         );
 
         // ── Swap position (Ctrl+nav) ──

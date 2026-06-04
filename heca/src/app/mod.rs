@@ -4,6 +4,8 @@
 //! the current behavior and ownership boundaries.
 
 pub mod focus;
+pub mod keyboard;
 pub mod mutations;
 pub mod registry;
 pub mod render;
+pub mod selection;
