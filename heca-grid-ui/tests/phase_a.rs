@@ -1043,6 +1043,47 @@ fn select_click_row_commits_and_closes() {
 }
 
 #[test]
+fn select_long_list_caps_visible_rows_and_scrolls() {
+    let theme = Theme::grid_tron();
+    let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
+    let mut sel = Select::new(opts);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+
+    let row_texts = |s: &Select| -> Vec<String> {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            s.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    }); // open
+
+    // Trigger label (1) + at most MAX_VISIBLE (6) rows are painted.
+    let texts = row_texts(&sel);
+    assert_eq!(texts.len(), 1 + 6, "long list caps the visible rows");
+    assert_eq!(texts[1], "OPT0", "starts at the top");
+
+    // Wheel-scroll moves the visible window down.
+    sel.event(&Event::Scroll { delta: 5.0 });
+    assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
+
+    // Scrolling past the end clamps to the last full window.
+    sel.event(&Event::Scroll { delta: 999.0 });
+    assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
+}
+
+#[test]
 fn select_keyboard_navigates_and_escape_closes() {
     let mut sel = Select::new(["A", "B", "C"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));

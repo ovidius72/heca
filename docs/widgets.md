@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs)
+  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
@@ -240,7 +240,8 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 - **`Modifiers`** `{ ctrl, alt, shift, meta }` — `meta` is Cmd/Super/Win. The host
   broadcasts changes via `Event::ModifiersChanged`.
 - **`Event`**: `PointerMoved{pos}`, `PointerPressed{pos}`, `PointerReleased{pos}`,
-  `Key{key, pressed}`, `ModifiersChanged(Modifiers)`.
+  `Key{key, pressed}`, `ModifiersChanged(Modifiers)`, `Scroll{delta}` (wheel — routed to an
+  open overlay).
 - **`Handled`** `{Yes, No}` — returned by `event`; `Yes` stops propagation.
 - **`FocusManager`**: `new()`, `focused() -> Option<usize>`, `advance(root, forward)`
   (Tab/Shift+Tab, wraps, honors `tab_index`), `deliver_key(root, key)` (→ focused widget),
@@ -264,6 +265,7 @@ pub struct Action { pub name: String, pub data: SignalData }
 | `Checkbox` | `"checkbox-change"` | `Bool` |
 | `Input` | `"input-change"` | `String` (full new text) |
 | `Tabs` | `"tab-change"` | `Usize` (selected index) |
+| `Select` | `"select-change"` | `Usize` (selected index) |
 
 ### `Scene` / `DrawCommand` / `PaintCx` (for building widgets)
 
@@ -444,6 +446,30 @@ from monospace metrics (no child components). Focusable; ←/→ move selection,
 Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
     .on_change(|a| if let SignalData::Usize(i) = a.data { show_tab(i); });
 ```
+
+### Select
+
+Single-select dropdown — the first **overlay** widget. The trigger shows the current value;
+the open option list paints in the scene's overlay layer (on top of everything) and the
+widget reports `overlay_active()` so the host routes input to it first (see
+[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Long lists cap at a
+fixed number of visible rows and gain a **scrollbar** (wheel / keyboard scrolls). Focusable;
+self-contained (no child components).
+
+- **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`.
+- **Builders**: `.selected(index)` (initial, clamped), `.on_change(impl Fn(Action))`.
+- **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
+- **Emits**: `"select-change"` / `SignalData::Usize`.
+- **Keys**: ↑/↓ move highlight (scroll into view), Enter/Space open & commit, Esc closes;
+  click a row to choose, click outside to close. Wheel scrolls the open list.
+
+```rust
+Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
+    .on_change(|a| if let SignalData::Usize(i) = a.data { set_level(i); });
+```
+
+> **Host wiring**: route pointer + `Esc` + wheel to `FocusManager::deliver_to_overlay` when
+> `overlay_active()` (see [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)).
 
 ### Badge
 

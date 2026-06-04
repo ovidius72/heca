@@ -112,6 +112,9 @@ pub enum Event {
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
+    /// Wheel/scroll by `delta` lines (positive = scroll down the content). The
+    /// host routes this to the open overlay, or to the widget under the cursor.
+    Scroll { delta: f32 },
 }
 
 /// Behavior shared by all components. Implementors provide access to their

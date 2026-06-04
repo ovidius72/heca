@@ -17,7 +17,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
@@ -69,10 +69,23 @@ fn build_ui(theme: &Theme) -> Flex {
     };
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
 
+    // 20-entry list so the dropdown caps its height and shows a scrollbar.
+    let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
+
     Flex::column()
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
+        // Top-of-page dropdowns: open downward and must overlap the rows below.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("MODE").color(theme.muted).font_size(13.0))
+                .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
+                .child(Label::new("WORKSPACE").color(theme.muted).font_size(13.0))
+                .child(Select::new(workspaces).selected(3).on_change(report)),
+        )
         .child(
             Flex::row()
                 .gap(28.0)
@@ -435,6 +448,19 @@ impl ApplicationHandler for App {
                     state.ui.event(&press);
                 }
                 state.window.request_redraw();
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Lines to scroll the open dropdown (positive = down the list).
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => -y,
+                    MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
+                };
+                if state.focus.overlay_active(&mut state.ui) {
+                    state
+                        .focus
+                        .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
+                    state.window.request_redraw();
+                }
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();

@@ -42,6 +42,10 @@ const HILITE_ALPHA: u8 = 48;
 /// Panel glow.
 const GLOW_RADIUS: f32 = 16.0;
 const GLOW_INTENSITY: f32 = 0.1;
+/// Max option rows shown at once; longer lists scroll with a scrollbar.
+const MAX_VISIBLE: usize = 6;
+/// Scrollbar track width (logical px).
+const SCROLLBAR_W: f64 = 4.0;
 
 /// A single-select dropdown.
 pub struct Select {
@@ -53,6 +57,8 @@ pub struct Select {
     open: bool,
     /// Highlighted row while open (keyboard/hover cursor).
     highlight: usize,
+    /// Index of the first visible row when the list scrolls.
+    scroll: usize,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -70,6 +76,7 @@ impl Select {
             selected: signal(0),
             open: false,
             highlight: 0,
+            scroll: 0,
             on_change: None,
         }
     }
@@ -110,25 +117,58 @@ impl Select {
         self.base.bounds.loc.y + self.base.bounds.size.h + PANEL_GAP
     }
 
+    /// Number of rows shown at once (capped by [`MAX_VISIBLE`]).
+    fn visible_count(&self) -> usize {
+        self.options.len().min(MAX_VISIBLE)
+    }
+
+    /// Whether the list is longer than the visible window (needs a scrollbar).
+    fn scrollable(&self) -> bool {
+        self.options.len() > MAX_VISIBLE
+    }
+
+    /// Largest valid `scroll` offset.
+    fn max_scroll(&self) -> usize {
+        self.options.len().saturating_sub(MAX_VISIBLE)
+    }
+
     /// The bounding rect of the open option list (panel).
     fn panel_rect(&self) -> Rectangle {
         let b = self.base.bounds;
-        let h = 2.0 * PANEL_PAD + self.options.len() as f64 * ROW_H;
+        let h = 2.0 * PANEL_PAD + self.visible_count() as f64 * ROW_H;
         Rectangle::new(Point::new(b.loc.x, self.panel_top()), Size::new(b.size.w, h))
     }
 
-    /// The rect of option row `i` within the open panel.
-    fn row_rect(&self, i: usize) -> Rectangle {
+    /// The rect of the `slot`-th *visible* row (0-based from the top of the list).
+    fn slot_rect(&self, slot: usize) -> Rectangle {
         let b = self.base.bounds;
         Rectangle::new(
-            Point::new(b.loc.x, self.panel_top() + PANEL_PAD + i as f64 * ROW_H),
+            Point::new(b.loc.x, self.panel_top() + PANEL_PAD + slot as f64 * ROW_H),
             Size::new(b.size.w, ROW_H),
         )
     }
 
     /// Index of the option row under `pos`, if any (only meaningful while open).
     fn row_at(&self, pos: Point) -> Option<usize> {
-        (0..self.options.len()).find(|&i| self.row_rect(i).contains(pos))
+        (0..self.visible_count())
+            .find(|&slot| self.slot_rect(slot).contains(pos))
+            .map(|slot| self.scroll + slot)
+    }
+
+    /// Scroll so the highlighted row is within the visible window.
+    fn scroll_into_view(&mut self) {
+        if self.highlight < self.scroll {
+            self.scroll = self.highlight;
+        } else if self.highlight >= self.scroll + MAX_VISIBLE {
+            self.scroll = self.highlight + 1 - MAX_VISIBLE;
+        }
+    }
+
+    /// Open the list, highlighting (and scrolling to) the current selection.
+    fn open_list(&mut self) {
+        self.open = true;
+        self.highlight = self.selected.get_untracked();
+        self.scroll = self.highlight.min(self.max_scroll());
     }
 
     fn commit(&mut self, i: usize) {
@@ -230,17 +270,41 @@ impl Component for Select {
                 });
                 cx.rect(panel, surface, Some(Border { color: accent, width: 1.5 }), RADIUS, glow);
                 let selected = self.selected.get_untracked();
-                for (i, opt) in self.options.iter().enumerate() {
-                    let row = self.row_rect(i);
+                let scrollbar = self.scrollable();
+                // Render only the visible window of rows (no clipping needed).
+                for slot in 0..self.visible_count() {
+                    let i = self.scroll + slot;
+                    let row = self.slot_rect(slot);
                     if i == self.highlight {
                         cx.rect(row, accent.with_alpha(HILITE_ALPHA), None, 2.0, None);
                     }
+                    // Leave room for the scrollbar on the right when present.
+                    let right_pad = if scrollbar { PAD_H + SCROLLBAR_W } else { PAD_H };
                     let row_text = Rectangle::new(
                         Point::new(row.loc.x + PAD_H, row.loc.y),
-                        Size::new((row.size.w - 2.0 * PAD_H).max(0.0), row.size.h),
+                        Size::new((row.size.w - PAD_H - right_pad).max(0.0), row.size.h),
                     );
                     let color = if i == selected { accent } else { foreground };
-                    cx.text(row_text, opt, color, fs, TextAlign::Start, i == selected);
+                    cx.text(row_text, &self.options[i], color, fs, TextAlign::Start, i == selected);
+                }
+                // Scrollbar: a thumb sized/positioned by the visible window.
+                if scrollbar {
+                    let n = self.options.len() as f64;
+                    let track_h = panel.size.h - 2.0 * PANEL_PAD;
+                    let thumb_h = (track_h * MAX_VISIBLE as f64 / n).max(12.0);
+                    let frac = self.scroll as f64 / self.max_scroll() as f64;
+                    let track_x = panel.loc.x + panel.size.w - SCROLLBAR_W - 2.0;
+                    let thumb_y = panel.loc.y + PANEL_PAD + (track_h - thumb_h) * frac;
+                    cx.rect(
+                        Rectangle::new(
+                            Point::new(track_x, thumb_y),
+                            Size::new(SCROLLBAR_W, thumb_h),
+                        ),
+                        accent,
+                        None,
+                        (SCROLLBAR_W / 2.0) as f32,
+                        None,
+                    );
                 }
             });
         }
@@ -266,12 +330,16 @@ impl Component for Select {
                     self.open = false;
                     Handled::Yes
                 } else if self.base.bounds.contains(*pos) {
-                    self.open = true;
-                    self.highlight = self.selected.get_untracked();
+                    self.open_list();
                     Handled::Yes
                 } else {
                     Handled::No
                 }
+            }
+            Event::Scroll { delta } if self.open => {
+                let max = self.max_scroll() as f32;
+                self.scroll = (self.scroll as f32 + delta).clamp(0.0, max).round() as usize;
+                Handled::Yes
             }
             Event::Key { key, pressed: true } => match key {
                 GridKey::Escape if self.open => {
@@ -283,22 +351,22 @@ impl Component for Select {
                         self.commit(self.highlight);
                         self.open = false;
                     } else {
-                        self.open = true;
-                        self.highlight = self.selected.get_untracked();
+                        self.open_list();
                     }
                     Handled::Yes
                 }
                 GridKey::ArrowDown => {
                     if self.open {
                         self.highlight = (self.highlight + 1).min(self.options.len() - 1);
+                        self.scroll_into_view();
                     } else {
-                        self.open = true;
-                        self.highlight = self.selected.get_untracked();
+                        self.open_list();
                     }
                     Handled::Yes
                 }
                 GridKey::ArrowUp if self.open => {
                     self.highlight = self.highlight.saturating_sub(1);
+                    self.scroll_into_view();
                     Handled::Yes
                 }
                 _ => Handled::No,
