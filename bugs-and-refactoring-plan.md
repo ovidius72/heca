@@ -279,16 +279,52 @@ Current problems:
 - `heca/src/mouse/render.rs`
 - `heca/src/mouse/sidebar.rs`
 
-**Tasks**
-- Move `hit_test_pane()` and sidebar hit helpers into `hit_test.rs`
-- Move `on_cursor_moved()` and drag-state transitions into `drag.rs`
-- Move:
+**Status update — 2026-06-04**
+
+Already extracted:
+- `heca/src/mouse/hit_test.rs`
+  - `hit_test_pane()`
+  - `sidebar_pane_hit_test()`
+- `heca/src/mouse/render.rs`
+  - `render_detached_pane()`
+  - `render_insert_hint()`
+- `heca/src/mouse/drag.rs`
+  - `on_cursor_moved()` internals
+  - `update_sidebar_drag_hover()`
+  - `start_interactive_move()`
+  - `transition_to_moving()`
+  - `cancel_interactive_move()`
+- `heca/src/mouse/drop.rs`
   - `drop_pane()`
   - `sidebar_drag_drop()`
   - `sidebar_handle_drop()`
-  into `drop.rs`
-- Move detached-pane / insert-hint drawing into `render.rs`
-- Keep public entrypoints minimal:
+
+Current state:
+- `heca/src/mouse.rs` is down to **551 LOC**
+- extracted submodules currently measure:
+  - `mouse/hit_test.rs` — **102 LOC**
+  - `mouse/render.rs` — **177 LOC**
+  - `mouse/drag.rs` — **310 LOC**
+  - `mouse/drop.rs` — **586 LOC**
+- public mouse entrypoints still live in `heca/src/mouse.rs`, and the heavy drag/drop logic now delegates into submodules
+- validation passes with:
+  - `cargo fmt`
+  - `cargo check -q`
+  - `cargo clippy --workspace --all-targets --all-features --quiet`
+
+Why this is the current stopping point:
+- the biggest readability win has already landed: `mouse.rs` is no longer the sole home for hit testing, drag transitions, drag visuals, and pane drop placement
+- however, `mouse/drop.rs` is still too large, which means the complexity has been isolated but not yet fully decomposed
+- the remaining complexity is concentrated in:
+  - detached-pane reinsertion
+  - swap-vs-insert behavior
+  - sidebar target routing
+  - cross-workspace placement fallbacks
+
+**Remaining tasks in this phase**
+- split `mouse/drop.rs` further or factor shared placement helpers so no single mouse submodule stays oversized
+- decide whether sidebar-target-specific logic belongs in a `mouse/sidebar.rs` helper or should stay in `drop.rs` with smaller internal helpers
+- keep public entrypoints minimal:
   - `on_cursor_moved`
   - `on_mouse_input`
   - `process_edge_scroll`
@@ -297,6 +333,7 @@ Current problems:
 **Acceptance criteria**
 - no single mouse submodule contains more than ~400 LOC
 - drag/drop code becomes locally navigable
+- `mouse.rs` mainly reads as top-level event glue instead of a full state-machine implementation
 
 ---
 
@@ -786,19 +823,19 @@ The roadmap is succeeding when:
 
 ## 7. Recommended Immediate Next Step
 
-**Start Phase 1.2: split `heca/src/mouse.rs`.**
+**Continue Phase 1.2: finish decomposing mouse drop logic.**
 
 Immediate next slices:
-1. extract hit testing into `heca/src/mouse/hit_test.rs`
-2. extract drag-state transitions into `heca/src/mouse/drag.rs`
-3. extract drop logic into `heca/src/mouse/drop.rs`
-4. keep public entrypoints in `mouse/mod.rs` thin
+1. reduce `heca/src/mouse/drop.rs` below the target complexity/size threshold
+2. extract shared reinsertion / swap fallback helpers or sidebar-target-specific helpers
+3. leave behavior unchanged while improving local readability
+4. re-run validation, then decide whether a tiny `mouse/sidebar.rs` helper split is still worthwhile
 
 Reason:
-- Phase 1.1 has reached its main acceptance target (`main.rs` is now well below 400 LOC)
-- `mouse.rs` is the next largest interaction hotspot
-- splitting mouse logic should reduce risk before deeper semantic cleanup
-- it continues the structure-first refactor order already agreed in this plan
+- Phase 1.1 is complete enough; `main.rs` is already thin
+- Phase 1.2 is **substantially progressed but not complete**
+- `mouse.rs` itself is much better, but the hardest logic is now concentrated in `mouse/drop.rs`
+- finishing that decomposition should make the later `sidebar.rs` and shared pane-operation cleanup safer
 
 ---
 

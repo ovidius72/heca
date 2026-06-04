@@ -2,310 +2,363 @@
 
 ## Purpose
 
-This file is for resuming the current refactor after clearing the session.
+This file is the current resume note for the active refactor.
 
 Primary active goal:
-- begin **Phase 1.2** and split `heca/src/mouse.rs` after the Phase 1.1 `main.rs` split milestone
+- continue **Phase 1.2** and finish decomposing the mouse drag/drop system
 
-Secondary context that must not be lost:
-- pull / merge `origin/main` **before starting each new task**
-- preserve the recently restored keybindings:
-  - `prefix+Ctrl+k/j` → `swap_up` / `swap_down`
-  - `prefix+Ctrl+p/n` → workspace prev / next aliases
-  - `prefix+Ctrl+Shift+k/j` → move column up / down
-- floating-vs-tiled focus-domain routing is **deferred intentionally** to the last phase in `bugs-and-refactoring-plan.md`
+Non-negotiable workflow rule from the user:
+- **pull / merge `origin/main` before starting each new task**
+
+Important deferred item:
+- floating-vs-tiled focus-domain routing is **intentionally deferred** to the **last phase** of `bugs-and-refactoring-plan.md`
 
 ---
 
-## Last committed state
+## Current branch state
 
-Latest relevant commits before the current commit:
-- `a13439a` — `Restore workspace key aliases and continue app refactor`
+Latest already-committed milestones relevant to this refactor:
 - `577033a` — `Add column rename support and continue app refactor`
+- `a13439a` — `Restore workspace key aliases and continue app refactor`
+- `ad1acaa` — `Finish main runtime split into app modules`
+- `85aaed6` — `Fix keybinding conflicts and prefix handling`
 
-The current work should be committed as the Phase 1.1 runtime split milestone.
+Current uncommitted work is the ongoing **Phase 1.2 mouse split**.
 
----
-
-## Current uncommitted working tree
-
-This handoff was originally written before the Phase 1.1 milestone commit.
-After committing the current runtime split, this section should effectively become:
-
-- no intended uncommitted Phase 1.1 runtime-split changes remain
-
-If you are resuming after the commit, verify with:
-
-```bash
-git status --short
-```
+At the moment, the working tree should show:
+- modified: `bugs-and-refactoring-plan.md`
+- modified: `session-resume-handoff.md`
+- modified: `heca/src/mouse.rs`
+- new: `heca/src/mouse/hit_test.rs`
+- new: `heca/src/mouse/render.rs`
+- new: `heca/src/mouse/drag.rs`
+- new: `heca/src/mouse/drop.rs`
 
 ---
 
-## What was extracted already
+## What is already done
 
-### Earlier committed extractions
-Already living under `heca/src/app/`:
+### 1. Phase 1.1 is effectively complete
+
+`heca/src/main.rs` was reduced to a thin module root / binary shell.
+
+Work already extracted into `heca/src/app/`:
+- `registry.rs`
 - `focus.rs`
 - `mutations.rs`
-- `registry.rs`
-- `render.rs` (initial helpers)
+- `render.rs`
 - `selection.rs`
+- `keyboard.rs`
+- `startup.rs`
+- `input.rs`
+- `events.rs`
+- `lifecycle.rs`
 
-### Runtime extractions completed in the Phase 1.1 milestone
-New or expanded in that slice:
+Why this matters:
+- runtime ownership is much clearer
+- `main.rs` is no longer the place where every system detail accumulates
+- future behavior changes can happen in narrower modules with less review risk
 
-#### `heca/src/app/startup.rs`
-Owns first-launch app initialization:
-- window creation
-- wgpu surface / adapter / device setup
-- renderer initialization
-- initial `Session` creation
-- initial fake pane/backend creation
-- initial sidebar tree build
-- initial `AppState` construction
+### 2. Keybinding and prefix regressions from review were fixed
 
-`main.rs` now delegates `init_state()` to this helper.
+Already done:
+- `prefix+p` is command palette again
+- pane cycling moved to `prefix+[` / `prefix+]`
+- `prefix+Ctrl+k/j` swap bindings restored
+- `prefix+Ctrl+p/n` workspace aliases restored
+- configurable double-prefix forwarding fixed
+- built-in and user custom modes now merge by mode name
+- startup/reload conflict logging made deterministic and visible
+- quick-select / swap / take overflow now falls back instead of partially labeling panes
 
-#### `heca/src/app/input.rs`
-Owns the large keyboard input-mode dispatch that used to live inside `main.rs` `window_event()`:
-- rename input handling
-- confirm-delete handling
-- prefix mode
-- chord mode
-- custom mode handling
-- pane select
-- pane swap
-- pane take
-- sidebar navigation mode
+Why this matters:
+- keyboard behavior is now deterministic again
+- config reload behavior is safer and easier to debug
+- future input/config work has a cleaner base
 
-Main entrypoint there:
-- `handle_keyboard_input(...)`
+### 3. Rename and zoom work is already in place
 
-#### `heca/src/app/keyboard.rs`
-Now also owns:
-- `build_event_combo(...)`
-- `is_prefix_match(...)`
+Already done:
+- `prefix+z` toggles active-column zoom
+- zoom is per-column and independent
+- pane rename is `prefix+$`
+- workspace rename is `prefix+Shift+w`
+- column rename is `prefix+Shift+c`
+- column names render in the sidebar
+- RPC support exists for zoom and column rename
 
-It already owned:
-- `normalize_key_text(...)`
-- `event_combo_matches(...)`
-- `typed_candidate_char(...)`
-- `winit_key_to_terminal_input(...)`
+Why this matters:
+- the product-level behavior the user asked for is already landed
+- current refactor work should preserve these paths, not redesign them
 
-#### `heca/src/app/render.rs`
-Now also owns:
-- `status_mode_parts(...)`
+### 4. Phase 1.2 is substantially progressed
 
-It already owned:
-- `render_backend_data(...)`
-- `update_session_viewport(...)`
+Extracted from `heca/src/mouse.rs` so far:
+
+#### `heca/src/mouse/hit_test.rs`
+Owns:
+- `hit_test_pane()`
+- `sidebar_pane_hit_test()`
+
+#### `heca/src/mouse/render.rs`
+Owns:
+- `render_detached_pane()`
+- `render_insert_hint()`
+
+#### `heca/src/mouse/drag.rs`
+Owns:
+- `on_cursor_moved()` internals
+- `update_sidebar_drag_hover()`
+- `start_interactive_move()`
+- `transition_to_moving()`
+- `cancel_interactive_move()`
+
+#### `heca/src/mouse/drop.rs`
+Owns:
+- `drop_pane()`
+- `sidebar_drag_drop()`
+- `sidebar_handle_drop()`
+
+Current file sizes:
+- `heca/src/mouse.rs` — **551 LOC**
+- `heca/src/mouse/hit_test.rs` — **102 LOC**
+- `heca/src/mouse/render.rs` — **177 LOC**
+- `heca/src/mouse/drag.rs` — **310 LOC**
+- `heca/src/mouse/drop.rs` — **586 LOC**
+
+Why this matters:
+- the top-level mouse module is much easier to navigate
+- the major responsibilities now have clearer homes
+- the remaining complexity is concentrated in one place instead of smeared across the whole file
 
 ---
 
-## Current main.rs state
+## What is not done yet
 
-`heca/src/main.rs` is now down to about **168 LOC**.
+### 1. Phase 1.2 is not fully complete
 
-Phase 1.1’s main acceptance target is effectively met.
+Still true:
+- `mouse/drop.rs` is too large for the intended end-state
+- pane placement / reinsertion logic is isolated, but not yet internally decomposed enough
 
-What still remains in `main.rs`:
-- `pane_name()` helper
-- `HecaApp` shell / binary entrypoint glue
-- very thin delegation to app modules
+Why it is not fully done yet:
+- `mouse.rs` itself is much cleaner now, but the most delicate logic was moved largely intact
+- `mouse/drop.rs` still mixes:
+  - detached-pane reinsertion
+  - insert-vs-swap behavior
+  - sidebar drop targeting
+  - column/workspace placement rules
+  - redraw/focus cleanup
+- that means complexity has been localized, but not fully simplified
 
-What has already been removed from `main.rs`:
-- registry/keymap construction helpers
-- focus bookkeeping helpers
-- mutation helpers
-- candidate lookup helpers
-- startup bootstrap details
-- keyboard-mode logic
-- frame rendering
-- `window_event()` internals
-- `about_to_wait()` internals
+### 2. Parameterized normal keybindings are still future work
+
+Still not implemented:
+- `[[keys.bind]]` for parameterized normal bindings
+- generalized structured spawn action / size parsing
+
+Why not now:
+- the agreed order is structure-first
+- finishing `mouse.rs` / `sidebar.rs` cleanup lowers risk before deeper config/runtime changes
+
+### 3. Floating focus-domain routing is still deferred
+
+Still not fixed:
+- handlers that should act on the focused floating pane often still mutate tiled `ws.scrolling...` state instead
+
+Why deferred:
+- the user explicitly asked for this to be the **last phase** in the plan
+- it is a semantic correctness project, not a structural refactor task
+
+---
+
+## What we are done with, and why
+
+We are effectively **done with Phase 1.1**.
+
+Reason:
+- `heca/src/main.rs` already hit the intended outcome: thin entrypoint, delegated runtime systems, better navigability
+- more Phase 1.1 work would mostly be optional micro-cleanup, not a meaningful risk reducer
+
+We are **done with the first-pass extraction of `mouse.rs`**.
+
+Reason:
+- hit testing, rendering, drag transitions, and drop logic now have distinct files
+- the big structural separation work has landed
+
+We are **not done with Phase 1.2 refinement**.
+
+Reason:
+- `mouse/drop.rs` is still oversized
+- the densest placement logic still needs one more decomposition pass
+- finishing that pass is higher value than reopening already-thin `main.rs`
+
+So the current strategy is:
+1. stop reopening completed `main.rs` work
+2. finish decomposing `mouse/drop.rs`
+3. then move to `sidebar.rs`
+4. only after the structure work is calmer, continue parameterized keybinding / spawn work
 
 ---
 
 ## Validation status
 
-This uncommitted slice passed:
+The current uncommitted mouse-split slice passed:
 - `cargo fmt`
 - `cargo check -q`
 - `cargo clippy --workspace --all-targets --all-features --quiet`
 
-Run them again after resuming if anything changes.
-
-Recommended command:
+Recommended command before any new edits:
 
 ```bash
 cargo fmt && cargo check -q && cargo clippy --workspace --all-targets --all-features --quiet
 ```
+
+After one or two more slices, also run a smoke test:
+
+```bash
+cargo run -p heca --quiet
+```
+
+Expected behavior for that smoke test:
+- app starts and stays in event loop
+- no startup error before timeout
+- prefix mode still works
+- rename bindings still work
+- zoom still works
+- sidebar interactions still work
+
+---
+
+## Exact next step
+
+### Best next slice
+
+Decompose:
+- `heca/src/mouse/drop.rs`
+
+Likely options:
+- extract shared reinsertion helpers
+- extract sidebar-target-specific helper paths
+- reduce duplication between content-drop and sidebar-drop swap fallback logic
+
+Goal of that slice:
+- keep behavior unchanged
+- make drop logic locally readable
+- bring the remaining oversized mouse submodule closer to the target end-state
+
+### Recommended extraction order
+
+1. sync with `origin/main`
+2. validate current tree
+3. identify the most repeated reinsertion / fallback patterns in `mouse/drop.rs`
+4. extract one helper at a time
+5. validate after each small step
+6. only then decide whether `mouse/sidebar.rs` is worth adding
+
+### Why this is the best next move
+
+Because the main structural split already succeeded, and the last big readability hotspot inside the mouse system is now concentrated in `mouse/drop.rs`.
 
 ---
 
 ## Exact resume procedure
 
 ### 1. Sync first
-User explicitly asked for this workflow rule:
+
+Always do this before starting a new task:
 
 ```bash
-git fetch origin main && git merge --no-edit origin/main
+git fetch origin && git merge --ff-only origin/main
 ```
 
-Do this **before starting the next task**.
-
 ### 2. Confirm working tree
-Check:
 
 ```bash
 git status --short
 ```
 
-You should still see the uncommitted files listed above.
+You should see the current uncommitted Phase 1.2 mouse files.
 
 ### 3. Re-read these files first
-To reload context quickly:
+
 - `bugs-and-refactoring-plan.md`
 - `session-resume-handoff.md`
-- `heca/src/main.rs`
-- `heca/src/app/input.rs`
-- `heca/src/app/startup.rs`
-- `heca/src/app/render.rs`
-- `heca/src/app/keyboard.rs`
-- `heca/src/app/mod.rs`
+- `heca/src/mouse.rs`
+- `heca/src/mouse/hit_test.rs`
+- `heca/src/mouse/render.rs`
+- `heca/src/mouse/drag.rs`
+- `heca/src/mouse/drop.rs`
 
-### 4. Re-run validation before new edits
-Even if the tree looks unchanged:
+### 4. Re-run validation before changing behavior
 
 ```bash
 cargo check -q
 cargo clippy --workspace --all-targets --all-features --quiet
 ```
 
-### 5. Continue Phase 1.1 only
-Do **not** jump ahead to floating focus-domain fixes or parameterized spawn work yet.
+### 5. Continue only the current structure slice
+
+Do **not** jump to:
+- floating focus-domain routing fixes
+- parameterized keybinding implementation
+- spawn-pane backend redesign
+
+until the current mouse split is in a cleaner state.
 
 ---
 
-## Recommended next steps
-
-### Best next slice
-Start Phase 1.2 and split `heca/src/mouse.rs`.
-
-Suggested shape:
-- `heca/src/mouse/mod.rs`
-- `heca/src/mouse/hit_test.rs`
-- `heca/src/mouse/drag.rs`
-- `heca/src/mouse/drop.rs`
-- `heca/src/mouse/render.rs`
-- `heca/src/mouse/sidebar.rs`
-
-Goal:
-- keep public mouse entrypoints thin
-- separate hit-testing, drag transitions, drop semantics, and rendering helpers
-
-### After that
-Move on to:
-- `sidebar.rs` split
-- shared pane-operation deduplication
-
----
-
-## Important behavior constraints while resuming
+## Behavior constraints that must not regress
 
 ### Keybindings
-Do not regress these again:
+Keep these exactly:
 - `prefix+Ctrl+k` → `swap_up`
 - `prefix+Ctrl+j` → `swap_down`
 - `prefix+Ctrl+p` → workspace previous
 - `prefix+Ctrl+n` → workspace next
 - `prefix+Ctrl+Shift+k` → move column up
 - `prefix+Ctrl+Shift+j` → move column down
+- `prefix+p` → command palette
+- `prefix+[` / `prefix+]` → prev / next pane
 
 Relevant files:
 - `heca-config/src/theme.rs`
 - `keybindings.toml`
-- `heca/src/app/registry.rs` tests
+- `heca/src/app/registry.rs`
 
 ### Rename bindings
-Recently updated and should stay:
+Keep these exactly:
 - `prefix+$` → rename pane/tab
 - `prefix+Shift+w` → rename workspace
 - `prefix+Shift+c` → rename column
 
 ### Zoom behavior
-Already implemented and should not be disturbed:
-- `prefix+z` toggles active-column zoom
-- multiple columns can remain zoomed independently
+Keep these exactly:
+- `prefix+z` toggles zoom for the active column
+- zoom is a toggle
+- multiple columns may remain zoomed independently
 
-### Floating focus-domain bug
-Still intentionally deferred.
-Do **not** “quick-fix” it during the `main.rs` refactor.
-That work is scheduled for the final phase.
+### Float/unfloat behavior
+Keep these exactly:
+- `prefix+f` remains float/unfloat toggle
+- manually floated tiled panes should restore to their original tiled location when possible
+- panes spawned floating without an original tiled slot should unfloat into a new column
 
----
-
-## If you want to finish the current slice cleanly
-
-Suggested order:
-
-1. sync with `origin/main`
-2. validate current working tree
-3. extract `render()` helpers into `app/render.rs`
-4. validate
-5. extract `window_event()` into `app/events.rs`
-6. validate
-7. extract `about_to_wait()` into `app/lifecycle.rs`
-8. validate
-9. update `bugs-and-refactoring-plan.md` with new status
-10. commit the whole Phase 1.1 slice
-
-Suggested commit message when that slice is ready:
-
-```bash
-git commit -m "Continue splitting main runtime into app modules"
-```
+### Deferred bug policy
+Do not silently “fix” the floating focus-domain routing bug inside the structural mouse split. Documented deferment is intentional.
 
 ---
 
-## Sanity checks after more refactor work
+## Short summary
 
-Run at least:
+We are **done with the `main.rs` runtime split**.
 
-```bash
-cargo fmt
-cargo check -q
-cargo clippy --workspace --all-targets --all-features --quiet
-```
+We are **done with the first-pass `mouse.rs` split**:
+- hit testing extracted
+- drag transitions extracted
+- detached-pane rendering extracted
+- drop logic extracted
 
-And ideally do a manual smoke test after one or two more extractions:
+We are **not done with Phase 1.2 refinement** because `mouse/drop.rs` is still too large.
 
-```bash
-cargo run -p heca
-```
-
-Check:
-- app launches
-- prefix mode works
-- `prefix+Ctrl+k/j` swap still works
-- `prefix+Ctrl+p/n` workspace switching still works
-- `prefix+$`, `prefix+Shift+w`, `prefix+Shift+c` rename flows still work
-- `prefix+z` zoom still works
-- sidebar navigation still works
-
----
-
-## Summary
-
-Resume from the **committed Phase 1.1 `main.rs` split milestone**.
-
-That work moved substantial runtime behavior into:
-- `app/startup.rs`
-- `app/input.rs`
-- `app/events.rs`
-- `app/lifecycle.rs`
-- `app/keyboard.rs`
-- `app/render.rs`
-
-The next best move is to start **Phase 1.2** and split `mouse.rs` while keeping behavior unchanged.
+The next best move is to decompose that drop module further, validate, and then continue to the planned `sidebar.rs` split.
