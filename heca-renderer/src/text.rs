@@ -1,4 +1,5 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache};
+use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, Weight};
+use heca_grid_ui::scene::TextAlign;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -18,10 +19,18 @@ struct Uniforms {
 
 struct TextCommand {
     text: String,
+    /// Position: top-left `(x, y)` when `centered` is false, otherwise the box
+    /// `(x, y, w, h)` the text is centered within.
     x: f32,
     y: f32,
+    w: f32,
+    h: f32,
     font_size: f32,
     color: [f32; 4],
+    bold: bool,
+    align: TextAlign,
+    /// Center within `(w, h)` (grid scene), or place at `(x, y)` (app labels).
+    centered: bool,
 }
 
 /// A GPU-ready text label: texture + quad.
@@ -176,8 +185,19 @@ impl TextRenderer {
             mapped_at_creation: false,
         });
 
+        // Embed the default mono font (Geist Mono) so the Grid look renders
+        // without a system install. This is a default, not a lock-in:
+        // `set_font_family` still overrides it from the theme.
+        let mut font_system = FontSystem::new();
+        font_system
+            .db_mut()
+            .load_font_data(heca_grid_ui::font::DEFAULT_MONO_BYTES.to_vec());
+        font_system
+            .db_mut()
+            .load_font_data(heca_grid_ui::font::DEFAULT_MONO_BOLD_BYTES.to_vec());
+
         Self {
-            font_system: FontSystem::new(),
+            font_system,
             swash_cache: SwashCache::new(),
             pipeline,
             vertex_buffer,
@@ -188,7 +208,7 @@ impl TextRenderer {
             scale_factor: 1.0,
             commands: Vec::new(),
             _atlas_size: (0, 0),
-            font_family: "monospace".to_string(),
+            font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
         }
     }
 
@@ -208,13 +228,50 @@ impl TextRenderer {
         self.font_family = family.to_string();
     }
 
+    /// Queue text with its top-left at `(x, y)` (logical px) — the simple
+    /// point-positioned form used throughout the app (sidebar, chrome, …).
     pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
         self.commands.push(TextCommand {
             text: text.to_string(),
             x,
             y,
+            w: 0.0,
+            h: 0.0,
             font_size,
             color,
+            bold: false,
+            align: TextAlign::Start,
+            centered: false,
+        });
+    }
+
+    /// Queue text centered within the box `(x, y, w, h)` (logical px):
+    /// horizontally per `align`, always centered vertically. Used by the grid
+    /// scene renderer ([`crate::scene`]).
+    #[allow(clippy::too_many_arguments)]
+    pub fn queue_text_in_box(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        font_size: f32,
+        color: [f32; 4],
+        bold: bool,
+        align: TextAlign,
+    ) {
+        self.commands.push(TextCommand {
+            text: text.to_string(),
+            x,
+            y,
+            w,
+            h,
+            font_size,
+            color,
+            bold,
+            align,
+            centered: true,
         });
     }
 
@@ -241,7 +298,10 @@ impl TextRenderer {
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
             // Very large wrap size to prevent any line wrapping for single-line labels
             buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-            let attrs = Attrs::new().family(Family::Name(&self.font_family));
+            let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+            let attrs = Attrs::new()
+                .family(Family::Name(&self.font_family))
+                .weight(weight);
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -387,12 +447,22 @@ impl TextRenderer {
                 ],
             });
 
-            // 5. Build quad
-            // cmd.x/cmd.y is the TOP-LEFT of where text should appear
-            let screen_x = cmd.x;
-            let screen_y = cmd.y;
+            // 5. Build quad. Box mode centers the measured glyph box within
+            // `(w, h)` (horizontally per `align`, vertically centered); point
+            // mode places it with its top-left at `(x, y)`.
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
+            let (screen_x, screen_y) = if cmd.centered {
+                let x = cmd.x
+                    + match cmd.align {
+                        TextAlign::Start => 0.0,
+                        TextAlign::Center => (cmd.w - screen_w) * 0.5,
+                        TextAlign::End => cmd.w - screen_w,
+                    };
+                (x, cmd.y + (cmd.h - screen_h) * 0.5)
+            } else {
+                (cmd.x, cmd.y)
+            };
 
             vertices.push(TextVertex {
                 position: [screen_x, screen_y],
