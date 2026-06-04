@@ -641,6 +641,86 @@ fn status_dot_color_and_glow_track_status() {
 }
 
 #[test]
+fn tabs_arrow_keys_and_click_change_selection() {
+    use heca_grid_ui::{Action, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut tabs =
+        Tabs::new(["ALPHA", "BETA", "GAMMA"]).on_change(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
+
+    assert_eq!(tabs.index(), 0);
+    tabs.event(&Event::Key {
+        key: GridKey::ArrowRight,
+        pressed: true,
+    });
+    assert_eq!(tabs.index(), 1);
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("tab-change", SignalData::Usize(1))),
+    );
+
+    tabs.event(&Event::Key {
+        key: GridKey::ArrowRight,
+        pressed: true,
+    });
+    assert_eq!(tabs.index(), 2);
+    let before = log.borrow().len();
+    tabs.event(&Event::Key {
+        key: GridKey::ArrowRight,
+        pressed: true,
+    });
+    assert_eq!(tabs.index(), 2, "ArrowRight clamps at the last tab");
+    assert_eq!(
+        log.borrow().len(),
+        before,
+        "no event emitted when selection is unchanged"
+    );
+
+    // A click near the left edge selects the first tab again.
+    let b = tabs.base().bounds;
+    tabs.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 2.0, b.loc.y + b.size.h / 2.0),
+    });
+    assert_eq!(tabs.index(), 0, "click selects the hit tab");
+}
+
+#[test]
+fn tabs_underline_slides_toward_selection() {
+    let theme = Theme::grid_tron();
+    let underline_x = |t: &Tabs| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            t.paint(&mut cx);
+        }
+        // Labels are Text; the underline is the only Rect.
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Rect(r) => Some(r.rect.loc.x),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let mut tabs = Tabs::new(["ALPHA", "BETA", "GAMMA"]);
+    LayoutEngine::new().compute(&mut tabs, Size::new(600.0, 60.0));
+    let x0 = underline_x(&tabs);
+    tabs.event(&Event::Key {
+        key: GridKey::ArrowRight,
+        pressed: true,
+    });
+    for _ in 0..40 {
+        tabs.tick(0.016);
+    }
+    let x1 = underline_x(&tabs);
+    assert!(x1 > x0, "underline slides right toward the next tab");
+}
+
+#[test]
 fn horizontal_separator_spans_container_width() {
     let mut col = Flex::column()
         .width(Length::Px(120.0))

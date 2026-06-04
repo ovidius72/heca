@@ -154,6 +154,8 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Input::new().value("GRID-7").on_change(report))
                 .child(Input::new().value("LOCKED").disabled(true)),
         )
+        // Tabs: segmented selector with a sliding underline.
+        .child(Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).on_change(report))
         .child(Separator::horizontal().length(440.0))
         // Display widgets: status dot + badges across variants.
         .child(
