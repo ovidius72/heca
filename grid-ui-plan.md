@@ -15,8 +15,9 @@
 | Phase B — renderer (SDF glow) + showcase | DONE | — |
 | Phase C — component catalog (Button, Toggle, Checkbox, Input, Tabs, Badge, StatusDot, Separator, Spinner, Alert, ProgressBar, Gauge; `disabled`, `tab_index`, full Input keyboard model) | DONE | [#21](https://github.com/ovidius72/heca/pull/21) ✅ merged |
 | Docs reconciliation — `docs/widgets.md` (per-widget API + examples), `AGENTS.md` agent guide, `docs/the-grid-ui.md` reconcile | DONE | [#22](https://github.com/ovidius72/heca/pull/22) |
-| Overlay / popover layer (infra for Select/Tooltip/Modal) | PENDING | — |
-| `Select` dropdown (needs overlay) | PENDING | — |
+| Overlay / popover layer (`Scene` overlay layer + `PaintCx::with_overlay` + `Component::overlay_active` + `FocusManager` overlay routing) | DONE | [#23](https://github.com/ovidius72/heca/pull/23) |
+| `Select` dropdown (first overlay consumer; `select-change`) | DONE | [#23](https://github.com/ovidius72/heca/pull/23) |
+| `Select` scrollable long list (max-visible rows + scrollbar + wheel) & showcase overlap demos | DONE | (extends #23) |
 | `Tooltip`, `Modal`/`Dialog` (need overlay) | PENDING | — |
 | Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
 | Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |

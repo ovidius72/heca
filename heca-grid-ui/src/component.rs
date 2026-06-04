@@ -112,6 +112,9 @@ pub enum Event {
     /// Modifier keys changed — broadcast to the whole tree so widgets can track
     /// state (e.g. for word-wise editing). Observers should return `Handled::No`.
     ModifiersChanged(Modifiers),
+    /// Wheel/scroll by `delta` lines (positive = scroll down the content). The
+    /// host routes this to the open overlay, or to the widget under the cursor.
+    Scroll { delta: f32 },
 }
 
 /// Behavior shared by all components. Implementors provide access to their
@@ -125,6 +128,14 @@ pub trait Component {
     /// Whether this component participates in keyboard focus traversal
     /// (Tab/Shift+Tab). Interactive widgets override this to `true`.
     fn focusable(&self) -> bool {
+        false
+    }
+
+    /// Whether this component currently has an **open overlay** (e.g. a `Select`
+    /// dropdown). The host routes pointer/key events to an overlay-active widget
+    /// first, so it can capture clicks/keys outside its layout bounds. Default
+    /// `false`; see [`FocusManager`](crate::focus::FocusManager).
+    fn overlay_active(&self) -> bool {
         false
     }
 
@@ -188,6 +199,14 @@ impl<'a> PaintCx<'a> {
     /// Create a painting context over `scene` using `theme`.
     pub fn new(scene: &'a mut Scene, theme: &'a Theme) -> Self {
         Self { scene, theme }
+    }
+
+    /// Run `f` with draws routed to the scene's **overlay layer** (painted on
+    /// top of everything). Used by popovers/dropdowns for correct z-order.
+    pub fn with_overlay(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.begin_overlay();
+        f(self);
+        self.scene.end_overlay();
     }
 
     /// The active theme.

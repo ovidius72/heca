@@ -56,7 +56,7 @@ pub use theme::{Intensity, Theme};
 pub use widgets::{
     container, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Card,
     Checkbox, Container, DotStatus, Flex, Gauge, Input, Label, LabelSide, Orientation, ProgressBar,
-    Separator, Spinner, StatusDot, Surface, Tabs, Toggle,
+    Select, Separator, Spinner, StatusDot, Surface, Tabs, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -73,6 +73,6 @@ pub mod prelude {
     pub use crate::widgets::{
         container, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant,
         Card, Checkbox, Container, DotStatus, Flex, Gauge, Input, Label, LabelSide, Orientation,
-        ProgressBar, Separator, Spinner, StatusDot, Surface, Tabs, Toggle,
+        ProgressBar, Select, Separator, Spinner, StatusDot, Surface, Tabs, Toggle,
     };
 }

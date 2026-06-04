@@ -978,6 +978,135 @@ fn status_dot_color_and_glow_track_status() {
 }
 
 #[test]
+fn select_opens_and_paints_options_in_overlay_layer() {
+    let theme = Theme::grid_tron();
+    let mut sel = Select::new(["LOW", "MEDIUM", "HIGH"]);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+
+    let texts = |s: &Select| -> Vec<String> {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            s.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    // Closed: only the selected label shows; not overlay-active.
+    assert!(!sel.overlay_active(), "closed select is not overlay-active");
+    assert_eq!(texts(&sel), vec!["LOW".to_string()], "closed shows only the trigger label");
+
+    // Open via click on the trigger.
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    });
+    assert!(sel.overlay_active(), "clicking the trigger opens + grabs input");
+    let open_texts = texts(&sel);
+    assert!(open_texts.contains(&"MEDIUM".to_string()) && open_texts.contains(&"HIGH".to_string()));
+}
+
+#[test]
+fn select_click_row_commits_and_closes() {
+    use heca_grid_ui::{Action, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut sel = Select::new(["LOW", "MEDIUM", "HIGH"]).on_change(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    }); // open
+
+    // Click the third row (HIGH). Rows start below the trigger + gap + panel pad.
+    // panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid-row(15).
+    let row2_y = b.loc.y + b.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 10.0, row2_y),
+    });
+    assert_eq!(sel.index(), 2, "clicking a row selects it");
+    assert!(!sel.overlay_active(), "selection closes the dropdown");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("select-change", SignalData::Usize(2))),
+    );
+}
+
+#[test]
+fn select_long_list_caps_visible_rows_and_scrolls() {
+    let theme = Theme::grid_tron();
+    let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
+    let mut sel = Select::new(opts);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
+
+    let row_texts = |s: &Select| -> Vec<String> {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            s.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let b = sel.base().bounds;
+    sel.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + 5.0, b.loc.y + 5.0),
+    }); // open
+
+    // Trigger label (1) + at most MAX_VISIBLE (6) rows are painted.
+    let texts = row_texts(&sel);
+    assert_eq!(texts.len(), 1 + 6, "long list caps the visible rows");
+    assert_eq!(texts[1], "OPT0", "starts at the top");
+
+    // Wheel-scroll moves the visible window down.
+    sel.event(&Event::Scroll { delta: 5.0 });
+    assert_eq!(row_texts(&sel)[1], "OPT5", "scroll reveals later options");
+
+    // Scrolling past the end clamps to the last full window.
+    sel.event(&Event::Scroll { delta: 999.0 });
+    assert_eq!(row_texts(&sel)[1], "OPT14", "scroll clamps at max (20 - 6)");
+}
+
+#[test]
+fn select_keyboard_navigates_and_escape_closes() {
+    let mut sel = Select::new(["A", "B", "C"]);
+    LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
+    let key = |s: &mut Select, k: GridKey| {
+        s.event(&Event::Key { key: k, pressed: true })
+    };
+
+    key(&mut sel, GridKey::Enter); // open
+    assert!(sel.overlay_active());
+    key(&mut sel, GridKey::ArrowDown);
+    key(&mut sel, GridKey::ArrowDown);
+    key(&mut sel, GridKey::Enter); // commit highlight (index 2)
+    assert_eq!(sel.index(), 2);
+    assert!(!sel.overlay_active(), "Enter commits and closes");
+
+    key(&mut sel, GridKey::Enter); // reopen
+    assert!(sel.overlay_active());
+    key(&mut sel, GridKey::Escape);
+    assert!(!sel.overlay_active(), "Escape closes without changing selection");
+    assert_eq!(sel.index(), 2);
+}
+
+#[test]
 fn tabs_arrow_keys_and_click_change_selection() {
     use heca_grid_ui::{Action, SignalData};
     use std::cell::RefCell;
