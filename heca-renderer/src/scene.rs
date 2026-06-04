@@ -71,7 +71,7 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
                 let (x, y, w, h) = xywh(&t.rect);
-                text.queue_text(
+                text.queue_text_in_box(
                     &t.text,
                     x,
                     y,

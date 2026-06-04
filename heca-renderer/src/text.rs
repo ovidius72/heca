@@ -19,7 +19,8 @@ struct Uniforms {
 
 struct TextCommand {
     text: String,
-    /// Target box (logical px) the text is centered within.
+    /// Position: top-left `(x, y)` when `centered` is false, otherwise the box
+    /// `(x, y, w, h)` the text is centered within.
     x: f32,
     y: f32,
     w: f32,
@@ -28,6 +29,8 @@ struct TextCommand {
     color: [f32; 4],
     bold: bool,
     align: TextAlign,
+    /// Center within `(w, h)` (grid scene), or place at `(x, y)` (app labels).
+    centered: bool,
 }
 
 /// A GPU-ready text label: texture + quad.
@@ -225,10 +228,28 @@ impl TextRenderer {
         self.font_family = family.to_string();
     }
 
-    /// Queue text to be centered within the box `(x, y, w, h)` (logical px):
-    /// horizontally per `align`, always centered vertically.
+    /// Queue text with its top-left at `(x, y)` (logical px) — the simple
+    /// point-positioned form used throughout the app (sidebar, chrome, …).
+    pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
+        self.commands.push(TextCommand {
+            text: text.to_string(),
+            x,
+            y,
+            w: 0.0,
+            h: 0.0,
+            font_size,
+            color,
+            bold: false,
+            align: TextAlign::Start,
+            centered: false,
+        });
+    }
+
+    /// Queue text centered within the box `(x, y, w, h)` (logical px):
+    /// horizontally per `align`, always centered vertically. Used by the grid
+    /// scene renderer ([`crate::scene`]).
     #[allow(clippy::too_many_arguments)]
-    pub fn queue_text(
+    pub fn queue_text_in_box(
         &mut self,
         text: &str,
         x: f32,
@@ -250,6 +271,7 @@ impl TextRenderer {
             color,
             bold,
             align,
+            centered: true,
         });
     }
 
@@ -425,19 +447,22 @@ impl TextRenderer {
                 ],
             });
 
-            // 5. Build quad
-            // cmd.x/cmd.y is the TOP-LEFT of where text should appear
-            // Center the measured glyph box within the target box: horizontally
-            // per `align`, vertically always centered (exact, real metrics).
+            // 5. Build quad. Box mode centers the measured glyph box within
+            // `(w, h)` (horizontally per `align`, vertically centered); point
+            // mode places it with its top-left at `(x, y)`.
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
-            let screen_x = cmd.x
-                + match cmd.align {
-                    TextAlign::Start => 0.0,
-                    TextAlign::Center => (cmd.w - screen_w) * 0.5,
-                    TextAlign::End => cmd.w - screen_w,
-                };
-            let screen_y = cmd.y + (cmd.h - screen_h) * 0.5;
+            let (screen_x, screen_y) = if cmd.centered {
+                let x = cmd.x
+                    + match cmd.align {
+                        TextAlign::Start => 0.0,
+                        TextAlign::Center => (cmd.w - screen_w) * 0.5,
+                        TextAlign::End => cmd.w - screen_w,
+                    };
+                (x, cmd.y + (cmd.h - screen_h) * 0.5)
+            } else {
+                (cmd.x, cmd.y)
+            };
 
             vertices.push(TextVertex {
                 position: [screen_x, screen_y],
