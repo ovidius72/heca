@@ -294,14 +294,18 @@ impl TextRenderer {
                 for glyph in run.glyphs {
                     // Use cosmic-text's own formula: offset by (0, line_y) so physical.y already includes baseline
                     let physical = glyph.physical((0.0, run.line_y), 1.0);
-                    let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
+                    let img_opt = self
+                        .swash_cache
+                        .get_image(&mut self.font_system, physical.cache_key);
                     let img = match img_opt.as_ref() {
                         Some(img) => img,
                         None => continue,
                     };
                     let gw = img.placement.width;
                     let gh = img.placement.height;
-                    if gw == 0 || gh == 0 { continue; }
+                    if gw == 0 || gh == 0 {
+                        continue;
+                    }
 
                     // Cosmic-text draw formula: physical.x + placement.left, physical.y - placement.top
                     let left = physical.x + img.placement.left;
@@ -336,14 +340,18 @@ impl TextRenderer {
             for run in buffer.layout_runs() {
                 for glyph in run.glyphs {
                     let physical = glyph.physical((0.0, run.line_y), 1.0);
-                    let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
+                    let img_opt = self
+                        .swash_cache
+                        .get_image(&mut self.font_system, physical.cache_key);
                     let img = match img_opt.as_ref() {
                         Some(img) => img,
                         None => continue,
                     };
                     let gw = img.placement.width;
                     let gh = img.placement.height;
-                    if gw == 0 || gh == 0 { continue; }
+                    if gw == 0 || gh == 0 {
+                        continue;
+                    }
 
                     // Cosmic-text formula: physical.x + placement.left, physical.y - placement.top
                     let dst_x = (physical.x + img.placement.left - min_x) as u32;
@@ -431,10 +439,26 @@ impl TextRenderer {
                 };
             let screen_y = cmd.y + (cmd.h - screen_h) * 0.5;
 
-            vertices.push(TextVertex { position: [screen_x, screen_y], texcoord: [0.0, 0.0], color: cmd.color });
-            vertices.push(TextVertex { position: [screen_x + screen_w, screen_y], texcoord: [1.0, 0.0], color: cmd.color });
-            vertices.push(TextVertex { position: [screen_x + screen_w, screen_y + screen_h], texcoord: [1.0, 1.0], color: cmd.color });
-            vertices.push(TextVertex { position: [screen_x, screen_y + screen_h], texcoord: [0.0, 1.0], color: cmd.color });
+            vertices.push(TextVertex {
+                position: [screen_x, screen_y],
+                texcoord: [0.0, 0.0],
+                color: cmd.color,
+            });
+            vertices.push(TextVertex {
+                position: [screen_x + screen_w, screen_y],
+                texcoord: [1.0, 0.0],
+                color: cmd.color,
+            });
+            vertices.push(TextVertex {
+                position: [screen_x + screen_w, screen_y + screen_h],
+                texcoord: [1.0, 1.0],
+                color: cmd.color,
+            });
+            vertices.push(TextVertex {
+                position: [screen_x, screen_y + screen_h],
+                texcoord: [0.0, 1.0],
+                color: cmd.color,
+            });
             indices.push(base);
             indices.push(base + 1);
             indices.push(base + 2);
@@ -442,9 +466,7 @@ impl TextRenderer {
             indices.push(base + 2);
             indices.push(base + 3);
 
-            labels.push(TextLabel {
-                bind_group,
-            });
+            labels.push(TextLabel { bind_group });
 
             base += 4;
         }
@@ -484,8 +506,20 @@ impl TextRenderer {
             usage: wgpu::BufferUsages::COPY_SRC,
         });
 
-        encoder.copy_buffer_to_buffer(&staging_v, 0, &self.vertex_buffer, 0, vertex_data.len() as u64);
-        encoder.copy_buffer_to_buffer(&staging_i, 0, &self.index_buffer, 0, index_data.len() as u64);
+        encoder.copy_buffer_to_buffer(
+            &staging_v,
+            0,
+            &self.vertex_buffer,
+            0,
+            vertex_data.len() as u64,
+        );
+        encoder.copy_buffer_to_buffer(
+            &staging_i,
+            0,
+            &self.index_buffer,
+            0,
+            index_data.len() as u64,
+        );
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),

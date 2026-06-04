@@ -149,10 +149,7 @@ impl Rectangle {
         let y2 = (self.loc.y + self.size.h).min(other.loc.y + other.size.h);
 
         if x1 < x2 && y1 < y2 {
-            Some(Self::new(
-                Point::new(x1, y1),
-                Size::new(x2 - x1, y2 - y1),
-            ))
+            Some(Self::new(Point::new(x1, y1), Size::new(x2 - x1, y2 - y1)))
         } else {
             None
         }
@@ -180,7 +177,7 @@ impl Default for LayoutOptions {
     fn default() -> Self {
         Self {
             gaps: 8.0,
-            center_focused_column: CenterFocusedColumn::OnOverflow,
+            center_focused_column: CenterFocusedColumn::Never,
             always_center_single_column: false,
             default_column_width: Some(ColumnWidth::Proportion(0.5)),
             overview_scale: 0.25,
@@ -207,5 +204,3 @@ pub enum InsertPosition {
     /// Insert into an existing column at the given pane index.
     InColumn { col_idx: usize, pane_idx: usize },
 }
-
-

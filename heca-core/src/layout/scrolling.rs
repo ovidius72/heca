@@ -1,7 +1,7 @@
 use super::animation::{Animation, AnimationConfig};
 use super::column::{Column, Pane};
 use super::types::*;
-use super::view_offset::{compute_new_view_offset, ViewOffset};
+use super::view_offset::{ViewOffset, compute_new_view_offset};
 
 // Re-export InsertPosition for convenience.
 pub use super::types::InsertPosition;
@@ -72,7 +72,11 @@ impl ScrollingSpace {
     fn column_xs(&self) -> impl Iterator<Item = f64> + '_ {
         let gaps = self.options.gaps;
         let mut x = 0.0;
-        let widths = self.column_widths.iter().copied().chain(std::iter::once(0.0));
+        let widths = self
+            .column_widths
+            .iter()
+            .copied()
+            .chain(std::iter::once(0.0));
         widths.map(move |width| {
             let rv = x;
             x += width + gaps;
@@ -158,7 +162,11 @@ impl ScrollingSpace {
     fn compute_view_offset_fit(&self, idx: usize) -> f64 {
         let col_x = self.column_x(idx);
         let col_w = self.column_widths.get(idx).copied().unwrap_or(0.0);
-        let mode = self.columns.get(idx).map(|c| c.sizing_mode()).unwrap_or(SizingMode::Normal);
+        let mode = self
+            .columns
+            .get(idx)
+            .map(|c| c.sizing_mode())
+            .unwrap_or(SizingMode::Normal);
 
         if mode.is_fullscreen() {
             return 0.0;
@@ -182,7 +190,11 @@ impl ScrollingSpace {
 
     fn compute_view_offset_centered(&self, idx: usize) -> f64 {
         let col_w = self.column_widths.get(idx).copied().unwrap_or(0.0);
-        let mode = self.columns.get(idx).map(|c| c.sizing_mode()).unwrap_or(SizingMode::Normal);
+        let mode = self
+            .columns
+            .get(idx)
+            .map(|c| c.sizing_mode())
+            .unwrap_or(SizingMode::Normal);
 
         if mode.is_fullscreen() {
             return self.compute_view_offset_fit(idx);
@@ -239,7 +251,11 @@ impl ScrollingSpace {
     pub fn add_column(&mut self, idx: Option<usize>, mut column: Column, activate: bool) {
         let was_empty = self.columns.is_empty();
         let idx = idx.unwrap_or_else(|| {
-            if was_empty { 0 } else { self.active_column_idx + 1 }
+            if was_empty {
+                0
+            } else {
+                self.active_column_idx + 1
+            }
         });
 
         // Compute column width.
@@ -455,16 +471,55 @@ impl ScrollingSpace {
                 ColumnWidth::Proportion(p) => {
                     ColumnWidth::Proportion((p + delta).clamp(0.05, 0.95))
                 }
-                ColumnWidth::Fixed(w) => {
-                    ColumnWidth::Fixed((w + delta * self.working_area.size.w).clamp(50.0, self.working_area.size.w))
-                }
+                ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
+                    (w + delta * self.working_area.size.w).clamp(50.0, self.working_area.size.w),
+                ),
             };
             col.width = new_width;
             col.is_full_width = false;
+
+            // Save old column positions before update.
+            let old_xs: Vec<(ColumnId, f64)> = self
+                .column_xs()
+                .zip(self.columns.iter())
+                .map(|(x, c)| (c.id, x))
+                .collect();
+
             self.update_all_column_widths();
-            // Recompute view offset so the active column stays visible.
-            let offset = self.compute_view_offset_for_column(self.active_column_idx, None);
-            self.view_offset = ViewOffset::Static(offset);
+
+            // Preserve view position so layout stays visually fixed during resize.
+            let old_view_pos = self.view_pos();
+            let new_view_pos = self.view_pos();
+            let view_delta = old_view_pos - new_view_pos;
+            self.view_offset.offset(view_delta);
+
+            // Ensure the active column stays visible after resize.
+            let target_offset = self.compute_view_offset_for_column(self.active_column_idx, None);
+            let pixel = 1.0 / self.scale;
+            let diff = target_offset - self.view_offset.target();
+            if diff.abs() < pixel {
+                self.view_offset.offset(diff);
+            } else {
+                self.view_offset = ViewOffset::Animation(Animation::new(
+                    self.view_offset.current(),
+                    target_offset,
+                    AnimationConfig::default(),
+                ));
+            }
+
+            // Animate columns to their new positions.
+            let new_xs: Vec<f64> = self.column_xs().collect();
+            for (i, col) in self.columns.iter_mut().enumerate() {
+                let old_x = old_xs
+                    .iter()
+                    .find(|(id, _)| *id == col.id)
+                    .map(|(_, x)| *x)
+                    .unwrap_or(new_xs[i]);
+                let diff = old_x - new_xs[i];
+                if diff.abs() > 0.5 {
+                    col.animate_move_from(diff, AnimationConfig::default());
+                }
+            }
         }
     }
 
@@ -474,7 +529,9 @@ impl ScrollingSpace {
     pub fn move_active_pane_left(&mut self) -> bool {
         if self.active_column_idx == 0 {
             // First column — create new column to the left if source has > 1 pane
-            let source_has_multiple = self.columns.get(self.active_column_idx)
+            let source_has_multiple = self
+                .columns
+                .get(self.active_column_idx)
                 .map(|c| c.panes.len() > 1)
                 .unwrap_or(false);
             if !source_has_multiple {
@@ -492,7 +549,9 @@ impl ScrollingSpace {
     pub fn move_active_pane_right(&mut self) -> bool {
         if self.active_column_idx + 1 >= self.columns.len() {
             // Last column — create new column to the right if source has > 1 pane
-            let source_has_multiple = self.columns.get(self.active_column_idx)
+            let source_has_multiple = self
+                .columns
+                .get(self.active_column_idx)
                 .map(|c| c.panes.len() > 1)
                 .unwrap_or(false);
             if !source_has_multiple {
@@ -511,16 +570,20 @@ impl ScrollingSpace {
         }
 
         // Save old column positions and pane position before any changes.
-        let old_xs: Vec<(ColumnId, f64)> = self.column_xs()
+        let old_xs: Vec<(ColumnId, f64)> = self
+            .column_xs()
             .zip(self.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
         let old_source_col_x = self.column_x(source_col);
-        let old_pane_y = self.pane_y_in_column(source_col, self.columns[source_col].active_pane_idx);
+        let old_pane_y =
+            self.pane_y_in_column(source_col, self.columns[source_col].active_pane_idx);
 
         let pane_idx = self.columns[source_col].active_pane_idx;
         let pane = self.columns[source_col].remove_pane(pane_idx);
-        let Some(pane) = pane else { return false; };
+        let Some(pane) = pane else {
+            return false;
+        };
 
         // If source column became empty, remove it.
         if self.columns[source_col].is_empty() {
@@ -552,7 +615,10 @@ impl ScrollingSpace {
         );
         let offset_x = old_source_col_x - new_col_x;
         let offset_y = old_pane_y - new_pane_y;
-        let moved_pane = self.columns[self.active_column_idx].panes.last_mut().unwrap();
+        let moved_pane = self.columns[self.active_column_idx]
+            .panes
+            .last_mut()
+            .unwrap();
         moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
@@ -581,7 +647,8 @@ impl ScrollingSpace {
         let pane_idx = self.columns[source_col].active_pane_idx;
 
         // Save old column positions and pane position before any changes.
-        let old_xs: Vec<(ColumnId, f64)> = self.column_xs()
+        let old_xs: Vec<(ColumnId, f64)> = self
+            .column_xs()
             .zip(self.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
@@ -589,13 +656,11 @@ impl ScrollingSpace {
         let old_pane_y = self.pane_y_in_column(source_col, pane_idx);
 
         let pane = self.columns[source_col].remove_pane(pane_idx);
-        let Some(pane) = pane else { return false; };
+        let Some(pane) = pane else {
+            return false;
+        };
 
-        let new_col = Column::new(
-            ColumnId(pane.id.0),
-            pane,
-            ColumnWidth::Proportion(0.5),
-        );
+        let new_col = Column::new(ColumnId(pane.id.0), pane, ColumnWidth::Proportion(0.5));
 
         let insert_idx = match dir {
             Direction::Left => source_col,
@@ -627,7 +692,10 @@ impl ScrollingSpace {
         let new_pane_y = self.pane_y_in_column(self.active_column_idx, 0);
         let offset_x = old_source_col_x - new_col_x;
         let offset_y = old_pane_y - new_pane_y;
-        let moved_pane = self.columns[self.active_column_idx].panes.first_mut().unwrap();
+        let moved_pane = self.columns[self.active_column_idx]
+            .panes
+            .first_mut()
+            .unwrap();
         moved_pane.animate_move_from(Point::new(offset_x, offset_y), AnimationConfig::default());
 
         // Animate all columns from their old positions.
@@ -676,7 +744,8 @@ impl ScrollingSpace {
         let old_idx = self.active_column_idx;
 
         // Save old column positions by ID.
-        let old_xs: Vec<(ColumnId, f64)> = self.column_xs()
+        let old_xs: Vec<(ColumnId, f64)> = self
+            .column_xs()
             .zip(self.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
@@ -751,10 +820,12 @@ impl ScrollingSpace {
             }
             // Advance pane Y-move animations.
             for pane in &mut col.panes {
-                if let super::animation::Animated::Animating { ref animation, .. } = pane.move_offset
+                if let super::animation::Animated::Animating { ref animation, .. } =
+                    pane.move_offset
                     && animation.is_done()
                 {
-                    pane.move_offset = super::animation::Animated::Static(super::types::Point::default());
+                    pane.move_offset =
+                        super::animation::Animated::Static(super::types::Point::default());
                 }
             }
         }
@@ -880,10 +951,9 @@ impl ScrollingSpace {
 
                 let pane_offset = pane.move_offset.current();
                 let rubber = pane.interactive_move_offset;
-                let pane_pos = view_off + col_pos + Point::new(
-                    pane_offset.x + rubber.x,
-                    pane_y + pane_offset.y + rubber.y,
-                );
+                let pane_pos = view_off
+                    + col_pos
+                    + Point::new(pane_offset.x + rubber.x, pane_y + pane_offset.y + rubber.y);
                 let rect = Rectangle::new(pane_pos, size);
                 result.push((pane.id, rect));
 
@@ -893,5 +963,4 @@ impl ScrollingSpace {
 
         result
     }
-
 }

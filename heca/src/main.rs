@@ -10,11 +10,11 @@ mod sidebar;
 
 use sidebar::SidebarTree;
 
-use app_state::{AppState, DragState, SidebarState, InputMode, RenameTarget};
+use app_state::{AppState, DragState, InputMode, RenameTarget, SidebarState};
 use chrome::ChromeConfig;
 use heca_config::theme::AppConfig;
-use heca_core::backend::{BackendRenderData, PaneBackend, FakeBackend};
-use heca_core::layout::{Session, Column, Pane as LayoutPane, ColumnId, PaneId, ColumnWidth};
+use heca_core::backend::{BackendRenderData, FakeBackend, PaneBackend};
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane as LayoutPane, PaneId, Session};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use input::{WmAction, action_from_name, build_action};
@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
-use winit::event::{WindowEvent, ElementState};
+use winit::event::{ElementState, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -42,12 +42,13 @@ fn render_backend_data(
     _theme: &heca_config::theme::Theme,
 ) {
     if let BackendRenderData::Terminal {
-            lines,
-            cursor_col,
-            cursor_row,
-            cell_w,
-            cell_h,
-        } = data {
+        lines,
+        cursor_col,
+        cursor_row,
+        cell_w,
+        cell_h,
+    } = data
+    {
         let cell_h = *cell_h;
         let cell_w = *cell_w;
 
@@ -100,20 +101,20 @@ fn render_backend_data(
 
 /// Extended alphabet for pane/column candidate labels (52 chars).
 const CANDIDATE_ALPHABET: &[char] = &[
-    'a','b','c','d','e','f','g','h','i','j','k','l','m',
-    'n','o','p','q','r','s','t','u','v','w','x','y','z',
-    'A','B','C','D','E','F','G','H','I','J','K','L','M',
-    'N','O','P','Q','R','S','T','U','V','W','X','Y','Z',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
+    't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+    'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
 /// Distinct pane names so you can visually identify what's moving.
 const PANE_NAMES: &[&str] = &[
-    "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta",
-    "Orange", "Purple", "Lime", "Pink", "Teal", "Coral",
+    "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta", "Orange", "Purple", "Lime", "Pink",
+    "Teal", "Coral",
 ];
 
 pub(crate) fn pane_name(id: u64) -> String {
-    PANE_NAMES.get((id as usize).saturating_sub(1) % PANE_NAMES.len())
+    PANE_NAMES
+        .get((id as usize).saturating_sub(1) % PANE_NAMES.len())
         .unwrap_or(&"?")
         .to_string()
 }
@@ -152,36 +153,35 @@ fn normalize_key_text(
 ) -> String {
     // Ctrl+special keys may produce control characters (e.g. Ctrl+[ → \u{1b}).
     // Use the physical key to recover the original printable key.
-    if ctrl
-        && let winit::keyboard::PhysicalKey::Code(code) = physical_key {
-            let mapped = match code {
-                winit::keyboard::KeyCode::BracketLeft => "[",
-                winit::keyboard::KeyCode::BracketRight => "]",
-                winit::keyboard::KeyCode::Semicolon => ";",
-                winit::keyboard::KeyCode::Quote => "'",
-                winit::keyboard::KeyCode::Comma => ",",
-                winit::keyboard::KeyCode::Period => ".",
-                winit::keyboard::KeyCode::Slash => "/",
-                winit::keyboard::KeyCode::Backslash => "\\",
-                winit::keyboard::KeyCode::Minus => "-",
-                winit::keyboard::KeyCode::Equal => "=",
-                winit::keyboard::KeyCode::Backquote => "`",
-                winit::keyboard::KeyCode::Digit0 => "0",
-                winit::keyboard::KeyCode::Digit1 => "1",
-                winit::keyboard::KeyCode::Digit2 => "2",
-                winit::keyboard::KeyCode::Digit3 => "3",
-                winit::keyboard::KeyCode::Digit4 => "4",
-                winit::keyboard::KeyCode::Digit5 => "5",
-                winit::keyboard::KeyCode::Digit6 => "6",
-                winit::keyboard::KeyCode::Digit7 => "7",
-                winit::keyboard::KeyCode::Digit8 => "8",
-                winit::keyboard::KeyCode::Digit9 => "9",
-                _ => "",
-            };
-            if !mapped.is_empty() {
-                return mapped.to_string();
-            }
+    if ctrl && let winit::keyboard::PhysicalKey::Code(code) = physical_key {
+        let mapped = match code {
+            winit::keyboard::KeyCode::BracketLeft => "[",
+            winit::keyboard::KeyCode::BracketRight => "]",
+            winit::keyboard::KeyCode::Semicolon => ";",
+            winit::keyboard::KeyCode::Quote => "'",
+            winit::keyboard::KeyCode::Comma => ",",
+            winit::keyboard::KeyCode::Period => ".",
+            winit::keyboard::KeyCode::Slash => "/",
+            winit::keyboard::KeyCode::Backslash => "\\",
+            winit::keyboard::KeyCode::Minus => "-",
+            winit::keyboard::KeyCode::Equal => "=",
+            winit::keyboard::KeyCode::Backquote => "`",
+            winit::keyboard::KeyCode::Digit0 => "0",
+            winit::keyboard::KeyCode::Digit1 => "1",
+            winit::keyboard::KeyCode::Digit2 => "2",
+            winit::keyboard::KeyCode::Digit3 => "3",
+            winit::keyboard::KeyCode::Digit4 => "4",
+            winit::keyboard::KeyCode::Digit5 => "5",
+            winit::keyboard::KeyCode::Digit6 => "6",
+            winit::keyboard::KeyCode::Digit7 => "7",
+            winit::keyboard::KeyCode::Digit8 => "8",
+            winit::keyboard::KeyCode::Digit9 => "9",
+            _ => "",
+        };
+        if !mapped.is_empty() {
+            return mapped.to_string();
         }
+    }
 
     let mut key = match logical_key {
         // Ctrl+[ produces Escape on some systems; recover the original key
@@ -235,11 +235,7 @@ fn normalize_key_text(
 }
 
 /// Convert a winit key event to terminal input bytes.
-fn winit_key_to_terminal_input(
-    key: &winit::keyboard::Key,
-    text: &str,
-    ctrl: bool,
-) -> Vec<u8> {
+fn winit_key_to_terminal_input(key: &winit::keyboard::Key, text: &str, ctrl: bool) -> Vec<u8> {
     use winit::keyboard::NamedKey;
 
     // Ctrl+letter -> control character
@@ -322,11 +318,9 @@ impl HecaApp {
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
-            state.interactive_move_modifier = self.app_config.config.settings.interactive_move_modifier;
+            state.interactive_move_modifier =
+                self.app_config.config.settings.interactive_move_modifier;
             state.needs_redraw = true;
-            eprintln!("========================================");
-            eprintln!("Configuration reloaded!");
-            eprintln!("========================================");
         }
     }
 
@@ -337,7 +331,11 @@ impl HecaApp {
                 self.app_config.config.settings.window_width as f64,
                 self.app_config.config.settings.window_height as f64,
             ));
-        let window = Arc::new(event_loop.create_window(window_attrs).expect("Failed to create window"));
+        let window = Arc::new(
+            event_loop
+                .create_window(window_attrs)
+                .expect("Failed to create window"),
+        );
         let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -345,7 +343,9 @@ impl HecaApp {
             ..Default::default()
         });
 
-        let surface = instance.create_surface(window.clone()).expect("Failed to create surface");
+        let surface = instance
+            .create_surface(window.clone())
+            .expect("Failed to create surface");
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -357,15 +357,13 @@ impl HecaApp {
             .expect("Failed to find an appropriate adapter");
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("heca_device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::Off,
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("heca_device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await
             .expect("Failed to create device");
 
@@ -394,8 +392,16 @@ impl HecaApp {
         let mut text_renderer = TextRenderer::new(&device, surface_format);
         text_renderer.set_scale_factor(scale_factor);
         text_renderer.set_font_family(&self.app_config.theme.font_family);
-        text_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
-        primitive_renderer.set_screen_size(&queue, physical.width as f32 / scale_factor as f32, physical.height as f32 / scale_factor as f32);
+        text_renderer.set_screen_size(
+            &queue,
+            physical.width as f32 / scale_factor as f32,
+            physical.height as f32 / scale_factor as f32,
+        );
+        primitive_renderer.set_screen_size(
+            &queue,
+            physical.width as f32 / scale_factor as f32,
+            physical.height as f32 / scale_factor as f32,
+        );
 
         // Compute chrome/content area size FIRST so session uses correct working area
         let chrome = ChromeConfig {
@@ -409,13 +415,14 @@ impl HecaApp {
         let pane_area = chrome.content_rect(log_w, log_h);
 
         // Initialize NIRI Session with content area size (not full window)
-        let viewport_size = heca_core::layout::types::Size::new(
-            pane_area.w as f64,
-            pane_area.h as f64,
-        );
+        let viewport_size =
+            heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
         let layout_options = heca_core::layout::types::LayoutOptions {
-            always_center_single_column:
-                self.app_config.config.settings.always_center_single_column,
+            always_center_single_column: self
+                .app_config
+                .config
+                .settings
+                .always_center_single_column,
             ..Default::default()
         };
         let mut session = Session::new(
@@ -471,9 +478,7 @@ impl HecaApp {
             auto_scroll_edge: self.app_config.config.settings.auto_scroll_edge,
             interactive_move_modifier: self.app_config.config.settings.interactive_move_modifier,
             prefix_entered_at: None,
-            prefix_combo: keymap::KeyCombo::parse(
-                &self.app_config.config.keys.prefix,
-            ),
+            prefix_combo: keymap::KeyCombo::parse(&self.app_config.config.keys.prefix),
             pending_reload: false,
         })
     }
@@ -488,12 +493,13 @@ impl HecaApp {
         let surface_texture = match state.surface.get_current_texture() {
             Ok(t) => t,
             Err(wgpu::SurfaceError::Lost) => {
-                state.surface.configure(&state.device, &state.surface_config);
+                state
+                    .surface
+                    .configure(&state.device, &state.surface_config);
                 return;
             }
             Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(1),
-            Err(e) => {
-                eprintln!("Surface error: {:?}", e);
+            Err(_) => {
                 return;
             }
         };
@@ -527,7 +533,9 @@ impl HecaApp {
 
         let mut encoder = state
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("render") });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("render"),
+            });
 
         // Clear background
         let bg = theme.background.to_f32x4();
@@ -560,7 +568,9 @@ impl HecaApp {
         } else {
             [0.953, 0.957, 0.973, 1.0]
         };
-        state.primitive_renderer.draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
+        state
+            .primitive_renderer
+            .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
         for (i, tab_name) in state.tab_names.iter().enumerate() {
             let tab_x = 4.0 + i as f32 * 120.0;
             let tab_color = if i == state.active_tab {
@@ -568,20 +578,42 @@ impl HecaApp {
             } else {
                 theme.border.to_f32x4()
             };
-            state.primitive_renderer.draw_rect(tab_x, 2.0, 116.0, tb.tab_bar_height - 4.0, tab_color);
+            state.primitive_renderer.draw_rect(
+                tab_x,
+                2.0,
+                116.0,
+                tb.tab_bar_height - 4.0,
+                tab_color,
+            );
             let tab_text_y = (tb.tab_bar_height - chrome_text) / 2.0;
             state.text_renderer.queue_text(
-                tab_name, tab_x + 4.0, tab_text_y, chrome_text, theme.foreground.to_f32x4(),
+                tab_name,
+                tab_x + 4.0,
+                tab_text_y,
+                chrome_text,
+                theme.foreground.to_f32x4(),
             );
         }
 
         // ── STATUS BAR ──
         let sb_y = h - tb.status_bar_height;
-        state.primitive_renderer.draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
-        let pane_count = state.session.active_workspace()
-            .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
+        state
+            .primitive_renderer
+            .draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
+        let pane_count = state
+            .session
+            .active_workspace()
+            .map(|ws| {
+                ws.scrolling
+                    .columns
+                    .iter()
+                    .map(|c| c.panes.len())
+                    .sum::<usize>()
+            })
             .unwrap_or(0);
-        let focus_title = state.session.active_workspace()
+        let focus_title = state
+            .session
+            .active_workspace()
             .and_then(|ws| ws.scrolling.active_pane())
             .map(|p| p.title.as_str())
             .unwrap_or("—");
@@ -590,28 +622,45 @@ impl HecaApp {
             InputMode::Prefix => ("PREFIX", String::new()),
             InputMode::PaneSelect { .. } => ("SELECT", String::new()),
             InputMode::PaneSwap { focus_after, .. } => {
-                if *focus_after { ("SWAP+FOCUS", String::new()) } else { ("SWAP", String::new()) }
-            },
+                if *focus_after {
+                    ("SWAP+FOCUS", String::new())
+                } else {
+                    ("SWAP", String::new())
+                }
+            }
             InputMode::SidebarNav => ("SIDEBAR", String::new()),
-            InputMode::Rename { target: _, buffer } => {
-                ("RENAME", format!(": {}_", buffer))
-            }
-            InputMode::Chord { sequence } => {
-                ("CHORD", format!(" w→{}", sequence.join("→")))
-            }
-            InputMode::Mode { name } => {
-                ("MODE", format!(" {} → ?", name))
+            InputMode::Rename { target: _, buffer } => ("RENAME", format!(": {}_", buffer)),
+            InputMode::Chord { sequence } => ("CHORD", format!(" w→{}", sequence.join("→"))),
+            InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
+            InputMode::ConfirmDelete { message, .. } => ("CONFIRM", format!(" {} ", message)),
+            InputMode::PaneTake { focus_after, .. } => {
+                if *focus_after {
+                    ("TAKE+", " pick a pane → ".to_string())
+                } else {
+                    ("TAKE", " pick a pane → ".to_string())
+                }
             }
         };
-        let status = format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint);
+        let status = format!(
+            "{} panes | {} | {}{}",
+            pane_count, focus_title, mode_str, rename_hint
+        );
         let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
         state.text_renderer.queue_text(
-            &status, 8.0, status_text_y, chrome_text, theme.foreground.to_f32x4(),
+            &status,
+            8.0,
+            status_text_y,
+            chrome_text,
+            theme.foreground.to_f32x4(),
         );
 
         // ── Flush tab bar + status bar ──
-        state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+        state
+            .primitive_renderer
+            .render(&state.device, &view, &mut encoder);
+        state
+            .text_renderer
+            .render(&state.device, &state.queue, &view, &mut encoder);
 
         // ── PANE CONTENT AREA ──
         let theme_border = theme.border.to_f32x4();
@@ -619,13 +668,16 @@ impl HecaApp {
         let accent_color = theme.accent.to_f32x4();
 
         // Get pane positions from NIRI layout engine
-        let pane_positions = state.session.active_workspace()
+        let pane_positions = state
+            .session
+            .active_workspace()
             .map(|ws| ws.scrolling.panes_with_positions())
             .unwrap_or_default();
 
         // Get workspace geometry for overview (normal mode = full size)
         let ws_geometries = state.session.workspace_geometries();
-        let ws_offset = ws_geometries.first()
+        let ws_offset = ws_geometries
+            .first()
             .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
             .unwrap_or((0.0, 0.0));
 
@@ -636,22 +688,34 @@ impl HecaApp {
             let pw = rect.size.w as f32;
             let ph = rect.size.h as f32;
             let is_active = state.focused_pane == Some(pane_id.0);
-            let bcolor = if is_active { accent_color } else {
+            let bcolor = if is_active {
+                accent_color
+            } else {
                 [theme_border[0], theme_border[1], theme_border[2], 0.5]
             };
 
             if let Some(backend) = state.backends.get(&pane_id.0) {
                 let data = backend.render_data();
                 render_backend_data(
-                    &data, px, py, pw, ph,
-                    &mut state.text_renderer, &mut state.primitive_renderer, theme,
+                    &data,
+                    px,
+                    py,
+                    pw,
+                    ph,
+                    &mut state.text_renderer,
+                    &mut state.primitive_renderer,
+                    theme,
                 );
             } else {
-                state.primitive_renderer.draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
+                state
+                    .primitive_renderer
+                    .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
             }
 
             // Draw pane name as large centered label so you can tell panes apart
-            let pane_name = state.session.active_workspace()
+            let pane_name = state
+                .session
+                .active_workspace()
                 .and_then(|ws| ws.find_pane(*pane_id))
                 .map(|p| p.title.as_str())
                 .unwrap_or("?");
@@ -665,12 +729,20 @@ impl HecaApp {
             let name_w = name_size * pane_name.len() as f32 * 0.6;
             let name_x = px + (pw - name_w) / 2.0;
             let name_y = py + (ph - name_size) / 2.0;
-            state.text_renderer.queue_text(pane_name, name_x, name_y, name_size, name_color);
+            state
+                .text_renderer
+                .queue_text(pane_name, name_x, name_y, name_size, name_color);
 
-            state.primitive_renderer.draw_border(px, py, pw, ph, bcolor, border_width);
+            state
+                .primitive_renderer
+                .draw_border(px, py, pw, ph, bcolor, border_width);
         }
-        state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+        state
+            .primitive_renderer
+            .render(&state.device, &view, &mut encoder);
+        state
+            .text_renderer
+            .render(&state.device, &state.queue, &view, &mut encoder);
 
         // ── SIDEBARS (drawn ON TOP of panes so they cover any overflow) ──
         let sidebar_top = chrome.tab_bar_height;
@@ -678,10 +750,20 @@ impl HecaApp {
         let sidebar_h = sidebar_bottom - sidebar_top;
 
         // Left sidebar
-        state.primitive_renderer.draw_rect(0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h, side_bg);
+        state.primitive_renderer.draw_rect(
+            0.0,
+            sidebar_top,
+            chrome.left_sidebar_width,
+            sidebar_h,
+            side_bg,
+        );
         state.primitive_renderer.draw_border(
-            chrome.left_sidebar_width - 1.0, sidebar_top, 1.0, sidebar_h,
-            theme.border.to_f32x4(), 1.0,
+            chrome.left_sidebar_width - 1.0,
+            sidebar_top,
+            1.0,
+            sidebar_h,
+            theme.border.to_f32x4(),
+            1.0,
         );
         let candidates = state.input_mode.candidates();
         let drag_hover_fi = state.mouse.drag_hover_sidebar_fi;
@@ -691,12 +773,20 @@ impl HecaApp {
         if chrome.left_sidebar_width >= 80.0 {
             sidebar::render_sidebar_expanded(
                 &mut state.sidebar_tree,
-                0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
+                0.0,
+                sidebar_top,
+                chrome.left_sidebar_width,
+                sidebar_h,
                 matches!(state.input_mode, InputMode::SidebarNav),
                 theme.accent.to_f32x4(),
                 theme.foreground.to_f32x4(),
-                [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],  // cursor highlight
-                [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6], // cursor highlight
+                [
+                    theme.accent.to_f32x4()[0],
+                    theme.accent.to_f32x4()[1],
+                    theme.accent.to_f32x4()[2],
+                    0.5,
+                ],
                 candidates,
                 state.focused_pane,
                 &mut state.text_renderer,
@@ -712,11 +802,19 @@ impl HecaApp {
         } else {
             sidebar::render_sidebar_collapsed(
                 &mut state.sidebar_tree,
-                0.0, sidebar_top, chrome.left_sidebar_width, sidebar_h,
+                0.0,
+                sidebar_top,
+                chrome.left_sidebar_width,
+                sidebar_h,
                 matches!(state.input_mode, InputMode::SidebarNav),
                 theme.accent.to_f32x4(),
                 theme.foreground.to_f32x4(),
-                [theme.accent.to_f32x4()[0], theme.accent.to_f32x4()[1], theme.accent.to_f32x4()[2], 0.5],
+                [
+                    theme.accent.to_f32x4()[0],
+                    theme.accent.to_f32x4()[1],
+                    theme.accent.to_f32x4()[2],
+                    0.5,
+                ],
                 [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],
                 candidates,
                 state.focused_pane,
@@ -740,10 +838,23 @@ impl HecaApp {
             let ghost_y = label.y - ghost_h / 2.0; // center on cursor
 
             // Ghost background from theme.
-            state.primitive_renderer.draw_rect(ghost_x, ghost_y, ghost_w, ghost_h, theme.sidebar_drag_ghost_bg.to_f32x4());
+            state.primitive_renderer.draw_rect(
+                ghost_x,
+                ghost_y,
+                ghost_w,
+                ghost_h,
+                theme.sidebar_drag_ghost_bg.to_f32x4(),
+            );
 
             // Ghost border from theme.
-            state.primitive_renderer.draw_border(ghost_x, ghost_y, ghost_w, ghost_h, theme.sidebar_drag_source_border.to_f32x4(), 1.5);
+            state.primitive_renderer.draw_border(
+                ghost_x,
+                ghost_y,
+                ghost_w,
+                ghost_h,
+                theme.sidebar_drag_source_border.to_f32x4(),
+                1.5,
+            );
 
             // Ghost text from theme.
             state.text_renderer.queue_text(
@@ -757,40 +868,86 @@ impl HecaApp {
 
         // Right sidebar
         let rsx = w - chrome.right_sidebar_width;
-        state.primitive_renderer.draw_rect(rsx, sidebar_top, chrome.right_sidebar_width, sidebar_h, side_bg);
+        state.primitive_renderer.draw_rect(
+            rsx,
+            sidebar_top,
+            chrome.right_sidebar_width,
+            sidebar_h,
+            side_bg,
+        );
         state.primitive_renderer.draw_border(
-            rsx, sidebar_top, 1.0, sidebar_h,
-            theme.border.to_f32x4(), 1.0,
+            rsx,
+            sidebar_top,
+            1.0,
+            sidebar_h,
+            theme.border.to_f32x4(),
+            1.0,
         );
         if chrome.right_sidebar_width >= 80.0 {
             state.text_renderer.queue_text(
-                "Details", rsx + 8.0, sidebar_top + 8.0, chrome_text, theme.foreground.to_f32x4(),
+                "Details",
+                rsx + 8.0,
+                sidebar_top + 8.0,
+                chrome_text,
+                theme.foreground.to_f32x4(),
             );
         }
 
         // ── FLOATING PANES ──
         if let Some(ws) = state.session.active_workspace() {
             for float in &ws.floating_panes {
-                let fx = float.position.x as f32 + pane_area.x;
-                let fy = float.position.y as f32 + pane_area.y;
+                let fx = float.position.x as f32 + pane_area.x + ws_offset.0;
+                let fy = float.position.y as f32 + pane_area.y + ws_offset.1;
                 let fw = float.size.w as f32;
                 let fh = float.size.h as f32;
                 let is_focused = state.focused_pane == Some(float.pane.id.0);
-                let fborder = if is_focused { theme.float_focus.to_f32x4() } else { theme.float_accent.to_f32x4() };
-                state.primitive_renderer.draw_rect(fx, fy, fw, fh, theme.float_background.to_f32x4());
-                state.primitive_renderer.draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
+                let fborder = if is_focused {
+                    theme.float_focus.to_f32x4()
+                } else {
+                    theme.float_accent.to_f32x4()
+                };
                 if let Some(backend) = state.backends.get(&float.pane.id.0) {
                     let data = backend.render_data();
-                    render_backend_data(&data, fx, fy, fw, fh, &mut state.text_renderer, &mut state.primitive_renderer, theme);
+                    render_backend_data(
+                        &data,
+                        fx,
+                        fy,
+                        fw,
+                        fh,
+                        &mut state.text_renderer,
+                        &mut state.primitive_renderer,
+                        theme,
+                    );
+                } else {
+                    state.primitive_renderer.draw_rect(
+                        fx,
+                        fy,
+                        fw,
+                        fh,
+                        theme.float_background.to_f32x4(),
+                    );
                 }
+                state
+                    .primitive_renderer
+                    .draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
                 // Draw floating pane name centered
                 let float_name = &float.pane.title;
                 let f_name_size = (fw.min(fh) * 0.25).clamp(24.0, 72.0);
-                let f_name_color = if is_focused { [1.0, 1.0, 1.0, 0.9] } else { [1.0, 1.0, 1.0, 0.4] };
+                let f_name_color = if is_focused {
+                    [1.0, 1.0, 1.0, 0.9]
+                } else {
+                    [1.0, 1.0, 1.0, 0.4]
+                };
                 let f_name_w = f_name_size * float_name.len() as f32 * 0.6;
                 let f_name_x = fx + (fw - f_name_w) / 2.0;
                 let f_name_y = fy + (fh - f_name_size) / 2.0;
-                state.text_renderer.queue_text(float_name, f_name_x, f_name_y, f_name_size, f_name_color);
+                state.text_renderer.queue_text(
+                    float_name,
+                    f_name_x,
+                    f_name_y,
+                    f_name_size,
+                    f_name_color,
+                );
             }
         }
 
@@ -820,7 +977,9 @@ impl HecaApp {
                         let lx = px + (pw - letter_size * 0.6) / 2.0;
                         let ly = py + (ph - letter_size) / 2.0;
                         let label = ch.to_string();
-                        state.text_renderer.queue_text(&label, lx, ly, letter_size, label_color);
+                        state
+                            .text_renderer
+                            .queue_text(&label, lx, ly, letter_size, label_color);
                         found = true;
                         break;
                     }
@@ -837,7 +996,13 @@ impl HecaApp {
                                 let lx = fx + (fw - letter_size * 0.6) / 2.0;
                                 let ly = fy + (fh - letter_size) / 2.0;
                                 let label = ch.to_string();
-                                state.text_renderer.queue_text(&label, lx, ly, letter_size, label_color);
+                                state.text_renderer.queue_text(
+                                    &label,
+                                    lx,
+                                    ly,
+                                    letter_size,
+                                    label_color,
+                                );
                                 found = true;
                                 break;
                             }
@@ -851,8 +1016,12 @@ impl HecaApp {
             }
         }
 
-        state.primitive_renderer.render(&state.device, &view, &mut encoder);
-        state.text_renderer.render(&state.device, &state.queue, &view, &mut encoder);
+        state
+            .primitive_renderer
+            .render(&state.device, &view, &mut encoder);
+        state
+            .text_renderer
+            .render(&state.device, &state.queue, &view, &mut encoder);
 
         state.queue.submit(std::iter::once(encoder.finish()));
         surface_texture.present();
@@ -880,19 +1049,24 @@ impl ApplicationHandler for HecaApp {
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(phys)
-                if phys.width > 0 && phys.height > 0 => {
-                    state.surface_config.width = phys.width;
-                    state.surface_config.height = phys.height;
-                    state.surface.configure(&state.device, &state.surface_config);
-                    let log_w = phys.width as f32 / state.scale_factor as f32;
-                    let log_h = phys.height as f32 / state.scale_factor as f32;
-                    state.primitive_renderer.set_screen_size(&state.queue, log_w, log_h);
-                    state.text_renderer.set_screen_size(&state.queue, log_w, log_h);
-                    // Update NIRI session viewport to content area size
-                    update_session_viewport(state);
-                    state.needs_redraw = true;
-                }
+            WindowEvent::Resized(phys) if phys.width > 0 && phys.height > 0 => {
+                state.surface_config.width = phys.width;
+                state.surface_config.height = phys.height;
+                state
+                    .surface
+                    .configure(&state.device, &state.surface_config);
+                let log_w = phys.width as f32 / state.scale_factor as f32;
+                let log_h = phys.height as f32 / state.scale_factor as f32;
+                state
+                    .primitive_renderer
+                    .set_screen_size(&state.queue, log_w, log_h);
+                state
+                    .text_renderer
+                    .set_screen_size(&state.queue, log_w, log_h);
+                // Update NIRI session viewport to content area size
+                update_session_viewport(state);
+                state.needs_redraw = true;
+            }
             WindowEvent::RedrawRequested => {
                 state.needs_redraw = true;
                 self.render();
@@ -902,10 +1076,7 @@ impl ApplicationHandler for HecaApp {
                 state.text_renderer.set_scale_factor(scale_factor);
                 state.needs_redraw = true;
             }
-            WindowEvent::KeyboardInput {
-                event,
-                ..
-            } => {
+            WindowEvent::KeyboardInput { event, .. } => {
                 if event.state != ElementState::Pressed {
                     return;
                 }
@@ -920,7 +1091,13 @@ impl ApplicationHandler for HecaApp {
 
                 // Build a KeyCombo from the current key event for comparison.
                 let event_combo = keymap::KeyCombo {
-                    key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key),
+                    key: normalize_key_text(
+                        &event.logical_key,
+                        &key_text,
+                        is_shift,
+                        is_ctrl,
+                        &event.physical_key,
+                    ),
                     ctrl: is_ctrl,
                     shift: is_shift,
                     alt: state.modifiers.alt_key(),
@@ -943,9 +1120,18 @@ impl ApplicationHandler for HecaApp {
 
                 // Handle Rename mode separately (needs mutable buffer access)
                 if let InputMode::Rename { target, buffer } = &mut state.input_mode {
-                    let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
-                    let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
-                    let is_backspace = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Backspace));
+                    let is_escape = matches!(
+                        event.logical_key,
+                        winit::keyboard::Key::Named(NamedKey::Escape)
+                    );
+                    let is_enter = matches!(
+                        event.logical_key,
+                        winit::keyboard::Key::Named(NamedKey::Enter)
+                    );
+                    let is_backspace = matches!(
+                        event.logical_key,
+                        winit::keyboard::Key::Named(NamedKey::Backspace)
+                    );
 
                     if is_escape {
                         state.input_mode = InputMode::Normal;
@@ -955,14 +1141,24 @@ impl ApplicationHandler for HecaApp {
                         match target {
                             RenameTarget::Workspace(ws_idx) => {
                                 if let Some(ws) = state.session.workspaces.get_mut(*ws_idx) {
-                                    ws.name = if new_name.is_empty() { None } else { Some(new_name) };
+                                    ws.name = if new_name.is_empty() {
+                                        None
+                                    } else {
+                                        Some(new_name)
+                                    };
                                 }
                             }
                             RenameTarget::Pane(pane_id) => {
                                 if let Some(ws) = state.session.active_workspace_mut()
-                                    && let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(*pane_id)) {
-                                        pane.title = if new_name.is_empty() { format!("pane{}", pane_id) } else { new_name };
-                                    }
+                                    && let Some(pane) =
+                                        ws.find_pane_mut(heca_core::layout::PaneId(*pane_id))
+                                {
+                                    pane.title = if new_name.is_empty() {
+                                        format!("pane{}", pane_id)
+                                    } else {
+                                        new_name
+                                    };
+                                }
                             }
                         }
                         sync_focus(state);
@@ -971,6 +1167,27 @@ impl ApplicationHandler for HecaApp {
                         buffer.pop();
                     } else if key_text.len() == 1 && !is_ctrl {
                         buffer.push_str(&key_text);
+                    }
+                    state.needs_redraw = true;
+                    return;
+                }
+
+                // Handle ConfirmDelete mode — y/n/esc
+                if let InputMode::ConfirmDelete { action, .. } = &state.input_mode {
+                    let is_escape = matches!(
+                        event.logical_key,
+                        winit::keyboard::Key::Named(NamedKey::Escape)
+                    );
+                    let is_y = key_text == "y" || key_text == "Y";
+                    let is_n = key_text == "n" || key_text == "N";
+
+                    if is_escape || is_n {
+                        state.input_mode = InputMode::Normal;
+                    } else if is_y {
+                        // Extract the action to execute (clone it out)
+                        let action = action.as_ref().clone();
+                        state.input_mode = InputMode::Normal;
+                        self.registry.execute(&action, state);
                     }
                     state.needs_redraw = true;
                     return;
@@ -997,16 +1214,14 @@ impl ApplicationHandler for HecaApp {
 
                         // Forward key to focused pane's backend (terminal input)
                         if let Some(pane_id) = state.focused_pane
-                            && let Some(backend) = state.backends.get_mut(&pane_id) {
-                                let input_bytes = winit_key_to_terminal_input(
-                                    &event.logical_key,
-                                    &key_text,
-                                    is_ctrl,
-                                );
-                                if !input_bytes.is_empty() {
-                                    backend.process_input(&input_bytes);
-                                }
+                            && let Some(backend) = state.backends.get_mut(&pane_id)
+                        {
+                            let input_bytes =
+                                winit_key_to_terminal_input(&event.logical_key, &key_text, is_ctrl);
+                            if !input_bytes.is_empty() {
+                                backend.process_input(&input_bytes);
                             }
+                        }
                     }
                     InputMode::Prefix => {
                         if is_prefix {
@@ -1015,9 +1230,10 @@ impl ApplicationHandler for HecaApp {
                             state.input_mode = InputMode::Normal;
                             state.prefix_entered_at = None;
                             if let Some(pane_id) = state.focused_pane
-                                && let Some(backend) = state.backends.get_mut(&pane_id) {
-                                    backend.process_input(&[0x02]);
-                                }
+                                && let Some(backend) = state.backends.get_mut(&pane_id)
+                            {
+                                backend.process_input(&[0x02]);
+                            }
                             return;
                         }
 
@@ -1025,14 +1241,17 @@ impl ApplicationHandler for HecaApp {
                         // The user may hold Shift while pressing the action key; we should
                         // wait for the actual character key, not exit on Shift alone.
                         let is_modifier_only = key_text.is_empty()
-                            && matches!(event.logical_key, winit::keyboard::Key::Named(
-                                winit::keyboard::NamedKey::Shift
-                                | winit::keyboard::NamedKey::Control
-                                | winit::keyboard::NamedKey::Alt
-                                | winit::keyboard::NamedKey::Super
-                                | winit::keyboard::NamedKey::Hyper
-                                | winit::keyboard::NamedKey::Meta
-                            ));
+                            && matches!(
+                                event.logical_key,
+                                winit::keyboard::Key::Named(
+                                    winit::keyboard::NamedKey::Shift
+                                        | winit::keyboard::NamedKey::Control
+                                        | winit::keyboard::NamedKey::Alt
+                                        | winit::keyboard::NamedKey::Super
+                                        | winit::keyboard::NamedKey::Hyper
+                                        | winit::keyboard::NamedKey::Meta
+                                )
+                            );
                         if is_modifier_only {
                             return;
                         }
@@ -1040,7 +1259,19 @@ impl ApplicationHandler for HecaApp {
                         // In prefix mode, pass the REAL modifier state. The user may intentionally
                         // press Ctrl+another key after the prefix (e.g. Ctrl+h for swap_left).
                         // The prefix key itself (Ctrl+B) is already handled above by is_prefix.
-                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo {
+                            key: normalize_key_text(
+                                &event.logical_key,
+                                &key_text,
+                                is_shift,
+                                is_ctrl,
+                                &event.physical_key,
+                            ),
+                            ctrl: is_ctrl,
+                            shift: is_shift,
+                            alt: false,
+                            super_: false,
+                        };
 
                         // Check mode triggers first (e.g. prefix+r → resize mode).
                         let mut entered_mode = None;
@@ -1072,7 +1303,10 @@ impl ApplicationHandler for HecaApp {
                         // else: empty key_text, no action — stay in prefix mode.
                     }
                     InputMode::Chord { sequence } => {
-                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
+                        let is_escape = matches!(
+                            event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::Escape)
+                        );
                         if is_escape {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
@@ -1082,13 +1316,16 @@ impl ApplicationHandler for HecaApp {
                         // Hardcoded chord: w → digit switches to workspace.
                         if sequence.len() == 1
                             && sequence[0].eq_ignore_ascii_case("w")
-                            && let Some(digit) = key_text.chars().next()
+                            && let Some(digit) = key_text
+                                .chars()
+                                .next()
                                 .filter(|c| c.is_ascii_digit())
                                 .and_then(|c| c.to_digit(10))
                         {
                             let ws_idx = (digit as usize).saturating_sub(1);
                             if ws_idx < state.session.workspaces.len() {
-                                self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                                self.registry
+                                    .execute(&WmAction::FocusWorkspace { ws_idx }, state);
                                 state.needs_redraw = true;
                             }
                             state.input_mode = InputMode::Normal;
@@ -1101,18 +1338,40 @@ impl ApplicationHandler for HecaApp {
                     }
                     InputMode::Mode { name } => {
                         let name = name.clone();
-                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
-                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
+                        let is_escape = matches!(
+                            event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::Escape)
+                        );
+                        let is_enter = matches!(
+                            event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::Enter)
+                        );
                         if is_escape || is_enter {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                             return;
                         }
-                        let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                        let combo = keymap::KeyCombo {
+                            key: normalize_key_text(
+                                &event.logical_key,
+                                &key_text,
+                                is_shift,
+                                is_ctrl,
+                                &event.physical_key,
+                            ),
+                            ctrl: is_ctrl,
+                            shift: is_shift,
+                            alt: false,
+                            super_: false,
+                        };
                         if let Some(mode_map) = self.mode_keymaps.get(&name)
                             && let Some(action) = mode_map.resolve(&name, &combo).cloned()
                         {
-                            let sticky = self.mode_triggers.get(&name).map(|(_, s)| *s).unwrap_or(true);
+                            let sticky = self
+                                .mode_triggers
+                                .get(&name)
+                                .map(|(_, s)| *s)
+                                .unwrap_or(true);
                             self.registry.execute(&action, state);
                             if !sticky {
                                 state.input_mode = InputMode::Normal;
@@ -1123,37 +1382,46 @@ impl ApplicationHandler for HecaApp {
                     InputMode::PaneSelect { candidates } => {
                         let candidates = candidates.clone();
                         state.input_mode = InputMode::Normal;
-                        let typed = key_text.chars().next()
-                            .or_else(|| {
-                                match event.physical_key {
-                                    winit::keyboard::PhysicalKey::Code(c) => {
-                                        let s = format!("{:?}", c);
-                                        s.strip_prefix("Key").and_then(|n| n.chars().next())
-                                    }
-                                    _ => None,
+                        let typed = key_text
+                            .chars()
+                            .next()
+                            .or_else(|| match event.physical_key {
+                                winit::keyboard::PhysicalKey::Code(c) => {
+                                    let s = format!("{:?}", c);
+                                    s.strip_prefix("Key").and_then(|n| n.chars().next())
                                 }
+                                _ => None,
                             })
                             .map(|c| c.to_ascii_lowercase());
                         if let Some(ch) = typed
-                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch) {
-                                self.registry.execute(&WmAction::FocusPane { pane_id: *target_id }, state);
-                            }
+                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
+                        {
+                            self.registry.execute(
+                                &WmAction::FocusPane {
+                                    pane_id: *target_id,
+                                },
+                                state,
+                            );
+                        }
                         state.input_mode = InputMode::Normal;
                     }
-                    InputMode::PaneSwap { candidates, focus_after } => {
+                    InputMode::PaneSwap {
+                        candidates,
+                        focus_after,
+                    } => {
                         let candidates = candidates.clone();
                         let should_focus = *focus_after;
                         state.input_mode = InputMode::Normal;
 
-                        let typed = key_text.chars().next()
-                            .or_else(|| {
-                                match event.physical_key {
-                                    winit::keyboard::PhysicalKey::Code(c) => {
-                                        let s = format!("{:?}", c);
-                                        s.strip_prefix("Key").and_then(|n| n.chars().next())
-                                    }
-                                    _ => None,
+                        let typed = key_text
+                            .chars()
+                            .next()
+                            .or_else(|| match event.physical_key {
+                                winit::keyboard::PhysicalKey::Code(c) => {
+                                    let s = format!("{:?}", c);
+                                    s.strip_prefix("Key").and_then(|n| n.chars().next())
                                 }
+                                _ => None,
                             })
                             .map(|c| c.to_ascii_lowercase());
                         let current_id = state.focused_pane;
@@ -1164,23 +1432,74 @@ impl ApplicationHandler for HecaApp {
                             && let Some((_, _, _)) = find_pane_location(&state.session, *target_id)
                         {
                             // Both panes are present in scrolling columns — dispatch Swap.
-                            eprintln!("[pane-swap] dispatching Swap a={} b={}", current_id, *target_id);
-                            self.registry.execute(&WmAction::Swap { a_id: current_id, b_id: *target_id }, state);
+                            self.registry.execute(
+                                &WmAction::Swap {
+                                    a_id: current_id,
+                                    b_id: *target_id,
+                                },
+                                state,
+                            );
 
                             // Apply focus semantics.
                             if should_focus {
-                                eprintln!("[pane-swap] focusing original pane a={}", current_id);
-                                self.registry.execute(&WmAction::FocusPane { pane_id: current_id }, state);
+                                self.registry.execute(
+                                    &WmAction::FocusPane {
+                                        pane_id: current_id,
+                                    },
+                                    state,
+                                );
                             } else {
-                                eprintln!("[pane-swap] focusing target pane b={}", *target_id);
-                                self.registry.execute(&WmAction::FocusPane { pane_id: *target_id }, state);
+                                self.registry.execute(
+                                    &WmAction::FocusPane {
+                                        pane_id: *target_id,
+                                    },
+                                    state,
+                                );
                             }
                         }
                         state.needs_redraw = true;
                     }
+                    InputMode::PaneTake {
+                        candidates,
+                        focus_after,
+                    } => {
+                        let candidates = candidates.clone();
+                        let should_focus = *focus_after;
+                        state.input_mode = InputMode::Normal;
+
+                        let typed = key_text
+                            .chars()
+                            .next()
+                            .or_else(|| match event.physical_key {
+                                winit::keyboard::PhysicalKey::Code(c) => {
+                                    let s = format!("{:?}", c);
+                                    s.strip_prefix("Key").and_then(|n| n.chars().next())
+                                }
+                                _ => None,
+                            })
+                            .map(|c| c.to_ascii_lowercase());
+                        if let Some(ch) = typed
+                            && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
+                        {
+                            self.registry.execute(
+                                &WmAction::TakePane {
+                                    pane_id: *target_id,
+                                    focus_after: should_focus,
+                                },
+                                state,
+                            );
+                        }
+                        state.needs_redraw = true;
+                    }
                     InputMode::SidebarNav => {
-                        let is_escape = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Escape));
-                        let is_enter = matches!(event.logical_key, winit::keyboard::Key::Named(NamedKey::Enter));
+                        let is_escape = matches!(
+                            event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::Escape)
+                        );
+                        let is_enter = matches!(
+                            event.logical_key,
+                            winit::keyboard::Key::Named(NamedKey::Enter)
+                        );
 
                         if is_escape {
                             state.input_mode = InputMode::Normal;
@@ -1198,9 +1517,15 @@ impl ApplicationHandler for HecaApp {
                                         .position(|ws| ws.find_pane(target_pane_id).is_some());
                                     if let Some(ws_idx) = target_ws {
                                         if ws_idx != state.session.active_workspace_idx {
-                                            self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                                            self.registry.execute(
+                                                &WmAction::FocusWorkspace { ws_idx },
+                                                state,
+                                            );
                                         }
-                                        self.registry.execute(&WmAction::FocusPane { pane_id: *pane_id }, state);
+                                        self.registry.execute(
+                                            &WmAction::FocusPane { pane_id: *pane_id },
+                                            state,
+                                        );
                                     }
                                 }
                                 Some(sidebar::SidebarItem::Workspace { .. }) => {
@@ -1209,7 +1534,8 @@ impl ApplicationHandler for HecaApp {
                                         .cursor_workspace_index()
                                         .unwrap_or(state.session.active_workspace_idx);
                                     if ws_idx != state.session.active_workspace_idx {
-                                        self.registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                                        self.registry
+                                            .execute(&WmAction::FocusWorkspace { ws_idx }, state);
                                     }
                                 }
                                 _ => {}
@@ -1217,16 +1543,28 @@ impl ApplicationHandler for HecaApp {
                             state.input_mode = InputMode::Normal;
                             state.needs_redraw = true;
                         } else {
-                            let combo = keymap::KeyCombo { key: normalize_key_text(&event.logical_key, &key_text, is_shift, is_ctrl, &event.physical_key), ctrl: is_ctrl, shift: is_shift, alt: false, super_: false };
+                            let combo = keymap::KeyCombo {
+                                key: normalize_key_text(
+                                    &event.logical_key,
+                                    &key_text,
+                                    is_shift,
+                                    is_ctrl,
+                                    &event.physical_key,
+                                ),
+                                ctrl: is_ctrl,
+                                shift: is_shift,
+                                alt: false,
+                                super_: false,
+                            };
                             let action = self.keymap.resolve("sidebar", &combo).cloned();
                             if let Some(act) = action {
                                 self.registry.execute(&act, state);
                             }
                         }
                     }
-                    InputMode::Rename { .. } => {
-                        // Handled by early return before this match
-                    }
+                    // Rename, ConfirmDelete, and PaneTake are handled by early
+                    // return before this match — use a wildcard for the rest.
+                    _ => {}
                 }
             }
             WindowEvent::ModifiersChanged(new_mods) => {
@@ -1243,7 +1581,11 @@ impl ApplicationHandler for HecaApp {
                 }
                 state.needs_redraw = true;
             }
-            WindowEvent::MouseInput { state: button_state, button, .. } => {
+            WindowEvent::MouseInput {
+                state: button_state,
+                button,
+                ..
+            } => {
                 if let Some(action) = mouse::on_mouse_input(state, button, button_state) {
                     self.registry.execute(&action, state);
                 }
@@ -1255,7 +1597,11 @@ impl ApplicationHandler for HecaApp {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         // Config reload requested via keybinding — do it before borrowing state.
-        let needs_reload = self.state.as_ref().map(|s| s.pending_reload).unwrap_or(false);
+        let needs_reload = self
+            .state
+            .as_ref()
+            .map(|s| s.pending_reload)
+            .unwrap_or(false);
         if needs_reload {
             if let Some(state) = self.state.as_mut() {
                 state.pending_reload = false;
@@ -1264,10 +1610,13 @@ impl ApplicationHandler for HecaApp {
         }
 
         if let Some(ref mut state) = self.state {
-
             // Prefix / Chord mode auto-timeout: exit if inactive > 500 ms.
-            let should_timeout = matches!(state.input_mode, InputMode::Prefix | InputMode::Chord { .. })
-                && state.prefix_entered_at.is_some_and(|entered| entered.elapsed() >= Duration::from_millis(500));
+            let should_timeout = matches!(
+                state.input_mode,
+                InputMode::Prefix | InputMode::Chord { .. }
+            ) && state
+                .prefix_entered_at
+                .is_some_and(|entered| entered.elapsed() >= Duration::from_millis(500));
             if should_timeout {
                 state.input_mode = InputMode::Normal;
                 state.prefix_entered_at = None;
@@ -1296,7 +1645,8 @@ impl ApplicationHandler for HecaApp {
                 }
             }
 
-            let needs_frame = state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
+            let needs_frame =
+                state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
             if needs_frame {
                 state.window.request_redraw();
             }
@@ -1304,7 +1654,7 @@ impl ApplicationHandler for HecaApp {
             // Use WaitUntil during animations (60fps cap), Wait when idle (0% CPU).
             if state.session.are_animations_ongoing() {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(
-                    Instant::now() + Duration::from_millis(16)
+                    Instant::now() + Duration::from_millis(16),
                 ));
             } else {
                 event_loop.set_control_flow(ControlFlow::Wait);
@@ -1324,7 +1674,9 @@ fn build_keymap(config: &heca_config::theme::Config) -> keymap::KeymapRegistry {
         merged_bindings.insert(k.clone(), v.clone());
     }
     for (action_name, value) in &merged_bindings {
-        let Some(action) = action_from_name(action_name) else { continue };
+        let Some(action) = action_from_name(action_name) else {
+            continue;
+        };
         for key_str in value.keys() {
             let trimmed = key_str.trim();
             if trimmed.starts_with("prefix+") {
@@ -1384,7 +1736,9 @@ fn build_keymap(config: &heca_config::theme::Config) -> keymap::KeymapRegistry {
 }
 
 /// Build mode keymaps and triggers from config.
-fn build_modes(config: &heca_config::theme::Config) -> (
+fn build_modes(
+    config: &heca_config::theme::Config,
+) -> (
     HashMap<String, keymap::KeymapRegistry>,
     HashMap<String, (keymap::KeyCombo, bool)>,
 ) {
@@ -1393,7 +1747,9 @@ fn build_modes(config: &heca_config::theme::Config) -> (
 
     // Start with default modes so built-in modes (resize, etc.) are always available.
     let default_keys = heca_config::theme::KeysConfig::default();
-    let modes_to_load: Vec<_> = default_keys.mode.iter()
+    let modes_to_load: Vec<_> = default_keys
+        .mode
+        .iter()
         .chain(config.keys.mode.iter())
         .cloned()
         .collect();
@@ -1406,7 +1762,6 @@ fn build_modes(config: &heca_config::theme::Config) -> (
             } else if let Some(built) = build_action(&binding.action, &binding.args) {
                 built
             } else {
-                eprintln!("warning: unknown mode action '{}' in mode '{}'", binding.action, mode_cfg.name);
                 continue;
             };
             let combo = keymap::KeyCombo::parse(&binding.keys);
@@ -1429,9 +1784,10 @@ fn build_modes(config: &heca_config::theme::Config) -> (
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
 fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
     let target = heca_core::layout::PaneId(pane_id);
-    session.workspaces.iter().position(|ws| {
-        ws.find_pane(target).is_some()
-    })
+    session
+        .workspaces
+        .iter()
+        .position(|ws| ws.find_pane(target).is_some())
 }
 
 /// Collect ALL panes across ALL workspaces as letter candidates.
@@ -1484,9 +1840,10 @@ pub(crate) fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usi
 pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
     // Switch workspace if the target pane is not in the current workspace.
     if let Some(target_ws) = find_pane_workspace(&state.session, pane_id)
-        && target_ws != state.session.active_workspace_idx {
-            switch_workspace_tracked(state, target_ws);
-        }
+        && target_ws != state.session.active_workspace_idx
+    {
+        switch_workspace_tracked(state, target_ws);
+    }
 
     if let Some(ws) = state.session.active_workspace_mut() {
         // Find location first (immutable scan), then mutate.
@@ -1498,10 +1855,13 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
                     break;
                 }
             }
-            if found.is_some() { break; }
+            if found.is_some() {
+                break;
+            }
         }
 
         if let Some((ci, pi)) = found {
+            ws.deactivate_floating_panes();
             ws.floating_is_active = false;
             ws.scrolling.activate_column(ci);
             if let Some(col) = ws.scrolling.columns.get_mut(ci) {
@@ -1509,13 +1869,7 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
             }
         } else {
             // Not in scrolling columns — check floating panes.
-            for float in &mut ws.floating_panes {
-                if float.pane.id.0 == pane_id {
-                    ws.floating_is_active = true;
-                    float.is_active = true;
-                    break;
-                }
-            }
+            ws.activate_floating_pane(heca_core::layout::PaneId(pane_id));
         }
     }
 
@@ -1545,7 +1899,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     let prev_ws = state.session.active_workspace_idx;
 
     // Update focused_pane from session state
-    state.focused_pane = state.session.active_workspace()
+    state.focused_pane = state
+        .session
+        .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id.0);
 
@@ -1556,11 +1912,18 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // If prev_focused doesn't belong to current_ws, a workspace switch
     // happened and switch_workspace_tracked() already recorded it.
     let pane_belongs_to_current_ws = prev_focused.is_some_and(|pid| {
-        state.session.workspaces.get(current_ws)
+        state
+            .session
+            .workspaces
+            .get(current_ws)
             .map(|ws| ws.find_pane(heca_core::layout::PaneId(pid)).is_some())
             .unwrap_or(false)
     });
-    if focus_changed && prev_focused.is_some() && prev_ws == current_ws && pane_belongs_to_current_ws {
+    if focus_changed
+        && prev_focused.is_some()
+        && prev_ws == current_ws
+        && pane_belongs_to_current_ws
+    {
         while state.last_visited_pane_per_ws.len() <= current_ws {
             state.last_visited_pane_per_ws.push(None);
         }
@@ -1571,8 +1934,6 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     if focus_changed && prev_focused.is_some() {
         state.last_focused = prev_focused;
     }
-
-
 
     // Rebuild sidebar tree
     state.sidebar_tree.rebuild(
@@ -1591,14 +1952,19 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
     let chrome = ChromeConfig {
         tab_bar_height: 32.0,
         status_bar_height: 24.0,
-        left_sidebar_width: if state.sidebar.left_visible { state.sidebar.left_width } else { 40.0 },
-        right_sidebar_width: if state.sidebar.right_visible { state.sidebar.right_width } else { 40.0 },
+        left_sidebar_width: if state.sidebar.left_visible {
+            state.sidebar.left_width
+        } else {
+            40.0
+        },
+        right_sidebar_width: if state.sidebar.right_visible {
+            state.sidebar.right_width
+        } else {
+            40.0
+        },
     };
     let pane_area = chrome.content_rect(win_w, win_h);
-    let new_size = heca_core::layout::types::Size::new(
-        pane_area.w as f64,
-        pane_area.h as f64,
-    );
+    let new_size = heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
     state.session.update_viewport(new_size);
 }
 
@@ -1622,7 +1988,10 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::FocusToggleLocal, handle_focus_toggle_local);
     registry.register(&WmAction::FocusToggleGlobal, handle_focus_toggle_global);
     registry.register(&WmAction::FocusPane { pane_id: 0 }, handle_focus_pane);
-    registry.register(&WmAction::FocusWorkspace { ws_idx: 0 }, handle_focus_workspace);
+    registry.register(
+        &WmAction::FocusWorkspace { ws_idx: 0 },
+        handle_focus_workspace,
+    );
 
     // ── Layout ──
     registry.register(&WmAction::SplitHorizontal, handle_split_horizontal);
@@ -1640,12 +2009,52 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::MoveColumnUp, handle_move_column_up);
     registry.register(&WmAction::MoveColumnDown, handle_move_column_down);
     registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, handle_swap_param);
-    registry.register(&WmAction::Move { pane_id: 0, target_col: 0 }, handle_move_param);
-    registry.register(&WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 }, handle_move_pane_to_workspace);
-    registry.register(&WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 }, handle_move_pane_to_column);
-    registry.register(&WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: true }, handle_move_column_to_workspace);
-    registry.register(&WmAction::Resize { target: input::ResizeTarget::Column, axis: input::ResizeAxis::X, amount: 0.0 }, handle_resize);
-    registry.register(&WmAction::ResizeTo { target: input::ResizeTarget::Column, width: 0.0, height: 0.0 }, handle_resize_to);
+    registry.register(
+        &WmAction::Move {
+            pane_id: 0,
+            target_col: 0,
+        },
+        handle_move_param,
+    );
+    registry.register(
+        &WmAction::MovePaneToWorkspace {
+            pane_id: 0,
+            ws_idx: 0,
+        },
+        handle_move_pane_to_workspace,
+    );
+    registry.register(
+        &WmAction::MovePaneToColumn {
+            pane_id: 0,
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        handle_move_pane_to_column,
+    );
+    registry.register(
+        &WmAction::MoveColumnToWorkspace {
+            col_idx: 0,
+            ws_idx: 0,
+            focus: true,
+        },
+        handle_move_column_to_workspace,
+    );
+    registry.register(
+        &WmAction::Resize {
+            target: input::ResizeTarget::Column,
+            axis: input::ResizeAxis::X,
+            amount: 0.0,
+        },
+        handle_resize,
+    );
+    registry.register(
+        &WmAction::ResizeTo {
+            target: input::ResizeTarget::Column,
+            width: 0.0,
+            height: 0.0,
+        },
+        handle_resize_to,
+    );
 
     // ── Pane ──
     registry.register(&WmAction::Float, handle_float);
@@ -1653,10 +2062,37 @@ pub fn build_registry() -> actions::ActionRegistry {
     registry.register(&WmAction::PaneSelect, handle_pane_select);
     registry.register(&WmAction::SwapPane, handle_swap_pane);
     registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
+    registry.register(&WmAction::PaneTake, handle_pane_take);
+    registry.register(&WmAction::PaneTakeAndFocus, handle_pane_take_and_focus);
+    registry.register(
+        &WmAction::TakePane {
+            pane_id: 0,
+            focus_after: false,
+        },
+        handle_take_pane,
+    );
     registry.register(&WmAction::RenamePane, handle_rename_pane);
-    registry.register(&WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 }, handle_float_at);
-    registry.register(&WmAction::ClosePaneById { pane_id: 0 }, handle_close_pane_by_id);
-    registry.register(&WmAction::RenameTarget { pane_id: 0, name: String::new() }, handle_rename_target);
+    registry.register(
+        &WmAction::FloatAt {
+            pane_id: 0,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        },
+        handle_float_at,
+    );
+    registry.register(
+        &WmAction::ClosePaneById { pane_id: 0 },
+        handle_close_pane_by_id,
+    );
+    registry.register(
+        &WmAction::RenameTarget {
+            pane_id: 0,
+            name: String::new(),
+        },
+        handle_rename_target,
+    );
 
     // ── Workspace ──
     registry.register(&WmAction::CreateWorkspace, handle_create_workspace);
@@ -1674,15 +2110,55 @@ pub fn build_registry() -> actions::ActionRegistry {
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
-    registry.register(&WmAction::SpawnCommand { command: String::new() }, handle_spawn_command);
+    registry.register(
+        &WmAction::SpawnCommand {
+            command: String::new(),
+        },
+        handle_spawn_command,
+    );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
 
+    // ── Sidebar-specific (parameterized) ──
+    registry.register(
+        &WmAction::AddPaneToColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        handle_add_pane_to_column,
+    );
+
+    // ── Destructive ──
+    registry.register(
+        &WmAction::DeleteColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        handle_delete_column,
+    );
+    registry.register(
+        &WmAction::DeleteWorkspace { ws_idx: 0 },
+        handle_delete_workspace,
+    );
+
+    // ── Take ──
+    // (registered above with PaneTake/PaneTakeAndFocus)
+
     // ── Mode ──
-    registry.register(&WmAction::EnterMode { name: String::new() }, handle_enter_mode);
+    registry.register(
+        &WmAction::EnterMode {
+            name: String::new(),
+        },
+        handle_enter_mode,
+    );
 
     registry
 }
-pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, target_ws: usize, target_col: usize) {
+pub(crate) fn move_pane_to_workspace_column(
+    state: &mut AppState,
+    pane_id: u64,
+    target_ws: usize,
+    target_col: usize,
+) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == target_ws {
         return;
@@ -1695,7 +2171,11 @@ pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, 
         };
         let mut removed = None;
         for ci in 0..ws.scrolling.columns.len() {
-            if let Some(pi) = ws.scrolling.columns[ci].panes.iter().position(|p| p.id.0 == pane_id) {
+            if let Some(pi) = ws.scrolling.columns[ci]
+                .panes
+                .iter()
+                .position(|p| p.id.0 == pane_id)
+            {
                 removed = ws.scrolling.remove_pane(ci, pi);
                 break;
             }
@@ -1713,7 +2193,11 @@ pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, 
         let new_col_id = ColumnId(state.session.next_id());
         if let Some(ws) = state.session.active_workspace_mut() {
             let insert_pos = target_col.min(ws.scrolling.columns.len());
-            ws.scrolling.add_column(Some(insert_pos), Column::new(new_col_id, pane, ColumnWidth::Proportion(0.5)), true);
+            ws.scrolling.add_column(
+                Some(insert_pos),
+                Column::new(new_col_id, pane, ColumnWidth::Proportion(0.5)),
+                true,
+            );
             state.focused_pane = Some(pane_id);
         }
 
@@ -1725,13 +2209,23 @@ pub(crate) fn move_pane_to_workspace_column(state: &mut AppState, pane_id: u64, 
 
 /// Move a pane from one column to another within the same workspace.
 /// Handles column removal when a column becomes empty after the move.
-pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: usize, dst_col: usize) {
-    if src_col == dst_col { return; }
+pub(crate) fn move_pane_to_column(
+    state: &mut AppState,
+    pane_id: u64,
+    src_col: usize,
+    dst_col: usize,
+) {
+    if src_col == dst_col {
+        return;
+    }
 
     let ws_idx = state.session.active_workspace_idx;
 
     // Validate indices before mutation. Allow `dst_col == col_count_before` to mean "append/new column".
-    let col_count_before = state.session.workspaces.get(ws_idx)
+    let col_count_before = state
+        .session
+        .workspaces
+        .get(ws_idx)
         .map(|ws| ws.scrolling.columns.len())
         .unwrap_or(0);
     if src_col >= col_count_before || dst_col > col_count_before {
@@ -1739,7 +2233,10 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
     }
 
     let removed_pane = if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-        if let Some(pi) = ws.scrolling.columns.get(src_col)
+        if let Some(pi) = ws
+            .scrolling
+            .columns
+            .get(src_col)
             .and_then(|col| col.panes.iter().position(|p| p.id.0 == pane_id))
         {
             ws.scrolling.remove_pane(src_col, pi)
@@ -1752,7 +2249,10 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
 
     if let Some(pane) = removed_pane {
         // Check if the source column was removed (became empty after removal).
-        let col_count_after = state.session.workspaces.get(ws_idx)
+        let col_count_after = state
+            .session
+            .workspaces
+            .get(ws_idx)
             .map(|ws| ws.scrolling.columns.len())
             .unwrap_or(0);
         let col_removed = col_count_after < col_count_before;
@@ -1764,20 +2264,38 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
         };
 
         // Determine current column count (immutable borrow) so we can call next_id() if we need to create a column.
-        let col_count_now = state.session.workspaces.get(ws_idx).map(|ws| ws.scrolling.columns.len()).unwrap_or(0);
+        let col_count_now = state
+            .session
+            .workspaces
+            .get(ws_idx)
+            .map(|ws| ws.scrolling.columns.len())
+            .unwrap_or(0);
         // Clamp adjusted_dst to [0..=col_count_now]
-        let target_pos = if adjusted_dst <= col_count_now { adjusted_dst } else { col_count_now };
+        let target_pos = if adjusted_dst <= col_count_now {
+            adjusted_dst
+        } else {
+            col_count_now
+        };
         let need_new_column = target_pos >= col_count_now;
-        let new_col_id = if need_new_column { Some(ColumnId(state.session.next_id())) } else { None };
+        let new_col_id = if need_new_column {
+            Some(ColumnId(state.session.next_id()))
+        } else {
+            None
+        };
 
         if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
             if target_pos < ws.scrolling.columns.len() {
                 // Insert into existing column at target_pos
-                ws.scrolling.add_pane_to_column(target_pos, None, pane, true);
+                ws.scrolling
+                    .add_pane_to_column(target_pos, None, pane, true);
             } else {
                 // Create a new column at target_pos (append if equal to current len)
                 let cid = new_col_id.unwrap_or(ColumnId(pane.id.0));
-                ws.scrolling.add_column(Some(target_pos), Column::new(cid, pane, ColumnWidth::Proportion(0.5)), true);
+                ws.scrolling.add_column(
+                    Some(target_pos),
+                    Column::new(cid, pane, ColumnWidth::Proportion(0.5)),
+                    true,
+                );
             }
             state.focused_pane = Some(pane_id);
         }
@@ -1785,7 +2303,6 @@ pub(crate) fn move_pane_to_column(state: &mut AppState, pane_id: u64, src_col: u
 
     sync_focus(state);
 }
-
 
 /// Move a column from its current workspace to a target workspace.
 /// If `focus` is true, switches to the target workspace after the move.
@@ -1797,8 +2314,12 @@ pub(crate) fn move_column_to_workspace(
     focus: bool,
 ) {
     let current_ws = state.session.active_workspace_idx;
-    if current_ws == target_ws { return; }
-    if target_ws >= state.session.workspaces.len() { return; }
+    if current_ws == target_ws {
+        return;
+    }
+    if target_ws >= state.session.workspaces.len() {
+        return;
+    }
 
     // 1. Remove the column from the source workspace.
     let removed_column = {
@@ -1806,16 +2327,19 @@ pub(crate) fn move_column_to_workspace(
             Some(ws) => ws,
             None => return,
         };
-        if col_idx >= ws.scrolling.columns.len() { return; }
+        if col_idx >= ws.scrolling.columns.len() {
+            return;
+        }
         ws.scrolling.remove_column(col_idx)
     };
 
     let Some(column) = removed_column else { return };
 
-    eprintln!("[move-col-ws] removed column id={:?} from ws={}", column.id, current_ws);
-
     // 2. If source workspace is empty after removal, handle it.
-    let source_empty = state.session.workspaces.get(current_ws)
+    let source_empty = state
+        .session
+        .workspaces
+        .get(current_ws)
         .map(|ws| ws.scrolling.columns.is_empty())
         .unwrap_or(false);
 
@@ -1830,7 +2354,6 @@ pub(crate) fn move_column_to_workspace(
         }
         destroy_empty_workspace(state, current_ws);
         source_destroyed = true;
-        eprintln!("[move-col-ws] destroyed empty source workspace (was ws={})", current_ws);
     } else if source_empty {
         // Last workspace — create a placeholder pane so it's never truly empty.
         let next_id = state.session.next_id();
@@ -1846,15 +2369,15 @@ pub(crate) fn move_column_to_workspace(
         if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
             ws.scrolling.add_column(None, placeholder_col, true);
         }
-        state.backends.insert(next_id, Box::new(FakeBackend::new(80, 24)));
-        eprintln!("[move-col-ws] created placeholder pane in last workspace");
+        state
+            .backends
+            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
     }
 
     // 3. Insert the column into the target workspace.
     state.session.switch_to_workspace(target_ws);
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.add_column(None, column, true);
-        eprintln!("[move-col-ws] inserted column into ws={}", target_ws);
     }
 
     // 4. Focus behavior.
@@ -1876,11 +2399,13 @@ pub(crate) fn move_column_to_workspace(
     state.needs_redraw = true;
 }
 
-
 /// Remove a workspace if it is empty and there are other workspaces.
 /// Adjusts tracking indices after removal.
 pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
-    let is_empty = state.session.workspaces.get(ws_idx)
+    let is_empty = state
+        .session
+        .workspaces
+        .get(ws_idx)
         .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
         .unwrap_or(true);
 
@@ -1891,9 +2416,10 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
         if state.last_visited_ws_idx == Some(ws_idx) {
             state.last_visited_ws_idx = None;
         } else if let Some(ref mut idx) = state.last_visited_ws_idx
-            && *idx > ws_idx {
-                *idx -= 1;
-            }
+            && *idx > ws_idx
+        {
+            *idx -= 1;
+        }
 
         // Fix up last_visited_pane_per_ws — remove the entry for the removed workspace.
         if ws_idx < state.last_visited_pane_per_ws.len() {
@@ -1908,5 +2434,7 @@ fn main() {
     let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = HecaApp::new();
-    event_loop.run_app(&mut app).expect("Failed to run event loop");
+    event_loop
+        .run_app(&mut app)
+        .expect("Failed to run event loop");
 }

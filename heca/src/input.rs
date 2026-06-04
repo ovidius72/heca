@@ -142,6 +142,10 @@ pub enum WmAction {
         name: String,
     },
 
+    // ── Quick take (unit) ──
+    PaneTake,
+    PaneTakeAndFocus,
+
     // ── Workspace (unit) ──
     CreateWorkspace,
     RenameWorkspace,
@@ -167,6 +171,27 @@ pub enum WmAction {
     // ── Mode management ──
     EnterMode {
         name: String,
+    },
+
+    // ── Sidebar-specific (parameterized) ──
+    AddPaneToColumn {
+        ws_idx: usize,
+        col_idx: usize,
+    },
+
+    // ── Destructive (parameterized) ──
+    DeleteColumn {
+        ws_idx: usize,
+        col_idx: usize,
+    },
+    DeleteWorkspace {
+        ws_idx: usize,
+    },
+
+    // ── Take pane (parameterized) ──
+    TakePane {
+        pane_id: u64,
+        focus_after: bool,
     },
 
     // ── Config ──
@@ -211,6 +236,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
         "swap_pane" => Some(WmAction::SwapPane),
+        "pane_take" => Some(WmAction::PaneTake),
+        "pane_take_and_focus" => Some(WmAction::PaneTakeAndFocus),
         "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
         "swap_left" => Some(WmAction::SwapLeft),
         "swap_right" => Some(WmAction::SwapRight),
@@ -244,6 +271,15 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
         "command_palette" => Some(WmAction::CommandPalette),
+        "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        }),
+        "delete_column" => Some(WmAction::DeleteColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        }),
+        "delete_workspace" => Some(WmAction::DeleteWorkspace { ws_idx: 0 }),
         "reload_config" => Some(WmAction::ReloadConfig),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
@@ -345,6 +381,24 @@ pub fn build_action(
             pane_id: get_u64(args, "pane_id")?,
             name: get_string(args, "name")?,
         }),
+        "take_pane" => Some(WmAction::TakePane {
+            pane_id: get_u64(args, "pane_id")?,
+            focus_after: args
+                .get("focus_after")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(false),
+        }),
+        "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
+        "delete_column" => Some(WmAction::DeleteColumn {
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
+        "delete_workspace" => Some(WmAction::DeleteWorkspace {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
         }),
@@ -420,7 +474,13 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::RenameTarget { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
-        | WmAction::ReloadConfig => 6,
+        | WmAction::ReloadConfig
+        | WmAction::AddPaneToColumn { .. }
+        | WmAction::DeleteColumn { .. }
+        | WmAction::DeleteWorkspace { .. }
+        | WmAction::TakePane { .. }
+        | WmAction::PaneTake
+        | WmAction::PaneTakeAndFocus => 6,
     }
 }
 
@@ -520,6 +580,86 @@ mod tests {
     }
 
     #[test]
+    fn test_action_priority_exhaustive() {
+        // Explicit match on every variant — no catch-all.
+        let _prio = |a: &WmAction| -> u8 {
+            match a {
+                // Navigation (highest priority)
+                WmAction::FocusLeft
+                | WmAction::FocusRight
+                | WmAction::FocusUp
+                | WmAction::FocusDown
+                | WmAction::NextPane
+                | WmAction::PrevPane => 0,
+                WmAction::SidebarFocus => 0,
+                WmAction::SidebarUp
+                | WmAction::SidebarDown
+                | WmAction::SidebarLeftNav
+                | WmAction::SidebarRightNav
+                | WmAction::SidebarExpandToggle => 4,
+                // Pane management
+                WmAction::SplitHorizontal
+                | WmAction::SplitVertical
+                | WmAction::Float
+                | WmAction::ClosePane
+                | WmAction::PaneSelect
+                | WmAction::SwapPane
+                | WmAction::SwapAndFocusPane
+                | WmAction::FocusToggleLocal
+                | WmAction::FocusToggleGlobal
+                | WmAction::CreateWorkspace
+                | WmAction::RenameWorkspace
+                | WmAction::RenamePane
+                | WmAction::WorkspaceNext
+                | WmAction::WorkspacePrev => 1,
+                // Swap
+                WmAction::SwapLeft
+                | WmAction::SwapRight
+                | WmAction::SwapUp
+                | WmAction::SwapDown
+                | WmAction::MovePaneLeft
+                | WmAction::MovePaneRight
+                | WmAction::MoveColumnUp
+                | WmAction::MoveColumnDown => 2,
+                // Resize (lowest priority — checked last)
+                WmAction::ResizeIncrease
+                | WmAction::ResizeDecrease
+                | WmAction::PaneHeightIncrease
+                | WmAction::PaneHeightDecrease => 3,
+                // Sidebars
+                WmAction::SidebarLeft | WmAction::SidebarRight => 4,
+                // System
+                WmAction::CommandPalette => 5,
+                // Parameterized variants — not resolved from keybindings
+                WmAction::FocusPane { .. }
+                | WmAction::FocusWorkspace { .. }
+                | WmAction::Swap { .. }
+                | WmAction::Move { .. }
+                | WmAction::MovePaneToWorkspace { .. }
+                | WmAction::MovePaneToColumn { .. }
+                | WmAction::MoveColumnToWorkspace { .. }
+                | WmAction::Resize { .. }
+                | WmAction::ResizeTo { .. }
+                | WmAction::FloatAt { .. }
+                | WmAction::ClosePaneById { .. }
+                | WmAction::RenameTarget { .. }
+                | WmAction::SpawnCommand { .. }
+                | WmAction::EnterMode { .. }
+                | WmAction::ReloadConfig
+                | WmAction::AddPaneToColumn { .. }
+                | WmAction::DeleteColumn { .. }
+                | WmAction::DeleteWorkspace { .. }
+                | WmAction::TakePane { .. }
+                | WmAction::PaneTake
+                | WmAction::PaneTakeAndFocus => 6,
+            }
+        };
+        // Smoke test that all branches compile
+        assert_eq!(_prio(&WmAction::FocusLeft), 0);
+        assert_eq!(_prio(&WmAction::ReloadConfig), 6);
+    }
+
+    #[test]
     fn test_parameterized_variants_constructible() {
         // Exercise all parameterized variants so they are not flagged as dead code.
         let _ = WmAction::FocusPane { pane_id: 1 };
@@ -565,6 +705,21 @@ mod tests {
             pane_id: 1,
             name: "test".to_string(),
         };
+        let _ = WmAction::AddPaneToColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        };
+        let _ = WmAction::DeleteColumn {
+            ws_idx: 0,
+            col_idx: 0,
+        };
+        let _ = WmAction::DeleteWorkspace { ws_idx: 0 };
+        let _ = WmAction::TakePane {
+            pane_id: 1,
+            focus_after: false,
+        };
+        let _ = WmAction::PaneTake;
+        let _ = WmAction::PaneTakeAndFocus;
     }
 
     #[test]

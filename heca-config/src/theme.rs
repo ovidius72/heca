@@ -36,7 +36,9 @@ impl FromStr for Color {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
-        if !s.starts_with('#') { return Err(format!("Color must start with #: got {}", s)); }
+        if !s.starts_with('#') {
+            return Err(format!("Color must start with #: got {}", s));
+        }
         let hex = &s[1..];
         if hex.len() != 6 && hex.len() != 8 {
             return Err(format!("Color hex must be 6 or 8 chars: got {}", hex.len()));
@@ -46,19 +48,34 @@ impl FromStr for Color {
         let b = u8::from_str_radix(&hex[4..6], 16).map_err(|e| format!("Invalid blue: {}", e))?;
         let a = if hex.len() >= 8 {
             u8::from_str_radix(&hex[6..8], 16).map_err(|e| format!("Invalid alpha: {}", e))?
-        } else { 255 };
+        } else {
+            255
+        };
         Ok(Color { r, g, b, a })
     }
 }
 
 impl fmt::Display for Color {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#{:02x}{:02x}{:02x}{:02x}", self.r, self.g, self.b, self.a)
+        write!(
+            f,
+            "#{:02x}{:02x}{:02x}{:02x}",
+            self.r, self.g, self.b, self.a
+        )
     }
 }
 
-impl From<Color> for String { fn from(c: Color) -> Self { c.to_string() } }
-impl TryFrom<String> for Color { type Error = String; fn try_from(s: String) -> Result<Self, Self::Error> { Color::from_str(&s) } }
+impl From<Color> for String {
+    fn from(c: Color) -> Self {
+        c.to_string()
+    }
+}
+impl TryFrom<String> for Color {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Color::from_str(&s)
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Shadow & Theme
@@ -72,7 +89,13 @@ pub struct Shadow {
 }
 
 impl Default for Shadow {
-    fn default() -> Self { Self { color: "#000000".to_string(), alpha: 0.3, blur: 8.0 } }
+    fn default() -> Self {
+        Self {
+            color: "#000000".to_string(),
+            alpha: 0.3,
+            blur: 8.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -87,30 +110,61 @@ pub struct Theme {
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
-    #[serde(default = "default_float_bg")]     pub float_background: Color,
-    #[serde(default = "default_float_accent")] pub float_accent: Color,
-    #[serde(default = "default_float_focus")]  pub float_focus: Color,
+    #[serde(default = "default_float_bg")]
+    pub float_background: Color,
+    #[serde(default = "default_float_accent")]
+    pub float_accent: Color,
+    #[serde(default = "default_float_focus")]
+    pub float_focus: Color,
     // ── Sidebar drag-and-drop colors ──
-    #[serde(default = "default_drag_ghost_bg")]    pub sidebar_drag_ghost_bg: Color,
-    #[serde(default = "default_drag_ghost_fg")]    pub sidebar_drag_ghost_fg: Color,
-    #[serde(default = "default_drag_source_bg")]   pub sidebar_drag_source_bg: Color,
-    #[serde(default = "default_drag_source_border")] pub sidebar_drag_source_border: Color,
+    #[serde(default = "default_drag_ghost_bg")]
+    pub sidebar_drag_ghost_bg: Color,
+    #[serde(default = "default_drag_ghost_fg")]
+    pub sidebar_drag_ghost_fg: Color,
+    #[serde(default = "default_drag_source_bg")]
+    pub sidebar_drag_source_bg: Color,
+    #[serde(default = "default_drag_source_border")]
+    pub sidebar_drag_source_border: Color,
     // ── Sidebar font sizes ──
-    #[serde(default = "default_sidebar_label_font_size")]  pub sidebar_label_font_size: f32,
-    #[serde(default = "default_sidebar_button_font_size")] pub sidebar_button_font_size: f32,
+    #[serde(default = "default_sidebar_label_font_size")]
+    pub sidebar_label_font_size: f32,
+    #[serde(default = "default_sidebar_button_font_size")]
+    pub sidebar_button_font_size: f32,
 }
 
-fn default_float_bg()    -> Color { Color::new(49, 50, 68, 255) }
-fn default_float_accent() -> Color { Color::new(137, 180, 250, 255) }
-fn default_float_focus()  -> Color { Color::new(250, 179, 135, 255) }
-fn default_drag_ghost_bg()    -> Color { Color::new(137, 180, 250, 217) } // accent @ 85%
-fn default_drag_ghost_fg()    -> Color { Color::new(255, 255, 255, 255) } // white
-fn default_drag_source_bg()   -> Color { Color::new(137, 180, 250, 38)  } // accent @ 15%
-fn default_drag_source_border() -> Color { Color::new(137, 180, 250, 255) } // accent
-fn default_sidebar_label_font_size() -> f32 { 14.0 }
-fn default_sidebar_button_font_size() -> f32 { 11.0 }
+fn default_float_bg() -> Color {
+    Color::new(49, 50, 68, 255)
+}
+fn default_float_accent() -> Color {
+    Color::new(137, 180, 250, 255)
+}
+fn default_float_focus() -> Color {
+    Color::new(250, 179, 135, 255)
+}
+fn default_drag_ghost_bg() -> Color {
+    Color::new(137, 180, 250, 217)
+} // accent @ 85%
+fn default_drag_ghost_fg() -> Color {
+    Color::new(255, 255, 255, 255)
+} // white
+fn default_drag_source_bg() -> Color {
+    Color::new(137, 180, 250, 38)
+} // accent @ 15%
+fn default_drag_source_border() -> Color {
+    Color::new(137, 180, 250, 255)
+} // accent
+fn default_sidebar_label_font_size() -> f32 {
+    14.0
+}
+fn default_sidebar_button_font_size() -> f32 {
+    11.0
+}
 
-impl Default for Theme { fn default() -> Self { Self::catppuccin_mocha() } }
+impl Default for Theme {
+    fn default() -> Self {
+        Self::catppuccin_mocha()
+    }
+}
 
 impl Theme {
     pub fn catppuccin_mocha() -> Self {
@@ -148,7 +202,11 @@ impl Theme {
             font_size: 32.0,
             border_radius: 6.0,
             border_width: 1.0,
-            shadow: Shadow { color: "#000000".to_string(), alpha: 0.15, blur: 8.0 },
+            shadow: Shadow {
+                color: "#000000".to_string(),
+                alpha: 0.15,
+                blur: 8.0,
+            },
             float_background: Color::new(204, 208, 218, 255),
             float_accent: Color::new(30, 102, 245, 255),
             float_focus: Color::new(230, 126, 34, 255),
@@ -167,14 +225,18 @@ impl Theme {
 
     fn load_from_disk(name: &str) -> Option<Self> {
         let path = config_dir().join("themes").join(format!("{}.toml", name));
-        std::fs::read_to_string(path).ok().and_then(|c| toml::from_str(&c).ok())
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|c| toml::from_str(&c).ok())
     }
 
     fn load_bundled(name: &str) -> Option<Self> {
         let bundled: HashMap<&str, &str> = [
             ("mocha", include_str!("themes/mocha.toml")),
             ("latte", include_str!("themes/latte.toml")),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
         toml::from_str(bundled.get(name)?).ok()
     }
 }
@@ -199,20 +261,38 @@ pub enum ModifierKey {
     Shift,
 }
 
-fn default_theme()        -> String { "mocha".to_string() }
-fn default_mouse()        -> bool   { true }
-fn default_window_width() -> u32    { 1280 }
-fn default_window_height()-> u32    { 800 }
-fn default_prefix_key()   -> String { "ctrl+b".to_string() }
-fn default_auto_scroll_edge()    -> bool { true }
-fn default_always_center_single_column()  -> bool { false }
+fn default_theme() -> String {
+    "mocha".to_string()
+}
+fn default_mouse() -> bool {
+    true
+}
+fn default_window_width() -> u32 {
+    1280
+}
+fn default_window_height() -> u32 {
+    800
+}
+fn default_prefix_key() -> String {
+    "ctrl+b".to_string()
+}
+fn default_auto_scroll_edge() -> bool {
+    true
+}
+fn default_always_center_single_column() -> bool {
+    false
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SettingsConfig {
-    #[serde(default = "default_theme")]         pub theme: String,
-    #[serde(default = "default_mouse")]         pub mouse: bool,
-    #[serde(default = "default_window_width")]  pub window_width: u32,
-    #[serde(default = "default_window_height")] pub window_height: u32,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default = "default_mouse")]
+    pub mouse: bool,
+    #[serde(default = "default_window_width")]
+    pub window_width: u32,
+    #[serde(default = "default_window_height")]
+    pub window_height: u32,
     /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
     #[serde(default = "default_auto_scroll_edge")]
     pub auto_scroll_edge: bool,
@@ -252,8 +332,16 @@ pub enum BindingValue {
 impl BindingValue {
     pub fn keys(&self) -> Vec<&str> {
         match self {
-            BindingValue::Single(s) => s.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).collect(),
-            BindingValue::Many(v)   => v.iter().map(|s| s.as_str()).filter(|p| !p.is_empty()).collect(),
+            BindingValue::Single(s) => s
+                .split(',')
+                .map(|p| p.trim())
+                .filter(|p| !p.is_empty())
+                .collect(),
+            BindingValue::Many(v) => v
+                .iter()
+                .map(|s| s.as_str())
+                .filter(|p| !p.is_empty())
+                .collect(),
         }
     }
 }
@@ -264,10 +352,13 @@ pub type KeybindingMap = HashMap<String, BindingValue>;
 pub struct CommandKeybindConfig {
     pub key: String,
     pub command: String,
-    #[serde(default = "default_command_type")] pub command_type: String,
+    #[serde(default = "default_command_type")]
+    pub command_type: String,
 }
 
-fn default_command_type() -> String { "pane".to_string() }
+fn default_command_type() -> String {
+    "pane".to_string()
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct ModeBindingConfig {
@@ -290,10 +381,13 @@ pub struct KeyModeConfig {
     /// If false, execute one binding and exit to Normal.
     #[serde(default = "default_mode_sticky")]
     pub sticky: bool,
-    #[serde(default)] pub bindings: Vec<ModeBindingConfig>,
+    #[serde(default)]
+    pub bindings: Vec<ModeBindingConfig>,
 }
 
-fn default_mode_sticky() -> bool { true }
+fn default_mode_sticky() -> bool {
+    true
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  KeysConfig — holds prefix, flat action bindings, commands, and modes
@@ -326,31 +420,59 @@ impl Default for KeysConfig {
         use BindingValue::*;
 
         // ── Navigation ──
-        bindings.insert("focus_left".to_string(),  Single("prefix+h".to_string()));
+        bindings.insert("focus_left".to_string(), Single("prefix+h".to_string()));
         bindings.insert("focus_right".to_string(), Single("prefix+l".to_string()));
-        bindings.insert("focus_up".to_string(),    Single("prefix+k".to_string()));
-        bindings.insert("focus_down".to_string(),  Single("prefix+j".to_string()));
+        bindings.insert("focus_up".to_string(), Single("prefix+k".to_string()));
+        bindings.insert("focus_down".to_string(), Single("prefix+j".to_string()));
 
         // ── Splits ──
-        bindings.insert("split_horizontal".to_string(), Single("prefix+Enter".to_string()));
-        bindings.insert("split_vertical".to_string(),   Single("prefix+v".to_string()));
+        bindings.insert(
+            "split_horizontal".to_string(),
+            Single("prefix+Enter".to_string()),
+        );
+        bindings.insert("split_vertical".to_string(), Single("prefix+v".to_string()));
 
         // ── Resize ──
-        bindings.insert("resize_increase".to_string(),      Single("prefix+=".to_string()));
-        bindings.insert("resize_decrease".to_string(),      Single("prefix+-".to_string()));
-        bindings.insert("pane_height_increase".to_string(), Single("prefix+Shift+=".to_string()));
-        bindings.insert("pane_height_decrease".to_string(), Single("prefix+Shift+-".to_string()));
+        bindings.insert(
+            "resize_increase".to_string(),
+            Single("prefix+=".to_string()),
+        );
+        bindings.insert(
+            "resize_decrease".to_string(),
+            Single("prefix+-".to_string()),
+        );
+        bindings.insert(
+            "pane_height_increase".to_string(),
+            Single("prefix+Shift+=".to_string()),
+        );
+        bindings.insert(
+            "pane_height_decrease".to_string(),
+            Single("prefix+Shift+-".to_string()),
+        );
 
         // ── Pane operations ──
-        bindings.insert("close".to_string(),  Single("prefix+x".to_string()));
-        bindings.insert("float".to_string(),  Single("prefix+f".to_string()));
+        bindings.insert("close".to_string(), Single("prefix+x".to_string()));
+        bindings.insert("float".to_string(), Single("prefix+f".to_string()));
 
         // ── Quick select / swap ──
-        bindings.insert("pane_select".to_string(),     Single("prefix+q".to_string()));
+        bindings.insert("pane_select".to_string(), Single("prefix+q".to_string()));
         // Swap (keyboard): Shift+M swaps panes
-        bindings.insert("swap_pane".to_string(),     Single("prefix+Shift+m".to_string()));
+        bindings.insert(
+            "swap_pane".to_string(),
+            Single("prefix+Shift+m".to_string()),
+        );
         // Swap + focus (keyboard): M swaps and then focuses the swapped pane
-        bindings.insert("swap_and_focus_pane".to_string(),  Single("prefix+m".to_string()));
+        bindings.insert(
+            "swap_and_focus_pane".to_string(),
+            Single("prefix+m".to_string()),
+        );
+        // Take: move target pane to bottom of active column
+        bindings.insert("pane_take".to_string(), Single("prefix+t".to_string()));
+        // Take + focus: same but focuses the moved pane
+        bindings.insert(
+            "pane_take_and_focus".to_string(),
+            Single("prefix+Shift+t".to_string()),
+        );
 
         // ── Tabs ──
         bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
@@ -359,43 +481,82 @@ impl Default for KeysConfig {
         // ── Sidebars ──
         // Note: sidebar navigation (h/j/k/l) is ONLY active in SidebarNav mode.
         // Do NOT bind them in the normal prefix map — they conflict with focus_left/right/up/down.
-        bindings.insert("sidebar_left".to_string(),  Single("prefix+b".to_string()));
+        bindings.insert("sidebar_left".to_string(), Single("prefix+b".to_string()));
         bindings.insert("sidebar_right".to_string(), Single("prefix+.".to_string()));
         bindings.insert("sidebar_focus".to_string(), Single("prefix+e".to_string()));
-        bindings.insert("sidebar_expand_toggle".to_string(), Single("prefix+Tab".to_string()));
+        bindings.insert(
+            "sidebar_expand_toggle".to_string(),
+            Single("prefix+Tab".to_string()),
+        );
 
         // ── Workspace navigation ──
         bindings.insert("workspace_prev".to_string(), Single("prefix+u".to_string()));
         bindings.insert("workspace_next".to_string(), Single("prefix+d".to_string()));
 
         // ── Focus toggle ──
-        bindings.insert("focus_toggle_local".to_string(),  Single("prefix+i".to_string()));
-        bindings.insert("focus_toggle_global".to_string(), Single("prefix+Shift+l".to_string()));
+        bindings.insert(
+            "focus_toggle_local".to_string(),
+            Single("prefix+i".to_string()),
+        );
+        bindings.insert(
+            "focus_toggle_global".to_string(),
+            Single("prefix+Shift+l".to_string()),
+        );
 
         // ── Workspace / naming ──
-        bindings.insert("create_workspace".to_string(),  Single("prefix+w".to_string()));
-        bindings.insert("rename_workspace".to_string(),  Single("prefix+Shift+w".to_string()));
-        bindings.insert("rename_pane".to_string(),       Single("prefix+Shift+p".to_string()));
+        bindings.insert(
+            "create_workspace".to_string(),
+            Single("prefix+w".to_string()),
+        );
+        bindings.insert(
+            "rename_workspace".to_string(),
+            Single("prefix+Shift+w".to_string()),
+        );
+        bindings.insert(
+            "rename_pane".to_string(),
+            Single("prefix+Shift+p".to_string()),
+        );
 
         // ── Command palette ──
-        bindings.insert("command_palette".to_string(), Single("prefix+p".to_string()));
+        bindings.insert(
+            "command_palette".to_string(),
+            Single("prefix+p".to_string()),
+        );
 
         // ── Config reload ──
-        bindings.insert("reload_config".to_string(), Single("prefix+Shift+r".to_string()));
+        bindings.insert(
+            "reload_config".to_string(),
+            Single("prefix+Shift+r".to_string()),
+        );
 
         // ── Move pane to column (NIRI-style) ──
-        bindings.insert("move_pane_left".to_string(),  Single("prefix+Ctrl+[".to_string()));
-        bindings.insert("move_pane_right".to_string(), Single("prefix+Ctrl+]".to_string()));
+        bindings.insert(
+            "move_pane_left".to_string(),
+            Single("prefix+Ctrl+[".to_string()),
+        );
+        bindings.insert(
+            "move_pane_right".to_string(),
+            Single("prefix+Ctrl+]".to_string()),
+        );
 
         // ── Move column to workspace (vertical movement) ──
-        bindings.insert("move_column_up".to_string(),   Single("prefix+Ctrl+k".to_string()));
-        bindings.insert("move_column_down".to_string(), Single("prefix+Ctrl+j".to_string()));
+        bindings.insert(
+            "move_column_up".to_string(),
+            Single("prefix+Ctrl+k".to_string()),
+        );
+        bindings.insert(
+            "move_column_down".to_string(),
+            Single("prefix+Ctrl+j".to_string()),
+        );
 
         // ── Swap position (Ctrl+nav) ──
-        bindings.insert("swap_left".to_string(),  Single("prefix+Ctrl+h".to_string()));
-        bindings.insert("swap_right".to_string(), Single("prefix+Ctrl+l".to_string()));
-        bindings.insert("swap_up".to_string(),    Single("prefix+Ctrl+k".to_string()));
-        bindings.insert("swap_down".to_string(),  Single("prefix+Ctrl+j".to_string()));
+        bindings.insert("swap_left".to_string(), Single("prefix+Ctrl+h".to_string()));
+        bindings.insert(
+            "swap_right".to_string(),
+            Single("prefix+Ctrl+l".to_string()),
+        );
+        bindings.insert("swap_up".to_string(), Single("prefix+Ctrl+k".to_string()));
+        bindings.insert("swap_down".to_string(), Single("prefix+Ctrl+j".to_string()));
 
         // ── Default resize mode ──
         let mut mode = Vec::new();
@@ -408,7 +569,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "column".to_string()),
                 ("axis".to_string(), "x".to_string()),
                 ("amount".to_string(), "-50".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -417,7 +580,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "column".to_string()),
                 ("axis".to_string(), "x".to_string()),
                 ("amount".to_string(), "50".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -426,7 +591,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "pane".to_string()),
                 ("axis".to_string(), "y".to_string()),
                 ("amount".to_string(), "-40".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -435,7 +602,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "pane".to_string()),
                 ("axis".to_string(), "y".to_string()),
                 ("amount".to_string(), "40".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -444,7 +613,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "column".to_string()),
                 ("axis".to_string(), "x".to_string()),
                 ("amount".to_string(), "-50".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -453,7 +624,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "column".to_string()),
                 ("axis".to_string(), "x".to_string()),
                 ("amount".to_string(), "50".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -462,7 +635,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "pane".to_string()),
                 ("axis".to_string(), "y".to_string()),
                 ("amount".to_string(), "-40".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         resize_bindings.push(Mbc {
             action: "resize".to_string(),
@@ -471,7 +646,9 @@ impl Default for KeysConfig {
                 ("target".to_string(), "pane".to_string()),
                 ("axis".to_string(), "y".to_string()),
                 ("amount".to_string(), "40".to_string()),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         });
         mode.push(KeyModeConfig {
             name: "resize".to_string(),
@@ -480,7 +657,13 @@ impl Default for KeysConfig {
             bindings: resize_bindings,
         });
 
-        Self { prefix: default_prefix_key(), bindings, unbind: HashMap::new(), command: Vec::new(), mode }
+        Self {
+            prefix: default_prefix_key(),
+            bindings,
+            unbind: HashMap::new(),
+            command: Vec::new(),
+            mode,
+        }
     }
 }
 
@@ -490,8 +673,10 @@ impl Default for KeysConfig {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct Config {
-    #[serde(default)] pub settings: SettingsConfig,
-    #[serde(default)] pub keys: KeysConfig,
+    #[serde(default)]
+    pub settings: SettingsConfig,
+    #[serde(default)]
+    pub keys: KeysConfig,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -506,10 +691,7 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> Self {
-        let config = Self::load_config_file().unwrap_or_else(|e| {
-            eprintln!("[config] failed to load: {e}; using defaults");
-            Config::default()
-        });
+        let config = Self::load_config_file().unwrap_or_else(|_| Config::default());
         let theme = Theme::load(&config.settings.theme);
         Self { config, theme }
     }
@@ -520,28 +702,14 @@ impl AppConfig {
             Some(config_dir().join("config.toml")),
         ];
         for path in paths.into_iter().flatten() {
-            eprintln!("[config] trying: {}", path.display());
-            match std::fs::read_to_string(&path) {
-                Ok(content) => {
-                    eprintln!("[config] found file at: {}", path.display());
-                    match toml::from_str::<Config>(&content) {
-                        Ok(config) => {
-                            eprintln!("[config] parsed successfully");
-                            eprintln!("[config] prefix='{}' bindings_count={} command_count={} mode_count={}",
-                                config.keys.prefix,
-                                config.keys.bindings.len(),
-                                config.keys.command.len(),
-                                config.keys.mode.len());
-                            return Ok(config);
-                        }
-                        Err(e) => {
-                            eprintln!("[config] PARSE ERROR in {}: {}", path.display(), e);
-                            return Err(format!("parse error in {}: {}", path.display(), e));
-                        }
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                match toml::from_str::<Config>(&content) {
+                    Ok(config) => {
+                        return Ok(config);
                     }
-                }
-                Err(e) => {
-                    eprintln!("[config] not found: {} ({e})", path.display());
+                    Err(e) => {
+                        return Err(format!("parse error in {}: {}", path.display(), e));
+                    }
                 }
             }
         }
@@ -550,7 +718,9 @@ impl AppConfig {
 }
 
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("heca")
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("heca")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -564,13 +734,19 @@ mod tests {
     #[test]
     fn test_color_from_hex() {
         let c: Color = "#1e1e2e".parse().unwrap();
-        assert_eq!(c.r, 30); assert_eq!(c.g, 30); assert_eq!(c.b, 46); assert_eq!(c.a, 255);
+        assert_eq!(c.r, 30);
+        assert_eq!(c.g, 30);
+        assert_eq!(c.b, 46);
+        assert_eq!(c.a, 255);
     }
 
     #[test]
     fn test_color_with_alpha() {
         let c: Color = "#ff000080".parse().unwrap();
-        assert_eq!(c.r, 255); assert_eq!(c.g, 0); assert_eq!(c.b, 0); assert_eq!(c.a, 128);
+        assert_eq!(c.r, 255);
+        assert_eq!(c.g, 0);
+        assert_eq!(c.b, 0);
+        assert_eq!(c.a, 128);
     }
 
     #[test]
@@ -662,8 +838,14 @@ keys = "="
 "#;
         let cfg: Config = toml::from_str(toml).unwrap();
         assert_eq!(cfg.keys.prefix, "ctrl+a");
-        assert_eq!(cfg.keys.bindings.get("focus_left").unwrap().keys(), vec!["h", "Left"]);
-        assert_eq!(cfg.keys.bindings.get("focus_right").unwrap().keys(), vec!["l"]);
+        assert_eq!(
+            cfg.keys.bindings.get("focus_left").unwrap().keys(),
+            vec!["h", "Left"]
+        );
+        assert_eq!(
+            cfg.keys.bindings.get("focus_right").unwrap().keys(),
+            vec!["l"]
+        );
         assert_eq!(cfg.keys.command.len(), 1);
         assert_eq!(cfg.keys.mode.len(), 1);
         assert_eq!(cfg.keys.mode[0].name, "resize");

@@ -1,3 +1,4 @@
+use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
@@ -25,17 +26,20 @@ pub enum RenameTarget {
     Pane(u64),
 }
 
-
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum InputMode {
     Normal,
     Prefix,
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
-    PaneSelect { candidates: Vec<(char, u64)> },
+    PaneSelect {
+        candidates: Vec<(char, u64)>,
+    },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
     /// `focus_after` determines whether focus follows the swapped pane.
-    PaneSwap { candidates: Vec<(char, u64)>, focus_after: bool },
+    PaneSwap {
+        candidates: Vec<(char, u64)>,
+        focus_after: bool,
+    },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
     /// Text input mode for renaming workspaces / panes.
@@ -45,16 +49,34 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
-    Chord { sequence: Vec<String> },
+    Chord {
+        sequence: Vec<String>,
+    },
     /// Custom mode (e.g. resize mode). Stay in mode until Esc.
     /// `name` is the mode identifier from config.
-    Mode { name: String },
+    Mode {
+        name: String,
+    },
+    /// Confirmation prompt for destructive operations.
+    /// `y` executes the stored action, `n` or `Esc` cancels.
+    ConfirmDelete {
+        message: String,
+        action: Box<WmAction>,
+    },
+    /// Take-pane letter selection mode.
+    /// User picks a pane which gets moved to the active column bottom.
+    PaneTake {
+        candidates: Vec<(char, u64)>,
+        focus_after: bool,
+    },
 }
 
 impl InputMode {
     pub fn candidates(&self) -> Option<&[(char, u64)]> {
         match self {
-            InputMode::PaneSelect { candidates } | InputMode::PaneSwap { candidates, .. } => Some(candidates),
+            InputMode::PaneSelect { candidates }
+            | InputMode::PaneSwap { candidates, .. }
+            | InputMode::PaneTake { candidates, .. } => Some(candidates),
             _ => None,
         }
     }
@@ -88,12 +110,25 @@ pub enum DragState {
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
     },
-    /// Sidebar drag — pane stays in layout, no floating ghost.
-    /// Ghost label follows cursor; pane animates on drop.
+    /// Phase 0: potential sidebar drag — mouse pressed, waiting for threshold.
+    /// On threshold exceeded → transitions to SidebarDrag (move) or SwapSidebarDrag.
+    /// On release without threshold → executes click_action instead.
+    SidebarDragStarting {
+        pane_id: u64,
+        original_ws: usize,
+        start_mouse: (f32, f32),
+        threshold_sq: f32,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
+        /// The click action (e.g. FocusPane) to execute if released without dragging.
+        click_action: Box<WmAction>,
+    },
+    /// Sidebar drag — move: pane stays in layout, ghost follows cursor.
     SidebarDrag {
         pane_id: u64,
         /// Workspace where the pane lives.
         original_ws: usize,
+        swap: bool,
     },
 }
 
@@ -216,11 +251,18 @@ mod tests {
     fn test_input_mode_candidates_some() {
         let cands = vec![('a', 1), ('b', 2)];
         assert_eq!(
-            InputMode::PaneSelect { candidates: cands.clone() }.candidates(),
+            InputMode::PaneSelect {
+                candidates: cands.clone()
+            }
+            .candidates(),
             Some(cands.as_slice())
         );
         assert_eq!(
-            InputMode::PaneSwap { candidates: cands.clone(), focus_after: false }.candidates(),
+            InputMode::PaneSwap {
+                candidates: cands.clone(),
+                focus_after: false
+            }
+            .candidates(),
             Some(cands.as_slice())
         );
     }

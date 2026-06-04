@@ -54,7 +54,9 @@ impl PaneBackend for FakeBackend {
                 bold: false,
             });
         }
-        lines.push(TerminalLine { cells: cells.clone() });
+        lines.push(TerminalLine {
+            cells: cells.clone(),
+        });
         // Second line has a short label so queue_text only gets called once
         if self.cols >= 8 {
             let label = "FakePane";

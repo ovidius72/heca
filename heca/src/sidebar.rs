@@ -9,15 +9,17 @@ pub enum SidebarItem {
     Workspace { ws_idx: usize },
     Column { ws_idx: usize, col_idx: usize },
     Pane { pane_id: u64 },
+    FloatingPane { pane_id: u64, ws_idx: usize },
 }
 
 impl SidebarItem {
-    /// Returns the workspace index for Workspace and Column variants.
+    /// Returns the workspace index for Workspace, Column, and FloatingPane variants.
     /// For Pane, returns None (use `cursor_workspace_index()` for tree search).
     pub fn workspace_idx(&self) -> Option<usize> {
         match self {
             SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
             SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
+            SidebarItem::FloatingPane { ws_idx, .. } => Some(*ws_idx),
             SidebarItem::Pane { .. } => None,
         }
     }
@@ -47,6 +49,7 @@ pub struct SidebarWsEntry {
     pub collapsed: bool,
     pub state: SidebarItemState,
     pub columns: Vec<SidebarColEntry>,
+    pub floating_panes: Vec<SidebarPaneEntry>,
 }
 
 /// The sidebar tree model — mirrors the session's layout hierarchy.
@@ -116,10 +119,14 @@ impl SidebarTree {
 
             let mut ws_entry = SidebarWsEntry {
                 ws_idx,
-                name: ws.name.clone().unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
+                name: ws
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
                 collapsed: false,
                 state,
                 columns: Vec::new(),
+                floating_panes: Vec::new(),
             };
 
             // Add scrolling columns
@@ -140,7 +147,8 @@ impl SidebarTree {
 
                     for pane in col.panes.iter() {
                         let is_active_pane = Some(pane.id.0) == focused_pane;
-                        let is_visited_pane = !is_active_pane && Some(pane.id.0) == last_visited_in_ws;
+                        let is_visited_pane =
+                            !is_active_pane && Some(pane.id.0) == last_visited_in_ws;
                         col_entry.panes.push(SidebarPaneEntry {
                             pane_id: pane.id.0,
                             name: pane.title.clone(),
@@ -158,6 +166,24 @@ impl SidebarTree {
                 }
             }
 
+            // Add floating panes for this workspace
+            for float in &ws.floating_panes {
+                let is_active_float = Some(float.pane.id.0) == focused_pane;
+                let is_visited_float =
+                    !is_active_float && Some(float.pane.id.0) == last_visited_in_ws;
+                ws_entry.floating_panes.push(SidebarPaneEntry {
+                    pane_id: float.pane.id.0,
+                    name: float.pane.title.clone(),
+                    state: if is_active_float {
+                        SidebarItemState::Active
+                    } else if is_visited_float {
+                        SidebarItemState::Visited
+                    } else {
+                        SidebarItemState::None
+                    },
+                });
+            }
+
             self.workspaces.push(ws_entry);
         }
 
@@ -170,7 +196,9 @@ impl SidebarTree {
         self.flat_items.clear();
 
         for ws_entry in &self.workspaces {
-            self.flat_items.push(SidebarItem::Workspace { ws_idx: ws_entry.ws_idx });
+            self.flat_items.push(SidebarItem::Workspace {
+                ws_idx: ws_entry.ws_idx,
+            });
 
             if !ws_entry.collapsed {
                 for col_entry in &ws_entry.columns {
@@ -181,9 +209,19 @@ impl SidebarTree {
 
                     if !col_entry.collapsed {
                         for pane_entry in &col_entry.panes {
-                            self.flat_items.push(SidebarItem::Pane { pane_id: pane_entry.pane_id });
+                            self.flat_items.push(SidebarItem::Pane {
+                                pane_id: pane_entry.pane_id,
+                            });
                         }
                     }
+                }
+
+                // Floating panes (always shown when workspace not collapsed)
+                for float_entry in &ws_entry.floating_panes {
+                    self.flat_items.push(SidebarItem::FloatingPane {
+                        pane_id: float_entry.pane_id,
+                        ws_idx: ws_entry.ws_idx,
+                    });
                 }
             }
         }
@@ -200,18 +238,30 @@ impl SidebarTree {
         }
     }
 
+    fn is_navigable(&self, idx: usize) -> bool {
+        self.flat_items
+            .get(idx)
+            .is_some_and(|item| !matches!(item, SidebarItem::FloatingPane { .. }))
+    }
+
     /// Move selection up, keeping cursor visible.
     pub fn cursor_up(&mut self) {
-        if self.cursor > 0 {
+        while self.cursor > 0 {
             self.cursor -= 1;
+            if self.is_navigable(self.cursor) {
+                break;
+            }
         }
         self.scroll_to_cursor();
     }
 
     /// Move selection down, keeping cursor visible.
     pub fn cursor_down(&mut self) {
-        if self.cursor + 1 < self.item_count {
+        while self.cursor + 1 < self.item_count {
             self.cursor += 1;
+            if self.is_navigable(self.cursor) {
+                break;
+            }
         }
         self.scroll_to_cursor();
     }
@@ -226,11 +276,12 @@ impl SidebarTree {
         }
     }
 
-    /// Returns true if the item at `idx` is visible in collapsed sidebar mode.
-    /// Columns are hidden; only Workspace and Pane items are shown.
-    fn is_visible_collapsed(&self, idx: usize) -> bool {
+    fn is_navigable_collapsed(&self, idx: usize) -> bool {
         self.flat_items.get(idx).is_some_and(|item| {
-            !matches!(item, SidebarItem::Column { .. })
+            !matches!(
+                item,
+                SidebarItem::Column { .. } | SidebarItem::FloatingPane { .. }
+            )
         })
     }
 
@@ -241,7 +292,7 @@ impl SidebarTree {
                 break;
             }
             self.cursor -= 1;
-            if self.is_visible_collapsed(self.cursor) {
+            if self.is_navigable_collapsed(self.cursor) {
                 break;
             }
         }
@@ -254,7 +305,7 @@ impl SidebarTree {
                 break;
             }
             self.cursor += 1;
-            if self.is_visible_collapsed(self.cursor) {
+            if self.is_navigable_collapsed(self.cursor) {
                 break;
             }
         }
@@ -271,11 +322,12 @@ impl SidebarTree {
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
                     if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
-                            col_entry.collapsed = !col_entry.collapsed;
-                        }
+                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
+                    {
+                        col_entry.collapsed = !col_entry.collapsed;
+                    }
                 }
-                SidebarItem::Pane { .. } => {
+                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {
                     // Panes are leaves — no expand/collapse.
                 }
             }
@@ -290,22 +342,24 @@ impl SidebarTree {
             match item {
                 SidebarItem::Workspace { ws_idx } => {
                     if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && ws_entry.collapsed {
-                            ws_entry.collapsed = false;
-                            self.rebuild_flat_items();
-                            self.clamp_cursor();
-                        }
+                        && ws_entry.collapsed
+                    {
+                        ws_entry.collapsed = false;
+                        self.rebuild_flat_items();
+                        self.clamp_cursor();
+                    }
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
                     if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
                         && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
-                            && col_entry.collapsed {
-                                col_entry.collapsed = false;
-                                self.rebuild_flat_items();
-                                self.clamp_cursor();
-                            }
+                        && col_entry.collapsed
+                    {
+                        col_entry.collapsed = false;
+                        self.rebuild_flat_items();
+                        self.clamp_cursor();
+                    }
                 }
-                SidebarItem::Pane { .. } => {
+                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {
                     // Panes are leaves — nothing to expand.
                 }
             }
@@ -325,13 +379,14 @@ impl SidebarTree {
                 }
                 SidebarItem::Column { ws_idx, col_idx } => {
                     if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx) {
-                            col_entry.collapsed = true;
-                            self.rebuild_flat_items();
-                            self.clamp_cursor();
-                        }
+                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
+                    {
+                        col_entry.collapsed = true;
+                        self.rebuild_flat_items();
+                        self.clamp_cursor();
+                    }
                 }
-                SidebarItem::Pane { .. } => {
+                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {
                     // Panes are leaves — no-op.
                 }
             }
@@ -343,23 +398,24 @@ impl SidebarTree {
         self.flat_items.get(self.cursor)
     }
 
-
-
     /// Get the workspace index of the item at the current cursor position.
-    /// Works for Workspace, Column, and Pane items.
+    /// Works for Workspace, Column, FloatingPane, and Pane items.
     pub fn cursor_workspace_index(&self) -> Option<usize> {
-        self.flat_items.get(self.cursor).and_then(|item| match item {
-            SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
-            SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
-            SidebarItem::Pane { pane_id } => {
-                // Search workspaces for this pane
-                self.workspaces.iter().position(|ws| {
-                    ws.columns.iter().any(|col| {
-                        col.panes.iter().any(|p| p.pane_id == *pane_id)
+        self.flat_items
+            .get(self.cursor)
+            .and_then(|item| match item {
+                SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
+                SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
+                SidebarItem::FloatingPane { ws_idx, .. } => Some(*ws_idx),
+                SidebarItem::Pane { pane_id } => {
+                    // Search workspaces for this pane
+                    self.workspaces.iter().position(|ws| {
+                        ws.columns
+                            .iter()
+                            .any(|col| col.panes.iter().any(|p| p.pane_id == *pane_id))
                     })
-                })
-            }
-        })
+                }
+            })
     }
 }
 
@@ -404,7 +460,10 @@ pub fn sidebar_hit_test(
                 continue;
             }
             if visible_line == line_index {
-                return Some(fi);
+                return match item {
+                    SidebarItem::FloatingPane { .. } => None,
+                    _ => Some(fi),
+                };
             }
             visible_line += 1;
         }
@@ -412,7 +471,11 @@ pub fn sidebar_hit_test(
         let visible_lines = (sidebar_height / ITEM_HEIGHT) as usize;
         let fi = tree.scroll_offset + line_index;
         if line_index < visible_lines && fi < tree.flat_items.len() {
-            return Some(fi);
+            return match tree.flat_items.get(fi) {
+                Some(SidebarItem::FloatingPane { .. }) => None,
+                Some(_) => Some(fi),
+                None => None,
+            };
         }
     }
 
@@ -427,8 +490,10 @@ pub fn sidebar_button_hit_test(
     mouse_y: f32,
 ) -> Option<(usize, WmAction)> {
     for (i, hitbox) in tree.button_hitboxes.iter().enumerate() {
-        if mouse_x >= hitbox.x && mouse_x <= hitbox.x + hitbox.width
-            && mouse_y >= hitbox.y && mouse_y <= hitbox.y + hitbox.height
+        if mouse_x >= hitbox.x
+            && mouse_x <= hitbox.x + hitbox.width
+            && mouse_y >= hitbox.y
+            && mouse_y <= hitbox.y + hitbox.height
         {
             return Some((i, hitbox.action.clone()));
         }
@@ -499,14 +564,36 @@ pub fn render_sidebar_expanded(
         let btn_idx = tree.button_hitboxes.len();
         let is_hov = hovered_btn_idx == Some(btn_idx);
         let (bg, brd, tc) = if is_hov {
-            ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            (
+                [foreground[0], foreground[1], foreground[2], 0.3],
+                [foreground[0], foreground[1], foreground[2], 0.7],
+                foreground,
+            )
         } else {
-            ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+            (
+                [foreground[0], foreground[1], foreground[2], 0.12],
+                [foreground[0], foreground[1], foreground[2], 0.35],
+                foreground,
+            )
         };
-        primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+        primitive_renderer
+            .draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
         let tw = 2.0 * button_font_size * 0.55;
-        text_renderer.queue_text("+w", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-        tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::CreateWorkspace, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+        text_renderer.queue_text(
+            "+w",
+            btn_x + (BTN_SIZE - tw) / 2.0,
+            btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+            button_font_size,
+            tc,
+        );
+        tree.button_hitboxes.push(SidebarButtonHitbox {
+            action: WmAction::CreateWorkspace,
+            ws_idx: None,
+            x: btn_x,
+            y: btn_y,
+            width: BTN_SIZE,
+            height: BTN_SIZE,
+        });
     }
     line_y += ITEM_HEIGHT;
     drawn += 1;
@@ -536,9 +623,20 @@ pub fn render_sidebar_expanded(
                 let mut label = pane_name_short(*pane_id, &tree.workspaces);
                 if let Some(cands) = candidates
                     && focused_pane != Some(*pane_id)
-                    && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id) {
-                        label = format!("[{}] {}", ch, label);
-                    }
+                    && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id)
+                {
+                    label = format!("[{}] {}", ch, label);
+                }
+                (INDENT_PANE, label, false)
+            }
+            SidebarItem::FloatingPane { pane_id, .. } => {
+                let mut label = format!("~ {}", pane_name_short(*pane_id, &tree.workspaces));
+                if let Some(cands) = candidates
+                    && focused_pane != Some(*pane_id)
+                    && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == *pane_id)
+                {
+                    label = format!("[{}] {}", ch, label);
+                }
                 (INDENT_PANE, label, false)
             }
         };
@@ -558,7 +656,14 @@ pub fn render_sidebar_expanded(
         // Drag source effect — the item being dragged gets a themed background + border.
         if drag_source_fi == Some(fi) {
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_source_bg);
-            primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, drag_source_border, 1.0);
+            primitive_renderer.draw_border(
+                x + 1.0,
+                line_y + 1.0,
+                width - 2.0,
+                ITEM_HEIGHT - 2.0,
+                drag_source_border,
+                1.0,
+            );
         }
 
         // Determine color based on state
@@ -566,7 +671,8 @@ pub fn render_sidebar_expanded(
             accent
         } else if is_ws {
             // Look up workspace state
-            if let Some(ws) = flat_item.workspace_idx()
+            if let Some(ws) = flat_item
+                .workspace_idx()
                 .and_then(|wi| tree.workspaces.get(wi))
             {
                 match ws.state {
@@ -578,72 +684,258 @@ pub fn render_sidebar_expanded(
                 foreground
             }
         } else {
-            // Check if it's an active pane
-            if let SidebarItem::Pane { pane_id } = flat_item {
-                if let Some(ws) = tree.workspaces.iter().find(|w| {
-                    w.columns.iter().any(|c| c.panes.iter().any(|p| p.pane_id == *pane_id))
-                }) {
-                    if let Some(col) = ws.columns.iter().find(|c| c.panes.iter().any(|p| p.pane_id == *pane_id)) {
-                        if let Some(pane) = col.panes.iter().find(|p| p.pane_id == *pane_id) {
-                            match pane.state {
-                                crate::app_state::SidebarItemState::Active => accent,
-                                crate::app_state::SidebarItemState::Visited => visited_color,
-                                crate::app_state::SidebarItemState::None => foreground,
-                            }
-                        } else { foreground }
-                    } else { foreground }
-                } else { foreground }
-            } else { foreground }
+            match flat_item {
+                SidebarItem::Pane { pane_id } | SidebarItem::FloatingPane { pane_id, .. } => {
+                    pane_entry_by_id(*pane_id, &tree.workspaces)
+                        .map(|pane| match pane.state {
+                            crate::app_state::SidebarItemState::Active => accent,
+                            crate::app_state::SidebarItemState::Visited => visited_color,
+                            crate::app_state::SidebarItemState::None => foreground,
+                        })
+                        .unwrap_or(foreground)
+                }
+                _ => foreground,
+            }
         };
+
+        // Pane background: active gets a prominent tint, visited gets a subtle tint.
+        if let SidebarItem::Pane { pane_id } | SidebarItem::FloatingPane { pane_id, .. } = flat_item
+            && let Some(pane) = pane_entry_by_id(*pane_id, &tree.workspaces)
+        {
+            match pane.state {
+                crate::app_state::SidebarItemState::Active => {
+                    let mut bg = accent;
+                    bg[3] = 0.18;
+                    primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, bg);
+                }
+                crate::app_state::SidebarItemState::Visited => {
+                    let mut bg = visited_color;
+                    bg[3] = 0.10;
+                    primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, bg);
+                }
+                crate::app_state::SidebarItemState::None => {}
+            }
+        }
 
         let text_x = x + indent;
         let text_y = line_y + (ITEM_HEIGHT - label_font_size) / 2.0 + 2.0;
         text_renderer.queue_text(&label, text_x, text_y, label_font_size, color);
 
         // Buttons on the right side of each item.
-        let btn_x = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
+        // Workspace and column items get two buttons (add + delete), pane gets one (delete).
+        let btn_x_right = x + width - BTN_SIZE - BTN_PAD_X - 4.0;
         let btn_y = line_y + (ITEM_HEIGHT - BTN_SIZE) / 2.0;
 
         if let SidebarItem::Workspace { ws_idx } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
-                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+            // Add button [+c]
+            let add_x = btn_x_right - BTN_SIZE - BTN_PAD_X;
+            let add_idx = tree.button_hitboxes.len();
+            let add_hov = hovered_btn_idx == Some(add_idx);
+            let (abg, abrd, atc) = if add_hov {
+                (
+                    [foreground[0], foreground[1], foreground[2], 0.3],
+                    [foreground[0], foreground[1], foreground[2], 0.7],
+                    foreground,
+                )
             } else {
-                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+                (
+                    [foreground[0], foreground[1], foreground[2], 0.12],
+                    [foreground[0], foreground[1], foreground[2], 0.35],
+                    foreground,
+                )
             };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            primitive_renderer
+                .draw_rounded_rect(add_x, btn_y, BTN_SIZE, BTN_SIZE, abg, abrd, 1.0, BTN_RADIUS);
             let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+c", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitHorizontal, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+            text_renderer.queue_text(
+                "+c",
+                add_x + (BTN_SIZE - tw) / 2.0,
+                btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+                button_font_size,
+                atc,
+            );
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::SplitHorizontal,
+                ws_idx: Some(*ws_idx),
+                x: add_x,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
+
+            // Delete button [-]
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
+                (
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.8],
+                    [0.95, 0.4, 0.4, 1.0],
+                )
+            } else {
+                (
+                    [0.9, 0.3, 0.3, 0.15],
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.9],
+                )
+            };
+            primitive_renderer.draw_rounded_rect(
+                btn_x_right,
+                btn_y,
+                BTN_SIZE,
+                BTN_SIZE,
+                dbg,
+                dbrd,
+                1.0,
+                BTN_RADIUS,
+            );
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text(
+                "-",
+                btn_x_right + (BTN_SIZE - dw) / 2.0,
+                btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+                button_font_size,
+                dtc,
+            );
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::DeleteWorkspace { ws_idx: *ws_idx },
+                ws_idx: Some(*ws_idx),
+                x: btn_x_right,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
         }
 
-        if let SidebarItem::Column { ws_idx, col_idx: _ } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
-                ([foreground[0], foreground[1], foreground[2], 0.3], [foreground[0], foreground[1], foreground[2], 0.7], foreground)
+        if let SidebarItem::Column { ws_idx, col_idx } = flat_item {
+            // Add button [+p]
+            let add_x = btn_x_right - BTN_SIZE - BTN_PAD_X;
+            let add_idx = tree.button_hitboxes.len();
+            let add_hov = hovered_btn_idx == Some(add_idx);
+            let (abg, abrd, atc) = if add_hov {
+                (
+                    [foreground[0], foreground[1], foreground[2], 0.3],
+                    [foreground[0], foreground[1], foreground[2], 0.7],
+                    foreground,
+                )
             } else {
-                ([foreground[0], foreground[1], foreground[2], 0.12], [foreground[0], foreground[1], foreground[2], 0.35], foreground)
+                (
+                    [foreground[0], foreground[1], foreground[2], 0.12],
+                    [foreground[0], foreground[1], foreground[2], 0.35],
+                    foreground,
+                )
             };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
+            primitive_renderer
+                .draw_rounded_rect(add_x, btn_y, BTN_SIZE, BTN_SIZE, abg, abrd, 1.0, BTN_RADIUS);
             let tw = 2.0 * button_font_size * 0.55;
-            text_renderer.queue_text("+p", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::SplitVertical, ws_idx: Some(*ws_idx), x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+            text_renderer.queue_text(
+                "+p",
+                add_x + (BTN_SIZE - tw) / 2.0,
+                btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+                button_font_size,
+                atc,
+            );
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::AddPaneToColumn {
+                    ws_idx: *ws_idx,
+                    col_idx: *col_idx,
+                },
+                ws_idx: Some(*ws_idx),
+                x: add_x,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
+
+            // Delete button [-]
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
+                (
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.8],
+                    [0.95, 0.4, 0.4, 1.0],
+                )
+            } else {
+                (
+                    [0.9, 0.3, 0.3, 0.15],
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.9],
+                )
+            };
+            primitive_renderer.draw_rounded_rect(
+                btn_x_right,
+                btn_y,
+                BTN_SIZE,
+                BTN_SIZE,
+                dbg,
+                dbrd,
+                1.0,
+                BTN_RADIUS,
+            );
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text(
+                "-",
+                btn_x_right + (BTN_SIZE - dw) / 2.0,
+                btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+                button_font_size,
+                dtc,
+            );
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::DeleteColumn {
+                    ws_idx: *ws_idx,
+                    col_idx: *col_idx,
+                },
+                ws_idx: Some(*ws_idx),
+                x: btn_x_right,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
         }
 
         if let SidebarItem::Pane { pane_id } = flat_item {
-            let btn_idx = tree.button_hitboxes.len();
-            let is_hov = hovered_btn_idx == Some(btn_idx);
-            let (bg, brd, tc) = if is_hov {
-                ([0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.8], [0.95, 0.4, 0.4, 1.0])
+            let del_idx = tree.button_hitboxes.len();
+            let del_hov = hovered_btn_idx == Some(del_idx);
+            let (dbg, dbrd, dtc) = if del_hov {
+                (
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.8],
+                    [0.95, 0.4, 0.4, 1.0],
+                )
             } else {
-                ([0.9, 0.3, 0.3, 0.15], [0.9, 0.3, 0.3, 0.4], [0.9, 0.3, 0.3, 0.9])
+                (
+                    [0.9, 0.3, 0.3, 0.15],
+                    [0.9, 0.3, 0.3, 0.4],
+                    [0.9, 0.3, 0.3, 0.9],
+                )
             };
-            primitive_renderer.draw_rounded_rect(btn_x, btn_y, BTN_SIZE, BTN_SIZE, bg, brd, 1.0, BTN_RADIUS);
-            let tw = 1.0 * button_font_size * 0.55;
-            text_renderer.queue_text("-", btn_x + (BTN_SIZE - tw) / 2.0, btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0, button_font_size, tc);
-            tree.button_hitboxes.push(SidebarButtonHitbox { action: WmAction::ClosePaneById { pane_id: *pane_id }, ws_idx: None, x: btn_x, y: btn_y, width: BTN_SIZE, height: BTN_SIZE });
+            primitive_renderer.draw_rounded_rect(
+                btn_x_right,
+                btn_y,
+                BTN_SIZE,
+                BTN_SIZE,
+                dbg,
+                dbrd,
+                1.0,
+                BTN_RADIUS,
+            );
+            let dw = 1.0 * button_font_size * 0.55;
+            text_renderer.queue_text(
+                "-",
+                btn_x_right + (BTN_SIZE - dw) / 2.0,
+                btn_y + (BTN_SIZE - button_font_size) / 2.0 + 2.0,
+                button_font_size,
+                dtc,
+            );
+            tree.button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::ClosePaneById { pane_id: *pane_id },
+                ws_idx: None,
+                x: btn_x_right,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
         }
 
         line_y += ITEM_HEIGHT;
@@ -705,9 +997,11 @@ pub fn render_sidebar_collapsed(
             crate::app_state::SidebarItemState::None => [0.0; 4], // transparent
         };
 
-        // Count lines for this workspace
-        let section_lines = 1 + if ws.collapsed { 0 } else {
-            ws.columns.iter().map(|c| c.panes.len()).sum::<usize>()
+        // Count lines for this workspace.
+        let section_lines = 1 + if ws.collapsed {
+            0
+        } else {
+            ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len()
         };
         let section_height = section_lines as f32 * ITEM_HEIGHT;
 
@@ -731,7 +1025,14 @@ pub fn render_sidebar_collapsed(
         // Drag source effect for workspace items.
         if drag_source_fi == Some(flat_idx - 1) {
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_source_bg);
-            primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, drag_source_border, 1.0);
+            primitive_renderer.draw_border(
+                x + 1.0,
+                line_y + 1.0,
+                width - 2.0,
+                ITEM_HEIGHT - 2.0,
+                drag_source_border,
+                1.0,
+            );
         }
 
         // Workspace number/identifier (first 2 chars)
@@ -754,7 +1055,8 @@ pub fn render_sidebar_collapsed(
             for col in &ws.columns {
                 flat_idx += 1; // consume Column item (invisible in collapsed mode)
                 for pane in &col.panes {
-                    let is_pane_cursor = is_sidebar_nav && flat_idx == tree.cursor;
+                    let item_idx = flat_idx;
+                    let is_pane_cursor = is_sidebar_nav && item_idx == tree.cursor;
                     flat_idx += 1; // consume Pane item
 
                     if is_pane_cursor {
@@ -762,20 +1064,26 @@ pub fn render_sidebar_collapsed(
                     }
 
                     // Drag hover highlight (pane or column)
-                    if drag_hover_fi == Some(flat_idx) {
+                    if drag_hover_fi == Some(item_idx) {
                         let mut drag_bg = accent;
                         drag_bg[3] = 0.25;
                         primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
                     }
 
                     // Drag source effect for pane items.
-                    if drag_source_fi == Some(flat_idx) {
+                    if drag_source_fi == Some(item_idx) {
                         primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_source_bg);
-                        primitive_renderer.draw_border(x + 1.0, line_y + 1.0, width - 2.0, ITEM_HEIGHT - 2.0, drag_source_border, 1.0);
+                        primitive_renderer.draw_border(
+                            x + 1.0,
+                            line_y + 1.0,
+                            width - 2.0,
+                            ITEM_HEIGHT - 2.0,
+                            drag_source_border,
+                            1.0,
+                        );
                     }
 
-                    let mut pane_char = pane.name.chars().next()
-                        .unwrap_or('?').to_string();
+                    let mut pane_char = pane.name.chars().next().unwrap_or('?').to_string();
                     // Show candidate letter during PaneSwap / PaneSelect
                     // but NOT for the focused pane — no need to swap with yourself.
                     if let Some(cands) = candidates
@@ -795,26 +1103,71 @@ pub fn render_sidebar_collapsed(
                         }
                     };
                     let pane_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
-                    text_renderer.queue_text(&pane_char, text_x, pane_text_y, font_size, pane_color);
+                    text_renderer.queue_text(
+                        &pane_char,
+                        text_x,
+                        pane_text_y,
+                        font_size,
+                        pane_color,
+                    );
                     line_y += ITEM_HEIGHT;
                 }
+            }
+
+            for pane in &ws.floating_panes {
+                let item_idx = flat_idx;
+                flat_idx += 1; // consume FloatingPane item
+
+                if drag_hover_fi == Some(item_idx) {
+                    let mut drag_bg = accent;
+                    drag_bg[3] = 0.18;
+                    primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, drag_bg);
+                }
+
+                let mut pane_char = pane.name.chars().next().unwrap_or('~').to_string();
+                if let Some(cands) = candidates
+                    && focused_pane != Some(pane.pane_id)
+                    && let Some((ch, _)) = cands.iter().find(|(_, pid)| *pid == pane.pane_id)
+                {
+                    pane_char = ch.to_string();
+                }
+
+                let pane_color = match pane.state {
+                    crate::app_state::SidebarItemState::Active => accent,
+                    crate::app_state::SidebarItemState::Visited => visited_color,
+                    crate::app_state::SidebarItemState::None => foreground,
+                };
+                let pane_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
+                text_renderer.queue_text(&pane_char, text_x, pane_text_y, font_size, pane_color);
+                line_y += ITEM_HEIGHT;
             }
         }
     }
 }
 
-/// Helper to find a pane's display name from the tree.
-fn pane_name_short(pane_id: u64, workspaces: &[SidebarWsEntry]) -> String {
+fn pane_entry_by_id(pane_id: u64, workspaces: &[SidebarWsEntry]) -> Option<&SidebarPaneEntry> {
     for ws in workspaces {
         for col in &ws.columns {
-            for pane in &col.panes {
-                if pane.pane_id == pane_id {
-                    return pane.name.clone();
-                }
+            if let Some(pane) = col.panes.iter().find(|pane| pane.pane_id == pane_id) {
+                return Some(pane);
             }
         }
+        if let Some(pane) = ws
+            .floating_panes
+            .iter()
+            .find(|pane| pane.pane_id == pane_id)
+        {
+            return Some(pane);
+        }
     }
-    format!("Pane {}", pane_id)
+    None
+}
+
+/// Helper to find a pane's display name from the tree.
+fn pane_name_short(pane_id: u64, workspaces: &[SidebarWsEntry]) -> String {
+    pane_entry_by_id(pane_id, workspaces)
+        .map(|pane| pane.name.clone())
+        .unwrap_or_else(|| format!("Pane {}", pane_id))
 }
 
 #[cfg(test)]
@@ -822,31 +1175,42 @@ mod tests {
     use super::*;
     use heca_core::layout::{
         Pane as LayoutPane, PaneId,
-        session::Session, types::{SessionId, Size},
+        session::Session,
+        types::{SessionId, Size},
     };
 
     fn make_test_session() -> (Session, Vec<u64>) {
         let viewport = Size::new(1280.0, 800.0);
-        let mut session = Session::new(SessionId(1), viewport, 2.0, heca_core::layout::types::LayoutOptions::default());
+        let mut session = Session::new(
+            SessionId(1),
+            viewport,
+            2.0,
+            heca_core::layout::types::LayoutOptions::default(),
+        );
 
         // Create 3 panes in the first workspace
-        let _ids: Vec<u64> = (1..=4).map(|i| {
-            let pane = LayoutPane::new(PaneId(i), format!("Pane{}", i));
-            let id = pane.id.0;
-            session.add_pane(pane, None, true);
-            id
-        }).collect();
+        let _ids: Vec<u64> = (1..=4)
+            .map(|i| {
+                let pane = LayoutPane::new(PaneId(i), format!("Pane{}", i));
+                let id = pane.id.0;
+                session.add_pane(pane, None, true);
+                id
+            })
+            .collect();
 
         // Add a second workspace with 1 pane
-        let wa = session.active_workspace().map(|ws| {
-            let r = ws.scrolling.working_area;
-            heca_core::layout::types::Rectangle::new(r.loc, r.size)
-        }).unwrap_or_else(|| {
-            heca_core::layout::types::Rectangle::new(
-                heca_core::layout::types::Point::new(0.0, 0.0),
-                viewport,
-            )
-        });
+        let wa = session
+            .active_workspace()
+            .map(|ws| {
+                let r = ws.scrolling.working_area;
+                heca_core::layout::types::Rectangle::new(r.loc, r.size)
+            })
+            .unwrap_or_else(|| {
+                heca_core::layout::types::Rectangle::new(
+                    heca_core::layout::types::Point::new(0.0, 0.0),
+                    viewport,
+                )
+            });
         session.add_workspace(wa);
         let pane5 = LayoutPane::new(PaneId(5), "Pane5");
         let _id5 = pane5.id.0;
@@ -866,8 +1230,16 @@ mod tests {
         assert_eq!(tree.workspaces.len(), 2, "should have 2 workspaces");
 
         // WS 0 should be active (the one with panes)
-        assert_eq!(tree.workspaces[0].state, SidebarItemState::Active, "WS 0 should be active");
-        assert_eq!(tree.workspaces[1].state, SidebarItemState::None, "WS 1 should be none (not yet visited)");
+        assert_eq!(
+            tree.workspaces[0].state,
+            SidebarItemState::Active,
+            "WS 0 should be active"
+        );
+        assert_eq!(
+            tree.workspaces[1].state,
+            SidebarItemState::None,
+            "WS 1 should be none (not yet visited)"
+        );
 
         // WS 0 should have some columns with panes
         let ws0 = &tree.workspaces[0];
@@ -882,7 +1254,10 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Flat items should contain workspaces, columns, and panes
-        assert!(!tree.flat_items.is_empty(), "flat items should not be empty");
+        assert!(
+            !tree.flat_items.is_empty(),
+            "flat items should not be empty"
+        );
 
         // First item should be a workspace
         match &tree.flat_items[0] {
@@ -891,7 +1266,11 @@ mod tests {
         }
 
         // Item count should match flat_items.len()
-        assert_eq!(tree.item_count, tree.flat_items.len(), "item_count should match");
+        assert_eq!(
+            tree.item_count,
+            tree.flat_items.len(),
+            "item_count should match"
+        );
     }
 
     #[test]
@@ -912,7 +1291,11 @@ mod tests {
         for _ in 0..tree.item_count + 5 {
             tree.cursor_down();
         }
-        assert_eq!(tree.cursor, tree.item_count - 1, "cursor clamps at last item");
+        assert_eq!(
+            tree.cursor,
+            tree.item_count - 1,
+            "cursor clamps at last item"
+        );
 
         // Move past start should clamp at 0
         for _ in 0..103 {
@@ -928,22 +1311,34 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Initially not collapsed
-        assert!(!tree.workspaces[0].collapsed, "WS 0 should not be collapsed initially");
+        assert!(
+            !tree.workspaces[0].collapsed,
+            "WS 0 should not be collapsed initially"
+        );
 
         // Move cursor to workspace 0 and toggle expand
         tree.cursor = 0;
         tree.toggle_expand();
 
         // Should now be collapsed
-        assert!(tree.workspaces[0].collapsed, "WS 0 should be collapsed after toggle");
+        assert!(
+            tree.workspaces[0].collapsed,
+            "WS 0 should be collapsed after toggle"
+        );
 
         // Flat items should have fewer items (children hidden)
         let collapsed_count = tree.flat_items.len();
 
         // Toggle again to expand
         tree.toggle_expand();
-        assert!(!tree.workspaces[0].collapsed, "WS 0 should be expanded after second toggle");
-        assert!(tree.flat_items.len() > collapsed_count, "flat items should increase after expand");
+        assert!(
+            !tree.workspaces[0].collapsed,
+            "WS 0 should be expanded after second toggle"
+        );
+        assert!(
+            tree.flat_items.len() > collapsed_count,
+            "flat items should increase after expand"
+        );
     }
 
     #[test]
@@ -958,9 +1353,17 @@ mod tests {
         tree.rebuild(&session, Some(0), Some(5), &[]);
 
         // WS 1 should be active (current)
-        assert_eq!(tree.workspaces[1].state, SidebarItemState::Active, "WS 1 should be active after switch");
+        assert_eq!(
+            tree.workspaces[1].state,
+            SidebarItemState::Active,
+            "WS 1 should be active after switch"
+        );
         // WS 0 should be visited
-        assert_eq!(tree.workspaces[0].state, SidebarItemState::Visited, "WS 0 should be visited");
+        assert_eq!(
+            tree.workspaces[0].state,
+            SidebarItemState::Visited,
+            "WS 0 should be visited"
+        );
         // WS 2 (doesn't exist) is none
     }
 
@@ -974,24 +1377,39 @@ mod tests {
 
         // Rebuild again — should be same result
         tree.rebuild(&session, None, Some(1), &[]);
-        assert_eq!(tree.flat_items.len(), first_count, "rebuild should produce same result");
+        assert_eq!(
+            tree.flat_items.len(),
+            first_count,
+            "rebuild should produce same result"
+        );
 
         // Cursor should be clamped if it was out of bounds
         tree.cursor = 9999;
         tree.rebuild(&session, None, Some(1), &[]);
-        assert!(tree.cursor < tree.flat_items.len(), "cursor should be clamped after rebuild");
+        assert!(
+            tree.cursor < tree.flat_items.len(),
+            "cursor should be clamped after rebuild"
+        );
     }
 
     #[test]
     fn test_empty_session() {
         let viewport = Size::new(1280.0, 800.0);
-        let session = Session::new(SessionId(1), viewport, 2.0, heca_core::layout::types::LayoutOptions::default());
+        let session = Session::new(
+            SessionId(1),
+            viewport,
+            2.0,
+            heca_core::layout::types::LayoutOptions::default(),
+        );
         let mut tree = SidebarTree::new();
 
         tree.rebuild(&session, None, None, &[]);
 
         // Even an empty session has at least 1 workspace (the initial one)
-        assert!(!tree.workspaces.is_empty(), "should have at least 1 workspace");
+        assert!(
+            !tree.workspaces.is_empty(),
+            "should have at least 1 workspace"
+        );
         // But it may have no panes
     }
 
@@ -1020,9 +1438,11 @@ mod tests {
 
         // Put cursor on the first Pane item after its Column.
         // cursor_up_collapsed should skip the Column and land on Workspace.
-        let first_pane_idx = tree.flat_items.iter().position(|i| {
-            matches!(i, SidebarItem::Pane { .. })
-        }).expect("should have a pane");
+        let first_pane_idx = tree
+            .flat_items
+            .iter()
+            .position(|i| matches!(i, SidebarItem::Pane { .. }))
+            .expect("should have a pane");
         tree.cursor = first_pane_idx;
         tree.cursor_up_collapsed();
         assert!(
@@ -1039,11 +1459,16 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Place cursor deep inside workspace 0 (e.g. on a pane).
-        let ws0_last_idx = tree.flat_items.iter().enumerate().rposition(|(_, i)| {
-            matches!(i, SidebarItem::Workspace { ws_idx } if *ws_idx == 0)
-                || matches!(i, SidebarItem::Column { ws_idx, .. } if *ws_idx == 0)
-                || matches!(i, SidebarItem::Pane { pane_id } if *pane_id <= 4)
-        }).expect("should have ws0 items");
+        let ws0_last_idx = tree
+            .flat_items
+            .iter()
+            .enumerate()
+            .rposition(|(_, i)| {
+                matches!(i, SidebarItem::Workspace { ws_idx } if *ws_idx == 0)
+                    || matches!(i, SidebarItem::Column { ws_idx, .. } if *ws_idx == 0)
+                    || matches!(i, SidebarItem::Pane { pane_id } if *pane_id <= 4)
+            })
+            .expect("should have ws0 items");
         tree.cursor = ws0_last_idx;
 
         // Collapse workspace 0 — its children disappear.
@@ -1068,21 +1493,29 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Find first Column item in flat list.
-        let col_idx = tree.flat_items.iter().position(|i| {
-            matches!(i, SidebarItem::Column { .. })
-        }).expect("should have a column");
+        let col_idx = tree
+            .flat_items
+            .iter()
+            .position(|i| matches!(i, SidebarItem::Column { .. }))
+            .expect("should have a column");
         tree.cursor = col_idx;
 
         // Collapse the column.
         tree.toggle_expand();
         if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
-            assert!(tree.workspaces[ws_idx].columns[c].collapsed, "column should be collapsed");
+            assert!(
+                tree.workspaces[ws_idx].columns[c].collapsed,
+                "column should be collapsed"
+            );
         }
 
         // Expand it back.
         tree.toggle_expand();
         if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
-            assert!(!tree.workspaces[ws_idx].columns[c].collapsed, "column should be expanded");
+            assert!(
+                !tree.workspaces[ws_idx].columns[c].collapsed,
+                "column should be expanded"
+            );
         }
     }
 
@@ -1094,12 +1527,18 @@ mod tests {
         let mut tree = tree;
         tree.rebuild(&session, None, Some(1), &[]);
 
-        // Click on first item line (just below top padding).
-        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 36.0 + 4.0 + 2.0);
+        // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
+        // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 60.0 + ITEM_HEIGHT / 2.0);
         assert_eq!(fi, Some(0), "click on first line should hit flat item 0");
 
         // Click above sidebar should miss.
         assert_eq!(sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 10.0), None);
+
+        // Click in the [+w] button row area should miss (returns None).
+        let btn_row =
+            sidebar_hit_test(&tree, 32.0, 400.0, 200.0, 32.0 + 4.0 + BTN_ROW_HEIGHT / 2.0);
+        assert_eq!(btn_row, None, "click on [+w] button row should miss items");
     }
 
     #[test]
@@ -1109,10 +1548,17 @@ mod tests {
         tree.rebuild(&session, None, Some(1), &[]);
 
         // Collapsed mode (width < 80). Click on second visible line.
-        // In collapsed mode visible lines are: WS, Pane, Pane... (columns hidden).
-        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, 36.0 + 4.0 + 2.0 + ITEM_HEIGHT);
+        // Rows: 4px pad, [+w] row (24px), then visible lines.
+        // Visible line 0 = WS (flat idx 0, column idx 1 skipped)
+        // Visible line 1 = first Pane (flat idx 2)
+        // First pane starts at y = 32 + 4 + 24 + 24 = 84.
+        let first_pane_y = 32.0 + 4.0 + BTN_ROW_HEIGHT + ITEM_HEIGHT + ITEM_HEIGHT / 2.0;
+        let fi = sidebar_hit_test(&tree, 32.0, 400.0, 40.0, first_pane_y);
         // Second visible line should be the first Pane (skipping the Column).
-        assert_eq!(fi, Some(2), "second visible line in collapsed mode should be first Pane (flat idx 2)");
+        assert_eq!(
+            fi,
+            Some(2),
+            "second visible line in collapsed mode should be first Pane (flat idx 2)"
+        );
     }
 }
-

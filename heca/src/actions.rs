@@ -83,11 +83,7 @@ impl ActionRegistry {
     }
 
     /// Register a handler for all variants that share `action`'s discriminant.
-    pub fn register(
-        &mut self,
-        action: &crate::input::WmAction,
-        handler: ActionHandler,
-    ) {
+    pub fn register(&mut self, action: &crate::input::WmAction, handler: ActionHandler) {
         let disc = crate::input::action_discriminant(action);
         self.handlers.insert(disc, handler);
     }
@@ -97,8 +93,6 @@ impl ActionRegistry {
         let disc = crate::input::action_discriminant(action);
         if let Some(handler) = self.handlers.get(&disc) {
             handler(state, action);
-        } else {
-            eprintln!("No handler registered for {:?}", action);
         }
     }
 
@@ -415,7 +409,9 @@ impl ActionRegistry {
     }
 
     /// Return all actions in a given category.
-    pub fn by_category(category: ActionCategory) -> impl Iterator<Item = &'static ActionDescriptor> {
+    pub fn by_category(
+        category: ActionCategory,
+    ) -> impl Iterator<Item = &'static ActionDescriptor> {
         Self::ALL.iter().filter(move |d| d.category == category)
     }
 
@@ -475,11 +471,7 @@ mod tests {
         let original_len = names.len();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(
-            names.len(),
-            original_len,
-            "all action names must be unique"
-        );
+        assert_eq!(names.len(), original_len, "all action names must be unique");
     }
 
     #[test]
@@ -487,15 +479,27 @@ mod tests {
         for desc in ActionRegistry::ALL {
             assert!(!desc.name.is_empty(), "name must not be empty");
             assert!(!desc.label.is_empty(), "label must not be empty");
-            assert!(!desc.description.is_empty(), "description must not be empty");
-            assert!(!desc.default_binding.is_empty(), "default_binding must not be empty");
-            assert!(!desc.category.label().is_empty(), "category label must not be empty");
+            assert!(
+                !desc.description.is_empty(),
+                "description must not be empty"
+            );
+            assert!(
+                !desc.default_binding.is_empty(),
+                "default_binding must not be empty"
+            );
+            assert!(
+                !desc.category.label().is_empty(),
+                "category label must not be empty"
+            );
         }
     }
 
     #[test]
     fn test_session_category_exists() {
         let count = ActionRegistry::by_category(ActionCategory::Session).count();
-        assert_eq!(count, 0, "no actions in Session category yet, but variant is reserved");
+        assert_eq!(
+            count, 0,
+            "no actions in Session category yet, but variant is reserved"
+        );
     }
 }

@@ -15,8 +15,11 @@ impl ChromeConfig {
     pub fn content_rect(&self, window_width: f32, window_height: f32) -> Rect {
         let y = self.tab_bar_height;
         let x = self.left_sidebar_width;
-        let w = window_width - self.left_sidebar_width.min(window_width)
-            - self.right_sidebar_width.min(window_width - self.left_sidebar_width);
+        let w = window_width
+            - self.left_sidebar_width.min(window_width)
+            - self
+                .right_sidebar_width
+                .min(window_width - self.left_sidebar_width);
         let h = window_height - self.tab_bar_height - self.status_bar_height;
         Rect::new(x, y, w, h)
     }
