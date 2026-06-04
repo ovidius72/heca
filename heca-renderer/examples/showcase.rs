@@ -206,8 +206,18 @@ fn build_ui(theme: &Theme) -> Flex {
                 .border(theme.accent, 1.5)
                 .radius(4.0)
                 .child(Item::new("DASHBOARD").leading(StatusDot::online()).selected(true))
-                .child(Item::new("VIEW PROFILE").trailing(Badge::neutral("CMD P")).on_activate(click("VIEW PROFILE")))
-                .child(Item::new("SETTINGS").trailing(Badge::neutral("CMD ,")).on_activate(click("SETTINGS")))
+                .child(
+                    Item::new("VIEW PROFILE")
+                        .trailing(Label::new("CMD P").color(theme.muted).font_size(12.0))
+                        .trailing_bordered(true)
+                        .on_activate(click("VIEW PROFILE")),
+                )
+                .child(
+                    Item::new("SETTINGS")
+                        .trailing(Label::new("CMD ,").color(theme.muted).font_size(12.0))
+                        .trailing_bordered(true)
+                        .on_activate(click("SETTINGS")),
+                )
                 .child(Item::new("SYSTEM").muted(true).trailing(Label::new(">").color(theme.muted))),
         )
 }

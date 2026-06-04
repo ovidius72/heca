@@ -1389,3 +1389,30 @@ fn item_slots_lay_out_left_and_right() {
     );
     assert!(lead.size.w > 0.0 && trail.size.w > 0.0, "both slots are laid out");
 }
+
+#[test]
+fn item_trailing_border_draws_a_flat_frame_no_glow() {
+    let theme = Theme::grid_tron();
+    let frames = |item: &Item| -> usize {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            item.paint(&mut cx);
+        }
+        // A bordered, glow-free rect = the chip frame.
+        scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(r) if r.border.is_some() && r.glow.is_none()))
+            .count()
+    };
+
+    let mut plain = Item::new("SETTINGS").trailing(Label::new("CMD ,"));
+    LayoutEngine::new().compute(&mut plain, Size::new(300.0, 40.0));
+    let mut bordered = Item::new("SETTINGS")
+        .trailing(Label::new("CMD ,"))
+        .trailing_bordered(true);
+    LayoutEngine::new().compute(&mut bordered, Size::new(300.0, 40.0));
+
+    assert_eq!(frames(&plain), 0, "no frame without trailing_bordered");
+    assert_eq!(frames(&bordered), 1, "trailing_bordered draws one flat frame");
+}

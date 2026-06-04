@@ -33,6 +33,11 @@ const SEL_BAR_W: f64 = 3.0;
 const SEL_FILL_ALPHA: u8 = 30;
 /// Hover-row fill alpha.
 const HOVER_FILL_ALPHA: u8 = 16;
+/// Padding the optional slot border adds around the slot content.
+const SLOT_BORDER_PAD_X: f64 = 7.0;
+const SLOT_BORDER_PAD_Y: f64 = 4.0;
+/// Corner radius of the optional slot border.
+const SLOT_BORDER_RADIUS: f32 = 4.0;
 
 /// Index of the leading / trailing slot within `base.children`.
 const LEADING: usize = 0;
@@ -46,6 +51,9 @@ pub struct Item {
     selected: Signal<bool>,
     /// Render the label in the muted color (e.g. a section header).
     muted: bool,
+    /// Draw a rounded border around the leading / trailing slot (chip style).
+    leading_border: bool,
+    trailing_border: bool,
     hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
@@ -73,6 +81,8 @@ impl Item {
             label: signal(label.into()),
             selected: signal(false),
             muted: false,
+            leading_border: false,
+            trailing_border: false,
             hovered: signal(false),
             flash: Flash::new(),
             on_activate: None,
@@ -100,6 +110,19 @@ impl Item {
     /// Render the label muted (section-header style).
     pub fn muted(mut self, muted: bool) -> Self {
         self.muted = muted;
+        self
+    }
+
+    /// Draw a rounded border (chip frame) around the leading slot.
+    pub fn leading_bordered(mut self, bordered: bool) -> Self {
+        self.leading_border = bordered;
+        self
+    }
+
+    /// Draw a rounded border (chip frame) around the trailing slot — e.g. a
+    /// keymap hint like `⌘P`.
+    pub fn trailing_bordered(mut self, bordered: bool) -> Self {
+        self.trailing_border = bordered;
         self
     }
 
@@ -165,9 +188,9 @@ impl Component for Item {
         }
         let disabled = self.base.disabled.get_untracked();
         let selected = self.selected.get_untracked();
-        let (accent, glow_c, foreground, muted_c) = {
+        let (accent, glow_c, foreground, muted_c, border_c) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.muted)
+            (t.accent, t.glow, t.foreground, t.muted, t.border)
         };
         let b = self.base.bounds;
 
@@ -206,6 +229,33 @@ impl Component for Item {
             TextAlign::Start,
             selected,
         );
+
+        // Optional chip border around a present slot (drawn behind its content).
+        let slot_border = |cx: &mut PaintCx, slot: Rectangle| {
+            if slot.size.w <= 0.1 {
+                return;
+            }
+            let frame = Rectangle::new(
+                Point::new(slot.loc.x - SLOT_BORDER_PAD_X, slot.loc.y - SLOT_BORDER_PAD_Y),
+                Size::new(
+                    slot.size.w + 2.0 * SLOT_BORDER_PAD_X,
+                    slot.size.h + 2.0 * SLOT_BORDER_PAD_Y,
+                ),
+            );
+            cx.rect(
+                frame,
+                crate::color::Color::TRANSPARENT,
+                Some(crate::scene::Border { color: border_c, width: 1.0 }),
+                SLOT_BORDER_RADIUS,
+                None,
+            );
+        };
+        if self.leading_border {
+            slot_border(cx, self.base.children[LEADING].base().bounds);
+        }
+        if self.trailing_border {
+            slot_border(cx, self.base.children[TRAILING].base().bounds);
+        }
 
         // Slots (leading + trailing) draw themselves.
         for child in &self.base.children {
