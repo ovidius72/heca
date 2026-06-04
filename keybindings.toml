@@ -70,8 +70,8 @@ swap_and_focus_pane = "prefix+m"        # Show letters, swap panes (follow)
 # -----------------------------------------------------------------------------
 # Pane Cycling (within column)
 # -----------------------------------------------------------------------------
-next_pane = "prefix+n"   # Next pane in column
-prev_pane = "prefix+p"   # Previous pane in column
+next_pane = "prefix+]"   # Next pane in column
+prev_pane = "prefix+["   # Previous pane in column
 
 # -----------------------------------------------------------------------------
 # Sidebars

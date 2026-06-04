@@ -476,8 +476,8 @@ impl Default for KeysConfig {
         );
 
         // ── Tabs ──
-        bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
-        bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
+        bindings.insert("next_pane".to_string(), Single("prefix+]".to_string()));
+        bindings.insert("prev_pane".to_string(), Single("prefix+[".to_string()));
 
         // ── Sidebars ──
         // Note: sidebar navigation (h/j/k/l) is ONLY active in SidebarNav mode.

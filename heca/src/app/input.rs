@@ -6,7 +6,8 @@
 use crate::actions::ActionRegistry;
 use crate::app::focus::sync_focus;
 use crate::app::keyboard::{
-    event_combo_matches, normalize_key_text, typed_candidate_char, winit_key_to_terminal_input,
+    event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
+    winit_key_to_terminal_input,
 };
 use crate::app::selection::find_pane_location;
 use crate::app_state::{AppState, InputMode, RenameTarget};
@@ -194,7 +195,10 @@ fn handle_prefix_mode(
         if let Some(pane_id) = state.focused_pane
             && let Some(backend) = state.backends.get_mut(&pane_id)
         {
-            backend.process_input(&[0x02]);
+            let literal = prefix_combo_to_literal_input(&state.prefix_combo);
+            if !literal.is_empty() {
+                backend.process_input(&literal);
+            }
         }
         return;
     }

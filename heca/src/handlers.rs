@@ -1048,6 +1048,10 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSelect { candidates };
@@ -1056,6 +1060,10 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
@@ -1067,6 +1075,10 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
@@ -1333,6 +1345,10 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
 // ── Take pane ──
 
 pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = crate::collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
@@ -1344,6 +1360,10 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = crate::collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {

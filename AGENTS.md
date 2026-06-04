@@ -595,7 +595,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - ✅ Pass real modifier state (`state.modifiers.control_key()`) in prefix mode — don't hardcode `false`.
 - ✅ Add a prefix timeout (~500ms) so the user can't get stuck in prefix mode.
 - ✅ Make the prefix key configurable (via `prefix = "ctrl+b"` in config).
-- ✅ Forward literal prefix key on double-press (`Ctrl+B Ctrl+B` → send 0x02 to backend).
+- ✅ Forward the literal configured prefix key on double-press (e.g. `Ctrl+B Ctrl+B` → `Ctrl+B`, `Ctrl+A Ctrl+A` → `Ctrl+A`).
 - ❌ Do not eliminate prefix mode — it prevents conflicts with hosted terminal apps.
 - ❌ Do not make prefix mode modeless — that defeats the purpose.
 - ❌ Do not forget that Ctrl-modified bindings (`Ctrl+h`, `Ctrl+]`) should work after prefix.

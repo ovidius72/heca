@@ -134,7 +134,7 @@ Ctrl+B → f   Toggle floating
 heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the action key. This avoids conflicts with applications running inside panes.
 
 - **Prefix timeout**: 500ms — if you don't press a key, prefix mode exits automatically.
-- **Double prefix**: `Ctrl+B` `Ctrl+B` sends a literal `Ctrl+B` (0x02) to the focused pane.
+- **Double prefix**: pressing the configured prefix twice sends the literal configured prefix key to the focused pane (for example `Ctrl+B Ctrl+B` → `Ctrl+B`, `Ctrl+A Ctrl+A` → `Ctrl+A`).
 - **Bare modifiers**: Holding Shift/Ctrl/Alt alone in prefix mode does nothing — wait for the actual key.
 
 ### Navigation
@@ -145,8 +145,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Focus right | `l` | Activate column right, scroll view |
 | Focus up | `k` | Activate pane above in column |
 | Focus down | `j` | Activate pane below in column |
-| Next pane | `n` | Cycle to next pane across columns |
-| Prev pane | `p` | Cycle to prev pane across columns |
+| Next pane | `]` | Cycle to next pane across columns |
+| Prev pane | `[` | Cycle to prev pane across columns |
 | Workspace next | `d` | Switch to next workspace (down) |
 | Workspace prev | `u` | Switch to prev workspace (up) |
 | Focus toggle (local) | `i` | Toggle between last two panes in same workspace |
@@ -190,7 +190,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 |---------|----------------|-------------|
 | Create workspace | `w` | Create new workspace with a pane |
 | Rename workspace | `Shift+W` | Rename current workspace |
-| Rename pane | `Shift+P` | Rename active pane |
+| Rename column | `Shift+C` | Rename active column |
+| Rename pane | `$` | Rename active pane |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Enter sidebar navigation mode |

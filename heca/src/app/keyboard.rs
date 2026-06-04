@@ -182,6 +182,43 @@ pub(crate) fn typed_candidate_char(key_text: &str, physical_key: &PhysicalKey) -
         .map(|c| c.to_ascii_lowercase())
 }
 
+/// Convert a configured prefix combo to the literal bytes that should be
+/// forwarded on double-prefix.
+pub(crate) fn prefix_combo_to_literal_input(prefix_combo: &KeyCombo) -> Vec<u8> {
+    if prefix_combo.alt || prefix_combo.super_ {
+        return Vec::new();
+    }
+
+    if prefix_combo.ctrl {
+        return match prefix_combo.key.as_str() {
+            "[" => vec![0x1b],
+            "\\" => vec![0x1c],
+            "]" => vec![0x1d],
+            _ if prefix_combo.key.len() == 1 => {
+                let c = prefix_combo.key.as_bytes()[0];
+                if c.is_ascii_lowercase() {
+                    vec![c - b'a' + 1]
+                } else {
+                    Vec::new()
+                }
+            }
+            _ => Vec::new(),
+        };
+    }
+
+    if prefix_combo.shift || prefix_combo.key.len() != 1 {
+        return match prefix_combo.key.as_str() {
+            "enter" => vec![b'\r'],
+            "tab" => vec![b'\t'],
+            "escape" => vec![0x1b],
+            "space" => vec![b' '],
+            _ => Vec::new(),
+        };
+    }
+
+    prefix_combo.key.as_bytes().to_vec()
+}
+
 /// Convert a winit key event to terminal input bytes.
 pub(crate) fn winit_key_to_terminal_input(key: &Key, text: &str, ctrl: bool) -> Vec<u8> {
     if ctrl && text.len() == 1 {
@@ -213,7 +250,8 @@ pub(crate) fn winit_key_to_terminal_input(key: &Key, text: &str, ctrl: bool) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::typed_candidate_char;
+    use super::{prefix_combo_to_literal_input, typed_candidate_char};
+    use crate::keymap::KeyCombo;
     use winit::keyboard::{KeyCode, PhysicalKey};
 
     #[test]
@@ -229,6 +267,18 @@ mod tests {
         assert_eq!(
             typed_candidate_char("", &PhysicalKey::Code(KeyCode::KeyZ)),
             Some('z')
+        );
+    }
+
+    #[test]
+    fn prefix_combo_to_literal_input_uses_configured_ctrl_prefix() {
+        assert_eq!(
+            prefix_combo_to_literal_input(&KeyCombo::parse("Ctrl+a")),
+            vec![0x01]
+        );
+        assert_eq!(
+            prefix_combo_to_literal_input(&KeyCombo::parse("Ctrl+[")),
+            vec![0x1b]
         );
     }
 }

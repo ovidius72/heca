@@ -142,14 +142,14 @@ impl ActionRegistry {
             label: "Next Pane in Column",
             description: "Cycle focus forward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "n",
+            default_binding: "]",
         },
         ActionDescriptor {
             name: "prev_pane",
             label: "Previous Pane in Column",
             description: "Cycle focus backward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "p",
+            default_binding: "[",
         },
         ActionDescriptor {
             name: "sidebar_focus",

@@ -6,11 +6,29 @@
 use heca_core::layout::Session;
 
 /// Extended alphabet for pane candidate labels (52 chars).
+pub(crate) const PANE_CANDIDATE_LIMIT: usize = 52;
 const CANDIDATE_ALPHABET: &[char] = &[
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
     't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
     'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
+
+pub(crate) fn has_pane_candidate_overflow(session: &Session) -> bool {
+    let mut count = 0usize;
+    for ws in &session.workspaces {
+        count += ws
+            .scrolling
+            .columns
+            .iter()
+            .map(|col| col.panes.len())
+            .sum::<usize>();
+        count += ws.floating_panes.len();
+        if count > PANE_CANDIDATE_LIMIT {
+            return true;
+        }
+    }
+    false
+}
 
 /// Collect ALL panes across ALL workspaces as letter candidates.
 /// Hard-capped at 52 unique labels (a–z, A–Z). Beyond that, use sidebar
@@ -20,7 +38,7 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)>
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
-                if candidates.len() >= CANDIDATE_ALPHABET.len() {
+                if candidates.len() >= PANE_CANDIDATE_LIMIT {
                     return candidates;
                 }
                 let ch = CANDIDATE_ALPHABET[candidates.len()];
@@ -28,7 +46,7 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, u64)>
             }
         }
         for float in &ws.floating_panes {
-            if candidates.len() >= CANDIDATE_ALPHABET.len() {
+            if candidates.len() >= PANE_CANDIDATE_LIMIT {
                 return candidates;
             }
             let ch = CANDIDATE_ALPHABET[candidates.len()];
@@ -49,4 +67,31 @@ pub(crate) fn find_pane_location(session: &Session, pane_id: u64) -> Option<(usi
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PANE_CANDIDATE_LIMIT, collect_all_pane_candidates, has_pane_candidate_overflow};
+    use heca_core::layout::{
+        Pane as LayoutPane, PaneId, Session,
+        types::{LayoutOptions, SessionId, Size},
+    };
+
+    fn make_session_with_panes(count: usize) -> Session {
+        let viewport = Size::new(1280.0, 800.0);
+        let mut session = Session::new(SessionId(1), viewport, 2.0, LayoutOptions::default());
+        for i in 1..=count as u64 {
+            let pane = LayoutPane::new(PaneId(i), format!("Pane{i}"));
+            session.add_pane(pane, None, true);
+        }
+        session
+    }
+
+    #[test]
+    fn candidate_collection_caps_at_limit() {
+        let session = make_session_with_panes(PANE_CANDIDATE_LIMIT + 5);
+        let candidates = collect_all_pane_candidates(&session);
+        assert_eq!(candidates.len(), PANE_CANDIDATE_LIMIT);
+        assert!(has_pane_candidate_overflow(&session));
+    }
 }

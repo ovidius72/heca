@@ -7,15 +7,93 @@ use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, WmAction, action_from_name, build_action};
 use crate::keymap::{KeyCombo, KeymapRegistry};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
+#[derive(Clone, Debug)]
+struct BindingConflict {
+    mode: String,
+    combo: KeyCombo,
+    previous_action: WmAction,
+    previous_source: String,
+    new_action: WmAction,
+    new_source: String,
+}
+
+fn bind_with_conflict_tracking(
+    keymap: &mut KeymapRegistry,
+    mode: &str,
+    combo: KeyCombo,
+    action: WmAction,
+    source: String,
+    conflicts: &mut Vec<BindingConflict>,
+) {
+    if let Some(previous_action) = keymap.resolve(mode, &combo).cloned()
+        && previous_action != action
+    {
+        conflicts.push(BindingConflict {
+            mode: mode.to_string(),
+            combo: combo.clone(),
+            previous_action,
+            previous_source: "existing binding".to_string(),
+            new_action: action.clone(),
+            new_source: source,
+        });
+    }
+    keymap.bind(mode, combo, action);
+}
+
+fn format_combo(combo: &KeyCombo) -> String {
+    let mut parts = Vec::new();
+    if combo.ctrl {
+        parts.push("Ctrl".to_string());
+    }
+    if combo.shift {
+        parts.push("Shift".to_string());
+    }
+    if combo.alt {
+        parts.push("Alt".to_string());
+    }
+    if combo.super_ {
+        parts.push("Super".to_string());
+    }
+    parts.push(combo.key.clone());
+    parts.join("+")
+}
+
+fn log_conflicts(kind: &str, conflicts: &[BindingConflict]) {
+    if conflicts.is_empty() || cfg!(test) {
+        return;
+    }
+
+    eprintln!(
+        "[heca] detected {} keybinding conflict(s):",
+        conflicts.len()
+    );
+    for conflict in conflicts {
+        eprintln!(
+            "[heca] {} conflict in mode '{}': '{}' => {:?} ({}) overwritten by {:?} ({})",
+            kind,
+            conflict.mode,
+            format_combo(&conflict.combo),
+            conflict.previous_action,
+            conflict.previous_source,
+            conflict.new_action,
+            conflict.new_source,
+        );
+    }
+}
 
 /// Build the keymap registry from a config.
 pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     let mut keymap = KeymapRegistry::new();
+    let mut conflicts = Vec::new();
 
-    // ── Load bindings from [keys] flat map ──
     let default_keys = heca_config::theme::KeysConfig::default();
-    let mut merged_bindings = default_keys.bindings.clone();
+    let mut merged_bindings: BTreeMap<String, heca_config::theme::BindingValue> = default_keys
+        .bindings
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     for (k, v) in &config.keys.bindings {
         merged_bindings.insert(k.clone(), v.clone());
     }
@@ -27,16 +105,27 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
             let trimmed = key_str.trim();
             if trimmed.starts_with("prefix+") {
                 let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-                let combo = KeyCombo::parse(rest);
-                keymap.bind("normal", combo, action.clone());
+                bind_with_conflict_tracking(
+                    &mut keymap,
+                    "normal",
+                    KeyCombo::parse(rest),
+                    action.clone(),
+                    format!("[keys] {action_name}"),
+                    &mut conflicts,
+                );
             } else {
-                let combo = KeyCombo::parse(trimmed);
-                keymap.bind("global", combo, action.clone());
+                bind_with_conflict_tracking(
+                    &mut keymap,
+                    "global",
+                    KeyCombo::parse(trimmed),
+                    action.clone(),
+                    format!("[keys] {action_name}"),
+                    &mut conflicts,
+                );
             }
         }
     }
 
-    // ── Apply unbinds ──
     for combo_str in config.keys.unbind.keys() {
         let trimmed = combo_str.trim();
         if trimmed.starts_with("prefix+") {
@@ -49,7 +138,6 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         }
     }
 
-    // ── Sidebar-mode bindings (hardcoded for now) ──
     let sidebar_bindings = vec![
         ("j", WmAction::SidebarDown),
         ("k", WmAction::SidebarUp),
@@ -61,10 +149,16 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         ("Enter", WmAction::SidebarRightNav),
     ];
     for (key, action) in sidebar_bindings {
-        keymap.bind("sidebar", KeyCombo::parse(key), action);
+        bind_with_conflict_tracking(
+            &mut keymap,
+            "sidebar",
+            KeyCombo::parse(key),
+            action,
+            format!("[sidebar] {key}"),
+            &mut conflicts,
+        );
     }
 
-    // ── Custom command bindings from [[keys.command]] ──
     for cmd_cfg in &config.keys.command {
         let action = WmAction::SpawnCommand {
             command: cmd_cfg.command.clone(),
@@ -72,12 +166,27 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         let trimmed = cmd_cfg.key.trim();
         if trimmed.starts_with("prefix+") {
             let rest = trimmed.strip_prefix("prefix+").unwrap().trim();
-            keymap.bind("normal", KeyCombo::parse(rest), action);
+            bind_with_conflict_tracking(
+                &mut keymap,
+                "normal",
+                KeyCombo::parse(rest),
+                action,
+                format!("[[keys.command]] {}", cmd_cfg.command),
+                &mut conflicts,
+            );
         } else {
-            keymap.bind("global", KeyCombo::parse(trimmed), action);
+            bind_with_conflict_tracking(
+                &mut keymap,
+                "global",
+                KeyCombo::parse(trimmed),
+                action,
+                format!("[[keys.command]] {}", cmd_cfg.command),
+                &mut conflicts,
+            );
         }
     }
 
+    log_conflicts("flat", &conflicts);
     keymap
 }
 
@@ -90,17 +199,26 @@ pub fn build_modes(
 ) {
     let mut mode_keymaps = HashMap::new();
     let mut mode_triggers: HashMap<String, (KeyCombo, bool)> = HashMap::new();
+    let mut conflicts = Vec::new();
 
-    // Start with default modes so built-in modes (resize, etc.) are always available.
     let default_keys = heca_config::theme::KeysConfig::default();
-    let modes_to_load: Vec<_> = default_keys
+    let mut merged_modes: BTreeMap<String, heca_config::theme::KeyModeConfig> = default_keys
         .mode
         .iter()
-        .chain(config.keys.mode.iter())
-        .cloned()
+        .map(|mode| (mode.name.clone(), mode.clone()))
         .collect();
 
-    for mode_cfg in &modes_to_load {
+    for user_mode in &config.keys.mode {
+        if let Some(existing) = merged_modes.get_mut(&user_mode.name) {
+            existing.trigger = user_mode.trigger.clone();
+            existing.sticky = user_mode.sticky;
+            existing.bindings.extend(user_mode.bindings.clone());
+        } else {
+            merged_modes.insert(user_mode.name.clone(), user_mode.clone());
+        }
+    }
+
+    for mode_cfg in merged_modes.values() {
         let mut mode_map = KeymapRegistry::new();
         for binding in &mode_cfg.bindings {
             let action = if let Some(unit) = action_from_name(&binding.action) {
@@ -110,8 +228,14 @@ pub fn build_modes(
             } else {
                 continue;
             };
-            let combo = KeyCombo::parse(&binding.keys);
-            mode_map.bind(&mode_cfg.name, combo, action);
+            bind_with_conflict_tracking(
+                &mut mode_map,
+                &mode_cfg.name,
+                KeyCombo::parse(&binding.keys),
+                action,
+                format!("[keys.mode:{}] {}", mode_cfg.name, binding.action),
+                &mut conflicts,
+            );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
         let trigger_trimmed = mode_cfg.trigger.trim();
@@ -123,6 +247,8 @@ pub fn build_modes(
         };
         mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
     }
+
+    log_conflicts("mode", &conflicts);
     (mode_keymaps, mode_triggers)
 }
 
@@ -312,9 +438,11 @@ pub fn build_registry() -> ActionRegistry {
 
 #[cfg(test)]
 mod tests {
-    use super::build_keymap;
+    use super::{build_keymap, build_modes};
     use crate::input::WmAction;
     use crate::keymap::KeyCombo;
+    use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
+    use std::collections::HashMap;
 
     #[test]
     fn default_ctrl_k_binding_stays_swap_up() {
@@ -359,6 +487,53 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("Ctrl+n")),
             Some(&WmAction::WorkspaceNext)
+        );
+    }
+
+    #[test]
+    fn default_pane_navigation_and_palette_bindings_are_separate() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("[")),
+            Some(&WmAction::PrevPane)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("]")),
+            Some(&WmAction::NextPane)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("p")),
+            Some(&WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn user_mode_with_same_name_merges_with_defaults() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode.push(KeyModeConfig {
+            name: "resize".to_string(),
+            trigger: "prefix+r".to_string(),
+            sticky: true,
+            bindings: vec![ModeBindingConfig {
+                action: "resize_increase".to_string(),
+                keys: "x".to_string(),
+                args: HashMap::new(),
+            }],
+        });
+
+        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let resize = mode_keymaps.get("resize").expect("resize mode exists");
+
+        assert!(resize.resolve("resize", &KeyCombo::parse("h")).is_some());
+        assert_eq!(
+            resize.resolve("resize", &KeyCombo::parse("x")),
+            Some(&WmAction::ResizeIncrease)
+        );
+        assert_eq!(
+            mode_triggers.get("resize"),
+            Some(&(KeyCombo::parse("r"), true))
         );
     }
 }
