@@ -409,6 +409,60 @@ fn disabled_button_ignores_clicks_and_focus() {
 }
 
 #[test]
+fn checkbox_toggle_emits_change_action_with_new_value() {
+    use heca_grid_ui::{Action, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut cb = Checkbox::new().on_change(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut cb, Size::new(200.0, 80.0));
+
+    let b = cb.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+
+    cb.event(&Event::PointerPressed { pos: center });
+    assert!(cb.is_checked(), "press checks the box");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("checkbox-change", SignalData::Bool(true))),
+    );
+
+    cb.event(&Event::PointerPressed { pos: center });
+    assert!(!cb.is_checked(), "press again unchecks");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("checkbox-change", SignalData::Bool(false))),
+    );
+}
+
+#[test]
+fn checkbox_paints_indicator_only_when_checked() {
+    let theme = Theme::grid_tron();
+    let rect_count = |cb: &Checkbox| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            cb.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter(|c| matches!(c, DrawCommand::Rect(_)))
+            .count()
+    };
+
+    let mut unchecked = Checkbox::new();
+    LayoutEngine::new().compute(&mut unchecked, Size::new(80.0, 80.0));
+    let mut checked = Checkbox::new().checked(true);
+    LayoutEngine::new().compute(&mut checked, Size::new(80.0, 80.0));
+
+    // Unchecked: just the box. Checked: box + indicator.
+    assert_eq!(rect_count(&unchecked), 1, "unchecked paints only the box");
+    assert_eq!(rect_count(&checked), 2, "checked adds the indicator");
+}
+
+#[test]
 fn disabled_widget_skipped_by_focus_traversal() {
     let mut ui = Flex::row()
         .child(Button::primary("A"))

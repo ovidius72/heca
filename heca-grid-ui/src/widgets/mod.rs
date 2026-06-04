@@ -7,6 +7,7 @@
 
 mod button;
 mod card;
+mod checkbox;
 mod flex;
 mod label;
 mod surface;
@@ -14,6 +15,7 @@ mod toggle;
 
 pub use button::{Button, ButtonSize, ButtonVariant};
 pub use card::Card;
+pub use checkbox::Checkbox;
 pub use flex::{container, Container, Flex};
 pub use label::Label;
 pub use surface::Surface;

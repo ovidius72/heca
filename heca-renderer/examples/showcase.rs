@@ -65,6 +65,13 @@ fn build_ui(theme: &Theme) -> Flex {
             .child(toggle)
             .child(Label::new(label).color(color).font_size(15.0))
     };
+    let checkbox_row = |checkbox: Checkbox, label: &str, color: Color| {
+        Flex::row()
+            .gap(12.0)
+            .align(Align::Center)
+            .child(checkbox)
+            .child(Label::new(label).color(color).font_size(15.0))
+    };
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
 
     Flex::column()
@@ -115,6 +122,27 @@ fn build_ui(theme: &Theme) -> Flex {
                     Toggle::new().on(true).disabled(true),
                     "LOCKED OUT",
                     theme.accent,
+                )),
+        )
+        // Checkboxes: checked / unchecked / disabled.
+        .child(
+            Flex::row()
+                .gap(24.0)
+                .align(Align::Center)
+                .child(checkbox_row(
+                    Checkbox::new().checked(true).on_change(report),
+                    "ENCRYPT",
+                    theme.accent,
+                ))
+                .child(checkbox_row(
+                    Checkbox::new().on_change(report),
+                    "VERBOSE",
+                    theme.foreground,
+                ))
+                .child(checkbox_row(
+                    Checkbox::new().checked(true).disabled(true),
+                    "READ-ONLY",
+                    theme.muted,
                 )),
         )
 }
