@@ -259,15 +259,34 @@ impl Input {
     /// Handle an editing key. Returns whether it was consumed.
     fn handle_key(&mut self, key: GridKey) -> Handled {
         match key {
+            // Cmd/Ctrl+A selects all; other modified chars are ignored so they
+            // aren't typed as text.
+            GridKey::Char(c)
+                if (self.mods.ctrl || self.mods.meta) && c.eq_ignore_ascii_case(&'a') =>
+            {
+                self.select_all();
+            }
+            GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
             GridKey::Char(c) => self.insert(c),
             GridKey::Space => self.insert(' '),
             GridKey::Backspace => self.backspace(self.delete_granularity()),
             GridKey::Delete => self.delete(self.delete_granularity()),
-            GridKey::ArrowLeft => self.move_caret(true),
-            GridKey::ArrowRight => self.move_caret(false),
+            GridKey::ArrowLeft => self.move_caret(true, self.granularity()),
+            GridKey::ArrowRight => self.move_caret(false, self.granularity()),
+            GridKey::Home => self.move_caret(true, Granularity::Line),
+            GridKey::End => self.move_caret(false, Granularity::Line),
             _ => return Handled::No,
         }
         Handled::Yes
+    }
+
+    /// Select the entire text (caret at the end).
+    fn select_all(&mut self) {
+        let n = self.char_count();
+        self.anchor = (n > 0).then_some(0);
+        self.cursor = n;
+        self.blink = 0.0;
+        self.clicks = 0;
     }
 
     /// Movement granularity from the current modifiers: Ctrl/Cmd → to start/end,
@@ -282,13 +301,12 @@ impl Input {
         }
     }
 
-    /// Move the caret left/right at the current granularity. With Shift held the
-    /// move **extends/shrinks** the selection (anchoring at the start position);
+    /// Move the caret left/right at `gran`. With Shift held the move
+    /// **extends/shrinks** the selection (anchoring at the start position);
     /// without Shift it collapses any selection and moves the caret.
-    fn move_caret(&mut self, left: bool) {
+    fn move_caret(&mut self, left: bool, gran: Granularity) {
         self.blink = 0.0;
         self.clicks = 0;
-        let gran = self.granularity();
 
         if self.mods.shift {
             // Begin anchoring at the caret if no selection is active yet.

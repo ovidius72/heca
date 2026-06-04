@@ -830,6 +830,72 @@ fn shift_alt_arrow_selects_by_word() {
 }
 
 #[test]
+fn cmd_a_selects_all_without_typing() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("hello world");
+    LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        meta: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::Char('a'),
+        pressed: true,
+    });
+    assert_eq!(input.selected_text().as_deref(), Some("hello world"), "Cmd+A selects all");
+    assert_eq!(input.value_str(), "hello world", "the 'a' is not typed");
+}
+
+#[test]
+fn home_end_move_caret_to_bounds() {
+    let mut input = Input::new().value("hello");
+    LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
+
+    input.event(&Event::Key {
+        key: GridKey::Home,
+        pressed: true,
+    });
+    input.event(&Event::Key {
+        key: GridKey::Char('X'),
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "Xhello", "Home moves the caret to the start");
+
+    input.event(&Event::Key {
+        key: GridKey::End,
+        pressed: true,
+    });
+    input.event(&Event::Key {
+        key: GridKey::Char('Y'),
+        pressed: true,
+    });
+    assert_eq!(input.value_str(), "XhelloY", "End moves the caret to the end");
+}
+
+#[test]
+fn shift_home_end_select_to_bounds() {
+    use heca_grid_ui::Modifiers;
+    let mut input = Input::new().value("hello");
+    LayoutEngine::new().compute(&mut input, Size::new(400.0, 60.0));
+
+    input.event(&Event::ModifiersChanged(Modifiers {
+        shift: true,
+        ..Default::default()
+    }));
+    input.event(&Event::Key {
+        key: GridKey::Home,
+        pressed: true,
+    });
+    assert_eq!(input.selected_text().as_deref(), Some("hello"), "Shift+Home selects to start");
+    input.event(&Event::Key {
+        key: GridKey::End,
+        pressed: true,
+    });
+    assert_eq!(input.selection(), None, "Shift+End back to the end deselects");
+}
+
+#[test]
 fn disabled_input_ignores_typing() {
     let mut input = Input::new().disabled(true);
     LayoutEngine::new().compute(&mut input, Size::new(300.0, 60.0));

@@ -33,6 +33,8 @@ fn to_grid_key(key: &Key) -> Option<GridKey> {
         Key::Named(NamedKey::ArrowRight) => GridKey::ArrowRight,
         Key::Named(NamedKey::ArrowUp) => GridKey::ArrowUp,
         Key::Named(NamedKey::ArrowDown) => GridKey::ArrowDown,
+        Key::Named(NamedKey::Home) => GridKey::Home,
+        Key::Named(NamedKey::End) => GridKey::End,
         Key::Character(s) => GridKey::Char(s.chars().next()?),
         _ => return None,
     })

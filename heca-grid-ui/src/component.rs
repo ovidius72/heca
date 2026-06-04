@@ -86,6 +86,8 @@ pub enum GridKey {
     ArrowRight,
     ArrowUp,
     ArrowDown,
+    Home,
+    End,
 }
 
 /// Keyboard modifier state, renderer-agnostic. The host maps its platform
