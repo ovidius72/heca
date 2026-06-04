@@ -196,6 +196,20 @@ fn build_ui(theme: &Theme) -> Flex {
                 .child(Label::new("INTENSITY").color(theme.muted).font_size(13.0))
                 .child(Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(2).on_change(report)),
         )
+        // Item rows: a menu panel — leading slot (dot), label, trailing slot
+        // (kbd hint / chevron), selected + clickable states.
+        .child(
+            Surface::column()
+                .width(Length::Px(320.0))
+                .gap(2.0)
+                .background(theme.surface)
+                .border(theme.accent, 1.5)
+                .radius(4.0)
+                .child(Item::new("DASHBOARD").leading(StatusDot::online()).selected(true))
+                .child(Item::new("VIEW PROFILE").trailing(Badge::neutral("CMD P")).on_activate(click("VIEW PROFILE")))
+                .child(Item::new("SETTINGS").trailing(Badge::neutral("CMD ,")).on_activate(click("SETTINGS")))
+                .child(Item::new("SYSTEM").muted(true).trailing(Label::new(">").color(theme.muted))),
+        )
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add

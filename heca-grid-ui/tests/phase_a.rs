@@ -1304,3 +1304,88 @@ fn gauge_lights_segments_by_value() {
     assert_eq!(lit(&empty), 0, "empty gauge lights nothing");
     assert_eq!(lit(&full), 12, "full gauge lights all 12 segments");
 }
+
+// ── Item (generic list row) ──
+
+#[test]
+fn item_activates_on_click_when_interactive() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let hits = Rc::new(Cell::new(0u32));
+    let h = hits.clone();
+    let mut item = Item::new("VIEW PROFILE").on_activate(move || h.set(h.get() + 1));
+    LayoutEngine::new().compute(&mut item, Size::new(260.0, 40.0));
+
+    assert!(item.focusable(), "interactive item is focusable");
+    let b = item.base().bounds;
+    item.event(&Event::PointerPressed {
+        pos: Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0),
+    });
+    assert_eq!(hits.get(), 1, "click activates the row");
+
+    // Space activates too (keyboard).
+    item.event(&Event::Key {
+        key: GridKey::Space,
+        pressed: true,
+    });
+    assert_eq!(hits.get(), 2);
+}
+
+#[test]
+fn display_only_item_is_inert_and_unfocusable() {
+    let mut item = Item::new("STATIC");
+    LayoutEngine::new().compute(&mut item, Size::new(260.0, 40.0));
+    assert!(!item.focusable(), "an item without on_activate is not focusable");
+    let b = item.base().bounds;
+    // No panic / no effect; just confirms it ignores the press.
+    assert_eq!(
+        item.event(&Event::PointerPressed {
+            pos: Point::new(b.loc.x + 1.0, b.loc.y + 1.0),
+        }),
+        Handled::No,
+    );
+}
+
+#[test]
+fn item_label_color_tracks_selected_state() {
+    let theme = Theme::grid_tron();
+    let label_color = |item: &Item| {
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            item.paint(&mut cx);
+        }
+        scene.iter().find_map(|c| match c {
+            DrawCommand::Text(t) => Some(t.color),
+            _ => None,
+        })
+    };
+
+    let mut plain = Item::new("PROGRAMS");
+    LayoutEngine::new().compute(&mut plain, Size::new(260.0, 40.0));
+    let mut sel = Item::new("DASHBOARD").selected(true);
+    LayoutEngine::new().compute(&mut sel, Size::new(260.0, 40.0));
+
+    assert_eq!(label_color(&plain), Some(theme.foreground), "plain label uses foreground");
+    assert_eq!(label_color(&sel), Some(theme.accent), "selected label uses accent");
+}
+
+#[test]
+fn item_slots_lay_out_left_and_right() {
+    // Leading badge on the left, trailing hint on the right; label sits between.
+    let mut item = Item::new("SETTINGS")
+        .leading(StatusDot::online())
+        .trailing(Badge::neutral("CMD ,"));
+    LayoutEngine::new().compute(&mut item, Size::new(300.0, 40.0));
+
+    let b = item.base().bounds;
+    let lead = item.base().children[0].base().bounds; // leading
+    let trail = item.base().children[1].base().bounds; // trailing
+    assert!(lead.loc.x < trail.loc.x, "leading sits left of trailing");
+    assert!(
+        trail.loc.x + trail.size.w <= b.loc.x + b.size.w + 0.5,
+        "trailing stays within the row's right edge"
+    );
+    assert!(lead.size.w > 0.0 && trail.size.w > 0.0, "both slots are laid out");
+}
