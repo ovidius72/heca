@@ -213,7 +213,7 @@ Interpretation rules:
         - confirmation from sidebar returns to `SidebarNav`
       - `n` is removed from this phase as redundant.
       - Successful mutation actions stay in `SidebarNav`.
-    - [ ] 1.5.3 Make sidebar actions selection-driven, not main-focus-driven
+    - [x] 1.5.3 Make sidebar actions selection-driven, not main-focus-driven
       - Sidebar mutation keys act on the currently selected sidebar row context.
       - Main-area active pane/workspace is **not** the target source for sidebar-mode mutation keys.
       - Existing creation semantics should be preserved:
@@ -222,7 +222,7 @@ Interpretation rules:
         - `v` uses normal add-pane/split-in-column behavior
       - No surprise fallbacks to active main focus when the selected row does not imply a valid target.
       - Invalid row/action combinations no-op.
-    - [ ] 1.5.4 Add mouse semantics for entering/exiting sidebar mode
+    - [x] 1.5.4 Add mouse semantics for entering/exiting sidebar mode
       - Clicking inside the sidebar should enter `SidebarNav`.
       - Row-body click behavior:
         - workspace row:
@@ -247,7 +247,7 @@ Interpretation rules:
       - This preserves a two-step mouse flow for panes:
         - first click = enter/select in sidebar
         - second click while already in sidebar mode = activate/focus leaf and exit
-    - [ ] 1.5.5 Add disclosure hit targets and visual symbols for workspace + column rows
+    - [x] 1.5.5 Add disclosure hit targets and visual symbols for workspace + column rows
       - Add expand/collapse disclosure symbols for column rows.
       - Use the same symbols for workspace and column rows:
         - collapsed = `▶`

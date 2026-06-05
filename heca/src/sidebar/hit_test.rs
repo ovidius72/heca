@@ -44,10 +44,7 @@ pub fn sidebar_hit_test(
                 continue;
             }
             if visible_line == line_index {
-                return match item {
-                    SidebarItem::FloatingPane { .. } => None,
-                    _ => Some(fi),
-                };
+                return Some(fi);
             }
             visible_line += 1;
         }
@@ -55,11 +52,7 @@ pub fn sidebar_hit_test(
         let visible_lines = (sidebar_height / ITEM_HEIGHT) as usize;
         let fi = tree.scroll_offset + line_index;
         if line_index < visible_lines && fi < tree.flat_items.len() {
-            return match tree.flat_items.get(fi) {
-                Some(SidebarItem::FloatingPane { .. }) => None,
-                Some(_) => Some(fi),
-                None => None,
-            };
+            return tree.flat_items.get(fi).map(|_| fi);
         }
     }
 

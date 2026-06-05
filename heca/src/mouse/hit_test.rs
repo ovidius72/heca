@@ -89,14 +89,8 @@ pub(super) fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option
         crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)?;
     let item = state.sidebar_tree.flat_items.get(fi);
     match item? {
-        crate::sidebar::SidebarItem::Pane { pane_id } => Some(*pane_id),
-        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => state
-            .session
-            .workspaces
-            .get(*ws_idx)
-            .and_then(|ws| ws.scrolling.columns.get(*col_idx))
-            .and_then(|col| col.panes.first())
-            .map(|p| p.id.0),
+        crate::sidebar::SidebarItem::Pane { pane_id }
+        | crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => Some(*pane_id),
         _ => None,
     }
 }

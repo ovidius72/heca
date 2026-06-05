@@ -161,6 +161,7 @@ pub fn render_sidebar_expanded(
         );
 
         let text_x = x + presentation.indent;
+        push_disclosure_hitbox(flat_item, &mut tree.button_hitboxes, text_x, line_y);
         let text_y = line_y + (ITEM_HEIGHT - fonts.label) / 2.0 + 2.0;
         text_renderer.queue_text(&label, text_x, text_y, fonts.label, color);
 
@@ -343,7 +344,10 @@ fn expanded_item_label(
             let label = workspaces
                 .get(*ws_idx)
                 .and_then(|ws| ws.columns.get(*col_idx))
-                .map(|col| col.name.clone())
+                .map(|col| {
+                    let arrow = if col.collapsed { "▶ " } else { "▼ " };
+                    format!("{}{}", arrow, col.name)
+                })
                 .unwrap_or_else(|| format!("Col {}", col_idx + 1));
             (
                 ExpandedItemPresentation {
@@ -387,6 +391,27 @@ fn expanded_pane_label(
         format!("[{}] {}", ch, base)
     } else {
         base
+    }
+}
+
+fn push_disclosure_hitbox(
+    flat_item: &SidebarItem,
+    button_hitboxes: &mut Vec<SidebarButtonHitbox>,
+    text_x: f32,
+    line_y: f32,
+) {
+    if matches!(
+        flat_item,
+        SidebarItem::Workspace { .. } | SidebarItem::Column { .. }
+    ) {
+        button_hitboxes.push(SidebarButtonHitbox {
+            action: WmAction::SidebarExpandToggle,
+            ws_idx: None,
+            x: text_x,
+            y: line_y,
+            width: 16.0,
+            height: ITEM_HEIGHT,
+        });
     }
 }
 
