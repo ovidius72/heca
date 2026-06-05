@@ -193,6 +193,10 @@ impl Default for KeysConfig {
             "sidebar_expand_toggle".to_string(),
             Single("prefix+Tab".to_string()),
         );
+        bindings.insert(
+            "column_expand_toggle".to_string(),
+            Many(vec!["prefix+(".to_string(), "prefix+)".to_string()]),
+        );
 
         // ── Workspace navigation ──
         bindings.insert(

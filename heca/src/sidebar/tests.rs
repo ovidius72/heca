@@ -445,6 +445,52 @@
         );
     }
 
+    #[test]
+    fn test_collapse_active_column_from_normal_mode() {
+        // Simulates what handle_column_expand_toggle does:
+        // toggle collapse on the active column.
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let active_ws = session.active_workspace_idx;
+        let ws_entry = &tree.workspaces[active_ws];
+        let active_col = 0; // first column is active by default
+        let col_entry = &ws_entry.columns[active_col];
+        assert!(!col_entry.collapsed, "active column should start expanded");
+
+        let expanded_count = tree.flat_items.len();
+
+        // Toggle collapse on active column.
+        tree.workspaces[active_ws].columns[active_col].collapsed = true;
+        tree.rebuild_flat_items();
+        tree.clamp_cursor();
+
+        assert!(
+            tree.workspaces[active_ws].columns[active_col].collapsed,
+            "active column should be collapsed"
+        );
+        assert!(
+            tree.flat_items.len() < expanded_count,
+            "flat items should be fewer after column collapse"
+        );
+
+        // Toggle back to expand.
+        tree.workspaces[active_ws].columns[active_col].collapsed = false;
+        tree.rebuild_flat_items();
+        tree.clamp_cursor();
+
+        assert!(
+            !tree.workspaces[active_ws].columns[active_col].collapsed,
+            "active column should be expanded again"
+        );
+        assert_eq!(
+            tree.flat_items.len(),
+            expanded_count,
+            "flat items should return to original count after expand"
+        );
+    }
+
     /// Build a session with one workspace containing:
     /// - 2 tiled panes in a single column
     /// - 1 floating pane

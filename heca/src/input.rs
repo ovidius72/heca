@@ -161,6 +161,7 @@ pub enum WmAction {
     SidebarLeftNav,
     SidebarRightNav,
     SidebarExpandToggle,
+    ColumnExpandToggle,
 
     // ── System ──
     CommandPalette,
@@ -235,6 +236,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
         "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
         "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
+        "column_expand_toggle" => Some(WmAction::ColumnExpandToggle),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -428,7 +430,8 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
-        | WmAction::SidebarExpandToggle => 4,
+        | WmAction::SidebarExpandToggle
+        | WmAction::ColumnExpandToggle => 4,
         // Pane management
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
@@ -607,7 +610,8 @@ mod tests {
                 | WmAction::SidebarDown
                 | WmAction::SidebarLeftNav
                 | WmAction::SidebarRightNav
-                | WmAction::SidebarExpandToggle => 4,
+                | WmAction::SidebarExpandToggle
+                | WmAction::ColumnExpandToggle => 4,
                 // Pane management
                 WmAction::SplitHorizontal
                 | WmAction::SplitVertical

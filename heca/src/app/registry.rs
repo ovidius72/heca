@@ -389,6 +389,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
+    registry.register(&WmAction::ColumnExpandToggle, handle_column_expand_toggle);
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);

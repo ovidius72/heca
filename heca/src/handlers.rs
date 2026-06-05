@@ -1665,6 +1665,28 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+pub fn handle_column_expand_toggle(state: &mut AppState, _action: &WmAction) {
+    // Toggle collapse on the active column in the current workspace.
+    let active_ws = state.session.active_workspace_idx;
+    let active_col = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx);
+    if let Some(active_col) = active_col
+        && let Some(ws_entry) = state
+            .sidebar_tree
+            .workspaces
+            .iter_mut()
+            .find(|w| w.ws_idx == active_ws)
+            && let Some(col_entry) = ws_entry.columns.iter_mut().find(|c| c.col_idx == active_col)
+    {
+        col_entry.collapsed = !col_entry.collapsed;
+        state.sidebar_tree.rebuild_flat_items();
+        state.sidebar_tree.clamp_cursor();
+        state.needs_redraw = true;
+    }
+}
+
 // ── System ──
 
 pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {

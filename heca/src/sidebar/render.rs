@@ -343,7 +343,10 @@ fn expanded_item_label(
             let label = workspaces
                 .get(*ws_idx)
                 .and_then(|ws| ws.columns.get(*col_idx))
-                .map(|col| col.name.clone())
+                .map(|col| {
+                    let arrow = if col.collapsed { "▶ " } else { "▼ " };
+                    format!("{}{}", arrow, col.name)
+                })
                 .unwrap_or_else(|| format!("Col {}", col_idx + 1));
             (
                 ExpandedItemPresentation {
@@ -498,6 +501,17 @@ fn render_expanded_item_buttons(
             );
         }
         SidebarItem::Column { ws_idx, col_idx } => {
+            // Collapse arrow hitbox — clickable area over the ▶/▼ arrow character.
+            let arrow_hitbox_x = x + INDENT_COL;
+            button_hitboxes.push(SidebarButtonHitbox {
+                action: WmAction::ColumnExpandToggle,
+                ws_idx: Some(*ws_idx),
+                x: arrow_hitbox_x,
+                y: btn_y,
+                width: BTN_SIZE,
+                height: BTN_SIZE,
+            });
+
             let add_x = btn_x_right - BTN_SIZE - BTN_PAD_X;
             let add_colors = button_colors(foreground, hovered_btn_idx == Some(button_hitboxes.len()));
             draw_sidebar_button(
