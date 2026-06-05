@@ -414,8 +414,9 @@ fn handle_sidebar_nav_mode(
 ) {
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    let is_a = char_key(ctx.logical_key, 'a');
-    let is_n = char_key(ctx.logical_key, 'n');
+    let is_a = !ctx.is_ctrl && char_key(ctx.logical_key, 'a');
+    let is_n = !ctx.is_ctrl && char_key(ctx.logical_key, 'n');
+    let is_d = !ctx.is_ctrl && char_key(ctx.logical_key, 'd');
     let is_ctrl_j = ctx.is_ctrl && char_key(ctx.logical_key, 'j');
     let is_ctrl_k = ctx.is_ctrl && char_key(ctx.logical_key, 'k');
 
@@ -478,6 +479,48 @@ fn handle_sidebar_nav_mode(
                     },
                     state,
                 );
+            }
+            _ => {}
+        }
+        sync_focus(state);
+        state.needs_redraw = true;
+    } else if is_d {
+        // Context-sensitive delete.
+        let item = state.sidebar_tree.current_item().cloned();
+        match &item {
+            Some(crate::sidebar::SidebarItem::Pane { pane_id }) => {
+                registry.execute(&WmAction::ClosePaneById { pane_id: *pane_id }, state);
+            }
+            Some(crate::sidebar::SidebarItem::Column { ws_idx, col_idx }) => {
+                let ws_idx = *ws_idx;
+                let col_idx = *col_idx;
+                let ws_label = state
+                    .session
+                    .workspaces
+                    .get(ws_idx)
+                    .and_then(|ws| ws.name.clone())
+                    .unwrap_or_else(|| format!("ws {}", ws_idx + 1));
+                state.input_mode = InputMode::ConfirmDelete {
+                    message: format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label),
+                    action: Box::new(WmAction::DeleteColumn { ws_idx, col_idx }),
+                };
+                state.needs_redraw = true;
+                return;
+            }
+            Some(crate::sidebar::SidebarItem::Workspace { ws_idx }) => {
+                let ws_idx = *ws_idx;
+                let ws_label = state
+                    .session
+                    .workspaces
+                    .get(ws_idx)
+                    .and_then(|ws| ws.name.clone())
+                    .unwrap_or_else(|| format!("workspace {}", ws_idx + 1));
+                state.input_mode = InputMode::ConfirmDelete {
+                    message: format!("Delete {}? (y/n)", ws_label),
+                    action: Box::new(WmAction::DeleteWorkspace { ws_idx }),
+                };
+                state.needs_redraw = true;
+                return;
             }
             _ => {}
         }
