@@ -169,24 +169,138 @@ Interpretation rules:
 
 ### Phase 1 — Reorganize the Giant Files
 
-- [ ] Phase 1 complete
+- [x] Phase 1 complete
   - [x] 1.1 Split `heca/src/main.rs`
   - [x] 1.2 Split `heca/src/mouse.rs`
   - [x] 1.3 Split `heca/src/sidebar.rs`
-  - [ ] 1.4 Split `heca-config/src/theme.rs`
-  - [ ] 1.5 New keymap for sidebar mode only:
-    - [ ] w anyhere in the sidbebar add new workspace
-    - [ ] c add new column under curren ws
-    - [ ] v on a pane/column add new split  pane in the curren column
-    - [ ] n add new pane to current column
-    - [ ] z toggle focus pane to toggle zoom
-    - [ ] click mouse activate sidebar mode
-    - [ ] add toggle collapse column with key  `prefix+(/)` or l/h on it in the sidebar
-    - [ ] add toggle collapse worspace with key  `prefix+</>` or l/h on it in the sidebar
-    - [ ] add column expand symbols
-    - [ ] click ws or columns icons toggle
+  - [x] 1.4 Split `heca-config/src/theme.rs`
+  - [ ] 1.5 Sidebar mode keymap + tree interaction follow-up
+    - [ ] 1.5.1 Normalize sidebar navigation contract
+      - Sidebar mode is a selection-driven tree navigator for the built-in workspace tree.
+      - `j/k` and `Down/Up` move the sidebar cursor only.
+      - Moving the sidebar cursor does **not** automatically focus/sync the main scrolling area.
+      - `h/l` and `Left/Right` are tree-navigation keys:
+        - on workspace/column rows: collapse/expand only
+        - on pane/floating-pane rows:
+          - `Left` / `h` = no-op
+          - `Right` / `l` = activate that leaf item and exit `SidebarNav`
+      - `Enter` on pane/floating-pane activates the item, focuses it, and exits `SidebarNav`.
+      - `Esc` exits `SidebarNav`.
+      - Expand/collapse/navigation actions stay in `SidebarNav`.
+    - [ ] 1.5.2 Add sidebar-only mutation keymap
+      - These bindings exist only in sidebar mode.
+      - `w` = create workspace
+        - works from workspace/column/pane rows
+        - floating-pane row = no-op
+      - `c` = create new column in the selected row’s workspace
+        - workspace row → create column in that workspace
+        - column row → create sibling/new column in that row’s workspace
+        - pane row → create column in that pane’s workspace
+        - floating-pane row = no-op
+      - `v` = add/split a new pane in the selected/current column
+        - column row → add pane in that column
+        - pane row → add pane in that pane’s column
+        - workspace/floating-pane row = no-op
+      - `z` = zoom the selected column
+        - column row → zoom that column
+        - pane row → zoom that pane’s column
+        - workspace/floating-pane row = no-op
+      - `n` is removed from this phase as redundant.
+      - Successful mutation actions stay in `SidebarNav`.
+    - [ ] 1.5.3 Make sidebar actions selection-driven, not main-focus-driven
+      - Sidebar mutation keys act on the currently selected sidebar row context.
+      - Main-area active pane/workspace is **not** the target source for sidebar-mode mutation keys.
+      - Existing creation semantics should be preserved:
+        - `w` uses current workspace-creation behavior
+        - `c` uses normal new-column insertion behavior
+        - `v` uses normal add-pane/split-in-column behavior
+      - No surprise fallbacks to active main focus when the selected row does not imply a valid target.
+      - Invalid row/action combinations no-op.
+    - [ ] 1.5.4 Add mouse semantics for entering/exiting sidebar mode
+      - Clicking inside the sidebar should enter `SidebarNav`.
+      - Row-body click behavior:
+        - workspace row:
+          - enter/stay in `SidebarNav`
+          - move cursor to that workspace row
+          - activate/select that workspace
+          - remain in `SidebarNav`
+        - column row:
+          - enter/stay in `SidebarNav`
+          - move cursor to that column row
+          - do **not** change main focus yet
+        - pane row:
+          - if not already in `SidebarNav`:
+            - enter `SidebarNav`
+            - move cursor to that pane row
+            - do **not** focus yet
+          - if already in `SidebarNav`:
+            - focus/select that pane
+            - exit to `Normal`
+        - floating-pane row:
+          - same activation behavior as normal pane rows
+      - This preserves a two-step mouse flow for panes:
+        - first click = enter/select in sidebar
+        - second click while already in sidebar mode = activate/focus leaf and exit
+    - [ ] 1.5.5 Add disclosure hit targets and visual symbols for workspace + column rows
+      - Add expand/collapse disclosure symbols for column rows.
+      - Use the same symbols for workspace and column rows:
+        - collapsed = `▶`
+        - expanded = `▼`
+      - Clicking the disclosure/icon toggles only tree UI state:
+        - enters/stays in `SidebarNav`
+        - does **not** activate/focus main content
+      - Row-body click and disclosure-icon click must remain distinct behaviors.
+    - [ ] 1.5.6 Add global sidebar-tree collapse actions
+      - Introduce real WM actions for sidebar tree UI state:
+        - `collapse_current_workspace`
+        - `expand_current_workspace`
+        - `toggle_current_workspace_collapsed`
+        - `collapse_current_column`
+        - `expand_current_column`
+        - `toggle_current_column_collapsed`
+      - These actions affect **sidebar tree UI collapse state only**, not compositor/layout visibility.
+      - They must be:
+        - added to `WmAction`
+        - mapped in `action_from_name()`
+        - given explicit priority entries
+        - registered in `ActionRegistry`
+        - represented in `ActionRegistry::ALL`
+        - bindable from `config.toml`
+      - For this phase, default keybindings only need:
+        - `prefix+(` → `toggle_current_column_collapsed`
+        - `prefix+<` → `toggle_current_workspace_collapsed`
+      - “current” for these global actions means:
+        - current workspace = active main-view workspace
+        - current column = focused pane’s column in active workspace
+      - These global actions should still work when the sidebar is hidden or not focused.
+    - [ ] 1.5.7 Preserve public config/action surface for future RPC work
+      - Even if only toggle variants are default-bound now, the explicit expand/collapse action family should exist now.
+      - This keeps the action surface ready for later RPC/target-token work.
+      - Future token targeting (`$workspaceIndex`, `$paneIndex`, `current`, etc.) is deferred to the later phase added in `pluggable-chrome-plugin-plan.md` section 8.1.
+    - [ ] 1.5.8 Add/update tests for sidebar tree behavior
+      - Add tests for sidebar-mode key resolution:
+        - `j/k`, `Up/Down`
+        - `h/l`, `Left/Right`
+        - `w/c/v/z`
+      - Add tests for:
+        - pane leaf activation exits `SidebarNav`
+        - workspace/column expand-collapse stays in `SidebarNav`
+        - disclosure click toggles only tree state
+        - row-body click behavior differs from icon click behavior
+        - global current-workspace/current-column collapse actions
+        - behavior when sidebar is hidden
+      - Preserve or extend existing collapse-persistence coverage.
+    - [ ] 1.5.9 Update docs and defaults
+      - Update default keybindings in `heca-config`
+      - Update README/keybinding docs for sidebar mode
+      - Document that:
+        - sidebar-mode mutation keys are sidebar-only
+        - global prefix collapse bindings act on active main-view state
+        - sidebar tree collapse is UI-only, not layout collapse
+  - [x] 1.V Validate file/module reorganization invariants
 
-  - [ ] 1.V Validate file/module reorganization invariants
+Short description:
+- the 1.5 block above is a clarified sidebar follow-up implementation plan based on agreed keyboard, mouse, action-registry, config-binding, and future RPC/token semantics gathered during planning discussion
 
 ### Phase 2 — Introduce a Central Mutation Boundary
 
@@ -557,6 +671,30 @@ Current problems:
 - `heca-config/src/keys.rs`
 - `heca-config/src/loader.rs`
 - `heca-config/src/defaults.rs`
+
+**Status update — 2026-06-05**
+
+Already extracted:
+
+- `heca-config/src/color.rs`
+- `heca-config/src/theme.rs`
+- `heca-config/src/settings.rs`
+- `heca-config/src/keys.rs`
+- `heca-config/src/loader.rs`
+- `heca-config/src/defaults.rs`
+
+Current state:
+
+- `theme.rs` is now focused on theme declarations/re-exports instead of acting as the whole config module
+- config loading, key schema, settings, defaults, and color parsing each have an obvious home
+- validation passes with:
+  - `cargo check -q`
+  - `cargo clippy --workspace --all-targets --all-features --quiet`
+  - `cargo test -q --workspace`
+
+Remaining work in this phase:
+
+- Treat the structural goal for Phase 1.4 as **met** and move to Phase 2 unless a later naming cleanup is needed.
 
 **Tasks**
 
@@ -1098,25 +1236,28 @@ The roadmap is succeeding when:
 
 ## 7. Recommended Immediate Next Step
 
-**Start Phase 1.3: split `heca/src/sidebar.rs`.**
+**Start Phase 2.1: create app-level mutation helpers.**
 
 Immediate next slices:
 
-1. extract sidebar data structures into a focused model module
-2. separate projection rebuild logic from navigation and rendering
-3. move hit testing and button hit testing into their own sidebar helper module
-4. keep behavior unchanged while improving readability and reviewability
+1. add a small post-mutation helper contract in the app layer
+2. centralize the common `sync_focus(state); state.needs_redraw = true;` tail
+3. remove extra manual `sidebar_tree.rebuild(...)` paths where the shared helper can own that responsibility
+4. keep behavior unchanged while shrinking handler/mouse duplication
 
 Reason:
 
-- Phase 1.1 is complete enough; `main.rs` is already thin
-- Phase 1.2 is now structurally complete enough to stop iterating there
-- `sidebar.rs` is the next large interaction hotspot
-- splitting sidebar logic next should make later shared pane-operation cleanup and focus-domain work safer
+- Phase 1.3’s live slice is complete
+- Phase 1.4 is now structurally complete in code
+- fresh validation on **2026-06-05** passes:
+  - `cargo check -q`
+  - `cargo clippy --workspace --all-targets --all-features --quiet`
+  - `cargo test -q --workspace`
+- the biggest remaining refactor hotspot is the scattered post-mutation contract across handlers, mouse drop paths, and sidebar focus flows
 
 ---
 
-## 8. Live Execution Checklist — Current Sidebar Split
+## 8. Live Execution Checklist — Current Central Mutation Boundary Slice
 
 This section is intentionally tactical. It exists so the active refactor can be tracked step by step inside the main plan document instead of only in ad hoc chat notes.
 
@@ -1126,9 +1267,12 @@ Rule for this checklist:
 
 - update it after each completed slice/commit
 - keep it behavior-preserving unless a later phase explicitly says otherwise
-- use it only for the **current active slice**, then replace it when the next slice becomes active
+- use it to track the current active slice, but preserve completed slice history when it is still useful context
 
-### Phase 1.3 — `heca/src/sidebar.rs`
+### Preserved completed slice history — Phase 1.3 `heca/src/sidebar.rs`
+
+Short description:
+- this completed checklist is intentionally preserved for history so prior refactor commit slices do not disappear from the plan document
 
 #### Commit 1 — Extract rendering module
 
@@ -1163,13 +1307,42 @@ Rule for this checklist:
 - [x] Validate with `cargo test -q --workspace`
 - [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
 
-#### Definition of done for the current slice
+#### Definition of done for the preserved completed slice
 
 - [x] `heca/src/sidebar.rs` is a thin façade
 - [x] rendering is fully extracted
 - [x] tests are fully extracted
 - [x] app behavior is unchanged
 - [x] validation passes
+
+### Current active slice — Phase 2.1 App-level mutation helpers
+
+#### Commit 1 — Introduce the helper contract
+
+- [ ] Add a small post-mutation helper in the app layer
+- [ ] Define what `after_layout_change(...)` guarantees
+- [ ] Add narrower helper(s) only if they remove real duplication
+- [ ] Keep `focus_pane_by_id(...)` as the canonical focus entrypoint
+- [ ] Validate with `cargo check -q`
+- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+
+#### Commit 2 — Convert repeated call-site tails
+
+- [ ] Replace repeated `sync_focus(state); state.needs_redraw = true;` endings in `heca/src/handlers.rs`
+- [ ] Convert matching tails in `heca/src/mouse/drop.rs`, `heca/src/mouse/sidebar_drop.rs`, `heca/src/mouse/drag.rs`, and `heca/src/app/input.rs` where appropriate
+- [ ] Reduce direct manual `sidebar_tree.rebuild(...)` use to startup + shared focus/mutation helpers
+- [ ] Keep behavior unchanged
+- [ ] Validate with `cargo check -q`
+- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [ ] Validate with `cargo test -q --workspace`
+
+#### Definition of done for the current slice
+
+- [ ] the post-mutation contract is explicit in code
+- [ ] repeated handler/mouse tails are materially reduced
+- [ ] sidebar rebuild responsibility is centralized
+- [ ] app behavior is unchanged
+- [ ] validation passes
 
 ---
 

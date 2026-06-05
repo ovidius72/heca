@@ -832,7 +832,9 @@ This solves the problem that JSON-only or fire-and-forget triggers could not sol
 
 ## Phase 8.1 — Placeholder variables (Formats/Tokens)
 
-> TO BE ANALYZED LATER
+> TO BE ANALYZED LATER.
+
+> ALLOWS EXTEND KEYBINDING WITH TOKENS LIKE $paneIndex and so on for propper RPC usage
 
 **Purpose**
 Add a way to create placeholder variables for plugins. like tmux does
