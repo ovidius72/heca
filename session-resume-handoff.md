@@ -9,8 +9,113 @@ Active branch:
 
 Important workflow state:
 - branch has already been **rebased onto `origin/main`** during this session
-- current working tree is **clean**
-- latest work is committed locally and ready to push / PR
+- PR has already been created for this branch
+- use this file + `AGENTS.md` as the first resume references before continuing
+
+## Session rules, standards, and must-follow workflow
+
+These are not optional; they were clarified explicitly during this session.
+
+### Workflow rules
+
+- Work **solo** from here — no more intercom/subagent delegation unless explicitly requested again.
+- **Before each new phase or major sub-phase**, use the **`/grill-me` skill** to acquire as much missing product/behavior detail as possible before implementing.
+- Before implementing a new phase slice, read at minimum:
+  - `AGENTS.md`
+  - `bugs-and-refactoring-plan.md`
+  - `bugs-and-refactoring-plan-with-checklist.md`
+  - all directly affected code files
+- Always **pull/rebase from `origin/main` before starting a new task/phase slice**.
+- Keep work in **small, behavior-preserving commits**.
+- After each meaningful slice, update the checklist and this handoff so the next session can resume cleanly.
+
+### Coding / architecture rules reinforced in this session
+
+- All real WM behavior must go through **`WmAction` + `ActionRegistry`**.
+- New behavior must be:
+  - registered in `WmAction`
+  - mapped in `action_from_name()`
+  - included in `action_priority()` explicitly
+  - registered in `build_registry()`
+  - added to `ActionRegistry::ALL` when user-facing
+  - bindable from config when appropriate
+- Do **not** bypass registry-driven state changes with ad hoc direct mutations unless the function is an internal helper used by a handler.
+- Sidebar tree collapse in current Phase 1.5 is **UI-only collapse state**, not compositor/layout collapse.
+- Sidebar-mode mutation keys are **selection-driven**.
+- Global prefix actions are **main-view active-state-driven**.
+- Do not invent larger semantic changes when a small structural/behavior-preserving slice is enough.
+- Keep code hand-formatted to match repo style; avoid running `cargo fmt` blindly.
+- Keep the tree/container distinction clear:
+  - current sidebar tree is the built-in workspace tree / future `WorkspacesContainer`
+  - the future sidebar shell/host is broader and documented separately
+
+### Files to consult for more information
+
+Core planning / rules:
+- `AGENTS.md`
+- `bugs-and-refactoring-plan.md`
+- `bugs-and-refactoring-plan-with-checklist.md`
+- `pluggable-chrome-plugin-plan.md`
+- `session-resume-handoff.md`
+
+User-facing keybinding reference:
+- `keybindings.toml`
+- `README.md`
+
+Current code areas relevant to sidebar + actions:
+- `heca/src/input.rs`
+- `heca/src/actions.rs`
+- `heca/src/app/registry.rs`
+- `heca/src/app/input.rs`
+- `heca/src/handlers.rs`
+- `heca/src/mouse.rs`
+- `heca/src/mouse/sidebar.rs`
+- `heca/src/mouse/hit_test.rs`
+- `heca/src/sidebar/model.rs`
+- `heca/src/sidebar/hit_test.rs`
+- `heca/src/sidebar/render.rs`
+- `heca/src/sidebar/tests.rs`
+
+Current config split reference:
+- `heca-config/src/color.rs`
+- `heca-config/src/settings.rs`
+- `heca-config/src/keys.rs`
+- `heca-config/src/loader.rs`
+- `heca-config/src/theme.rs`
+- `heca-config/src/defaults.rs`
+
+### Completed work from this session at a glance
+
+Config refactor work already completed earlier in this session:
+- split `heca-config` concerns into:
+  - `color.rs`
+  - `settings.rs`
+  - `keys.rs`
+  - `loader.rs`
+  - `theme.rs`
+  - `defaults.rs`
+- preserved compatibility through re-exports
+- validated with `cargo test -p heca-config`, `cargo clippy -p heca-config --all-targets`, and workspace checks
+
+Sidebar Phase 1.5 work completed so far:
+- `1.5.1` normalize sidebar navigation contract
+- `1.5.2` add sidebar-only mutation keymap
+- `1.5.3` make sidebar actions selection-driven
+- `1.5.4` add mouse semantics for entering/exiting sidebar mode
+- `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
+- sidebar-mode `Space` default binding documented in `keybindings.toml`
+
+### Planned incoming work
+
+Immediate remaining 1.5 items:
+- `1.5.6` add global sidebar-tree collapse action family
+- `1.5.7` preserve public config/action surface for future RPC work
+- `1.5.8` add/update focused sidebar tests
+- `1.5.9` update docs/defaults
+
+After Phase 1.5:
+- move to **Phase 2** from the refactor plan unless product direction changes
+- for future RPC token targeting, refer to the later phase added under `pluggable-chrome-plugin-plan.md` section **8.1**
 
 ## Latest commits from this session
 
@@ -215,14 +320,18 @@ Do **not** re-decide these unless intentionally changing product behavior:
 - `keybindings.toml`
 - `bugs-and-refactoring-plan-with-checklist.md`
 
-## Push / PR intent
+## Push / PR status
 
-The user explicitly asked to:
+The user asked to:
 - commit
 - push
 - create PR
 - write detailed handoff
 
-At the time of writing this handoff:
-- local commits are ready
-- next immediate task is to push branch and create PR
+That has been completed.
+
+Current PR:
+- https://github.com/ovidius72/heca/pull/26
+
+Branch:
+- `feature/gpt-refactoring`

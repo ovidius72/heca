@@ -753,6 +753,118 @@ See `niri-compatibility-review.md` for full details. Key issues:
 
 ---
 
+## Session Addendum — 2026-06-05
+
+This addendum captures important project-specific rules and outcomes established during the current refactor session. Treat these as active working rules unless the user explicitly overrides them.
+
+### Workflow rules for future phases
+
+- Work **solo** by default — do not use intercom/subagent delegation unless the user explicitly asks for it again.
+- **Before each new phase or major sub-phase, use the `/grill-me` skill** to acquire as much missing behavioral/product detail as possible before implementing.
+- Before starting a new phase slice, explicitly read:
+  - `AGENTS.md`
+  - `bugs-and-refactoring-plan.md`
+  - `bugs-and-refactoring-plan-with-checklist.md`
+  - all directly affected code files
+- **Pull/rebase from `origin/main` before starting each new task or phase slice.**
+- Keep work in **small, behavior-preserving slices** with clean commits.
+- After each meaningful slice, update:
+  - `bugs-and-refactoring-plan-with-checklist.md`
+  - `session-resume-handoff.md`
+
+### Action-system rules reinforced in this session
+
+For any new app behavior that should be user-visible or scriptable:
+- add a `WmAction` variant
+- add `action_from_name()` mapping
+- update `action_priority()` explicitly
+- register the handler in `build_registry()`
+- add metadata in `ActionRegistry::ALL` when user-facing
+- make it bindable from config when appropriate
+
+Do **not** introduce ad hoc behavior that bypasses the action system when the feature should be reachable from:
+- keyboard
+- mouse/UI
+- RPC / future RPC
+
+### Sidebar Phase 1.5 semantic rules already settled
+
+These were clarified in detail with `/grill-me`; do not casually re-decide them:
+
+- Sidebar mode is **selection-driven**.
+- `j/k` and `Up/Down` move sidebar cursor only.
+- Main scrolling/focus state does **not** auto-follow sidebar cursor movement.
+- `h/l` and `Left/Right` are tree-navigation keys on structural rows.
+- Pane / floating-pane leaf activation (`Enter`, `Right`, `l`, or second click in sidebar mode) focuses the leaf and exits `SidebarNav`.
+- `Esc` exits sidebar mode and focuses contextual content.
+- Sidebar-mode mutation keys are sidebar-only.
+- Global prefix collapse actions use **active main-view state**, not sidebar selection.
+- Sidebar collapse in current 1.5 work is **UI-tree collapse only**, not compositor/layout collapse.
+- Explicit expand/collapse/toggle action families should exist when preparing for future RPC friendliness, even if only toggle variants get default bindings initially.
+
+### Important reference files
+
+Planning / rules:
+- `bugs-and-refactoring-plan.md`
+- `bugs-and-refactoring-plan-with-checklist.md`
+- `pluggable-chrome-plugin-plan.md`
+- `session-resume-handoff.md`
+
+Default keybinding reference:
+- `keybindings.toml`
+- `README.md`
+
+Sidebar/action implementation files:
+- `heca/src/input.rs`
+- `heca/src/actions.rs`
+- `heca/src/app/registry.rs`
+- `heca/src/app/input.rs`
+- `heca/src/handlers.rs`
+- `heca/src/mouse.rs`
+- `heca/src/mouse/sidebar.rs`
+- `heca/src/mouse/hit_test.rs`
+- `heca/src/sidebar/model.rs`
+- `heca/src/sidebar/hit_test.rs`
+- `heca/src/sidebar/render.rs`
+- `heca/src/sidebar/tests.rs`
+
+Current `heca-config` split reference:
+- `heca-config/src/color.rs`
+- `heca-config/src/settings.rs`
+- `heca-config/src/keys.rs`
+- `heca-config/src/loader.rs`
+- `heca-config/src/theme.rs`
+- `heca-config/src/defaults.rs`
+
+### Work completed in this session
+
+Already completed:
+- `heca-config` Phase 1.4 split work:
+  - `color.rs`
+  - `settings.rs`
+  - `keys.rs`
+  - `loader.rs`
+  - `defaults.rs`
+  - slimmed `theme.rs`
+- Sidebar Phase 1.5 completed slices so far:
+  - `1.5.1` normalize sidebar navigation contract
+  - `1.5.2` add sidebar-only mutation keymap
+  - `1.5.3` make sidebar actions selection-driven
+  - `1.5.4` add mouse semantics for entering/exiting sidebar mode
+  - `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
+
+### Planned incoming phases / slices
+
+Immediate remaining 1.5 work:
+- `1.5.6` global sidebar-tree collapse action family
+- `1.5.7` preserve public config/action surface for future RPC work
+- `1.5.8` add/update focused sidebar tests
+- `1.5.9` update docs/defaults
+
+After that:
+- proceed to **Phase 2** from `bugs-and-refactoring-plan.md`, unless the user redirects
+- future token-target/RPC extension work is planned in `pluggable-chrome-plugin-plan.md` section `8.1`
+
 ## Agent Rules
 
 ### When Reading Code
