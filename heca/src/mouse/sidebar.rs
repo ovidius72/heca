@@ -2,7 +2,7 @@
 //!
 //! This module owns sidebar click routing.
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, InputMode};
 use crate::input::WmAction;
 
 pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
@@ -74,10 +74,13 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
                 crate::sidebar::SidebarItem::Pane { pane_id } => {
                     return Some(WmAction::FocusPane { pane_id });
                 }
-                crate::sidebar::SidebarItem::Workspace { ws_idx } => {
-                    return Some(WmAction::FocusWorkspace { ws_idx });
+                crate::sidebar::SidebarItem::Workspace { .. } | crate::sidebar::SidebarItem::Column { .. } => {
+                    // Clicking a workspace or column row selects it and enters
+                    // SidebarNav mode so the user can navigate via keyboard.
+                    state.input_mode = InputMode::SidebarNav;
+                    state.needs_redraw = true;
+                    return None;
                 }
-                crate::sidebar::SidebarItem::Column { .. } => {}
                 crate::sidebar::SidebarItem::FloatingPane { .. } => {}
             }
         }
