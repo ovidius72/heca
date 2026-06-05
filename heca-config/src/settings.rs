@@ -87,3 +87,35 @@ impl Default for SettingsConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_config_default_values() {
+        let s = SettingsConfig::default();
+        assert_eq!(s.theme, "mocha");
+        assert!(s.mouse);
+        assert_eq!(s.window_width, 1280);
+        assert_eq!(s.window_height, 800);
+        assert!(s.auto_scroll_edge);
+        assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
+        assert!(!s.always_center_single_column);
+    }
+
+    #[test]
+    fn test_modifier_key_control_alias() {
+        #[derive(Deserialize)]
+        struct Wrap {
+            #[serde(default)]
+            m: ModifierKey,
+        }
+
+        let ctrl: Wrap = toml::from_str(r#"m = "Control""#).unwrap();
+        assert_eq!(ctrl.m, ModifierKey::Ctrl);
+
+        let pascal: Wrap = toml::from_str(r#"m = "Ctrl""#).unwrap();
+        assert_eq!(pascal.m, ModifierKey::Ctrl);
+    }
+}
