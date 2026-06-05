@@ -1625,6 +1625,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
+        // SidebarNav mode: existing behavior — toggle item under cursor or focus pane.
         let item = state.sidebar_tree.current_item().cloned();
         match &item {
             Some(sidebar::SidebarItem::Pane { pane_id }) => {
@@ -1647,8 +1648,21 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
                 state.sidebar_tree.toggle_expand();
             }
         }
-        state.needs_redraw = true;
+    } else {
+        // Normal/other modes: toggle collapse on the active workspace.
+        let active_ws = state.session.active_workspace_idx;
+        if let Some(ws_entry) = state
+            .sidebar_tree
+            .workspaces
+            .iter_mut()
+            .find(|w| w.ws_idx == active_ws)
+        {
+            ws_entry.collapsed = !ws_entry.collapsed;
+            state.sidebar_tree.rebuild_flat_items();
+            state.sidebar_tree.clamp_cursor();
+        }
     }
+    state.needs_redraw = true;
 }
 
 // ── System ──

@@ -399,6 +399,52 @@
         );
     }
 
+    #[test]
+    fn test_collapse_active_workspace_from_normal_mode() {
+        // Simulates what handle_sidebar_expand_toggle does when
+        // called from Normal mode: toggle collapse on the active workspace.
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let active_ws = session.active_workspace_idx;
+        assert!(
+            !tree.workspaces[active_ws].collapsed,
+            "active workspace should start expanded"
+        );
+
+        let expanded_count = tree.flat_items.len();
+
+        // Toggle collapse on active workspace (simulating Normal mode path).
+        tree.workspaces[active_ws].collapsed = true;
+        tree.rebuild_flat_items();
+        tree.clamp_cursor();
+
+        assert!(
+            tree.workspaces[active_ws].collapsed,
+            "active workspace should be collapsed"
+        );
+        assert!(
+            tree.flat_items.len() < expanded_count,
+            "flat items should be fewer after collapse"
+        );
+
+        // Toggle back to expand.
+        tree.workspaces[active_ws].collapsed = false;
+        tree.rebuild_flat_items();
+        tree.clamp_cursor();
+
+        assert!(
+            !tree.workspaces[active_ws].collapsed,
+            "active workspace should be expanded again"
+        );
+        assert_eq!(
+            tree.flat_items.len(),
+            expanded_count,
+            "flat items should return to original count after expand"
+        );
+    }
+
     /// Build a session with one workspace containing:
     /// - 2 tiled panes in a single column
     /// - 1 floating pane
