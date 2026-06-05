@@ -451,6 +451,12 @@ It must define, in detail:
 - dynamic action registration contract
 - overlay ownership rules
 - host-side widget / semantic contribution model
+- canonical geometry types for chrome/container APIs
+
+Geometry rule for the future architecture:
+- new chrome/container/overlay contracts should use the logical-pixel geometry types from `heca-core/src/layout/types.rs`
+- prefer `Rectangle` / `Point` / `Size`
+- do not carry the old legacy `heca_core::types::Rect` forward into new ChromeHost/provider/plugin-facing APIs
 
 **Where it sits in the process**
 
@@ -888,6 +894,12 @@ This architecture implies future changes to at least these areas:
 ### 5.6 `heca-grid-ui`
 - must expand with richer chrome/container/item primitives
 - but should still remain presentation-focused
+
+### 5.7 Geometry unification
+- chrome-facing geometry should be unified on `heca-core/src/layout/types.rs`
+- migrate remaining legacy `heca_core::types::Rect` usage out of chrome-facing code
+- especially remove/replace the current `Rect` usage in `heca/src/chrome.rs`
+- new ChromeHost / provider / overlay APIs should use `Rectangle` / `Point` / `Size` as the canonical geometry contract
 
 ---
 

@@ -143,6 +143,103 @@ And the main runtime responsibilities should be split into:
 
 ---
 
+## 4A. Global Progress Checklist
+
+This checklist is the **global phase-by-phase tracker** for the refactor program.
+
+Interpretation rules:
+- the checklist below tracks **overall program progress**
+- the later **Live Execution Checklist** tracks only the **current active slice**
+- when a subphase is completed, check the subphase item
+- each phase now includes an explicit **test/validation checkpoint** near its end
+- when every implementation subphase plus that phase's validation checkpoint is completed and its acceptance intent is satisfied, check the phase item
+- do not delete the detailed phase descriptions below; they remain the source of truth for scope and acceptance details
+- Phase 10 is the final whole-program verification pass after all refactor phases are complete
+
+### Phase 0 — Safety Net Before Refactoring
+- [ ] Phase 0 complete
+  - [ ] 0.1 Audit current tests
+  - [ ] 0.2 Add high-value behavior tests
+  - [ ] 0.V Validate Phase 0 safety net coverage
+
+### Phase 1 — Reorganize the Giant Files
+- [ ] Phase 1 complete
+  - [x] 1.1 Split `heca/src/main.rs`
+  - [x] 1.2 Split `heca/src/mouse.rs`
+  - [x] 1.3 Split `heca/src/sidebar.rs`
+  - [ ] 1.4 Split `heca-config/src/theme.rs`
+  - [ ] 1.V Validate file/module reorganization invariants
+
+### Phase 2 — Introduce a Central Mutation Boundary
+- [ ] Phase 2 complete
+  - [ ] 2.1 Create app-level mutation helpers
+  - [ ] 2.2 Standardize handler endings
+  - [ ] 2.V Validate centralized mutation/post-hook behavior
+
+### Phase 3 — Extract Shared Pane Operation Logic
+- [ ] Phase 3 complete
+  - [ ] 3.1 Create a shared pane-ops layer
+  - [ ] 3.2 Simplify handlers to dispatchers
+  - [ ] 3.3 Reduce cross-file ad hoc search logic
+  - [ ] 3.V Validate shared pane-op behavior across keyboard/mouse/sidebar flows
+
+### Phase 4 — Redesign Sidebar Projection and Interaction Model
+- [ ] Phase 4 complete
+  - [ ] 4.1 Preserve UI state across rebuilds
+  - [ ] 4.2 Separate projection rows from interaction rules
+  - [ ] 4.3 Introduce `sync()` semantics
+  - [ ] 4.4 Performance/readability cleanup
+  - [ ] 4.V Validate projection/state preservation and interaction-row behavior
+
+### Phase 5 — Backend Runtime Ownership Cleanup
+- [ ] Phase 5 complete
+  - [ ] 5.1 Wrap backend storage
+  - [ ] 5.2 Isolate lifecycle rules
+  - [ ] 5.3 Optional deeper follow-up
+  - [ ] 5.V Validate backend lifecycle ownership and removal rules
+
+### Phase 6 — Remove Stale, Dormant, and Drifting State
+- [ ] Phase 6 complete
+  - [ ] 6.1 Remove dead legacy geometry
+  - [ ] 6.2 Review dormant fields
+  - [ ] 6.3 Remove placeholder backend variants
+  - [ ] 6.4 Fix action metadata drift
+  - [ ] 6.5 Review `#[allow(dead_code)]`
+  - [ ] 6.V Validate dead-state removals and metadata consistency
+
+### Phase 7 — Typed Errors and Unsafe Hygiene
+- [ ] Phase 7 complete
+  - [ ] 7.1 Add typed errors where boundaries are stable
+  - [ ] 7.2 Improve action dispatch failure behavior
+  - [ ] 7.3 Add `// SAFETY:` comments to all unsafe blocks
+  - [ ] 7.V Validate typed-error behavior and unsafe documentation coverage
+
+### Phase 8 — Constants, Polish, and Performance Follow-Ups
+- [ ] Phase 8 complete
+  - [ ] 8.1 Centralize constants
+  - [ ] 8.2 Clarify renderer API truthfulness
+  - [ ] 8.3 Revisit terminal render-data cloning
+  - [ ] 8.4 Improve docs
+  - [ ] 8.V Validate constants cleanup, renderer API clarity, and targeted perf expectations
+
+### Phase 9 — Fix Floating vs Tiled Focus-Domain Routing
+- [ ] Phase 9 complete
+  - [ ] 9.1 Define the focus domain explicitly
+  - [ ] 9.2 Define action policy by domain
+  - [ ] 9.3 Route handlers through the domain guard
+  - [ ] 9.4 Centralize focused-pane targeting helpers
+  - [ ] 9.5 Add regression tests for domain routing
+  - [ ] 9.V Validate floating vs tiled action targeting correctness
+
+### Phase 10 — Final Whole-Program Verification
+- [ ] Phase 10 complete
+  - [ ] 10.1 Run full workspace validation (`cargo check`, `cargo clippy`, `cargo test`)
+  - [ ] 10.2 Run focused smoke tests for keybindings, sidebar/workspace behavior, floating/tiled behavior, and config reload
+  - [ ] 10.3 Reconcile docs/checklists/roadmaps with final refactor state
+  - [ ] 10.4 Confirm no phase-level regressions remain open without explicit deferment
+
+---
+
 ## Phase 0 — Safety Net Before Refactoring
 
 **Goal:** lock current expected behavior before moving code around.
@@ -875,6 +972,8 @@ Reason:
 ## 8. Live Execution Checklist — Current Sidebar Split
 
 This section is intentionally tactical. It exists so the active refactor can be tracked step by step inside the main plan document instead of only in ad hoc chat notes.
+
+Important: this is **not** the global refactor completion board. The global status lives in **4A. Global Progress Checklist** above.
 
 Rule for this checklist:
 - update it after each completed slice/commit
