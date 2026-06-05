@@ -431,6 +431,7 @@ fn handle_sidebar_nav_mode(
     let is_a = !ctx.is_ctrl && char_key(ctx.logical_key, 'a');
     let is_n = !ctx.is_ctrl && char_key(ctx.logical_key, 'n');
     let is_d = !ctx.is_ctrl && char_key(ctx.logical_key, 'd');
+    let is_z = !ctx.is_ctrl && char_key(ctx.logical_key, 'z');
     let is_ctrl_j = ctx.is_ctrl && char_key(ctx.logical_key, 'j');
     let is_ctrl_k = ctx.is_ctrl && char_key(ctx.logical_key, 'k');
 
@@ -542,6 +543,32 @@ fn handle_sidebar_nav_mode(
         }
         sync_focus(state);
         state.needs_redraw = true;
+    } else if is_z {
+        // Toggle column zoom for the pane's column.
+        let item = state.sidebar_tree.current_item().cloned();
+        if let Some(crate::sidebar::SidebarItem::Pane { pane_id }) = &item {
+            let target = heca_core::layout::PaneId(*pane_id);
+            for (ws_idx, ws) in state.session.workspaces.iter().enumerate() {
+                if let Some(col_idx) = ws
+                    .scrolling
+                    .columns
+                    .iter()
+                    .position(|col| col.panes.iter().any(|p| p.id == target))
+                {
+                    if ws_idx != state.session.active_workspace_idx {
+                        registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                    }
+                    state.session.workspaces[ws_idx]
+                        .scrolling
+                        .activate_column(col_idx);
+                    state.session.workspaces[ws_idx]
+                        .scrolling
+                        .toggle_active_column_zoom();
+                    state.needs_redraw = true;
+                    break;
+                }
+            }
+        }
     } else if is_ctrl_j {
         // Context-sensitive move/navigate down.
         let item = state.sidebar_tree.current_item().cloned();
