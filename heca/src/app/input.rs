@@ -16,6 +16,11 @@ use crate::keymap::{KeyCombo, KeymapRegistry};
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 
+/// Check if a Key::Character matches a given lowercase letter.
+fn char_key(key: &Key, ch: char) -> bool {
+    matches!(key, Key::Character(c) if c.eq_ignore_ascii_case(&ch.to_string()))
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct KeyInputContext<'a> {
     pub logical_key: &'a Key,
@@ -409,6 +414,10 @@ fn handle_sidebar_nav_mode(
 ) {
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
+    let is_a = char_key(ctx.logical_key, 'a');
+    let is_n = char_key(ctx.logical_key, 'n');
+    let is_ctrl_j = ctx.is_ctrl && char_key(ctx.logical_key, 'j');
+    let is_ctrl_k = ctx.is_ctrl && char_key(ctx.logical_key, 'k');
 
     if is_escape {
         state.input_mode = InputMode::Normal;
@@ -442,6 +451,71 @@ fn handle_sidebar_nav_mode(
             _ => {}
         }
         state.input_mode = InputMode::Normal;
+        state.needs_redraw = true;
+    } else if is_a {
+        // Add new workspace with a column and pane.
+        registry.execute(&WmAction::CreateWorkspace, state);
+        // After create, the new workspace is active. Rebuild sidebar tree.
+        sync_focus(state);
+        state.needs_redraw = true;
+    } else if is_n {
+        // Context-sensitive "new" — add child item based on cursor.
+        let item = state.sidebar_tree.current_item().cloned();
+        match &item {
+            Some(crate::sidebar::SidebarItem::Workspace { ws_idx }) => {
+                // Switch to workspace, then split horizontally (add column).
+                if *ws_idx != state.session.active_workspace_idx {
+                    registry.execute(&WmAction::FocusWorkspace { ws_idx: *ws_idx }, state);
+                }
+                registry.execute(&WmAction::SplitHorizontal, state);
+            }
+            Some(crate::sidebar::SidebarItem::Column { ws_idx, col_idx }) => {
+                // Add a pane to this column.
+                registry.execute(
+                    &WmAction::AddPaneToColumn {
+                        ws_idx: *ws_idx,
+                        col_idx: *col_idx,
+                    },
+                    state,
+                );
+            }
+            _ => {}
+        }
+        sync_focus(state);
+        state.needs_redraw = true;
+    } else if is_ctrl_j {
+        // Context-sensitive move/navigate down.
+        let item = state.sidebar_tree.current_item().cloned();
+        match &item {
+            Some(crate::sidebar::SidebarItem::Pane { .. }) => {
+                registry.execute(&WmAction::SwapDown, state);
+            }
+            Some(crate::sidebar::SidebarItem::Column { .. }) => {
+                registry.execute(&WmAction::MoveColumnDown, state);
+            }
+            Some(crate::sidebar::SidebarItem::Workspace { .. }) => {
+                registry.execute(&WmAction::WorkspaceNext, state);
+            }
+            _ => {}
+        }
+        sync_focus(state);
+        state.needs_redraw = true;
+    } else if is_ctrl_k {
+        // Context-sensitive move/navigate up.
+        let item = state.sidebar_tree.current_item().cloned();
+        match &item {
+            Some(crate::sidebar::SidebarItem::Pane { .. }) => {
+                registry.execute(&WmAction::SwapUp, state);
+            }
+            Some(crate::sidebar::SidebarItem::Column { .. }) => {
+                registry.execute(&WmAction::MoveColumnUp, state);
+            }
+            Some(crate::sidebar::SidebarItem::Workspace { .. }) => {
+                registry.execute(&WmAction::WorkspacePrev, state);
+            }
+            _ => {}
+        }
+        sync_focus(state);
         state.needs_redraw = true;
     } else {
         let combo = mode_combo(ctx);
