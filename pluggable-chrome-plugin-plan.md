@@ -830,7 +830,7 @@ This solves the problem that JSON-only or fire-and-forget triggers could not sol
 
 ---
 
-## Phase 8.1 — Placeholder variables (Formats)
+## Phase 8.1 — Placeholder variables (Formats/Tokens)
 
 > TO BE ANALYZED LATER
 
