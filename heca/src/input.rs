@@ -162,6 +162,10 @@ pub enum WmAction {
     SidebarRightNav,
     SidebarExpandToggle,
     ColumnExpandToggle,
+    SidebarAddItem,
+    SidebarDeleteItem,
+    SidebarAddWorkspace,
+    SidebarToggleZoom,
 
     // ── System ──
     CommandPalette,
@@ -237,6 +241,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
         "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
         "column_expand_toggle" => Some(WmAction::ColumnExpandToggle),
+        "sidebar_add_item" => Some(WmAction::SidebarAddItem),
+        "sidebar_delete_item" => Some(WmAction::SidebarDeleteItem),
+        "sidebar_add_workspace" => Some(WmAction::SidebarAddWorkspace),
+        "sidebar_toggle_zoom" => Some(WmAction::SidebarToggleZoom),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -431,7 +439,11 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
         | WmAction::SidebarExpandToggle
-        | WmAction::ColumnExpandToggle => 4,
+        | WmAction::ColumnExpandToggle
+        | WmAction::SidebarAddItem
+        | WmAction::SidebarDeleteItem
+        | WmAction::SidebarAddWorkspace
+        | WmAction::SidebarToggleZoom => 4,
         // Pane management
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
@@ -611,7 +623,11 @@ mod tests {
                 | WmAction::SidebarLeftNav
                 | WmAction::SidebarRightNav
                 | WmAction::SidebarExpandToggle
-                | WmAction::ColumnExpandToggle => 4,
+                | WmAction::ColumnExpandToggle
+                | WmAction::SidebarAddItem
+                | WmAction::SidebarDeleteItem
+                | WmAction::SidebarAddWorkspace
+                | WmAction::SidebarToggleZoom => 4,
                 // Pane management
                 WmAction::SplitHorizontal
                 | WmAction::SplitVertical

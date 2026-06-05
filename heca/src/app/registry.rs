@@ -151,6 +151,10 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         ("Space", WmAction::SidebarExpandToggle),
         ("b", WmAction::SidebarLeft),
         ("Enter", WmAction::SidebarRightNav),
+        ("a", WmAction::SidebarAddWorkspace),
+        ("n", WmAction::SidebarAddItem),
+        ("d", WmAction::SidebarDeleteItem),
+        ("z", WmAction::SidebarToggleZoom),
     ];
     for (key, action) in sidebar_bindings {
         bind_with_conflict_tracking(
@@ -394,6 +398,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
     registry.register(&WmAction::ColumnExpandToggle, handle_column_expand_toggle);
+    registry.register(&WmAction::SidebarAddItem, handle_sidebar_add_item);
+    registry.register(&WmAction::SidebarDeleteItem, handle_sidebar_delete_item);
+    registry.register(&WmAction::SidebarAddWorkspace, handle_sidebar_add_workspace);
+    registry.register(&WmAction::SidebarToggleZoom, handle_sidebar_toggle_zoom);
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);

@@ -428,10 +428,6 @@ fn handle_sidebar_nav_mode(
 ) {
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    let is_a = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'a');
-    let is_n = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'n');
-    let is_d = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'd');
-    let is_z = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'z');
     let is_ctrl_j = ctx.is_ctrl && char_key(ctx.logical_key, 'j');
     let is_ctrl_k = ctx.is_ctrl && char_key(ctx.logical_key, 'k');
 
@@ -468,107 +464,6 @@ fn handle_sidebar_nav_mode(
         }
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
-    } else if is_a {
-        // Add new workspace with a column and pane.
-        registry.execute(&WmAction::CreateWorkspace, state);
-        // After create, the new workspace is active. Rebuild sidebar tree.
-        sync_focus(state);
-        state.needs_redraw = true;
-    } else if is_n {
-        // Context-sensitive "new" — add child item based on cursor.
-        let item = state.sidebar_tree.current_item().cloned();
-        match &item {
-            Some(crate::sidebar::SidebarItem::Workspace { ws_idx }) => {
-                // Switch to workspace, then split horizontally (add column).
-                if *ws_idx != state.session.active_workspace_idx {
-                    registry.execute(&WmAction::FocusWorkspace { ws_idx: *ws_idx }, state);
-                }
-                registry.execute(&WmAction::SplitHorizontal, state);
-            }
-            Some(crate::sidebar::SidebarItem::Column { ws_idx, col_idx }) => {
-                // Add a pane to this column.
-                registry.execute(
-                    &WmAction::AddPaneToColumn {
-                        ws_idx: *ws_idx,
-                        col_idx: *col_idx,
-                    },
-                    state,
-                );
-            }
-            _ => {}
-        }
-        sync_focus(state);
-        state.needs_redraw = true;
-    } else if is_d {
-        // Context-sensitive delete.
-        let item = state.sidebar_tree.current_item().cloned();
-        match &item {
-            Some(crate::sidebar::SidebarItem::Pane { pane_id }) => {
-                registry.execute(&WmAction::ClosePaneById { pane_id: *pane_id }, state);
-            }
-            Some(crate::sidebar::SidebarItem::Column { ws_idx, col_idx }) => {
-                let ws_idx = *ws_idx;
-                let col_idx = *col_idx;
-                let ws_label = state
-                    .session
-                    .workspaces
-                    .get(ws_idx)
-                    .and_then(|ws| ws.name.clone())
-                    .unwrap_or_else(|| format!("ws {}", ws_idx + 1));
-                state.input_mode = InputMode::ConfirmDelete {
-                    message: format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label),
-                    action: Box::new(WmAction::DeleteColumn { ws_idx, col_idx }),
-                    restore_sidebar: true,
-                };
-                state.needs_redraw = true;
-                return;
-            }
-            Some(crate::sidebar::SidebarItem::Workspace { ws_idx }) => {
-                let ws_idx = *ws_idx;
-                let ws_label = state
-                    .session
-                    .workspaces
-                    .get(ws_idx)
-                    .and_then(|ws| ws.name.clone())
-                    .unwrap_or_else(|| format!("workspace {}", ws_idx + 1));
-                state.input_mode = InputMode::ConfirmDelete {
-                    message: format!("Delete {}? (y/n)", ws_label),
-                    action: Box::new(WmAction::DeleteWorkspace { ws_idx }),
-                    restore_sidebar: true,
-                };
-                state.needs_redraw = true;
-                return;
-            }
-            _ => {}
-        }
-        sync_focus(state);
-        state.needs_redraw = true;
-    } else if is_z {
-        // Toggle column zoom for the pane's column.
-        let item = state.sidebar_tree.current_item().cloned();
-        if let Some(crate::sidebar::SidebarItem::Pane { pane_id }) = &item {
-            let target = heca_core::layout::PaneId(*pane_id);
-            for (ws_idx, ws) in state.session.workspaces.iter().enumerate() {
-                if let Some(col_idx) = ws
-                    .scrolling
-                    .columns
-                    .iter()
-                    .position(|col| col.panes.iter().any(|p| p.id == target))
-                {
-                    if ws_idx != state.session.active_workspace_idx {
-                        registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
-                    }
-                    state.session.workspaces[ws_idx]
-                        .scrolling
-                        .activate_column(col_idx);
-                    state.session.workspaces[ws_idx]
-                        .scrolling
-                        .toggle_active_column_zoom();
-                    state.needs_redraw = true;
-                    break;
-                }
-            }
-        }
     } else if is_ctrl_j {
         // Context-sensitive move/navigate down.
         let item = state.sidebar_tree.current_item().cloned();
