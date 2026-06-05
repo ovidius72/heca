@@ -41,54 +41,26 @@ pub struct Theme {
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
-    #[serde(default = "default_float_bg")]
+    #[serde(default = "crate::defaults::default_float_bg")]
     pub float_background: Color,
-    #[serde(default = "default_float_accent")]
+    #[serde(default = "crate::defaults::default_float_accent")]
     pub float_accent: Color,
-    #[serde(default = "default_float_focus")]
+    #[serde(default = "crate::defaults::default_float_focus")]
     pub float_focus: Color,
     // ── Sidebar drag-and-drop colors ──
-    #[serde(default = "default_drag_ghost_bg")]
+    #[serde(default = "crate::defaults::default_drag_ghost_bg")]
     pub sidebar_drag_ghost_bg: Color,
-    #[serde(default = "default_drag_ghost_fg")]
+    #[serde(default = "crate::defaults::default_drag_ghost_fg")]
     pub sidebar_drag_ghost_fg: Color,
-    #[serde(default = "default_drag_source_bg")]
+    #[serde(default = "crate::defaults::default_drag_source_bg")]
     pub sidebar_drag_source_bg: Color,
-    #[serde(default = "default_drag_source_border")]
+    #[serde(default = "crate::defaults::default_drag_source_border")]
     pub sidebar_drag_source_border: Color,
     // ── Sidebar font sizes ──
-    #[serde(default = "default_sidebar_label_font_size")]
+    #[serde(default = "crate::defaults::default_sidebar_label_font_size")]
     pub sidebar_label_font_size: f32,
-    #[serde(default = "default_sidebar_button_font_size")]
+    #[serde(default = "crate::defaults::default_sidebar_button_font_size")]
     pub sidebar_button_font_size: f32,
-}
-
-fn default_float_bg() -> Color {
-    Color::new(49, 50, 68, 255)
-}
-fn default_float_accent() -> Color {
-    Color::new(137, 180, 250, 255)
-}
-fn default_float_focus() -> Color {
-    Color::new(250, 179, 135, 255)
-}
-fn default_drag_ghost_bg() -> Color {
-    Color::new(137, 180, 250, 217)
-} // accent @ 85%
-fn default_drag_ghost_fg() -> Color {
-    Color::new(255, 255, 255, 255)
-} // white
-fn default_drag_source_bg() -> Color {
-    Color::new(137, 180, 250, 38)
-} // accent @ 15%
-fn default_drag_source_border() -> Color {
-    Color::new(137, 180, 250, 255)
-} // accent
-fn default_sidebar_label_font_size() -> f32 {
-    14.0
-}
-fn default_sidebar_button_font_size() -> f32 {
-    11.0
 }
 
 impl Default for Theme {
