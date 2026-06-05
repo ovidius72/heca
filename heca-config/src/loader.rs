@@ -2,6 +2,7 @@ use crate::keys::KeysConfig;
 use crate::settings::SettingsConfig;
 use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -58,6 +59,35 @@ pub fn config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("heca")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Theme loading
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Try loading a theme from the user's theme directory, then fall back to a
+/// bundled theme, then fall back to the default theme.
+pub fn load_theme(name: &str) -> Theme {
+    load_theme_from_disk(name)
+        .or_else(|| load_bundled_theme(name))
+        .unwrap_or_default()
+}
+
+fn load_theme_from_disk(name: &str) -> Option<Theme> {
+    let path = config_dir().join("themes").join(format!("{}.toml", name));
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|c| toml::from_str(&c).ok())
+}
+
+fn load_bundled_theme(name: &str) -> Option<Theme> {
+    let bundled: HashMap<&str, &str> = [
+        ("mocha", include_str!("themes/mocha.toml")),
+        ("latte", include_str!("themes/latte.toml")),
+    ]
+    .into_iter()
+    .collect();
+    toml::from_str(bundled.get(name)?).ok()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

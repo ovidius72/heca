@@ -6,7 +6,6 @@ pub use crate::keys::{
 pub use crate::loader::{config_dir, AppConfig, Config};
 pub use crate::settings::{ModifierKey, SettingsConfig};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Shadow & Theme
@@ -123,24 +122,7 @@ impl Theme {
     }
 
     pub fn load(name: &str) -> Self {
-        Self::load_from_disk(name).unwrap_or_else(|| Self::load_bundled(name).unwrap_or_default())
-    }
-
-    fn load_from_disk(name: &str) -> Option<Self> {
-        let path = config_dir().join("themes").join(format!("{}.toml", name));
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|c| toml::from_str(&c).ok())
-    }
-
-    fn load_bundled(name: &str) -> Option<Self> {
-        let bundled: HashMap<&str, &str> = [
-            ("mocha", include_str!("themes/mocha.toml")),
-            ("latte", include_str!("themes/latte.toml")),
-        ]
-        .into_iter()
-        .collect();
-        toml::from_str(bundled.get(name)?).ok()
+        crate::loader::load_theme(name)
     }
 }
 
