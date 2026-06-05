@@ -865,6 +865,11 @@ After that:
 - proceed to **Phase 2** from `bugs-and-refactoring-plan.md`, unless the user redirects
 - future token-target/RPC extension work is planned in `pluggable-chrome-plugin-plan.md` section `8.1`
 
+## Workflow Rules for Future Phases
+- Before starting a new phase, use the `/grill-me` skill to acquire as much information as possible and have a clear plan.
+- At the end of tasks, wait for user approval before committing and creating a PR.
+- When the session is about to run out of tokens (70/80%), write a detailed handoff with all information for restart without losing context.
+
 ## Agent Rules
 
 ### When Reading Code
