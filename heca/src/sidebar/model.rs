@@ -14,7 +14,7 @@ pub enum SidebarItem {
 
 impl SidebarItem {
     /// Returns the workspace index for Workspace, Column, and FloatingPane variants.
-    /// For Pane, returns None (use `cursor_workspace_index()` for tree search).
+    /// For Pane, returns None.
     pub fn workspace_idx(&self) -> Option<usize> {
         match self {
             SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
@@ -416,20 +416,4 @@ impl SidebarTree {
         self.flat_items.get(self.cursor)
     }
 
-    /// Get the workspace index of the item at the current cursor position.
-    /// Works for Workspace, Column, FloatingPane, and Pane items.
-    pub fn cursor_workspace_index(&self) -> Option<usize> {
-        self.flat_items
-            .get(self.cursor)
-            .and_then(|item| match item {
-                SidebarItem::Workspace { ws_idx } => Some(*ws_idx),
-                SidebarItem::Column { ws_idx, .. } => Some(*ws_idx),
-                SidebarItem::FloatingPane { ws_idx, .. } => Some(*ws_idx),
-                SidebarItem::Pane { pane_id } => self.workspaces.iter().position(|ws| {
-                    ws.columns
-                        .iter()
-                        .any(|col| col.panes.iter().any(|p| p.pane_id == *pane_id))
-                }),
-            })
-    }
 }

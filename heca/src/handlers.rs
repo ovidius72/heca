@@ -1583,37 +1583,12 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
         let item = state.sidebar_tree.current_item().cloned();
         match &item {
             Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                let target_pane_id = heca_core::layout::PaneId(*pane_id);
-                let target_ws = state
-                    .session
-                    .workspaces
-                    .iter()
-                    .position(|ws| ws.find_pane(target_pane_id).is_some());
-                if let Some(ws_idx) = target_ws {
-                    if ws_idx != state.session.active_workspace_idx {
-                        switch_workspace_tracked(state, ws_idx);
-                    }
-                    focus_pane_by_id(state, *pane_id);
-                }
-                // Stay in sidebar mode; only Enter/Esc exit
+                focus_pane_by_id(state, *pane_id);
+                state.input_mode = InputMode::Normal;
             }
-            Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
-            Some(sidebar::SidebarItem::Workspace { .. }) => {
-                let ws_idx = state
-                    .sidebar_tree
-                    .cursor_workspace_index()
-                    .unwrap_or(state.session.active_workspace_idx);
-                if ws_idx != state.session.active_workspace_idx {
-                    switch_workspace_tracked(state, ws_idx);
-                }
-                let next_id = state.session.next_id();
-                let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-                state.session.add_pane(pane, None, true);
-                state
-                    .backends
-                    .insert(next_id, Box::new(FakeBackend::new(80, 24)));
-                sync_focus(state);
-                // Stay in sidebar mode; only Enter/Esc exit
+            Some(sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
+                focus_pane_by_id(state, *pane_id);
+                state.input_mode = InputMode::Normal;
             }
             _ => {
                 state.sidebar_tree.expand();
@@ -1627,22 +1602,8 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
         let item = state.sidebar_tree.current_item().cloned();
         match &item {
-            Some(sidebar::SidebarItem::Pane { pane_id }) => {
-                let target_pane_id = heca_core::layout::PaneId(*pane_id);
-                let target_ws = state
-                    .session
-                    .workspaces
-                    .iter()
-                    .position(|ws| ws.find_pane(target_pane_id).is_some());
-                if let Some(ws_idx) = target_ws {
-                    if ws_idx != state.session.active_workspace_idx {
-                        switch_workspace_tracked(state, ws_idx);
-                    }
-                    focus_pane_by_id(state, *pane_id);
-                }
-                state.input_mode = InputMode::Normal;
-            }
-            Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
+            Some(sidebar::SidebarItem::Pane { .. })
+            | Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
                 state.sidebar_tree.toggle_expand();
             }

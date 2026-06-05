@@ -411,37 +411,29 @@ fn handle_sidebar_nav_mode(
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
 
     if is_escape {
+        if let Some(item) = state.sidebar_tree.current_item().cloned()
+            && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
+        {
+            registry.execute(&WmAction::FocusPane { pane_id }, state);
+        }
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
     } else if is_enter {
         let item = state.sidebar_tree.current_item().cloned();
-        match &item {
-            Some(crate::sidebar::SidebarItem::Pane { pane_id }) => {
-                let target_pane_id = heca_core::layout::PaneId(*pane_id);
-                let target_ws = state
-                    .session
-                    .workspaces
-                    .iter()
-                    .position(|ws| ws.find_pane(target_pane_id).is_some());
-                if let Some(ws_idx) = target_ws {
-                    if ws_idx != state.session.active_workspace_idx {
-                        registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
-                    }
-                    registry.execute(&WmAction::FocusPane { pane_id: *pane_id }, state);
-                }
+        match item {
+            Some(crate::sidebar::SidebarItem::Pane { pane_id })
+            | Some(crate::sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
+                registry.execute(&WmAction::FocusPane { pane_id }, state);
+                state.input_mode = InputMode::Normal;
             }
-            Some(crate::sidebar::SidebarItem::Workspace { .. }) => {
-                let ws_idx = state
-                    .sidebar_tree
-                    .cursor_workspace_index()
-                    .unwrap_or(state.session.active_workspace_idx);
-                if ws_idx != state.session.active_workspace_idx {
-                    registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
-                }
+            Some(crate::sidebar::SidebarItem::Workspace { ws_idx })
+            | Some(crate::sidebar::SidebarItem::Column { ws_idx, .. })
+                if ws_idx != state.session.active_workspace_idx =>
+            {
+                registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
             }
             _ => {}
         }
-        state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
     } else {
         let combo = mode_combo(ctx);
@@ -450,6 +442,39 @@ fn handle_sidebar_nav_mode(
             registry.execute(&act, state);
         }
     }
+}
+
+fn sidebar_item_focus_target(
+    session: &heca_core::layout::Session,
+    item: &crate::sidebar::SidebarItem,
+) -> Option<u64> {
+    match item {
+        crate::sidebar::SidebarItem::Pane { pane_id }
+        | crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => Some(*pane_id),
+        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => session
+            .workspaces
+            .get(*ws_idx)
+            .and_then(|ws| ws.scrolling.columns.get(*col_idx))
+            .and_then(|col| col.active_pane().or_else(|| col.panes.first()))
+            .map(|pane| pane.id.0),
+        crate::sidebar::SidebarItem::Workspace { ws_idx } => session
+            .workspaces
+            .get(*ws_idx)
+            .and_then(workspace_focus_target),
+    }
+}
+
+fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<u64> {
+    ws.active_pane()
+        .map(|pane| pane.id.0)
+        .or_else(|| {
+            ws.scrolling
+                .columns
+                .iter()
+                .find_map(|col| col.active_pane().or_else(|| col.panes.first()))
+                .map(|pane| pane.id.0)
+        })
+        .or_else(|| ws.floating_panes.first().map(|float| float.pane.id.0))
 }
 
 fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
@@ -465,5 +490,100 @@ fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
         shift: ctx.is_shift,
         alt: false,
         super_: false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sidebar_item_focus_target;
+    use crate::sidebar::SidebarItem;
+    use heca_core::layout::column::Pane;
+    use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
+    use heca_core::layout::{PaneId, Session, SessionId};
+
+    fn make_session() -> Session {
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+        session.add_pane(Pane::new(PaneId(1), "pane-1"), None, true);
+        session.add_pane(Pane::new(PaneId(2), "pane-2"), Some(0), true);
+        session.add_pane(Pane::new(PaneId(3), "pane-3"), None, true);
+        session
+    }
+
+    #[test]
+    fn workspace_focus_target_prefers_active_pane() {
+        let session = make_session();
+        let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
+        assert_eq!(target, Some(3));
+    }
+
+    #[test]
+    fn column_focus_target_uses_column_active_pane() {
+        let session = make_session();
+        let target = sidebar_item_focus_target(
+            &session,
+            &SidebarItem::Column {
+                ws_idx: 0,
+                col_idx: 0,
+            },
+        );
+        assert_eq!(target, Some(2));
+    }
+
+    #[test]
+    fn floating_and_pane_items_target_their_exact_pane() {
+        let mut session = make_session();
+        let ws = session.active_workspace_mut().expect("active workspace exists");
+        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
+            pane: Pane::new(PaneId(99), "float"),
+            position: Point::new(0.0, 0.0),
+            size: Size::new(200.0, 100.0),
+            is_active: false,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        ws.floating_is_active = false;
+
+        assert_eq!(
+            sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: 2 }),
+            Some(2)
+        );
+        assert_eq!(
+            sidebar_item_focus_target(
+                &session,
+                &SidebarItem::FloatingPane {
+                    pane_id: 99,
+                    ws_idx: 0,
+                },
+            ),
+            Some(99)
+        );
+    }
+
+    #[test]
+    fn workspace_focus_target_falls_back_to_first_floating_pane() {
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+        let ws = session.active_workspace_mut().expect("active workspace exists");
+        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
+            pane: Pane::new(PaneId(77), "float-only"),
+            position: Point::new(0.0, 0.0),
+            size: Size::new(200.0, 100.0),
+            is_active: false,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        ws.update_working_area(Rectangle::new(Point::new(0.0, 0.0), Size::new(1280.0, 800.0)));
+
+        let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
+        assert_eq!(target, Some(77));
     }
 }

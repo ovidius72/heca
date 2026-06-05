@@ -141,12 +141,19 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     let sidebar_bindings = vec![
         ("j", WmAction::SidebarDown),
         ("k", WmAction::SidebarUp),
+        ("ArrowDown", WmAction::SidebarDown),
+        ("Down", WmAction::SidebarDown),
+        ("ArrowUp", WmAction::SidebarUp),
+        ("Up", WmAction::SidebarUp),
         ("h", WmAction::SidebarLeftNav),
         ("l", WmAction::SidebarRightNav),
+        ("ArrowLeft", WmAction::SidebarLeftNav),
+        ("Left", WmAction::SidebarLeftNav),
+        ("ArrowRight", WmAction::SidebarRightNav),
+        ("Right", WmAction::SidebarRightNav),
         ("Tab", WmAction::SidebarExpandToggle),
         ("Space", WmAction::SidebarExpandToggle),
         ("b", WmAction::SidebarLeft),
-        ("Enter", WmAction::SidebarRightNav),
     ];
     for (key, action) in sidebar_bindings {
         bind_with_conflict_tracking(
@@ -506,6 +513,29 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn sidebar_mode_includes_arrow_aliases() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowUp")),
+            Some(&WmAction::SidebarUp)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowDown")),
+            Some(&WmAction::SidebarDown)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowLeft")),
+            Some(&WmAction::SidebarLeftNav)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
+            Some(&WmAction::SidebarRightNav)
         );
     }
 

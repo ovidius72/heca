@@ -175,7 +175,7 @@ Interpretation rules:
   - [x] 1.3 Split `heca/src/sidebar.rs`
   - [x] 1.4 Split `heca-config/src/theme.rs`
   - [ ] 1.5 Sidebar mode keymap + tree interaction follow-up
-    - [ ] 1.5.1 Normalize sidebar navigation contract
+    - [x] 1.5.1 Normalize sidebar navigation contract
       - Sidebar mode is a selection-driven tree navigator for the built-in workspace tree.
       - `j/k` and `Down/Up` move the sidebar cursor only.
       - Moving the sidebar cursor does **not** automatically focus/sync the main scrolling area.
