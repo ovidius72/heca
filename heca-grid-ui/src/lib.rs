@@ -54,9 +54,9 @@ pub use scene::{DrawCommand, Scene};
 pub use style::{Align, Direction, Justify, Length, Style};
 pub use theme::{Intensity, Theme};
 pub use widgets::{
-    container, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Card,
-    Checkbox, Container, DotStatus, Flex, Gauge, Input, Item, Label, LabelSide, Orientation,
-    Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface, Tabs, Toggle,
+    Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Card, Checkbox,
+    Container, DotStatus, Flex, Gauge, Input, Item, Label, LabelSide, Orientation, Pane,
+    ProgressBar, Select, Separator, Spinner, StatusDot, Surface, Tabs, Toggle, container,
 };
 
 /// Common imports for building UIs.
@@ -66,14 +66,13 @@ pub mod prelude {
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
     pub use crate::focus::FocusManager;
-    pub use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+    pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;
     pub use crate::style::{Align, Direction, Justify, Length};
     pub use crate::theme::{Intensity, Theme};
     pub use crate::widgets::{
-        container, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant,
-        Card, Checkbox, Container, DotStatus, Flex, Gauge, Input, Item, Label, LabelSide,
-        Orientation, Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface, Tabs,
-        Toggle,
+        Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize, ButtonVariant, Card,
+        Checkbox, Container, DotStatus, Flex, Gauge, Input, Item, Label, LabelSide, Orientation,
+        Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface, Tabs, Toggle, container,
     };
 }

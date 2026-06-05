@@ -19,7 +19,7 @@
 //! which the app coalesces into a single redraw.
 
 pub use floem_reactive::{
-    create_effect, create_memo, Memo, RwSignal, SignalGet, SignalUpdate, SignalWith,
+    Memo, RwSignal, SignalGet, SignalUpdate, SignalWith, create_effect, create_memo,
 };
 
 /// A read-write reactive value. Cheap to copy and move into closures.

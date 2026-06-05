@@ -431,6 +431,7 @@ impl Default for KeysConfig {
             Single("prefix+Enter".to_string()),
         );
         bindings.insert("split_vertical".to_string(), Single("prefix+v".to_string()));
+        bindings.insert("zoom_column".to_string(), Single("prefix+z".to_string()));
 
         // ── Resize ──
         bindings.insert(
@@ -475,8 +476,8 @@ impl Default for KeysConfig {
         );
 
         // ── Tabs ──
-        bindings.insert("next_pane".to_string(), Single("prefix+n".to_string()));
-        bindings.insert("prev_pane".to_string(), Single("prefix+p".to_string()));
+        bindings.insert("next_pane".to_string(), Single("prefix+]".to_string()));
+        bindings.insert("prev_pane".to_string(), Single("prefix+[".to_string()));
 
         // ── Sidebars ──
         // Note: sidebar navigation (h/j/k/l) is ONLY active in SidebarNav mode.
@@ -490,8 +491,14 @@ impl Default for KeysConfig {
         );
 
         // ── Workspace navigation ──
-        bindings.insert("workspace_prev".to_string(), Single("prefix+u".to_string()));
-        bindings.insert("workspace_next".to_string(), Single("prefix+d".to_string()));
+        bindings.insert(
+            "workspace_prev".to_string(),
+            Many(vec!["prefix+u".to_string(), "prefix+Ctrl+p".to_string()]),
+        );
+        bindings.insert(
+            "workspace_next".to_string(),
+            Many(vec!["prefix+d".to_string(), "prefix+Ctrl+n".to_string()]),
+        );
 
         // ── Focus toggle ──
         bindings.insert(
@@ -512,9 +519,10 @@ impl Default for KeysConfig {
             "rename_workspace".to_string(),
             Single("prefix+Shift+w".to_string()),
         );
+        bindings.insert("rename_pane".to_string(), Single("prefix+$".to_string()));
         bindings.insert(
-            "rename_pane".to_string(),
-            Single("prefix+Shift+p".to_string()),
+            "rename_column".to_string(),
+            Single("prefix+Shift+c".to_string()),
         );
 
         // ── Command palette ──
@@ -542,11 +550,11 @@ impl Default for KeysConfig {
         // ── Move column to workspace (vertical movement) ──
         bindings.insert(
             "move_column_up".to_string(),
-            Single("prefix+Ctrl+k".to_string()),
+            Single("prefix+Ctrl+Shift+k".to_string()),
         );
         bindings.insert(
             "move_column_down".to_string(),
-            Single("prefix+Ctrl+j".to_string()),
+            Single("prefix+Ctrl+Shift+j".to_string()),
         );
 
         // ── Swap position (Ctrl+nav) ──
@@ -809,6 +817,8 @@ mod tests {
         let cfg = Config::default();
         assert!(cfg.keys.bindings.contains_key("focus_left"));
         assert!(cfg.keys.bindings.contains_key("split_horizontal"));
+        assert!(cfg.keys.bindings.contains_key("zoom_column"));
+        assert!(cfg.keys.bindings.contains_key("rename_column"));
         assert!(cfg.keys.bindings.contains_key("close"));
     }
 

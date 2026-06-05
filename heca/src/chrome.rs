@@ -45,6 +45,30 @@ mod tests {
     }
 
     #[test]
+    fn test_content_rect_clamping_when_sidebars_exceed_window() {
+        // Both sidebars together exceed the window width.
+        // Left sidebar is NOT clamped for x-position, but IS clamped for width calculation.
+        // Right sidebar is clamped to remaining space after left sidebar.
+        // Width must never go negative.
+        let c = ChromeConfig {
+            tab_bar_height: 20.0,
+            status_bar_height: 10.0,
+            left_sidebar_width: 300.0,
+            right_sidebar_width: 300.0,
+        };
+        let r = c.content_rect(500.0, 600.0);
+        // x = 300, y = 20
+        // left clamped: min(300, 500) = 300
+        // right clamped: min(300, 500-300) = min(300, 200) = 200
+        // w = 500 - 300 - 200 = 0  (not negative)
+        // h = 600 - 20 - 10 = 570
+        assert_eq!(r.x, 300.0);
+        assert_eq!(r.y, 20.0);
+        assert_eq!(r.w, 0.0);
+        assert_eq!(r.h, 570.0);
+    }
+
+    #[test]
     fn test_content_rect_no_sidebars() {
         let c = ChromeConfig {
             tab_bar_height: 32.0,

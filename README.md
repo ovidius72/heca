@@ -41,6 +41,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 - **Workspaces** — Multiple workspaces stacked vertically, switched with animated transitions.
 - **Floating panes** — Any pane can be detached from the scrolling layout and positioned freely.
 - **GPU-native chrome** — Tab bar, sidebars, status bar, pane borders — all rendered in one GPU pass.
+- **Future pluggable chrome** — the long-term architecture is evolving toward left/right/top/bottom chrome regions that host built-in containers first and WASM/plugin containers later.
 
 **Why not tmux + a terminal?**
 
@@ -49,7 +50,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 | Rendering | CPU text grid | GPU text atlas + primitives |
 | Fonts | Limited ligature support | Full HarfBuzz shaping, variable fonts |
 | Animations | None | Smooth scroll, zoom, slide |
-| Panes | Terminal only | Terminal, Neovim, browser, plugins |
+| Panes | Terminal only | Terminal, Neovim, browser, future container/plugin integrations |
 | Chrome | Text-only | GPU-rendered shapes, shadows, rounded corners |
 
 **Why NIRI-inspired?**
@@ -134,7 +135,7 @@ Ctrl+B → f   Toggle floating
 heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the action key. This avoids conflicts with applications running inside panes.
 
 - **Prefix timeout**: 500ms — if you don't press a key, prefix mode exits automatically.
-- **Double prefix**: `Ctrl+B` `Ctrl+B` sends a literal `Ctrl+B` (0x02) to the focused pane.
+- **Double prefix**: pressing the configured prefix twice sends the literal configured prefix key to the focused pane (for example `Ctrl+B Ctrl+B` → `Ctrl+B`, `Ctrl+A Ctrl+A` → `Ctrl+A`).
 - **Bare modifiers**: Holding Shift/Ctrl/Alt alone in prefix mode does nothing — wait for the actual key.
 
 ### Navigation
@@ -145,8 +146,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Focus right | `l` | Activate column right, scroll view |
 | Focus up | `k` | Activate pane above in column |
 | Focus down | `j` | Activate pane below in column |
-| Next pane | `n` | Cycle to next pane across columns |
-| Prev pane | `p` | Cycle to prev pane across columns |
+| Next pane | `]` | Cycle to next pane across columns |
+| Prev pane | `[` | Cycle to prev pane across columns |
 | Workspace next | `d` | Switch to next workspace (down) |
 | Workspace prev | `u` | Switch to prev workspace (up) |
 | Focus toggle (local) | `i` | Toggle between last two panes in same workspace |
@@ -190,14 +191,17 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 |---------|----------------|-------------|
 | Create workspace | `w` | Create new workspace with a pane |
 | Rename workspace | `Shift+W` | Rename current workspace |
-| Rename pane | `Shift+P` | Rename active pane |
+| Rename column | `Shift+C` | Rename active column |
+| Rename pane | `$` | Rename active pane |
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Enter sidebar navigation mode |
 
+Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
+
 ### Sidebar Navigation Mode
 
-When in sidebar mode (`Ctrl+B → e` or clicking sidebar):
+When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree sidebar):
 
 | Key | Action |
 |-----|--------|
@@ -243,16 +247,20 @@ focus_up = "prefix+k"
 focus_down = "prefix+j"
 split_horizontal = "prefix+Enter"
 split_vertical = "prefix+v"
+zoom_column = "prefix+z"
 close = "prefix+x"
 float = "prefix+f"
 pane_select = "prefix+q"
 swap_pane = "prefix+Shift+q"
 swap_and_focus_pane = "prefix+m"
+rename_workspace = "prefix+Shift+w"
+rename_column = "prefix+Shift+c"
+rename_pane = "prefix+$"
 ```
 
 ### Config File Format
 
-The config uses TOML with a flat `[keys]` table:
+The config uses TOML with a flat `[keys]` table for simple actions, plus structured tables for richer bindings:
 
 ```toml
 [keys]
@@ -269,6 +277,134 @@ Alt+Enter = "spawn_lazygit"   # Requires [[keys.command]]
 # Unbind defaults
 [keys.unbind]
 "prefix+f" = true   # Remove float toggle
+```
+
+### Planned parameterized keybindings contract
+
+The agreed next-step config shape for richer actions is:
+
+```toml
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+```
+
+Mode bindings should support the same action+args structure:
+
+```toml
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "t"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+```
+
+Size parsing contract:
+- `800` → `800px`
+- `800px` → explicit pixels
+- `80%` → percentage of available content area
+
+Floating spawns should open **centered by default** when `x/y` are omitted.
+
+Complete example set:
+
+```toml
+[keys]
+focus_left = "prefix+h"
+float = "prefix+f"
+
+# Unit action via parameterized-normal-binding syntax
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+# Tiled terminal pane
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Floating terminal pane with implicit px values
+[[keys.bind]]
+keys = "prefix+Shift+t"
+action = "spawn_pane"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+
+# Floating terminal pane with explicit px suffix
+[[keys.bind]]
+keys = "prefix+Shift+y"
+action = "spawn_pane"
+args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+
+# Floating terminal pane with percent sizing
+[[keys.bind]]
+keys = "prefix+Shift+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Floating browser pane
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+# Floating nvim GUI pane
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+# Float active pane with geometry helper
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+# Tiled spawn from a mode
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "g"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Floating percent-sized spawn from a mode
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Zoom from a mode
+[[keys.mode.bindings]]
+action = "zoom_column"
+keys = "z"
 ```
 
 ### Key Combo Syntax
@@ -357,8 +493,9 @@ Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry �
 
 This design means:
 - Every action is traceable and hookable
-- Future scripting/IPC can trigger any action by name
+- Future scripting/IPC/RPC can trigger any action by name
 - Actions can be composed and chained
+- Important capabilities should not be trapped behind one surface: when meaningful, the same action should be reachable from mouse/UI, keybindings, and RPC
 
 ### Creating Custom Actions
 
@@ -390,7 +527,7 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 }
 ```
 
-5. **Register** in `build_registry()` in `heca/src/main.rs`:
+5. **Register** in `build_registry()` in `heca/src/app/registry.rs`:
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
@@ -420,6 +557,7 @@ prefix = "ctrl+a"
 # Rebind actions
 focus_left = "prefix+h"
 focus_right = "prefix+l"
+zoom_column = "prefix+z"
 
 # Multiple bindings for same action
 focus_left = ["prefix+h", "prefix+ArrowLeft"]
@@ -427,6 +565,19 @@ focus_left = ["prefix+h", "prefix+ArrowLeft"]
 # Global bindings (no prefix needed)
 # Checked before forwarding to terminal
 Alt+Enter = "spawn_terminal"
+```
+
+For richer bindings with arguments, use `[[keys.bind]]` (planned contract):
+
+```toml
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
 ```
 
 ### Unbinding Defaults
@@ -446,6 +597,15 @@ To remove a default keybinding, add it to `[keys.unbind]`:
 - Resolve conflicts with custom bindings
 
 The action still exists — you can rebind it to a different key in `[keys]`. For example, if you unbind `prefix+f` (float), you can rebind it to `prefix+Shift+f`.
+
+### Zooming the active column
+
+By default, `prefix+z` toggles the active column between:
+- its normal stored width
+- a viewport-wide zoomed width
+
+Each column tracks its own zoom state, so you can zoom multiple columns independently.
+Press `prefix+z` again on the active column to restore that column's previous width.
 
 ### Modes
 
@@ -491,7 +651,7 @@ heca checks bindings in this order:
 
 ## Spawning Applications
 
-Launch external applications in new panes using `[[keys.command]]`:
+Today, heca can launch simple command-bound panes using `[[keys.command]]`:
 
 ```toml
 [[keys.command]]
@@ -507,48 +667,144 @@ keys = "Alt+Enter"
 command = "alacritty"
 ```
 
-This creates a new pane with the command as its title. When PTY support is fully implemented, the application will run inside heca with full terminal emulation.
+This currently creates a new pane with the command as its title; real backend execution is still evolving.
+
+### Planned `spawn_pane` action contract
+
+The agreed future-ready action model is `spawn_pane`, designed for multiple pane kinds:
+
+- `terminal`
+- `browser`
+- `nvim_gui`
+- temporary/mock fallback while a backend is not implemented
+
+Examples:
+
+```toml
+# Terminal-like pane, tiled
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+# Terminal-like pane, floating, centered, 800x400 with implicit px
+[[keys.bind]]
+keys = "prefix+Shift+t"
+action = "spawn_pane"
+args = { kind = "terminal", program = "btm", argv = [], float = true, width = "800", height = "400" }
+
+# Terminal-like pane, floating, centered, 800px x 400px with explicit px suffix
+[[keys.bind]]
+keys = "prefix+Shift+y"
+action = "spawn_pane"
+args = { kind = "terminal", program = "htop", argv = [], float = true, width = "800px", height = "400px" }
+
+# Terminal-like pane, floating, centered, 80% of content area
+[[keys.bind]]
+keys = "prefix+Shift+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+# Future browser pane
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+# Future nvim GUI pane
+[[keys.bind]]
+keys = "prefix+Shift+n"
+action = "spawn_pane"
+args = { kind = "nvim_gui", float = true, width = "1000", height = "700" }
+
+# Float the active pane using explicit geometry
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+
+# Zoom toggle on a normal binding
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+# Same spawn ideas inside a mode
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "g"
+args = { kind = "terminal", program = "lazygit", argv = [] }
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.mode.bindings]]
+action = "zoom_column"
+keys = "z"
+```
+
+### Float / unfloat contract
+
+The agreed behavior for float toggling is:
+
+- `prefix+f` remains the float/unfloat toggle
+- if a pane was originally tiled, unfloat restores it to its original tiled position
+- if a pane was spawned directly as floating with no original tiled slot, unfloat should place it into a **new column**
+- `prefix+z` is reserved for **column zoom toggle**
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  heca (main binary)                     │
-│  ├── winit event loop                   │
-│  ├── input routing (prefix/keymap)      │
-│  ├── ActionRegistry dispatch            │
-│  ├── render() — GPU compositor          │
-│  └── chrome (tab bar, sidebars, status) │
-├─────────────────────────────────────────┤
-│  heca-renderer                          │
-│  ├── PrimitiveRenderer (rects, borders) │
-│  └── TextRenderer (cosmic-text atlas)   │
-├─────────────────────────────────────────┤
-│  heca-core                              │
-│  ├── layout/                            │
-│  │   ├── Session → Workspace → Column → Pane
-│  │   ├── ViewOffset (animated scroll)   │
-│  │   └── Animation (easing, springs)    │
-│  └── backend/                           │
-│      ├── PaneBackend trait              │
-│      ├── TerminalBackend (PTY + vte)    │
-│      └── FakeBackend (layout testing)   │
-├─────────────────────────────────────────┤
-│  heca-config                            │
-│  └── TOML config + theme loading        │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│  heca (main binary)                                   │
+│  ├── winit event loop                                 │
+│  ├── input routing (prefix/keymap)                    │
+│  ├── ActionRegistry dispatch                          │
+│  ├── render() — GPU compositor                        │
+│  └── current chrome + future pluggable chrome host    │
+├───────────────────────────────────────────────────────┤
+│  heca-renderer                                        │
+│  ├── PrimitiveRenderer (rects, borders)               │
+│  └── TextRenderer (cosmic-text atlas)                 │
+├───────────────────────────────────────────────────────┤
+│  heca-core                                            │
+│  ├── layout/                                          │
+│  │   ├── Session → Workspace → Column → Pane          │
+│  │   ├── ViewOffset (animated scroll)                 │
+│  │   └── Animation (easing, springs)                  │
+│  └── backend/                                         │
+│      ├── PaneBackend trait                            │
+│      ├── TerminalBackend (PTY + vte)                  │
+│      └── FakeBackend (layout testing)                 │
+├───────────────────────────────────────────────────────┤
+│  heca-config                                          │
+│  └── TOML config + theme loading                      │
+├───────────────────────────────────────────────────────┤
+│  future direction                                     │
+│  ├── chrome host with left/right/top/bottom regions   │
+│  ├── built-in containers (first: WorkspacesContainer) │
+│  └── dynamic actions + later WASM/plugin containers   │
+└───────────────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
 
 - **NIRI layout engine**: Horizontal scrolling columns, not BSP trees. Column widths are independent.
 - **Separation of concerns**: Layout in `heca-core`, GPU in `heca-renderer`, orchestration in `heca`.
-- **ActionRegistry**: All WM commands go through one dispatch point. Every action is a `WmAction` enum variant.
+- **ActionRegistry**: All WM commands go through one dispatch point. Today that is centered on `WmAction`; the long-term direction is toward dynamic/string-based actions for pluggable chrome containers too.
 - **KeymapRegistry**: Mode-specific keymaps. Modes are groups of bindings active until Esc/Enter.
 - **Prefix mode**: Intentionally tmux-style to avoid conflicts with hosted applications.
 - **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
+- **Sidebar shell vs container**: the long-term design separates the sidebar shell from the mounted content container. The current workspace tree should evolve into a built-in `WorkspacesContainer`, not remain the definition of the sidebar itself.
+- **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
 
 ---
 
@@ -559,7 +815,7 @@ This creates a new pane with the command as its title. When PTY support is fully
 | **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
 | **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
 | **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |
-| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins |
+| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC/RPC, pluggable chrome, dynamic actions, WASM/plugin containers |
 
 See `.planning/ROADMAP.md` for detailed requirements.
 

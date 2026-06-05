@@ -170,6 +170,13 @@ pub fn handle_resize_decrease(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.toggle_active_column_zoom();
+    }
+    state.needs_redraw = true;
+}
+
 pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         let col_idx = ws.scrolling.active_column_idx;
@@ -938,11 +945,12 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         let target_idx = orig_pane
                             .unwrap_or(0)
                             .min(ws.scrolling.columns[col_idx].panes.len());
-                        ws.scrolling.columns[col_idx]
-                            .panes
-                            .insert(target_idx, float.pane);
-                        ws.scrolling.columns[col_idx].active_pane_idx = target_idx;
-                        ws.scrolling.active_column_idx = col_idx;
+                        ws.scrolling.add_pane_to_column(
+                            col_idx,
+                            Some(target_idx),
+                            float.pane,
+                            true,
+                        );
                     } else {
                         ws.scrolling.add_column(
                             None,
@@ -1040,6 +1048,10 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSelect { candidates };
@@ -1048,6 +1060,10 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
@@ -1059,6 +1075,10 @@ pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneSwap {
@@ -1080,6 +1100,24 @@ pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
         state.input_mode = InputMode::Rename {
             target: RenameTarget::Pane(pane_id),
             buffer: current_title,
+        };
+        state.needs_redraw = true;
+    }
+}
+
+pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
+    let ws_idx = state.session.active_workspace_idx;
+    if let Some(ws) = state.session.active_workspace() {
+        let col_idx = ws.scrolling.active_column_idx;
+        let current_name = ws
+            .scrolling
+            .columns
+            .get(col_idx)
+            .and_then(|col| col.name.clone())
+            .unwrap_or_default();
+        state.input_mode = InputMode::Rename {
+            target: RenameTarget::Column { ws_idx, col_idx },
+            buffer: current_name,
         };
         state.needs_redraw = true;
     }
@@ -1307,6 +1345,10 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
 // ── Take pane ──
 
 pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = crate::collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {
@@ -1318,6 +1360,10 @@ pub fn handle_pane_take(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_pane_take_and_focus(state: &mut AppState, _action: &WmAction) {
+    if crate::app::selection::has_pane_candidate_overflow(&state.session) {
+        handle_sidebar_focus(state, &WmAction::SidebarFocus);
+        return;
+    }
     let candidates = crate::collect_all_pane_candidates(&state.session);
     if !candidates.is_empty() {
         state.input_mode = InputMode::PaneTake {

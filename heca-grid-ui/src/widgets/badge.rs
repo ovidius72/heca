@@ -7,7 +7,7 @@ use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 

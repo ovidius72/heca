@@ -142,14 +142,14 @@ impl ActionRegistry {
             label: "Next Pane in Column",
             description: "Cycle focus forward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "n",
+            default_binding: "]",
         },
         ActionDescriptor {
             name: "prev_pane",
             label: "Previous Pane in Column",
             description: "Cycle focus backward through panes in the active column.",
             category: ActionCategory::Navigation,
-            default_binding: "p",
+            default_binding: "[",
         },
         ActionDescriptor {
             name: "sidebar_focus",
@@ -228,6 +228,13 @@ impl ActionRegistry {
             description: "Add a new pane below the current one in the same column.",
             category: ActionCategory::Layout,
             default_binding: "v",
+        },
+        ActionDescriptor {
+            name: "zoom_column",
+            label: "Toggle Column Zoom",
+            description: "Toggle the active column between viewport-wide zoom and its previous width.",
+            category: ActionCategory::Layout,
+            default_binding: "z",
         },
         ActionDescriptor {
             name: "resize_increase",
@@ -338,9 +345,16 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "rename_pane",
             label: "Rename Pane",
-            description: "Rename the active pane.",
+            description: "Rename the active pane/tab.",
             category: ActionCategory::Pane,
-            default_binding: "Shift+p",
+            default_binding: "$",
+        },
+        ActionDescriptor {
+            name: "rename_column",
+            label: "Rename Column",
+            description: "Rename the active column.",
+            category: ActionCategory::Layout,
+            default_binding: "Shift+c",
         },
         // ── Workspace ──
         ActionDescriptor {

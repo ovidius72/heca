@@ -462,65 +462,106 @@ impl ScrollingSpace {
         true
     }
 
+    fn capture_column_positions(&self) -> Vec<(ColumnId, f64)> {
+        self.column_xs()
+            .zip(self.columns.iter())
+            .map(|(x, col)| (col.id, x))
+            .collect()
+    }
+
+    fn finish_active_column_width_change(&mut self, old_xs: &[(ColumnId, f64)], old_view_pos: f64) {
+        self.update_all_column_widths();
+
+        // Preserve view position so layout stays visually fixed during width changes.
+        let new_view_pos = self.view_pos();
+        let view_delta = old_view_pos - new_view_pos;
+        self.view_offset.offset(view_delta);
+
+        // Ensure the active column stays visible after the width change.
+        let target_offset = self.compute_view_offset_for_column(self.active_column_idx, None);
+        let pixel = 1.0 / self.scale;
+        let diff = target_offset - self.view_offset.target();
+        if diff.abs() < pixel {
+            self.view_offset.offset(diff);
+        } else {
+            self.view_offset = ViewOffset::Animation(Animation::new(
+                self.view_offset.current(),
+                target_offset,
+                AnimationConfig::default(),
+            ));
+        }
+
+        // Animate columns to their new positions.
+        let new_xs: Vec<f64> = self.column_xs().collect();
+        for (i, col) in self.columns.iter_mut().enumerate() {
+            let old_x = old_xs
+                .iter()
+                .find(|(id, _)| *id == col.id)
+                .map(|(_, x)| *x)
+                .unwrap_or(new_xs[i]);
+            let diff = old_x - new_xs[i];
+            if diff.abs() > 0.5 {
+                col.animate_move_from(diff, AnimationConfig::default());
+            }
+        }
+    }
+
+    /// Toggle the active column between viewport-wide zoom and its previous width.
+    pub fn toggle_active_column_zoom(&mut self) -> bool {
+        if self.active_column_idx >= self.columns.len() {
+            return false;
+        }
+
+        let old_xs = self.capture_column_positions();
+        let old_view_pos = self.view_pos();
+        let active_idx = self.active_column_idx;
+        let active_was_zoomed = self.columns[active_idx].is_zoomed();
+
+        let active_col = &mut self.columns[active_idx];
+        if active_was_zoomed {
+            if let Some(previous_width) = active_col.zoom_restore_width.take() {
+                active_col.width = previous_width;
+            }
+        } else {
+            active_col.zoom_restore_width = Some(active_col.width);
+        }
+
+        self.finish_active_column_width_change(&old_xs, old_view_pos);
+        true
+    }
+
     /// Resize the active column by a delta (positive = wider, negative = narrower).
     /// NIRI behavior: only the active column changes. Other columns keep their widths.
     /// If the total exceeds the viewport, the view scrolls horizontally.
     pub fn resize_active_column(&mut self, delta: f64) {
+        if self.active_column_idx >= self.columns.len() {
+            return;
+        }
+
+        let old_xs = self.capture_column_positions();
+        let old_view_pos = self.view_pos();
+        let available_width = (self.working_area.size.w - self.options.gaps * 2.0).max(50.0);
+
         if let Some(col) = self.columns.get_mut(self.active_column_idx) {
-            let new_width = match col.width {
+            let base_width = if col.is_zoomed() {
+                ColumnWidth::Fixed(available_width)
+            } else {
+                col.width
+            };
+            let new_width = match base_width {
                 ColumnWidth::Proportion(p) => {
                     ColumnWidth::Proportion((p + delta).clamp(0.05, 0.95))
                 }
                 ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
-                    (w + delta * self.working_area.size.w).clamp(50.0, self.working_area.size.w),
+                    (w + delta * self.working_area.size.w).clamp(50.0, available_width),
                 ),
             };
             col.width = new_width;
+            col.zoom_restore_width = None;
             col.is_full_width = false;
-
-            // Save old column positions before update.
-            let old_xs: Vec<(ColumnId, f64)> = self
-                .column_xs()
-                .zip(self.columns.iter())
-                .map(|(x, c)| (c.id, x))
-                .collect();
-
-            self.update_all_column_widths();
-
-            // Preserve view position so layout stays visually fixed during resize.
-            let old_view_pos = self.view_pos();
-            let new_view_pos = self.view_pos();
-            let view_delta = old_view_pos - new_view_pos;
-            self.view_offset.offset(view_delta);
-
-            // Ensure the active column stays visible after resize.
-            let target_offset = self.compute_view_offset_for_column(self.active_column_idx, None);
-            let pixel = 1.0 / self.scale;
-            let diff = target_offset - self.view_offset.target();
-            if diff.abs() < pixel {
-                self.view_offset.offset(diff);
-            } else {
-                self.view_offset = ViewOffset::Animation(Animation::new(
-                    self.view_offset.current(),
-                    target_offset,
-                    AnimationConfig::default(),
-                ));
-            }
-
-            // Animate columns to their new positions.
-            let new_xs: Vec<f64> = self.column_xs().collect();
-            for (i, col) in self.columns.iter_mut().enumerate() {
-                let old_x = old_xs
-                    .iter()
-                    .find(|(id, _)| *id == col.id)
-                    .map(|(_, x)| *x)
-                    .unwrap_or(new_xs[i]);
-                let diff = old_x - new_xs[i];
-                if diff.abs() > 0.5 {
-                    col.animate_move_from(diff, AnimationConfig::default());
-                }
-            }
         }
+
+        self.finish_active_column_width_change(&old_xs, old_view_pos);
     }
 
     /// Move the active pane to the previous column (left).
@@ -962,5 +1003,80 @@ impl ScrollingSpace {
         }
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_scrolling_space() -> ScrollingSpace {
+        ScrollingSpace::new(
+            Rectangle::from_size(Size::new(1000.0, 800.0)),
+            1.0,
+            LayoutOptions::default(),
+        )
+    }
+
+    fn test_column(id: u64, width: ColumnWidth) -> Column {
+        Column::new(
+            ColumnId(id),
+            Pane::new(PaneId(id), format!("Pane {id}")),
+            width,
+        )
+    }
+
+    #[test]
+    fn toggle_active_column_zoom_restores_previous_width() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
+        assert!(!space.columns[0].is_zoomed());
+
+        assert!(space.toggle_active_column_zoom());
+        assert!(space.columns[0].is_zoomed());
+        assert_eq!(
+            space.columns[0].zoom_restore_width,
+            Some(ColumnWidth::Proportion(0.5))
+        );
+        assert_eq!(space.column_widths[0], 984.0);
+
+        assert!(space.toggle_active_column_zoom());
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
+        assert!(!space.columns[0].is_zoomed());
+    }
+
+    #[test]
+    fn columns_can_be_zoomed_independently() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.4)), true);
+        space.add_column(None, test_column(2, ColumnWidth::Proportion(0.6)), false);
+
+        assert!(space.toggle_active_column_zoom());
+        assert!(space.columns[0].is_zoomed());
+        assert_eq!(
+            space.columns[0].zoom_restore_width,
+            Some(ColumnWidth::Proportion(0.4))
+        );
+
+        space.activate_column(1);
+        assert!(space.toggle_active_column_zoom());
+
+        assert!(space.columns[0].is_zoomed());
+        assert_eq!(
+            space.columns[0].zoom_restore_width,
+            Some(ColumnWidth::Proportion(0.4))
+        );
+        assert!(space.columns[1].is_zoomed());
+        assert_eq!(
+            space.columns[1].zoom_restore_width,
+            Some(ColumnWidth::Proportion(0.6))
+        );
+
+        assert!(space.toggle_active_column_zoom());
+        assert!(space.columns[0].is_zoomed());
+        assert!(!space.columns[1].is_zoomed());
+        assert_eq!(space.columns[1].width, ColumnWidth::Proportion(0.6));
     }
 }

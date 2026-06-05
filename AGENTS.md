@@ -1,7 +1,7 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-06-02
+> Last updated: 2026-06-05
 
 ---
 
@@ -82,7 +82,8 @@ Ctrl+B → ]    Move pane to column right
 Ctrl+B → e    Enter sidebar navigation mode
 Ctrl+B → w    Create workspace + pane
 Ctrl+B → Shift+w  Rename workspace
-Ctrl+B → Shift+p  Rename pane
+Ctrl+B → Shift+c  Rename active column
+Ctrl+B → $    Rename active pane/tab
 Ctrl+B → i    Toggle focus (local, same workspace)
 Ctrl+B → Shift+l  Toggle focus (global, cross-workspace)
 Ctrl+B → b    Toggle left sidebar
@@ -92,8 +93,14 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 ```
 
 **Key rules:**
+
 - Prefix mode is intentional (like tmux), NOT a bug. This avoids conflicts with hosted apps.
 - The prefix key is **configurable** via `prefix = "ctrl+b"` in config.toml.
+- All keybingings should be configurable in config.toml.
+- All actions should be registered in the action registry and accessible with keybindings and from the RPC.
+- Important app-wide rule: actions must not be trapped behind a single input surface. Design app features so they are reachable through mouse/UI, keyboard via actions/keybindings, and RPC whenever they are meaningful on those surfaces. Example: moving a container from the left sidebar to the right sidebar must be doable by mouse interaction, by keybinding via an action, and by RPC.
+- Actions can be assigned to more keys in config.toml.
+- No harcoded keybinging or color, style and theme related data must be defined in the code. They must be configurable in config.toml.
 - In Normal mode, all key events are forwarded to the focused backend (terminal/nvim).
 - Only the prefix key and explicitly bound keys trigger WM actions.
 - **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
@@ -194,6 +201,7 @@ pub enum InputMode {
 ```
 
 **Mode triggers**: Config defines how to enter modes:
+
 ```toml
 [[keys.mode]]
 name = "resize"
@@ -271,6 +279,71 @@ keys = "h"
 args = { target = "column", axis = "x", amount = "-50" }
 ```
 
+### Planned parameterized binding contract
+
+When implementing richer spawning / geometry-aware bindings, keep these rules:
+
+- **Both** normal keybindings and mode bindings should support parameterized actions.
+- Keep simple flat bindings for unit actions:
+
+```toml
+[keys]
+focus_left = "prefix+h"
+float = "prefix+f"
+```
+
+- Add `[[keys.bind]]` for parameterized non-mode bindings:
+
+```toml
+[[keys.bind]]
+keys = "prefix+z"
+action = "zoom_column"
+
+[[keys.bind]]
+keys = "prefix+g"
+action = "spawn_pane"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "80%", height = "80%" }
+
+[[keys.bind]]
+keys = "prefix+Shift+b"
+action = "spawn_pane"
+args = { kind = "browser", float = true, width = "1200", height = "800" }
+
+[[keys.bind]]
+keys = "prefix+Shift+f"
+action = "float_active_at"
+args = { width = "95%", height = "95%" }
+```
+
+- Mode bindings should keep using `[[keys.mode.bindings]]` with `args`:
+
+```toml
+[[keys.mode]]
+name = "spawn"
+trigger = "prefix+s"
+sticky = true
+
+[[keys.mode.bindings]]
+action = "spawn_pane"
+keys = "n"
+args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width = "800", height = "400" }
+```
+
+- Size parsing contract:
+  - `800` → `800px`
+  - `800px` → explicit pixels
+  - `80%` → percentage of available content area
+- Floating spawns should open **centered by default** when no `x/y` are provided.
+- `spawn_pane` should be **future-ready by kind**:
+  - `terminal`
+  - `browser`
+  - `nvim_gui`
+  - temporary/mock fallback when a real backend is not implemented yet
+- For terminal-like panes, use structured command fields:
+  - `program = "nvim"`
+  - `argv = ["."]`
+  instead of shell-only strings.
+
 ### Config Loading
 
 1. `~/.config/heca/config.toml` (user config, optional)
@@ -291,6 +364,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ```
 
 **How it works:**
+
 - During config loading, all defaults are bound first
 - Then `[keys.unbind]` entries are processed
 - `keymap.unbind("normal", &combo)` removes the binding from the normal mode keymap
@@ -298,6 +372,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 - The action itself still exists — you can rebind it to a different combo
 
 **Use cases:**
+
 - Free up a key for a custom binding
 - Disable features you don't use
 - Resolve conflicts between default and custom bindings
@@ -305,6 +380,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 ### Config Reload
 
 `WmAction::ReloadConfig` triggers `reload_config()` on `HecaApp`:
+
 - Rebuilds keymaps from config file
 - Reloads theme
 - Updates settings (mouse, focus_follows_mouse, etc.)
@@ -325,7 +401,7 @@ To remove a default binding, add it to `[keys.unbind]`:
 | MsgPack | `rmpv` | 1.3+ | Neovim msgpack-RPC protocol. |
 | Config | `serde` + `toml` | latest | TOML parsing. |
 | Session IO | `bincode` or JSON | — | Session persistence format. |
-| Dynamic loading | `libloading` | 0.8+ | In-process plugin loading. |
+| Plugin runtime | WASM host/runtime (planned) | — | Preferred long-term plugin boundary for pluggable chrome containers and actions; safer than native Rust dylibs. |
 
 ### What NOT to use
 
@@ -352,7 +428,8 @@ To remove a default binding, add it to `[keys.unbind]`:
 - **Reactivity** via `floem_reactive`, hidden behind the `heca_grid_ui::reactive` facade — component code never names the dependency (swappable).
 - **Component layout** via `taffy` (Flexbox/Grid/Block). This is *intra-component* layout (widgets inside a sidebar/panel/pane). It is **NOT** a second WM layout engine — `taffy` never positions panes or columns; the niri scrolling engine remains canonical for that.
 - **Coordinates**: `Scene` carries `f32` logical pixels; the renderer scales to physical by `scale_factor` (HiDPI crispness preserved at the GPU boundary).
-- The existing chrome (sidebar, tab/status bar, pane frames) becomes a **consumer** of `heca-grid-ui`; panes render as Grid-styled `Pane` shells over the unchanged layout engine.
+- The existing chrome becomes a **consumer** of `heca-grid-ui`; over time this should evolve toward a pluggable chrome host with left/right/top/bottom regions.
+- Important separation: the `Sidebar` in `heca-grid-ui` is a **shell/layout widget**, while the current workspace tree should evolve into a built-in `WorkspacesContainer` mounted inside that shell.
 
 ### Using the widgets
 
@@ -397,8 +474,8 @@ myvim/
 │   │   ├── keymap.rs      ← KeymapRegistry, KeyCombo, event_combo_matches()
 │   │   ├── actions.rs     ← ActionRegistry, ActionDescriptor, ActionCategory
 │   │   ├── handlers.rs    ← All action handlers (handle_focus_pane, handle_swap, etc.)
-│   │   ├── sidebar.rs     ← SidebarTree, rendering, hit-testing, navigation
-│   │   └── chrome.rs      ← ChromeConfig (tab bar, sidebar, status bar)
+│   │   ├── sidebar.rs     ← Current workspace-tree container façade (`model`, `hit_test`, `render`, `tests`); future built-in `WorkspacesContainer`
+│   │   └── chrome.rs      ← Current chrome config; future pluggable chrome host will generalize left/right/top/bottom regions
 │   └── Cargo.toml
 ├── heca-core/             ← Layout engine + backends (no GPU code)
 │   ├── src/
@@ -458,9 +535,11 @@ myvim/
 ## Available Skills
 
 ### `niri` (`.agents/skills/niri/SKILL.md`)
+
 **Activate when:** Working on layout engine, ViewOffset, scrolling, workspaces, overview mode, or any feature inspired by niri's scrollable-tiling model.
 
 Contains:
+
 - Complete niri architecture reference (ScrollingSpace, Column, ViewOffset, Workspace)
 - Scrolling model (horizontal continuous + snap, vertical discrete)
 - Column width management (no normalization)
@@ -474,9 +553,11 @@ Contains:
 - Source file references into niri's actual codebase
 
 ### `pi-intercom` (for multi-session coordination)
+
 Use when delegating tasks to other pi sessions.
 
 ### `pi-subagents` (for subagent workflows)
+
 Use for multi-step analysis, advisory review, or parallel implementation tasks.
 
 ---
@@ -494,6 +575,9 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 - Use `Animated<T>` for any value that should animate smoothly over time.
 - Store column widths as `ColumnWidth::Proportion(f64)` or `ColumnWidth::Fixed(f64)`. NEVER normalize column widths.
 - Store `working_area` in the layout engine; apply chrome offsets in the renderer.
+- Treat the current workspace/sidebar tree as the future built-in `WorkspacesContainer`, not as the final definition of the Sidebar shell.
+- Keep Sidebar-shell concerns separate from mounted-container concerns: shell = framing/visibility/collapsed mode; container = tree semantics, search, DnD, provider-specific actions.
+- Design compatible container placement/move behavior as host-managed chrome behavior, not as container-internal DnD.
 - Add `#[cfg(debug_assertions)]` for debug logging.
 - Use `expect("descriptive message")` instead of `unwrap()` for initialization code.
 
@@ -507,6 +591,9 @@ Use for multi-step analysis, advisory review, or parallel implementation tasks.
 - **Do NOT add a webview.** All chrome renders via `wgpu` primitives.
 - **Do NOT add tokio to the main event loop** without careful thought. winit events must not block. Use `pollster` for async init.
 - **Do NOT create registry bypasses.** All focus/workspace/layout changes must go through `registry.execute()`.
+- **Do NOT treat the current workspace tree as the final Sidebar abstraction.** The Sidebar should evolve into a shell/host; workspace tree behavior belongs to the built-in `WorkspacesContainer`.
+- **Do NOT put provider-specific semantics in the Sidebar shell.** Expand/collapse rules, search, row actions, and pane DnD belong to the mounted container/provider, not the shell.
+- **Do NOT model future plugins as native Rust dylibs by default.** Prefer a host-controlled WASM boundary for external chrome/container extensions.
 - **Do NOT repeat yourself.** Prefer reusable components, modules, and functions. If you find yourself writing the same pattern multiple times (e.g., button rendering, hit testing, animation logic), extract it into a shared function or struct. Duplication breeds bugs and makes maintenance harder.
 
 ### Prefix Mode Design Rules
@@ -516,7 +603,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - ✅ Pass real modifier state (`state.modifiers.control_key()`) in prefix mode — don't hardcode `false`.
 - ✅ Add a prefix timeout (~500ms) so the user can't get stuck in prefix mode.
 - ✅ Make the prefix key configurable (via `prefix = "ctrl+b"` in config).
-- ✅ Forward literal prefix key on double-press (`Ctrl+B Ctrl+B` → send 0x02 to backend).
+- ✅ Forward the literal configured prefix key on double-press (e.g. `Ctrl+B Ctrl+B` → `Ctrl+B`, `Ctrl+A Ctrl+A` → `Ctrl+A`).
 - ❌ Do not eliminate prefix mode — it prevents conflicts with hosted terminal apps.
 - ❌ Do not make prefix mode modeless — that defeats the purpose.
 - ❌ Do not forget that Ctrl-modified bindings (`Ctrl+h`, `Ctrl+]`) should work after prefix.
@@ -528,17 +615,43 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - `action_priority()`: **do NOT use `_ =>` catch-all** — explicitly match every variant.
 - `resolve()`: case-insensitive key matching, modifier-exact. Physical key fallback for macOS.
 - **All WM state changes go through `registry.execute()`** — no direct `focus_pane_by_id()` calls outside handlers.
+- Important app-wide rule: design actions so they are reachable through mouse/UI, keyboard/action dispatch, and RPC whenever that capability makes sense on those surfaces.
 - Default keybindings in `heca-config/src/theme.rs`: add new bindings here.
 
 ### Adding New Actions
 
 1. Add variant to `WmAction` in `heca/src/input.rs`
 2. Add string mapping in `action_from_name()`
-3. Add priority in `action_priority()`
-4. Create handler in `heca/src/handlers.rs`
-5. Register in `build_registry()` in `heca/src/main.rs`
-6. Add default binding in `heca-config/src/theme.rs`
-7. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+3. Add builder support in `build_action()` when the action is parameterized
+4. Add priority in `action_priority()`
+5. Create handler in `heca/src/handlers.rs`
+6. Register in `build_registry()` in `heca/src/app/registry.rs`
+7. Add default binding in `heca-config/src/theme.rs`
+8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
+9. Add RPC parser support in `heca/src/rpc.rs`
+10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate.
+11. Document examples in `README.md` and `keybindings.toml`
+
+For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
+
+```rust
+WmAction::ZoomColumn
+WmAction::FloatActiveAt { width: SizeSpec, height: SizeSpec }
+WmAction::SpawnPane {
+    kind: PaneKind,
+    program: Option<String>,
+    argv: Vec<String>,
+    float: bool,
+    width: Option<SizeSpec>,
+    height: Option<SizeSpec>,
+}
+```
+
+Behavior contract for float/unfloat:
+- `prefix+f` stays the float toggle
+- if a pane was originally tiled, unfloat restores it
+- if it was spawned directly as floating with no original slot, unfloat should place it into a **new column**
+- `prefix+z` should be reserved for column zoom toggle, not float/unfloat
 
 ---
 
@@ -641,6 +754,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 ## Agent Rules
 
 ### When Reading Code
+
 1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.
 2. Read `.agents/skills/niri/SKILL.md` when working on layout features.
 3. Check `heca/src/input.rs` and `heca-config/src/theme.rs` for keybinding concerns.
@@ -648,6 +762,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 5. Run `cargo check` before and after changes — the project must compile.
 
 ### When Writing Code
+
 1. Use the NIRI layout engine, not BSP (`pane.rs` is dead reference code).
 2. Always use `Rectangle` from `layout/types.rs`, not `Rect` from `types.rs`.
 3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
@@ -658,6 +773,7 @@ See `niri-compatibility-review.md` for full details. Key issues:
 8. **After every task, run `cargo clippy --workspace --all-targets --all-features` and fix all warnings.** The codebase must stay clippy-clean. Use `cargo clippy --fix` for auto-fixable issues.
 
 ### When Reviewing
+
 1. Check for BSP tree references that should be NIRI scrolling columns.
 2. Verify `update_all_column_widths()` isn't called unnecessarily.
 3. **Verify no registry bypasses** — all state changes go through `registry.execute()`.
