@@ -428,10 +428,10 @@ fn handle_sidebar_nav_mode(
 ) {
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    let is_a = !ctx.is_ctrl && char_key(ctx.logical_key, 'a');
-    let is_n = !ctx.is_ctrl && char_key(ctx.logical_key, 'n');
-    let is_d = !ctx.is_ctrl && char_key(ctx.logical_key, 'd');
-    let is_z = !ctx.is_ctrl && char_key(ctx.logical_key, 'z');
+    let is_a = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'a');
+    let is_n = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'n');
+    let is_d = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'd');
+    let is_z = !ctx.is_ctrl && !ctx.is_shift && char_key(ctx.logical_key, 'z');
     let is_ctrl_j = ctx.is_ctrl && char_key(ctx.logical_key, 'j');
     let is_ctrl_k = ctx.is_ctrl && char_key(ctx.logical_key, 'k');
 
