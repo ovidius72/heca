@@ -2,7 +2,26 @@
 
 **Scope:** `heca-core`, `heca-renderer`, `heca-config`, `heca/src`  
 **Excluded:** `heca-grid-ui`, `heca-ui`  
-**Date:** 2026-06-04
+**Date:** 2026-06-04  
+**Last updated:** 2026-06-05
+
+---
+
+## Plan Change Notice — 2026-06-05
+
+This roadmap changed on **2026-06-05** after new requirements emerged around:
+- a pluggable chrome architecture rather than a sidebar treated only as a workspace tree
+- region-level extensibility for left sidebar, right sidebar, top bar, and bottom bar
+- a future built-in `WorkspacesContainer` rather than a monolithic hardcoded sidebar
+- future **WASM plugins** with event subscriptions, host-owned overlays, and action dispatch
+- dynamic plugin-provided actions that must later integrate with config keybindings
+
+Those new requirements are captured in:
+- `pluggable-chrome-plugin-plan.md`
+
+Important interpretation rule:
+- this document still describes the current codebase problems and why the **current cleanup/refactor** is still necessary
+- but the long-term architecture target has changed and should be read alongside the new plan document above
 
 ---
 
@@ -30,7 +49,9 @@ What is now the main problem:
 - **sidebar projection drift** and UI-state rebuild issues
 - **focus-domain drift** between floating focus state and tiled action targeting
 
-The biggest readability and maintainability win is **reorganizing the code first**, then moving the remaining cross-cutting behavior behind clearer boundaries.
+The biggest readability and maintainability win is still **reorganizing the code first**, then moving the remaining cross-cutting behavior behind clearer boundaries.
+
+However, as of **2026-06-05**, that cleanup is no longer the whole story. The long-term direction now includes a pluggable chrome host, built-in container providers, dynamic actions, and future WASM plugins. That new architecture should be started only after the current refactor reaches its planned stopping point.
 
 ---
 
@@ -190,6 +211,8 @@ This will dramatically reduce the mental overhead of changing behavior.
 
 ## A4. `SidebarTree` is still a duplicated projection, and it still forgets UI state
 
+**Updated architectural interpretation — 2026-06-05:** this finding still matters, but the future target should now be understood as a `WorkspacesContainer` projection/view-model living inside a broader pluggable chrome system, not as the final architecture of the entire sidebar.
+
 `SidebarTree::rebuild()` still clears and reconstructs the sidebar model from scratch:
 
 - `self.workspaces.clear()`
@@ -236,6 +259,8 @@ That removes the current "rebuild then patch behavior with ad hoc skip logic" pa
 ---
 
 ## A5. Interaction logic is duplicated across keyboard, mouse, and sidebar flows
+
+This finding becomes even more important after the 2026-06-05 plan change, because a future provider/plugin system will need cleaner host-side interaction seams rather than more hardcoded sidebar-special behavior.
 
 The same conceptual operations are implemented in multiple places:
 - pane focus by id

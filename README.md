@@ -41,6 +41,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 - **Workspaces** — Multiple workspaces stacked vertically, switched with animated transitions.
 - **Floating panes** — Any pane can be detached from the scrolling layout and positioned freely.
 - **GPU-native chrome** — Tab bar, sidebars, status bar, pane borders — all rendered in one GPU pass.
+- **Future pluggable chrome** — the long-term architecture is evolving toward left/right/top/bottom chrome regions that host built-in containers first and WASM/plugin containers later.
 
 **Why not tmux + a terminal?**
 
@@ -49,7 +50,7 @@ heca is a **workspace compositor** — not a traditional terminal emulator or wi
 | Rendering | CPU text grid | GPU text atlas + primitives |
 | Fonts | Limited ligature support | Full HarfBuzz shaping, variable fonts |
 | Animations | None | Smooth scroll, zoom, slide |
-| Panes | Terminal only | Terminal, Neovim, browser, plugins |
+| Panes | Terminal only | Terminal, Neovim, browser, future container/plugin integrations |
 | Chrome | Text-only | GPU-rendered shapes, shadows, rounded corners |
 
 **Why NIRI-inspired?**
@@ -196,9 +197,11 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Enter sidebar navigation mode |
 
+Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
+
 ### Sidebar Navigation Mode
 
-When in sidebar mode (`Ctrl+B → e` or clicking sidebar):
+When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree sidebar):
 
 | Key | Action |
 |-----|--------|
@@ -490,8 +493,9 @@ Keyboard input → KeyCombo → KeymapRegistry → WmAction → ActionRegistry �
 
 This design means:
 - Every action is traceable and hookable
-- Future scripting/IPC can trigger any action by name
+- Future scripting/IPC/RPC can trigger any action by name
 - Actions can be composed and chained
+- Important capabilities should not be trapped behind one surface: when meaningful, the same action should be reachable from mouse/UI, keybindings, and RPC
 
 ### Creating Custom Actions
 
@@ -523,7 +527,7 @@ pub fn handle_my_custom_action(state: &mut AppState, _action: &WmAction) {
 }
 ```
 
-5. **Register** in `build_registry()` in `heca/src/main.rs`:
+5. **Register** in `build_registry()` in `heca/src/app/registry.rs`:
 ```rust
 registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 ```
@@ -759,41 +763,48 @@ The agreed behavior for float toggling is:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  heca (main binary)                     │
-│  ├── winit event loop                   │
-│  ├── input routing (prefix/keymap)      │
-│  ├── ActionRegistry dispatch            │
-│  ├── render() — GPU compositor          │
-│  └── chrome (tab bar, sidebars, status) │
-├─────────────────────────────────────────┤
-│  heca-renderer                          │
-│  ├── PrimitiveRenderer (rects, borders) │
-│  └── TextRenderer (cosmic-text atlas)   │
-├─────────────────────────────────────────┤
-│  heca-core                              │
-│  ├── layout/                            │
-│  │   ├── Session → Workspace → Column → Pane
-│  │   ├── ViewOffset (animated scroll)   │
-│  │   └── Animation (easing, springs)    │
-│  └── backend/                           │
-│      ├── PaneBackend trait              │
-│      ├── TerminalBackend (PTY + vte)    │
-│      └── FakeBackend (layout testing)   │
-├─────────────────────────────────────────┤
-│  heca-config                            │
-│  └── TOML config + theme loading        │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│  heca (main binary)                                   │
+│  ├── winit event loop                                 │
+│  ├── input routing (prefix/keymap)                    │
+│  ├── ActionRegistry dispatch                          │
+│  ├── render() — GPU compositor                        │
+│  └── current chrome + future pluggable chrome host    │
+├───────────────────────────────────────────────────────┤
+│  heca-renderer                                        │
+│  ├── PrimitiveRenderer (rects, borders)               │
+│  └── TextRenderer (cosmic-text atlas)                 │
+├───────────────────────────────────────────────────────┤
+│  heca-core                                            │
+│  ├── layout/                                          │
+│  │   ├── Session → Workspace → Column → Pane          │
+│  │   ├── ViewOffset (animated scroll)                 │
+│  │   └── Animation (easing, springs)                  │
+│  └── backend/                                         │
+│      ├── PaneBackend trait                            │
+│      ├── TerminalBackend (PTY + vte)                  │
+│      └── FakeBackend (layout testing)                 │
+├───────────────────────────────────────────────────────┤
+│  heca-config                                          │
+│  └── TOML config + theme loading                      │
+├───────────────────────────────────────────────────────┤
+│  future direction                                     │
+│  ├── chrome host with left/right/top/bottom regions   │
+│  ├── built-in containers (first: WorkspacesContainer) │
+│  └── dynamic actions + later WASM/plugin containers   │
+└───────────────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
 
 - **NIRI layout engine**: Horizontal scrolling columns, not BSP trees. Column widths are independent.
 - **Separation of concerns**: Layout in `heca-core`, GPU in `heca-renderer`, orchestration in `heca`.
-- **ActionRegistry**: All WM commands go through one dispatch point. Every action is a `WmAction` enum variant.
+- **ActionRegistry**: All WM commands go through one dispatch point. Today that is centered on `WmAction`; the long-term direction is toward dynamic/string-based actions for pluggable chrome containers too.
 - **KeymapRegistry**: Mode-specific keymaps. Modes are groups of bindings active until Esc/Enter.
 - **Prefix mode**: Intentionally tmux-style to avoid conflicts with hosted applications.
 - **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
+- **Sidebar shell vs container**: the long-term design separates the sidebar shell from the mounted content container. The current workspace tree should evolve into a built-in `WorkspacesContainer`, not remain the definition of the sidebar itself.
+- **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
 
 ---
 
@@ -804,7 +815,7 @@ The agreed behavior for float toggling is:
 | **1 — The Shell** | ✅ Complete | GPU window, text rendering, theme system |
 | **2 — The Workspace** | ✅ Complete | NIRI layout, animations, input, sidebar |
 | **3 — The Content** | 🔄 In Progress | Terminal backend, Neovim msgpack-RPC |
-| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC, plugins |
+| **4 — The Platform** | 📋 Planned | Session persistence, JSON-RPC/RPC, pluggable chrome, dynamic actions, WASM/plugin containers |
 
 See `.planning/ROADMAP.md` for detailed requirements.
 
