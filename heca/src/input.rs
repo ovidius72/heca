@@ -161,6 +161,11 @@ pub enum WmAction {
     SidebarLeftNav,
     SidebarRightNav,
     SidebarExpandToggle,
+    SidebarCreateWorkspace,
+    SidebarCreateColumn,
+    SidebarSplitInColumn,
+    SidebarZoomSelectedColumn,
+    SidebarDeleteSelected,
 
     // ── System ──
     CommandPalette,
@@ -235,6 +240,11 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
         "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
         "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
+        "sidebar_create_workspace" => Some(WmAction::SidebarCreateWorkspace),
+        "sidebar_create_column" => Some(WmAction::SidebarCreateColumn),
+        "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
+        "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
+        "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -428,7 +438,12 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
-        | WmAction::SidebarExpandToggle => 4,
+        | WmAction::SidebarExpandToggle
+        | WmAction::SidebarCreateWorkspace
+        | WmAction::SidebarCreateColumn
+        | WmAction::SidebarSplitInColumn
+        | WmAction::SidebarZoomSelectedColumn
+        | WmAction::SidebarDeleteSelected => 4,
         // Pane management
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
@@ -607,7 +622,12 @@ mod tests {
                 | WmAction::SidebarDown
                 | WmAction::SidebarLeftNav
                 | WmAction::SidebarRightNav
-                | WmAction::SidebarExpandToggle => 4,
+                | WmAction::SidebarExpandToggle
+                | WmAction::SidebarCreateWorkspace
+                | WmAction::SidebarCreateColumn
+                | WmAction::SidebarSplitInColumn
+                | WmAction::SidebarZoomSelectedColumn
+                | WmAction::SidebarDeleteSelected => 4,
                 // Pane management
                 WmAction::SplitHorizontal
                 | WmAction::SplitVertical

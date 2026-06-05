@@ -10,6 +10,7 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     let chrome = super::chrome_config(state);
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = win_h - chrome.status_bar_height;
+    let was_sidebar_nav = matches!(state.input_mode, crate::app_state::InputMode::SidebarNav);
 
     let sw = if state.sidebar.left_visible {
         chrome.left_sidebar_width
@@ -51,10 +52,12 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
                 state.input_mode = crate::app_state::InputMode::ConfirmDelete {
                     message,
                     action: Box::new(button),
+                    resume_sidebar: true,
                 };
                 return None;
             }
 
+            state.input_mode = crate::app_state::InputMode::SidebarNav;
             if let Some(hitbox) = state.sidebar_tree.button_hitboxes.get(btn_idx)
                 && let Some(ws_idx) = hitbox.ws_idx
                 && ws_idx != state.session.active_workspace_idx
@@ -69,16 +72,27 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
             crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)
         {
             state.sidebar_tree.cursor = fi;
+            state.input_mode = crate::app_state::InputMode::SidebarNav;
             let item = state.sidebar_tree.current_item().cloned();
             match item? {
                 crate::sidebar::SidebarItem::Pane { pane_id } => {
-                    return Some(WmAction::FocusPane { pane_id });
+                    if was_sidebar_nav {
+                        return Some(WmAction::FocusPane { pane_id });
+                    }
+                }
+                crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => {
+                    if was_sidebar_nav {
+                        return Some(WmAction::FocusPane { pane_id });
+                    }
                 }
                 crate::sidebar::SidebarItem::Workspace { ws_idx } => {
                     return Some(WmAction::FocusWorkspace { ws_idx });
                 }
-                crate::sidebar::SidebarItem::Column { .. } => {}
-                crate::sidebar::SidebarItem::FloatingPane { .. } => {}
+                crate::sidebar::SidebarItem::Column { ws_idx, .. } => {
+                    if ws_idx != state.session.active_workspace_idx {
+                        return Some(WmAction::FocusWorkspace { ws_idx });
+                    }
+                }
             }
         }
     }

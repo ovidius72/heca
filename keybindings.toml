@@ -82,10 +82,13 @@ sidebar_focus        = "prefix+e"    # Focus sidebar (enter nav mode)
 sidebar_expand_toggle = "prefix+Tab" # Expand/collapse sidebar tree
 
 # Sidebar navigation (only active IN sidebar mode):
-#   h / l  → collapse / expand tree node
-#   j / k  → move cursor down / up
-#   Enter  → activate selected item (pane/workspace)
-#   Escape → exit sidebar mode
+#   h / l              → collapse / expand tree node
+#   Left / Right       → collapse / expand tree node
+#   j / k              → move cursor down / up
+#   Up / Down          → move cursor down / up
+#   Space              → focus/select pane on leaf rows; otherwise acts like Right
+#   Enter              → activate selected item
+#   Escape             → exit sidebar mode
 
 # -----------------------------------------------------------------------------
 # Workspace Navigation

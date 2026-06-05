@@ -32,6 +32,7 @@ The earlier sidebar discussion treated the sidebar too narrowly as a single work
 This is a much larger architecture change than the original sidebar refactor.
 
 So this document captures, in one place:
+
 - what was decided
 - what must change
 - what new subsystems are required
@@ -47,6 +48,7 @@ So this document captures, in one place:
 The left sidebar must no longer be treated as synonymous with the workspace tree.
 
 Instead:
+
 - the **Sidebar widget/shell** is only a visual/layout region shell
 - it may be bordered, toggleable, collapsed/expanded, and capable of informing children about its current display mode
 - it hosts one or more mounted containers
@@ -54,6 +56,7 @@ Instead:
 - other containers may also be present in the same sidebar, in a specific order, top-to-bottom
 
 Examples of future containers:
+
 - Workspaces
 - AI Agents
 - Docker Containers
@@ -63,10 +66,12 @@ Examples of future containers:
 - Plugin-defined containers
 
 This means the current `sidebar.rs` logic should ultimately be reinterpreted as:
+
 - the first built-in **WorkspacesContainer** implementation
 - not the definition of the entire sidebar system
 
 It also means the following behaviors are **not Sidebar-shell concerns**:
+
 - workspace/column/pane up/down navigation semantics
 - workspace/column expand-collapse semantics
 - pane drag/drop and swap semantics
@@ -83,15 +88,18 @@ The Sidebar shell itself should not imply that a search input exists. A containe
 The previous idea of a global sidebar search input was revised.
 
 New rule:
+
 - a **SidebarContainer** may expose its own search/filter input if it wants one
 - the sidebar host itself should not own a mandatory search field
 
 Why:
+
 - not every container needs search
 - different containers may need different filtering semantics
 - search may be scoped differently depending on domain
 
 Examples:
+
 - WorkspacesContainer may filter workspaces / columns / panes
 - AgentsContainer may filter by name, role, status
 - DockerContainer may filter by container name, image, state
@@ -104,6 +112,7 @@ Examples:
 A plugin must **not** receive raw mutable access to heca internals.
 
 Instead, plugins should:
+
 - observe events
 - read state through a controlled host API / facade
 - return UI contributions
@@ -112,11 +121,13 @@ Instead, plugins should:
 This keeps state ownership explicit.
 
 Correct model:
+
 - **app owns canonical state**
 - plugins own only **derived state** or local plugin state
 - plugins ask the app to do things through **actions**
 
 Examples:
+
 - good: `app.actions.dispatch("pane.focus", { paneId: 42 })`
 - bad: plugin directly mutates `session.workspaces[0]...`
 
@@ -127,6 +138,7 @@ Examples:
 The current action system is not enough if plugins must add actions that can later be bound in config.
 
 New rule:
+
 - plugins must be able to **register actions dynamically**
 - those actions must be visible to:
   - config keybindings
@@ -137,6 +149,7 @@ New rule:
 This implies that the current static/closed action model will need to evolve.
 
 The future action system must support:
+
 - stable string action ids
 - metadata for actions
 - dynamic registration/unregistration
@@ -144,6 +157,7 @@ The future action system must support:
 - separation between built-in actions and plugin-provided actions
 
 Examples of future action ids:
+
 - `workspace.focus_next`
 - `pane.close`
 - `plugin.docker.restart_selected`
@@ -156,10 +170,12 @@ Examples of future action ids:
 It was considered whether plugins could simply return static declarative content. That may help for trivial integrations, but it is too weak for the intended GUI interaction model.
 
 The preferred direction is:
+
 - **code plugins**, not raw text/template-only plugins
 - specifically: **WASM plugins** as the long-term plugin format
 
 Why WASM:
+
 - safer than native dylib plugins
 - avoids Rust ABI instability across dynamic library boundaries
 - still allows code-based interaction and stateful behavior
@@ -174,16 +190,19 @@ WASM plugins should receive a host SDK/facade, not direct Rust object references
 ## 2.6 Plugins should contribute UI declaratively, but from code
 
 Important distinction:
+
 - plugins should not manually hand-write giant JSON blobs as their primary authoring experience
 - plugins also should not directly instantiate internal Rust widget structs across the boundary
 
 Preferred model:
+
 - plugins are written in code
 - they use a host SDK / builder API
 - internally this produces a host-understood declarative model
 - the host maps that model to `heca-grid-ui` widgets and manages rendering/event routing
 
 So plugin authors get a code-first API, while the host still controls:
+
 - rendering
 - focus
 - overlays
@@ -198,6 +217,7 @@ So plugin authors get a code-first API, while the host still controls:
 Because heca is a GUI app, modal/dialog/dropdown/popover behavior must be managed by the host.
 
 Plugins may request overlays, but the host must own:
+
 - z-order
 - focus trap
 - keyboard routing
@@ -208,6 +228,7 @@ Plugins may request overlays, but the host must own:
 This is critical.
 
 So plugin model should support things like:
+
 - `await app.overlay.openModal(...)`
 - `await app.overlay.openDropdown(...)`
 
@@ -218,6 +239,7 @@ This solves the “how do I know which button was pressed?” problem much bette
 ## 2.8 The design is not sidebar-only; it is chrome-wide
 
 The same pluggable system should power:
+
 - left sidebar
 - right sidebar
 - top bar
@@ -226,11 +248,13 @@ The same pluggable system should power:
 This means the real target is not a “sidebar plugin API”.
 
 The real target is a:
+
 - **pluggable chrome host system**
 
 with region-specific contribution APIs.
 
 Examples:
+
 - left sidebar may host WorkspacesContainer
 - right sidebar may host AgentsContainer
 - top bar may host mode/status/tool segments
@@ -241,19 +265,23 @@ Examples:
 ## 2.9 Container movement across compatible regions is a host concern
 
 The architecture should support mounted containers being:
+
 - reordered within a region
 - moved between compatible regions
 - persisted in their chosen placement
 
 Important distinction:
+
 - **host-level container drag/drop** is a ChromeHost concern
 - **container-internal drag/drop** remains the mounted container’s concern
 
 Examples:
+
 - moving `WorkspacesContainer` from left sidebar to right sidebar is **host-level placement behavior**
 - dragging panes inside `WorkspacesContainer` is **container-internal behavior**
 
 To support this cleanly, mounted containers should expose metadata such as:
+
 - `id`
 - `title`
 - `supported_regions`
@@ -265,6 +293,7 @@ To support this cleanly, mounted containers should expose metadata such as:
 This movement must not be mouse-only.
 
 Important app-wide action rule:
+
 - when container movement is supported, it must also be representable as an **action**
 - for example, moving a container from left sidebar to right sidebar should be doable by:
   - mouse drag/drop
@@ -282,6 +311,7 @@ This rule aligns with the broader heca principle that app capabilities should no
 A new host/controller layer should own all pluggable chrome regions.
 
 Responsibilities:
+
 - maintain registries for all regions
 - track region ordering and visibility
 - track container placement within and across regions
@@ -293,6 +323,7 @@ Responsibilities:
 - bridge plugins with app state and action system
 
 Subregions conceptually:
+
 - `LeftSidebarHost`
 - `RightSidebarHost`
 - `TopBarHost`
@@ -307,6 +338,7 @@ These may be implementations of one generic region host abstraction.
 A contribution should not mean “raw pixels”.
 
 A contribution should be one of a small set of semantic units, such as:
+
 - container
 - toolbar group
 - status segment
@@ -314,13 +346,16 @@ A contribution should be one of a small set of semantic units, such as:
 - overlay request
 
 For sidebar regions, the most important contribution type is:
+
 - a **mounted container contribution** hosted inside the Sidebar shell
 
 Important separation:
+
 - the Sidebar shell provides visual/layout hosting behavior
 - the mounted container provides domain-specific interaction behavior
 
 Examples:
+
 - `WorkspacesContainer` owns workspace-tree semantics
 - `AgentsContainer` owns agent-list semantics
 - `DockerContainer` owns docker-list semantics
@@ -332,6 +367,7 @@ A future `SidebarContainerFrame` widget may be useful as a visual wrapper around
 ## 3.3 Shared UI / chrome state
 
 A new shared state layer will be required to coordinate:
+
 - scrolling area
 - workspace tree / WorkspacesContainer
 - future additional containers
@@ -342,6 +378,7 @@ A new shared state layer will be required to coordinate:
 This state must live outside the widgets.
 
 Examples of likely shared UI state:
+
 - expanded/collapsed container ids
 - selected row ids
 - hovered row ids
@@ -360,6 +397,7 @@ Examples of likely shared UI state:
 Built-in first, plugin-driven later.
 
 Conceptually each provider should:
+
 - identify itself
 - declare which region(s) it supports
 - provide container placement metadata
@@ -372,6 +410,7 @@ Conceptually each provider should:
 A provider should not be thought of as “providing sidebar rows”. It provides a mounted container contribution.
 
 The first provider should be:
+
 - `WorkspacesContainerProvider`
 
 The current sidebar code should be gradually migrated into that shape.
@@ -381,6 +420,7 @@ The current sidebar code should be gradually migrated into that shape.
 ## 3.5 Future WASM plugin host API
 
 The host should expose a controlled plugin API that supports:
+
 - `app.on(event, handler)`
 - `app.state.*` read accessors/selectors
 - `app.actions.register(...)`
@@ -443,6 +483,7 @@ Design the target system before implementing it.
 This phase exists to prevent the team from forgetting requirements or accidentally coding the wrong abstraction. It captures the formal architecture for the next program.
 
 It must define, in detail:
+
 - chrome regions and what each region is allowed to host
 - difference between sidebar shell and sidebar containers
 - shared UI/chrome state boundaries
@@ -454,6 +495,7 @@ It must define, in detail:
 - canonical geometry types for chrome/container APIs
 
 Geometry rule for the future architecture:
+
 - new chrome/container/overlay contracts should use the logical-pixel geometry types from `heca-core/src/layout/types.rs`
 - prefer `Rectangle` / `Point` / `Size`
 - do not carry the old legacy `heca_core::types::Rect` forward into new ChromeHost/provider/plugin-facing APIs
@@ -479,6 +521,7 @@ Immediately after the current refactor ends, and before implementation of the ch
 **Why this phase matters**
 
 Without this phase, we risk implementing:
+
 - a sidebar-specific system instead of a chrome-wide system
 - static action assumptions that later block plugin actions
 - widget ownership mistakes
@@ -495,11 +538,13 @@ Introduce the shared app-side UI/chrome state that widgets and providers will co
 **What this phase is for**
 
 This phase creates the state boundary that separates:
+
 - canonical layout/runtime state
 - derived UI/chrome state
 - provider-local state
 
 Examples of likely responsibilities:
+
 - per-region visibility
 - per-container collapse state
 - per-container search/filter state
@@ -519,6 +564,7 @@ After the architecture/spec phase, before providerization of the current sidebar
 **Why this phase matters**
 
 Today too much behavior is embedded inside sidebar/workspace-specific code. This phase introduces the shared coordination layer needed for:
+
 - sidebars to reflect scrolling/focus state correctly
 - multiple containers to coexist
 - plugins to read coherent UI state safely
@@ -534,12 +580,14 @@ Create the host/runtime that manages pluggable chrome regions.
 **What this phase is for**
 
 This phase introduces the infrastructure that will own:
+
 - left sidebar contributions
 - right sidebar contributions
 - top bar contributions
 - bottom bar contributions
 
 Responsibilities include:
+
 - container registration
 - ordering
 - visibility/mounting
@@ -576,14 +624,17 @@ Implement the provider abstraction using only built-in first-party providers fir
 Before loading external plugins, we should prove the provider model internally.
 
 The first built-in provider should be:
+
 - `WorkspacesContainerProvider`
 
 Potential later built-in providers:
+
 - right sidebar placeholders
 - top bar status/mode provider
 - bottom bar diagnostics/status provider
 
 This phase should also validate provider/container metadata such as:
+
 - supported regions
 - default region
 - movable/collapsible flags
@@ -600,6 +651,7 @@ After ChromeHost exists, before WASM runtime/plugin scanning.
 **Why this phase matters**
 
 It lets us validate:
+
 - whether the provider interface is correct
 - whether region host orchestration is good enough
 - whether `WorkspacesContainer` truly fits as “one provider” rather than “the sidebar itself”
@@ -615,11 +667,13 @@ Move the current sidebar/workspace tree behavior into the new built-in provider 
 **What this phase is for**
 
 This phase reinterprets the current sidebar logic as:
+
 - one mounted container contribution
 - one built-in provider
 - one consumer of shared UI state
 
 This includes:
+
 - workspace/column/pane projection
 - floating-pane representation rules
 - expand/collapse behavior
@@ -650,12 +704,14 @@ Make the action system capable of hosting plugin actions and later config-bindab
 **What this phase is for**
 
 This phase updates the action architecture so that actions can be:
+
 - built-in
 - dynamically registered by providers/plugins
 - bound by string id from config
 - invoked from UI, keybindings, command palette, or RPC
 
 Expected changes:
+
 - stable string-based action ids
 - action metadata descriptors
 - dynamic registration/unregistration
@@ -664,6 +720,7 @@ Expected changes:
 - explicit support for actions that are invokable from UI, keybindings, and RPC
 
 Examples of important host-level actions in this family:
+
 - `chrome.container.move_to_region`
 - `chrome.container.move_left_sidebar`
 - `chrome.container.move_right_sidebar`
@@ -682,6 +739,7 @@ After built-in providers start to exist, but before WASM plugins.
 **Why this phase matters**
 
 Without this, plugins cannot cleanly integrate with:
+
 - keybindings
 - command palette
 - future external automation
@@ -699,6 +757,7 @@ Add or evolve widgets needed by the new chrome host and provider architecture.
 The current grid-ui primitives are not enough yet for the full pluggable chrome system.
 
 Likely needed widgets/components:
+
 - `Sidebar` (shell only)
 - `SidebarContainerFrame` (optional visual wrapper for mounted containers)
 - `SidebarItem`
@@ -708,11 +767,13 @@ Likely needed widgets/components:
 - possible scroll/list container primitives
 
 Important separation rule:
+
 - `Sidebar` is a shell widget, not a workspace-tree widget
 - `WorkspacesContainer` is a mounted container/component, not a sidebar item
 - `SidebarItem` is a reusable row primitive that a container may choose to use internally
 
 Important rule:
+
 - widgets remain presentation components
 - canonical state stays outside them
 
@@ -740,6 +801,7 @@ Create host-owned overlay APIs that providers and future plugins can use safely.
 **What this phase is for**
 
 This phase defines and implements:
+
 - modal host APIs
 - dropdown/popover host APIs
 - focus trap behavior
@@ -747,6 +809,7 @@ This phase defines and implements:
 - provider/plugin-friendly async overlay flow
 
 Example target usage:
+
 - provider/plugin opens modal
 - waits for result
 - dispatches action based on selected button
@@ -767,6 +830,57 @@ This solves the problem that JSON-only or fire-and-forget triggers could not sol
 
 ---
 
+## Phase 8.1 — Placeholder variables (Formats/Tokens)
+
+> TO BE ANALYZED LATER.
+
+> ALLOWS EXTEND KEYBINDING WITH TOKENS LIKE $paneIndex and so on for propper RPC usage
+
+**Purpose**
+Add a way to create placeholder variables for plugins. like tmux does
+
+syntax: `#{var}` or `${var}` or `%{var}` or `#{@$var}`
+
+`${paneIndex}` should be parsed as the current pane index number
+`${prevPanesIndex}` should be parsed as the previous pane index
+`${paneTitle}`  should be parsed as the current pane title
+`${prevPaneTitle}`  should be parsed as the previous pane title
+`${panesCount}` should be parsed as the total number of panes
+`${paneProgram}` the current pane program
+`${paneCwd}` the current pane working directory
+`${columnIndex}` the current column index number
+`${columnTitle}` the current column title
+`${columnsCount}` the total number of columns
+`${workspaceTitle}` the current workspace title
+`${workspaceIndex}` the current workspace index number
+`${workspacesCount}` the total number of workspaces
+`${leftSidebarStatus}` whether the left sidebar is open or closed
+`${rightSidebarStatus}` whether the right sidebar is open or closed
+`${pid}` the current process id
+
+more... (sessions, selections, etc)
+
+---
+
+## Phase 8.2 — Simple Plugins from config.toml
+
+> TO BE ANALYZED LATER
+
+**Purpose**
+Add a way to create simpole plugins from config.toml
+e.g.
+
+```toml
+[[plugins.name]]
+name="myplugin"
+placement="bottomBar"
+weight=100
+text="current pane: ${paneIndes}"
+
+```
+
+---
+
 ## Phase 9 — WASM Plugin Runtime
 
 **Purpose**
@@ -776,6 +890,7 @@ Add code-based external plugins using WASM as the plugin format.
 **What this phase is for**
 
 This phase adds:
+
 - plugin discovery/scanning
 - WASM module loading
 - plugin lifecycle (`activate`, teardown, reload if desired)
@@ -813,6 +928,7 @@ Prove the architecture with more than the WorkspacesContainer.
 This phase validates that the system is not secretly hardcoded around workspaces.
 
 Examples:
+
 - add a second real built-in provider in right sidebar or bottom bar
 - add a simple first-party plugin/provider using the public-style API
 - prove ordering, coexistence, collapse state, region contribution, action registration
@@ -841,17 +957,20 @@ Finalize the user-facing integration of dynamic actions.
 **What this phase is for**
 
 This phase ensures plugin-provided actions participate fully in:
+
 - config keybindings
 - command palette
 - RPC
 - user-visible action listings and diagnostics
 
 It should also enforce the broader app rule that important actions are not trapped behind only one surface. In particular, host/container placement actions such as moving a container from the left sidebar to the right sidebar must be reachable through:
+
 - mouse interaction
 - keybinding/action dispatch
 - RPC
 
 It also likely needs:
+
 - action discovery UX
 - action id validation
 - action conflict diagnostics
@@ -876,26 +995,33 @@ This is what makes the plugin/action system actually usable by end users, not ju
 This architecture implies future changes to at least these areas:
 
 ### 5.1 Sidebar assumptions
+
 - current sidebar code must stop being treated as “the sidebar”
 - it becomes `WorkspacesContainer` logic
 
 ### 5.2 Action system
+
 - current static action routing must evolve toward dynamic registration
 
 ### 5.3 Shared UI state
+
 - more state must move out of ad hoc widget/module-local assumptions and into a shared UI/chrome state layer
 
 ### 5.4 App/plugin event system
+
 - the app needs a formal event publication/subscription model
 
 ### 5.5 Overlay ownership
+
 - modals/dropdowns/popovers must be managed by the host, not ad hoc per feature
 
 ### 5.6 `heca-grid-ui`
+
 - must expand with richer chrome/container/item primitives
 - but should still remain presentation-focused
 
 ### 5.7 Geometry unification
+
 - chrome-facing geometry should be unified on `heca-core/src/layout/types.rs`
 - migrate remaining legacy `heca_core::types::Rect` usage out of chrome-facing code
 - especially remove/replace the current `Rect` usage in `heca/src/chrome.rs`
@@ -906,6 +1032,7 @@ This architecture implies future changes to at least these areas:
 ## 6. Risks and Guardrails
 
 ## Risks
+
 - trying to jump into plugin runtime before the host contracts are designed
 - keeping action system too static for plugin actions
 - overloading generic widgets instead of introducing the right chrome-specific ones
@@ -914,6 +1041,7 @@ This architecture implies future changes to at least these areas:
 - starting WASM runtime before built-in providers prove the model
 
 ## Guardrails
+
 - finish current refactor first
 - define contracts before implementation
 - build built-in providers before external WASM plugins
@@ -926,9 +1054,11 @@ This architecture implies future changes to at least these areas:
 ## 7. Implementation Checklist
 
 ## Precondition
+
 - [ ] Complete the current cleanup roadmap in `bugs-and-refactoring-plan.md` to its intended stopping point
 
 ## Architecture
+
 - [ ] Write and ratify the formal chrome host + provider + plugin contracts
 - [ ] Define chrome regions and allowed contribution types
 - [ ] Define shared UI/chrome state model
@@ -936,12 +1066,14 @@ This architecture implies future changes to at least these areas:
 - [ ] Define overlay ownership and result-returning API shape
 
 ## Core runtime
+
 - [ ] Introduce shared UI/chrome state layer
 - [ ] Introduce ChromeHost and region hosts
 - [ ] Introduce built-in provider system
 - [ ] Migrate current sidebar/workspace logic into `WorkspacesContainerProvider`
 
 ## Actions
+
 - [ ] Evolve ActionRegistry to support dynamic/string-based actions
 - [ ] Support action metadata, registration, unregistration, dispatch, and args
 - [ ] Ensure future config keybindings can target dynamic actions
@@ -949,17 +1081,20 @@ This architecture implies future changes to at least these areas:
 - [ ] Add host-level container placement actions for moving compatible containers between left and right sidebars
 
 ## UI/widgets
+
 - [ ] Add `SidebarContainerFrame`-style presentation primitives to `heca-grid-ui`
 - [ ] Add richer sidebar item/group widgets as needed
 - [ ] Add or generalize region/top/bottom/right-side widgets
 - [ ] Add list/scroll primitives if needed
 
 ## Overlays
+
 - [ ] Add host-owned modal API
 - [ ] Add host-owned dropdown/popover API
 - [ ] Support async result-returning overlay flows
 
 ## Plugins
+
 - [ ] Design WASM host API/facade
 - [ ] Add plugin discovery/loading lifecycle
 - [ ] Add event bus bridge to plugins
@@ -967,6 +1102,7 @@ This architecture implies future changes to at least these areas:
 - [ ] Add plugin action registration API
 
 ## Validation
+
 - [ ] Prove architecture with WorkspacesContainer first
 - [ ] Prove multi-container coexistence in left/right/top/bottom regions
 - [ ] Prove at least one non-workspaces provider/plugin path
@@ -980,13 +1116,16 @@ This architecture implies future changes to at least these areas:
 This plan defines the next architecture program for heca **after** the current cleanup/refactor roadmap is complete enough.
 
 The main shift is:
+
 - from a hardcoded sidebar/tree model
 - to a **pluggable chrome host** with region contributions, shared UI state, dynamic actions, and future WASM plugins
 
 The first migration target should be:
+
 - turning the current workspace tree/sidebar logic into a built-in `WorkspacesContainerProvider`
 
 The long-term goal should be:
+
 - left/right/top/bottom pluggable regions
 - host-owned overlays
 - dynamic action registration

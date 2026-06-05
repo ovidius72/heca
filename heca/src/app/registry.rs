@@ -141,12 +141,24 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     let sidebar_bindings = vec![
         ("j", WmAction::SidebarDown),
         ("k", WmAction::SidebarUp),
+        ("ArrowDown", WmAction::SidebarDown),
+        ("Down", WmAction::SidebarDown),
+        ("ArrowUp", WmAction::SidebarUp),
+        ("Up", WmAction::SidebarUp),
         ("h", WmAction::SidebarLeftNav),
         ("l", WmAction::SidebarRightNav),
+        ("ArrowLeft", WmAction::SidebarLeftNav),
+        ("Left", WmAction::SidebarLeftNav),
+        ("ArrowRight", WmAction::SidebarRightNav),
+        ("Right", WmAction::SidebarRightNav),
+        ("w", WmAction::SidebarCreateWorkspace),
+        ("c", WmAction::SidebarCreateColumn),
+        ("v", WmAction::SidebarSplitInColumn),
+        ("z", WmAction::SidebarZoomSelectedColumn),
+        ("d", WmAction::SidebarDeleteSelected),
         ("Tab", WmAction::SidebarExpandToggle),
-        ("Space", WmAction::SidebarExpandToggle),
+        ("Space", WmAction::SidebarRightNav),
         ("b", WmAction::SidebarLeft),
-        ("Enter", WmAction::SidebarRightNav),
     ];
     for (key, action) in sidebar_bindings {
         bind_with_conflict_tracking(
@@ -389,6 +401,23 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
+    registry.register(
+        &WmAction::SidebarCreateWorkspace,
+        handle_sidebar_create_workspace,
+    );
+    registry.register(&WmAction::SidebarCreateColumn, handle_sidebar_create_column);
+    registry.register(
+        &WmAction::SidebarSplitInColumn,
+        handle_sidebar_split_in_column,
+    );
+    registry.register(
+        &WmAction::SidebarZoomSelectedColumn,
+        handle_sidebar_zoom_selected_column,
+    );
+    registry.register(
+        &WmAction::SidebarDeleteSelected,
+        handle_sidebar_delete_selected,
+    );
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
@@ -506,6 +535,60 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn sidebar_mode_includes_arrow_aliases() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowUp")),
+            Some(&WmAction::SidebarUp)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowDown")),
+            Some(&WmAction::SidebarDown)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowLeft")),
+            Some(&WmAction::SidebarLeftNav)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
+            Some(&WmAction::SidebarRightNav)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("Space")),
+            Some(&WmAction::SidebarRightNav)
+        );
+    }
+
+    #[test]
+    fn sidebar_mode_includes_mutation_bindings() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("w")),
+            Some(&WmAction::SidebarCreateWorkspace)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("c")),
+            Some(&WmAction::SidebarCreateColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("v")),
+            Some(&WmAction::SidebarSplitInColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("z")),
+            Some(&WmAction::SidebarZoomSelectedColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("d")),
+            Some(&WmAction::SidebarDeleteSelected)
         );
     }
 

@@ -371,6 +371,34 @@
     }
 
     #[test]
+    fn test_collapse_persists_across_rebuild() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        // Collapse workspace 0.
+        tree.cursor = 0;
+        tree.toggle_expand();
+        assert!(
+            tree.workspaces[0].collapsed,
+            "WS 0 should be collapsed after toggle"
+        );
+        let collapsed_count = tree.flat_items.len();
+
+        // Rebuild from session — collapse state should survive.
+        tree.rebuild(&session, None, Some(1), &[]);
+        assert!(
+            tree.workspaces[0].collapsed,
+            "WS 0 collapse should persist across rebuild"
+        );
+        assert_eq!(
+            tree.flat_items.len(),
+            collapsed_count,
+            "flat item count should remain reduced after rebuild"
+        );
+    }
+
+    #[test]
     fn test_sidebar_hit_test_collapsed() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();

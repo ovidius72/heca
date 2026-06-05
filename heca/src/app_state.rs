@@ -63,9 +63,12 @@ pub enum InputMode {
     },
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
+    /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
+    /// instead of `Normal` after confirm/cancel.
     ConfirmDelete {
         message: String,
         action: Box<WmAction>,
+        resume_sidebar: bool,
     },
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.
@@ -124,8 +127,9 @@ pub enum DragState {
         threshold_sq: f32,
         /// If true, drop performs a swap instead of a move.
         swap: bool,
-        /// The click action (e.g. FocusPane) to execute if released without dragging.
-        click_action: Box<WmAction>,
+        /// Optional click action to execute if released without dragging.
+        /// `None` means the press only entered/selected sidebar mode.
+        click_action: Option<Box<WmAction>>,
     },
     /// Sidebar drag — move: pane stays in layout, ghost follows cursor.
     SidebarDrag {

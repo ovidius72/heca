@@ -63,16 +63,14 @@ pub fn on_mouse_input(
                         None => return sidebar_action,
                     };
                     let swap = state.modifiers.shift_key();
-                    let click_action = sidebar_action
-                        .clone()
-                        .unwrap_or(WmAction::FocusPane { pane_id });
+                    let click_action = sidebar_action.clone().map(Box::new);
                     state.mouse.drag_state = DragState::SidebarDragStarting {
                         pane_id,
                         original_ws: ws_idx,
                         start_mouse: pos,
                         threshold_sq: 100.0, // 10px threshold
                         swap,
-                        click_action: Box::new(click_action),
+                        click_action,
                     };
                     return None;
                 }
@@ -112,13 +110,20 @@ pub fn on_mouse_input(
                     sidebar_drop::drag_drop(state, pane_id, original_ws, swap, pos);
                 }
                 DragState::SidebarDragStarting { .. } => {
-                    // Released before threshold: execute the click action.
+                    // Released before threshold: execute the click action if one exists.
                     if let DragState::SidebarDragStarting { click_action, .. } =
                         &state.mouse.drag_state
                     {
-                        let action = click_action.as_ref().clone();
+                        let action = click_action.as_deref().cloned();
                         state.mouse.drag_state = DragState::None;
-                        return Some(action);
+                        if let Some(action) = action {
+                            if matches!(action, WmAction::FocusPane { .. })
+                                && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
+                            {
+                                state.input_mode = crate::app_state::InputMode::Normal;
+                            }
+                            return Some(action);
+                        }
                     }
                 }
                 _ => {}
