@@ -103,6 +103,22 @@ impl SidebarTree {
         focused_pane: Option<u64>,
         last_visited_pane_per_ws: &[Option<u64>],
     ) {
+        // Preserve collapsed state across rebuild.
+        let prev_ws_collapsed: std::collections::HashMap<usize, bool> = self
+            .workspaces
+            .iter()
+            .map(|w| (w.ws_idx, w.collapsed))
+            .collect();
+        let prev_col_collapsed: std::collections::HashMap<(usize, usize), bool> = self
+            .workspaces
+            .iter()
+            .flat_map(|w| {
+                w.columns
+                    .iter()
+                    .map(move |c| ((w.ws_idx, c.col_idx), c.collapsed))
+            })
+            .collect();
+
         self.workspaces.clear();
         self.flat_items.clear();
 
@@ -118,13 +134,15 @@ impl SidebarTree {
 
             let last_visited_in_ws = last_visited_pane_per_ws.get(ws_idx).copied().flatten();
 
+            let collapsed = prev_ws_collapsed.get(&ws_idx).copied().unwrap_or(false);
+
             let mut ws_entry = SidebarWsEntry {
                 ws_idx,
                 name: ws
                     .name
                     .clone()
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
-                collapsed: false,
+                collapsed,
                 state,
                 columns: Vec::new(),
                 floating_panes: Vec::new(),
@@ -139,13 +157,17 @@ impl SidebarTree {
             for &col_idx in &cols_to_show {
                 if let Some(col) = ws.scrolling.columns.get(col_idx) {
                     let _is_active_col = col_idx == ws.scrolling.active_column_idx && is_active;
+                    let col_collapsed = prev_col_collapsed
+                        .get(&(ws_idx, col_idx))
+                        .copied()
+                        .unwrap_or(false);
                     let mut col_entry = SidebarColEntry {
                         col_idx,
                         name: col
                             .name
                             .clone()
                             .unwrap_or_else(|| format!("Col {}", col_idx + 1)),
-                        collapsed: false,
+                        collapsed: col_collapsed,
                         panes: Vec::new(),
                     };
 
