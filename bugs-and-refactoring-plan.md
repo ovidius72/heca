@@ -3,7 +3,27 @@
 **Scope:** `heca`, `heca-core`, `heca-renderer`, `heca-config`  
 **Excluded:** `heca-ui`, `heca-grid-ui`  
 **Based on:** `bugs-and-refactoring.md`  
-**Date:** 2026-06-04
+**Date:** 2026-06-04  
+**Last updated:** 2026-06-05
+
+---
+
+## Plan Change Notice — 2026-06-05
+
+This roadmap changed on **2026-06-05** after new requirements emerged around:
+- a **pluggable chrome system** instead of treating the left sidebar as only a workspace tree
+- future **left sidebar / right sidebar / top bar / bottom bar** region hosting
+- built-in containers such as a future `WorkspacesContainer`
+- a future **WASM plugin system**
+- dynamic plugin-provided actions that must later be bindable from config
+
+Those requirements are documented in:
+- `pluggable-chrome-plugin-plan.md`
+
+Important scope clarification:
+- this document still governs the **current cleanup/refactor program** already in progress
+- the new chrome/plugin architecture plan is to start **after** the current refactor reaches its intended stopping point
+- after this current refactor is complete enough, this roadmap should be adapted again so its later phases align with the pluggable chrome/plugin architecture
 
 ---
 
@@ -114,7 +134,7 @@ And the main runtime responsibilities should be split into:
 | 1 | File/module reorganization | Giant files split without major semantic changes |
 | 2 | Central mutation boundary | Session mutation post-hooks become explicit |
 | 3 | Shared pane operation layer | Focus/move/swap/drop logic deduplicated |
-| 4 | Sidebar redesign | Sidebar projection and UI state cleaned up |
+| 4 | Sidebar redesign | Sidebar projection and UI state cleaned up, in a way that can later feed a `WorkspacesContainer` inside a pluggable chrome host |
 | 5 | Backend/runtime ownership cleanup | Backend lifecycle less fragile |
 | 6 | Dead state and metadata cleanup | Remove stale types, fields, placeholders |
 | 7 | Error handling and safety hygiene | Typed errors and `// SAFETY:` comments |
@@ -338,6 +358,17 @@ Why this is now considered structurally complete:
 ---
 
 ### 1.3 Split `heca/src/sidebar.rs`
+
+**Important architectural note — updated 2026-06-05**
+
+This phase should still proceed as a structure-first cleanup, but its output should now be understood as preparation for a future built-in `WorkspacesContainer`, not as the final architecture of "the sidebar" itself.
+
+The new longer-term model is:
+- `Sidebar` / chrome region host
+- pluggable containers inside that host
+- `WorkspacesContainer` as one such container
+
+That future architecture is documented in `pluggable-chrome-plugin-plan.md` and starts only after the current cleanup roadmap reaches its stopping point.
 
 Current problems:
 - combines data model, projection rebuild, navigation, hit testing, rendering, tests
@@ -839,7 +870,60 @@ Reason:
 
 ---
 
-## 8. Final Note
+## 8. Live Execution Checklist — Current Sidebar Split
+
+This section is intentionally tactical. It exists so the active refactor can be tracked step by step inside the main plan document instead of only in ad hoc chat notes.
+
+Rule for this checklist:
+- update it after each completed slice/commit
+- keep it behavior-preserving unless a later phase explicitly says otherwise
+- use it only for the **current active slice**, then replace it when the next slice becomes active
+
+### Phase 1.3 — `heca/src/sidebar.rs`
+
+#### Commit 1 — Extract rendering module
+- [x] Extract sidebar data structures into `heca/src/sidebar/model.rs`
+- [x] Extract sidebar hit testing into `heca/src/sidebar/hit_test.rs`
+- [x] Create `heca/src/sidebar/render.rs`
+- [x] Move `render_sidebar_expanded(...)` into `render.rs`
+- [x] Move `render_sidebar_collapsed(...)` into `render.rs`
+- [x] Move render-only constants into `render.rs`
+- [x] Move render-only helpers (`pane_entry_by_id`, `pane_name_short`) into `render.rs` or a small render support module
+- [x] Re-export render entrypoints from `heca/src/sidebar.rs`
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+
+#### Commit 2 — Split render internals into helpers
+- [x] Extract repeated button color helpers
+- [x] Extract workspace row rendering helper(s)
+- [x] Extract column row rendering helper(s)
+- [x] Extract pane row rendering helper(s)
+- [x] Extract floating-pane row rendering helper(s)
+- [x] Extract collapsed-section rendering helper(s)
+- [x] Confirm no behavior changes in ordering, colors, candidate letters, drag highlights, or actions
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+
+#### Commit 3 — Move tests into dedicated module
+- [x] Create `heca/src/sidebar/tests.rs`
+- [x] Move inline sidebar tests out of `heca/src/sidebar.rs`
+- [x] Add `#[cfg(test)] mod tests;` in `heca/src/sidebar.rs`
+- [x] Validate with `cargo test -q --workspace`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+
+#### Definition of done for the current slice
+- [x] `heca/src/sidebar.rs` is a thin façade
+- [x] rendering is fully extracted
+- [x] tests are fully extracted
+- [x] app behavior is unchanged
+- [x] validation passes
+
+---
+
+## 9. Final Note
+
+This roadmap is now explicitly a **current cleanup/stabilization plan**, not the final long-term UI architecture plan. The long-term plan changed on **2026-06-05** after new requirements emerged around pluggable chrome regions, built-in container providers, dynamic action registration, and future WASM plugins. See `pluggable-chrome-plugin-plan.md`.
+
 
 This roadmap deliberately avoids trying to force all behavior into one place.
 
