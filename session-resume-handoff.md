@@ -1,414 +1,228 @@
 # Session Resume Handoff — 2026-06-05
 
-## Purpose
+## Current status
 
-This file is the current resume note for the active refactor and architecture-doc update.
+We are now working **solo** — no more intercom/subagent coordination.
 
-Primary status now:
-- **Phase 1.3 (`heca/src/sidebar.rs`) is structurally complete enough**
-- the repo also contains new **architecture/planning docs** for the future pluggable chrome / WASM plugin direction
+Active branch:
+- `feature/gpt-refactoring`
 
-Non-negotiable workflow rule from the user:
-- **pull / merge `origin/main` before starting each new task**
+Important workflow state:
+- branch has already been **rebased onto `origin/main`** during this session
+- current working tree is **clean**
+- latest work is committed locally and ready to push / PR
 
-Important deferred item:
-- floating-vs-tiled focus-domain routing is still **intentionally deferred** to the **last phase** of `bugs-and-refactoring-plan.md`
+## Latest commits from this session
 
----
+- `4929e0e` — `docs(sidebar): document sidebar space binding`
+- `84bf249` — `feat(sidebar): add sidebar mouse and disclosure behavior`
+- `88746ad` — `feat(sidebar): add sidebar mutation actions`
+- `16308ca` — `feat(sidebar): normalize sidebar nav contract`
+- `66b2079` — `docs(plan): expand sidebar phase 1.5 tasks`
 
-## Current branch state
+## What was completed
 
-Latest already-committed milestones relevant to this refactor:
-- `577033a` — `Add column rename support and continue app refactor`
-- `a13439a` — `Restore workspace key aliases and continue app refactor`
-- `ad1acaa` — `Finish main runtime split into app modules`
-- `85aaed6` — `Fix keybinding conflicts and prefix handling`
-- `2e2cdeb` — `Split mouse logic into focused submodules`
-- `212a20f` — `Finish splitting mouse interactions into focused modules`
-- `660c0f7` — `Start splitting sidebar model and hit testing`
+### Planning / checklist work
 
-Current uncommitted / untracked work now consists of:
+`bugs-and-refactoring-plan-with-checklist.md` was rewritten for **Phase 1.5** with a much more detailed breakdown based on a long clarification pass.
 
-### Code refactor completion for Phase 1.3
-- modified: `heca/src/sidebar.rs`
-- new: `heca/src/sidebar/render.rs`
-- new: `heca/src/sidebar/tests.rs`
+The 1.5 checklist now captures:
+- sidebar navigation contract
+- sidebar-only mutation keys
+- selection-driven behavior
+- mouse enter/exit semantics
+- disclosure icon behavior
+- future global collapse action family
+- future RPC/token compatibility constraints
+- tests/docs follow-up
 
-### Planning / architecture docs
-- modified: `AGENTS.md`
-- modified: `README.md`
-- modified: `bugs-and-refactoring-plan.md`
-- modified: `bugs-and-refactoring.md`
-- new: `pluggable-chrome-plugin-plan.md`
-- new: `sidebar-gap.md`
+### Sidebar Phase 1.5 implementation progress
 
----
+Completed in code so far:
 
-## What is already done
+#### 1.5.1 Normalize sidebar navigation contract
+Implemented:
+- `j/k` and `Up/Down` move cursor in sidebar mode
+- `h/l` and `Left/Right` do tree collapse/expand on structural rows
+- `Enter` behavior was normalized
+- `Esc` now exits sidebar mode while focusing contextually relevant content
+- leaf focus-target resolution was added for:
+  - workspace rows
+  - column rows
+  - pane rows
+  - floating-pane rows
+- removed obsolete `cursor_workspace_index()` helper from `SidebarTree`
 
-### 1. Phase 1.1 is complete enough
+Key behavior now:
+- pane / floating pane leaf activation exits `SidebarNav`
+- workspace / column structural navigation stays in `SidebarNav`
+- `Esc` exits and focuses contextual target using:
+  - workspace active/first pane fallback
+  - column active/first pane fallback
+  - exact pane/floating pane ids when directly selected
 
-`heca/src/main.rs` was reduced to a thin module root / binary shell.
+#### 1.5.2 Add sidebar-only mutation keymap
+Implemented new sidebar-only actions:
+- `SidebarCreateWorkspace`
+- `SidebarCreateColumn`
+- `SidebarSplitInColumn`
+- `SidebarZoomSelectedColumn`
+- `SidebarDeleteSelected`
 
-Work extracted into `heca/src/app/`:
-- `registry.rs`
-- `focus.rs`
-- `mutations.rs`
-- `render.rs`
-- `selection.rs`
-- `keyboard.rs`
-- `startup.rs`
-- `input.rs`
-- `events.rs`
-- `lifecycle.rs`
+Implemented new sidebar-mode keys:
+- `w` → create workspace
+- `c` → create column in selected workspace context
+- `v` → split/add pane in selected column context
+- `z` → zoom selected column
+- `d` → delete selected item with confirmation
 
-Why this matters:
-- runtime ownership is much clearer
-- `main.rs` is no longer the place where every system detail accumulates
-- future behavior changes can happen in narrower modules with less review risk
+Behavior details:
+- all sidebar mutation actions are **selection-driven**
+- `w/c/v/z` stay in `SidebarNav`
+- `d` reuses confirm-delete flow and returns to `SidebarNav`
+- floating-pane row is a no-op for actions that require a workspace/column target
 
-### 2. Keybinding and prefix regressions from review were fixed
+Also fixed related behavior:
+- `ClosePaneById` now handles floating panes too
+- workspace deletion now cleans up floating-pane backends too
+- `ConfirmDelete` now has `resume_sidebar: bool`
 
-Already done:
-- `prefix+p` is command palette again
-- pane cycling moved to `prefix+[` / `prefix+]`
-- `prefix+Ctrl+k/j` swap bindings restored
-- `prefix+Ctrl+p/n` workspace aliases restored
-- configurable double-prefix forwarding fixed
-- built-in and user custom modes now merge by mode name
-- startup/reload conflict logging made deterministic and visible
-- quick-select / swap / take overflow now falls back instead of partially labeling panes
+#### 1.5.3 Make sidebar actions selection-driven
+Implemented in the same slice as 1.5.2:
+- sidebar mutation actions derive targets from current sidebar selection
+- they no longer depend on active main-area focus as the target source
 
-Why this matters:
-- keyboard behavior is deterministic again
-- config reload behavior is safer and easier to debug
-- future input/config work has a cleaner base
+#### 1.5.4 Add mouse semantics for entering/exiting sidebar mode
+Implemented:
+- clicking in sidebar enters `SidebarNav`
+- row-body click behavior differs depending on item type and current mode
+- pane/floating-pane clicks now support the intended two-step flow:
+  - first click enters/selects in sidebar mode
+  - second click while already in sidebar mode focuses leaf and exits
+- column row click activates parent workspace if needed but stays in `SidebarNav`
+- workspace row click activates workspace and stays in `SidebarNav`
 
-### 3. Rename and zoom work is already in place
+Implementation note:
+- `SidebarDragStarting.click_action` is now optional
+- this was necessary so first pane click can enter sidebar mode without immediately focusing the pane on release
 
-Already done:
-- `prefix+z` toggles active-column zoom
-- zoom is per-column and independent
-- pane rename is `prefix+$`
-- workspace rename is `prefix+Shift+w`
-- column rename is `prefix+Shift+c`
-- column names render in the sidebar
-- RPC support exists for zoom and column rename
+#### 1.5.5 Add disclosure hit targets and visual symbols for workspace + column rows
+Implemented:
+- column rows now render disclosure arrows too
+- symbols used:
+  - collapsed = `▶`
+  - expanded = `▼`
+- disclosure glyph area now gets its own sidebar hit target
+- disclosure clicks toggle tree state only
+- row-body click remains distinct from disclosure click
 
-Why this matters:
-- the product-level behavior the user asked for is already landed
-- current refactor work should preserve these paths, not redesign them
+### Sidebar-mode default binding update
 
-### 4. Phase 1.2 is structurally complete
-
-Mouse logic is already split into:
-- `heca/src/mouse/hit_test.rs`
-- `heca/src/mouse/render.rs`
-- `heca/src/mouse/drag.rs`
-- `heca/src/mouse/drop.rs`
-- `heca/src/mouse/sidebar.rs`
-- `heca/src/mouse/sidebar_drop.rs`
-- `heca/src/mouse/tests.rs`
-
-Why this matters:
-- the top-level mouse module is thin enough to read quickly
-- each major mouse concern has a clearer home
-- no mouse submodule exceeds the target ~400 LOC threshold
-
-### 5. Phase 1.3 is now structurally complete enough
-
-Sidebar logic is now split into:
-- `heca/src/sidebar.rs` — thin façade / re-exports
-- `heca/src/sidebar/model.rs` — tree/projection/navigation/collapse state
-- `heca/src/sidebar/hit_test.rs` — hit testing
-- `heca/src/sidebar/render.rs` — expanded/collapsed rendering + render helpers
-- `heca/src/sidebar/tests.rs` — sidebar tests
-
-What was completed in this slice:
-- rendering extracted from `sidebar.rs`
-- render internals split into smaller helpers
-- tests moved out of `sidebar.rs`
-- `bugs-and-refactoring-plan.md` live checklist updated through the end of the current sidebar split
-
-Why this matters:
-- the last major mixed-responsibility UI file in the current structure-first wave is now much thinner
-- current workspace-tree behavior is easier to reinterpret later as a built-in `WorkspacesContainer`
-- future chrome-host work will not need to start from a monolithic `sidebar.rs`
-
-### 6. Architecture docs were updated to match the new direction
-
-Already documented:
-- sidebar shell vs mounted container separation
-- current workspace tree should evolve into built-in `WorkspacesContainer`
-- future pluggable chrome host with left/right/top/bottom regions
-- dynamic action evolution
-- future WASM/plugin direction
-- important action reachability rule: features should be reachable from mouse/UI, keyboard/action dispatch, and RPC when meaningful on those surfaces
-- container movement across compatible regions should be host-managed and action-addressable
-
-Files carrying this new direction:
-- `pluggable-chrome-plugin-plan.md`
-- `sidebar-gap.md`
-- `AGENTS.md`
-- `README.md`
-- `bugs-and-refactoring-plan.md`
-- `bugs-and-refactoring.md`
-
----
-
-## What is not done yet
-
-### 1. Parameterized normal keybindings are still future work
-
-Still not implemented:
-- `[[keys.bind]]` for parameterized normal bindings
-- generalized structured spawn action / size parsing
-
-Why not now:
-- the agreed order was structure-first
-- the `main.rs` / `mouse.rs` / `sidebar.rs` cleanup was the immediate priority
-
-### 2. Floating focus-domain routing is still deferred
-
-Still not fixed:
-- handlers that should act on the focused floating pane still often mutate tiled `ws.scrolling...` state instead
-
-Why deferred:
-- the user explicitly asked for this to be the **last phase** in the plan
-- it is a semantic correctness project, not a structural refactor task
-
-### 3. Pluggable chrome / provider / WASM runtime work has not started
-
-Important:
-- the architecture is documented
-- the implementation has **not** started
-- current code is still the existing app architecture, now with better structural seams
-
----
-
-## What we are done with, and why
-
-We are effectively **done with Phase 1.1**.
-
-Reason:
-- `heca/src/main.rs` already hit the intended outcome: thin entrypoint, delegated runtime systems, better navigability
-
-We are **done with Phase 1.2’s structural split**.
-
-Reason:
-- mouse concerns now have distinct files and the top-level module is thin
-
-We are now **done enough with Phase 1.3’s structural split**.
-
-Reason:
-- `sidebar.rs` is now a thin façade
-- rendering, hit-testing, model, and tests are separated
-- validation passed after the split
-
-So the current strategy should be:
-1. do **not** reopen completed `main.rs` / `mouse.rs` / `sidebar.rs` structure work unless needed
-2. commit the current sidebar/doc/architecture batch cleanly
-3. then choose the next planned refactor slice deliberately
-
----
+Added default sidebar-mode behavior:
+- `Space` now maps to sidebar `Right` behavior
+- on a pane leaf in sidebar mode this means **focus/select + exit**
+- `keybindings.toml` was updated to document this default binding
 
 ## Validation status
 
-The current sidebar split and related refactor slices passed:
-- `cargo check -q`
-- `cargo clippy --workspace --all-targets --all-features --quiet`
-- `cargo test -q --workspace`
+All of the above was validated repeatedly.
 
-Recommended validation before any new behavior work:
+Passing commands during this session:
+- `cargo test -p heca --quiet`
+- `cargo clippy -p heca --all-targets --quiet`
 
-```bash
-cargo check -q
-cargo clippy --workspace --all-targets --all-features --quiet
-cargo test -q --workspace
-```
+Also earlier in the session:
+- `cargo test -p heca-config --quiet`
+- `cargo clippy -p heca-config --all-targets --quiet`
+- `cargo check --workspace --quiet`
 
-Optional smoke test after commit:
+At the current checkpoint, `heca` tests/clippy were green after the latest sidebar changes.
 
-```bash
-cargo run -p heca --quiet
-```
+## What is still not done
 
-Expected smoke-test behavior:
-- app starts and stays in event loop
-- no startup error before timeout
-- prefix mode still works
-- rename bindings still work
-- zoom still works
-- sidebar interactions still work
+The remaining **Phase 1.5** items are still open:
 
----
+- `1.5.6 Add global sidebar-tree collapse actions`
+- `1.5.7 Preserve public config/action surface for future RPC work`
+- `1.5.8 Add/update tests for sidebar tree behavior`
+- `1.5.9 Update docs and defaults`
 
-## Exact next step
+## Recommended next step
 
-### Immediate practical next move
+### Start with 1.5.6
 
-Create clean commits for the current work.
+Add the global action family for sidebar-tree UI collapse state:
 
-### Recommended commit plan
+Workspace:
+- `collapse_current_workspace`
+- `expand_current_workspace`
+- `toggle_current_workspace_collapsed`
 
-#### Commit A — Finish sidebar structural split
-Include:
-- `heca/src/sidebar.rs`
-- `heca/src/sidebar/render.rs`
-- `heca/src/sidebar/tests.rs`
-- `bugs-and-refactoring-plan.md`
+Column:
+- `collapse_current_column`
+- `expand_current_column`
+- `toggle_current_column_collapsed`
 
-Suggested message:
-- `Finish splitting sidebar into focused modules`
+Requirements already agreed in planning:
+- these are **sidebar tree UI state** actions only, not compositor/layout collapse
+- they must be real `WmAction` variants
+- must be registered in `ActionRegistry`
+- must be bindable from config
+- for now default bindings only needed:
+  - `prefix+(` → toggle current column collapsed
+  - `prefix+<` → toggle current workspace collapsed
+- “current” for these global actions means:
+  - active main-view workspace
+  - focused pane’s column in active workspace
+- they should work even if the sidebar is hidden
 
-#### Commit B — Document architecture shift
-Include:
-- `AGENTS.md`
-- `README.md`
-- `bugs-and-refactoring.md`
-- `pluggable-chrome-plugin-plan.md`
-- `sidebar-gap.md`
+### Suggested implementation order for 1.5.6
 
-Suggested message:
-- `Document pluggable chrome and container architecture`
+1. Extend `SidebarTree` with explicit helpers by index:
+   - collapse / expand / toggle workspace by `ws_idx`
+   - collapse / expand / toggle column by `(ws_idx, col_idx)`
+2. Add new `WmAction` variants in `heca/src/input.rs`
+3. Add `action_from_name()` mappings
+4. Update `action_priority()` exhaustive matches
+5. Add `ActionRegistry::ALL` descriptors in `heca/src/actions.rs`
+6. Register handlers in `heca/src/app/registry.rs`
+7. Implement handlers in `heca/src/handlers.rs`
+8. Add default keybindings in `heca-config` and update `keybindings.toml`
+9. Add focused tests
 
-(Optional)
-If you want plan/history docs kept separate from architecture docs:
+## Important semantic agreements already settled
 
-#### Commit C — Update refactor-plan context docs
-Include:
-- `bugs-and-refactoring-plan.md` if not already grouped with Commit A
-- `session-resume-handoff.md`
+Do **not** re-decide these unless intentionally changing product behavior:
 
-Suggested message:
-- `Update refactor handoff after sidebar split`
+- sidebar navigation is **selection-driven**
+- main scrolling area is **not** auto-synced on `j/k`
+- `h/l` and `Left/Right` are tree navigation on structural rows
+- pane/floating-pane `l` / `Right` / `Enter` focus leaf and exit
+- `Esc` exits sidebar mode and focuses contextual target
+- sidebar mutation keys are sidebar-only
+- global prefix collapse actions use **active main-view state**, not sidebar selection
+- sidebar tree collapse is **UI-only**, not layout collapse
+- explicit expand/collapse/toggle family should exist for future RPC friendliness, even if only toggles get default bindings now
 
-### After the commits
+## Files most relevant for the next slice
 
-Re-evaluate the next code slice from the refactor roadmap.
-
-Most likely candidates:
-- continue with the next planned PR slice (`theme.rs` / config split)
-- or jump to **Phase 2 — Introduce a Central Mutation Boundary** if that now gives the best readability payoff
-
-Do **not** start:
-- floating focus-domain routing
-- plugin runtime implementation
-- ChromeHost implementation
-
-until the current batch is committed and the next slice is chosen explicitly.
-
----
-
-## Exact resume procedure
-
-### 1. Sync first
-
-Always do this before starting a new task:
-
-```bash
-git fetch origin && git merge --ff-only origin/main
-```
-
-### 2. Confirm working tree
-
-```bash
-git status --short
-```
-
-### 3. Re-read these files first
-
-- `bugs-and-refactoring-plan.md`
-- `session-resume-handoff.md`
-- `pluggable-chrome-plugin-plan.md`
-- `sidebar-gap.md`
-- `AGENTS.md`
-- `README.md`
-- `heca/src/sidebar.rs`
-- `heca/src/sidebar/model.rs`
-- `heca/src/sidebar/hit_test.rs`
-- `heca/src/sidebar/render.rs`
-- `heca/src/sidebar/tests.rs`
-
-### 4. Re-run validation before changing behavior
-
-```bash
-cargo check -q
-cargo clippy --workspace --all-targets --all-features --quiet
-cargo test -q --workspace
-```
-
-### 5. Continue only the explicitly chosen next slice
-
-Do **not** jump implicitly to:
-- floating focus-domain routing fixes
-- parameterized keybinding implementation
-- plugin runtime implementation
-- ChromeHost implementation
-
-until the current sidebar/doc batch is committed and the next step is explicitly selected.
-
----
-
-## Behavior constraints that must not regress
-
-### Keybindings
-Keep these exactly:
-- `prefix+Ctrl+k` → `swap_up`
-- `prefix+Ctrl+j` → `swap_down`
-- `prefix+Ctrl+p` → workspace previous
-- `prefix+Ctrl+n` → workspace next
-- `prefix+Ctrl+Shift+k` → move column up
-- `prefix+Ctrl+Shift+j` → move column down
-- `prefix+p` → command palette
-- `prefix+[` / `prefix+]` → prev / next pane
-
-Relevant files:
-- `heca-config/src/theme.rs`
-- `keybindings.toml`
+- `heca/src/input.rs`
+- `heca/src/actions.rs`
 - `heca/src/app/registry.rs`
+- `heca/src/handlers.rs`
+- `heca/src/sidebar/model.rs`
+- `heca-config/src/keys.rs`
+- `keybindings.toml`
+- `bugs-and-refactoring-plan-with-checklist.md`
 
-### Rename bindings
-Keep these exactly:
-- `prefix+$` → rename pane/tab
-- `prefix+Shift+w` → rename workspace
-- `prefix+Shift+c` → rename column
+## Push / PR intent
 
-### Zoom behavior
-Keep these exactly:
-- `prefix+z` toggles zoom for the active column
-- zoom is a toggle
-- multiple columns may remain zoomed independently
+The user explicitly asked to:
+- commit
+- push
+- create PR
+- write detailed handoff
 
-### Float/unfloat behavior
-Keep these exactly:
-- `prefix+f` remains float/unfloat toggle
-- manually floated tiled panes should restore to their original tiled location when possible
-- panes spawned floating without an original tiled slot should unfloat into a new column
-
-### Deferred bug policy
-Do not silently “fix” the floating focus-domain routing bug inside unrelated refactor or doc work. Documented deferment is intentional.
-
----
-
-## Short summary
-
-We are **done with the `main.rs` runtime split**.
-
-We are **done with the structural `mouse.rs` split**.
-
-We are now **done enough with the structural `sidebar.rs` split**:
-- model extracted
-- hit testing extracted
-- rendering extracted
-- tests extracted
-- `sidebar.rs` is thin
-
-We also now have a documented future architecture direction:
-- sidebar shell vs `WorkspacesContainer`
-- pluggable chrome host
-- dynamic actions
-- host-managed container movement
-- future WASM/plugin boundary
-
-The next best move is to **commit the current sidebar split + architecture doc updates cleanly**, then explicitly choose the next refactor/code slice.
+At the time of writing this handoff:
+- local commits are ready
+- next immediate task is to push branch and create PR
