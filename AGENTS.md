@@ -105,6 +105,7 @@ Ctrl+B → p    Command palette (backend ready, UI pending)
 - Only the prefix key and explicitly bound keys trigger WM actions.
 - **Prefix timeout:** auto-exits Prefix mode after 500ms of inactivity.
 - **Pane letter limit:** PaneSelect/Swap modes use a-z, A-Z (52 unique labels). Sessions with >52 panes/columns fall back to sidebar navigation.
+- **Actions** should not be harcode. ActionRegistry should be used to register new actions (`registry.register`) and execute them (`registry.execute`).
 
 ---
 
@@ -648,6 +649,7 @@ WmAction::SpawnPane {
 ```
 
 Behavior contract for float/unfloat:
+
 - `prefix+f` stays the float toggle
 - if a pane was originally tiled, unfloat restores it
 - if it was spawned directly as floating with no original slot, unfloat should place it into a **new column**
