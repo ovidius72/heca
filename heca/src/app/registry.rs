@@ -157,7 +157,7 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         ("z", WmAction::SidebarZoomSelectedColumn),
         ("d", WmAction::SidebarDeleteSelected),
         ("Tab", WmAction::SidebarExpandToggle),
-        ("Space", WmAction::SidebarExpandToggle),
+        ("Space", WmAction::SidebarRightNav),
         ("b", WmAction::SidebarLeft),
     ];
     for (key, action) in sidebar_bindings {
@@ -557,6 +557,10 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
+            Some(&WmAction::SidebarRightNav)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("Space")),
             Some(&WmAction::SidebarRightNav)
         );
     }
