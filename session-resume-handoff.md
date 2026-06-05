@@ -1,17 +1,18 @@
-# Session Resume Handoff — 2026-06-04
+# Session Resume Handoff — 2026-06-05
 
 ## Purpose
 
-This file is the current resume note for the active refactor.
+This file is the current resume note for the active refactor and architecture-doc update.
 
-Primary active goal:
-- begin **Phase 1.3** and split `heca/src/sidebar.rs`
+Primary status now:
+- **Phase 1.3 (`heca/src/sidebar.rs`) is structurally complete enough**
+- the repo also contains new **architecture/planning docs** for the future pluggable chrome / WASM plugin direction
 
 Non-negotiable workflow rule from the user:
 - **pull / merge `origin/main` before starting each new task**
 
 Important deferred item:
-- floating-vs-tiled focus-domain routing is **intentionally deferred** to the **last phase** of `bugs-and-refactoring-plan.md`
+- floating-vs-tiled focus-domain routing is still **intentionally deferred** to the **last phase** of `bugs-and-refactoring-plan.md`
 
 ---
 
@@ -22,27 +23,34 @@ Latest already-committed milestones relevant to this refactor:
 - `a13439a` — `Restore workspace key aliases and continue app refactor`
 - `ad1acaa` — `Finish main runtime split into app modules`
 - `85aaed6` — `Fix keybinding conflicts and prefix handling`
+- `2e2cdeb` — `Split mouse logic into focused submodules`
+- `212a20f` — `Finish splitting mouse interactions into focused modules`
+- `660c0f7` — `Start splitting sidebar model and hit testing`
 
-Current uncommitted work is the completed structural slice of the **Phase 1.2 mouse split** plus updated planning docs.
+Current uncommitted / untracked work now consists of:
 
-At the moment, the working tree should show:
+### Code refactor completion for Phase 1.3
+- modified: `heca/src/sidebar.rs`
+- new: `heca/src/sidebar/render.rs`
+- new: `heca/src/sidebar/tests.rs`
+
+### Planning / architecture docs
+- modified: `AGENTS.md`
+- modified: `README.md`
 - modified: `bugs-and-refactoring-plan.md`
-- modified: `session-resume-handoff.md`
-- modified: `heca/src/mouse.rs`
-- modified: `heca/src/mouse/drop.rs`
-- new: `heca/src/mouse/sidebar.rs`
-- new: `heca/src/mouse/sidebar_drop.rs`
-- new: `heca/src/mouse/tests.rs`
+- modified: `bugs-and-refactoring.md`
+- new: `pluggable-chrome-plugin-plan.md`
+- new: `sidebar-gap.md`
 
 ---
 
 ## What is already done
 
-### 1. Phase 1.1 is effectively complete
+### 1. Phase 1.1 is complete enough
 
 `heca/src/main.rs` was reduced to a thin module root / binary shell.
 
-Work already extracted into `heca/src/app/`:
+Work extracted into `heca/src/app/`:
 - `registry.rs`
 - `focus.rs`
 - `mutations.rs`
@@ -72,7 +80,7 @@ Already done:
 - quick-select / swap / take overflow now falls back instead of partially labeling panes
 
 Why this matters:
-- keyboard behavior is now deterministic again
+- keyboard behavior is deterministic again
 - config reload behavior is safer and easier to debug
 - future input/config work has a cleaner base
 
@@ -93,91 +101,88 @@ Why this matters:
 
 ### 4. Phase 1.2 is structurally complete
 
-Extracted from `heca/src/mouse.rs` so far:
-
-#### `heca/src/mouse/hit_test.rs`
-Owns:
-- `hit_test_pane()`
-- `sidebar_pane_hit_test()`
-
-#### `heca/src/mouse/render.rs`
-Owns:
-- `render_detached_pane()`
-- `render_insert_hint()`
-
-#### `heca/src/mouse/drag.rs`
-Owns:
-- `on_cursor_moved()` internals
-- `update_sidebar_drag_hover()`
-- `start_interactive_move()`
-- `transition_to_moving()`
-- `cancel_interactive_move()`
-
-#### `heca/src/mouse/drop.rs`
-Owns:
-- `drop_pane()`
-
-#### `heca/src/mouse/sidebar.rs`
-Owns:
-- sidebar click routing
-
-#### `heca/src/mouse/sidebar_drop.rs`
-Owns:
-- sidebar drag-drop move/swap behavior
-- sidebar-targeted detached-pane drop handling
-
-#### `heca/src/mouse/tests.rs`
-Owns:
-- helper-focused mouse unit tests moved out of the main module file
-
-Current file sizes:
-- `heca/src/mouse.rs` — **301 LOC**
-- `heca/src/mouse/hit_test.rs` — **102 LOC**
-- `heca/src/mouse/render.rs` — **177 LOC**
-- `heca/src/mouse/drag.rs` — **310 LOC**
-- `heca/src/mouse/drop.rs` — **198 LOC**
-- `heca/src/mouse/sidebar.rs` — **87 LOC**
-- `heca/src/mouse/sidebar_drop.rs` — **396 LOC**
-- `heca/src/mouse/tests.rs` — **153 LOC**
+Mouse logic is already split into:
+- `heca/src/mouse/hit_test.rs`
+- `heca/src/mouse/render.rs`
+- `heca/src/mouse/drag.rs`
+- `heca/src/mouse/drop.rs`
+- `heca/src/mouse/sidebar.rs`
+- `heca/src/mouse/sidebar_drop.rs`
+- `heca/src/mouse/tests.rs`
 
 Why this matters:
-- the top-level mouse module is now thin enough to read quickly
+- the top-level mouse module is thin enough to read quickly
 - each major mouse concern has a clearer home
 - no mouse submodule exceeds the target ~400 LOC threshold
+
+### 5. Phase 1.3 is now structurally complete enough
+
+Sidebar logic is now split into:
+- `heca/src/sidebar.rs` — thin façade / re-exports
+- `heca/src/sidebar/model.rs` — tree/projection/navigation/collapse state
+- `heca/src/sidebar/hit_test.rs` — hit testing
+- `heca/src/sidebar/render.rs` — expanded/collapsed rendering + render helpers
+- `heca/src/sidebar/tests.rs` — sidebar tests
+
+What was completed in this slice:
+- rendering extracted from `sidebar.rs`
+- render internals split into smaller helpers
+- tests moved out of `sidebar.rs`
+- `bugs-and-refactoring-plan.md` live checklist updated through the end of the current sidebar split
+
+Why this matters:
+- the last major mixed-responsibility UI file in the current structure-first wave is now much thinner
+- current workspace-tree behavior is easier to reinterpret later as a built-in `WorkspacesContainer`
+- future chrome-host work will not need to start from a monolithic `sidebar.rs`
+
+### 6. Architecture docs were updated to match the new direction
+
+Already documented:
+- sidebar shell vs mounted container separation
+- current workspace tree should evolve into built-in `WorkspacesContainer`
+- future pluggable chrome host with left/right/top/bottom regions
+- dynamic action evolution
+- future WASM/plugin direction
+- important action reachability rule: features should be reachable from mouse/UI, keyboard/action dispatch, and RPC when meaningful on those surfaces
+- container movement across compatible regions should be host-managed and action-addressable
+
+Files carrying this new direction:
+- `pluggable-chrome-plugin-plan.md`
+- `sidebar-gap.md`
+- `AGENTS.md`
+- `README.md`
+- `bugs-and-refactoring-plan.md`
+- `bugs-and-refactoring.md`
 
 ---
 
 ## What is not done yet
 
-### 1. Phase 1.3 has not started yet
-
-Still true:
-- `heca/src/sidebar.rs` remains the next large mixed-responsibility module
-- projection rebuild, navigation, hit testing, rendering, and tests still live too close together there
-
-Why this is next:
-- the mouse split is now structurally complete enough
-- `sidebar.rs` is the next readability hotspot in the agreed refactor order
-- cleaning sidebar structure should reduce risk before later semantic focus-domain work
-
-### 2. Parameterized normal keybindings are still future work
+### 1. Parameterized normal keybindings are still future work
 
 Still not implemented:
 - `[[keys.bind]]` for parameterized normal bindings
 - generalized structured spawn action / size parsing
 
 Why not now:
-- the agreed order is structure-first
-- finishing `mouse.rs` / `sidebar.rs` cleanup lowers risk before deeper config/runtime changes
+- the agreed order was structure-first
+- the `main.rs` / `mouse.rs` / `sidebar.rs` cleanup was the immediate priority
 
-### 3. Floating focus-domain routing is still deferred
+### 2. Floating focus-domain routing is still deferred
 
 Still not fixed:
-- handlers that should act on the focused floating pane often still mutate tiled `ws.scrolling...` state instead
+- handlers that should act on the focused floating pane still often mutate tiled `ws.scrolling...` state instead
 
 Why deferred:
 - the user explicitly asked for this to be the **last phase** in the plan
 - it is a semantic correctness project, not a structural refactor task
+
+### 3. Pluggable chrome / provider / WASM runtime work has not started
+
+Important:
+- the architecture is documented
+- the implementation has **not** started
+- current code is still the existing app architecture, now with better structural seams
 
 ---
 
@@ -187,43 +192,48 @@ We are effectively **done with Phase 1.1**.
 
 Reason:
 - `heca/src/main.rs` already hit the intended outcome: thin entrypoint, delegated runtime systems, better navigability
-- more Phase 1.1 work would mostly be optional micro-cleanup, not a meaningful risk reducer
 
 We are **done with Phase 1.2’s structural split**.
 
 Reason:
-- hit testing, rendering, drag transitions, content drop logic, sidebar click routing, sidebar drop logic, and tests now have distinct files
-- `mouse.rs` is now thin and locally navigable
-- no mouse submodule remains above the target ~400 LOC threshold
+- mouse concerns now have distinct files and the top-level module is thin
 
-So the current strategy is:
-1. stop reopening completed `main.rs` work
-2. stop spending more refactor energy on `mouse.rs` unless a new need appears
-3. move to `sidebar.rs`
-4. only after the structure work is calmer, continue parameterized keybinding / spawn work
+We are now **done enough with Phase 1.3’s structural split**.
+
+Reason:
+- `sidebar.rs` is now a thin façade
+- rendering, hit-testing, model, and tests are separated
+- validation passed after the split
+
+So the current strategy should be:
+1. do **not** reopen completed `main.rs` / `mouse.rs` / `sidebar.rs` structure work unless needed
+2. commit the current sidebar/doc/architecture batch cleanly
+3. then choose the next planned refactor slice deliberately
 
 ---
 
 ## Validation status
 
-The current uncommitted mouse-split slice passed:
-- `cargo fmt`
+The current sidebar split and related refactor slices passed:
 - `cargo check -q`
 - `cargo clippy --workspace --all-targets --all-features --quiet`
+- `cargo test -q --workspace`
 
-Recommended command before any new edits:
+Recommended validation before any new behavior work:
 
 ```bash
-cargo fmt && cargo check -q && cargo clippy --workspace --all-targets --all-features --quiet
+cargo check -q
+cargo clippy --workspace --all-targets --all-features --quiet
+cargo test -q --workspace
 ```
 
-After one or two more slices, also run a smoke test:
+Optional smoke test after commit:
 
 ```bash
 cargo run -p heca --quiet
 ```
 
-Expected behavior for that smoke test:
+Expected smoke-test behavior:
 - app starts and stays in event loop
 - no startup error before timeout
 - prefix mode still works
@@ -235,35 +245,58 @@ Expected behavior for that smoke test:
 
 ## Exact next step
 
-### Best next slice
+### Immediate practical next move
 
-Split:
+Create clean commits for the current work.
+
+### Recommended commit plan
+
+#### Commit A — Finish sidebar structural split
+Include:
 - `heca/src/sidebar.rs`
+- `heca/src/sidebar/render.rs`
+- `heca/src/sidebar/tests.rs`
+- `bugs-and-refactoring-plan.md`
 
-Likely options:
-- extract sidebar model/data definitions
-- extract projection rebuild helpers
-- extract navigation helpers
-- extract hit testing and button hit testing
-- isolate rendering paths from behavior and tests
+Suggested message:
+- `Finish splitting sidebar into focused modules`
 
-Goal of that slice:
-- keep behavior unchanged
-- make sidebar logic locally readable
-- reduce the next major mixed-responsibility hotspot in the refactor plan
+#### Commit B — Document architecture shift
+Include:
+- `AGENTS.md`
+- `README.md`
+- `bugs-and-refactoring.md`
+- `pluggable-chrome-plugin-plan.md`
+- `sidebar-gap.md`
 
-### Recommended extraction order
+Suggested message:
+- `Document pluggable chrome and container architecture`
 
-1. sync with `origin/main`
-2. validate current tree
-3. inspect `heca/src/sidebar.rs` and identify clean structural seams
-4. extract one concern at a time
-5. validate after each small step
-6. keep behavior unchanged while shrinking the top-level file
+(Optional)
+If you want plan/history docs kept separate from architecture docs:
 
-### Why this is the best next move
+#### Commit C — Update refactor-plan context docs
+Include:
+- `bugs-and-refactoring-plan.md` if not already grouped with Commit A
+- `session-resume-handoff.md`
 
-Because the mouse split is now structurally complete enough, and `sidebar.rs` is the next large readability hotspot in the planned order.
+Suggested message:
+- `Update refactor handoff after sidebar split`
+
+### After the commits
+
+Re-evaluate the next code slice from the refactor roadmap.
+
+Most likely candidates:
+- continue with the next planned PR slice (`theme.rs` / config split)
+- or jump to **Phase 2 — Introduce a Central Mutation Boundary** if that now gives the best readability payoff
+
+Do **not** start:
+- floating focus-domain routing
+- plugin runtime implementation
+- ChromeHost implementation
+
+until the current batch is committed and the next slice is chosen explicitly.
 
 ---
 
@@ -283,36 +316,37 @@ git fetch origin && git merge --ff-only origin/main
 git status --short
 ```
 
-You should see the current uncommitted Phase 1.2 mouse files.
-
 ### 3. Re-read these files first
 
 - `bugs-and-refactoring-plan.md`
 - `session-resume-handoff.md`
-- `heca/src/mouse.rs`
-- `heca/src/mouse/hit_test.rs`
-- `heca/src/mouse/render.rs`
-- `heca/src/mouse/drag.rs`
-- `heca/src/mouse/drop.rs`
-- `heca/src/mouse/sidebar.rs`
-- `heca/src/mouse/sidebar_drop.rs`
-- `heca/src/mouse/tests.rs`
+- `pluggable-chrome-plugin-plan.md`
+- `sidebar-gap.md`
+- `AGENTS.md`
+- `README.md`
+- `heca/src/sidebar.rs`
+- `heca/src/sidebar/model.rs`
+- `heca/src/sidebar/hit_test.rs`
+- `heca/src/sidebar/render.rs`
+- `heca/src/sidebar/tests.rs`
 
 ### 4. Re-run validation before changing behavior
 
 ```bash
 cargo check -q
 cargo clippy --workspace --all-targets --all-features --quiet
+cargo test -q --workspace
 ```
 
-### 5. Continue only the current structure slice
+### 5. Continue only the explicitly chosen next slice
 
-Do **not** jump to:
+Do **not** jump implicitly to:
 - floating focus-domain routing fixes
 - parameterized keybinding implementation
-- spawn-pane backend redesign
+- plugin runtime implementation
+- ChromeHost implementation
 
-until the current mouse split is committed or intentionally abandoned.
+until the current sidebar/doc batch is committed and the next step is explicitly selected.
 
 ---
 
@@ -353,7 +387,7 @@ Keep these exactly:
 - panes spawned floating without an original tiled slot should unfloat into a new column
 
 ### Deferred bug policy
-Do not silently “fix” the floating focus-domain routing bug inside the structural mouse split. Documented deferment is intentional.
+Do not silently “fix” the floating focus-domain routing bug inside unrelated refactor or doc work. Documented deferment is intentional.
 
 ---
 
@@ -361,13 +395,20 @@ Do not silently “fix” the floating focus-domain routing bug inside the struc
 
 We are **done with the `main.rs` runtime split**.
 
-We are **done with the structural `mouse.rs` split**:
-- hit testing extracted
-- drag transitions extracted
-- detached-pane rendering extracted
-- content drop logic extracted
-- sidebar click routing extracted
-- sidebar drop logic extracted
-- mouse helper tests extracted
+We are **done with the structural `mouse.rs` split**.
 
-The next best move is to commit this mouse refactor slice, then continue to the planned `sidebar.rs` split.
+We are now **done enough with the structural `sidebar.rs` split**:
+- model extracted
+- hit testing extracted
+- rendering extracted
+- tests extracted
+- `sidebar.rs` is thin
+
+We also now have a documented future architecture direction:
+- sidebar shell vs `WorkspacesContainer`
+- pluggable chrome host
+- dynamic actions
+- host-managed container movement
+- future WASM/plugin boundary
+
+The next best move is to **commit the current sidebar split + architecture doc updates cleanly**, then explicitly choose the next refactor/code slice.
