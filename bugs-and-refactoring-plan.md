@@ -279,7 +279,7 @@ Current problems:
 - `heca/src/mouse/render.rs`
 - `heca/src/mouse/sidebar.rs`
 
-**Status update — 2026-06-04**
+**Status update — 2026-06-05**
 
 Already extracted:
 - `heca/src/mouse/hit_test.rs`
@@ -296,44 +296,44 @@ Already extracted:
   - `cancel_interactive_move()`
 - `heca/src/mouse/drop.rs`
   - `drop_pane()`
-  - `sidebar_drag_drop()`
-  - `sidebar_handle_drop()`
+- `heca/src/mouse/sidebar.rs`
+  - sidebar click routing
+- `heca/src/mouse/sidebar_drop.rs`
+  - sidebar drag-drop move/swap behavior
+  - sidebar-targeted detached-pane drop handling
+- `heca/src/mouse/tests.rs`
+  - helper-focused mouse unit tests moved out of the main module file
 
 Current state:
-- `heca/src/mouse.rs` is down to **551 LOC**
+- `heca/src/mouse.rs` is down to **301 LOC**
 - extracted submodules currently measure:
   - `mouse/hit_test.rs` — **102 LOC**
   - `mouse/render.rs` — **177 LOC**
   - `mouse/drag.rs` — **310 LOC**
-  - `mouse/drop.rs` — **586 LOC**
-- public mouse entrypoints still live in `heca/src/mouse.rs`, and the heavy drag/drop logic now delegates into submodules
+  - `mouse/drop.rs` — **198 LOC**
+  - `mouse/sidebar.rs` — **87 LOC**
+  - `mouse/sidebar_drop.rs` — **396 LOC**
+  - `mouse/tests.rs` — **153 LOC**
+- public mouse entrypoints still live in `heca/src/mouse.rs`, but the file now reads mostly as event glue plus small shared helpers
 - validation passes with:
   - `cargo fmt`
   - `cargo check -q`
   - `cargo clippy --workspace --all-targets --all-features --quiet`
 
-Why this is the current stopping point:
-- the biggest readability win has already landed: `mouse.rs` is no longer the sole home for hit testing, drag transitions, drag visuals, and pane drop placement
-- however, `mouse/drop.rs` is still too large, which means the complexity has been isolated but not yet fully decomposed
-- the remaining complexity is concentrated in:
-  - detached-pane reinsertion
-  - swap-vs-insert behavior
-  - sidebar target routing
-  - cross-workspace placement fallbacks
+Why this is now considered structurally complete:
+- the giant mixed-responsibility `mouse.rs` file has been decomposed into domain-focused modules
+- no mouse submodule is above the target ~400 LOC threshold
+- click routing, hit testing, drag transitions, content drop logic, sidebar drop logic, rendering helpers, and tests now have separate homes
 
 **Remaining tasks in this phase**
-- split `mouse/drop.rs` further or factor shared placement helpers so no single mouse submodule stays oversized
-- decide whether sidebar-target-specific logic belongs in a `mouse/sidebar.rs` helper or should stay in `drop.rs` with smaller internal helpers
-- keep public entrypoints minimal:
-  - `on_cursor_moved`
-  - `on_mouse_input`
-  - `process_edge_scroll`
-  - render helpers
+- only optional polish remains, such as extracting tiny shared helpers if future edits reveal repetition pressure
+- otherwise treat Phase 1.2’s structural goal as met and move to `sidebar.rs`
 
 **Acceptance criteria**
 - no single mouse submodule contains more than ~400 LOC
 - drag/drop code becomes locally navigable
 - `mouse.rs` mainly reads as top-level event glue instead of a full state-machine implementation
+- **Status:** effectively met
 
 ---
 
@@ -823,19 +823,19 @@ The roadmap is succeeding when:
 
 ## 7. Recommended Immediate Next Step
 
-**Continue Phase 1.2: finish decomposing mouse drop logic.**
+**Start Phase 1.3: split `heca/src/sidebar.rs`.**
 
 Immediate next slices:
-1. reduce `heca/src/mouse/drop.rs` below the target complexity/size threshold
-2. extract shared reinsertion / swap fallback helpers or sidebar-target-specific helpers
-3. leave behavior unchanged while improving local readability
-4. re-run validation, then decide whether a tiny `mouse/sidebar.rs` helper split is still worthwhile
+1. extract sidebar data structures into a focused model module
+2. separate projection rebuild logic from navigation and rendering
+3. move hit testing and button hit testing into their own sidebar helper module
+4. keep behavior unchanged while improving readability and reviewability
 
 Reason:
 - Phase 1.1 is complete enough; `main.rs` is already thin
-- Phase 1.2 is **substantially progressed but not complete**
-- `mouse.rs` itself is much better, but the hardest logic is now concentrated in `mouse/drop.rs`
-- finishing that decomposition should make the later `sidebar.rs` and shared pane-operation cleanup safer
+- Phase 1.2 is now structurally complete enough to stop iterating there
+- `sidebar.rs` is the next large interaction hotspot
+- splitting sidebar logic next should make later shared pane-operation cleanup and focus-domain work safer
 
 ---
 

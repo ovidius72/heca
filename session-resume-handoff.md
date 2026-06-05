@@ -5,7 +5,7 @@
 This file is the current resume note for the active refactor.
 
 Primary active goal:
-- continue **Phase 1.2** and finish decomposing the mouse drag/drop system
+- begin **Phase 1.3** and split `heca/src/sidebar.rs`
 
 Non-negotiable workflow rule from the user:
 - **pull / merge `origin/main` before starting each new task**
@@ -23,16 +23,16 @@ Latest already-committed milestones relevant to this refactor:
 - `ad1acaa` — `Finish main runtime split into app modules`
 - `85aaed6` — `Fix keybinding conflicts and prefix handling`
 
-Current uncommitted work is the ongoing **Phase 1.2 mouse split**.
+Current uncommitted work is the completed structural slice of the **Phase 1.2 mouse split** plus updated planning docs.
 
 At the moment, the working tree should show:
 - modified: `bugs-and-refactoring-plan.md`
 - modified: `session-resume-handoff.md`
 - modified: `heca/src/mouse.rs`
-- new: `heca/src/mouse/hit_test.rs`
-- new: `heca/src/mouse/render.rs`
-- new: `heca/src/mouse/drag.rs`
-- new: `heca/src/mouse/drop.rs`
+- modified: `heca/src/mouse/drop.rs`
+- new: `heca/src/mouse/sidebar.rs`
+- new: `heca/src/mouse/sidebar_drop.rs`
+- new: `heca/src/mouse/tests.rs`
 
 ---
 
@@ -91,7 +91,7 @@ Why this matters:
 - the product-level behavior the user asked for is already landed
 - current refactor work should preserve these paths, not redesign them
 
-### 4. Phase 1.2 is substantially progressed
+### 4. Phase 1.2 is structurally complete
 
 Extracted from `heca/src/mouse.rs` so far:
 
@@ -116,40 +116,49 @@ Owns:
 #### `heca/src/mouse/drop.rs`
 Owns:
 - `drop_pane()`
-- `sidebar_drag_drop()`
-- `sidebar_handle_drop()`
+
+#### `heca/src/mouse/sidebar.rs`
+Owns:
+- sidebar click routing
+
+#### `heca/src/mouse/sidebar_drop.rs`
+Owns:
+- sidebar drag-drop move/swap behavior
+- sidebar-targeted detached-pane drop handling
+
+#### `heca/src/mouse/tests.rs`
+Owns:
+- helper-focused mouse unit tests moved out of the main module file
 
 Current file sizes:
-- `heca/src/mouse.rs` — **551 LOC**
+- `heca/src/mouse.rs` — **301 LOC**
 - `heca/src/mouse/hit_test.rs` — **102 LOC**
 - `heca/src/mouse/render.rs` — **177 LOC**
 - `heca/src/mouse/drag.rs` — **310 LOC**
-- `heca/src/mouse/drop.rs` — **586 LOC**
+- `heca/src/mouse/drop.rs` — **198 LOC**
+- `heca/src/mouse/sidebar.rs` — **87 LOC**
+- `heca/src/mouse/sidebar_drop.rs` — **396 LOC**
+- `heca/src/mouse/tests.rs` — **153 LOC**
 
 Why this matters:
-- the top-level mouse module is much easier to navigate
-- the major responsibilities now have clearer homes
-- the remaining complexity is concentrated in one place instead of smeared across the whole file
+- the top-level mouse module is now thin enough to read quickly
+- each major mouse concern has a clearer home
+- no mouse submodule exceeds the target ~400 LOC threshold
 
 ---
 
 ## What is not done yet
 
-### 1. Phase 1.2 is not fully complete
+### 1. Phase 1.3 has not started yet
 
 Still true:
-- `mouse/drop.rs` is too large for the intended end-state
-- pane placement / reinsertion logic is isolated, but not yet internally decomposed enough
+- `heca/src/sidebar.rs` remains the next large mixed-responsibility module
+- projection rebuild, navigation, hit testing, rendering, and tests still live too close together there
 
-Why it is not fully done yet:
-- `mouse.rs` itself is much cleaner now, but the most delicate logic was moved largely intact
-- `mouse/drop.rs` still mixes:
-  - detached-pane reinsertion
-  - insert-vs-swap behavior
-  - sidebar drop targeting
-  - column/workspace placement rules
-  - redraw/focus cleanup
-- that means complexity has been localized, but not fully simplified
+Why this is next:
+- the mouse split is now structurally complete enough
+- `sidebar.rs` is the next readability hotspot in the agreed refactor order
+- cleaning sidebar structure should reduce risk before later semantic focus-domain work
 
 ### 2. Parameterized normal keybindings are still future work
 
@@ -180,23 +189,17 @@ Reason:
 - `heca/src/main.rs` already hit the intended outcome: thin entrypoint, delegated runtime systems, better navigability
 - more Phase 1.1 work would mostly be optional micro-cleanup, not a meaningful risk reducer
 
-We are **done with the first-pass extraction of `mouse.rs`**.
+We are **done with Phase 1.2’s structural split**.
 
 Reason:
-- hit testing, rendering, drag transitions, and drop logic now have distinct files
-- the big structural separation work has landed
-
-We are **not done with Phase 1.2 refinement**.
-
-Reason:
-- `mouse/drop.rs` is still oversized
-- the densest placement logic still needs one more decomposition pass
-- finishing that pass is higher value than reopening already-thin `main.rs`
+- hit testing, rendering, drag transitions, content drop logic, sidebar click routing, sidebar drop logic, and tests now have distinct files
+- `mouse.rs` is now thin and locally navigable
+- no mouse submodule remains above the target ~400 LOC threshold
 
 So the current strategy is:
 1. stop reopening completed `main.rs` work
-2. finish decomposing `mouse/drop.rs`
-3. then move to `sidebar.rs`
+2. stop spending more refactor energy on `mouse.rs` unless a new need appears
+3. move to `sidebar.rs`
 4. only after the structure work is calmer, continue parameterized keybinding / spawn work
 
 ---
@@ -234,31 +237,33 @@ Expected behavior for that smoke test:
 
 ### Best next slice
 
-Decompose:
-- `heca/src/mouse/drop.rs`
+Split:
+- `heca/src/sidebar.rs`
 
 Likely options:
-- extract shared reinsertion helpers
-- extract sidebar-target-specific helper paths
-- reduce duplication between content-drop and sidebar-drop swap fallback logic
+- extract sidebar model/data definitions
+- extract projection rebuild helpers
+- extract navigation helpers
+- extract hit testing and button hit testing
+- isolate rendering paths from behavior and tests
 
 Goal of that slice:
 - keep behavior unchanged
-- make drop logic locally readable
-- bring the remaining oversized mouse submodule closer to the target end-state
+- make sidebar logic locally readable
+- reduce the next major mixed-responsibility hotspot in the refactor plan
 
 ### Recommended extraction order
 
 1. sync with `origin/main`
 2. validate current tree
-3. identify the most repeated reinsertion / fallback patterns in `mouse/drop.rs`
-4. extract one helper at a time
+3. inspect `heca/src/sidebar.rs` and identify clean structural seams
+4. extract one concern at a time
 5. validate after each small step
-6. only then decide whether `mouse/sidebar.rs` is worth adding
+6. keep behavior unchanged while shrinking the top-level file
 
 ### Why this is the best next move
 
-Because the main structural split already succeeded, and the last big readability hotspot inside the mouse system is now concentrated in `mouse/drop.rs`.
+Because the mouse split is now structurally complete enough, and `sidebar.rs` is the next large readability hotspot in the planned order.
 
 ---
 
@@ -289,6 +294,9 @@ You should see the current uncommitted Phase 1.2 mouse files.
 - `heca/src/mouse/render.rs`
 - `heca/src/mouse/drag.rs`
 - `heca/src/mouse/drop.rs`
+- `heca/src/mouse/sidebar.rs`
+- `heca/src/mouse/sidebar_drop.rs`
+- `heca/src/mouse/tests.rs`
 
 ### 4. Re-run validation before changing behavior
 
@@ -304,7 +312,7 @@ Do **not** jump to:
 - parameterized keybinding implementation
 - spawn-pane backend redesign
 
-until the current mouse split is in a cleaner state.
+until the current mouse split is committed or intentionally abandoned.
 
 ---
 
@@ -353,12 +361,13 @@ Do not silently “fix” the floating focus-domain routing bug inside the struc
 
 We are **done with the `main.rs` runtime split**.
 
-We are **done with the first-pass `mouse.rs` split**:
+We are **done with the structural `mouse.rs` split**:
 - hit testing extracted
 - drag transitions extracted
 - detached-pane rendering extracted
-- drop logic extracted
+- content drop logic extracted
+- sidebar click routing extracted
+- sidebar drop logic extracted
+- mouse helper tests extracted
 
-We are **not done with Phase 1.2 refinement** because `mouse/drop.rs` is still too large.
-
-The next best move is to decompose that drop module further, validate, and then continue to the planned `sidebar.rs` split.
+The next best move is to commit this mouse refactor slice, then continue to the planned `sidebar.rs` split.
