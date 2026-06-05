@@ -63,9 +63,12 @@ pub enum InputMode {
     },
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
+    /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
+    /// instead of `Normal` after confirm/cancel.
     ConfirmDelete {
         message: String,
         action: Box<WmAction>,
+        resume_sidebar: bool,
     },
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.

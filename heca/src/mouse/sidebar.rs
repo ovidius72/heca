@@ -51,6 +51,7 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
                 state.input_mode = crate::app_state::InputMode::ConfirmDelete {
                     message,
                     action: Box::new(button),
+                    resume_sidebar: matches!(state.input_mode, crate::app_state::InputMode::SidebarNav),
                 };
                 return None;
             }

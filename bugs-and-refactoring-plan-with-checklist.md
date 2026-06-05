@@ -187,7 +187,7 @@ Interpretation rules:
       - `Enter` on pane/floating-pane activates the item, focuses it, and exits `SidebarNav`.
       - `Esc` exits `SidebarNav`.
       - Expand/collapse/navigation actions stay in `SidebarNav`.
-    - [ ] 1.5.2 Add sidebar-only mutation keymap
+    - [x] 1.5.2 Add sidebar-only mutation keymap
       - These bindings exist only in sidebar mode.
       - `w` = create workspace
         - works from workspace/column/pane rows
@@ -205,6 +205,12 @@ Interpretation rules:
         - column row → zoom that column
         - pane row → zoom that pane’s column
         - workspace/floating-pane row = no-op
+      - `d` = delete selected sidebar item with confirmation
+        - workspace row → delete workspace
+        - column row → delete column
+        - pane row → delete pane
+        - floating-pane row → remove floating pane
+        - confirmation from sidebar returns to `SidebarNav`
       - `n` is removed from this phase as redundant.
       - Successful mutation actions stay in `SidebarNav`.
     - [ ] 1.5.3 Make sidebar actions selection-driven, not main-focus-driven

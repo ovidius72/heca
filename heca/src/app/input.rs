@@ -163,19 +163,28 @@ fn handle_confirm_delete_input(
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) -> bool {
-    let InputMode::ConfirmDelete { action, .. } = &state.input_mode else {
-        return false;
+    let (action, resume_sidebar) = match &state.input_mode {
+        InputMode::ConfirmDelete {
+            action,
+            resume_sidebar,
+            ..
+        } => (action.as_ref().clone(), *resume_sidebar),
+        _ => return false,
     };
 
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_y = ctx.key_text == "y" || ctx.key_text == "Y";
     let is_n = ctx.key_text == "n" || ctx.key_text == "N";
+    let resume_mode = if resume_sidebar {
+        InputMode::SidebarNav
+    } else {
+        InputMode::Normal
+    };
 
     if is_escape || is_n {
-        state.input_mode = InputMode::Normal;
+        state.input_mode = resume_mode;
     } else if is_y {
-        let action = action.as_ref().clone();
-        state.input_mode = InputMode::Normal;
+        state.input_mode = resume_mode;
         registry.execute(&action, state);
     }
     state.needs_redraw = true;

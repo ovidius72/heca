@@ -151,6 +151,11 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         ("Left", WmAction::SidebarLeftNav),
         ("ArrowRight", WmAction::SidebarRightNav),
         ("Right", WmAction::SidebarRightNav),
+        ("w", WmAction::SidebarCreateWorkspace),
+        ("c", WmAction::SidebarCreateColumn),
+        ("v", WmAction::SidebarSplitInColumn),
+        ("z", WmAction::SidebarZoomSelectedColumn),
+        ("d", WmAction::SidebarDeleteSelected),
         ("Tab", WmAction::SidebarExpandToggle),
         ("Space", WmAction::SidebarExpandToggle),
         ("b", WmAction::SidebarLeft),
@@ -396,6 +401,23 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SidebarLeftNav, handle_sidebar_left_nav);
     registry.register(&WmAction::SidebarRightNav, handle_sidebar_right_nav);
     registry.register(&WmAction::SidebarExpandToggle, handle_sidebar_expand_toggle);
+    registry.register(
+        &WmAction::SidebarCreateWorkspace,
+        handle_sidebar_create_workspace,
+    );
+    registry.register(&WmAction::SidebarCreateColumn, handle_sidebar_create_column);
+    registry.register(
+        &WmAction::SidebarSplitInColumn,
+        handle_sidebar_split_in_column,
+    );
+    registry.register(
+        &WmAction::SidebarZoomSelectedColumn,
+        handle_sidebar_zoom_selected_column,
+    );
+    registry.register(
+        &WmAction::SidebarDeleteSelected,
+        handle_sidebar_delete_selected,
+    );
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
@@ -536,6 +558,33 @@ mod tests {
         assert_eq!(
             keymap.resolve("sidebar", &KeyCombo::parse("ArrowRight")),
             Some(&WmAction::SidebarRightNav)
+        );
+    }
+
+    #[test]
+    fn sidebar_mode_includes_mutation_bindings() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("w")),
+            Some(&WmAction::SidebarCreateWorkspace)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("c")),
+            Some(&WmAction::SidebarCreateColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("v")),
+            Some(&WmAction::SidebarSplitInColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("z")),
+            Some(&WmAction::SidebarZoomSelectedColumn)
+        );
+        assert_eq!(
+            keymap.resolve("sidebar", &KeyCombo::parse("d")),
+            Some(&WmAction::SidebarDeleteSelected)
         );
     }
 

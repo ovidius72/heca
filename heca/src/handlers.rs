@@ -1179,10 +1179,17 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
                 break;
             }
         }
-        if let Some((ci, pi)) = found
-            && let Some(removed) = ws.scrolling.remove_pane(ci, pi)
+        if let Some((ci, pi)) = found {
+            if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
+                state.backends.remove(&removed.id.0);
+            }
+        } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == *pane_id)
         {
-            state.backends.remove(&removed.id.0);
+            let removed = ws.floating_panes.remove(float_idx);
+            state.backends.remove(&removed.pane.id.0);
+            if ws.floating_is_active && ws.floating_panes.is_empty() {
+                ws.floating_is_active = false;
+            }
         }
     }
     let current_ws = state.session.active_workspace_idx;
@@ -1190,7 +1197,7 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         .session
         .workspaces
         .get(current_ws)
-        .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
+        .map(|ws| !ws.has_panes())
         .unwrap_or(true);
     if ws_is_empty && state.session.workspaces.len() > 1 {
         destroy_empty_workspace(state, current_ws);
@@ -1310,11 +1317,14 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         .workspaces
         .get(target_ws)
         .map(|ws| {
-            ws.scrolling
+            let mut ids: Vec<u64> = ws
+                .scrolling
                 .columns
                 .iter()
                 .flat_map(|col| col.panes.iter().map(|p| p.id.0))
-                .collect()
+                .collect();
+            ids.extend(ws.floating_panes.iter().map(|float| float.pane.id.0));
+            ids
         })
         .unwrap_or_default();
 
@@ -1608,6 +1618,150 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
                 state.sidebar_tree.toggle_expand();
             }
         }
+        state.needs_redraw = true;
+    }
+}
+
+fn sidebar_selected_workspace_idx(state: &AppState) -> Option<usize> {
+    let item = state.sidebar_tree.current_item()?;
+    match item {
+        sidebar::SidebarItem::Workspace { ws_idx }
+        | sidebar::SidebarItem::Column { ws_idx, .. }
+        | sidebar::SidebarItem::FloatingPane { ws_idx, .. } => Some(*ws_idx),
+        sidebar::SidebarItem::Pane { pane_id } => {
+            find_pane_location(&state.session, *pane_id).map(|(ws_idx, _, _)| ws_idx)
+        }
+    }
+}
+
+fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
+    let item = state.sidebar_tree.current_item()?;
+    match item {
+        sidebar::SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+        sidebar::SidebarItem::Pane { pane_id } => {
+            find_pane_location(&state.session, *pane_id).map(|(ws_idx, col_idx, _)| (ws_idx, col_idx))
+        }
+        sidebar::SidebarItem::Workspace { .. } | sidebar::SidebarItem::FloatingPane { .. } => None,
+    }
+}
+
+fn sidebar_delete_prompt(state: &AppState) -> Option<(String, WmAction)> {
+    let item = state.sidebar_tree.current_item()?.clone();
+    match item {
+        sidebar::SidebarItem::Workspace { ws_idx } => {
+            let ws_label = if let Some(ws) = state.session.workspaces.get(ws_idx)
+                && let Some(ref name) = ws.name
+            {
+                name.clone()
+            } else {
+                format!("workspace {}", ws_idx + 1)
+            };
+            Some((
+                format!("Delete {}? (y/n)", ws_label),
+                WmAction::DeleteWorkspace { ws_idx },
+            ))
+        }
+        sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+            let ws_label = if let Some(ws) = state.session.workspaces.get(ws_idx)
+                && let Some(ref name) = ws.name
+            {
+                name.clone()
+            } else {
+                format!("ws {}", ws_idx + 1)
+            };
+            Some((
+                format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label),
+                WmAction::DeleteColumn { ws_idx, col_idx },
+            ))
+        }
+        sidebar::SidebarItem::Pane { pane_id }
+        | sidebar::SidebarItem::FloatingPane { pane_id, .. } => {
+            let pane_label = state
+                .session
+                .workspaces
+                .iter()
+                .find_map(|ws| ws.find_pane(heca_core::layout::PaneId(pane_id)))
+                .map(|pane| pane.title.clone())
+                .unwrap_or_else(|| format!("pane {}", pane_id));
+            Some((
+                format!("Delete {}? (y/n)", pane_label),
+                WmAction::ClosePaneById { pane_id },
+            ))
+        }
+    }
+}
+
+pub fn handle_sidebar_create_workspace(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::SidebarNav) {
+        return;
+    }
+    if matches!(
+        state.sidebar_tree.current_item(),
+        Some(sidebar::SidebarItem::FloatingPane { .. })
+    ) {
+        return;
+    }
+    handle_create_workspace(state, &WmAction::CreateWorkspace);
+    state.input_mode = InputMode::SidebarNav;
+}
+
+pub fn handle_sidebar_create_column(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::SidebarNav) {
+        return;
+    }
+    if matches!(
+        state.sidebar_tree.current_item(),
+        Some(sidebar::SidebarItem::FloatingPane { .. })
+    ) {
+        return;
+    }
+    if let Some(target_ws) = sidebar_selected_workspace_idx(state) {
+        if target_ws != state.session.active_workspace_idx {
+            switch_workspace_tracked(state, target_ws);
+        }
+        handle_split_horizontal(state, &WmAction::SplitHorizontal);
+        state.input_mode = InputMode::SidebarNav;
+    }
+}
+
+pub fn handle_sidebar_split_in_column(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::SidebarNav) {
+        return;
+    }
+    if let Some((ws_idx, col_idx)) = sidebar_selected_column_target(state) {
+        handle_add_pane_to_column(state, &WmAction::AddPaneToColumn { ws_idx, col_idx });
+        state.input_mode = InputMode::SidebarNav;
+    }
+}
+
+pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::SidebarNav) {
+        return;
+    }
+    if let Some((ws_idx, col_idx)) = sidebar_selected_column_target(state) {
+        if ws_idx != state.session.active_workspace_idx {
+            switch_workspace_tracked(state, ws_idx);
+        }
+        if let Some(ws) = state.session.active_workspace_mut()
+            && col_idx < ws.scrolling.columns.len()
+        {
+            ws.scrolling.activate_column(col_idx);
+        }
+        handle_zoom_column(state, &WmAction::ZoomColumn);
+        state.input_mode = InputMode::SidebarNav;
+    }
+}
+
+pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::SidebarNav) {
+        return;
+    }
+    if let Some((message, action)) = sidebar_delete_prompt(state) {
+        state.input_mode = InputMode::ConfirmDelete {
+            message,
+            action: Box::new(action),
+            resume_sidebar: true,
+        };
         state.needs_redraw = true;
     }
 }
