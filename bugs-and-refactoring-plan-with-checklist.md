@@ -159,7 +159,7 @@ Interpretation rules:
 ### Phase 0 — Safety Net Before Refactoring
 - [ ] Phase 0 complete
   - [ ] 0.1 Audit current tests
-  - [ ] 0.2 Add high-value behavior tests
+  - [x] 0.2 Add high-value behavior tests
   - [ ] 0.V Validate Phase 0 safety net coverage
 
 ### Phase 1 — Reorganize the Giant Files
@@ -167,7 +167,7 @@ Interpretation rules:
   - [x] 1.1 Split `heca/src/main.rs`
   - [x] 1.2 Split `heca/src/mouse.rs`
   - [x] 1.3 Split `heca/src/sidebar.rs`
-  - [ ] 1.4 Split `heca-config/src/theme.rs`
+  - [x] 1.4 Split `heca-config/src/theme.rs`
   - [ ] 1.V Validate file/module reorganization invariants
 
 ### Phase 2 — Introduce a Central Mutation Boundary
