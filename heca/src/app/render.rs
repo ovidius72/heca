@@ -636,6 +636,7 @@ mod tests {
             status_mode_parts(&InputMode::ConfirmDelete {
                 message: "Delete pane?".to_string(),
                 action: Box::new(WmAction::ClosePane),
+                restore_sidebar: false,
             }),
             ("CONFIRM", " Delete pane? ".to_string())
         );

@@ -63,9 +63,11 @@ pub fn on_mouse_input(
                         None => return sidebar_action,
                     };
                     let swap = state.modifiers.shift_key();
-                    let click_action = sidebar_action
+                    // When sidebar::click handles the mode (returns None), use
+                // SidebarFocus as fallback to preserve the sidebar nav mode.
+                let click_action = sidebar_action
                         .clone()
-                        .unwrap_or(WmAction::FocusPane { pane_id });
+                        .unwrap_or(WmAction::SidebarFocus);
                     state.mouse.drag_state = DragState::SidebarDragStarting {
                         pane_id,
                         original_ws: ws_idx,

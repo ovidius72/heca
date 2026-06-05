@@ -1534,6 +1534,11 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
+    if matches!(state.input_mode, InputMode::SidebarNav) {
+        // Already in sidebar nav mode — don't reset the tree or width.
+        state.needs_redraw = true;
+        return;
+    }
     state.sidebar.left_visible = true;
     state.sidebar.left_width = 200.0;
     state.input_mode = InputMode::SidebarNav;

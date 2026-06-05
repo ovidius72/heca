@@ -66,6 +66,8 @@ pub enum InputMode {
     ConfirmDelete {
         message: String,
         action: Box<WmAction>,
+        /// If true, restore SidebarNav mode after confirmation.
+        restore_sidebar: bool,
     },
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.

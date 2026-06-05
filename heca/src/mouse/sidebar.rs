@@ -51,6 +51,7 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
                 state.input_mode = crate::app_state::InputMode::ConfirmDelete {
                     message,
                     action: Box::new(button),
+                    restore_sidebar: false,
                 };
                 return None;
             }
@@ -71,11 +72,10 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
             state.sidebar_tree.cursor = fi;
             let item = state.sidebar_tree.current_item().cloned();
             match item? {
-                crate::sidebar::SidebarItem::Pane { pane_id } => {
-                    return Some(WmAction::FocusPane { pane_id });
-                }
-                crate::sidebar::SidebarItem::Workspace { .. } | crate::sidebar::SidebarItem::Column { .. } => {
-                    // Clicking a workspace or column row selects it and enters
+                crate::sidebar::SidebarItem::Pane { .. }
+                | crate::sidebar::SidebarItem::Workspace { .. }
+                | crate::sidebar::SidebarItem::Column { .. } => {
+                    // Clicking selects the item in the sidebar and enters
                     // SidebarNav mode so the user can navigate via keyboard.
                     state.input_mode = InputMode::SidebarNav;
                     state.needs_redraw = true;

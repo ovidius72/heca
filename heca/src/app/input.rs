@@ -168,19 +168,33 @@ fn handle_confirm_delete_input(
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) -> bool {
-    let InputMode::ConfirmDelete { action, .. } = &state.input_mode else {
+    let InputMode::ConfirmDelete {
+        action,
+        restore_sidebar,
+        ..
+    } = &state.input_mode
+    else {
         return false;
     };
+    let restore_sidebar = *restore_sidebar;
 
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_y = ctx.key_text == "y" || ctx.key_text == "Y";
     let is_n = ctx.key_text == "n" || ctx.key_text == "N";
 
     if is_escape || is_n {
-        state.input_mode = InputMode::Normal;
+        state.input_mode = if restore_sidebar {
+            InputMode::SidebarNav
+        } else {
+            InputMode::Normal
+        };
     } else if is_y {
         let action = action.as_ref().clone();
-        state.input_mode = InputMode::Normal;
+        state.input_mode = if restore_sidebar {
+            InputMode::SidebarNav
+        } else {
+            InputMode::Normal
+        };
         registry.execute(&action, state);
     }
     state.needs_redraw = true;
@@ -503,6 +517,7 @@ fn handle_sidebar_nav_mode(
                 state.input_mode = InputMode::ConfirmDelete {
                     message: format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label),
                     action: Box::new(WmAction::DeleteColumn { ws_idx, col_idx }),
+                    restore_sidebar: true,
                 };
                 state.needs_redraw = true;
                 return;
@@ -518,6 +533,7 @@ fn handle_sidebar_nav_mode(
                 state.input_mode = InputMode::ConfirmDelete {
                     message: format!("Delete {}? (y/n)", ws_label),
                     action: Box::new(WmAction::DeleteWorkspace { ws_idx }),
+                    restore_sidebar: true,
                 };
                 state.needs_redraw = true;
                 return;
