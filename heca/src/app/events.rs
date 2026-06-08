@@ -6,6 +6,7 @@
 use crate::actions::ActionRegistry;
 use crate::app::input::{KeyInputContext, handle_keyboard_input};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
+use crate::app::mutations::{after_mutation_change, MutationKind};
 use crate::app::render::{render_frame, update_session_viewport};
 use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
@@ -40,7 +41,7 @@ pub(crate) fn handle_window_event(
                 .text_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             update_session_viewport(state);
-            state.needs_redraw = true;
+            after_mutation_change(state, MutationKind::Config);
         }
         WindowEvent::RedrawRequested => {
             state.needs_redraw = true;

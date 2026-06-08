@@ -94,7 +94,7 @@ pub(crate) fn handle_keyboard_input(
             handle_pane_take_mode(registry, state, &candidates, focus_after, ctx);
         }
         InputMode::SidebarNav => {
-            handle_sidebar_nav_mode(registry, keymap, state, ctx);
+            handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
         _ => {}
     }
@@ -412,7 +412,7 @@ fn handle_pane_take_mode(
 
 fn handle_sidebar_nav_mode(
     registry: &ActionRegistry,
-    keymap: &KeymapRegistry,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) {
@@ -446,7 +446,9 @@ fn handle_sidebar_nav_mode(
         state.needs_redraw = true;
     } else {
         let combo = mode_combo(ctx);
-        let action = keymap.resolve("sidebar", &combo).cloned();
+        let action = mode_keymaps
+            .get("sidebar")
+            .and_then(|mode_map| mode_map.resolve("sidebar", &combo).cloned());
         if let Some(act) = action {
             registry.execute(&act, state);
         }

@@ -1,12 +1,45 @@
 //! App-level mutation helpers.
 //!
 //! These helpers coordinate multi-step pane/workspace mutations that span
-//! session layout state, focus bookkeeping, and backend lifecycle.
+//! session layout state, focus bookkeeping, backend lifecycle, and the shared
+//! post-mutation hooks introduced in Phase 2.
 
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
 use heca_core::backend::FakeBackend;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MutationKind {
+    Layout,
+    Focus,
+    Config,
+}
+
+fn after_mutation_change_inner(state: &mut AppState, kind: MutationKind) {
+    match kind {
+        MutationKind::Layout | MutationKind::Focus | MutationKind::Config => {
+            sync_focus(state);
+            state.needs_redraw = true;
+        }
+    }
+}
+
+pub fn after_layout_change(state: &mut AppState) {
+    after_mutation_change_inner(state, MutationKind::Layout);
+}
+
+pub fn after_focus_change(state: &mut AppState) {
+    after_mutation_change_inner(state, MutationKind::Focus);
+}
+
+pub fn after_config_change(state: &mut AppState) {
+    after_mutation_change_inner(state, MutationKind::Config);
+}
+
+pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
+    after_mutation_change_inner(state, kind);
+}
 
 /// Move a pane from one workspace into a new/existing column position in another workspace.
 pub(crate) fn move_pane_to_workspace_column(

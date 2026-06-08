@@ -305,6 +305,11 @@ Interpretation rules:
         - sidebar-mode mutation keys are sidebar-only
         - global prefix collapse bindings act on active main-view state
         - sidebar tree collapse is UI-only, not layout collapse
+    - [x] 1.5.10 Make sidebar nav bindings configurable from `config.toml`
+      - Built-in sidebar-nav defaults now live in `[[keys.mode]] name = "sidebar"`.
+      - User configs can override sidebar-nav defaults by redefining that mode's bindings.
+      - `SidebarNav` still uses the built-in `sidebar` mode name; its trigger field is ignored because sidebar mode is entered via `SidebarFocus` or mouse interaction.
+  - [x] 1.5 complete — sidebar mode keymap + tree interaction follow-up
   - [x] 1.V Validate file/module reorganization invariants
 
 Short description:
@@ -1327,30 +1332,34 @@ Short description:
 
 #### Commit 1 — Introduce the helper contract
 
-- [ ] Add a small post-mutation helper in the app layer
-- [ ] Define what `after_layout_change(...)` guarantees
-- [ ] Add narrower helper(s) only if they remove real duplication
-- [ ] Keep `focus_pane_by_id(...)` as the canonical focus entrypoint
-- [ ] Validate with `cargo check -q`
-- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [x] Add a small post-mutation helper in the app layer
+- [x] Define what `after_layout_change(...)` guarantees
+- [x] Add narrower helper(s) only if they remove real duplication
+- [x] Keep `focus_pane_by_id(...)` as the canonical focus entrypoint
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
 
 #### Commit 2 — Convert repeated call-site tails
 
-- [ ] Replace repeated `sync_focus(state); state.needs_redraw = true;` endings in `heca/src/handlers.rs`
+- [x] Replace repeated `sync_focus(state); state.needs_redraw = true;` endings in `heca/src/handlers.rs`
 - [ ] Convert matching tails in `heca/src/mouse/drop.rs`, `heca/src/mouse/sidebar_drop.rs`, `heca/src/mouse/drag.rs`, and `heca/src/app/input.rs` where appropriate
 - [ ] Reduce direct manual `sidebar_tree.rebuild(...)` use to startup + shared focus/mutation helpers
-- [ ] Keep behavior unchanged
-- [ ] Validate with `cargo check -q`
-- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
-- [ ] Validate with `cargo test -q --workspace`
+- [x] Keep behavior unchanged
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [x] Validate with `cargo test -q --workspace`
 
 #### Definition of done for the current slice
 
 - [ ] the post-mutation contract is explicit in code
 - [ ] repeated handler/mouse tails are materially reduced
 - [ ] sidebar rebuild responsibility is centralized
-- [ ] app behavior is unchanged
-- [ ] validation passes
+- [x] app behavior is unchanged
+- [x] validation passes
+
+#### Progress note
+
+- `heca/src/handlers.rs` now routes the common post-mutation tail through `after_layout_change(...)` in the main layout/focus paths, and the shared hook module remains the central place for focus/sidebar/redraw synchronization.
 
 ---
 
