@@ -3,11 +3,11 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `245e725` — fast-forward from `origin/main`
+- HEAD: `b2d5155` — `refactor(app): route rename and mouse tails through hooks`
 - `origin/main` is current at `245e725`
-- `origin/feature/gpt-refactoring` is still behind the local uncommitted Phase 2 slice
-- Working tree has Phase 2 mutation-hook edits in progress
-- PR #29 is open against `main`
+- `origin/feature/gpt-refactoring` now matches the local branch tip
+- Working tree is clean
+- PR #29 is merged into `main`
 
 ### Current Phase 2 progress
 
@@ -17,7 +17,8 @@
 - `after_mutation_change(state, MutationKind::Config)` is used for config-driven refreshes in the app event path
 - Mouse drop / sidebar drop / drag / input rename paths now flow through the shared hooks instead of hand-rolled sync/redraw tails
 - Manual `sidebar_tree.rebuild(...)` calls are now limited to startup and the focus-sync path
-- Validation currently passes: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
+- Validation passed: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
+- Phase 2.1 slice landed in commit `b2d5155`
 
 ## Must-follow workflow rules
 
