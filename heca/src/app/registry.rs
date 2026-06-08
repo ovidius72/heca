@@ -418,6 +418,30 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::SidebarDeleteSelected,
         handle_sidebar_delete_selected,
     );
+    registry.register(
+        &WmAction::CollapseCurrentWorkspace,
+        handle_collapse_current_workspace,
+    );
+    registry.register(
+        &WmAction::ExpandCurrentWorkspace,
+        handle_expand_current_workspace,
+    );
+    registry.register(
+        &WmAction::ToggleCurrentWorkspaceCollapsed,
+        handle_toggle_current_workspace_collapsed,
+    );
+    registry.register(
+        &WmAction::CollapseCurrentColumn,
+        handle_collapse_current_column,
+    );
+    registry.register(
+        &WmAction::ExpandCurrentColumn,
+        handle_expand_current_column,
+    );
+    registry.register(
+        &WmAction::ToggleCurrentColumnCollapsed,
+        handle_toggle_current_column_collapsed,
+    );
 
     // ── System ──
     registry.register(&WmAction::CommandPalette, handle_command_palette);
@@ -516,6 +540,21 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("Ctrl+n")),
             Some(&WmAction::WorkspaceNext)
+        );
+    }
+
+    #[test]
+    fn default_sidebar_global_collapse_bindings_exist() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("(")),
+            Some(&WmAction::ToggleCurrentColumnCollapsed)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("<")),
+            Some(&WmAction::ToggleCurrentWorkspaceCollapsed)
         );
     }
 

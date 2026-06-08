@@ -1645,6 +1645,17 @@ fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
     }
 }
 
+fn current_active_workspace_idx(state: &AppState) -> Option<usize> {
+    let ws_idx = state.session.active_workspace_idx;
+    (ws_idx < state.session.workspaces.len()).then_some(ws_idx)
+}
+
+fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
+    let pane_id = state.focused_pane?;
+    let (ws_idx, col_idx, _) = find_pane_location(&state.session, pane_id)?;
+    (ws_idx == state.session.active_workspace_idx).then_some((ws_idx, col_idx))
+}
+
 fn sidebar_delete_prompt(state: &AppState) -> Option<(String, WmAction)> {
     let item = state.sidebar_tree.current_item()?.clone();
     match item {
@@ -1764,6 +1775,90 @@ pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) 
         };
         state.needs_redraw = true;
     }
+}
+
+pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
+    let Some(ws_idx) = current_active_workspace_idx(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.collapse_workspace(ws_idx);
+    state.needs_redraw = true;
+}
+
+pub fn handle_expand_current_workspace(state: &mut AppState, _action: &WmAction) {
+    let Some(ws_idx) = current_active_workspace_idx(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.expand_workspace(ws_idx);
+    state.needs_redraw = true;
+}
+
+pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: &WmAction) {
+    let Some(ws_idx) = current_active_workspace_idx(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.toggle_workspace_collapsed(ws_idx);
+    state.needs_redraw = true;
+}
+
+pub fn handle_collapse_current_column(state: &mut AppState, _action: &WmAction) {
+    let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.collapse_column(ws_idx, col_idx);
+    state.needs_redraw = true;
+}
+
+pub fn handle_expand_current_column(state: &mut AppState, _action: &WmAction) {
+    let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.expand_column(ws_idx, col_idx);
+    state.needs_redraw = true;
+}
+
+pub fn handle_toggle_current_column_collapsed(state: &mut AppState, _action: &WmAction) {
+    let Some((ws_idx, col_idx)) = current_tiled_column_target(state) else {
+        return;
+    };
+    state.sidebar_tree.rebuild(
+        &state.session,
+        state.last_visited_ws_idx,
+        state.focused_pane,
+        &state.last_visited_pane_per_ws,
+    );
+    state.sidebar_tree.toggle_column_collapsed(ws_idx, col_idx);
+    state.needs_redraw = true;
 }
 
 // ── System ──

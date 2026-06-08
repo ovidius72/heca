@@ -103,12 +103,13 @@ Sidebar Phase 1.5 work completed so far:
 - `1.5.3` make sidebar actions selection-driven
 - `1.5.4` add mouse semantics for entering/exiting sidebar mode
 - `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
+- `1.5.6` add global sidebar-tree collapse action family
+- `1.5.7` preserve public config/action surface for future RPC work
 - sidebar-mode `Space` default binding documented in `keybindings.toml`
 
 ### Planned incoming work
 
 Immediate remaining 1.5 items:
-- `1.5.6` add global sidebar-tree collapse action family
 - `1.5.7` preserve public config/action surface for future RPC work
 - `1.5.8` add/update focused sidebar tests
 - `1.5.9` update docs/defaults
@@ -247,53 +248,55 @@ At the current checkpoint, `heca` tests/clippy were green after the latest sideb
 
 The remaining **Phase 1.5** items are still open:
 
-- `1.5.6 Add global sidebar-tree collapse actions`
-- `1.5.7 Preserve public config/action surface for future RPC work`
 - `1.5.8 Add/update tests for sidebar tree behavior`
 - `1.5.9 Update docs and defaults`
 
+## Latest local slice
+
+`1.5.6 Add global sidebar-tree collapse actions` and `1.5.7 Preserve public config/action surface for future RPC work` have now been implemented locally and validated, pending user review/approval before commit.
+
+Implemented:
+- new global actions:
+  - `collapse_current_workspace`
+  - `expand_current_workspace`
+  - `toggle_current_workspace_collapsed`
+  - `collapse_current_column`
+  - `expand_current_column`
+  - `toggle_current_column_collapsed`
+- actions registered in:
+  - `WmAction`
+  - `action_from_name()`
+  - explicit `action_priority()` matches
+  - `ActionRegistry::ALL`
+  - `build_registry()`
+- RPC command parsing added in `heca/src/rpc.rs` for the new actions
+- default bindings added:
+  - `prefix+<` → toggle current workspace collapsed
+  - `prefix+(` → toggle current column collapsed
+- new sidebar tree helpers added for explicit workspace/column collapse by index
+- cursor behavior implemented:
+  - if collapse hides the selected descendant row, cursor moves to the collapsed parent row
+- hidden-sidebar behavior implemented:
+  - global collapse actions update tree UI state without opening the sidebar
+- floating/no-valid-tiled-column behavior implemented:
+  - current-column collapse actions no-op
+- focused tests added for:
+  - new default bindings
+  - workspace collapse moving cursor to workspace row
+  - column collapse moving cursor to column row
+  - RPC parsing of the new commands
+
+Validation for this slice:
+- `cargo test -p heca --quiet`
+- `cargo clippy -p heca --all-targets --quiet`
+- `cargo check --workspace --quiet`
+- `cargo clippy --workspace --all-targets --all-features --quiet`
+
 ## Recommended next step
 
-### Start with 1.5.6
+### Start with 1.5.8
 
-Add the global action family for sidebar-tree UI collapse state:
-
-Workspace:
-- `collapse_current_workspace`
-- `expand_current_workspace`
-- `toggle_current_workspace_collapsed`
-
-Column:
-- `collapse_current_column`
-- `expand_current_column`
-- `toggle_current_column_collapsed`
-
-Requirements already agreed in planning:
-- these are **sidebar tree UI state** actions only, not compositor/layout collapse
-- they must be real `WmAction` variants
-- must be registered in `ActionRegistry`
-- must be bindable from config
-- for now default bindings only needed:
-  - `prefix+(` → toggle current column collapsed
-  - `prefix+<` → toggle current workspace collapsed
-- “current” for these global actions means:
-  - active main-view workspace
-  - focused pane’s column in active workspace
-- they should work even if the sidebar is hidden
-
-### Suggested implementation order for 1.5.6
-
-1. Extend `SidebarTree` with explicit helpers by index:
-   - collapse / expand / toggle workspace by `ws_idx`
-   - collapse / expand / toggle column by `(ws_idx, col_idx)`
-2. Add new `WmAction` variants in `heca/src/input.rs`
-3. Add `action_from_name()` mappings
-4. Update `action_priority()` exhaustive matches
-5. Add `ActionRegistry::ALL` descriptors in `heca/src/actions.rs`
-6. Register handlers in `heca/src/app/registry.rs`
-7. Implement handlers in `heca/src/handlers.rs`
-8. Add default keybindings in `heca-config` and update `keybindings.toml`
-9. Add focused tests
+Add/update focused sidebar tests, then continue into 1.5.9 docs/defaults updates.
 
 ## Important semantic agreements already settled
 

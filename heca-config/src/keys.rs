@@ -193,6 +193,14 @@ impl Default for KeysConfig {
             "sidebar_expand_toggle".to_string(),
             Single("prefix+Tab".to_string()),
         );
+        bindings.insert(
+            "toggle_current_workspace_collapsed".to_string(),
+            Single("prefix+<".to_string()),
+        );
+        bindings.insert(
+            "toggle_current_column_collapsed".to_string(),
+            Single("prefix+(".to_string()),
+        );
 
         // ── Workspace navigation ──
         bindings.insert(

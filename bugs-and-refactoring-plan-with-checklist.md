@@ -256,7 +256,7 @@ Interpretation rules:
         - enters/stays in `SidebarNav`
         - does **not** activate/focus main content
       - Row-body click and disclosure-icon click must remain distinct behaviors.
-    - [ ] 1.5.6 Add global sidebar-tree collapse actions
+    - [x] 1.5.6 Add global sidebar-tree collapse actions
       - Introduce real WM actions for sidebar tree UI state:
         - `collapse_current_workspace`
         - `expand_current_workspace`
@@ -279,10 +279,11 @@ Interpretation rules:
         - current workspace = active main-view workspace
         - current column = focused pane’s column in active workspace
       - These global actions should still work when the sidebar is hidden or not focused.
-    - [ ] 1.5.7 Preserve public config/action surface for future RPC work
+    - [x] 1.5.7 Preserve public config/action surface for future RPC work
       - Even if only toggle variants are default-bound now, the explicit expand/collapse action family should exist now.
       - This keeps the action surface ready for later RPC/target-token work.
       - Future token targeting (`$workspaceIndex`, `$paneIndex`, `current`, etc.) is deferred to the later phase added in `pluggable-chrome-plugin-plan.md` section 8.1.
+      - RPC command parsing now exposes the new actions via `heca/src/rpc.rs`.
     - [ ] 1.5.8 Add/update tests for sidebar tree behavior
       - Add tests for sidebar-mode key resolution:
         - `j/k`, `Up/Down`
