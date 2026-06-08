@@ -317,10 +317,10 @@ Short description:
 
 ### Phase 2 — Introduce a Central Mutation Boundary
 
-- [ ] Phase 2 complete
-  - [ ] 2.1 Create app-level mutation helpers
-  - [ ] 2.2 Standardize handler endings
-  - [ ] 2.V Validate centralized mutation/post-hook behavior
+- [x] Phase 2 complete
+  - [x] 2.1 Create app-level mutation helpers
+  - [x] 2.2 Standardize handler endings
+  - [x] 2.V Validate centralized mutation/post-hook behavior
 
 ### Phase 3 — Extract Shared Pane Operation Logic
 
@@ -1357,8 +1357,10 @@ Short description:
 
 #### Progress note
 
-- Added `heca/src/app/pane_ops.rs` with a shared same-column swap helper.
-- `handle_swap_param()`, `handle_swap_up()`, and `handle_swap_down()` now delegate to the shared helper instead of each carrying the same animation/swap code inline.
+- Added `heca/src/app/pane_ops.rs` with shared same-column swap and pane insert/remove helpers.
+- `handle_swap_param()`, `handle_swap_up()`, and `handle_swap_down()` delegate to the shared same-column helper instead of each carrying the same animation/swap code inline.
+- `heca/src/mouse/drop.rs` now uses the shared insert/remove helpers for detached-pane reinsertion.
+- `heca/src/mouse/sidebar_drop.rs` still needs the same helper treatment.
 
 ---
 

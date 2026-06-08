@@ -5,6 +5,56 @@
 
 use heca_core::layout::animation::AnimationConfig;
 use heca_core::layout::workspace::Workspace;
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane};
+use heca_core::layout::types::InsertPosition;
+
+/// Information about a pane removed from a workspace.
+#[derive(Debug)]
+pub(crate) struct RemovedPane {
+    pub pane: Pane,
+}
+
+/// Remove a pane from a workspace by pane id.
+pub(crate) fn remove_pane_by_id(ws: &mut Workspace, pane_id: u64) -> Option<RemovedPane> {
+    for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+        if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+            let pane = ws.scrolling.remove_pane(ci, pi)?;
+            return Some(RemovedPane { pane });
+        }
+    }
+    None
+}
+
+/// Insert a pane into a workspace using an existing column target or a new column fallback.
+pub(crate) fn insert_pane_at_position(
+    ws: &mut Workspace,
+    pane: Pane,
+    target: InsertPosition,
+    new_col_id: ColumnId,
+    new_col_width: ColumnWidth,
+    activate: bool,
+) -> bool {
+    match target {
+        InsertPosition::NewColumn(col_idx) => {
+            let insert_idx = col_idx.min(ws.scrolling.columns.len());
+            let col = Column::new(new_col_id, pane, new_col_width);
+            ws.scrolling.add_column(Some(insert_idx), col, activate);
+            true
+        }
+        InsertPosition::InColumn { col_idx, pane_idx } => {
+            if col_idx < ws.scrolling.columns.len() {
+                let insert_idx = pane_idx.min(ws.scrolling.columns[col_idx].panes.len());
+                ws.scrolling
+                    .add_pane_to_column(col_idx, Some(insert_idx), pane, activate);
+            } else {
+                let insert_idx = col_idx.min(ws.scrolling.columns.len());
+                let col = Column::new(new_col_id, pane, new_col_width);
+                ws.scrolling.add_column(Some(insert_idx), col, activate);
+            }
+            true
+        }
+    }
+}
 
 /// Swap two panes inside the same column, including the local vertical motion
 /// animation and pane-size recomputation.

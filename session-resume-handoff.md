@@ -3,10 +3,10 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `b2d5155` — `refactor(app): route rename and mouse tails through hooks`
+- HEAD: `f201534` — `refactor(app): extract shared same-column swap helper`
 - `origin/main` is current at `245e725`
-- `origin/feature/gpt-refactoring` now matches the local branch tip
-- Working tree is clean
+- `origin/feature/gpt-refactoring` is behind the local work-in-progress slice
+- Working tree has Phase 3 pane-op extraction edits in progress
 - PR #29 is merged into `main`
 
 ### Current Phase 3 progress
@@ -15,11 +15,12 @@
 - `after_layout_change(...)` centralizes the common post-mutation redraw/focus-sync path for layout mutations
 - `after_metadata_change(...)` handles rename/title-only refreshes
 - `after_mutation_change(state, MutationKind::Config)` is used for config-driven refreshes in the app event path
-- Mouse drop / sidebar drop / drag / input rename paths now flow through the shared hooks instead of hand-rolled sync/redraw tails
+- Mouse drop / drag / input rename paths now flow through the shared hooks instead of hand-rolled sync/redraw tails
 - Manual `sidebar_tree.rebuild(...)` calls are now limited to startup and the focus-sync path
 - Added `app::pane_ops::swap_panes_same_column(...)` and delegated swap-up/down + same-column swap handling to it
+- Added `app::pane_ops::remove_pane_by_id(...)` and `insert_pane_at_position(...)`; `heca/src/mouse/drop.rs` now uses them for detached-pane reinsertion
 - Validation passed: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
-- Phase 2.1 slice landed in commit `b2d5155`
+- Phase 3.1 slice is in progress; latest commit is `f201534`
 
 ## Must-follow workflow rules
 
