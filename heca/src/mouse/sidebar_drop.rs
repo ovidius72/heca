@@ -197,7 +197,8 @@ pub(super) fn drag_drop(
 
 /// Handle a drop on the sidebar during interactive move.
 /// Returns true if the drop was handled (pane placed in target workspace/column).
-/// The pane is detached from layout, so we insert it directly into the target.
+/// In the new model, the pane stays in the layout (no detach). We remove it
+/// from its current position and re-insert at the sidebar target.
 pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
     let (_win_w, win_h) = super::window_logical_size(state);
     let chrome = super::chrome_config(state);
@@ -231,112 +232,124 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
         None => return false,
     };
 
-    let det = match state.mouse.detached_pane.take() {
-        Some(d) => d,
-        None => {
-            state.mouse.drag_state = DragState::None;
-            state.mouse.drag_hover_sidebar_fi = None;
-            state.mouse.sidebar_drag_source_fi = None;
-            state.mouse.sidebar_drag_label = None;
-            return true;
-        }
+    // Source pane is in the layout. Get its ID from the drag state
+    // and find its current position before removing it.
+    let source_id = match state.mouse.drag_state {
+        DragState::InteractiveMove { _pane_id, .. } => _pane_id,
+        _ => return false,
     };
 
-    let new_col_detached = ColumnId(state.session.next_id());
-    let new_col_removed = ColumnId(state.session.next_id());
+    // Find source position before removal.
+    let source_loc = crate::find_pane_location(&state.session, source_id);
+    let original_ws = state.session.active_workspace_idx;
+
+    // Reset drag offset so layout positions are correct for removal.
+    crate::mouse::drag::reset_interactive_move_offset(state);
+
+    // Remove the pane from its current position.
+    let removed_pane = match state.session.workspaces.get_mut(original_ws) {
+        Some(ws) => remove_pane_by_id(ws, source_id),
+        None => return false,
+    };
+    let Some(removed) = removed_pane else {
+        return false;
+    };
+    let pane = removed.pane;
+
+    // Re-derive source column id for reinsertion in swap case.
+    let source_col_id = source_loc.and_then(|(ws_idx, col_idx, _)| {
+        state.session.workspaces.get(ws_idx)
+            .and_then(|ws| ws.scrolling.columns.get(col_idx).map(|c| c.id))
+    });
+    let source_pane_idx = source_loc.map(|(_, _, pi)| pi);
+
+    let shift_held = state.modifiers.shift_key();
+    let new_col_id = ColumnId(state.session.next_id());
 
     match item {
-        crate::sidebar::SidebarItem::Pane { pane_id } => {
-            let shift_held = state.modifiers.shift_key();
-
+        crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
             if shift_held {
+                // Swap: remove target pane too, insert source at target, re-insert target at source.
                 if let Some((t_ws, t_col, t_pi)) =
-                    crate::find_pane_location(&state.session, pane_id)
+                    crate::find_pane_location(&state.session, target_pid)
                 {
-                    if t_ws < state.session.workspaces.len() {
-                        let removed_target = state.session.workspaces[t_ws]
-                            .scrolling
-                            .remove_pane(t_col, t_pi);
+                    let removed_target = state.session.workspaces[t_ws]
+                        .scrolling
+                        .remove_pane(t_col, t_pi);
 
-                        if let Some(removed_target) = removed_target {
-                            if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
-                                let position = if t_col < ws.scrolling.columns.len() {
-                                    PaneInsertTarget::InColumn { col_idx: t_col, pane_idx: t_pi }
-                                } else {
-                                    PaneInsertTarget::NewColumn(t_col)
-                                };
-                                let _ = insert_pane_at_position(
-                                    ws,
-                                    det.pane,
-                                    position,
-                                    new_col_detached,
-                                    ColumnWidth::Proportion(0.5),
-                                    true,
-                                );
-                            } else {
-                                state.session.add_pane(det.pane, None, true);
-                            }
+                    if let Some(removed_target) = removed_target {
+                        // Insert source pane at target position.
+                        let position = if t_col < state.session.workspaces[t_ws].scrolling.columns.len() {
+                            PaneInsertTarget::InColumn { col_idx: t_col, pane_idx: t_pi }
+                        } else {
+                            PaneInsertTarget::NewColumn(t_col)
+                        };
+                        if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
+                            let _ = insert_pane_at_position(
+                                ws,
+                                pane,
+                                position,
+                                new_col_id,
+                                ColumnWidth::Proportion(0.5),
+                                true,
+                            );
+                        }
 
-                            let orig_ws = det.original_ws;
-                            if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
-                                let orig_col_idx = ws
-                                    .scrolling
-                                    .columns
-                                    .iter()
-                                    .position(|c| c.id == det.original_col_id);
-                                let position = match orig_col_idx {
-                                    Some(idx) => {
-                                        let orig_pi = det
-                                            .original_pane
-                                            .min(ws.scrolling.columns[idx].panes.len());
-                                        PaneInsertTarget::InColumn { col_idx: idx, pane_idx: orig_pi }
-                                    }
-                                    None => PaneInsertTarget::NewColumn(ws.scrolling.columns.len()),
-                                };
+                        // Re-insert target pane at source position.
+                        let new_col_id2 = ColumnId(state.session.next_id());
+                        if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
+                            if let Some(src_col_idx) = ws.scrolling.columns.iter().position(|c| Some(&c.id) == source_col_id.as_ref()) {
+                                let src_pi = source_pane_idx.unwrap_or(0).min(ws.scrolling.columns[src_col_idx].panes.len());
                                 let _ = insert_pane_at_position(
                                     ws,
                                     removed_target,
-                                    position,
-                                    new_col_removed,
+                                    PaneInsertTarget::InColumn { col_idx: src_col_idx, pane_idx: src_pi },
+                                    new_col_id2,
                                     ColumnWidth::Proportion(0.5),
                                     true,
                                 );
                             } else {
-                                state.session.add_pane(removed_target, None, true);
+                                let width = state
+                                    .session
+                                    .options
+                                    .default_column_width
+                                    .unwrap_or(heca_core::layout::ColumnWidth::Proportion(0.85));
+                                ws.add_pane(removed_target, None, true, width);
                             }
                         } else {
-                            state.session.add_pane(det.pane, None, true);
+                            state.session.add_pane(removed_target, None, true);
                         }
                     } else {
-                        state.session.add_pane(det.pane, None, true);
+                        place_pane_at_sidebar_target(state, original_ws, pane, &item);
                     }
                 } else {
-                    state.session.add_pane(det.pane, None, true);
+                    place_pane_at_sidebar_target(state, original_ws, pane, &item);
                 }
             } else {
+                // Move: insert source pane after the target pane.
                 if let Some((ws_idx, col_idx, pane_idx)) =
-                    crate::find_pane_location(&state.session, pane_id)
+                    crate::find_pane_location(&state.session, target_pid)
                 {
                     let position = PaneInsertTarget::InColumn {
                         col_idx,
                         pane_idx: pane_idx + 1,
                     };
-                    let new_col_id = ColumnId(state.session.next_id());
+                    let col_id = ColumnId(state.session.next_id());
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                         let _ = insert_pane_at_position(
                             ws,
-                            det.pane,
+                            pane,
                             position,
-                            new_col_id,
+                            col_id,
                             ColumnWidth::Proportion(0.5),
                             true,
                         );
                     }
                 } else {
-                    state.session.add_pane(det.pane, None, true);
+                    state.session.add_pane(pane, None, true);
                 }
             }
-            state.focused_pane = Some(pane_id);
+            state.focused_pane = Some(target_pid);
         }
         crate::sidebar::SidebarItem::Workspace { ws_idx } => {
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
@@ -345,14 +358,14 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                     .options
                     .default_column_width
                     .unwrap_or(heca_core::layout::ColumnWidth::Proportion(0.85));
-                ws.add_pane(det.pane, None, true, width);
+                ws.add_pane(pane, None, true, width);
             }
         }
         crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
             if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
                 let target_col = col_idx.min(ws.scrolling.columns.len().saturating_sub(1));
                 ws.scrolling
-                    .add_pane_to_column(target_col, None, det.pane, true);
+                    .add_pane_to_column(target_col, None, pane, true);
             }
         }
         crate::sidebar::SidebarItem::FloatingPane { .. } => {
@@ -361,8 +374,8 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                 .options
                 .default_column_width
                 .unwrap_or(heca_core::layout::ColumnWidth::Proportion(0.85));
-            if let Some(ws) = state.session.workspaces.get_mut(det.original_ws) {
-                ws.add_pane(det.pane, None, true, width);
+            if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
+                ws.add_pane(pane, None, true, width);
             }
         }
     }
@@ -372,4 +385,34 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
     state.mouse.drag_hover_sidebar_fi = None;
     crate::app::mutations::after_layout_change(state);
     true
+}
+
+/// Place a pane at a sidebar target location (workspace, column, or pane item).
+fn place_pane_at_sidebar_target(
+    state: &mut AppState,
+    _original_ws: usize,
+    pane: heca_core::layout::Pane,
+    item: &crate::sidebar::SidebarItem,
+) {
+    match item {
+        crate::sidebar::SidebarItem::Workspace { ws_idx } => {
+            if let Some(ws) = state.session.workspaces.get_mut(*ws_idx) {
+                let width = state
+                    .session
+                    .options
+                    .default_column_width
+                    .unwrap_or(heca_core::layout::ColumnWidth::Proportion(0.85));
+                ws.add_pane(pane, None, true, width);
+            }
+        }
+        crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => {
+            if let Some(ws) = state.session.workspaces.get_mut(*ws_idx) {
+                let target_col = (*col_idx).min(ws.scrolling.columns.len() - 1);
+                ws.scrolling.add_pane_to_column(target_col, None, pane, true);
+            }
+        }
+        _ => {
+            state.session.add_pane(pane, None, true);
+        }
+    }
 }
