@@ -81,64 +81,78 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — theme-token pass (glow / radius / border / font) + dropdown polish
+### 🤝 Handoff — last updated 2026-06-08 (after the theme-token pass + docs refresh)
 
-**Branch:** `heca-grid-ui` → PR into `main`. Build + `cargo test -p heca-grid-ui` are
-green (65 tests). `heca-renderer/src/` and `heca`/`heca-core`/`heca-config` were
-**not touched** (other devs own them; only `heca-renderer/examples/showcase.rs` is
-ours). **Never run `cargo fmt`** (rustfmt 1.9 churns unrelated files).
+**Read this first to resume.** It's the single place that says where we are, what's
+next, and how to start.
 
-**What this branch delivered (all DONE this pass, on top of the Item/Pane work):**
+#### Git / PR state (verify before you start)
 
-1. **Configurable theme tokens, applied uniformly across widgets:**
-   - `GlowLevel { None, Thin, Medium, Large }` — glow halo size; sole owner of glow.
-   - `intensity` — **CRT scanline overlay only** (Off=0 → Heavy=0.20). Fully
-     separate from glow (no more overlap). Visible in the showcase now.
-   - `radius` + `border_width` — every box/pill widget reads them. Pills (Badge,
-     Toggle, ProgressBar) round at `radius × 2` clamped to their capsule max;
-     `border: 0` is honored. `control_radius()` = `radius × 0.5` for small controls.
-   - **Font is a theme token, inherited centrally** — see the architecture note below.
-2. **Central font architecture** (the important one): `Style.font_size` is a
-   `0.0`=inherit sentinel; `Style.font_scale` is a semantic multiplier (header 2.0,
-   caption 0.8, etc.); the resolved size lives in `Base.font`. `LayoutEngine` carries
-   `base_font` (= `theme.font_size`) and, for every node, resolves
-   `explicit ? font_size : base_font × font_scale` → `Base.font`, then calls the new
-   `Component::remeasure()` hook (widgets size from `Base.font`). One global font
-   change reflows the whole tree live — no per-widget wiring, no rebuild.
-3. **Dropdown (`Select`) polish:** opens **up** when no room below; **caps + scrolls**
-   internally to the viewport; **row height** derives from font (no clipping);
-   **width adapts** to the widest option at the current font (no fixed 200px).
-4. **Showcase:** live GLOW/RADIUS/BORDER/FONT/INTENSITY selects (mutate the theme
-   each frame); whole-page **scroll** (wheel; window framebuffer clips); grip/resize
-   **cursor** near window edges; **single-select** sidebar (immediate-mode shared
-   signals).
-5. **Docs:** §12 documents the **deferred** keybinding / `ActionSink` action-registry
-   design (covers all actionable widgets).
+- **Branch:** `heca-grid-ui`. **Default branch:** `main`.
+- **Merged:** PR **#30** (theme-token / font / dropdown pass) and PR **#32** (docs:
+  plan tracker + `docs/widgets.md` refresh). `main` is at `4e85422`.
+- **⚠️ One dangling commit:** `c28973d` ("note end-user docs as the final task") is on
+  `origin/heca-grid-ui` but **not yet in `main`** (the branch is 1 ahead / 9 behind main).
+  **First action when resuming:** sync the branch with `main` (`git fetch && git merge
+  origin/main` or rebase) and open a tiny PR for `c28973d`, *or* fold it into the next PR.
+- Build is green: `cargo test -p heca-grid-ui` = **6 unit + 59 integration + doctests**; clippy clean.
 
-**How to resume / what's next (in rough priority):**
+#### Hard rules (do not violate)
 
-- **PR review feedback**, then merge.
-- **Documentation pass** (the only remaining PLANNED task): `docs/widgets.md` +
-  theme-token reference + the §12 `ActionSink` design.
-- **`ActionSink` keybinding integration** — implement §12 *when Phase D wires these
-  widgets into the `heca` app* (add `ActionSink` trait + `action(&str)` builder to
-  Button/Checkbox/Toggle/Select/Item/Tabs; adapter in `heca`).
-- **Renderer dependency:** an embeddable (non-page) scroll region needs the renderer
-  to implement `PushClip`/`PopClip` (currently a no-op in `heca-renderer/src/scene.rs`
-  — not ours to edit). Until then, scroll is whole-page only.
-- New components backlog + Phase D app adoption (see §11 / Task Board).
+- **Never run `cargo fmt`** — rustfmt 1.9 churns unrelated files.
+- **Only touch our files:** `heca-grid-ui/**` and `heca-renderer/examples/showcase.rs`.
+  `heca-renderer/src/**`, `heca`, `heca-core`, `heca-config` are owned by other devs.
+- **Workflow:** one feature branch per task off up-to-date `main`; PR per task; mark
+  IN PROGRESS / DONE on the board; leave a Resume note if you stop mid-task.
+- **No hard-coded font/radius/border/glow** — read theme tokens (see [Font sizing](#font-sizing)
+  and the [Theme tokens](#theme-glowlevel--intensity) table).
 
-**Gotchas for the next session:**
-- `Base.font` is the resolved font; widgets must read it (not `style.font_size`) for
-  text + `remeasure()`. `style.font_size > 0` means an explicit override.
-- Changing `LayoutEngine` font resolution affects sizing of all font-derived widgets;
-  the integration tests use *relative* centers (`b.size.h/2`) so they tolerate it.
-- Two tests were updated this pass to match new behavior:
-  `pane_draws_rounded_accent_border_no_brackets` and `glow_none_suppresses_glow`.
+#### Where we are
 
-**Older status:** Phases A–C complete (full widget catalog + renderer); overlay layer,
-`Select`, `Item`, `Pane` all landed (PRs #21/#23/#24). Next big milestone after this
-PR is **Phase D** (app adoption).
+- **Phases A, B, C-catalog: shipped** (see [Task Board — Shipped](#-task-board--shipped)).
+  Full widget catalog + renderer; overlay layer; `Select`; `Item`/`ActiveMarker`; `Pane`
+  container; the whole theme-token + central-font-inheritance pass; dropdown flip/scroll.
+- **Docs are current:** `grid-ui-plan.md` (this file) is the activity tracker;
+  `docs/widgets.md` is the refreshed developer API reference; `docs/the-grid-ui.md` is
+  reference/vision only. End-user docs are parked as the very last task.
+
+#### What's next (in priority order — full list in [📍 Remaining Work](#-remaining-work))
+
+1. **Phase C shells** — the gap that *blocks Phase D*. Suggested order:
+   - **C6 `Sidebar`** — tree nav (expand/collapse, cursor, drag affordance). Today we
+     only have `Pane` + `Item` rows; this is a new widget. Mirror `heca/src/sidebar.rs`
+     behavior; compose from `Item` rows inside a `Pane`-like frame.
+   - **C7 `Pane` shell** — add HUD header (title + status) + optional tab bar +
+     focused-state brackets to the existing `Pane`; expose an inner content `Rectangle`.
+   - **C5 `StatusBar`**, **C4 `CornerBrackets`/`Reticle`** decorator.
+2. **Catalog gaps** — `IconButton` + icon support, `Tag`/`Chip`, `Tooltip`/`Modal`/`CommandPalette`,
+   wire `Item` into `Select` options, C8 showcase/snapshot tests.
+3. **Phase D — app adoption** (D1–D7), including **D6.5 `ActionSink` keybinding integration**
+   (design locked in §12 — build it *here*, when widgets meet the app).
+4. **Documentation finish** — demote/merge `docs/the-grid-ui.md`; add a theme-token reference page.
+5. **End-user docs** — the very last task (config/keybindings, for people running heca).
+
+#### Starting the next task (C6 `Sidebar`) — pointers
+
+- New file `heca-grid-ui/src/widgets/sidebar.rs`; export from `widgets/mod.rs` + `lib.rs`
+  (top-level + prelude) — copy how `pane.rs`/`item.rs` are wired.
+- Embed `Base`, implement `Component`; opt into `LayoutExt`/`StyleExt`/`Parent`.
+- Reuse `Item` for rows (it already has leading/trailing slots, `ActiveMarker`, single-select
+  via shared `state()` signals — see the [Item](#item) docs + the showcase sidebar for the
+  click-to-select pattern).
+- Add a showcase section exercising it; keep `cargo test` + clippy green; update the board.
+
+#### Gotchas
+
+- `Base.font` is the **resolved** font; widgets read it (not `style.font_size`) for text +
+  in `remeasure()`. `style.font_size > 0` = explicit override; `0` = inherit.
+- Any change to `LayoutEngine` font resolution resizes all font-derived widgets — the
+  integration tests use *relative* centers (`b.size.h/2`) so they tolerate it; keep that.
+- An **embeddable** (non-page) scroll region is blocked on the renderer implementing
+  `PushClip`/`PopClip` (no-op today in `heca-renderer/src/scene.rs` — not ours). Only
+  whole-page scroll works until then.
+- `PaintCx::new(scene, theme)` defaults to an *infinite* viewport; pass `.with_viewport(size)`
+  in a real host so `Select` can flip/cap (the 22 headless tests rely on the infinite default).
 
 **Run / verify:**
 
@@ -164,9 +178,9 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 
 **Display widgets done:** `Separator` (cross-axis stretch + `.length()`), `Badge` (6 theme-mapped variants, neon chip), `StatusDot` (semantic glowing dot).
 
-**Next steps:** see the [📍 Remaining Work](#-remaining-work) checklist above — the authoritative, current list (overlay layer, `Select`, `Item`, `Pane` container, and the whole theme-token pass are all **shipped**; what remains is the heca-specific shells C4–C8, the documentation pass, then Phase D).
-
-**Two-doc reconciliation:** captured in Remaining Work → *Documentation pass*. `docs/the-grid-ui.md` is reference/vision only (it describes an older never-implemented architecture and self-labels as such); `docs/widgets.md` is the canonical API reference and needs refreshing to the post-PR-#30 API.
+> The blocks above (Done / Key files / Established pattern / Change & Display widgets) are
+> **historical reference** for the shipped catalog. For the live plan use the
+> [🤝 Handoff](#-resume-here) and [📍 Remaining Work](#-remaining-work) sections at the top.
 
 ---
 >
