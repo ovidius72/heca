@@ -114,42 +114,16 @@ pub fn on_mouse_input(
                                 },
                             );
                         }
+                        state.mouse.drag_state = DragState::None;
+                        state.mouse.insert_hint = None;
+                        crate::app::mutations::after_layout_change(state);
                     } else if sidebar_drop::handle_drop(state, pos) {
-                        // Sidebar drop handled.
-                    } else if let Some(hint) = state.mouse.insert_hint.take() {
-                        // Move mode: pane is still in layout. Remove it and
-                        // re-insert at the drop target position.
-                        drag::reset_interactive_move_offset(state);
-                        let source_id = match state.mouse.drag_state {
-                            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-                            _ => unreachable!(),
-                        };
-                        // Remove pane from current position.
-                        if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
-                            && let Some(ws) = state.session.workspaces.get_mut(ws_idx)
-                            && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
-                        {
-                            // Determine target.
-                            let target_ws = state.session.active_workspace_idx;
-                            let new_col_id = heca_core::layout::ColumnId(state.session.next_id());
-                            if let Some(target_ws_mut) = state.session.workspaces.get_mut(target_ws) {
-                                crate::app::pane_ops::insert_pane_at_position(
-                                    target_ws_mut,
-                                    removed,
-                                    hint,
-                                    new_col_id,
-                                    heca_core::layout::ColumnWidth::Proportion(0.5),
-                                    true,
-                                );
-                            }
-                        }
-                        state.focused_pane = Some(source_id);
+                        // Sidebar drop handled; detached pane already placed.
+                    } else if state.mouse.insert_hint.is_some() {
+                        drop::drop_pane(state);
                     } else {
                         drag::cancel_interactive_move(state);
                     }
-                    state.mouse.drag_state = DragState::None;
-                    state.mouse.insert_hint = None;
-                    crate::app::mutations::after_layout_change(state);
                 }
                 DragState::SidebarDrag {
                     pane_id,

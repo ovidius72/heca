@@ -8,12 +8,6 @@ use crate::app_state::{AppState, DragState};
 use heca_core::layout::types::PaneInsertTarget;
 use heca_core::layout::{ColumnId, ColumnWidth};
 
-/// Handle drop during interactive move (non-swap mode).
-///
-/// Currently unused — move mode now keeps the pane in layout and re-inserts
-/// at the target position via the mouse.rs drop handler. Kept for potential
-/// reversion or future detach-on-move behavior.
-#[allow(dead_code)]
 pub(super) fn drop_pane(state: &mut AppState) {
     let hint = match state.mouse.insert_hint.take() {
         Some(h) => h,

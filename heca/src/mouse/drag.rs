@@ -3,9 +3,8 @@
 //! This module owns drag initiation, drag-motion updates, and cancellation for
 //! interactive move and sidebar drag workflows.
 
-use heca_core::layout::Point;
-
-use crate::app_state::{AppState, DragState};
+use crate::app_state::{AppState, DetachedPane, DragState};
+use heca_core::layout::{ColumnId, Point, Size};
 
 pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     state.mouse.pos = pos;
@@ -69,8 +68,10 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
                                 }
                             }
                         }
+                        Some(format!("pane{}", pid))
+                    } else {
+                        None
                     }
-                    None
                 })
                 .unwrap_or_else(|| format!("pane{}", pane_id));
 
@@ -129,19 +130,27 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
             );
         }
 
-        // Swap mode: update interactive_move_offset so the pane follows the cursor.
-        // Move mode (non-detached): same — pane follows cursor via offset.
-        // This reuses the same mechanism as the rubberband starting phase,
-        // but with a direct 1:1 tracking instead of damping.
-        if state.mouse.detached_pane.is_none()
-            && let DragState::InteractiveMove { swap: _, _pane_id: source_id, .. } = state.mouse.drag_state
+        // Swap mode: update interactive_move_offset so the source pane follows
+        // the cursor. This reuses the same offset mechanism as the rubberband
+        // starting phase, but with a direct 1:1 tracking instead of damping.
+        //
+        // We want: pane_visual_pos = cursor_pos - grab_offset_in_pane
+        // pane_visual_pos = pane_layout_pos + interactive_move_offset
+        // So: interactive_move_offset = cursor_pos - grab_offset - pane_layout_pos
+        // Since grab_offset = (offset.0, offset.1) = cursor_at_grab - pane_topleft_at_grab
+        // And cursor_pos = pointer_in = (pos - content_origin)
+        // And pane_layout_pos ≈ (col_x - view_pos, working_area_y + pane_y_in_col)
+        if let DragState::InteractiveMove { swap: true, _pane_id: source_id, .. } = state.mouse.drag_state
             && let Some(ws) = state.session.workspaces.get_mut(state.session.active_workspace_idx)
             && let Some((ci, pi)) = super::find_pane_in_workspace(ws, source_id)
         {
-            let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
+            let col_x = ws.scrolling.column_x(ci);
+            let view_pos = ws.scrolling.view_pos();
             let pane_y = ws.scrolling.working_area.loc.y
                 + ws.scrolling.pane_y_in_column(ci, pi);
-            let pane_layout_x = col_x;
+            // pane_layout_x = col_x - view_pos (matching panes_with_positions)
+            // pane_layout_y = pane_y (already includes working_area.loc.y)
+            let pane_layout_x = col_x - view_pos;
             let pane_layout_y = pane_y;
             ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
                 pointer_in.0 as f64 - offset.0 as f64 - pane_layout_x,
@@ -168,6 +177,46 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
         label.x = pos.0;
         label.y = pos.1;
     }
+
+    state.mouse.sidebar_hovered_btn_idx =
+        crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1).map(|(i, _)| i);
+}
+
+fn update_sidebar_drag_hover(state: &mut AppState) {
+    let (_win_w, win_h) = super::window_logical_size(state);
+    let chrome = super::chrome_config(state);
+    let pos = state.mouse.pos;
+    let sidebar_top = chrome.tab_bar_height;
+    let sidebar_bottom = win_h - chrome.status_bar_height;
+    let sw = if state.sidebar.left_visible {
+        chrome.left_sidebar_width
+    } else {
+        40.0
+    };
+    if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+        let sidebar_h = sidebar_bottom - sidebar_top;
+        let fi = crate::sidebar::sidebar_hit_test(
+            &state.sidebar_tree,
+            sidebar_top,
+            sidebar_h,
+            sw,
+            pos.1,
+        );
+        if let Some(fi) = fi {
+            if matches!(
+                state.sidebar_tree.flat_items.get(fi),
+                Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
+            ) {
+                state.mouse.drag_hover_sidebar_fi = None;
+            } else {
+                state.mouse.drag_hover_sidebar_fi = Some(fi);
+            }
+        } else {
+            state.mouse.drag_hover_sidebar_fi = None;
+        }
+    } else {
+        state.mouse.drag_hover_sidebar_fi = None;
+    }
 }
 
 pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
@@ -181,46 +230,127 @@ pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_p
     };
 }
 
-/// Transition from rubberband (InteractiveMoveStarting) to active drag
-/// (InteractiveMove). Both move and swap modes keep the pane in the layout
-/// and track it via interactive_move_offset.
 fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32), swap: bool) {
     let (cx, cy) = super::content_area_origin(state);
     let original_ws = state.session.active_workspace_idx;
 
-    // Find the pane and zero any rubberband offset from the starting phase.
-    let (_ci, _pi, col_x, pane_y) = {
-        let ws = match state.session.workspaces.get_mut(original_ws) {
+    if swap {
+        // Swap mode: keep the pane in the layout. Zero any rubberband offset
+        // from the starting phase so the pane tracks the cursor cleanly.
+        // Compute the grab offset (cursor position relative to pane top-left)
+        // so the pane follows the cursor from its grab point.
+        let (ci, pi) = {
+            let ws = match state.session.workspaces.get_mut(original_ws) {
+                Some(ws) => ws,
+                None => return,
+            };
+            let found = super::find_pane_in_workspace(ws, pane_id);
+            if let Some((ci, pi)) = found {
+                ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::default();
+            }
+            match found {
+                Some(v) => v,
+                None => return,
+            }
+        };
+
+        let ws = match state.session.workspaces.get(original_ws) {
             Some(ws) => ws,
             None => return,
         };
-        let found = super::find_pane_in_workspace(ws, pane_id);
-        let (ci, pi) = match found {
-            Some(v) => v,
-            None => return,
-        };
-        ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::default();
-        let col_x = ws.scrolling.column_x(ci);
+        let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
         let pane_y = ws.scrolling.pane_y_in_column(ci, pi);
-        (ci, pi, col_x, pane_y)
+        let pointer_in = ((mouse_pos.0 - cx) as f64, (mouse_pos.1 - cy) as f64);
+        // offset = cursor_in_content - pane_top_left_in_content
+        let offset = (
+            (pointer_in.0 - col_x) as f32,
+            (pointer_in.1 - pane_y) as f32,
+        );
+
+        state.mouse.drag_state = DragState::InteractiveMove {
+            _pane_id: pane_id,
+            _original_ws: original_ws,
+            offset,
+            swap: true,
+        };
+        return;
+    }
+
+    // Move mode: detach the pane from the layout so other panes reflow.
+    let ws = match state.session.workspaces.get_mut(original_ws) {
+        Some(ws) => ws,
+        None => return,
     };
 
-    // Compute grab offset: cursor position relative to pane top-left in content coords.
-    let pointer_in = ((mouse_pos.0 - cx) as f64, (mouse_pos.1 - cy) as f64);
-    let view_pos = state.session.workspaces.get(original_ws)
-        .map(|ws| ws.scrolling.view_pos())
-        .unwrap_or(0.0);
+    let mut found = None;
+    for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+        for (pi, pane) in col.panes.iter().enumerate() {
+            if pane.id.0 == pane_id {
+                found = Some((ci, pi));
+                break;
+            }
+        }
+        if found.is_some() {
+            break;
+        }
+    }
+
+    let (col_idx, pane_idx) = match found {
+        Some(v) => v,
+        None => return,
+    };
+
+    let col_x = ws.scrolling.column_x(col_idx);
+    let pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
+    let size = ws
+        .scrolling
+        .columns
+        .get(col_idx)
+        .and_then(|c| c.pane_sizes.get(pane_idx))
+        .copied()
+        .unwrap_or(Size::new(200.0, 100.0));
+    let view_pos = ws.scrolling.view_pos();
+
+    if let Some(col) = ws.scrolling.columns.get_mut(col_idx)
+        && let Some(pane) = col.panes.get_mut(pane_idx)
+    {
+        pane.interactive_move_offset = Point::default();
+    }
+
+    let original_col_id = ws
+        .scrolling
+        .columns
+        .get(col_idx)
+        .map(|c| c.id)
+        .unwrap_or(ColumnId(0));
+
+    let removed = match ws.scrolling.remove_pane(col_idx, pane_idx) {
+        Some(p) => p,
+        None => return,
+    };
+
     let col_screen_x = col_x - view_pos;
+    let pointer_in_content = (mouse_pos.0 - cx, mouse_pos.1 - cy);
     let offset = (
-        (pointer_in.0 - col_screen_x) as f32,
-        (pointer_in.1 - pane_y) as f32,
+        pointer_in_content.0 - col_screen_x as f32,
+        pointer_in_content.1 - pane_y as f32,
     );
+
+    state.mouse.detached_pane = Some(DetachedPane {
+        pane: removed,
+        render_pos: Point::new(col_screen_x, pane_y),
+        size,
+        original_ws,
+        _original_col: col_idx,
+        original_col_id,
+        original_pane: pane_idx,
+    });
 
     state.mouse.drag_state = DragState::InteractiveMove {
         _pane_id: pane_id,
         _original_ws: original_ws,
         offset,
-        swap,
+        swap: false,
     };
 }
 
@@ -265,42 +395,5 @@ pub(super) fn reset_interactive_move_offset(state: &mut AppState) {
                 pane.interactive_move_offset = Point::default();
             }
         }
-    }
-}
-
-fn update_sidebar_drag_hover(state: &mut AppState) {
-    let (_win_w, win_h) = super::window_logical_size(state);
-    let chrome = super::chrome_config(state);
-    let pos = state.mouse.pos;
-    let sidebar_top = chrome.tab_bar_height;
-    let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.sidebar.left_visible {
-        chrome.left_sidebar_width
-    } else {
-        40.0
-    };
-    if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(
-            &state.sidebar_tree,
-            sidebar_top,
-            sidebar_h,
-            sw,
-            pos.1,
-        );
-        if let Some(fi) = fi {
-            if matches!(
-                state.sidebar_tree.flat_items.get(fi),
-                Some(&crate::sidebar::SidebarItem::FloatingPane { .. })
-            ) {
-                state.mouse.drag_hover_sidebar_fi = None;
-            } else {
-                state.mouse.drag_hover_sidebar_fi = Some(fi);
-            }
-        } else {
-            state.mouse.drag_hover_sidebar_fi = None;
-        }
-    } else {
-        state.mouse.drag_hover_sidebar_fi = None;
     }
 }
