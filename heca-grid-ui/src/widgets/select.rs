@@ -13,28 +13,27 @@
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
-use crate::font::MONO_LINE_RATIO;
+use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
+use std::cell::Cell;
 
 /// Default trigger width (logical px).
 const DEFAULT_WIDTH: f32 = 200.0;
-/// Trigger/row font size.
-const FONT_SIZE: f32 = 14.0;
 /// Inner horizontal padding.
 const PAD_H: f64 = 12.0;
 /// Inner vertical padding (trigger).
 const PAD_V: f64 = 8.0;
 /// Height of each option row in the open list.
-const ROW_H: f64 = 30.0;
+/// Option-row height as a multiple of the (resolved) font — so rows grow with
+/// the font instead of clipping. ≈30px at the 15px base font.
+const ROW_H_RATIO: f64 = 2.0;
 /// Padding around the option list inside the panel.
 const PANEL_PAD: f64 = 4.0;
 /// Gap between the trigger and the panel.
 const PANEL_GAP: f64 = 4.0;
-/// Corner radius for trigger + panel.
-const RADIUS: f32 = 4.0;
 /// Border alpha at rest; firms to solid when focused/open.
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Highlighted-row fill alpha.
@@ -46,6 +45,8 @@ const GLOW_INTENSITY: f32 = 0.1;
 const MAX_VISIBLE: usize = 6;
 /// Scrollbar track width (logical px).
 const SCROLLBAR_W: f64 = 4.0;
+/// Horizontal room reserved for the down-chevron (+ gap) when sizing the width.
+const CHEVRON_W: f64 = 22.0;
 
 /// A single-select dropdown.
 pub struct Select {
@@ -59,6 +60,12 @@ pub struct Select {
     highlight: usize,
     /// Index of the first visible row when the list scrolls.
     scroll: usize,
+    /// Rows shown at once while open — capped to what fits in the viewport.
+    vis_rows: usize,
+    /// Whether the open list flips *above* the trigger (no room below).
+    open_up: bool,
+    /// Last-seen viewport height (set during paint), used to flip/cap the list.
+    viewport_h: Cell<f64>,
     on_change: Option<Box<dyn Fn(Action)>>,
 }
 
@@ -67,9 +74,8 @@ impl Select {
     pub fn new(options: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let options: Vec<String> = options.into_iter().map(Into::into).collect();
         let mut base = Base::new();
-        base.style.font_size = FONT_SIZE;
         base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(FONT_SIZE * MONO_LINE_RATIO + 2.0 * PAD_V as f32);
+        base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD_V as f32);
         Self {
             base,
             options,
@@ -77,8 +83,19 @@ impl Select {
             open: false,
             highlight: 0,
             scroll: 0,
+            vis_rows: MAX_VISIBLE,
+            open_up: false,
+            viewport_h: Cell::new(f64::MAX),
             on_change: None,
         }
+    }
+
+    /// Explicit font size — overrides the inherited theme font.
+    pub fn font_size(mut self, fs: f32) -> Self {
+        self.base.style.font_size = fs;
+        self.base.font = fs;
+        self.remeasure();
+        self
     }
 
     /// Select an initial option (clamped to the option count).
@@ -113,41 +130,54 @@ impl Select {
             .unwrap_or("")
     }
 
-    fn panel_top(&self) -> f64 {
-        self.base.bounds.loc.y + self.base.bounds.size.h + PANEL_GAP
+    /// Option-row height, derived from the resolved font.
+    fn row_h(&self) -> f64 {
+        self.base.font as f64 * ROW_H_RATIO
     }
 
-    /// Number of rows shown at once (capped by [`MAX_VISIBLE`]).
+    /// Panel height for the current visible-row count.
+    fn panel_h(&self) -> f64 {
+        2.0 * PANEL_PAD + self.vis_rows as f64 * self.row_h()
+    }
+
+    /// Y of the panel top — below the trigger normally, above it when flipped up.
+    fn panel_top(&self) -> f64 {
+        let b = self.base.bounds;
+        if self.open_up {
+            b.loc.y - PANEL_GAP - self.panel_h()
+        } else {
+            b.loc.y + b.size.h + PANEL_GAP
+        }
+    }
+
+    /// Number of rows shown at once (set when the list opens, capped to fit).
     fn visible_count(&self) -> usize {
-        self.options.len().min(MAX_VISIBLE)
+        self.vis_rows
     }
 
     /// Whether the list is longer than the visible window (needs a scrollbar).
     fn scrollable(&self) -> bool {
-        self.options.len() > MAX_VISIBLE
+        self.options.len() > self.vis_rows
     }
 
     /// Largest valid `scroll` offset.
     fn max_scroll(&self) -> usize {
-        self.options.len().saturating_sub(MAX_VISIBLE)
+        self.options.len().saturating_sub(self.vis_rows)
     }
 
     /// The bounding rect of the open option list (panel).
     fn panel_rect(&self) -> Rectangle {
         let b = self.base.bounds;
-        let h = 2.0 * PANEL_PAD + self.visible_count() as f64 * ROW_H;
-        Rectangle::new(
-            Point::new(b.loc.x, self.panel_top()),
-            Size::new(b.size.w, h),
-        )
+        Rectangle::new(Point::new(b.loc.x, self.panel_top()), Size::new(b.size.w, self.panel_h()))
     }
 
     /// The rect of the `slot`-th *visible* row (0-based from the top of the list).
     fn slot_rect(&self, slot: usize) -> Rectangle {
         let b = self.base.bounds;
+        let row_h = self.row_h();
         Rectangle::new(
-            Point::new(b.loc.x, self.panel_top() + PANEL_PAD + slot as f64 * ROW_H),
-            Size::new(b.size.w, ROW_H),
+            Point::new(b.loc.x, self.panel_top() + PANEL_PAD + slot as f64 * row_h),
+            Size::new(b.size.w, row_h),
         )
     }
 
@@ -162,15 +192,39 @@ impl Select {
     fn scroll_into_view(&mut self) {
         if self.highlight < self.scroll {
             self.scroll = self.highlight;
-        } else if self.highlight >= self.scroll + MAX_VISIBLE {
-            self.scroll = self.highlight + 1 - MAX_VISIBLE;
+        } else if self.highlight >= self.scroll + self.vis_rows {
+            self.scroll = self.highlight + 1 - self.vis_rows;
         }
     }
 
-    /// Open the list, highlighting (and scrolling to) the current selection.
+    /// Open the list. Picks a direction (below the trigger, or flipped above when
+    /// there's no room) and caps the visible rows to what fits in the viewport;
+    /// longer lists scroll inside the panel.
     fn open_list(&mut self) {
         self.open = true;
         self.highlight = self.selected.get_untracked();
+
+        let vp = self.viewport_h.get();
+        let b = self.base.bounds;
+        let space_below = (vp - (b.loc.y + b.size.h) - 2.0 * PANEL_GAP).max(0.0);
+        let space_above = (b.loc.y - 2.0 * PANEL_GAP).max(0.0);
+        let row_h = self.row_h();
+        let rows_in = |space: f64| ((space - 2.0 * PANEL_PAD) / row_h).floor().max(0.0) as usize;
+        let want = self.options.len().min(MAX_VISIBLE);
+        let fit_below = rows_in(space_below);
+        let fit_above = rows_in(space_above);
+
+        if fit_below >= want {
+            self.open_up = false;
+            self.vis_rows = want;
+        } else if fit_above > fit_below {
+            self.open_up = true;
+            self.vis_rows = want.min(fit_above).max(1);
+        } else {
+            self.open_up = false;
+            self.vis_rows = want.min(fit_below).max(1);
+        }
+
         self.scroll = self.highlight.min(self.max_scroll());
     }
 
@@ -200,27 +254,42 @@ impl Component for Select {
         self.open && !self.base.disabled.get_untracked()
     }
 
+    /// Trigger height + width track the resolved font: the width adapts to the
+    /// widest option (plus padding, chevron and scrollbar room) so it's snug, not
+    /// a fixed block, and text never overflows.
+    fn remeasure(&mut self) {
+        let fs = self.base.font;
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V as f32);
+        let longest = self.options.iter().map(|s| s.chars().count()).max().unwrap_or(0) as f32;
+        let text_w = longest * fs * MONO_ADVANCE_RATIO;
+        let chrome = (2.0 * PAD_H + CHEVRON_W + SCROLLBAR_W) as f32;
+        self.base.style.width = Length::Px(text_w + chrome);
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
+        // Remember the viewport so the next `open_list` can flip/cap the panel.
+        self.viewport_h.set(cx.viewport().h);
         let disabled = self.base.disabled.get_untracked();
         let active = self.open || self.base.focused.get_untracked();
-        let (surface, accent, glow_c, muted, foreground) = {
+        let (surface, accent, glow_c, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground)
+            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.control_radius(), t.border_width)
         };
         let b = self.base.bounds;
-        let fs = self.base.style.font_size;
+        let fs = self.base.font;
 
-        // Trigger box: border firms muted → accent when focused/open.
+        // Trigger box: border firms muted → accent when focused/open. Radius +
+        // border width come from the theme so global settings scale them.
         let p = if active { 1.0 } else { 0.0 };
         let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
-            width: 1.5,
+            width: bw,
         };
-        cx.rect(b, surface, Some(border), RADIUS, None);
+        cx.rect(b, surface, Some(border), radius, None);
 
         // Selected label (left), inset by padding.
         let text_rect = Rectangle::new(
@@ -256,7 +325,7 @@ impl Component for Select {
         }
 
         if disabled {
-            cx.dim(b, RADIUS);
+            cx.dim(b, radius);
         }
         if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
             cx.corner_brackets(b, accent);
@@ -271,16 +340,7 @@ impl Component for Select {
                     radius: GLOW_RADIUS,
                     intensity: GLOW_INTENSITY,
                 });
-                cx.rect(
-                    panel,
-                    surface,
-                    Some(Border {
-                        color: accent,
-                        width: 1.5,
-                    }),
-                    RADIUS,
-                    glow,
-                );
+                cx.rect(panel, surface, Some(Border { color: accent, width: bw }), radius, glow);
                 let selected = self.selected.get_untracked();
                 let scrollbar = self.scrollable();
                 // Render only the visible window of rows (no clipping needed).
@@ -314,7 +374,7 @@ impl Component for Select {
                 if scrollbar {
                     let n = self.options.len() as f64;
                     let track_h = panel.size.h - 2.0 * PANEL_PAD;
-                    let thumb_h = (track_h * MAX_VISIBLE as f64 / n).max(12.0);
+                    let thumb_h = (track_h * self.vis_rows as f64 / n).max(12.0);
                     let frac = self.scroll as f64 / self.max_scroll() as f64;
                     let track_x = panel.loc.x + panel.size.w - SCROLLBAR_W - 2.0;
                     let thumb_y = panel.loc.y + PANEL_PAD + (track_h - thumb_h) * frac;

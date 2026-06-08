@@ -15,8 +15,8 @@ use crate::style::Length;
 const PAD_H: f32 = 9.0;
 /// Vertical padding inside the pill.
 const PAD_V: f32 = 4.0;
-/// Badge font size (badges are small).
-const FONT_SIZE: f32 = 11.0;
+/// Badge font multiplier — small chip text relative to the base font (≈11px @15).
+const BADGE_FONT_SCALE: f32 = 0.73;
 /// Translucent fill alpha for colored variants.
 const FILL_ALPHA: u8 = 38;
 /// Glow spread radius (px).
@@ -53,7 +53,7 @@ impl Badge {
     /// A new accent badge showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.font_size = FONT_SIZE;
+        base.style.font_scale = BADGE_FONT_SCALE; // small chip text, relative to base
         let mut badge = Self {
             base,
             label: signal(label.into()),
@@ -89,12 +89,6 @@ impl Badge {
         self
     }
 
-    fn remeasure(&mut self) {
-        let chars = self.label.get_untracked().chars().count() as f32;
-        let fs = self.base.style.font_size;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V);
-    }
 }
 
 impl Component for Badge {
@@ -103,6 +97,14 @@ impl Component for Badge {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    /// Pill size tracks the resolved font.
+    fn remeasure(&mut self) {
+        let chars = self.label.get_untracked().chars().count() as f32;
+        let fs = self.base.font;
+        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -114,7 +116,9 @@ impl Component for Badge {
             (t.muted, t.foreground)
         };
         let pill = self.base.bounds;
-        let radius = (pill.size.h / 2.0) as f32;
+        // Pill widget: round harder than a box (×2), clamped to the capsule max —
+        // radius:0 → square, a moderate radius → full pill.
+        let radius = (cx.theme().radius * 2.0).min((pill.size.h / 2.0) as f32);
         let white = Color::rgb(255, 255, 255);
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
@@ -150,7 +154,7 @@ impl Component for Badge {
             pill,
             &self.label.get_untracked(),
             text_c,
-            self.base.style.font_size,
+            self.base.font,
             TextAlign::Center,
             true,
         );

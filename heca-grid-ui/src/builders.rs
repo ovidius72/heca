@@ -105,6 +105,13 @@ pub trait StyleExt: Component + Sized {
         self.base_mut().style.radius = r;
         self
     }
+
+    /// Semantic font multiplier relative to the inherited base font (e.g. `2.0`
+    /// for a header, `0.8` for a caption). Scales with a global font change.
+    fn font_scale(mut self, scale: f32) -> Self {
+        self.base_mut().style.font_scale = scale;
+        self
+    }
 }
 
 /// Components that contain children.

@@ -1,7 +1,7 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Status: **A done · B done · C ~mostly done · D pending** · Last updated: 2026-06-04
+> Status: **A done · B done · C ~mostly done · D pending** · Last updated: 2026-06-08
 
 ---
 
@@ -19,6 +19,17 @@
 | `Select` dropdown (first overlay consumer; `select-change`) | DONE | [#23](https://github.com/ovidius72/heca/pull/23) |
 | `Select` scrollable long list (max-visible rows + scrollbar + wheel) & showcase overlap demos | DONE | (extends #23) |
 | `Item` widget — generic row (leading · label · trailing slots, selected/hover/activate) for menus/options/sidebar | DONE | [#24](https://github.com/ovidius72/heca/pull/24) |
+| `ActiveMarker { None, Bar, Check }` on `Item` — context-driven indicator (Bar=sidebar, Check=menu pip, None=dropdown) | DONE | (extends #24) |
+| Bug: dropdown hover bleeds to items below Select panel (`PointerMoved` now routed only to overlay when active) | DONE | (extends #24) |
+| Bug: Tabs underline overlaps text on height resize (fixed `flex_shrink: 0` in `style.rs`) | DONE | (extends #24) |
+| Pane border: 1px accent at 30% opacity + small radius (4px) | DONE | (extends #24) |
+| Theme glow token `GlowLevel { None, Thin, Medium, Large }` — scales every glow's halo radius; `scaled_glow` folds in glow size + intensity | DONE | — (pending PR) |
+| Theme-driven radius + border width (`Theme::control_radius()`) across `Input`/`Select`/`Checkbox`/`Item` slot/`Pane`; `border: 0` supported | DONE | — (pending PR) |
+| `Pane` rounded corner brackets — radius-matched border + dimmed straight midsections (replaces square `BracketCmd`); active-row inset selection pill | DONE | — (pending PR) |
+| Single-select sidebar (immediate-mode shared `active` signals); clicked row highlights, others clear | DONE | — (pending PR) |
+| Whole-page scroll in showcase (wheel; natural-height layout + translate; window framebuffer clips) | DONE | — (pending PR) |
+| `Select` dropdown flip-up when no room below + viewport-capped internal scroll (`PaintCx::with_viewport`) | DONE | — (pending PR) |
+| Live theme controls in showcase (GLOW/RADIUS/BORDER/FONT/INTENSITY selects); re-measuring `font_size()` builders on `Input`/`Select`/`Button`/`Tabs` | DONE | — (pending PR) |
 | Wire `Item` into `Select` options (label + `value: SignalData` + slots) | PENDING | — |
 | Icon support (icon-font glyphs, no renderer texture work) | PENDING | — |
 | `Pane` container — prominent corner brackets, **no glow/shadow**; wraps sidebars/panes (rows = `Item`s) | DONE | (extends #24) |
@@ -26,23 +37,96 @@
 | Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
 | Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |
 | Reconcile `docs/the-grid-ui.md` with implemented architecture | PENDING | — |
+| **PLANNED** — Multi-select (`Select` multi mode or `SelectMulti`): multiple active rows via `Vec<usize>`, `Check` markers, toggle-on-click semantics | PLANNED | — |
+| **PLANNED** — `Item` drag-and-drop reordering (sidebar rows) | PLANNED | — |
+| **PLANNED** — `Item` description text (secondary line below label, muted color) | PLANNED | — |
+| **PLANNED** — `Item` custom fg/bg colors per row | PLANNED | — |
+| **PLANNED** — `Item` progress bar (inline fill strip inside the row) | PLANNED | — |
+| **PLANNED** — `Item` custom widget composition (arbitrary child in the label slot) | PLANNED | — |
+| Disentangle `intensity` vs `glow_size`: `glow_size` is the **sole** owner of glow (presence + halo size); `intensity` owns only the CRT scanline overlay (Off=0 → Heavy=0.20, no floor). Removed double-scaling in `scaled_glow` | DONE | — (pending PR) |
+| **Central font inheritance**: `Style.font_size` is a `0.0`=inherit sentinel + `font_scale` semantic multiplier; `Base.font` resolved by `LayoutEngine.base_font` + a `Component::remeasure()` hook. Every text/actionable widget (Label/Input/Select/Button/Tabs/Item/Badge/Alert/Card) inherits the theme font and re-measures live — no per-widget wiring, no tree rebuild. Explicit `.font_size(x)` overrides | DONE | — (pending PR) |
+| Theme radius applies proportionally to Badge + Toggle (pill ×2 mult, clamped) + Card + Alert + ProgressBar; `border: 0` supported | DONE | — (pending PR) |
+| `Select` dropdown: font-derived **row height** (no clipping) + **content-adaptive width** (fits widest option at current font, no fixed 200px floor) | DONE | — (pending PR) |
+| Showcase window: grip/resize cursor when the pointer is near a window edge/corner (winit `CursorIcon` from edge hit-test) | DONE | — (pending PR) |
+| Bug: `Item` keymap-hint slot top-aligned (row was `Align::Stretch`) — now vertically centered (`Align::Center`) | DONE | — (pending PR) |
+| Keybindings / `ActionSink` action-registry integration — **design locked, deferred** (see §12); covers all actionable widgets | DEFERRED | — |
+| **PLANNED (final)** — Proper documentation pass: `docs/widgets.md` + theme-token reference (`glow_size`, `intensity`, `radius`, `border_width`, `font_size`), config.toml configurability, the `ActionSink` port for the action registry, dropdown flip/scroll + page-scroll behavior | PLANNED | — |
 
-**Resume notes (active):** _none._
+**Resume notes (active):** *none.*
 
 ---
 
 ## ▶ Resume Here
 
-**Where we are:** Phases A–C are complete (full widget catalog + renderer) and up for review in [PR #21](https://github.com/ovidius72/heca/pull/21). See the **Task Board** above for what's done vs pending. Next up: the overlay/popover layer (then `Select`), or Phase D app adoption.
+### 🤝 Handoff — theme-token pass (glow / radius / border / font) + dropdown polish
+
+**Branch:** `heca-grid-ui` → PR into `main`. Build + `cargo test -p heca-grid-ui` are
+green (65 tests). `heca-renderer/src/` and `heca`/`heca-core`/`heca-config` were
+**not touched** (other devs own them; only `heca-renderer/examples/showcase.rs` is
+ours). **Never run `cargo fmt`** (rustfmt 1.9 churns unrelated files).
+
+**What this branch delivered (all DONE this pass, on top of the Item/Pane work):**
+
+1. **Configurable theme tokens, applied uniformly across widgets:**
+   - `GlowLevel { None, Thin, Medium, Large }` — glow halo size; sole owner of glow.
+   - `intensity` — **CRT scanline overlay only** (Off=0 → Heavy=0.20). Fully
+     separate from glow (no more overlap). Visible in the showcase now.
+   - `radius` + `border_width` — every box/pill widget reads them. Pills (Badge,
+     Toggle, ProgressBar) round at `radius × 2` clamped to their capsule max;
+     `border: 0` is honored. `control_radius()` = `radius × 0.5` for small controls.
+   - **Font is a theme token, inherited centrally** — see the architecture note below.
+2. **Central font architecture** (the important one): `Style.font_size` is a
+   `0.0`=inherit sentinel; `Style.font_scale` is a semantic multiplier (header 2.0,
+   caption 0.8, etc.); the resolved size lives in `Base.font`. `LayoutEngine` carries
+   `base_font` (= `theme.font_size`) and, for every node, resolves
+   `explicit ? font_size : base_font × font_scale` → `Base.font`, then calls the new
+   `Component::remeasure()` hook (widgets size from `Base.font`). One global font
+   change reflows the whole tree live — no per-widget wiring, no rebuild.
+3. **Dropdown (`Select`) polish:** opens **up** when no room below; **caps + scrolls**
+   internally to the viewport; **row height** derives from font (no clipping);
+   **width adapts** to the widest option at the current font (no fixed 200px).
+4. **Showcase:** live GLOW/RADIUS/BORDER/FONT/INTENSITY selects (mutate the theme
+   each frame); whole-page **scroll** (wheel; window framebuffer clips); grip/resize
+   **cursor** near window edges; **single-select** sidebar (immediate-mode shared
+   signals).
+5. **Docs:** §12 documents the **deferred** keybinding / `ActionSink` action-registry
+   design (covers all actionable widgets).
+
+**How to resume / what's next (in rough priority):**
+
+- **PR review feedback**, then merge.
+- **Documentation pass** (the only remaining PLANNED task): `docs/widgets.md` +
+  theme-token reference + the §12 `ActionSink` design.
+- **`ActionSink` keybinding integration** — implement §12 *when Phase D wires these
+  widgets into the `heca` app* (add `ActionSink` trait + `action(&str)` builder to
+  Button/Checkbox/Toggle/Select/Item/Tabs; adapter in `heca`).
+- **Renderer dependency:** an embeddable (non-page) scroll region needs the renderer
+  to implement `PushClip`/`PopClip` (currently a no-op in `heca-renderer/src/scene.rs`
+  — not ours to edit). Until then, scroll is whole-page only.
+- New components backlog + Phase D app adoption (see §11 / Task Board).
+
+**Gotchas for the next session:**
+- `Base.font` is the resolved font; widgets must read it (not `style.font_size`) for
+  text + `remeasure()`. `style.font_size > 0` means an explicit override.
+- Changing `LayoutEngine` font resolution affects sizing of all font-derived widgets;
+  the integration tests use *relative* centers (`b.size.h/2`) so they tolerate it.
+- Two tests were updated this pass to match new behavior:
+  `pane_draws_rounded_accent_border_no_brackets` and `glow_none_suppresses_glow`.
+
+**Older status:** Phases A–C complete (full widget catalog + renderer); overlay layer,
+`Select`, `Item`, `Pane` all landed (PRs #21/#23/#24). Next big milestone after this
+PR is **Phase D** (app adoption).
 
 **Run / verify:**
+
 ```bash
 cargo run -p heca-renderer --example showcase          # the live demo (needs a display)
-cargo test -p heca-grid-ui                              # 6 unit + 14 integration + doctests
+cargo test -p heca-grid-ui                              # 6 unit + 59 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 ```
 
 **Done (committed):**
+
 - **Phase A** — `heca-grid-ui` crate: `reactive` facade (`floem_reactive`), `taffy` layout, `Scene`/`DrawCommand`, `Component` trait + `Base` (composition), `Style`/`Theme` (dark `grid_tron` default), `Flex`/`Container`/`Label`.
 - **Phase B** — `heca-renderer`: SDF rounded-rect pipeline `grid.rs`/`grid.wgsl` with **premultiplied additive glow** (real translucent halo), `scene.rs` bridge (`enqueue_scene`), embedded **Geist Mono Regular+Bold**, bold + **metric-based text centering** in `text.rs`, `examples/showcase.rs`.
 - **Phase C (partial)** — builder traits `LayoutExt`/`StyleExt`/`Parent`; `Flex` is layout-only; `Surface`, `Card`, **`Button`** (6 GridCN variants × 3 sizes; animated per-variant hover; tuned glow; per-variant **press `Flash`**; focus-visible ring), **`Toggle`** (sliding switch: accent-filled-on track, light knob + glow; `on_change(Action)`; `disabled`), **`Checkbox`** (box + pop-in glowing accent indicator; `checkbox-change`), **`Input`** (single-line editable buffer, blinking caret, placeholder; `input-change`); display widgets **`Separator`**, **`Badge`** (6 variants), **`StatusDot`**; **`Tabs`** (segmented selector, sliding underline, arrow-key nav; `tab-change`), **`Spinner`** (ring-of-dots brightness sweep via `tick`), **`Alert`** (4 variants, left accent bar + title/body), **`ProgressBar`** (eased signal-driven fill), **`Gauge`** (12-segment energy meter, success→warning→danger).
@@ -58,11 +142,12 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 **Display widgets done:** `Separator` (cross-axis stretch + `.length()`), `Badge` (6 theme-mapped variants, neon chip), `StatusDot` (semantic glowing dot).
 
 **Next steps (in priority order):**
+
 1. **Overlay/popover layer** — the first real infra gap (`Select`/`Tooltip`/`Modal` all need it): paint above the tree + route events to the topmost layer. Design before building `Select`.
 2. heca-specific shells: `StatusBar`, `Sidebar`, `Pane` (Phase C5–C7), then Phase D app adoption.
 3. Remaining catalog polish: `Tag`/`Chip`, `EnergyMeter`/`SignalIndicator`, `IconButton`, `DataCard`/`Panel`/`Hud`.
-2. Then the rest of the catalog (`Badge`, `Tag`, `Chip`, `StatusDot`, `Separator`/`Divider`, `Spinner`, `Tooltip`, `Alert`, `Select`, `Modal`/`Dialog`, `CommandPalette`, `Sidebar`, `StatusBar`, `MenuBar`, …) — full list + GridCN reference links in `docs/the-grid-ui.md`.
-3. **Phase D** — app adoption (dark grid theme default, real `Sidebar` + `Pane` shells over the niri layout).
+4. Then the rest of the catalog (`Badge`, `Tag`, `Chip`, `StatusDot`, `Separator`/`Divider`, `Spinner`, `Tooltip`, `Alert`, `Select`, `Modal`/`Dialog`, `CommandPalette`, `Sidebar`, `StatusBar`, `MenuBar`, …) — full list + GridCN reference links in `docs/the-grid-ui.md`.
+5. **Phase D** — app adoption (dark grid theme default, real `Sidebar` + `Pane` shells over the niri layout).
 
 **⚠️ Two-doc reconciliation (open):** `docs/the-grid-ui.md` holds the GridCN reference + the canonical **component catalog, reference links, and event/accessibility spec** — but it describes an *older architecture* (`ComponentBase` + `impl_component!` macro + `SignalBus` + manual layout). **The implemented code follows THIS plan's architecture** (signals + taffy + `Event`/`Handled` + builder traits). The doc's event/accessibility *directions* were implemented, mapped onto the real architecture. When convenient, reconcile the two docs into one.
 
@@ -197,6 +282,7 @@ pub use facade::{Signal, RwSignal, Memo, Effect, batch};
 ### 4.3 Layout (`layout.rs`, via taffy)
 
 Per frame, only when the tree is dirty:
+
 1. Sync each `Base.style` → `taffy::Style` on its node.
 2. `taffy.compute_layout(root, available_space)`.
 3. Walk the tree, copy each node's computed `(x, y, w, h)` → `Base.bounds`.
@@ -377,3 +463,86 @@ Pin and verify both against **edition 2024 / rust 1.85**.
 - **Q1**: `Color` — promote to `heca-core` and re-export from `heca-config` (cleanest, DRY), or define a local `heca_grid_ui::Color`? *Recommendation: promote to `heca-core`.*
 - **Q2**: Reactivity engine confirmed as `floem_reactive`? *Recommended.*
 - **Q3**: Showcase as a `heca-grid-ui` example binary, or a `--showcase` flag in `heca`? *Recommendation: standalone example to keep `heca-grid-ui` self-demonstrating.*
+- **Glow level** configurabel (off, low, medium, hight)
+- **NEW COMPONENTS** TO ADD:
+  - `HUD Frame` [[https://thegridcn.com/components#hud-frame]]
+  - Metric Row (SidebarItem ? [[https://thegridcn.com/components#metric-row]])
+  - Modal ([[https://thegridcn.com/components#modal]])
+  - Notification and icons ([[https://thegridcn.com/components#notification]])
+  - Search Input (for ws filtering) [[https://thegridcn.com/components#search-input]]
+  - Workspaces Container ([[https://thegridcn.com/components#command-example]]) seaarch matching ws, cols, panes
+  - SidebarItem 1 ([[https://thegridcn.com/components#changelog]])
+  - SidebarItem 2 ([[https://thegridcn.com/components#sidebar-nav]])
+  - SidebarItem 3 ([[https://thegridcn.com/components#activity-feed]])
+  - SidebarItem 4 ([[https://thegridcn.com/components#kanban-board]])
+  - Status Dots ([[https://thegridcn.com/components#status-dot]])
+  - Tags ([[https://thegridcn.com/components#tag]])
+  - Toast ([[https://thegridcn.com/components#toast]]) (Can be used as sidebar item ?)
+  - Accordion ([[https://thegridcn.com/components#tron-accordion]]) (worspace and columns container)
+  - Command Menu (Palette) [[https://thegridcn.com/components#command-menu]]
+
+---
+
+## 12. Keybindings & the Action Registry (DEFERRED — design locked)
+
+**Status:** design agreed, implementation **deferred** until the `heca` app actually
+consumes the widgets (so the port is designed against a real adapter, not an
+imaginary one). The kbd-hint chips in the showcase (`CMD P`, `CMD ,`) are
+**decorative** until this lands.
+
+**Scope:** this is **not an `Item`-only feature**. It must cover **every actionable
+widget** — `Button`, `Checkbox`, `Toggle`, `Select`/dropdown, `Item` (menu/sidebar
+rows), `Tabs`, and any future actionable component (Command Menu, Modal buttons,
+Search Input submit, etc.).
+
+**Goal:** keybindings are real and configurable through `heca`'s `config.toml`,
+routed through the app's action registry, **without coupling `heca-grid-ui` to that
+registry**.
+
+### Locked decisions
+
+- **Dependency direction stays one-way:** `heca` → `heca-renderer` → `heca-grid-ui`
+  → `heca-core`. `WmAction`, `ActionRegistry`, `KeymapRegistry`, and config.toml
+  parsing all live in the top `heca` crate. `heca-grid-ui` never reaches *up* to it.
+- **Dependency inversion via an `ActionSink` port** — trait defined in
+  `heca-grid-ui`, implemented in `heca`. Widgets speak in **opaque string action
+  IDs**, never `WmAction`:
+
+  ```rust
+  // heca-grid-ui — generic, no WmAction, no config
+  pub trait ActionSink {
+      fn dispatch(&self, action: &str);                  // opaque id → effect
+      fn shortcut_hint(&self, action: &str) -> Option<String>; // for the kbd chip
+  }
+  ```
+  ```rust
+  // heca — the adapter over the real registries
+  impl ActionSink for HecaActions {
+      fn dispatch(&self, id: &str) { /* id → WmAction → ActionRegistry::execute */ }
+      fn shortcut_hint(&self, id: &str) -> Option<String> { /* keymap reverse-lookup */ }
+  }
+  ```
+- **Every actionable widget gains an optional `action: &'static str`** (the opaque
+  id) alongside its existing `on_*` closure. The closure stays the simple path; the
+  `action` id is the registry path. A widget with an `action` set routes through the
+  shared `ActionSink`.
+- **grid-ui does NOT match accelerators.** Flow: raw key → `heca` resolves
+  `KeyCombo → WmAction` via the keymap → `ActionRegistry::execute` → mutates a signal
+  → grid-ui re-renders. The app intercepts e.g. Cmd+P **globally**, before focus
+  routing. grid-ui's only shortcut responsibility is **displaying** the hint.
+- **The kbd-hint chip text is reverse-looked-up from the keymap** (`shortcut_hint`),
+  so `config.toml` is the single source of truth — rebind in config and the chip
+  updates, no duplicated strings in widget code.
+
+### When we implement it
+
+1. Add the `ActionSink` trait + an `action(&str)` builder to each actionable widget
+   in `heca-grid-ui` (Button, Checkbox, Toggle, Select, Item, Tabs, …).
+2. Thread a shared `&dyn ActionSink` (likely `Rc<dyn ActionSink>`) to widgets, or hand
+   it in at paint/event time via the host.
+3. In `heca`, implement `ActionSink` over `KeymapRegistry` + `ActionRegistry`; wire
+   global accelerator dispatch in the input loop.
+
+> Note: `heca-ui` is deprecated and being removed — all of this lands in
+> **`heca-grid-ui`**.
+

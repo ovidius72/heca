@@ -4,12 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01 of 2 (the shell)
 status: executing
-last_updated: "2026-05-29"
+last_updated: "2026-06-08T08:47:57.350Z"
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 2
   completed_plans: 0
+  percent: 0
 ---
 
 # State: heca
