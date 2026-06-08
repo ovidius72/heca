@@ -402,6 +402,76 @@
     }
 
     #[test]
+    fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let pane_idx = tree
+            .flat_items
+            .iter()
+            .position(|item| matches!(item, SidebarItem::Pane { .. }))
+            .expect("should have a pane row");
+        tree.cursor = pane_idx;
+
+        tree.toggle_workspace_collapsed(0);
+        assert!(tree.workspaces[0].collapsed);
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        ));
+
+        tree.toggle_workspace_collapsed(0);
+        assert!(!tree.workspaces[0].collapsed);
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        ));
+    }
+
+    #[test]
+    fn test_toggle_column_collapsed_by_index_updates_cursor() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let pane_idx = tree
+            .flat_items
+            .iter()
+            .position(|item| matches!(item, SidebarItem::Pane { .. }))
+            .expect("should have a pane row");
+        let (ws_idx, col_idx) = tree
+            .flat_items
+            .iter()
+            .find_map(|item| match item {
+                SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+                _ => None,
+            })
+            .expect("should have a column row");
+        tree.cursor = pane_idx;
+
+        tree.toggle_column_collapsed(ws_idx, col_idx);
+        assert!(tree.workspaces[ws_idx].columns[col_idx].collapsed);
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Column {
+                ws_idx: item_ws,
+                col_idx: item_col,
+            }) if *item_ws == ws_idx && *item_col == col_idx
+        ));
+
+        tree.toggle_column_collapsed(ws_idx, col_idx);
+        assert!(!tree.workspaces[ws_idx].columns[col_idx].collapsed);
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Column {
+                ws_idx: item_ws,
+                col_idx: item_col,
+            }) if *item_ws == ws_idx && *item_col == col_idx
+        ));
+    }
+
+    #[test]
     fn test_sidebar_hit_test_expanded() {
         let (session, _ids) = make_test_session();
         let tree = SidebarTree::new();

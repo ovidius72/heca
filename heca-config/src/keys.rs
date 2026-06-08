@@ -193,6 +193,8 @@ impl Default for KeysConfig {
             "sidebar_expand_toggle".to_string(),
             Single("prefix+Tab".to_string()),
         );
+
+        // ── Sidebar tree UI collapse (global, works even when sidebar hidden) ──
         bindings.insert(
             "toggle_current_workspace_collapsed".to_string(),
             Single("prefix+<".to_string()),
