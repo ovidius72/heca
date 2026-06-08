@@ -1341,26 +1341,32 @@ Short description:
 
 #### Commit 2 — Expand shared pane ops beyond same-column swaps
 
-- [ ] Extract move/reinsert helpers used by mouse drop and cross-workspace swap logic
-- [ ] Reduce remaining ad hoc pane scan/reinsert logic in handlers and mouse paths
-- [ ] Keep behavior unchanged
-- [ ] Validate with `cargo check -q`
-- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
-- [ ] Validate with `cargo test -q --workspace`
+- [x] Extract move/reinsert helpers used by mouse drop and cross-workspace swap logic
+- [x] Reduce remaining ad hoc pane scan/reinsert logic in handlers and mouse paths
+- [x] Keep behavior unchanged
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [x] Validate with `cargo test -q --workspace`
 
 #### Definition of done for the current slice
 
-- [ ] common pane swap mechanics live in a shared helper
-- [ ] handlers/mouse paths reuse the same pane-op building blocks where applicable
-- [ ] behavior is unchanged
-- [ ] validation passes
+- [x] common pane swap mechanics live in a shared helper
+- [x] handlers/mouse paths reuse the same pane-op building blocks where applicable
+- [x] behavior is unchanged
+- [x] validation passes
 
 #### Progress note
 
 - Added `heca/src/app/pane_ops.rs` with shared same-column swap and pane insert/remove helpers.
 - `handle_swap_param()`, `handle_swap_up()`, and `handle_swap_down()` delegate to the shared same-column helper instead of each carrying the same animation/swap code inline.
 - `heca/src/mouse/drop.rs` now uses the shared insert/remove helpers for detached-pane reinsertion.
-- `heca/src/mouse/sidebar_drop.rs` still needs the same helper treatment.
+- `heca/src/mouse/sidebar_drop.rs` now uses the same helpers:
+  - `remove_pane_by_id()` replaces the manual pane-by-id search+remove scan in `drag_drop()`.
+  - `find_pane_location()` replaces the triply-nested manual pane location loop in `handle_drop()`.
+  - `insert_pane_at_position()` replaces `add_pane_to_column`/`add_column` fork patterns in both `drag_drop()` and `handle_drop()` shift and non-shift paths.
+  - `Column` import removed from `sidebar_drop.rs` since `insert_pane_at_position` handles column creation internally.
+  - `PaneInsertTarget` import added.
+  - `PaneInsertTarget` import added.
 
 ---
 

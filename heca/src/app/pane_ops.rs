@@ -6,7 +6,7 @@
 use heca_core::layout::animation::AnimationConfig;
 use heca_core::layout::workspace::Workspace;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane};
-use heca_core::layout::types::InsertPosition;
+use heca_core::layout::types::PaneInsertTarget;
 
 /// Information about a pane removed from a workspace.
 #[derive(Debug)]
@@ -29,19 +29,19 @@ pub(crate) fn remove_pane_by_id(ws: &mut Workspace, pane_id: u64) -> Option<Remo
 pub(crate) fn insert_pane_at_position(
     ws: &mut Workspace,
     pane: Pane,
-    target: InsertPosition,
+    target: PaneInsertTarget,
     new_col_id: ColumnId,
     new_col_width: ColumnWidth,
     activate: bool,
 ) -> bool {
     match target {
-        InsertPosition::NewColumn(col_idx) => {
+        PaneInsertTarget::NewColumn(col_idx) => {
             let insert_idx = col_idx.min(ws.scrolling.columns.len());
             let col = Column::new(new_col_id, pane, new_col_width);
             ws.scrolling.add_column(Some(insert_idx), col, activate);
             true
         }
-        InsertPosition::InColumn { col_idx, pane_idx } => {
+        PaneInsertTarget::InColumn { col_idx, pane_idx } => {
             if col_idx < ws.scrolling.columns.len() {
                 let insert_idx = pane_idx.min(ws.scrolling.columns[col_idx].panes.len());
                 ws.scrolling
@@ -81,6 +81,17 @@ pub(crate) fn swap_panes_same_column(
         return false;
     }
 
+    // After the swap, the pane that was at `first_pi` moves to `second_pi`
+    // and vice versa. If the active pane is one of the swapped positions, its
+    // new index is the other; otherwise it stays.
+    let new_active = if col.active_pane_idx == first_pi {
+        second_pi
+    } else if col.active_pane_idx == second_pi {
+        first_pi
+    } else {
+        col.active_pane_idx
+    };
+
     let (first_pi, second_pi) = if first_pi < second_pi {
         (first_pi, second_pi)
     } else {
@@ -93,10 +104,10 @@ pub(crate) fn swap_panes_same_column(
     let up_offset = h_above + gap;
     let down_offset = -(h_below + gap);
 
-    col.panes[first_pi].animate_move_y_from(up_offset, AnimationConfig::default());
-    col.panes[second_pi].animate_move_y_from(down_offset, AnimationConfig::default());
+    col.panes[first_pi].animate_move_y_from(down_offset, AnimationConfig::default());
+    col.panes[second_pi].animate_move_y_from(up_offset, AnimationConfig::default());
     col.panes.swap(first_pi, second_pi);
-    col.active_pane_idx = second_pi;
+    col.active_pane_idx = new_active;
     col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
     true
 }

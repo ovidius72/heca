@@ -2,10 +2,11 @@
 //!
 //! This module owns sidebar-targeted drop and sidebar-drag move/swap behavior.
 
+use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, DragState};
 use crate::input::WmAction;
-use heca_core::layout::types::Point;
-use heca_core::layout::{Column, ColumnId, ColumnWidth};
+use heca_core::layout::types::{PaneInsertTarget, Point};
+use heca_core::layout::{ColumnId, ColumnWidth};
 
 /// Handle a drop during sidebar drag.
 /// Removes the pane from its original position and inserts it at the target
@@ -68,27 +69,14 @@ pub(super) fn drag_drop(
             .map(|(_, r)| r)
     });
 
-    let removed_pane = {
-        let ws = match state.session.workspaces.get_mut(original_ws) {
-            Some(ws) => ws,
-            None => return,
-        };
-        let mut found = None;
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
-                found = Some((ci, pi));
-                break;
-            }
-        }
-        match found {
-            Some((ci, pi)) => ws.scrolling.remove_pane(ci, pi),
-            None => return,
-        }
+    let removed_pane = match state.session.workspaces.get_mut(original_ws) {
+        Some(ws) => remove_pane_by_id(ws, pane_id),
+        None => return,
     };
-
-    let Some(removed_pane) = removed_pane else {
+    let Some(removed) = removed_pane else {
         return;
     };
+    let removed_pane = removed.pane;
 
     let (_win_w, win_h) = super::window_logical_size(state);
     let chrome = super::chrome_config(state);
@@ -121,13 +109,18 @@ pub(super) fn drag_drop(
                         if let Some((t_ws, t_col, t_pi)) =
                             crate::find_pane_location(&state.session, target_pid)
                         {
+                            let new_col_id = ColumnId(state.session.next_id());
+                            let position = PaneInsertTarget::InColumn {
+                                col_idx: t_col,
+                                pane_idx: t_pi + 1,
+                            };
                             if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
-                                let insert_idx =
-                                    (t_pi + 1).min(ws.scrolling.columns[t_col].panes.len());
-                                ws.scrolling.add_pane_to_column(
-                                    t_col,
-                                    Some(insert_idx),
+                                let _ = insert_pane_at_position(
+                                    ws,
                                     removed_pane,
+                                    position,
+                                    new_col_id,
+                                    ColumnWidth::Proportion(0.5),
                                     true,
                                 );
                             }
@@ -267,56 +260,47 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
 
                         if let Some(removed_target) = removed_target {
                             if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
-                                if t_col < ws.scrolling.columns.len() {
-                                    ws.scrolling.add_pane_to_column(
-                                        t_col,
-                                        Some(t_pi),
-                                        det.pane,
-                                        true,
-                                    );
+                                let position = if t_col < ws.scrolling.columns.len() {
+                                    PaneInsertTarget::InColumn { col_idx: t_col, pane_idx: t_pi }
                                 } else {
-                                    ws.scrolling.add_column(
-                                        Some(t_col),
-                                        Column::new(
-                                            new_col_detached,
-                                            det.pane,
-                                            ColumnWidth::Proportion(0.5),
-                                        ),
-                                        true,
-                                    );
-                                }
+                                    PaneInsertTarget::NewColumn(t_col)
+                                };
+                                let _ = insert_pane_at_position(
+                                    ws,
+                                    det.pane,
+                                    position,
+                                    new_col_detached,
+                                    ColumnWidth::Proportion(0.5),
+                                    true,
+                                );
                             } else {
                                 state.session.add_pane(det.pane, None, true);
                             }
 
                             let orig_ws = det.original_ws;
                             if let Some(ws) = state.session.workspaces.get_mut(orig_ws) {
-                                if let Some(orig_idx) = ws
+                                let orig_col_idx = ws
                                     .scrolling
                                     .columns
                                     .iter()
-                                    .position(|c| c.id == det.original_col_id)
-                                {
-                                    let orig_pi = det
-                                        .original_pane
-                                        .min(ws.scrolling.columns[orig_idx].panes.len());
-                                    ws.scrolling.add_pane_to_column(
-                                        orig_idx,
-                                        Some(orig_pi),
-                                        removed_target,
-                                        true,
-                                    );
-                                } else {
-                                    ws.scrolling.add_column(
-                                        None,
-                                        Column::new(
-                                            new_col_removed,
-                                            removed_target,
-                                            ColumnWidth::Proportion(0.5),
-                                        ),
-                                        true,
-                                    );
-                                }
+                                    .position(|c| c.id == det.original_col_id);
+                                let position = match orig_col_idx {
+                                    Some(idx) => {
+                                        let orig_pi = det
+                                            .original_pane
+                                            .min(ws.scrolling.columns[idx].panes.len());
+                                        PaneInsertTarget::InColumn { col_idx: idx, pane_idx: orig_pi }
+                                    }
+                                    None => PaneInsertTarget::NewColumn(ws.scrolling.columns.len()),
+                                };
+                                let _ = insert_pane_at_position(
+                                    ws,
+                                    removed_target,
+                                    position,
+                                    new_col_removed,
+                                    ColumnWidth::Proportion(0.5),
+                                    true,
+                                );
                             } else {
                                 state.session.add_pane(removed_target, None, true);
                             }
@@ -330,25 +314,23 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
                     state.session.add_pane(det.pane, None, true);
                 }
             } else {
-                let target = {
-                    let mut found = None;
-                    for (wi, ws) in state.session.workspaces.iter().enumerate() {
-                        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-                            for (pi, pane) in col.panes.iter().enumerate() {
-                                if pane.id.0 == pane_id {
-                                    found = Some((wi, ci, pi));
-                                }
-                            }
-                        }
-                    }
-                    found
-                };
-                if let Some((ws_idx, col_idx, pane_idx)) = target {
+                if let Some((ws_idx, col_idx, pane_idx)) =
+                    crate::find_pane_location(&state.session, pane_id)
+                {
+                    let position = PaneInsertTarget::InColumn {
+                        col_idx,
+                        pane_idx: pane_idx + 1,
+                    };
+                    let new_col_id = ColumnId(state.session.next_id());
                     if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
-                        let insert_idx =
-                            (pane_idx + 1).min(ws.scrolling.columns[col_idx].panes.len());
-                        ws.scrolling
-                            .add_pane_to_column(col_idx, Some(insert_idx), det.pane, true);
+                        let _ = insert_pane_at_position(
+                            ws,
+                            det.pane,
+                            position,
+                            new_col_id,
+                            ColumnWidth::Proportion(0.5),
+                            true,
+                        );
                     }
                 } else {
                     state.session.add_pane(det.pane, None, true);

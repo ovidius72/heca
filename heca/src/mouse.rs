@@ -91,10 +91,33 @@ pub fn on_mouse_input(
                 DragState::InteractiveMoveStarting { .. } => {
                     drag::cancel_interactive_move(state);
                 }
-                DragState::InteractiveMove { .. } => {
-                    // Check if dropping on a sidebar entry (workspace, column, or pane).
-                    // This must be done BEFORE drop_pane since the pane is detached.
-                    if sidebar_drop::handle_drop(state, pos) {
+                DragState::InteractiveMove { swap, .. } => {
+                    if swap {
+                        // Swap mode: pane stays in layout. Find the target pane
+                        // (excluding the source) and swap. Reset offset first so
+                        // hit-testing uses layout positions.
+                        drag::reset_interactive_move_offset(state);
+                        let source_id = match state.mouse.drag_state {
+                            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
+                            _ => unreachable!(),
+                        };
+                        if let Some(target_id) = hit_test::hit_test_pane_excluding(
+                            state,
+                            state.mouse.pos,
+                            Some(source_id),
+                        ) {
+                            crate::handlers::handle_swap_param(
+                                state,
+                                &WmAction::Swap {
+                                    a_id: source_id,
+                                    b_id: target_id,
+                                },
+                            );
+                        }
+                        state.mouse.drag_state = DragState::None;
+                        state.mouse.insert_hint = None;
+                        crate::app::mutations::after_layout_change(state);
+                    } else if sidebar_drop::handle_drop(state, pos) {
                         // Sidebar drop handled; detached pane already placed.
                     } else if state.mouse.insert_hint.is_some() {
                         drop::drop_pane(state);
@@ -230,7 +253,7 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
 //  Hit testing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub(crate) use hit_test::hit_test_pane;
+pub(crate) use hit_test::{hit_test_pane, hit_test_pane_excluding};
 use hit_test::sidebar_pane_hit_test;
 
 pub(crate) use render::{render_detached_pane, render_insert_hint};
