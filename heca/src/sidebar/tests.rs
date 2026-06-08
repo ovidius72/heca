@@ -349,6 +349,59 @@
     }
 
     #[test]
+    fn test_collapse_workspace_moves_cursor_to_workspace_row() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let pane_idx = tree
+            .flat_items
+            .iter()
+            .position(|item| matches!(item, SidebarItem::Pane { .. }))
+            .expect("should have a pane row");
+        tree.cursor = pane_idx;
+
+        tree.collapse_workspace(0);
+
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
+        ));
+    }
+
+    #[test]
+    fn test_collapse_column_moves_cursor_to_column_row() {
+        let (session, _ids) = make_test_session();
+        let mut tree = SidebarTree::new();
+        tree.rebuild(&session, None, Some(1), &[]);
+
+        let pane_idx = tree
+            .flat_items
+            .iter()
+            .position(|item| matches!(item, SidebarItem::Pane { .. }))
+            .expect("should have a pane row");
+        let (ws_idx, col_idx) = tree
+            .flat_items
+            .iter()
+            .find_map(|item| match item {
+                SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
+                _ => None,
+            })
+            .expect("should have a column row");
+        tree.cursor = pane_idx;
+
+        tree.collapse_column(ws_idx, col_idx);
+
+        assert!(matches!(
+            tree.current_item(),
+            Some(SidebarItem::Column {
+                ws_idx: item_ws,
+                col_idx: item_col,
+            }) if *item_ws == ws_idx && *item_col == col_idx
+        ));
+    }
+
+    #[test]
     fn test_sidebar_hit_test_expanded() {
         let (session, _ids) = make_test_session();
         let tree = SidebarTree::new();

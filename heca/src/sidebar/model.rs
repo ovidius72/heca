@@ -335,52 +335,175 @@ impl SidebarTree {
         }
     }
 
-    /// Toggle expand/collapse of the item under cursor.
-    pub fn toggle_expand(&mut self) {
-        if let Some(item) = self.flat_items.get(self.cursor) {
-            match item {
-                SidebarItem::Workspace { ws_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        ws_entry.collapsed = !ws_entry.collapsed;
-                    }
+    fn pane_location(&self, pane_id: u64) -> Option<(usize, Option<usize>)> {
+        for ws_entry in &self.workspaces {
+            for col_entry in &ws_entry.columns {
+                if col_entry.panes.iter().any(|pane| pane.pane_id == pane_id) {
+                    return Some((ws_entry.ws_idx, Some(col_entry.col_idx)));
                 }
-                SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
-                    {
-                        col_entry.collapsed = !col_entry.collapsed;
-                    }
-                }
-                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
             }
+            if ws_entry
+                .floating_panes
+                .iter()
+                .any(|pane| pane.pane_id == pane_id)
+            {
+                return Some((ws_entry.ws_idx, None));
+            }
+        }
+        None
+    }
+
+    fn workspace_flat_index(&self, ws_idx: usize) -> Option<usize> {
+        self.flat_items
+            .iter()
+            .position(|item| matches!(item, SidebarItem::Workspace { ws_idx: item_ws } if *item_ws == ws_idx))
+    }
+
+    fn column_flat_index(&self, ws_idx: usize, col_idx: usize) -> Option<usize> {
+        self.flat_items.iter().position(|item| {
+            matches!(
+                item,
+                SidebarItem::Column {
+                    ws_idx: item_ws,
+                    col_idx: item_col,
+                } if *item_ws == ws_idx && *item_col == col_idx
+            )
+        })
+    }
+
+    fn current_item_in_workspace(&self, ws_idx: usize) -> bool {
+        match self.current_item() {
+            Some(SidebarItem::Workspace { ws_idx: item_ws }) => *item_ws == ws_idx,
+            Some(SidebarItem::Column { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
+            Some(SidebarItem::FloatingPane { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
+            Some(SidebarItem::Pane { pane_id }) => self
+                .pane_location(*pane_id)
+                .is_some_and(|(item_ws, _)| item_ws == ws_idx),
+            None => false,
+        }
+    }
+
+    fn current_item_in_column(&self, ws_idx: usize, col_idx: usize) -> bool {
+        match self.current_item() {
+            Some(SidebarItem::Column {
+                ws_idx: item_ws,
+                col_idx: item_col,
+            }) => *item_ws == ws_idx && *item_col == col_idx,
+            Some(SidebarItem::Pane { pane_id }) => self
+                .pane_location(*pane_id)
+                .is_some_and(|(item_ws, item_col)| item_ws == ws_idx && item_col == Some(col_idx)),
+            _ => false,
+        }
+    }
+
+    pub fn toggle_workspace_collapsed(&mut self, ws_idx: usize) {
+        let move_cursor_to_parent = self.current_item_in_workspace(ws_idx)
+            && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx);
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
+            ws_entry.collapsed = !ws_entry.collapsed;
+            let now_collapsed = ws_entry.collapsed;
+            self.rebuild_flat_items();
+            if move_cursor_to_parent
+                && now_collapsed
+                && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
+            {
+                self.cursor = parent_idx;
+            }
+            self.clamp_cursor();
+        }
+    }
+
+    pub fn expand_workspace(&mut self, ws_idx: usize) {
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
+            && ws_entry.collapsed
+        {
+            ws_entry.collapsed = false;
             self.rebuild_flat_items();
             self.clamp_cursor();
         }
     }
 
+    pub fn collapse_workspace(&mut self, ws_idx: usize) {
+        let move_cursor_to_parent = self.current_item_in_workspace(ws_idx)
+            && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx);
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
+            ws_entry.collapsed = true;
+            self.rebuild_flat_items();
+            if move_cursor_to_parent
+                && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
+            {
+                self.cursor = parent_idx;
+            }
+            self.clamp_cursor();
+        }
+    }
+
+    pub fn toggle_column_collapsed(&mut self, ws_idx: usize, col_idx: usize) {
+        let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
+            && !matches!(self.current_item(), Some(SidebarItem::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
+            && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
+        {
+            col_entry.collapsed = !col_entry.collapsed;
+            let now_collapsed = col_entry.collapsed;
+            self.rebuild_flat_items();
+            if move_cursor_to_parent
+                && now_collapsed
+                && let Some(parent_idx) = self.column_flat_index(ws_idx, col_idx)
+            {
+                self.cursor = parent_idx;
+            }
+            self.clamp_cursor();
+        }
+    }
+
+    pub fn expand_column(&mut self, ws_idx: usize, col_idx: usize) {
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
+            && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
+            && col_entry.collapsed
+        {
+            col_entry.collapsed = false;
+            self.rebuild_flat_items();
+            self.clamp_cursor();
+        }
+    }
+
+    pub fn collapse_column(&mut self, ws_idx: usize, col_idx: usize) {
+        let move_cursor_to_parent = self.current_item_in_column(ws_idx, col_idx)
+            && !matches!(self.current_item(), Some(SidebarItem::Column { ws_idx: item_ws, col_idx: item_col }) if *item_ws == ws_idx && *item_col == col_idx);
+        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
+            && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
+        {
+            col_entry.collapsed = true;
+            self.rebuild_flat_items();
+            if move_cursor_to_parent
+                && let Some(parent_idx) = self.column_flat_index(ws_idx, col_idx)
+            {
+                self.cursor = parent_idx;
+            }
+            self.clamp_cursor();
+        }
+    }
+
+    /// Toggle expand/collapse of the item under cursor.
+    pub fn toggle_expand(&mut self) {
+        if let Some(item) = self.flat_items.get(self.cursor).cloned() {
+            match item {
+                SidebarItem::Workspace { ws_idx } => self.toggle_workspace_collapsed(ws_idx),
+                SidebarItem::Column { ws_idx, col_idx } => {
+                    self.toggle_column_collapsed(ws_idx, col_idx)
+                }
+                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
+            }
+        }
+    }
+
     /// Expand the item under cursor (recurse into children).
     pub fn expand(&mut self) {
-        if let Some(item) = self.flat_items.get(self.cursor) {
+        if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item {
-                SidebarItem::Workspace { ws_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && ws_entry.collapsed
-                    {
-                        ws_entry.collapsed = false;
-                        self.rebuild_flat_items();
-                        self.clamp_cursor();
-                    }
-                }
-                SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
-                        && col_entry.collapsed
-                    {
-                        col_entry.collapsed = false;
-                        self.rebuild_flat_items();
-                        self.clamp_cursor();
-                    }
-                }
+                SidebarItem::Workspace { ws_idx } => self.expand_workspace(ws_idx),
+                SidebarItem::Column { ws_idx, col_idx } => self.expand_column(ws_idx, col_idx),
                 SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
             }
         }
@@ -388,24 +511,10 @@ impl SidebarTree {
 
     /// Collapse the item under cursor.
     pub fn collapse(&mut self) {
-        if let Some(item) = self.flat_items.get(self.cursor) {
+        if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item {
-                SidebarItem::Workspace { ws_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx) {
-                        ws_entry.collapsed = true;
-                        self.rebuild_flat_items();
-                        self.clamp_cursor();
-                    }
-                }
-                SidebarItem::Column { ws_idx, col_idx } => {
-                    if let Some(ws_entry) = self.workspaces.get_mut(*ws_idx)
-                        && let Some(col_entry) = ws_entry.columns.get_mut(*col_idx)
-                    {
-                        col_entry.collapsed = true;
-                        self.rebuild_flat_items();
-                        self.clamp_cursor();
-                    }
-                }
+                SidebarItem::Workspace { ws_idx } => self.collapse_workspace(ws_idx),
+                SidebarItem::Column { ws_idx, col_idx } => self.collapse_column(ws_idx, col_idx),
                 SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
             }
         }
@@ -415,5 +524,4 @@ impl SidebarTree {
     pub fn current_item(&self) -> Option<&SidebarItem> {
         self.flat_items.get(self.cursor)
     }
-
 }

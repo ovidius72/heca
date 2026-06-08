@@ -166,6 +166,12 @@ pub enum WmAction {
     SidebarSplitInColumn,
     SidebarZoomSelectedColumn,
     SidebarDeleteSelected,
+    CollapseCurrentWorkspace,
+    ExpandCurrentWorkspace,
+    ToggleCurrentWorkspaceCollapsed,
+    CollapseCurrentColumn,
+    ExpandCurrentColumn,
+    ToggleCurrentColumnCollapsed,
 
     // ── System ──
     CommandPalette,
@@ -245,6 +251,12 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
         "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
         "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
+        "collapse_current_workspace" => Some(WmAction::CollapseCurrentWorkspace),
+        "expand_current_workspace" => Some(WmAction::ExpandCurrentWorkspace),
+        "toggle_current_workspace_collapsed" => Some(WmAction::ToggleCurrentWorkspaceCollapsed),
+        "collapse_current_column" => Some(WmAction::CollapseCurrentColumn),
+        "expand_current_column" => Some(WmAction::ExpandCurrentColumn),
+        "toggle_current_column_collapsed" => Some(WmAction::ToggleCurrentColumnCollapsed),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -443,7 +455,13 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarCreateColumn
         | WmAction::SidebarSplitInColumn
         | WmAction::SidebarZoomSelectedColumn
-        | WmAction::SidebarDeleteSelected => 4,
+        | WmAction::SidebarDeleteSelected
+        | WmAction::CollapseCurrentWorkspace
+        | WmAction::ExpandCurrentWorkspace
+        | WmAction::ToggleCurrentWorkspaceCollapsed
+        | WmAction::CollapseCurrentColumn
+        | WmAction::ExpandCurrentColumn
+        | WmAction::ToggleCurrentColumnCollapsed => 4,
         // Pane management
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
@@ -537,6 +555,14 @@ mod tests {
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
         assert_eq!(action_from_name("zoom_column"), Some(WmAction::ZoomColumn));
         assert_eq!(
+            action_from_name("toggle_current_workspace_collapsed"),
+            Some(WmAction::ToggleCurrentWorkspaceCollapsed)
+        );
+        assert_eq!(
+            action_from_name("toggle_current_column_collapsed"),
+            Some(WmAction::ToggleCurrentColumnCollapsed)
+        );
+        assert_eq!(
             action_from_name("rename_column"),
             Some(WmAction::RenameColumn)
         );
@@ -627,7 +653,13 @@ mod tests {
                 | WmAction::SidebarCreateColumn
                 | WmAction::SidebarSplitInColumn
                 | WmAction::SidebarZoomSelectedColumn
-                | WmAction::SidebarDeleteSelected => 4,
+                | WmAction::SidebarDeleteSelected
+                | WmAction::CollapseCurrentWorkspace
+                | WmAction::ExpandCurrentWorkspace
+                | WmAction::ToggleCurrentWorkspaceCollapsed
+                | WmAction::CollapseCurrentColumn
+                | WmAction::ExpandCurrentColumn
+                | WmAction::ToggleCurrentColumnCollapsed => 4,
                 // Pane management
                 WmAction::SplitHorizontal
                 | WmAction::SplitVertical

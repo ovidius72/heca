@@ -771,10 +771,15 @@ This addendum captures important project-specific rules and outcomes established
 - After each meaningful slice, update:
   - `bugs-and-refactoring-plan-with-checklist.md`
   - `session-resume-handoff.md`
-
+- when the user gives you hint or observation mark them in the agent-rules.md file (create if needed):
+  - record what the user want you to do and what not to do
+  - record important things to remember
+  - try to follow coding standard and best practices and if you get scolted ask the user solutions and how they want to be implemented. Write in the file the user choice so you remeber next times.
+  
 ### Action-system rules reinforced in this session
 
 For any new app behavior that should be user-visible or scriptable:
+
 - add a `WmAction` variant
 - add `action_from_name()` mapping
 - update `action_priority()` explicitly
@@ -783,6 +788,7 @@ For any new app behavior that should be user-visible or scriptable:
 - make it bindable from config when appropriate
 
 Do **not** introduce ad hoc behavior that bypasses the action system when the feature should be reachable from:
+
 - keyboard
 - mouse/UI
 - RPC / future RPC
@@ -805,16 +811,19 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 ### Important reference files
 
 Planning / rules:
+
 - `bugs-and-refactoring-plan.md`
 - `bugs-and-refactoring-plan-with-checklist.md`
 - `pluggable-chrome-plugin-plan.md`
 - `session-resume-handoff.md`
 
 Default keybinding reference:
+
 - `keybindings.toml`
 - `README.md`
 
 Sidebar/action implementation files:
+
 - `heca/src/input.rs`
 - `heca/src/actions.rs`
 - `heca/src/app/registry.rs`
@@ -829,6 +838,7 @@ Sidebar/action implementation files:
 - `heca/src/sidebar/tests.rs`
 
 Current `heca-config` split reference:
+
 - `heca-config/src/color.rs`
 - `heca-config/src/settings.rs`
 - `heca-config/src/keys.rs`
@@ -839,6 +849,7 @@ Current `heca-config` split reference:
 ### Work completed in this session
 
 Already completed:
+
 - `heca-config` Phase 1.4 split work:
   - `color.rs`
   - `settings.rs`
@@ -856,16 +867,19 @@ Already completed:
 ### Planned incoming phases / slices
 
 Immediate remaining 1.5 work:
+
 - `1.5.6` global sidebar-tree collapse action family
 - `1.5.7` preserve public config/action surface for future RPC work
 - `1.5.8` add/update focused sidebar tests
 - `1.5.9` update docs/defaults
 
 After that:
+
 - proceed to **Phase 2** from `bugs-and-refactoring-plan.md`, unless the user redirects
 - future token-target/RPC extension work is planned in `pluggable-chrome-plugin-plan.md` section `8.1`
 
 ## Workflow Rules for Future Phases
+
 - Before starting a new phase, use the `/grill-me` skill to acquire as much information as possible and have a clear plan.
 - At the end of tasks, wait for user approval before committing and creating a PR.
 - When the session is about to run out of tokens (70/80%), write a detailed handoff with all information for restart without losing context.

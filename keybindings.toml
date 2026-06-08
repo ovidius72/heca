@@ -79,7 +79,11 @@ prev_pane = "prefix+["   # Previous pane in column
 sidebar_left         = "prefix+b"    # Toggle left sidebar
 sidebar_right        = "prefix+."    # Toggle right sidebar
 sidebar_focus        = "prefix+e"    # Focus sidebar (enter nav mode)
-sidebar_expand_toggle = "prefix+Tab" # Expand/collapse sidebar tree
+sidebar_expand_toggle = "prefix+Tab" # Expand/collapse selected sidebar node
+# Global sidebar-tree UI collapse state (works even if sidebar is hidden)
+# These affect tree UI state only, not compositor/layout visibility.
+toggle_current_workspace_collapsed = "prefix+<"
+toggle_current_column_collapsed    = "prefix+("
 
 # Sidebar navigation (only active IN sidebar mode):
 #   h / l              → collapse / expand tree node

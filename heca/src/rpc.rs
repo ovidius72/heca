@@ -14,6 +14,8 @@
 //!   focus-left | focus-right | focus-up | focus-down
 //!   workspace-next | workspace-prev
 //!   sidebar-left | sidebar-right
+//!   collapse-current-workspace | expand-current-workspace | toggle-current-workspace-collapsed
+//!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
 //!   command-palette
 
@@ -232,6 +234,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "rename-workspace" => Ok(WmAction::RenameWorkspace),
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
+        "collapse-current-workspace" => Ok(WmAction::CollapseCurrentWorkspace),
+        "expand-current-workspace" => Ok(WmAction::ExpandCurrentWorkspace),
+        "toggle-current-workspace-collapsed" => {
+            Ok(WmAction::ToggleCurrentWorkspaceCollapsed)
+        }
+        "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
+        "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
+        "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
         "command-palette" => Ok(WmAction::CommandPalette),
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
@@ -415,6 +425,30 @@ mod tests {
         assert_eq!(
             parse_rpc_command("sidebar-right"),
             Ok(WmAction::SidebarRight)
+        );
+        assert_eq!(
+            parse_rpc_command("collapse-current-workspace"),
+            Ok(WmAction::CollapseCurrentWorkspace)
+        );
+        assert_eq!(
+            parse_rpc_command("expand-current-workspace"),
+            Ok(WmAction::ExpandCurrentWorkspace)
+        );
+        assert_eq!(
+            parse_rpc_command("toggle-current-workspace-collapsed"),
+            Ok(WmAction::ToggleCurrentWorkspaceCollapsed)
+        );
+        assert_eq!(
+            parse_rpc_command("collapse-current-column"),
+            Ok(WmAction::CollapseCurrentColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("expand-current-column"),
+            Ok(WmAction::ExpandCurrentColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("toggle-current-column-collapsed"),
+            Ok(WmAction::ToggleCurrentColumnCollapsed)
         );
     }
 
