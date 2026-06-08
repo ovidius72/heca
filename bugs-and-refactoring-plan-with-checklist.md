@@ -1342,8 +1342,8 @@ Short description:
 #### Commit 2 — Convert repeated call-site tails
 
 - [x] Replace repeated `sync_focus(state); state.needs_redraw = true;` endings in `heca/src/handlers.rs`
-- [ ] Convert matching tails in `heca/src/mouse/drop.rs`, `heca/src/mouse/sidebar_drop.rs`, `heca/src/mouse/drag.rs`, and `heca/src/app/input.rs` where appropriate
-- [ ] Reduce direct manual `sidebar_tree.rebuild(...)` use to startup + shared focus/mutation helpers
+- [x] Convert matching tails in `heca/src/mouse/drop.rs`, `heca/src/mouse/sidebar_drop.rs`, `heca/src/mouse/drag.rs`, and `heca/src/app/input.rs` where appropriate
+- [x] Reduce direct manual `sidebar_tree.rebuild(...)` use to startup + shared focus/mutation helpers
 - [x] Keep behavior unchanged
 - [x] Validate with `cargo check -q`
 - [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
@@ -1351,15 +1351,17 @@ Short description:
 
 #### Definition of done for the current slice
 
-- [ ] the post-mutation contract is explicit in code
-- [ ] repeated handler/mouse tails are materially reduced
-- [ ] sidebar rebuild responsibility is centralized
+- [x] the post-mutation contract is explicit in code
+- [x] repeated handler/mouse tails are materially reduced
+- [x] sidebar rebuild responsibility is centralized
 - [x] app behavior is unchanged
 - [x] validation passes
 
 #### Progress note
 
-- `heca/src/handlers.rs` now routes the common post-mutation tail through `after_layout_change(...)` in the main layout/focus paths, and the shared hook module remains the central place for focus/sidebar/redraw synchronization.
+- `heca/src/handlers.rs` now routes the common post-mutation tail through `after_layout_change(...)` in the main layout/focus paths.
+- Rename/title updates use `after_metadata_change(...)`.
+- Mouse drop / sidebar-drop / drag / input rename paths now flow through the shared post-mutation hooks instead of hand-rolling the focus+redraw tail.
 
 ---
 

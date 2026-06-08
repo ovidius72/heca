@@ -54,8 +54,7 @@ pub(super) fn drag_drop(
                         b_id: target_pid,
                     },
                 );
-                crate::sync_focus(state);
-                state.needs_redraw = true;
+                crate::app::mutations::after_layout_change(state);
                 return;
             }
         }
@@ -200,8 +199,7 @@ pub(super) fn drag_drop(
         }
     }
 
-    crate::sync_focus(state);
-    state.needs_redraw = true;
+    crate::app::mutations::after_layout_change(state);
 }
 
 /// Handle a drop on the sidebar during interactive move.
@@ -390,7 +388,6 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
     state.mouse.drag_state = DragState::None;
     state.mouse.insert_hint = None;
     state.mouse.drag_hover_sidebar_fi = None;
-    state.needs_redraw = true;
-    crate::sync_focus(state);
+    crate::app::mutations::after_layout_change(state);
     true
 }

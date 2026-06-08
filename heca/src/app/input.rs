@@ -4,7 +4,7 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
-use crate::app::focus::sync_focus;
+use crate::app::mutations::after_metadata_change;
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_terminal_input,
@@ -146,7 +146,7 @@ fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
                 }
             }
         }
-        sync_focus(state);
+        after_metadata_change(state);
         state.input_mode = InputMode::Normal;
     } else if is_backspace {
         buffer.pop();

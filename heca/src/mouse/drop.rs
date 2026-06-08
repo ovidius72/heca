@@ -193,6 +193,5 @@ pub(super) fn drop_pane(state: &mut AppState) {
 
     state.mouse.drag_state = DragState::None;
     state.mouse.drag_hover_sidebar_fi = None;
-    crate::sync_focus(state);
-    state.needs_redraw = true;
+    crate::app::mutations::after_layout_change(state);
 }
