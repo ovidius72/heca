@@ -14,10 +14,8 @@ use heca_core::layout::{Point, Rectangle, Size};
 const PAD: f64 = 14.0;
 /// Width of the colored left accent bar.
 const BAR_W: f64 = 3.0;
-/// Title font size.
-const TITLE_FS: f32 = 14.0;
-/// Body font size.
-const BODY_FS: f32 = 13.0;
+/// Body text multiplier relative to the title (which uses the resolved font).
+const BODY_SCALE: f32 = 0.9;
 /// Gap between title and body.
 const GAP: f64 = 6.0;
 /// Default alert width.
@@ -89,15 +87,6 @@ impl Alert {
         self
     }
 
-    fn remeasure(&mut self) {
-        let title_h = TITLE_FS as f64 * MONO_LINE_RATIO as f64;
-        let body_h = if self.body.is_some() {
-            GAP + BODY_FS as f64 * MONO_LINE_RATIO as f64
-        } else {
-            0.0
-        };
-        self.base.style.height = Length::Px((2.0 * PAD + title_h + body_h) as f32);
-    }
 }
 
 impl Component for Alert {
@@ -108,14 +97,27 @@ impl Component for Alert {
         &mut self.base
     }
 
+    /// Height = padding + title line + optional body line, from the resolved font.
+    fn remeasure(&mut self) {
+        let title_h = self.base.font as f64 * MONO_LINE_RATIO as f64;
+        let body_h = if self.body.is_some() {
+            GAP + self.base.font as f64 * BODY_SCALE as f64 * MONO_LINE_RATIO as f64
+        } else {
+            0.0
+        };
+        self.base.style.height = Length::Px((2.0 * PAD + title_h + body_h) as f32);
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (foreground, muted) = {
+        let (foreground, muted, radius) = {
             let t = cx.theme();
-            (t.foreground, t.muted)
+            (t.foreground, t.muted, t.control_radius())
         };
+        let title_fs = self.base.font;
+        let body_fs = self.base.font * BODY_SCALE;
         let color = match self.variant {
             AlertVariant::Info => cx.theme().accent,
             AlertVariant::Success => cx.theme().success,
@@ -129,7 +131,7 @@ impl Component for Alert {
             b,
             color.with_alpha(FILL_ALPHA),
             Some(Border { color, width: 1.0 }),
-            4.0,
+            radius,
             None,
         );
         // Colored left accent bar.
@@ -144,17 +146,17 @@ impl Component for Alert {
         // Title (variant-colored, bold) then optional body (muted).
         let text_x = b.loc.x + BAR_W + PAD;
         let text_w = (b.size.w - BAR_W - 2.0 * PAD).max(0.0);
-        let title_h = TITLE_FS as f64 * MONO_LINE_RATIO as f64;
+        let title_h = title_fs as f64 * MONO_LINE_RATIO as f64;
         cx.text(
             Rectangle::new(Point::new(text_x, b.loc.y + PAD), Size::new(text_w, title_h)),
             &self.title.get_untracked(),
             color,
-            TITLE_FS,
+            title_fs,
             TextAlign::Start,
             true,
         );
         if let Some(body) = &self.body {
-            let body_h = BODY_FS as f64 * MONO_LINE_RATIO as f64;
+            let body_h = body_fs as f64 * MONO_LINE_RATIO as f64;
             cx.text(
                 Rectangle::new(
                     Point::new(text_x, b.loc.y + PAD + title_h + GAP),
@@ -162,7 +164,7 @@ impl Component for Alert {
                 ),
                 body,
                 foreground.lerp(muted, 0.2),
-                BODY_FS,
+                body_fs,
                 TextAlign::Start,
                 false,
             );

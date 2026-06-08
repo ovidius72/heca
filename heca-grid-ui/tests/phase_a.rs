@@ -263,9 +263,12 @@ fn click_focuses_hit_widget_and_misses_clear() {
 }
 
 #[test]
-fn intensity_off_suppresses_glow() {
+fn glow_none_suppresses_glow() {
+    use heca_grid_ui::GlowLevel;
+    // Glow is owned solely by `glow_size` now (intensity controls only scanlines),
+    // so `GlowLevel::None` — not `Intensity::Off` — is what suppresses the glow.
     let mut theme = Theme::grid_tron();
-    theme.intensity = Intensity::Off;
+    theme.glow_size = GlowLevel::None;
 
     let root = Surface::new().glow(Color::rgb(64, 224, 255));
     let mut scene = Scene::new();
@@ -274,12 +277,21 @@ fn intensity_off_suppresses_glow() {
         root.paint(&mut cx);
     }
 
-    // The rect is still emitted, but its glow is stripped at Off intensity.
     let glow_present = scene.iter().any(|c| match c {
         DrawCommand::Rect(r) => r.glow.is_some(),
         _ => false,
     });
-    assert!(!glow_present, "glow must be suppressed when intensity is Off");
+    assert!(!glow_present, "glow must be suppressed when glow_size is None");
+
+    // And with a glow size set, the glow survives.
+    theme.glow_size = GlowLevel::Medium;
+    let mut scene2 = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene2, &theme);
+        Surface::new().glow(Color::rgb(64, 224, 255)).paint(&mut cx);
+    }
+    let glow_present2 = scene2.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()));
+    assert!(glow_present2, "glow present when glow_size is Medium");
 }
 
 #[test]
@@ -1418,10 +1430,9 @@ fn item_trailing_border_draws_a_flat_frame_no_glow() {
 }
 
 #[test]
-fn pane_draws_flat_corner_brackets_no_glow() {
+fn pane_draws_rounded_accent_border_no_brackets() {
     let theme = Theme::grid_tron();
-    let pane = Pane::new().background(theme.surface).child(Label::new("X"));
-    let mut pane = pane;
+    let mut pane = Pane::new().background(theme.surface).child(Label::new("X"));
     LayoutEngine::new().compute(&mut pane, Size::new(200.0, 300.0));
 
     let mut scene = Scene::new();
@@ -1429,14 +1440,21 @@ fn pane_draws_flat_corner_brackets_no_glow() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         pane.paint(&mut cx);
     }
-    let plain_brackets = scene
+    // New design: the corner brackets are segments of a *rounded border* (so they
+    // share the theme radius), drawn with rects + dimmed straights — not the flat,
+    // always-square `BracketCmd` primitive, and never glowing.
+    let brackets = scene
         .iter()
-        .filter(|c| matches!(c, DrawCommand::Brackets(b) if b.glow.is_none()))
+        .filter(|c| matches!(c, DrawCommand::Brackets(_)))
         .count();
-    let glowing = scene
-        .iter()
-        .filter(|c| matches!(c, DrawCommand::Brackets(b) if b.glow.is_some()))
-        .count();
-    assert_eq!(plain_brackets, 1, "pane draws one set of flat (no-glow) brackets");
-    assert_eq!(glowing, 0, "no glowing brackets");
+    assert_eq!(brackets, 0, "pane no longer uses the square bracket primitive");
+
+    let rounded_border = scene.iter().any(|c| {
+        matches!(
+            c,
+            DrawCommand::Rect(r)
+                if r.border.is_some() && r.radius == theme.radius && r.glow.is_none()
+        )
+    });
+    assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
 }

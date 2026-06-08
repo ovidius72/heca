@@ -106,7 +106,11 @@ pub struct Style {
     pub accent: Color,
     pub fg: Color,
     pub radius: f32,
+    /// Explicit font size in logical px. `0.0` = inherit the theme base font.
     pub font_size: f32,
+    /// Semantic multiplier applied to the inherited base font (header ≈ 2.0,
+    /// caption ≈ 0.8, body = 1.0). Ignored when `font_size` is set explicitly.
+    pub font_scale: f32,
 }
 
 impl Default for Style {
@@ -126,7 +130,10 @@ impl Default for Style {
             accent: Color::rgb(137, 180, 250),
             fg: Color::rgb(205, 214, 244),
             radius: 0.0,
-            font_size: 14.0,
+            // 0.0 = inherit the theme's `font_size`; a widget's `.font_size(x)`
+            // (x > 0) overrides it. Resolved centrally during layout.
+            font_size: 0.0,
+            font_scale: 1.0,
         }
     }
 }
@@ -158,6 +165,8 @@ impl Style {
                 height: self.height.to_taffy(),
             },
             flex_grow: self.flex_grow,
+            // Widgets use explicit Px sizes; never let a flex container squish them.
+            flex_shrink: 0.0,
             ..Default::default()
         }
     }

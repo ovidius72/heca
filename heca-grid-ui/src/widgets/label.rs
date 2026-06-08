@@ -43,25 +43,24 @@ impl Label {
         self
     }
 
-    /// Font size in logical pixels.
+    /// Explicit font size in logical px — overrides the inherited theme font.
     pub fn font_size(mut self, size: f32) -> Self {
         self.base.style.font_size = size;
+        self.base.font = size;
         self.remeasure();
+        self
+    }
+
+    /// Semantic font multiplier relative to the inherited base font (header ≈ 2.0,
+    /// caption ≈ 0.8). Scales with a global font change.
+    pub fn font_scale(mut self, scale: f32) -> Self {
+        self.base.style.font_scale = scale;
         self
     }
 
     /// The reactive text signal, so callers can update the label live.
     pub fn text_signal(&self) -> Signal<String> {
         self.text
-    }
-
-    /// Naive monospace measure for deterministic Phase-A layout. Replaced by
-    /// real `cosmic-text` shaping in Phase B.
-    fn remeasure(&mut self) {
-        let chars = self.text.get_untracked().chars().count() as f32;
-        let fs = self.base.style.font_size;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO);
     }
 }
 
@@ -71,6 +70,14 @@ impl Component for Label {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    /// Naive monospace measure from the resolved font ([`Base::font`]).
+    fn remeasure(&mut self) {
+        let chars = self.text.get_untracked().chars().count() as f32;
+        let fs = self.base.font;
+        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -83,7 +90,7 @@ impl Component for Label {
             self.base.bounds,
             &self.text.get_untracked(),
             color,
-            self.base.style.font_size,
+            self.base.font,
             self.align,
             false,
         );

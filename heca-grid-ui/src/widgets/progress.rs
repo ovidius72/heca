@@ -14,8 +14,6 @@ use heca_core::layout::{Rectangle, Size};
 const DEFAULT_WIDTH: f32 = 240.0;
 /// Track height (logical px).
 const HEIGHT: f32 = 8.0;
-/// Track/fill corner radius.
-const RADIUS: f32 = 4.0;
 /// Seconds for the fill to ease a full 0→1 sweep.
 const ANIM_DURATION: f32 = 0.25;
 /// Fill glow radius (px).
@@ -76,11 +74,13 @@ impl Component for ProgressBar {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (surface, accent, glow_c, muted) = {
+        let (surface, accent, glow_c, muted, theme_radius) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted)
+            (t.surface, t.accent, t.glow, t.muted, t.radius)
         };
         let b = self.base.bounds;
+        // Follow the theme radius, clamped to the bar's pill max (0 → square).
+        let radius = theme_radius.min((b.size.h / 2.0) as f32);
 
         // Track.
         cx.rect(
@@ -90,7 +90,7 @@ impl Component for ProgressBar {
                 color: muted,
                 width: 1.0,
             }),
-            RADIUS,
+            radius,
             None,
         );
 
@@ -103,7 +103,7 @@ impl Component for ProgressBar {
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
-            cx.rect(fill, accent, None, RADIUS, glow);
+            cx.rect(fill, accent, None, radius, glow);
         }
     }
 

@@ -7,6 +7,8 @@
 //!
 //! Run: `cargo run -p heca-renderer --example showcase`
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -40,11 +42,47 @@ fn to_grid_key(key: &Key) -> Option<GridKey> {
     })
 }
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::window::{CursorIcon, Window, WindowId};
 
 /// Build the retained UI tree. `Flex` is layout-only; `Card`/`Button` are the
 /// styled surfaces.
-fn build_ui(theme: &Theme) -> Flex {
+/// Live theme controls, backed by signals so a `Select` change is picked up by
+/// the next frame's `build_scene` (which reads `self.theme`). Demonstrates that
+/// border width, radius and glow are all configurable at runtime, not hardcoded.
+/// Intensity options in the order shown by the INTENSITY select.
+const INTENSITY_OPTS: [Intensity; 4] =
+    [Intensity::Off, Intensity::Low, Intensity::Medium, Intensity::Heavy];
+
+#[derive(Clone, Copy)]
+struct ThemeCtl {
+    glow: Signal<GlowLevel>,
+    radius: Signal<f32>,
+    border: Signal<f32>,
+    font: Signal<f32>,
+    intensity: Signal<Intensity>,
+}
+
+fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
+    // Initial positions for the control selects, read from the current control
+    // values — so the selects stay in sync if the tree is rebuilt (on font change).
+    let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
+    let border_opts = [0.0f32, 1.0, 2.0, 3.0];
+    let font_opts = [8.0f32, 10.0, 12.0, 15.0, 20.0, 28.0];
+    let near = |arr: &[f32], v: f32, dflt: usize| {
+        arr.iter().position(|x| (x - v).abs() < 0.01).unwrap_or(dflt)
+    };
+    let glow_idx = GlowLevel::ALL
+        .iter()
+        .position(|g| *g == ctl.glow.get_untracked())
+        .unwrap_or(2);
+    let radius_idx = near(&radius_opts, ctl.radius.get_untracked(), 2);
+    let border_idx = near(&border_opts, ctl.border.get_untracked(), 1);
+    let font_idx = near(&font_opts, ctl.font.get_untracked(), 3);
+    let intensity_idx = INTENSITY_OPTS
+        .iter()
+        .position(|x| *x == ctl.intensity.get_untracked())
+        .unwrap_or(2);
+
     let card = |title: &str, value: &str| {
         Card::new(title)
             .width(Length::Px(220.0))
@@ -52,8 +90,7 @@ fn build_ui(theme: &Theme) -> Flex {
             .background(theme.surface)
             .border(theme.accent, 1.5)
             .glow(theme.glow)
-            .radius(4.0)
-            .child(Label::new(value).color(theme.foreground).font_size(32.0))
+            .child(Label::new(value).color(theme.foreground).font_scale(2.0))
     };
     let click = |label: &str| {
         let name = label.to_string();
@@ -65,7 +102,7 @@ fn build_ui(theme: &Theme) -> Flex {
             .gap(16.0)
             .align(Align::Center)
             .child(toggle)
-            .child(Label::new(label).color(color).font_size(15.0))
+            .child(Label::new(label).color(color))
     };
     let report = |a: Action| println!("[showcase] {} -> {:?}", a.name, a.data);
 
@@ -88,9 +125,9 @@ fn build_ui(theme: &Theme) -> Flex {
             Flex::row()
                 .gap(16.0)
                 .align(Align::Center)
-                .child(Label::new("MODE").color(theme.muted).font_size(13.0))
+                .child(Label::new("MODE").color(theme.muted).font_scale(0.85))
                 .child(Select::new(["NORMAL", "PREFIX", "PASSTHROUGH"]).on_change(report))
-                .child(Label::new("WORKSPACE").color(theme.muted).font_size(13.0))
+                .child(Label::new("WORKSPACE").color(theme.muted).font_scale(0.85))
                 .child(Select::new(workspaces).selected(3).on_change(report)),
         )
         // One button per GridCN variant.
@@ -184,7 +221,7 @@ fn build_ui(theme: &Theme) -> Flex {
             Flex::row()
                 .gap(24.0)
                 .align(Align::Center)
-                .child(Label::new("POWER").color(theme.muted).font_size(13.0))
+                .child(Label::new("POWER").color(theme.muted).font_scale(0.85))
                 .child(ProgressBar::new().value(0.72))
                 .child(Gauge::new().value(0.85)),
         )
@@ -193,31 +230,146 @@ fn build_ui(theme: &Theme) -> Flex {
             Flex::row()
                 .gap(16.0)
                 .align(Align::Center)
-                .child(Label::new("INTENSITY").color(theme.muted).font_size(13.0))
-                .child(Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(2).on_change(report)),
+                .child(Label::new("INTENSITY").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(intensity_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.intensity.set(INTENSITY_OPTS[i.min(3)]);
+                            }
+                        },
+                    ),
+                ),
         )
-        // Item rows: a menu panel — leading slot (dot), label, trailing slot
-        // (kbd hint / chevron), selected + clickable states.
+        // Live theme controls — glow size, corner radius, border width. Each
+        // Select writes a signal that the next frame folds into `self.theme`.
         .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("GLOW").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(GlowLevel::ALL.map(|g| g.label()))
+                        .selected(glow_idx)
+                        .on_change(move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.glow.set(GlowLevel::ALL[i.min(GlowLevel::ALL.len() - 1)]);
+                            }
+                        }),
+                )
+                .child(Label::new("RADIUS").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["0", "4", "8", "16"]).selected(radius_idx).on_change(move |a| {
+                        if let SignalData::Usize(i) = a.data {
+                            ctl.radius.set(radius_opts[i.min(3)]);
+                        }
+                    }),
+                )
+                .child(Label::new("BORDER").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["0", "1", "2", "3"]).selected(border_idx).on_change(move |a| {
+                        if let SignalData::Usize(i) = a.data {
+                            ctl.border.set(border_opts[i.min(3)]);
+                        }
+                    }),
+                ),
+        )
+        // Font-size control + widgets that re-measure from it: the Input, Select
+        // and Label below are built at `theme.font_size`, so changing it rebuilds
+        // them at a different size — you can see their boxes grow/shrink with text.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("FONT").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["8", "10", "12", "15", "20", "28"]).selected(font_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.font.set(font_opts[i.min(font_opts.len() - 1)]);
+                            }
+                        },
+                    ),
+                )
+                .child(Input::new().value("SIZED"))
+                .child(Select::new(["ALPHA", "BETA", "GAMMA"]))
+                .child(Label::new("Aa").color(theme.foreground)),
+        )
+        // Item rows: a single-select menu panel. Clicking a row highlights it and
+        // clears the others. Immediate-mode (no reactive effects): each row's
+        // `active` signal is set directly on click via a shared list.
+        .child({
+            let selected = signal(0usize);
+            let states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
+            let select = move |i: usize, item: Item| -> Item {
+                states.borrow_mut().push(item.state());
+                let states = states.clone();
+                item.on_activate(move || {
+                    selected.set(i);
+                    for (j, s) in states.borrow().iter().enumerate() {
+                        s.set(j == i);
+                    }
+                })
+            };
             Pane::new()
                 .width(Length::Px(320.0))
                 .gap(2.0)
                 .background(theme.surface)
-                .child(Item::new("DASHBOARD").leading(StatusDot::online()).active(true))
-                .child(
+                .child(select(
+                    0,
+                    Item::new("DASHBOARD")
+                        
+                        .leading(StatusDot::online())
+                        .active(true)
+                        .marker(ActiveMarker::Bar),
+                ))
+                .child(select(
+                    1,
                     Item::new("VIEW PROFILE")
-                        .trailing(Label::new("CMD P").color(theme.muted).font_size(12.0))
-                        .trailing_bordered(true)
-                        .on_activate(click("VIEW PROFILE")),
-                )
-                .child(
+                        
+                        .marker(ActiveMarker::Bar)
+                        .trailing(Label::new("CMD P").color(theme.muted).font_scale(0.8))
+                        .trailing_bordered(true),
+                ))
+                .child(select(
+                    2,
                     Item::new("SETTINGS")
-                        .trailing(Label::new("CMD ,").color(theme.muted).font_size(12.0))
-                        .trailing_bordered(true)
-                        .on_activate(click("SETTINGS")),
+                        
+                        .marker(ActiveMarker::Bar)
+                        .trailing(Label::new("CMD ,").color(theme.muted).font_scale(0.8))
+                        .trailing_bordered(true),
+                ))
+                .child(
+                    Item::new("SYSTEM")
+                        
+                        .muted(true)
+                        .trailing(Label::new(">").color(theme.muted)),
                 )
-                .child(Item::new("SYSTEM").muted(true).trailing(Label::new(">").color(theme.muted))),
-        )
+        })
+}
+
+/// Resize cursor for the window edge/corner the pointer is near (else `Default`).
+fn edge_cursor(x: f64, y: f64, w: f64, h: f64) -> CursorIcon {
+    const E: f64 = 6.0;
+    let (l, r, t, b) = (x <= E, x >= w - E, y <= E, y >= h - E);
+    match (l, r, t, b) {
+        (true, _, true, _) => CursorIcon::NwResize,
+        (_, true, true, _) => CursorIcon::NeResize,
+        (true, _, _, true) => CursorIcon::SwResize,
+        (_, true, _, true) => CursorIcon::SeResize,
+        (true, _, _, _) | (_, true, _, _) => CursorIcon::EwResize,
+        (_, _, true, _) | (_, _, _, true) => CursorIcon::NsResize,
+        _ => CursorIcon::Default,
+    }
+}
+
+/// Shift every node's absolute bounds down by `dy` (negative scrolls the page up).
+/// Used for whole-page scrolling: the window framebuffer clips the overflow.
+fn offset_tree(c: &mut dyn Component, dy: f64) {
+    c.base_mut().bounds.loc.y += dy;
+    for child in c.base_mut().children.iter_mut() {
+        offset_tree(child.as_mut(), dy);
+    }
 }
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
@@ -225,7 +377,8 @@ fn build_ui(theme: &Theme) -> Flex {
 fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
     let mut scene = Scene::new();
     {
-        let mut cx = PaintCx::new(&mut scene, theme);
+        let mut cx =
+            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         root.paint(&mut cx);
     }
     // Corner brackets on the cards (first row) only — not the small buttons.
@@ -248,7 +401,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
         rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
         color: theme.accent,
         spacing: 3.0,
-        opacity: theme.intensity.scanline_opacity().max(0.05),
+        opacity: theme.intensity.scanline_opacity(),
     }));
     scene
 }
@@ -264,6 +417,8 @@ struct GpuState {
     scale_factor: f64,
     theme: Theme,
     ui: Flex,
+    ctl: ThemeCtl,
+    scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
     focus: FocusManager,
@@ -327,7 +482,14 @@ impl GpuState {
         let mut text = TextRenderer::new(&device, format);
         text.set_scale_factor(scale_factor);
         text.set_font_family(&theme.font_family);
-        let ui = build_ui(&theme);
+        let ctl = ThemeCtl {
+            glow: signal(theme.glow_size),
+            radius: signal(theme.radius),
+            border: signal(theme.border_width),
+            font: signal(theme.font_size),
+            intensity: signal(theme.intensity),
+        };
+        let ui = build_ui(&theme, ctl);
 
         Self {
             window,
@@ -340,6 +502,8 @@ impl GpuState {
             scale_factor,
             theme,
             ui,
+            ctl,
+            scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
             focus: FocusManager::new(),
@@ -367,10 +531,27 @@ impl GpuState {
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
 
-        // Relayout the retained tree to fill the window.
+        // Fold live theme controls in before painting.
+        self.theme.glow_size = self.ctl.glow.get_untracked();
+        self.theme.radius = self.ctl.radius.get_untracked();
+        self.theme.border_width = self.ctl.border.get_untracked();
+        self.theme.intensity = self.ctl.intensity.get_untracked();
+        self.theme.font_size = self.ctl.font.get_untracked();
+
+        // Lay the tree out at its natural (content) height — which may exceed the
+        // window — then translate it up by the scroll offset. The window edges do
+        // the clipping (the renderer has no scissor yet), so this is a whole-page
+        // scroll, not an embedded scroll region. The engine resolves every widget's
+        // font from `base_font` (= theme.font_size), so a font change reflows the
+        // whole tree live — no per-widget wiring, no rebuild.
         self.ui.base_mut().style.width = Length::Px(w);
-        self.ui.base_mut().style.height = Length::Px(h);
-        LayoutEngine::new().compute(&mut self.ui, Size::new(w as f64, h as f64));
+        self.ui.base_mut().style.height = Length::Auto;
+        LayoutEngine::new()
+            .base_font(self.theme.font_size)
+            .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
+        let content_h = self.ui.base().bounds.size.h as f32;
+        self.scroll_y = self.scroll_y.clamp(0.0, (content_h - h).max(0.0));
+        offset_tree(&mut self.ui, -(self.scroll_y as f64));
 
         let scene = build_scene(&self.ui, &self.theme, w, h);
 
@@ -458,7 +639,24 @@ impl ApplicationHandler for App {
                     position.x / state.scale_factor,
                     position.y / state.scale_factor,
                 );
-                state.ui.event(&Event::PointerMoved { pos: state.cursor });
+                // Grip/resize cursor when near a window edge or corner.
+                let phys = state.window.inner_size();
+                let sf = state.scale_factor;
+                let cur = edge_cursor(
+                    state.cursor.x,
+                    state.cursor.y,
+                    phys.width as f64 / sf,
+                    phys.height as f64 / sf,
+                );
+                state.window.set_cursor(cur);
+                let moved = Event::PointerMoved { pos: state.cursor };
+                // When an overlay is open, route hover only to it — items behind
+                // the panel must not receive hover events.
+                if state.focus.overlay_active(&mut state.ui) {
+                    state.focus.deliver_to_overlay(&mut state.ui, &moved);
+                } else {
+                    state.ui.event(&moved);
+                }
                 state.window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -489,8 +687,11 @@ impl ApplicationHandler for App {
                     state
                         .focus
                         .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
-                    state.window.request_redraw();
+                } else {
+                    // No overlay open → scroll the whole page (clamped in render).
+                    state.scroll_y += lines * 40.0;
                 }
+                state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();

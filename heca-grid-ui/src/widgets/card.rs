@@ -3,9 +3,15 @@
 //! from [`Surface`](super::Surface) conventions + [`Label`](super::Label).
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{Base, Component};
+use crate::color::Color;
+use crate::component::{Base, Component, PaintCx};
+use crate::reactive::SignalGet;
+use crate::scene::Border;
 use crate::style::Direction;
 use crate::widgets::Label;
+
+/// Title text multiplier relative to the inherited base font (small header).
+const TITLE_SCALE: f32 = 0.85;
 
 /// A titled, padded surface card.
 pub struct Card {
@@ -19,8 +25,7 @@ impl Card {
         base.style.direction = Direction::Column;
         base.style.padding = 18.0;
         base.style.gap = 10.0;
-        base.style.radius = 4.0;
-        base.children.push(Box::new(Label::new(title).font_size(13.0)));
+        base.children.push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
         Self { base }
     }
 }
@@ -31,6 +36,33 @@ impl Component for Card {
     }
     fn base_mut(&mut self) -> &mut Base {
         &mut self.base
+    }
+
+    /// Paint the surface chrome with the **theme** corner radius + border width
+    /// (so the global radius/border settings reach cards too), then children.
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        let (radius, bw) = {
+            let t = cx.theme();
+            (t.radius, t.border_width)
+        };
+        let s = &self.base.style;
+        // Keep the styled border color, but take its width from the theme.
+        let border = s.border.map(|b| Border { color: b.color, width: bw });
+        if s.fill.is_some() || border.is_some() || s.glow.is_some() {
+            cx.rect(
+                self.base.bounds,
+                s.fill.unwrap_or(Color::TRANSPARENT),
+                border,
+                radius,
+                s.glow,
+            );
+        }
+        for child in &self.base.children {
+            child.paint(cx);
+        }
     }
 }
 

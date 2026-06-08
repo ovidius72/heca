@@ -18,6 +18,10 @@ use crate::scene::{Border, Glow};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
+/// Pill widgets round harder than boxes: the theme radius is multiplied by this
+/// (then clamped to the capsule max), so a moderate radius reads as a capsule.
+const PILL_RADIUS_MUL: f32 = 2.0;
+
 /// Track width (logical px).
 const TRACK_W: f64 = 44.0;
 /// Track height (logical px); also drives the pill radius.
@@ -121,9 +125,9 @@ impl Component for Toggle {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (surface, accent, glow_c, muted, foreground) = {
+        let (surface, accent, glow_c, muted, foreground, theme_radius) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground)
+            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.radius)
         };
         let p = self.progress.clamp(0.0, 1.0);
         let track = self.base.bounds;
@@ -141,7 +145,9 @@ impl Component for Toggle {
             radius: GLOW_RADIUS,
             intensity: GLOW_INTENSITY * p,
         });
-        let radius = (TRACK_H / 2.0) as f32;
+        // Track radius follows the theme but rounds harder (pill widget), clamped
+        // to the pill max — so at a moderate theme radius it reads as a capsule.
+        let radius = (theme_radius * PILL_RADIUS_MUL).min((TRACK_H / 2.0) as f32);
         let fill = surface.lerp(accent.with_alpha(ON_FILL_ALPHA), p);
         cx.rect(track, fill, Some(border), radius, track_glow);
 
@@ -165,7 +171,7 @@ impl Component for Toggle {
             knob,
             muted.lerp(foreground, p),
             None,
-            (knob_d / 2.0) as f32,
+            (theme_radius * PILL_RADIUS_MUL).min((knob_d / 2.0) as f32),
             knob_glow,
         );
 
