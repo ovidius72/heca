@@ -57,7 +57,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [ ] **D6.5 `ActionSink` keybinding integration** (design locked — see §12): real config.toml-driven shortcuts on all actionable widgets. Implement *here*, when widgets meet the app.
 - [ ] D7 `cargo clippy --workspace` clean; update README + AGENTS.md.
 
-### Documentation pass (do before/with Phase D)
+### Documentation pass — **developer-facing** (do before/with Phase D)
 - [ ] Refresh **`docs/widgets.md`** to the current API — `font_scale`/`GlowLevel`/`control_radius`/`remeasure`/`PaintCx::with_viewport`, adaptive `Select`, per-widget theme-token behavior.
 - [ ] Add a **theme-token reference** (`glow_size`, `intensity`, `radius`, `border_width`, `font_size`/`font_scale`) + config.toml configurability.
 - [ ] Formally demote **`docs/the-grid-ui.md`** to reference-only (or fold its still-useful catalog/links into widgets.md) and delete the stale architecture section.
@@ -71,6 +71,9 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [ ] Multi-select (`Select` multi mode or `SelectMulti`): `Vec<usize>`, `Check` markers, toggle-on-click.
 - [ ] `Item`: drag-and-drop reordering · description (2nd line) · custom fg/bg per row · inline progress strip · arbitrary child composition.
 - [ ] New components (§11): HUD Frame, Metric Row, Modal, Notification, Search Input, Workspaces Container, SidebarItem variants, Tags, Toast, Accordion, Command Menu.
+
+### End-user documentation — **the very last task**
+- [ ] Author **end-user docs** (separate from the developer `docs/widgets.md`): for people *running* heca, not coding against it — config.toml, theme/intensity switching, keybindings/shortcuts (ties into §12 `ActionSink`/keymap). Do this **after everything else ships**.
 
 **Resume notes (active):** *none.*
 
