@@ -3,6 +3,7 @@
 //! This module keeps redraw / animation / backend polling orchestration out of
 //! `main.rs`.
 
+use crate::app::mutations::after_config_change;
 use crate::app_state::{AppState, DragState, InputMode};
 use crate::mouse;
 use std::time::{Duration, Instant};
@@ -23,7 +24,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     let edge_scrolled = mouse::process_edge_scroll(state);
     if edge_scrolled {
-        state.needs_redraw = true;
+        after_config_change(state);
     }
 
     if !matches!(state.mouse.drag_state, DragState::None) {

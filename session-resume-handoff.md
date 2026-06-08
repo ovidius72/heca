@@ -6,8 +6,16 @@
 - HEAD: `08eabab` — `feat(sidebar): make sidebar nav configurable`
 - `origin/main` is current at `36b8684`
 - `origin/feature/gpt-refactoring` matches local `HEAD`
-- Working tree is clean
+- Working tree currently has Phase 2 mutation-hook edits in progress
 - PR #29 is open against `main`
+
+### Current Phase 2 progress
+
+- Added `app::mutations` as the shared post-mutation hook module
+- `after_layout_change(...)` now centralizes the common post-mutation redraw/focus-sync path for layout mutations
+- `after_mutation_change(state, MutationKind::Config)` is used for config-driven refreshes in the app event path
+- Repeated `sync_focus(...); needs_redraw` tails in `heca/src/handlers.rs` were reduced materially
+- Validation currently passes: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
 
 ## Must-follow workflow rules
 

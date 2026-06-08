@@ -4,13 +4,14 @@
 //! action.  Parameterized variants destructure their fields from the enum;
 //! unit variants ignore the `_action` parameter.
 
+use crate::app::mutations::{after_focus_change, after_layout_change};
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
 use crate::{
     collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, focus_pane_by_id,
     move_pane_to_column, move_pane_to_workspace_column, pane_name, switch_workspace_tracked,
-    sync_focus, update_session_viewport,
+    update_session_viewport,
 };
 use heca_core::backend::FakeBackend;
 use heca_core::layout::animation::AnimationConfig;
@@ -21,42 +22,36 @@ use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane as LayoutPane, PaneI
 
 pub fn handle_focus_left(state: &mut AppState, _action: &WmAction) {
     state.session.focus_left();
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_focus_right(state: &mut AppState, _action: &WmAction) {
     state.session.focus_right();
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_focus_up(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.focus_up();
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_focus_down(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.focus_down();
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_next_pane(state: &mut AppState, _action: &WmAction) {
     state.session.focus_right();
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_prev_pane(state: &mut AppState, _action: &WmAction) {
     state.session.focus_left();
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_focus_change(state);
 }
 
 pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) {
@@ -64,8 +59,7 @@ pub fn handle_workspace_next(state: &mut AppState, _action: &WmAction) {
     let next = (current_ws + 1).min(state.session.workspaces.len().saturating_sub(1));
     if next != current_ws {
         switch_workspace_tracked(state, next);
-        sync_focus(state);
-        state.needs_redraw = true;
+        after_focus_change(state);
     }
 }
 
@@ -74,8 +68,7 @@ pub fn handle_workspace_prev(state: &mut AppState, _action: &WmAction) {
     let prev = current_ws.saturating_sub(1);
     if prev != current_ws {
         switch_workspace_tracked(state, prev);
-        sync_focus(state);
-        state.needs_redraw = true;
+        after_focus_change(state);
     }
 }
 
@@ -99,9 +92,10 @@ pub fn handle_focus_toggle_global(state: &mut AppState, _action: &WmAction) {
         let current_ws = state.session.active_workspace_idx;
         if prev_ws != current_ws {
             switch_workspace_tracked(state, prev_ws);
-            sync_focus(state);
+            after_focus_change(state);
+        } else {
+            state.needs_redraw = true;
         }
-        state.needs_redraw = true;
     }
 }
 
@@ -118,8 +112,7 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
     };
     if *ws_idx < state.session.workspaces.len() {
         switch_workspace_tracked(state, *ws_idx);
-        sync_focus(state);
-        state.needs_redraw = true;
+        after_focus_change(state);
     }
 }
 
@@ -133,8 +126,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     state
         .backends
         .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
@@ -152,29 +144,28 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     state
         .backends
         .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_resize_increase(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.resize_active_column(0.05);
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_resize_decrease(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.resize_active_column(-0.05);
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.toggle_active_column_zoom();
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
@@ -186,7 +177,7 @@ pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
             col.resize_active_pane_height(40.0, h, gaps);
         }
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_pane_height_decrease(state: &mut AppState, _action: &WmAction) {
@@ -198,7 +189,7 @@ pub fn handle_pane_height_decrease(state: &mut AppState, _action: &WmAction) {
             col.resize_active_pane_height(-40.0, h, gaps);
         }
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
@@ -206,7 +197,7 @@ pub fn handle_swap_left(state: &mut AppState, _action: &WmAction) {
         ws.scrolling.move_column_left();
         ws.scrolling.align_view_to_active_column();
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_swap_right(state: &mut AppState, _action: &WmAction) {
@@ -214,7 +205,7 @@ pub fn handle_swap_right(state: &mut AppState, _action: &WmAction) {
         ws.scrolling.move_column_right();
         ws.scrolling.align_view_to_active_column();
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_swap_up(state: &mut AppState, _action: &WmAction) {
@@ -247,11 +238,7 @@ pub fn handle_swap_up(state: &mut AppState, _action: &WmAction) {
             }
         }
     }
-    sync_focus(state);
-    if let Some(pane_id) = state.focused_pane {
-        crate::focus_pane_by_id(state, pane_id);
-    }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
@@ -284,27 +271,21 @@ pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
             }
         }
     }
-    sync_focus(state);
-    if let Some(pane_id) = state.focused_pane {
-        crate::focus_pane_by_id(state, pane_id);
-    }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_move_pane_left(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_active_pane_left();
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_move_pane_right(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_active_pane_right();
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_move_column_up(state: &mut AppState, _action: &WmAction) {
@@ -797,8 +778,7 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     }
 
     // Update AppState.focused_pane and sidebar after the swap, then log final locations.
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_move_param(state: &mut AppState, action: &WmAction) {
@@ -1005,8 +985,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
             }
         }
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
@@ -1032,7 +1011,6 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         destroy_empty_workspace(state, current_ws);
         let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
         state.session.switch_to_workspace(new_idx);
-        sync_focus(state);
     } else if ws_is_empty {
         let next_id = state.session.next_id();
         let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
@@ -1040,11 +1018,8 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         state
             .backends
             .insert(next_id, Box::new(FakeBackend::new(80, 24)));
-        sync_focus(state);
-    } else {
-        sync_focus(state);
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
@@ -1163,8 +1138,7 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
             ws.floating_is_active = true;
         }
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
@@ -1203,7 +1177,6 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         destroy_empty_workspace(state, current_ws);
         let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
         state.session.switch_to_workspace(new_idx);
-        sync_focus(state);
     } else if ws_is_empty {
         let next_id = state.session.next_id();
         let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
@@ -1211,11 +1184,8 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         state
             .backends
             .insert(next_id, Box::new(FakeBackend::new(80, 24)));
-        sync_focus(state);
-    } else {
-        sync_focus(state);
     }
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
@@ -1230,8 +1200,7 @@ pub fn handle_rename_target(state: &mut AppState, action: &WmAction) {
         } else {
             name.clone()
         };
-        sync_focus(state);
-        state.needs_redraw = true;
+        after_layout_change(state);
     }
 }
 
@@ -1263,8 +1232,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
     state
         .backends
         .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 /// Delete a column and all its panes (destructive).
@@ -1296,8 +1264,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
         ws.scrolling.remove_column(capped_col);
     }
 
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 /// Delete a workspace and all its columns/panes (destructive).
@@ -1348,8 +1315,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         state.last_visited_pane_per_ws.remove(target_ws);
     }
 
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 // ── Take pane ──
@@ -1479,8 +1445,7 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
         crate::destroy_empty_workspace(state, src_ws);
     }
 
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
@@ -1511,8 +1476,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
@@ -1881,8 +1845,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     state
         .backends
         .insert(next_id, Box::new(FakeBackend::new(80, 24)));
-    sync_focus(state);
-    state.needs_redraw = true;
+    after_layout_change(state);
 }
 
 // ── Mode ──
