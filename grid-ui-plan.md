@@ -1,56 +1,76 @@
 # heca-grid-ui — Grid UI Component Library: Plan
 
 > A reusable, signal-driven, composable GPU component library that gives heca a *Tron/GridCN* visual identity.
-> Status: **A done · B done · C ~mostly done · D pending** · Last updated: 2026-06-08
+> Status: **A done · B mostly done · C catalog done, shells pending · D not started** · Last updated: 2026-06-08
+
+**Doc roles (single source of truth for each):**
+- **`grid-ui-plan.md`** (this file) — the **activity tracker**: what's done, what remains, phases/tasks. *Update this as work lands.*
+- **`docs/widgets.md`** — canonical **per-widget API reference** (props/methods/events + examples). *Currently stale (Jun 4) — predates the theme-token/font pass; refresh is the [Documentation pass](#-remaining-work) task.*
+- **`docs/the-grid-ui.md`** — **reference & vision only** (external GridCN analysis + original design vision + GridCN reference links). Describes an *older, never-implemented* architecture; do **not** track activity here.
 
 ---
 
-## ✅ Task Board
+## ✅ Task Board — Shipped
 
-**Workflow** (agreed 2026-06-04): one **feature branch per task** off up-to-date `main`; **PR after each task**; mark a task **IN PROGRESS** before starting and **DONE** when finished; on stopping mid-task add a **Resume note** (what/why/agreed/how-to-continue) and delete it once resumed-and-completed.
+**Workflow** (agreed 2026-06-04): one **feature branch per task** off up-to-date `main`; **PR after each task**; mark a task **IN PROGRESS** before starting and **DONE** when finished; on stopping mid-task add a **Resume note** and delete it once resumed-and-completed. **Never run `cargo fmt`** (rustfmt 1.9 churns unrelated files). `heca-renderer/src` + `heca`/`heca-core`/`heca-config` are owned by other devs — only `heca-renderer/examples/showcase.rs` is ours.
 
-| Task | Status | PR |
-|------|--------|----|
-| Phase A — crate skeleton + core model | DONE | — |
-| Phase B — renderer (SDF glow) + showcase | DONE | — |
-| Phase C — component catalog (Button, Toggle, Checkbox, Input, Tabs, Badge, StatusDot, Separator, Spinner, Alert, ProgressBar, Gauge; `disabled`, `tab_index`, full Input keyboard model) | DONE | [#21](https://github.com/ovidius72/heca/pull/21) ✅ merged |
-| Docs reconciliation — `docs/widgets.md` (per-widget API + examples), `AGENTS.md` agent guide, `docs/the-grid-ui.md` reconcile | DONE | [#22](https://github.com/ovidius72/heca/pull/22) |
-| Overlay / popover layer (`Scene` overlay layer + `PaintCx::with_overlay` + `Component::overlay_active` + `FocusManager` overlay routing) | DONE | [#23](https://github.com/ovidius72/heca/pull/23) |
-| `Select` dropdown (first overlay consumer; `select-change`) | DONE | [#23](https://github.com/ovidius72/heca/pull/23) |
-| `Select` scrollable long list (max-visible rows + scrollbar + wheel) & showcase overlap demos | DONE | (extends #23) |
-| `Item` widget — generic row (leading · label · trailing slots, selected/hover/activate) for menus/options/sidebar | DONE | [#24](https://github.com/ovidius72/heca/pull/24) |
-| `ActiveMarker { None, Bar, Check }` on `Item` — context-driven indicator (Bar=sidebar, Check=menu pip, None=dropdown) | DONE | (extends #24) |
-| Bug: dropdown hover bleeds to items below Select panel (`PointerMoved` now routed only to overlay when active) | DONE | (extends #24) |
-| Bug: Tabs underline overlaps text on height resize (fixed `flex_shrink: 0` in `style.rs`) | DONE | (extends #24) |
-| Pane border: 1px accent at 30% opacity + small radius (4px) | DONE | (extends #24) |
-| Theme glow token `GlowLevel { None, Thin, Medium, Large }` — scales every glow's halo radius; `scaled_glow` folds in glow size + intensity | DONE | — (pending PR) |
-| Theme-driven radius + border width (`Theme::control_radius()`) across `Input`/`Select`/`Checkbox`/`Item` slot/`Pane`; `border: 0` supported | DONE | — (pending PR) |
-| `Pane` rounded corner brackets — radius-matched border + dimmed straight midsections (replaces square `BracketCmd`); active-row inset selection pill | DONE | — (pending PR) |
-| Single-select sidebar (immediate-mode shared `active` signals); clicked row highlights, others clear | DONE | — (pending PR) |
-| Whole-page scroll in showcase (wheel; natural-height layout + translate; window framebuffer clips) | DONE | — (pending PR) |
-| `Select` dropdown flip-up when no room below + viewport-capped internal scroll (`PaintCx::with_viewport`) | DONE | — (pending PR) |
-| Live theme controls in showcase (GLOW/RADIUS/BORDER/FONT/INTENSITY selects); re-measuring `font_size()` builders on `Input`/`Select`/`Button`/`Tabs` | DONE | — (pending PR) |
-| Wire `Item` into `Select` options (label + `value: SignalData` + slots) | PENDING | — |
-| Icon support (icon-font glyphs, no renderer texture work) | PENDING | — |
-| `Pane` container — prominent corner brackets, **no glow/shadow**; wraps sidebars/panes (rows = `Item`s) | DONE | (extends #24) |
-| `Tooltip`, `Modal`/`Dialog` (need overlay) | PENDING | — |
-| Misc widgets: `IconButton`, `Tag`/`Chip`, `EnergyMeter`, `SignalIndicator`, `DataCard`/`Panel`/`Hud` | PENDING | — |
-| Phase D — app adoption (default `grid_tron`, real `Sidebar`/`Pane` shells, status/tab bars, intensity action) | PENDING | — |
-| Reconcile `docs/the-grid-ui.md` with implemented architecture | PENDING | — |
-| **PLANNED** — Multi-select (`Select` multi mode or `SelectMulti`): multiple active rows via `Vec<usize>`, `Check` markers, toggle-on-click semantics | PLANNED | — |
-| **PLANNED** — `Item` drag-and-drop reordering (sidebar rows) | PLANNED | — |
-| **PLANNED** — `Item` description text (secondary line below label, muted color) | PLANNED | — |
-| **PLANNED** — `Item` custom fg/bg colors per row | PLANNED | — |
-| **PLANNED** — `Item` progress bar (inline fill strip inside the row) | PLANNED | — |
-| **PLANNED** — `Item` custom widget composition (arbitrary child in the label slot) | PLANNED | — |
-| Disentangle `intensity` vs `glow_size`: `glow_size` is the **sole** owner of glow (presence + halo size); `intensity` owns only the CRT scanline overlay (Off=0 → Heavy=0.20, no floor). Removed double-scaling in `scaled_glow` | DONE | — (pending PR) |
-| **Central font inheritance**: `Style.font_size` is a `0.0`=inherit sentinel + `font_scale` semantic multiplier; `Base.font` resolved by `LayoutEngine.base_font` + a `Component::remeasure()` hook. Every text/actionable widget (Label/Input/Select/Button/Tabs/Item/Badge/Alert/Card) inherits the theme font and re-measures live — no per-widget wiring, no tree rebuild. Explicit `.font_size(x)` overrides | DONE | — (pending PR) |
-| Theme radius applies proportionally to Badge + Toggle (pill ×2 mult, clamped) + Card + Alert + ProgressBar; `border: 0` supported | DONE | — (pending PR) |
-| `Select` dropdown: font-derived **row height** (no clipping) + **content-adaptive width** (fits widest option at current font, no fixed 200px floor) | DONE | — (pending PR) |
-| Showcase window: grip/resize cursor when the pointer is near a window edge/corner (winit `CursorIcon` from edge hit-test) | DONE | — (pending PR) |
-| Bug: `Item` keymap-hint slot top-aligned (row was `Align::Stretch`) — now vertically centered (`Align::Center`) | DONE | — (pending PR) |
-| Keybindings / `ActionSink` action-registry integration — **design locked, deferred** (see §12); covers all actionable widgets | DEFERRED | — |
-| **PLANNED (final)** — Proper documentation pass: `docs/widgets.md` + theme-token reference (`glow_size`, `intensity`, `radius`, `border_width`, `font_size`), config.toml configurability, the `ActionSink` port for the action registry, dropdown flip/scroll + page-scroll behavior | PLANNED | — |
+| Milestone | PR |
+|-----------|----|
+| **Phase A** — crate skeleton + core model (reactive facade, taffy layout, Scene/DrawCommand, Component+Base, Style/Theme, Flex/Container/Label) | merged |
+| **Phase B** — renderer (SDF rounded-rect + additive glow, brackets, embedded Geist Mono, text centering) + showcase | merged |
+| **Phase C catalog** — Button (6×3), Toggle, Checkbox, Input (full keyboard model), Tabs, Badge, StatusDot, Separator, Spinner, Alert, ProgressBar, Gauge; `disabled`, `tab_index`, focus-visible | [#21](https://github.com/ovidius72/heca/pull/21) |
+| Docs — `docs/widgets.md` API reference + `AGENTS.md` agent guide | [#22](https://github.com/ovidius72/heca/pull/22) |
+| Overlay/popover layer + `Select` dropdown (scrollable long list, `select-change`) | [#23](https://github.com/ovidius72/heca/pull/23) |
+| `Item` row (leading·label·trailing slots) + `ActiveMarker` + `Pane` container + dropdown-hover/Tabs-resize bug fixes | [#24](https://github.com/ovidius72/heca/pull/24) |
+| **Theme-token pass** — `GlowLevel{None,Thin,Medium,Large}`; intensity↔glow disentangle (intensity = CRT scanlines only); radius+border width across all box/pill widgets (`control_radius()`, `border:0`); **central font inheritance** (`Style.font_size` sentinel + `font_scale` multiplier + `Base.font` + `Component::remeasure()` + `LayoutEngine.base_font`); Pane rounded corner brackets; single-select sidebar; whole-page scroll; Select flip-up + viewport-capped scroll + font-derived row height + content-adaptive width; showcase live GLOW/RADIUS/BORDER/FONT/INTENSITY controls + edge resize cursor | [#30](https://github.com/ovidius72/heca/pull/30) ✅ merged 2026-06-08 |
+
+---
+
+## 📍 Remaining Work
+
+The authoritative checklist of what's left, by phase. (Supersedes the old flat task board.)
+
+### Phase C — finish the catalog & shells
+
+**heca-specific shells (the gap blocking Phase D):**
+- [ ] **C6 `Sidebar`** component — tree nav (expand/collapse, cursor, drag affordance), Grid-styled; mirrors `heca/src/sidebar.rs` behavior. *(Today we have `Pane` + `Item` rows, not a `Sidebar` widget.)*
+- [ ] **C7 `Pane` shell** — HUD header (title + status), optional tab bar, focused-state brackets; exposes inner content `Rectangle` for the backend. *(Today `Pane` is a bracket-framed container only.)*
+- [ ] **C5 `StatusBar`** — segmented `Flex`, signal-bound segments.
+- [ ] **C4 `CornerBrackets` decorator + `Reticle`** — shared, reusable by Pane/focus chrome.
+
+**Catalog gaps:**
+- [ ] `IconButton` + **icon support** (icon-font glyphs; no renderer texture work).
+- [ ] `Tag`/`Chip` (dismissible pill / selectable filter).
+- [ ] `EnergyMeter`, `SignalIndicator`.
+- [ ] `DataCard`/`Panel`/`Hud`.
+- [ ] `Tooltip`, `Modal`/`Dialog`, `CommandPalette` (all consume the overlay layer).
+- [ ] Wire `Item` into `Select` options (label + `value: SignalData` + slots) — unify the two row models.
+- [ ] **C8** extend showcase to exercise every component; visual/snapshot tests.
+
+### Phase D — app adoption (not started)
+- [ ] D1 `grid_tron` default theme; keep `mocha`/`latte` selectable.
+- [ ] D2 replace `heca/src/sidebar.rs` rendering with the `Sidebar` component, wired to WM-state signals.
+- [ ] D3 wrap each pane in the `Pane` shell (frame/brackets/header); backend renders into inner rect. **Layout engine untouched.**
+- [ ] D4 rebuild tab bar + status bar as `heca-grid-ui` components.
+- [ ] D5 bridge WM state → signals (focused pane, active workspace, titles).
+- [ ] D6 `CycleTronIntensity` action through the full action pipeline.
+- [ ] **D6.5 `ActionSink` keybinding integration** (design locked — see §12): real config.toml-driven shortcuts on all actionable widgets. Implement *here*, when widgets meet the app.
+- [ ] D7 `cargo clippy --workspace` clean; update README + AGENTS.md.
+
+### Documentation pass (do before/with Phase D)
+- [ ] Refresh **`docs/widgets.md`** to the current API — `font_scale`/`GlowLevel`/`control_radius`/`remeasure`/`PaintCx::with_viewport`, adaptive `Select`, per-widget theme-token behavior.
+- [ ] Add a **theme-token reference** (`glow_size`, `intensity`, `radius`, `border_width`, `font_size`/`font_scale`) + config.toml configurability.
+- [ ] Formally demote **`docs/the-grid-ui.md`** to reference-only (or fold its still-useful catalog/links into widgets.md) and delete the stale architecture section.
+
+### Infra / renderer dependency (other dev owns `heca-renderer/src`)
+- [ ] **`PushClip`/`PopClip`** — currently a no-op in `heca-renderer/src/scene.rs`. Needed for an **embeddable scroll region** (today only whole-page scroll works).
+- [ ] B5 physical-pixel alignment for crisp 1px borders on fractional scale.
+- [ ] B2 dedicated full-region scanline shader (basic version exists).
+
+### PLANNED enhancements (not scheduled)
+- [ ] Multi-select (`Select` multi mode or `SelectMulti`): `Vec<usize>`, `Check` markers, toggle-on-click.
+- [ ] `Item`: drag-and-drop reordering · description (2nd line) · custom fg/bg per row · inline progress strip · arbitrary child composition.
+- [ ] New components (§11): HUD Frame, Metric Row, Modal, Notification, Search Input, Workspaces Container, SidebarItem variants, Tags, Toast, Accordion, Command Menu.
 
 **Resume notes (active):** *none.*
 
@@ -141,15 +161,9 @@ cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
 
 **Display widgets done:** `Separator` (cross-axis stretch + `.length()`), `Badge` (6 theme-mapped variants, neon chip), `StatusDot` (semantic glowing dot).
 
-**Next steps (in priority order):**
+**Next steps:** see the [📍 Remaining Work](#-remaining-work) checklist above — the authoritative, current list (overlay layer, `Select`, `Item`, `Pane` container, and the whole theme-token pass are all **shipped**; what remains is the heca-specific shells C4–C8, the documentation pass, then Phase D).
 
-1. **Overlay/popover layer** — the first real infra gap (`Select`/`Tooltip`/`Modal` all need it): paint above the tree + route events to the topmost layer. Design before building `Select`.
-2. heca-specific shells: `StatusBar`, `Sidebar`, `Pane` (Phase C5–C7), then Phase D app adoption.
-3. Remaining catalog polish: `Tag`/`Chip`, `EnergyMeter`/`SignalIndicator`, `IconButton`, `DataCard`/`Panel`/`Hud`.
-4. Then the rest of the catalog (`Badge`, `Tag`, `Chip`, `StatusDot`, `Separator`/`Divider`, `Spinner`, `Tooltip`, `Alert`, `Select`, `Modal`/`Dialog`, `CommandPalette`, `Sidebar`, `StatusBar`, `MenuBar`, …) — full list + GridCN reference links in `docs/the-grid-ui.md`.
-5. **Phase D** — app adoption (dark grid theme default, real `Sidebar` + `Pane` shells over the niri layout).
-
-**⚠️ Two-doc reconciliation (open):** `docs/the-grid-ui.md` holds the GridCN reference + the canonical **component catalog, reference links, and event/accessibility spec** — but it describes an *older architecture* (`ComponentBase` + `impl_component!` macro + `SignalBus` + manual layout). **The implemented code follows THIS plan's architecture** (signals + taffy + `Event`/`Handled` + builder traits). The doc's event/accessibility *directions* were implemented, mapped onto the real architecture. When convenient, reconcile the two docs into one.
+**Two-doc reconciliation:** captured in Remaining Work → *Documentation pass*. `docs/the-grid-ui.md` is reference/vision only (it describes an older never-implemented architecture and self-labels as such); `docs/widgets.md` is the canonical API reference and needs refreshing to the post-PR-#30 API.
 
 ---
 >
@@ -384,17 +398,18 @@ Build order: **A → B → C standalone; D adopts into the app** (lowest risk; "
 
 **Goal:** The reusable Tron component set heca will consume.
 
-- [x] C1. `Button` **done** — 6 GridCN variants (primary/secondary/destructive/outline/ghost/link) × 3 sizes, variant-driven look from theme tokens, hover + click. `Toggle` **done** (sliding switch + `on_change(Action)` + `disabled`). `Checkbox` **done** (box + pop-in accent indicator + `checkbox-change`). `Input` **done** (editable buffer, blinking caret, placeholder, `input-change`). `IconButton` still pending.
-- [~] C2. `Surface` (base styled box) + `Card` + `Separator` + `Badge` (6 variants) + `StatusDot` **done**; `DataCard`/`Panel`/`Hud` pending.
 - [x] C0. Builder traits `LayoutExt`/`StyleExt`/`Parent` enforcing layout-vs-surface separation; `Flex` made layout-only; showcase migrated to `Card`/`Button` with live hover/click.
-- [~] C3. `Gauge` **done** (segmented energy meter) + `ProgressBar` **done** (eased fill); `EnergyMeter`/`SignalIndicator` pending.
+- [x] C1. `Button` (6 variants × 3 sizes), `Toggle`, `Checkbox`, `Input` (full keyboard model) — all done. `IconButton` still pending (see Remaining Work).
+- [~] C2. `Surface` + `Card` + `Separator` + `Badge` (6 variants) + `StatusDot` **done**; `DataCard`/`Panel`/`Hud` pending.
+- [~] C3. `Gauge` + `ProgressBar` **done**; `EnergyMeter`/`SignalIndicator` pending.
+- [x] C3.5. **Theme-token pass** (PR #30): `GlowLevel`, intensity↔glow split, theme-driven radius/border across all widgets, central font inheritance (`font_scale`/`Base.font`/`remeasure`), Pane rounded brackets, single-select sidebar, page scroll, Select flip/scroll/adaptive-width. *(Not in the original phase plan — added during build.)*
 - [ ] C4. `CornerBrackets` decorator + `Reticle` (shared, used by Pane/focus chrome).
 - [ ] C5. `StatusBar` (segmented `Flex`, signal-bound segments).
 - [ ] C6. `Sidebar` component (tree model, expand/collapse, cursor, drag affordance) — Grid-styled, mirrors current `heca/src/sidebar.rs` behavior.
-- [ ] C7. `Pane` shell: glow border, corner brackets when focused, HUD header (title + status); exposes an inner content `Rectangle` for the backend.
+- [ ] C7. `Pane` shell: HUD header (title + status), tab bar, focused-state brackets; exposes an inner content `Rectangle` for the backend. *(Today `Pane` is a bracket-framed container without the header/tabs.)*
 - [ ] C8. Extend showcase to exercise every component; visual + snapshot tests.
 
-**Exit:** All components render in the showcase; each is composable in a `Flex`/`Grid` and stylable via builders + theme.
+**Exit:** All components render in the showcase; each is composable in a `Flex`/`Grid` and stylable via builders + theme. **Remaining for full exit: C4–C8 (shells + decorators + tests).**
 
 ### Phase D — App adoption
 
