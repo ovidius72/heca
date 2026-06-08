@@ -3,11 +3,11 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `68b9415` — `docs(sidebar): finish phase 1.5 docs and tests`
-- `origin/main` is current at `c60baf3`
+- HEAD: `08eabab` — `feat(sidebar): make sidebar nav configurable`
+- `origin/main` is current at `36b8684`
 - `origin/feature/gpt-refactoring` matches local `HEAD`
-- Working tree is dirty only from the sidebar-nav configurability follow-up in progress
-- PR #28 is open against `main`
+- Working tree is clean
+- PR #29 is open against `main`
 
 ## Must-follow workflow rules
 
@@ -34,6 +34,7 @@ Completed and recorded in the checklist:
 - `1.5.8` add/update tests for sidebar tree behavior
 - `1.5.9` update docs and defaults
 - `1.5.10` make sidebar nav bindings configurable from `config.toml`
+- Phase 1.5 complete marker added to the checklist
 
 ### RPC exposure added
 The new collapse actions are RPC-exposed in `heca/src/rpc.rs`:
@@ -60,16 +61,16 @@ Updated user-facing references:
 - `heca-config/src/keys.rs`
 - `AGENTS.md` coding standard update
 
-### Validation that passed so far in this slice
+### Validation that passed
 - `cargo test -p heca --quiet`
 - `cargo test -p heca-config --quiet`
-- `cargo clippy -p heca --all-targets --quiet`
+- `cargo check --workspace --quiet`
+- `cargo clippy --workspace --all-targets --all-features --quiet`
 
 ## Still open
 
-- run the workspace-wide validation pass
-- commit the configurability slice
-- update / push PR #28 after review
+- PR #29 needs review/merge
+- Phase 2 is next after this branch is merged or otherwise advanced
 
 ## Important rules already settled
 
@@ -104,11 +105,11 @@ Implementation areas:
 
 ## Recent commits
 
+- `08eabab` — `feat(sidebar): make sidebar nav configurable`
 - `68b9415` — `docs(sidebar): finish phase 1.5 docs and tests`
 - `3f7d23f` — `docs: refresh handoff after merge sync`
 - `c60baf3` — merge of PR #27 into `main`
-- `da66b26` — `feat(sidebar): expose collapse actions via rpc`
 
 ## Next recommended step
 
-Finish the workspace-wide validation pass, then commit and update PR #28 with the sidebar-nav configurability follow-up.
+Wait for PR #29 review/merge, then move to **Phase 2** unless redirected.
