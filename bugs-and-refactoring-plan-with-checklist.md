@@ -284,6 +284,7 @@ Interpretation rules:
       - This keeps the action surface ready for later RPC/target-token work.
       - Future token targeting (`$workspaceIndex`, `$paneIndex`, `current`, etc.) is deferred to the later phase added in `pluggable-chrome-plugin-plan.md` section 8.1.
       - RPC command parsing now exposes the new actions via `heca/src/rpc.rs`.
+      - Merged into `main` via PR #27.
     - [ ] 1.5.8 Add/update tests for sidebar tree behavior
       - Add tests for sidebar-mode key resolution:
         - `j/k`, `Up/Down`
