@@ -9,14 +9,15 @@
 - Working tree is clean
 - PR #29 is merged into `main`
 
-### Current Phase 2 progress
+### Current Phase 3 progress
 
 - Added `app::mutations` as the shared post-mutation hook module
-- `after_layout_change(...)` now centralizes the common post-mutation redraw/focus-sync path for layout mutations
-- `after_metadata_change(...)` now handles rename/title-only refreshes
+- `after_layout_change(...)` centralizes the common post-mutation redraw/focus-sync path for layout mutations
+- `after_metadata_change(...)` handles rename/title-only refreshes
 - `after_mutation_change(state, MutationKind::Config)` is used for config-driven refreshes in the app event path
 - Mouse drop / sidebar drop / drag / input rename paths now flow through the shared hooks instead of hand-rolled sync/redraw tails
 - Manual `sidebar_tree.rebuild(...)` calls are now limited to startup and the focus-sync path
+- Added `app::pane_ops::swap_panes_same_column(...)` and delegated swap-up/down + same-column swap handling to it
 - Validation passed: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
 - Phase 2.1 slice landed in commit `b2d5155`
 

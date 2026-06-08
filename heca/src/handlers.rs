@@ -5,6 +5,7 @@
 //! unit variants ignore the `_action` parameter.
 
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
+use crate::app::pane_ops::swap_panes_same_column;
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
@@ -214,27 +215,8 @@ pub fn handle_swap_up(state: &mut AppState, _action: &WmAction) {
         if let Some(col) = ws.scrolling.active_column() {
             let pane_idx = col.active_pane_idx;
             let swap_with = pane_idx.saturating_sub(1);
-            if swap_with != pane_idx
-                && let Some(col) = ws.scrolling.columns.get_mut(col_idx)
-            {
-                let h_above = col
-                    .pane_sizes
-                    .get(pane_idx.min(swap_with))
-                    .map(|s| s.h)
-                    .unwrap_or(0.0);
-                let h_below = col
-                    .pane_sizes
-                    .get(pane_idx.max(swap_with))
-                    .map(|s| s.h)
-                    .unwrap_or(0.0);
-                let gap = ws.scrolling.options.gaps;
-                let up_offset = h_above + gap;
-                let down_offset = -(h_below + gap);
-                col.panes[pane_idx].animate_move_y_from(up_offset, AnimationConfig::default());
-                col.panes[swap_with].animate_move_y_from(down_offset, AnimationConfig::default());
-                col.panes.swap(pane_idx, swap_with);
-                col.active_pane_idx = swap_with;
-                col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+            if swap_with != pane_idx {
+                let _ = swap_panes_same_column(ws, col_idx, pane_idx, swap_with);
             }
         }
     }
@@ -247,27 +229,8 @@ pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
         if let Some(col) = ws.scrolling.active_column() {
             let pane_idx = col.active_pane_idx;
             let swap_with = (pane_idx + 1).min(col.panes.len().saturating_sub(1));
-            if swap_with != pane_idx
-                && let Some(col) = ws.scrolling.columns.get_mut(col_idx)
-            {
-                let h_above = col
-                    .pane_sizes
-                    .get(pane_idx.min(swap_with))
-                    .map(|s| s.h)
-                    .unwrap_or(0.0);
-                let h_below = col
-                    .pane_sizes
-                    .get(pane_idx.max(swap_with))
-                    .map(|s| s.h)
-                    .unwrap_or(0.0);
-                let gap = ws.scrolling.options.gaps;
-                let up_offset = h_above + gap;
-                let down_offset = -(h_below + gap);
-                col.panes[pane_idx].animate_move_y_from(down_offset, AnimationConfig::default());
-                col.panes[swap_with].animate_move_y_from(up_offset, AnimationConfig::default());
-                col.panes.swap(pane_idx, swap_with);
-                col.active_pane_idx = swap_with;
-                col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+            if swap_with != pane_idx {
+                let _ = swap_panes_same_column(ws, col_idx, pane_idx, swap_with);
             }
         }
     }
@@ -352,29 +315,8 @@ pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     if aws == bws {
         // Same workspace.
         if acol == bcol {
-            // Same column: swap panes in-place (robust & avoids index-shift pitfalls).
-            let (first_pi, second_pi) = if api < bpi { (api, bpi) } else { (bpi, api) };
             if let Some(ws) = state.session.workspaces.get_mut(aws) {
-                if acol >= ws.scrolling.columns.len() {
-                    return;
-                }
-                if second_pi >= ws.scrolling.columns[acol].panes.len()
-                    || first_pi >= ws.scrolling.columns[acol].panes.len()
-                {
-                    return;
-                }
-                // Animate vertical motion (approximate) then swap.
-                let col = &mut ws.scrolling.columns[acol];
-                let h_above = col.pane_sizes.get(first_pi).map(|s| s.h).unwrap_or(0.0);
-                let h_below = col.pane_sizes.get(second_pi).map(|s| s.h).unwrap_or(0.0);
-                let gap = ws.scrolling.options.gaps;
-                let up_offset = h_above + gap;
-                let down_offset = -(h_below + gap);
-                col.panes[first_pi].animate_move_y_from(up_offset, AnimationConfig::default());
-                col.panes[second_pi].animate_move_y_from(down_offset, AnimationConfig::default());
-                col.panes.swap(first_pi, second_pi);
-                col.active_pane_idx = second_pi;
-                col.compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
+                let _ = swap_panes_same_column(ws, acol, api, bpi);
             }
         } else {
             // Different columns, same workspace: perform reinsert-first to avoid column deletion
