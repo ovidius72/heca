@@ -97,10 +97,9 @@ toggle_current_column_collapsed    = "prefix+("
 # Sidebar navigation (only active IN sidebar mode):
 #   The defaults below come from [[keys.mode]] name = "sidebar".
 #   Override them in config.toml by redefining that mode's bindings.
-#   Example:
+#   Use the real config shape:
 #   [[keys.mode]]
 #   name = "sidebar"
-#   trigger = ""
 #   sticky = true
 #   [[keys.mode.bindings]]
 #   action = "sidebar_up"
