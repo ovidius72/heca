@@ -15,7 +15,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
-use crate::style::{Direction, Justify, Length};
+use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Flex;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -38,20 +38,42 @@ const HOVER_FILL_ALPHA: u8 = 16;
 /// Padding the optional slot border adds around the slot content.
 const SLOT_BORDER_PAD_X: f64 = 7.0;
 const SLOT_BORDER_PAD_Y: f64 = 4.0;
-/// Corner radius of the optional slot border.
-const SLOT_BORDER_RADIUS: f32 = 4.0;
+
+/// Inset of the active/hover selection pill from the row edges, so its corners
+/// never contend with a rounded container's corners.
+const SEL_INSET: f64 = 4.0;
+
+/// Size of the [`ActiveMarker::Check`] pip (logical px).
+const CHECK_SIZE: f64 = 10.0;
 
 /// Index of the leading / trailing slot within `base.children`.
 const LEADING: usize = 0;
 const TRAILING: usize = 1;
 
+/// How an [`Item`]'s active state is indicated. Set per context; the row carries
+/// the `active` bool, the marker decides how it's shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ActiveMarker {
+    /// No marker — only the tinted bg + accent label (default; plain rows /
+    /// dropdown options without a bar).
+    #[default]
+    None,
+    /// Vivid left bar — the sidebar/nav current item.
+    Bar,
+    /// A pip in the left gutter — a selected menu/dropdown option (works for
+    /// multi-select, where several rows are active at once).
+    Check,
+}
+
 /// A generic list row with leading/trailing slots and a label.
 pub struct Item {
     base: Base,
     label: Signal<String>,
-    /// Active (clicked-and-stays current item): vivid left bar + tinted bg +
-    /// accent label.
+    /// Active (clicked-and-stays current item): tinted bg + accent label, plus
+    /// an optional indicator controlled by [`ActiveMarker`].
     active: Signal<bool>,
+    /// How the active state is visually indicated — context-dependent.
+    marker: ActiveMarker,
     /// Render the label in the muted color (e.g. a section header).
     muted: bool,
     /// Draw a rounded border around the leading / trailing slot (chip style).
@@ -73,9 +95,9 @@ impl Item {
         let mut base = Base::new();
         base.style.direction = Direction::Row;
         base.style.justify = Justify::SpaceBetween; // leading left, trailing right
+        base.style.align = Align::Center; // center slots vertically (kbd hint, dot)
         base.style.padding = PAD_H as f32;
         base.style.height = Length::Px(ROW_H);
-        base.style.font_size = FONT_SIZE;
         // children[LEADING], children[TRAILING] — replaced by the slot builders.
         base.children.push(Box::new(spacer()));
         base.children.push(Box::new(spacer()));
@@ -83,6 +105,7 @@ impl Item {
             base,
             label: signal(label.into()),
             active: signal(false),
+            marker: ActiveMarker::None,
             muted: false,
             leading_border: false,
             trailing_border: false,
@@ -90,6 +113,14 @@ impl Item {
             flash: Flash::new(),
             on_activate: None,
         }
+    }
+
+    /// Explicit label font size — overrides the inherited theme font.
+    pub fn font_size(mut self, fs: f32) -> Self {
+        self.base.style.font_size = fs;
+        self.base.font = fs;
+        self.remeasure();
+        self
     }
 
     /// Set the leading (left) slot — any component (icon, dot, badge…).
@@ -104,10 +135,17 @@ impl Item {
         self
     }
 
-    /// Set the active state — the clicked-and-stays current item (vivid left bar
-    /// + tinted bg + accent label).
+    /// Set the active state — the clicked-and-stays current item (tinted bg +
+    /// accent label + optional indicator).
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
+        self
+    }
+
+    /// Set how the active state is visually indicated. Defaults to
+    /// [`ActiveMarker::None`] (tinted bg + accent label only).
+    pub fn marker(mut self, marker: ActiveMarker) -> Self {
+        self.marker = marker;
         self
     }
 
@@ -189,37 +227,80 @@ impl Component for Item {
         self.interactive() && !self.base.disabled.get_untracked()
     }
 
+    /// Row height scales with the resolved font (keeps the default 38px at 15px).
+    fn remeasure(&mut self) {
+        self.base.style.height = Length::Px(self.base.font * (ROW_H / FONT_SIZE));
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, muted_c, border_c) = {
+        let (accent, glow_c, foreground, muted_c, border_c, ctrl_radius, bw) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.muted, t.border)
+            (t.accent, t.glow, t.foreground, t.muted, t.border, t.control_radius(), t.border_width)
         };
         let b = self.base.bounds;
 
-        // Row background: tinted when active, faint on hover.
+        // Row background: tinted when active, faint on hover. Drawn as an *inset*
+        // selection pill (not full-bleed) so its rounded corners never contend
+        // with a rounded container's corners at any radius — a full-bleed fill in
+        // a heavily-rounded Pane leaves notches at the corners.
+        let sel = Rectangle::new(
+            Point::new(b.loc.x + SEL_INSET, b.loc.y + SEL_INSET),
+            Size::new(
+                (b.size.w - 2.0 * SEL_INSET).max(0.0),
+                (b.size.h - 2.0 * SEL_INSET).max(0.0),
+            ),
+        );
+        let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
         if active {
-            cx.rect(b, accent.with_alpha(ACTIVE_FILL_ALPHA), None, 0.0, None);
-            // Vivid left bar — centered, ~65% of the row height (not full).
-            let bar_h = b.size.h * ACTIVE_BAR_FRAC;
-            let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
-            cx.rect(
-                Rectangle::new(Point::new(b.loc.x, bar_y), Size::new(ACTIVE_BAR_W, bar_h)),
-                accent,
-                None,
-                (ACTIVE_BAR_W / 2.0) as f32,
-                Some(Glow {
-                    color: glow_c,
-                    radius: 8.0,
-                    intensity: 0.16,
-                }),
-            );
+            cx.rect(sel, accent.with_alpha(ACTIVE_FILL_ALPHA), None, sel_radius, None);
         } else if self.hovered.get_untracked() {
-            cx.rect(b, foreground.with_alpha(HOVER_FILL_ALPHA), None, 0.0, None);
+            cx.rect(sel, foreground.with_alpha(HOVER_FILL_ALPHA), None, sel_radius, None);
+        }
+
+        // Active indicator — depends on marker.
+        if active {
+            match self.marker {
+                ActiveMarker::Bar => {
+                    // Vivid left bar — centered, ~65% of row height.
+                    let bar_h = b.size.h * ACTIVE_BAR_FRAC;
+                    let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
+                    cx.rect(
+                        Rectangle::new(
+                            Point::new(b.loc.x, bar_y),
+                            Size::new(ACTIVE_BAR_W, bar_h),
+                        ),
+                        accent,
+                        None,
+                        (ACTIVE_BAR_W / 2.0) as f32,
+                        Some(Glow {
+                            color: glow_c,
+                            radius: 8.0,
+                            intensity: 0.16,
+                        }),
+                    );
+                }
+                ActiveMarker::Check => {
+                    // Small accent pip centered in the left gutter.
+                    let pip_x = b.loc.x + PAD_H / 2.0 - CHECK_SIZE / 2.0;
+                    let pip_y = b.loc.y + (b.size.h - CHECK_SIZE) / 2.0;
+                    cx.rect(
+                        Rectangle::new(
+                            Point::new(pip_x, pip_y),
+                            Size::new(CHECK_SIZE, CHECK_SIZE),
+                        ),
+                        accent,
+                        None,
+                        (CHECK_SIZE / 2.0) as f32,
+                        None,
+                    );
+                }
+                ActiveMarker::None => {}
+            }
         }
 
         // Label (state-driven color).
@@ -234,7 +315,7 @@ impl Component for Item {
             self.label_rect(),
             &self.label.get_untracked(),
             color,
-            self.base.style.font_size,
+            self.base.font,
             TextAlign::Start,
             active,
         );
@@ -257,11 +338,8 @@ impl Component for Item {
             cx.rect(
                 frame,
                 crate::color::Color::TRANSPARENT,
-                Some(crate::scene::Border {
-                    color: border_c,
-                    width: 1.0,
-                }),
-                SLOT_BORDER_RADIUS,
+                Some(crate::scene::Border { color: border_c, width: bw }),
+                ctrl_radius,
                 None,
             );
         };

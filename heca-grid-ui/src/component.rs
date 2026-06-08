@@ -37,6 +37,10 @@ pub struct Base {
     pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
+    /// Resolved font size in logical px, written by the layout pass: the widget's
+    /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
+    /// Widgets read **this** for text + size, so a global font flows in for free.
+    pub font: f32,
 }
 
 impl Base {
@@ -52,6 +56,7 @@ impl Base {
             focus_visible: signal(false),
             tab_index: None,
             children: Vec::new(),
+            font: 15.0,
         }
     }
 }
@@ -183,6 +188,12 @@ pub trait Component {
         self.base_mut().focus_visible.set(false);
     }
 
+    /// Recompute size from the resolved font ([`Base::font`]). Widgets whose
+    /// dimensions depend on font size override this; the layout pass calls it on
+    /// every node after resolving the font, so a global font reflows the tree
+    /// without per-widget wiring. Default: no-op.
+    fn remeasure(&mut self) {}
+
     /// Advance time-based animations by `dt` seconds. Returns `true` if still
     /// animating, so the host can schedule another frame. Default: recurse.
     fn tick(&mut self, dt: f32) -> bool {
@@ -202,12 +213,31 @@ const DISABLED_SCRIM: f32 = 0.55;
 pub struct PaintCx<'a> {
     scene: &'a mut Scene,
     theme: &'a Theme,
+    /// Visible viewport size in logical px. Widgets that place overlays (e.g. a
+    /// `Select` dropdown) use it to flip/cap against the screen. Defaults to
+    /// "infinite" so non-host callers (tests) keep the open-below behavior.
+    viewport: Size,
 }
 
 impl<'a> PaintCx<'a> {
     /// Create a painting context over `scene` using `theme`.
     pub fn new(scene: &'a mut Scene, theme: &'a Theme) -> Self {
-        Self { scene, theme }
+        Self {
+            scene,
+            theme,
+            viewport: Size::new(f64::MAX, f64::MAX),
+        }
+    }
+
+    /// Set the visible viewport size (the host passes the window size).
+    pub fn with_viewport(mut self, viewport: Size) -> Self {
+        self.viewport = viewport;
+        self
+    }
+
+    /// The visible viewport size in logical px.
+    pub fn viewport(&self) -> Size {
+        self.viewport
     }
 
     /// Run `f` with draws routed to the scene's **overlay layer** (painted on
@@ -248,6 +278,18 @@ impl<'a> PaintCx<'a> {
             rect,
             color,
             len: 16.0,
+            thickness: 1.5,
+            glow: None,
+        }));
+    }
+
+    /// Flat corner brackets with a custom arm length. Use `len = radius` so the
+    /// bracket arms end exactly where a rounded border's arc begins.
+    pub fn corner_brackets_len(&mut self, rect: Rectangle, color: Color, len: f32) {
+        self.scene.push(DrawCommand::Brackets(BracketCmd {
+            rect,
+            color,
+            len,
             thickness: 1.5,
             glow: None,
         }));
@@ -340,11 +382,14 @@ impl<'a> PaintCx<'a> {
         );
     }
 
-    /// Scale a glow by the theme intensity; drop it entirely when intensity is Off.
+    /// Scale a glow by the theme's `glow_size` token (the **sole** owner of glow:
+    /// presence + halo radius). `intensity` is intentionally *not* applied here —
+    /// it controls only the scanline/CRT overlay — so the two settings no longer
+    /// overlap. `GlowLevel::None` drops the glow entirely.
     fn scaled_glow(&self, glow: Option<Glow>) -> Option<Glow> {
-        let scale = self.theme.intensity.glow_scale();
-        glow.filter(|_| scale > 0.0).map(|g| Glow {
-            intensity: g.intensity * scale,
+        let size = self.theme.glow_size.radius_scale();
+        glow.filter(|_| size > 0.0).map(|g| Glow {
+            radius: g.radius * size,
             ..g
         })
     }

@@ -22,8 +22,6 @@ use heca_core::layout::{Point, Rectangle, Size};
 
 /// Box side length (logical px).
 const BOX_SIZE: f64 = 22.0;
-/// Box corner radius (a softened square, distinct from a round radio).
-const BOX_RADIUS: f32 = 4.0;
 /// Checked indicator size as a fraction of the box at full-on.
 const INNER_FRAC: f64 = 0.55;
 /// Indicator corner radius.
@@ -193,20 +191,21 @@ impl Component for Checkbox {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (surface, accent, glow_c, muted, foreground) = {
+        let (surface, accent, glow_c, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground)
+            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.control_radius(), t.border_width)
         };
         let p = self.progress.clamp(0.0, 1.0);
         let bx = self.box_rect();
 
-        // Box: dark fill, border firms muted → accent.
+        // Box: dark fill, border firms muted → accent. Radius + border width from
+        // the theme so the global settings scale this proportionally.
         let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
-            width: 1.5,
+            width: bw,
         };
-        cx.rect(bx, surface, Some(border), BOX_RADIUS, None);
+        cx.rect(bx, surface, Some(border), radius, None);
 
         // Checked indicator: an accent square that pops in from the box center.
         if p > 0.0 {
@@ -240,7 +239,7 @@ impl Component for Checkbox {
 
         // Press flash over the box (active widgets only).
         if !disabled {
-            cx.flash(bx, self.flash.amount() * 0.6, BOX_RADIUS);
+            cx.flash(bx, self.flash.amount() * 0.6, radius);
         }
 
         // Dim the whole control (box + label) when disabled.

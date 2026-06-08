@@ -30,12 +30,14 @@ impl Intensity {
         }
     }
 
-    /// Scanline opacity for this level.
+    /// CRT scanline-overlay opacity for this level — the visible thing `intensity`
+    /// controls. `Off` = no scanlines; higher = a stronger CRT grille.
     pub fn scanline_opacity(self) -> f32 {
         match self {
-            Intensity::Off | Intensity::Low => 0.0,
-            Intensity::Medium => 0.04,
-            Intensity::Heavy => 0.10,
+            Intensity::Off => 0.0,
+            Intensity::Low => 0.05,
+            Intensity::Medium => 0.11,
+            Intensity::Heavy => 0.20,
         }
     }
 
@@ -46,6 +48,60 @@ impl Intensity {
             Intensity::Low => Intensity::Medium,
             Intensity::Medium => Intensity::Heavy,
             Intensity::Heavy => Intensity::Off,
+        }
+    }
+}
+
+/// Size of the neon glow halo — a configurable token (e.g. from `config.toml`).
+/// Scales every glow's falloff radius; `None` disables glow entirely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GlowLevel {
+    /// No glow at all.
+    None,
+    /// A tight halo.
+    Thin,
+    #[default]
+    Medium,
+    /// A wide, soft halo.
+    Large,
+}
+
+impl GlowLevel {
+    /// Multiplier applied to a glow's base falloff radius. `0.0` means "off".
+    pub fn radius_scale(self) -> f32 {
+        match self {
+            GlowLevel::None => 0.0,
+            GlowLevel::Thin => 0.5,
+            GlowLevel::Medium => 1.0,
+            GlowLevel::Large => 2.0,
+        }
+    }
+
+    /// Parse a `config.toml` value (case-insensitive). Unknown → `Medium`.
+    pub fn parse(s: &str) -> Self {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "none" => GlowLevel::None,
+            "thin" => GlowLevel::Thin,
+            "large" => GlowLevel::Large,
+            _ => GlowLevel::Medium,
+        }
+    }
+
+    /// Stable ordering used by selectors: None, Thin, Medium, Large.
+    pub const ALL: [GlowLevel; 4] = [
+        GlowLevel::None,
+        GlowLevel::Thin,
+        GlowLevel::Medium,
+        GlowLevel::Large,
+    ];
+
+    /// Uppercase label for UI (matches `ALL` order).
+    pub fn label(self) -> &'static str {
+        match self {
+            GlowLevel::None => "NONE",
+            GlowLevel::Thin => "THIN",
+            GlowLevel::Medium => "MEDIUM",
+            GlowLevel::Large => "LARGE",
         }
     }
 }
@@ -66,7 +122,13 @@ pub struct Theme {
     pub warning: Color,
     pub font_family: String,
     pub font_size: f32,
+    /// Base corner radius in logical px. Widgets read this (possibly scaled) rather
+    /// than hardcoding their own.
     pub radius: f32,
+    /// Base border width in logical px. Used by container/pane borders.
+    pub border_width: f32,
+    /// Glow halo size — scales every glow's falloff radius (`None` = no glow).
+    pub glow_size: GlowLevel,
     pub intensity: Intensity,
     /// Show the keyboard focus ring (focus-visible indicator).
     pub show_focus_border: bool,
@@ -78,7 +140,19 @@ impl Default for Theme {
     }
 }
 
+/// Small controls (inputs, selects, checkboxes, chips) round at this fraction of
+/// the base [`Theme::radius`], so one global radius scales every widget together.
+const CONTROL_RADIUS_FRAC: f32 = 0.5;
+
 impl Theme {
+    /// Corner radius for small controls — a fraction of the base container
+    /// [`radius`](Theme::radius). Driving everything off `radius` means the global
+    /// radius setting scales all widgets proportionally (like `glow_size` does for
+    /// glow), instead of each widget hardcoding its own corners.
+    pub fn control_radius(&self) -> f32 {
+        self.radius * CONTROL_RADIUS_FRAC
+    }
+
     /// The default dark, cyan-accented Tron theme.
     pub fn grid_tron() -> Self {
         Self {
@@ -95,7 +169,9 @@ impl Theme {
             warning: Color::rgb(255, 190, 70),
             font_family: DEFAULT_MONO_FAMILY.to_string(),
             font_size: 15.0,
-            radius: 2.0,
+            radius: 8.0,
+            border_width: 1.0,
+            glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
         }
@@ -117,7 +193,9 @@ impl Theme {
             warning: Color::rgb(255, 190, 70),
             font_family: DEFAULT_MONO_FAMILY.to_string(),
             font_size: 15.0,
-            radius: 2.0,
+            radius: 6.0,
+            border_width: 1.0,
+            glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
         }

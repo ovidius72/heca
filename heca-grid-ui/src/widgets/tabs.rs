@@ -20,8 +20,6 @@ use heca_core::layout::{Point, Rectangle, Size};
 const TAB_PAD_H: f64 = 14.0;
 /// Gap between tabs.
 const TAB_GAP: f64 = 6.0;
-/// Tab font size.
-const FONT_SIZE: f32 = 14.0;
 /// Underline thickness.
 const UNDERLINE_H: f64 = 2.0;
 /// Extra vertical room around the text (for the underline).
@@ -49,8 +47,7 @@ impl Tabs {
     /// New tabs from `labels`; the first tab is selected.
     pub fn new(labels: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let labels: Vec<String> = labels.into_iter().map(Into::into).collect();
-        let mut base = Base::new();
-        base.style.font_size = FONT_SIZE;
+        let base = Base::new();
         let mut tabs = Self {
             base,
             labels,
@@ -65,6 +62,19 @@ impl Tabs {
         tabs.ind_x = x;
         tabs.ind_w = w;
         tabs
+    }
+
+    /// Explicit font size — overrides the inherited theme font.
+    pub fn font_size(mut self, fs: f32) -> Self {
+        self.base.style.font_size = fs;
+        self.base.font = fs;
+        self.remeasure();
+        // Re-anchor the active indicator to the re-measured segments.
+        let i = self.selected.get_untracked();
+        let (x, w) = self.segment(i).unwrap_or((0.0, 0.0));
+        self.ind_x = x;
+        self.ind_w = w;
+        self
     }
 
     /// Select an initial tab (clamped to the tab count).
@@ -95,7 +105,7 @@ impl Tabs {
     }
 
     fn advance(&self) -> f64 {
-        (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64
+        (self.base.font * MONO_ADVANCE_RATIO) as f64
     }
 
     /// `(start_x, width)` of tab `i` relative to the bounds origin.
@@ -121,12 +131,6 @@ impl Tabs {
             x += w + TAB_GAP;
         }
         (x - TAB_GAP).max(0.0)
-    }
-
-    fn remeasure(&mut self) {
-        let fs = self.base.style.font_size;
-        self.base.style.width = Length::Px(self.total_width() as f32);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * V_PAD);
     }
 
     /// Index of the tab under relative x, if any.
@@ -165,6 +169,12 @@ impl Component for Tabs {
         !self.base.disabled.get_untracked()
     }
 
+    /// Strip width + height track the resolved font.
+    fn remeasure(&mut self) {
+        self.base.style.width = Length::Px(self.total_width() as f32);
+        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * V_PAD);
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -175,7 +185,7 @@ impl Component for Tabs {
             (t.accent, t.glow, t.muted, t.foreground)
         };
         let b = self.base.bounds;
-        let fs = self.base.style.font_size;
+        let fs = self.base.font;
         let selected = self.selected.get_untracked();
 
         // Tab labels.

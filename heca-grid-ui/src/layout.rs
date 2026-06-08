@@ -12,9 +12,15 @@ use crate::component::Component;
 use heca_core::layout::{Point, Rectangle, Size};
 use taffy::prelude::*;
 
+/// Default base font (logical px) when the host doesn't set one — matches the
+/// default theme's `font_size`.
+const DEFAULT_BASE_FONT: f32 = 15.0;
+
 /// Computes layout for a component tree using `taffy`.
 pub struct LayoutEngine {
     tree: TaffyTree<()>,
+    /// Base font size widgets inherit unless they set their own `style.font_size`.
+    base_font: f32,
 }
 
 impl LayoutEngine {
@@ -22,7 +28,15 @@ impl LayoutEngine {
     pub fn new() -> Self {
         Self {
             tree: TaffyTree::new(),
+            base_font: DEFAULT_BASE_FONT,
         }
+    }
+
+    /// Set the base font size widgets inherit (the host passes `theme.font_size`),
+    /// so a global font change reflows every widget without per-widget wiring.
+    pub fn base_font(mut self, base_font: f32) -> Self {
+        self.base_font = base_font;
+        self
     }
 
     /// Lay out `root` within `available` (logical pixels) and write the computed
@@ -42,6 +56,14 @@ impl LayoutEngine {
 
     /// Recursively create taffy nodes for `c` and its children.
     fn build(&mut self, c: &mut dyn Component) -> taffy::NodeId {
+        // Resolve the inherited font (own `style.font_size` if set, else the base)
+        // and let the widget re-measure from it before we read its taffy style.
+        let resolved = {
+            let s = &c.base().style;
+            if s.font_size > 0.0 { s.font_size } else { self.base_font * s.font_scale }
+        };
+        c.base_mut().font = resolved;
+        c.remeasure();
         let style = c.base().style.to_taffy();
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);

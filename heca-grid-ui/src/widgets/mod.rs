@@ -33,7 +33,7 @@ pub use checkbox::{Checkbox, LabelSide};
 pub use flex::{Container, Flex, container};
 pub use gauge::Gauge;
 pub use input::Input;
-pub use item::Item;
+pub use item::{ActiveMarker, Item};
 pub use label::Label;
 pub use pane::Pane;
 pub use progress::ProgressBar;

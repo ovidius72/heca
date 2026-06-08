@@ -25,8 +25,6 @@ const DEFAULT_WIDTH: f32 = 240.0;
 const PAD: f64 = 10.0;
 /// Caret width (logical px).
 const CARET_W: f64 = 1.5;
-/// Field corner radius.
-const RADIUS: f32 = 4.0;
 /// Border alpha at rest; firms to solid accent on focus.
 const REST_BORDER_ALPHA: f32 = 150.0;
 /// Caret blink period (seconds): visible for the first half, hidden the second.
@@ -67,9 +65,8 @@ impl Input {
     /// A new empty input.
     pub fn new() -> Self {
         let mut base = Base::new();
-        base.style.font_size = 14.0;
         base.style.width = Length::Px(DEFAULT_WIDTH);
-        base.style.height = Length::Px(base.style.font_size * MONO_LINE_RATIO + 2.0 * PAD as f32);
+        base.style.height = Length::Px(base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
         Self {
             base,
             text: signal(String::new()),
@@ -83,6 +80,14 @@ impl Input {
             mods: Modifiers::default(),
             on_change: None,
         }
+    }
+
+    /// Explicit font size — overrides the inherited theme font.
+    pub fn font_size(mut self, fs: f32) -> Self {
+        self.base.style.font_size = fs;
+        self.base.font = fs;
+        self.remeasure();
+        self
     }
 
     /// Set the initial text (caret lands at the end).
@@ -154,7 +159,7 @@ impl Input {
 
     /// Char index nearest pointer x (rounded, for caret placement).
     fn caret_index_at_x(&self, x: f64) -> usize {
-        let advance = (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64;
+        let advance = (self.base.font * MONO_ADVANCE_RATIO) as f64;
         let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
         let idx = if advance > 0.0 {
             (rel / advance).round() as usize
@@ -166,7 +171,7 @@ impl Input {
 
     /// Char index under pointer x (floored, for word hit-testing).
     fn char_index_at_x(&self, x: f64, len: usize) -> usize {
-        let advance = (self.base.style.font_size * MONO_ADVANCE_RATIO) as f64;
+        let advance = (self.base.font * MONO_ADVANCE_RATIO) as f64;
         let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
         let idx = if advance > 0.0 {
             (rel / advance).floor() as usize
@@ -411,27 +416,33 @@ impl Component for Input {
         !self.base.disabled.get_untracked()
     }
 
+    /// Field height tracks the resolved font.
+    fn remeasure(&mut self) {
+        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
         let focused = self.base.focused.get_untracked();
-        let (surface, accent, muted, foreground) = {
+        let (surface, accent, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.muted, t.foreground)
+            (t.surface, t.accent, t.muted, t.foreground, t.control_radius(), t.border_width)
         };
         let b = self.base.bounds;
-        let fs = self.base.style.font_size;
+        let fs = self.base.font;
 
-        // Field: dark fill; border firms muted → accent on focus.
+        // Field: dark fill; border firms muted → accent on focus. Radius + border
+        // width come from the theme so global settings scale this proportionally.
         let p = if focused { 1.0 } else { 0.0 };
         let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
-            width: 1.5,
+            width: bw,
         };
-        cx.rect(b, surface, Some(border), RADIUS, None);
+        cx.rect(b, surface, Some(border), radius, None);
 
         // Text (left-aligned within the padded inner rect); placeholder when
         // empty and unfocused.
@@ -482,7 +493,7 @@ impl Component for Input {
 
         // Dim when disabled.
         if disabled {
-            cx.dim(b, RADIUS);
+            cx.dim(b, radius);
         }
 
         // Focus-visible ring (keyboard focus only).

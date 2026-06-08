@@ -61,11 +61,12 @@ pub enum ButtonSize {
 }
 
 impl ButtonSize {
-    fn font_size(self) -> f32 {
+    /// Semantic font multiplier relative to the inherited base font.
+    fn font_scale(self) -> f32 {
         match self {
-            ButtonSize::Small => 12.0,
-            ButtonSize::Medium => 14.0,
-            ButtonSize::Large => 16.0,
+            ButtonSize::Small => 0.85,
+            ButtonSize::Medium => 1.0,
+            ButtonSize::Large => 1.15,
         }
     }
     fn padding(self) -> f32 {
@@ -101,7 +102,7 @@ impl Button {
     /// A primary button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
-        base.style.font_size = ButtonSize::Medium.font_size();
+        base.style.font_scale = ButtonSize::Medium.font_scale();
         base.style.padding = ButtonSize::Medium.padding();
         let mut button = Self {
             base,
@@ -145,11 +146,19 @@ impl Button {
         self
     }
 
-    /// Set the size (updates font size + padding).
+    /// Set the size (a semantic font multiplier + padding), tracking the base font.
     pub fn size(mut self, size: ButtonSize) -> Self {
         self.size = size;
-        self.base.style.font_size = size.font_size();
+        self.base.style.font_scale = size.font_scale();
         self.base.style.padding = size.padding();
+        self.remeasure();
+        self
+    }
+
+    /// Set an explicit font size — overrides the inherited theme font + size scale.
+    pub fn font_size(mut self, fs: f32) -> Self {
+        self.base.style.font_size = fs;
+        self.base.font = fs;
         self.remeasure();
         self
     }
@@ -177,14 +186,6 @@ impl Button {
         self.hovered
     }
 
-    fn remeasure(&mut self) {
-        let chars = self.label.get_untracked().chars().count() as f32;
-        let fs = self.base.style.font_size;
-        let pad = self.base.style.padding * 2.0;
-        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
-    }
-
     fn contains(&self, p: Point) -> bool {
         self.base.bounds.contains(p)
     }
@@ -207,7 +208,7 @@ impl Button {
             self.base.bounds,
             &self.label.get_untracked(),
             color,
-            self.base.style.font_size,
+            self.base.font,
             TextAlign::Center,
             true,
         );
@@ -233,7 +234,7 @@ impl Button {
     /// A thin underline beneath the centered label.
     fn paint_underline(&self, cx: &mut PaintCx, color: Color) {
         let b = self.base.bounds;
-        let fs = self.base.style.font_size;
+        let fs = self.base.font;
         let chars = self.label.get_untracked().chars().count() as f32;
         let tw = (chars * fs * MONO_ADVANCE_RATIO) as f64;
         let x = b.loc.x + (b.size.w - tw) / 2.0;
@@ -258,6 +259,15 @@ impl Component for Button {
 
     fn focusable(&self) -> bool {
         !self.base.disabled.get_untracked()
+    }
+
+    /// Width + height track the resolved font (base font × the size scale).
+    fn remeasure(&mut self) {
+        let chars = self.label.get_untracked().chars().count() as f32;
+        let fs = self.base.font;
+        let pad = self.base.style.padding * 2.0;
+        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
