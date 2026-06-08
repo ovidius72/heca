@@ -71,6 +71,7 @@ pub enum WmAction {
     // ── Layout (unit) ──
     SplitHorizontal,
     SplitVertical,
+    ZoomColumn,
     ResizeIncrease,
     ResizeDecrease,
     PaneHeightIncrease,
@@ -125,6 +126,7 @@ pub enum WmAction {
     SwapPane,
     SwapAndFocusPane,
     RenamePane,
+    RenameColumn,
 
     // ── Pane (parameterized) ──
     FloatAt {
@@ -159,6 +161,17 @@ pub enum WmAction {
     SidebarLeftNav,
     SidebarRightNav,
     SidebarExpandToggle,
+    SidebarCreateWorkspace,
+    SidebarCreateColumn,
+    SidebarSplitInColumn,
+    SidebarZoomSelectedColumn,
+    SidebarDeleteSelected,
+    CollapseCurrentWorkspace,
+    ExpandCurrentWorkspace,
+    ToggleCurrentWorkspaceCollapsed,
+    CollapseCurrentColumn,
+    ExpandCurrentColumn,
+    ToggleCurrentColumnCollapsed,
 
     // ── System ──
     CommandPalette,
@@ -220,6 +233,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "focus_down" => Some(WmAction::FocusDown),
         "split_horizontal" => Some(WmAction::SplitHorizontal),
         "split_vertical" => Some(WmAction::SplitVertical),
+        "zoom_column" => Some(WmAction::ZoomColumn),
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
         "resize_increase" => Some(WmAction::ResizeIncrease),
@@ -232,6 +246,17 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_left_nav" => Some(WmAction::SidebarLeftNav),
         "sidebar_right_nav" => Some(WmAction::SidebarRightNav),
         "sidebar_expand_toggle" => Some(WmAction::SidebarExpandToggle),
+        "sidebar_create_workspace" => Some(WmAction::SidebarCreateWorkspace),
+        "sidebar_create_column" => Some(WmAction::SidebarCreateColumn),
+        "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
+        "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
+        "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
+        "collapse_current_workspace" => Some(WmAction::CollapseCurrentWorkspace),
+        "expand_current_workspace" => Some(WmAction::ExpandCurrentWorkspace),
+        "toggle_current_workspace_collapsed" => Some(WmAction::ToggleCurrentWorkspaceCollapsed),
+        "collapse_current_column" => Some(WmAction::CollapseCurrentColumn),
+        "expand_current_column" => Some(WmAction::ExpandCurrentColumn),
+        "toggle_current_column_collapsed" => Some(WmAction::ToggleCurrentColumnCollapsed),
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
@@ -270,6 +295,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "create_workspace" => Some(WmAction::CreateWorkspace),
         "rename_workspace" => Some(WmAction::RenameWorkspace),
         "rename_pane" => Some(WmAction::RenamePane),
+        "rename_column" => Some(WmAction::RenameColumn),
         "command_palette" => Some(WmAction::CommandPalette),
         "add_pane_to_column" => Some(WmAction::AddPaneToColumn {
             ws_idx: 0,
@@ -424,10 +450,22 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SidebarDown
         | WmAction::SidebarLeftNav
         | WmAction::SidebarRightNav
-        | WmAction::SidebarExpandToggle => 4,
+        | WmAction::SidebarExpandToggle
+        | WmAction::SidebarCreateWorkspace
+        | WmAction::SidebarCreateColumn
+        | WmAction::SidebarSplitInColumn
+        | WmAction::SidebarZoomSelectedColumn
+        | WmAction::SidebarDeleteSelected
+        | WmAction::CollapseCurrentWorkspace
+        | WmAction::ExpandCurrentWorkspace
+        | WmAction::ToggleCurrentWorkspaceCollapsed
+        | WmAction::CollapseCurrentColumn
+        | WmAction::ExpandCurrentColumn
+        | WmAction::ToggleCurrentColumnCollapsed => 4,
         // Pane management
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
+        | WmAction::ZoomColumn
         | WmAction::Float
         | WmAction::ClosePane
         | WmAction::PaneSelect
@@ -438,6 +476,7 @@ fn action_priority(action: &WmAction) -> u8 {
         | WmAction::CreateWorkspace
         | WmAction::RenameWorkspace
         | WmAction::RenamePane
+        | WmAction::RenameColumn
         | WmAction::WorkspaceNext
         | WmAction::WorkspacePrev => 1,
         // Swap
@@ -514,6 +553,19 @@ mod tests {
     fn test_action_from_name_known() {
         assert_eq!(action_from_name("focus_left"), Some(WmAction::FocusLeft));
         assert_eq!(action_from_name("focus_right"), Some(WmAction::FocusRight));
+        assert_eq!(action_from_name("zoom_column"), Some(WmAction::ZoomColumn));
+        assert_eq!(
+            action_from_name("toggle_current_workspace_collapsed"),
+            Some(WmAction::ToggleCurrentWorkspaceCollapsed)
+        );
+        assert_eq!(
+            action_from_name("toggle_current_column_collapsed"),
+            Some(WmAction::ToggleCurrentColumnCollapsed)
+        );
+        assert_eq!(
+            action_from_name("rename_column"),
+            Some(WmAction::RenameColumn)
+        );
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
             action_from_name("command_palette"),
@@ -596,10 +648,22 @@ mod tests {
                 | WmAction::SidebarDown
                 | WmAction::SidebarLeftNav
                 | WmAction::SidebarRightNav
-                | WmAction::SidebarExpandToggle => 4,
+                | WmAction::SidebarExpandToggle
+                | WmAction::SidebarCreateWorkspace
+                | WmAction::SidebarCreateColumn
+                | WmAction::SidebarSplitInColumn
+                | WmAction::SidebarZoomSelectedColumn
+                | WmAction::SidebarDeleteSelected
+                | WmAction::CollapseCurrentWorkspace
+                | WmAction::ExpandCurrentWorkspace
+                | WmAction::ToggleCurrentWorkspaceCollapsed
+                | WmAction::CollapseCurrentColumn
+                | WmAction::ExpandCurrentColumn
+                | WmAction::ToggleCurrentColumnCollapsed => 4,
                 // Pane management
                 WmAction::SplitHorizontal
                 | WmAction::SplitVertical
+                | WmAction::ZoomColumn
                 | WmAction::Float
                 | WmAction::ClosePane
                 | WmAction::PaneSelect
@@ -610,6 +674,7 @@ mod tests {
                 | WmAction::CreateWorkspace
                 | WmAction::RenameWorkspace
                 | WmAction::RenamePane
+                | WmAction::RenameColumn
                 | WmAction::WorkspaceNext
                 | WmAction::WorkspacePrev => 1,
                 // Swap
@@ -683,6 +748,7 @@ mod tests {
             ws_idx: 1,
             focus: true,
         };
+        let _ = WmAction::ZoomColumn;
         let _ = WmAction::Resize {
             target: ResizeTarget::Column,
             axis: ResizeAxis::X,
@@ -718,6 +784,7 @@ mod tests {
             pane_id: 1,
             focus_after: false,
         };
+        let _ = WmAction::RenameColumn;
         let _ = WmAction::PaneTake;
         let _ = WmAction::PaneTakeAndFocus;
     }

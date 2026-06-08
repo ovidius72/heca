@@ -67,7 +67,9 @@ impl FocusManager {
             return;
         }
         // Current position within the Tab order (by visit index identity).
-        let pos = self.focused.and_then(|f| order.iter().position(|&v| v == f));
+        let pos = self
+            .focused
+            .and_then(|f| order.iter().position(|&v| v == f));
         let next_pos = match pos {
             None => {
                 if forward {

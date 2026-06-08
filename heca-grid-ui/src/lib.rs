@@ -67,7 +67,7 @@ pub mod prelude {
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
     pub use crate::focus::FocusManager;
-    pub use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+    pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;
     pub use crate::style::{Align, Direction, Justify, Length};
     pub use crate::theme::{GlowLevel, Intensity, Theme};

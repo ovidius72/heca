@@ -19,7 +19,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -415,7 +415,11 @@ impl Component for Button {
         let mut animating = false;
 
         // Hover progress eases toward the hovered target.
-        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        let target = if self.hovered.get_untracked() {
+            1.0
+        } else {
+            0.0
+        };
         if (self.progress - target).abs() >= 1e-3 {
             let step = dt / HOVER_DURATION;
             self.progress = if self.progress < target {

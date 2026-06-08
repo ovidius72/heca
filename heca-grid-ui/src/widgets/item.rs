@@ -13,7 +13,7 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Flex;
@@ -208,7 +208,10 @@ impl Item {
         let trail_w = trail.size.w;
         let x0 = lead.loc.x + lead_w + if lead_w > 0.1 { GAP } else { 0.0 };
         let x1 = trail.loc.x - if trail_w > 0.1 { GAP } else { 0.0 };
-        Rectangle::new(Point::new(x0, b.loc.y), Size::new((x1 - x0).max(0.0), b.size.h))
+        Rectangle::new(
+            Point::new(x0, b.loc.y),
+            Size::new((x1 - x0).max(0.0), b.size.h),
+        )
     }
 }
 
@@ -323,7 +326,10 @@ impl Component for Item {
                 return;
             }
             let frame = Rectangle::new(
-                Point::new(slot.loc.x - SLOT_BORDER_PAD_X, slot.loc.y - SLOT_BORDER_PAD_Y),
+                Point::new(
+                    slot.loc.x - SLOT_BORDER_PAD_X,
+                    slot.loc.y - SLOT_BORDER_PAD_Y,
+                ),
                 Size::new(
                     slot.size.w + 2.0 * SLOT_BORDER_PAD_X,
                     slot.size.h + 2.0 * SLOT_BORDER_PAD_Y,

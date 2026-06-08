@@ -1,0 +1,41 @@
+use crate::color::Color;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Theme serde-default helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(crate) fn default_float_bg() -> Color {
+    Color::new(49, 50, 68, 255)
+}
+
+pub(crate) fn default_float_accent() -> Color {
+    Color::new(137, 180, 250, 255)
+}
+
+pub(crate) fn default_float_focus() -> Color {
+    Color::new(250, 179, 135, 255)
+}
+
+pub(crate) fn default_drag_ghost_bg() -> Color {
+    Color::new(137, 180, 250, 217)
+} // accent @ 85%
+
+pub(crate) fn default_drag_ghost_fg() -> Color {
+    Color::new(255, 255, 255, 255)
+} // white
+
+pub(crate) fn default_drag_source_bg() -> Color {
+    Color::new(137, 180, 250, 38)
+} // accent @ 15%
+
+pub(crate) fn default_drag_source_border() -> Color {
+    Color::new(137, 180, 250, 255)
+} // accent
+
+pub(crate) fn default_sidebar_label_font_size() -> f32 {
+    14.0
+}
+
+pub(crate) fn default_sidebar_button_font_size() -> f32 {
+    11.0
+}

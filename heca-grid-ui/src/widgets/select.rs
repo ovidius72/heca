@@ -14,7 +14,7 @@ use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -351,13 +351,24 @@ impl Component for Select {
                         cx.rect(row, accent.with_alpha(HILITE_ALPHA), None, 2.0, None);
                     }
                     // Leave room for the scrollbar on the right when present.
-                    let right_pad = if scrollbar { PAD_H + SCROLLBAR_W } else { PAD_H };
+                    let right_pad = if scrollbar {
+                        PAD_H + SCROLLBAR_W
+                    } else {
+                        PAD_H
+                    };
                     let row_text = Rectangle::new(
                         Point::new(row.loc.x + PAD_H, row.loc.y),
                         Size::new((row.size.w - PAD_H - right_pad).max(0.0), row.size.h),
                     );
                     let color = if i == selected { accent } else { foreground };
-                    cx.text(row_text, &self.options[i], color, fs, TextAlign::Start, i == selected);
+                    cx.text(
+                        row_text,
+                        &self.options[i],
+                        color,
+                        fs,
+                        TextAlign::Start,
+                        i == selected,
+                    );
                 }
                 // Scrollbar: a thumb sized/positioned by the visible window.
                 if scrollbar {
@@ -388,7 +399,9 @@ impl Component for Select {
         }
         match ev {
             Event::PointerMoved { pos } => {
-                if self.open && let Some(i) = self.row_at(*pos) {
+                if self.open
+                    && let Some(i) = self.row_at(*pos)
+                {
                     self.highlight = i;
                 }
                 Handled::No

@@ -174,9 +174,19 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
             Flex::row()
                 .gap(24.0)
                 .align(Align::Center)
-                .child(Checkbox::new().checked(true).label("ENCRYPT").on_change(report))
+                .child(
+                    Checkbox::new()
+                        .checked(true)
+                        .label("ENCRYPT")
+                        .on_change(report),
+                )
                 .child(Checkbox::new().label("VERBOSE").on_change(report))
-                .child(Checkbox::new().checked(true).label("READ-ONLY").disabled(true))
+                .child(
+                    Checkbox::new()
+                        .checked(true)
+                        .label("READ-ONLY")
+                        .disabled(true),
+                )
                 .child(
                     Checkbox::new()
                         .label("LABEL LEFT")
@@ -318,7 +328,6 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .child(select(
                     0,
                     Item::new("DASHBOARD")
-                        
                         .leading(StatusDot::online())
                         .active(true)
                         .marker(ActiveMarker::Bar),
@@ -326,7 +335,6 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .child(select(
                     1,
                     Item::new("VIEW PROFILE")
-                        
                         .marker(ActiveMarker::Bar)
                         .trailing(Label::new("CMD P").color(theme.muted).font_scale(0.8))
                         .trailing_bordered(true),
@@ -334,14 +342,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .child(select(
                     2,
                     Item::new("SETTINGS")
-                        
                         .marker(ActiveMarker::Bar)
                         .trailing(Label::new("CMD ,").color(theme.muted).font_scale(0.8))
                         .trailing_bordered(true),
                 ))
                 .child(
                     Item::new("SYSTEM")
-                        
                         .muted(true)
                         .trailing(Label::new(">").color(theme.muted)),
                 )
@@ -567,7 +573,9 @@ impl GpuState {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("showcase") });
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("showcase"),
+            });
 
         let bg = self.theme.background.to_f32x4();
         {
@@ -597,11 +605,13 @@ impl GpuState {
         // just base rects (the renderer draws all rects then all text per pass).
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
         self.grid.render(&self.device, &view, &mut encoder);
-        self.text.render(&self.device, &self.queue, &view, &mut encoder);
+        self.text
+            .render(&self.device, &self.queue, &view, &mut encoder);
         if scene.has_overlay() {
             enqueue_scene(&mut self.grid, &mut self.text, &scene.overlay_layer());
             self.grid.render(&self.device, &view, &mut encoder);
-            self.text.render(&self.device, &self.queue, &view, &mut encoder);
+            self.text
+                .render(&self.device, &self.queue, &view, &mut encoder);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
@@ -704,9 +714,7 @@ impl ApplicationHandler for App {
                     meta: s.super_key(),
                 }));
             }
-            WindowEvent::KeyboardInput { event, .. }
-                if event.state == ElementState::Pressed =>
-            {
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
                         // Tab / Shift+Tab move keyboard focus across buttons.

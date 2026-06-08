@@ -8,12 +8,16 @@ use super::types::*;
 #[derive(Debug, Clone)]
 pub struct Column {
     pub id: ColumnId,
+    /// Optional user-visible name for this column.
+    pub name: Option<String>,
     /// Panes in this column. Must be non-empty.
     pub panes: Vec<Pane>,
     /// Currently active pane index.
     pub active_pane_idx: usize,
     /// Desired width of this column.
     pub width: ColumnWidth,
+    /// Previous width saved while this column is zoomed to the viewport.
+    pub zoom_restore_width: Option<ColumnWidth>,
     /// Whether this column is full-width.
     pub is_full_width: bool,
     /// Whether this column is pending fullscreen.
@@ -32,9 +36,11 @@ impl Column {
     pub fn new(id: ColumnId, first_pane: Pane, width: ColumnWidth) -> Self {
         Self {
             id,
+            name: None,
             panes: vec![first_pane],
             active_pane_idx: 0,
             width,
+            zoom_restore_width: None,
             is_full_width: false,
             is_pending_fullscreen: false,
             is_pending_maximized: false,
@@ -66,9 +72,13 @@ impl Column {
         }
     }
 
+    pub fn is_zoomed(&self) -> bool {
+        self.zoom_restore_width.is_some()
+    }
+
     pub fn resolve_width(&self, working_width: f64, gaps: f64) -> f64 {
-        if self.is_full_width {
-            return working_width - gaps * 2.0;
+        if self.is_zoomed() || self.is_full_width {
+            return (working_width - gaps * 2.0).max(50.0);
         }
         match self.width {
             ColumnWidth::Proportion(p) => (working_width - gaps) * p - gaps,

@@ -1,0 +1,922 @@
+{
+  "/Users/antonio/projects/heca/.planning/config.json": {
+    "mtime": 1780491498.86755,
+    "ast_hash": "88d9771de654a3329bec29d6cf19c93c",
+    "semantic_hash": "88d9771de654a3329bec29d6cf19c93c"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/color.rs": {
+    "mtime": 1780686176.3634553,
+    "ast_hash": "ae63f1a2c07192c8d3616465e354f051",
+    "semantic_hash": "ae63f1a2c07192c8d3616465e354f051"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/defaults.rs": {
+    "mtime": 1780686176.3833673,
+    "ast_hash": "bf816c67c82f927998c62cdf689f9ec7",
+    "semantic_hash": "bf816c67c82f927998c62cdf689f9ec7"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/keys.rs": {
+    "mtime": 1780686176.3785295,
+    "ast_hash": "e1461835cd1de9ede95113f6b20605fe",
+    "semantic_hash": "e1461835cd1de9ede95113f6b20605fe"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/lib.rs": {
+    "mtime": 1780686176.388923,
+    "ast_hash": "2fef3163632b236e4b5309c7f0ba77b0",
+    "semantic_hash": "2fef3163632b236e4b5309c7f0ba77b0"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/loader.rs": {
+    "mtime": 1780686176.3951142,
+    "ast_hash": "c8980884dd17c353fbbffc660fdb6dc9",
+    "semantic_hash": "c8980884dd17c353fbbffc660fdb6dc9"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/settings.rs": {
+    "mtime": 1780686176.373863,
+    "ast_hash": "cbaeee36aeb863eb4aaf8b352ac0d5b2",
+    "semantic_hash": "cbaeee36aeb863eb4aaf8b352ac0d5b2"
+  },
+  "/Users/antonio/projects/heca/heca-config/src/theme.rs": {
+    "mtime": 1780686176.395355,
+    "ast_hash": "83227a4fe679f1b595337735a8876df2",
+    "semantic_hash": "83227a4fe679f1b595337735a8876df2"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/backend/fake.rs": {
+    "mtime": 1780525660.1221035,
+    "ast_hash": "d1f05e8d3c9b9b3517fb61d98d02d6c6",
+    "semantic_hash": "d1f05e8d3c9b9b3517fb61d98d02d6c6"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/backend/mod.rs": {
+    "mtime": 1780491498.87931,
+    "ast_hash": "65a93c3aa3deda89e57636459fb1f68c",
+    "semantic_hash": "65a93c3aa3deda89e57636459fb1f68c"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/backend/terminal.rs": {
+    "mtime": 1780525660.1251829,
+    "ast_hash": "afdd57a7ad806a858bbda102f6214ed1",
+    "semantic_hash": "afdd57a7ad806a858bbda102f6214ed1"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout.rs": {
+    "mtime": 1780491498.879449,
+    "ast_hash": "040f46663af363bab2acd0485520fb18",
+    "semantic_hash": "040f46663af363bab2acd0485520fb18"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/animation.rs": {
+    "mtime": 1780525660.1259885,
+    "ast_hash": "09adbfaec6d46be14822ef02482642c3",
+    "semantic_hash": "09adbfaec6d46be14822ef02482642c3"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/column.rs": {
+    "mtime": 1780604855.9777668,
+    "ast_hash": "e81f323c20132bfab516314082fa01e4",
+    "semantic_hash": "e81f323c20132bfab516314082fa01e4"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/scrolling.rs": {
+    "mtime": 1780604855.9781382,
+    "ast_hash": "5f226d6ee60780c49a19e0090e01a752",
+    "semantic_hash": "5f226d6ee60780c49a19e0090e01a752"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/session.rs": {
+    "mtime": 1780525660.1334574,
+    "ast_hash": "8480e1fb8f4bf2655b50ebfaa02a552a",
+    "semantic_hash": "8480e1fb8f4bf2655b50ebfaa02a552a"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/types.rs": {
+    "mtime": 1780525660.1342309,
+    "ast_hash": "3362a0fcd2b855b1d49830f8b0ffefb0",
+    "semantic_hash": "3362a0fcd2b855b1d49830f8b0ffefb0"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/view_offset.rs": {
+    "mtime": 1780525660.134674,
+    "ast_hash": "844ab82649cc831a59efaba13b84c496",
+    "semantic_hash": "844ab82649cc831a59efaba13b84c496"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/layout/workspace.rs": {
+    "mtime": 1780525660.1354942,
+    "ast_hash": "5be06efbb3130d2a9fcf5916d430daf1",
+    "semantic_hash": "5be06efbb3130d2a9fcf5916d430daf1"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/lib.rs": {
+    "mtime": 1780491498.8802679,
+    "ast_hash": "07ac6e2de98f6619c7331ef4330d4d6b",
+    "semantic_hash": "07ac6e2de98f6619c7331ef4330d4d6b"
+  },
+  "/Users/antonio/projects/heca/heca-core/src/types.rs": {
+    "mtime": 1780491498.8803272,
+    "ast_hash": "15be97167606ae0537c4a3fca07acdf1",
+    "semantic_hash": "15be97167606ae0537c4a3fca07acdf1"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/action.rs": {
+    "mtime": 1780568274.7724051,
+    "ast_hash": "0ab5e181157952d5f4b8964e0a7db948",
+    "semantic_hash": "0ab5e181157952d5f4b8964e0a7db948"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/builders.rs": {
+    "mtime": 1780568274.7724814,
+    "ast_hash": "52aa2f3cdfea1443af1749a710a23c96",
+    "semantic_hash": "52aa2f3cdfea1443af1749a710a23c96"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/color.rs": {
+    "mtime": 1780568274.7725601,
+    "ast_hash": "a3ee5b737e412c3d4b132bf653ee4878",
+    "semantic_hash": "a3ee5b737e412c3d4b132bf653ee4878"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/component.rs": {
+    "mtime": 1780604855.9783635,
+    "ast_hash": "14b7586bc0b3193e0b493969f0b8bae1",
+    "semantic_hash": "14b7586bc0b3193e0b493969f0b8bae1"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/effects.rs": {
+    "mtime": 1780568274.7727418,
+    "ast_hash": "2d835fff6b8ef7e391a17d4448014c18",
+    "semantic_hash": "2d835fff6b8ef7e391a17d4448014c18"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/focus.rs": {
+    "mtime": 1780604855.9786696,
+    "ast_hash": "c824fe30326c6ce3c5c11c2fa21ee73e",
+    "semantic_hash": "c824fe30326c6ce3c5c11c2fa21ee73e"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/font.rs": {
+    "mtime": 1780568274.7728915,
+    "ast_hash": "85322b16116329b16b5bb16f2d0521a3",
+    "semantic_hash": "85322b16116329b16b5bb16f2d0521a3"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/layout.rs": {
+    "mtime": 1780568274.7729614,
+    "ast_hash": "022bf2555e6dc46be91f243454857455",
+    "semantic_hash": "022bf2555e6dc46be91f243454857455"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/lib.rs": {
+    "mtime": 1780604855.978845,
+    "ast_hash": "65207039fe6b5ffe0df852874fbeef32",
+    "semantic_hash": "65207039fe6b5ffe0df852874fbeef32"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/reactive.rs": {
+    "mtime": 1780604855.97911,
+    "ast_hash": "ebed6c32af03d9d2790a353ad87deb0d",
+    "semantic_hash": "ebed6c32af03d9d2790a353ad87deb0d"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/scene.rs": {
+    "mtime": 1780573670.617766,
+    "ast_hash": "896ecf4f734cfd017fe8449d990d579c",
+    "semantic_hash": "896ecf4f734cfd017fe8449d990d579c"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/style.rs": {
+    "mtime": 1780568274.7732587,
+    "ast_hash": "aaa212d8f6d168c5e0fc860caded78f1",
+    "semantic_hash": "aaa212d8f6d168c5e0fc860caded78f1"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/theme.rs": {
+    "mtime": 1780568274.7733307,
+    "ast_hash": "6a72c34971a145feb6b0f35ba404be74",
+    "semantic_hash": "6a72c34971a145feb6b0f35ba404be74"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/alert.rs": {
+    "mtime": 1780604855.9794276,
+    "ast_hash": "977fedbcfce3b49f86d0a645d208a755",
+    "semantic_hash": "977fedbcfce3b49f86d0a645d208a755"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/badge.rs": {
+    "mtime": 1780604855.9798083,
+    "ast_hash": "feb5824c92bcc4854fdc536bf5ca132b",
+    "semantic_hash": "feb5824c92bcc4854fdc536bf5ca132b"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/button.rs": {
+    "mtime": 1780604855.9801524,
+    "ast_hash": "fb1278e18356fff52126acd51a949ba7",
+    "semantic_hash": "fb1278e18356fff52126acd51a949ba7"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/card.rs": {
+    "mtime": 1780604855.9803321,
+    "ast_hash": "066c72b57a2f10205451ca88a7c12cc5",
+    "semantic_hash": "066c72b57a2f10205451ca88a7c12cc5"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/checkbox.rs": {
+    "mtime": 1780604855.9805417,
+    "ast_hash": "7633978f7de0a9c10edf30eb667b7167",
+    "semantic_hash": "7633978f7de0a9c10edf30eb667b7167"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/flex.rs": {
+    "mtime": 1780568274.773921,
+    "ast_hash": "88a4a0d89f2e5d9dd7ed2c6e2e44014a",
+    "semantic_hash": "88a4a0d89f2e5d9dd7ed2c6e2e44014a"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/gauge.rs": {
+    "mtime": 1780604855.9806962,
+    "ast_hash": "a951a63828f5e657089a70dbb5f8f81a",
+    "semantic_hash": "a951a63828f5e657089a70dbb5f8f81a"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/input.rs": {
+    "mtime": 1780604855.981018,
+    "ast_hash": "ad3a5d16820e95060103dfa87d16bf1c",
+    "semantic_hash": "ad3a5d16820e95060103dfa87d16bf1c"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/item.rs": {
+    "mtime": 1780604855.981207,
+    "ast_hash": "818718944cf7628ad188004556532a8f",
+    "semantic_hash": "818718944cf7628ad188004556532a8f"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/label.rs": {
+    "mtime": 1780604855.9813824,
+    "ast_hash": "e23e85ba202bbdf3e56bfe008fe9e6c8",
+    "semantic_hash": "e23e85ba202bbdf3e56bfe008fe9e6c8"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/mod.rs": {
+    "mtime": 1780604855.9815252,
+    "ast_hash": "e92f071be051a050fec19bc5b493c74a",
+    "semantic_hash": "e92f071be051a050fec19bc5b493c74a"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/pane.rs": {
+    "mtime": 1780604679.0785968,
+    "ast_hash": "3e9c304bbfcfc48efb0dfc05677b04a4",
+    "semantic_hash": "3e9c304bbfcfc48efb0dfc05677b04a4"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/progress.rs": {
+    "mtime": 1780604855.9816866,
+    "ast_hash": "a7dfcb31c12cca7ef3ce1dd1f87873e1",
+    "semantic_hash": "a7dfcb31c12cca7ef3ce1dd1f87873e1"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/select.rs": {
+    "mtime": 1780604855.9819727,
+    "ast_hash": "04192472bf8da538f996235dd9c9298f",
+    "semantic_hash": "04192472bf8da538f996235dd9c9298f"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/separator.rs": {
+    "mtime": 1780568274.7744322,
+    "ast_hash": "491bd7cf782a2f895699bd2ef8691985",
+    "semantic_hash": "491bd7cf782a2f895699bd2ef8691985"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/spinner.rs": {
+    "mtime": 1780604855.9821303,
+    "ast_hash": "376a6e6f34b7ef90703c72315106dd8b",
+    "semantic_hash": "376a6e6f34b7ef90703c72315106dd8b"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/status_dot.rs": {
+    "mtime": 1780568274.7745793,
+    "ast_hash": "af9d10b528f1ded1c2fa1321863d7bfc",
+    "semantic_hash": "af9d10b528f1ded1c2fa1321863d7bfc"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/surface.rs": {
+    "mtime": 1780568274.774651,
+    "ast_hash": "49d6a7a397c57da0d27e662b78cf87c7",
+    "semantic_hash": "49d6a7a397c57da0d27e662b78cf87c7"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/tabs.rs": {
+    "mtime": 1780604855.982516,
+    "ast_hash": "00a1e429740d7d3a948f4929711c5913",
+    "semantic_hash": "00a1e429740d7d3a948f4929711c5913"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/src/widgets/toggle.rs": {
+    "mtime": 1780604855.982702,
+    "ast_hash": "4f9f2aa05f7e7544214f094ffac6824f",
+    "semantic_hash": "4f9f2aa05f7e7544214f094ffac6824f"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/tests/phase_a.rs": {
+    "mtime": 1780604855.9829323,
+    "ast_hash": "d845cc858049f86785e0555fa747d596",
+    "semantic_hash": "d845cc858049f86785e0555fa747d596"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/examples/showcase.rs": {
+    "mtime": 1780604855.983169,
+    "ast_hash": "b1df3640489e0555509ed5f81c04a09b",
+    "semantic_hash": "b1df3640489e0555509ed5f81c04a09b"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/src/grid.rs": {
+    "mtime": 1780604855.9833868,
+    "ast_hash": "e36957e5eef14df80497051f23ab5ccb",
+    "semantic_hash": "e36957e5eef14df80497051f23ab5ccb"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/src/lib.rs": {
+    "mtime": 1780568274.7921762,
+    "ast_hash": "2c4b3beadf5e4b919fb94c83cc15f2b1",
+    "semantic_hash": "2c4b3beadf5e4b919fb94c83cc15f2b1"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/src/primitive.rs": {
+    "mtime": 1780525660.139034,
+    "ast_hash": "ebeaa3ce0fe9cfb99e8b043e5d15f339",
+    "semantic_hash": "ebeaa3ce0fe9cfb99e8b043e5d15f339"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/src/scene.rs": {
+    "mtime": 1780568274.7922635,
+    "ast_hash": "e05acbde3f48c41332d9b31e1030b09e",
+    "semantic_hash": "e05acbde3f48c41332d9b31e1030b09e"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/src/text.rs": {
+    "mtime": 1780604855.9835825,
+    "ast_hash": "6ee4dd4ff7026f8c7b28d5b1dd7fb586",
+    "semantic_hash": "6ee4dd4ff7026f8c7b28d5b1dd7fb586"
+  },
+  "/Users/antonio/projects/heca/heca-renderer/tests/shader_valid.rs": {
+    "mtime": 1780568274.7926245,
+    "ast_hash": "9beb910adfd66d6b404581379f031ec2",
+    "semantic_hash": "9beb910adfd66d6b404581379f031ec2"
+  },
+  "/Users/antonio/projects/heca/heca/src/actions.rs": {
+    "mtime": 1780697066.1204731,
+    "ast_hash": "a692d0b0223058bcf9aa8ea0a2246e89",
+    "semantic_hash": "a692d0b0223058bcf9aa8ea0a2246e89"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/events.rs": {
+    "mtime": 1780604855.9843388,
+    "ast_hash": "fa53d63ce23d252767775b7b33400849",
+    "semantic_hash": "fa53d63ce23d252767775b7b33400849"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/focus.rs": {
+    "mtime": 1780604855.984584,
+    "ast_hash": "416d3d3d627df4b21f6b99c2475c7d49",
+    "semantic_hash": "416d3d3d627df4b21f6b99c2475c7d49"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/input.rs": {
+    "mtime": 1780697066.120706,
+    "ast_hash": "6b0d27ec5e88324e16019f5eeb28e7a7",
+    "semantic_hash": "6b0d27ec5e88324e16019f5eeb28e7a7"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/keyboard.rs": {
+    "mtime": 1780604855.9850695,
+    "ast_hash": "21d8020f9d38fb4460a9dcf6a674ac49",
+    "semantic_hash": "21d8020f9d38fb4460a9dcf6a674ac49"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/lifecycle.rs": {
+    "mtime": 1780604855.9852808,
+    "ast_hash": "d0f3f747205be54a7e06a2fa0a23c314",
+    "semantic_hash": "d0f3f747205be54a7e06a2fa0a23c314"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/mod.rs": {
+    "mtime": 1780604855.985513,
+    "ast_hash": "6ff9581c506516465ed436beccc5c4eb",
+    "semantic_hash": "6ff9581c506516465ed436beccc5c4eb"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/mutations.rs": {
+    "mtime": 1780604855.9857256,
+    "ast_hash": "98d551c23a239a7a73fdb97b623c72be",
+    "semantic_hash": "98d551c23a239a7a73fdb97b623c72be"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/registry.rs": {
+    "mtime": 1780697066.1357434,
+    "ast_hash": "883331f3c4b64a5800bf6b30099c4480",
+    "semantic_hash": "883331f3c4b64a5800bf6b30099c4480"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/render.rs": {
+    "mtime": 1780697066.1210837,
+    "ast_hash": "2e29da7e79f7b06912cf4f86efd2c7ee",
+    "semantic_hash": "2e29da7e79f7b06912cf4f86efd2c7ee"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/selection.rs": {
+    "mtime": 1780604855.9864697,
+    "ast_hash": "1d045fbace57d7407966cd9340fce413",
+    "semantic_hash": "1d045fbace57d7407966cd9340fce413"
+  },
+  "/Users/antonio/projects/heca/heca/src/app/startup.rs": {
+    "mtime": 1780604855.986625,
+    "ast_hash": "6b02b954d8e566416e869562d23120b5",
+    "semantic_hash": "6b02b954d8e566416e869562d23120b5"
+  },
+  "/Users/antonio/projects/heca/heca/src/app_state.rs": {
+    "mtime": 1780697066.1277797,
+    "ast_hash": "441aaa82784514c881b098eae90a6c59",
+    "semantic_hash": "441aaa82784514c881b098eae90a6c59"
+  },
+  "/Users/antonio/projects/heca/heca/src/chrome.rs": {
+    "mtime": 1780664271.2716362,
+    "ast_hash": "08065e3323d3c721f1f82f5525e2f7d8",
+    "semantic_hash": "08065e3323d3c721f1f82f5525e2f7d8"
+  },
+  "/Users/antonio/projects/heca/heca/src/handlers.rs": {
+    "mtime": 1780697066.1219194,
+    "ast_hash": "9c51512d769e6dc534819340574aeed1",
+    "semantic_hash": "9c51512d769e6dc534819340574aeed1"
+  },
+  "/Users/antonio/projects/heca/heca/src/input.rs": {
+    "mtime": 1780697066.12212,
+    "ast_hash": "5eed94540183075a46d7447d1ee086f6",
+    "semantic_hash": "5eed94540183075a46d7447d1ee086f6"
+  },
+  "/Users/antonio/projects/heca/heca/src/keymap.rs": {
+    "mtime": 1780525660.072785,
+    "ast_hash": "e97ebcc4ad84ebde4ce244e6b6c6df1e",
+    "semantic_hash": "e97ebcc4ad84ebde4ce244e6b6c6df1e"
+  },
+  "/Users/antonio/projects/heca/heca/src/main.rs": {
+    "mtime": 1780604855.9877114,
+    "ast_hash": "cd2408d23b35987d82f723eb081ff2a5",
+    "semantic_hash": "cd2408d23b35987d82f723eb081ff2a5"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse.rs": {
+    "mtime": 1780697066.1279306,
+    "ast_hash": "335541b8b2553c842c88baead5629b57",
+    "semantic_hash": "335541b8b2553c842c88baead5629b57"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/drag.rs": {
+    "mtime": 1780604855.9883113,
+    "ast_hash": "3f6e97c1587bb8393fcd3fc192055088",
+    "semantic_hash": "3f6e97c1587bb8393fcd3fc192055088"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/drop.rs": {
+    "mtime": 1780612634.7166312,
+    "ast_hash": "eb19413a50a27649522cd20afa3820cf",
+    "semantic_hash": "eb19413a50a27649522cd20afa3820cf"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/hit_test.rs": {
+    "mtime": 1780697066.1282125,
+    "ast_hash": "f25fce57a1d98fa5064122e7facfef82",
+    "semantic_hash": "f25fce57a1d98fa5064122e7facfef82"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/render.rs": {
+    "mtime": 1780604855.9890056,
+    "ast_hash": "734ba4459d8f8a478d761211c9a633cc",
+    "semantic_hash": "734ba4459d8f8a478d761211c9a633cc"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/sidebar.rs": {
+    "mtime": 1780697066.128445,
+    "ast_hash": "5f42678c138f57c0fe35a18c6244507d",
+    "semantic_hash": "5f42678c138f57c0fe35a18c6244507d"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/sidebar_drop.rs": {
+    "mtime": 1780612763.8001666,
+    "ast_hash": "24a54180b4f645dedd321b6e3a0e9750",
+    "semantic_hash": "24a54180b4f645dedd321b6e3a0e9750"
+  },
+  "/Users/antonio/projects/heca/heca/src/mouse/tests.rs": {
+    "mtime": 1780612809.297928,
+    "ast_hash": "dee331ae1d80519a0277970e3d74cca6",
+    "semantic_hash": "dee331ae1d80519a0277970e3d74cca6"
+  },
+  "/Users/antonio/projects/heca/heca/src/rpc.rs": {
+    "mtime": 1780604855.9892852,
+    "ast_hash": "30f853ea4fb09a51c41a2ff6d1deb3e7",
+    "semantic_hash": "30f853ea4fb09a51c41a2ff6d1deb3e7"
+  },
+  "/Users/antonio/projects/heca/heca/src/sidebar.rs": {
+    "mtime": 1780661749.5424933,
+    "ast_hash": "fea478aa01b59a5e4bf3fbc53a58b2ab",
+    "semantic_hash": "fea478aa01b59a5e4bf3fbc53a58b2ab"
+  },
+  "/Users/antonio/projects/heca/heca/src/sidebar/hit_test.rs": {
+    "mtime": 1780697066.1287193,
+    "ast_hash": "52a11d043f4fae149b562d433c3fa70b",
+    "semantic_hash": "52a11d043f4fae149b562d433c3fa70b"
+  },
+  "/Users/antonio/projects/heca/heca/src/sidebar/model.rs": {
+    "mtime": 1780697066.1137583,
+    "ast_hash": "9f8966efc642b8f54d1942969ae423f9",
+    "semantic_hash": "9f8966efc642b8f54d1942969ae423f9"
+  },
+  "/Users/antonio/projects/heca/heca/src/sidebar/render.rs": {
+    "mtime": 1780697066.1289163,
+    "ast_hash": "07d617b43536cb1b909e45a791814e90",
+    "semantic_hash": "07d617b43536cb1b909e45a791814e90"
+  },
+  "/Users/antonio/projects/heca/heca/src/sidebar/tests.rs": {
+    "mtime": 1780686176.3574157,
+    "ast_hash": "db02c8f479bc62bb86f891912f3499b3",
+    "semantic_hash": "db02c8f479bc62bb86f891912f3499b3"
+  },
+  "/Users/antonio/projects/heca/.planning/PROJECT.md": {
+    "mtime": 1780491498.8671932,
+    "ast_hash": "a71c094c0a6f2659e34e3de39ba4a3f5",
+    "semantic_hash": "a71c094c0a6f2659e34e3de39ba4a3f5"
+  },
+  "/Users/antonio/projects/heca/.planning/REQUIREMENTS.md": {
+    "mtime": 1780491498.867317,
+    "ast_hash": "8caf93c92195e00cb596354dcf69d539",
+    "semantic_hash": "8caf93c92195e00cb596354dcf69d539"
+  },
+  "/Users/antonio/projects/heca/.planning/ROADMAP.md": {
+    "mtime": 1780491498.867424,
+    "ast_hash": "6858a030cf06d828fefb515119bc5941",
+    "semantic_hash": "6858a030cf06d828fefb515119bc5941"
+  },
+  "/Users/antonio/projects/heca/.planning/STATE.md": {
+    "mtime": 1780491498.867489,
+    "ast_hash": "262146f529836efbbff6816e69860c4e",
+    "semantic_hash": "262146f529836efbbff6816e69860c4e"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/01-the-shell/01-CONTEXT.md": {
+    "mtime": 1780491498.8676825,
+    "ast_hash": "1842054b4798c885fc4418e58ac007cf",
+    "semantic_hash": "1842054b4798c885fc4418e58ac007cf"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/01-the-shell/01-DISCUSSION-LOG.md": {
+    "mtime": 1780491498.8677588,
+    "ast_hash": "c0dc6aa5502bd0c4bb2ddecb1d878d6b",
+    "semantic_hash": "c0dc6aa5502bd0c4bb2ddecb1d878d6b"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/01-the-shell/01-PLAN.md": {
+    "mtime": 1780491498.867862,
+    "ast_hash": "8753f84bbeb0a88245fc647011b7c3b6",
+    "semantic_hash": "8753f84bbeb0a88245fc647011b7c3b6"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/02-the-workspace/02-CONTEXT.md": {
+    "mtime": 1780491498.8679714,
+    "ast_hash": "d4f261d42d944d6f3402fa109b48fa01",
+    "semantic_hash": "d4f261d42d944d6f3402fa109b48fa01"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/02-the-workspace/02-DISCUSSION-LOG.md": {
+    "mtime": 1780491498.8680336,
+    "ast_hash": "93c09e63e5695884efc4a472cdf5d744",
+    "semantic_hash": "93c09e63e5695884efc4a472cdf5d744"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/02-the-workspace/02-PLAN.md": {
+    "mtime": 1780491498.8681254,
+    "ast_hash": "7c01e81d60215b050f13ab7893627e07",
+    "semantic_hash": "7c01e81d60215b050f13ab7893627e07"
+  },
+  "/Users/antonio/projects/heca/.planning/phases/03-the-content/03-CONTEXT.md": {
+    "mtime": 1780491498.8682194,
+    "ast_hash": "207082d2b1096fee2fc6a16c0a2d16f5",
+    "semantic_hash": "207082d2b1096fee2fc6a16c0a2d16f5"
+  },
+  "/Users/antonio/projects/heca/.planning/research/ARCHITECTURE.md": {
+    "mtime": 1780491498.8683321,
+    "ast_hash": "2e54f9ac9f2628a9ee8b1142cff9e9aa",
+    "semantic_hash": "2e54f9ac9f2628a9ee8b1142cff9e9aa"
+  },
+  "/Users/antonio/projects/heca/.planning/research/FEATURES.md": {
+    "mtime": 1780491498.868403,
+    "ast_hash": "799b126084ccd4479b2ce9a2ad761c06",
+    "semantic_hash": "799b126084ccd4479b2ce9a2ad761c06"
+  },
+  "/Users/antonio/projects/heca/.planning/research/MOUSE_INTERACTIVE_MOVE_PLAN.md": {
+    "mtime": 1780491498.8685067,
+    "ast_hash": "bed0650c2819a9d432ef3b345852c726",
+    "semantic_hash": "bed0650c2819a9d432ef3b345852c726"
+  },
+  "/Users/antonio/projects/heca/.planning/research/NIRI_ANALYSIS_AND_PLAN.md": {
+    "mtime": 1780491498.8686192,
+    "ast_hash": "e8cd26ec93516df0d863a79daa414ca0",
+    "semantic_hash": "e8cd26ec93516df0d863a79daa414ca0"
+  },
+  "/Users/antonio/projects/heca/.planning/research/NIRI_RESIZE_AND_FLOAT.md": {
+    "mtime": 1780491498.868687,
+    "ast_hash": "abda31a93a97033487abf3643ae59f72",
+    "semantic_hash": "abda31a93a97033487abf3643ae59f72"
+  },
+  "/Users/antonio/projects/heca/.planning/research/PITFALLS.md": {
+    "mtime": 1780491498.8687582,
+    "ast_hash": "32f19f74a07ee7f54f9efa6344eb6a96",
+    "semantic_hash": "32f19f74a07ee7f54f9efa6344eb6a96"
+  },
+  "/Users/antonio/projects/heca/.planning/research/STACK.md": {
+    "mtime": 1780491498.8688176,
+    "ast_hash": "dfa4660214dd9440748037ca11a27df9",
+    "semantic_hash": "dfa4660214dd9440748037ca11a27df9"
+  },
+  "/Users/antonio/projects/heca/.planning/research/SUMMARY.md": {
+    "mtime": 1780491498.8688745,
+    "ast_hash": "d2f501824a3c6a14ecc3b8607eeaed2c",
+    "semantic_hash": "d2f501824a3c6a14ecc3b8607eeaed2c"
+  },
+  "/Users/antonio/projects/heca/AGENTS.md": {
+    "mtime": 1780698271.2385793,
+    "ast_hash": "8fc9c8849974871b6ef291500a19c2c9",
+    "semantic_hash": "8fc9c8849974871b6ef291500a19c2c9"
+  },
+  "/Users/antonio/projects/heca/CLAUDE.md": {
+    "mtime": 1780491498.869046,
+    "ast_hash": "06bb4c04b815f3ae2afeb535fdc33c9f",
+    "semantic_hash": "06bb4c04b815f3ae2afeb535fdc33c9f"
+  },
+  "/Users/antonio/projects/heca/PLAN.md": {
+    "mtime": 1780491498.869359,
+    "ast_hash": "5d4c945af1f93b42363295103460ec6e",
+    "semantic_hash": "5d4c945af1f93b42363295103460ec6e"
+  },
+  "/Users/antonio/projects/heca/README.md": {
+    "mtime": 1780662135.0325236,
+    "ast_hash": "a46a9eb2917d35fabf7bef415af21f6a",
+    "semantic_hash": "a46a9eb2917d35fabf7bef415af21f6a"
+  },
+  "/Users/antonio/projects/heca/bugs-and-refactoring-plan-with-checklist.md": {
+    "mtime": 1780697066.1275032,
+    "ast_hash": "0cfdb854fc283dc63211e5eb7a8d16a3",
+    "semantic_hash": "0cfdb854fc283dc63211e5eb7a8d16a3"
+  },
+  "/Users/antonio/projects/heca/bugs-and-refactoring-plan.md": {
+    "mtime": 1780663058.125443,
+    "ast_hash": "36139e6654d459dc4dab90a565c15491",
+    "semantic_hash": "36139e6654d459dc4dab90a565c15491"
+  },
+  "/Users/antonio/projects/heca/bugs-and-refactoring.md": {
+    "mtime": 1780653255.3924685,
+    "ast_hash": "58f92edee23c270374b1d48073c292f4",
+    "semantic_hash": "58f92edee23c270374b1d48073c292f4"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/01-getting-started/important-software.md": {
+    "mtime": 1780491498.875693,
+    "ast_hash": "b81d2ceb922d3c9fa20dfc9e7f27a270",
+    "semantic_hash": "b81d2ceb922d3c9fa20dfc9e7f27a270"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/01-getting-started/overview.md": {
+    "mtime": 1780491498.8757696,
+    "ast_hash": "9f0a65b60c8588c8daac7a9ad28d4de1",
+    "semantic_hash": "9f0a65b60c8588c8daac7a9ad28d4de1"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/animations.md": {
+    "mtime": 1780491498.8758852,
+    "ast_hash": "0af6ad15d3c60d654b293d52f04c0b73",
+    "semantic_hash": "0af6ad15d3c60d654b293d52f04c0b73"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/debug.md": {
+    "mtime": 1780491498.8759456,
+    "ast_hash": "c100917399a7e7b461754dcd20507263",
+    "semantic_hash": "c100917399a7e7b461754dcd20507263"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/gestures.md": {
+    "mtime": 1780491498.8760073,
+    "ast_hash": "5d384b871a96e08b501c002b09274c90",
+    "semantic_hash": "5d384b871a96e08b501c002b09274c90"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/include.md": {
+    "mtime": 1780491498.8760805,
+    "ast_hash": "ee26c59d26f2c6c30fa22e850473f08c",
+    "semantic_hash": "ee26c59d26f2c6c30fa22e850473f08c"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/input.md": {
+    "mtime": 1780491498.8761432,
+    "ast_hash": "b275ef81074e81a3d2c14e206586a609",
+    "semantic_hash": "b275ef81074e81a3d2c14e206586a609"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/introduction.md": {
+    "mtime": 1780491498.8762066,
+    "ast_hash": "0022b5a268cabed947e667e0a93b27bb",
+    "semantic_hash": "0022b5a268cabed947e667e0a93b27bb"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/key-bindings.md": {
+    "mtime": 1780491498.8762848,
+    "ast_hash": "9fbf2056bafff9f61f7ea85ee894938b",
+    "semantic_hash": "9fbf2056bafff9f61f7ea85ee894938b"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/layer-rules.md": {
+    "mtime": 1780491498.876362,
+    "ast_hash": "ecbec7e63cb223e86383f59945e689ce",
+    "semantic_hash": "ecbec7e63cb223e86383f59945e689ce"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/layout.md": {
+    "mtime": 1780491498.8764434,
+    "ast_hash": "02bd1c2f2749dd765201b6d8362d30f5",
+    "semantic_hash": "02bd1c2f2749dd765201b6d8362d30f5"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/miscellaneous.md": {
+    "mtime": 1780491498.8765056,
+    "ast_hash": "fa0d90183d206f873515e5c14570d766",
+    "semantic_hash": "fa0d90183d206f873515e5c14570d766"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/named-workspaces.md": {
+    "mtime": 1780491498.876571,
+    "ast_hash": "549b5f2baa8be6aa8157e53a00500aee",
+    "semantic_hash": "549b5f2baa8be6aa8157e53a00500aee"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/outputs.md": {
+    "mtime": 1780491498.876637,
+    "ast_hash": "7cd7357f17b9cb6cd1562a73f6d79906",
+    "semantic_hash": "7cd7357f17b9cb6cd1562a73f6d79906"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/recent-windows.md": {
+    "mtime": 1780491498.876702,
+    "ast_hash": "5633bac3e6acc121901305df07d86474",
+    "semantic_hash": "5633bac3e6acc121901305df07d86474"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/switch-events.md": {
+    "mtime": 1780491498.876764,
+    "ast_hash": "f5e55078e362bb5614613a9ffbeab3ea",
+    "semantic_hash": "f5e55078e362bb5614613a9ffbeab3ea"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/02-configuration/window-rules.md": {
+    "mtime": 1780491498.876824,
+    "ast_hash": "d975d2787f7650528551342404548b6c",
+    "semantic_hash": "d975d2787f7650528551342404548b6c"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/accessibility.md": {
+    "mtime": 1780491498.8769307,
+    "ast_hash": "c7e3e80ccc2727a9f8a1b56ac0184d88",
+    "semantic_hash": "c7e3e80ccc2727a9f8a1b56ac0184d88"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/application-issues.md": {
+    "mtime": 1780491498.8770022,
+    "ast_hash": "730f931bcd0ea1523e6aa0e66b8d5ae9",
+    "semantic_hash": "730f931bcd0ea1523e6aa0e66b8d5ae9"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/floating-windows.md": {
+    "mtime": 1780491498.8770785,
+    "ast_hash": "515de8f3656ad074c28c2d7cd8ba7de9",
+    "semantic_hash": "515de8f3656ad074c28c2d7cd8ba7de9"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/fullscreen-and-maximize.md": {
+    "mtime": 1780491498.877145,
+    "ast_hash": "074c944021f9a8443cee0d12f643c5d8",
+    "semantic_hash": "074c944021f9a8443cee0d12f643c5d8"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/gestures.md": {
+    "mtime": 1780491498.877208,
+    "ast_hash": "1c2de5b32cee3c93410a6395782b10ef",
+    "semantic_hash": "1c2de5b32cee3c93410a6395782b10ef"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/ipc.md": {
+    "mtime": 1780491498.877272,
+    "ast_hash": "21e868414f03261391d9a35c5025442b",
+    "semantic_hash": "21e868414f03261391d9a35c5025442b"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/overview.md": {
+    "mtime": 1780491498.8773363,
+    "ast_hash": "4d17d26b4c9754109431032d3a4a0503",
+    "semantic_hash": "4d17d26b4c9754109431032d3a4a0503"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/screencasting.md": {
+    "mtime": 1780491498.877409,
+    "ast_hash": "f78b2bd71b0e174bf7280c4253cb44a1",
+    "semantic_hash": "f78b2bd71b0e174bf7280c4253cb44a1"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/security-model.md": {
+    "mtime": 1780491498.8774762,
+    "ast_hash": "ca59687b228935dace27c766a3b58919",
+    "semantic_hash": "ca59687b228935dace27c766a3b58919"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/tabs.md": {
+    "mtime": 1780491498.8775423,
+    "ast_hash": "9c12c940c213d0ed5281eca379eb0ce6",
+    "semantic_hash": "9c12c940c213d0ed5281eca379eb0ce6"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/window-effects.md": {
+    "mtime": 1780491498.877616,
+    "ast_hash": "f64bf75ea8748618122a5de42a954021",
+    "semantic_hash": "f64bf75ea8748618122a5de42a954021"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/03-usage/workspaces.md": {
+    "mtime": 1780491498.87768,
+    "ast_hash": "6ab6686c194ee25f035450de2dbc407d",
+    "semantic_hash": "6ab6686c194ee25f035450de2dbc407d"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/animation-timing.md": {
+    "mtime": 1780491498.8777933,
+    "ast_hash": "8340a2ccd6a3a21e3a886df9d9291f0c",
+    "semantic_hash": "8340a2ccd6a3a21e3a886df9d9291f0c"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/design-principles.md": {
+    "mtime": 1780491498.8778646,
+    "ast_hash": "26388182bad212cbb1f4fab559827735",
+    "semantic_hash": "26388182bad212cbb1f4fab559827735"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/developing.md": {
+    "mtime": 1780491498.8779287,
+    "ast_hash": "176c0dd7b2f7ce13bb258282a8007ff3",
+    "semantic_hash": "176c0dd7b2f7ce13bb258282a8007ff3"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/fractional-layout.md": {
+    "mtime": 1780491498.878004,
+    "ast_hash": "4da369c4d0ff0a888f0ee788c2ac48c3",
+    "semantic_hash": "4da369c4d0ff0a888f0ee788c2ac48c3"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/redraw-loop.md": {
+    "mtime": 1780491498.8780746,
+    "ast_hash": "3c6276b9c9bd0e8ce75b1730406c4371",
+    "semantic_hash": "3c6276b9c9bd0e8ce75b1730406c4371"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/04-development/releasing.md": {
+    "mtime": 1780491498.878142,
+    "ast_hash": "1d0a58a8c4a342c6753b47abd05322bd",
+    "semantic_hash": "1d0a58a8c4a342c6753b47abd05322bd"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/README.md": {
+    "mtime": 1780491498.878232,
+    "ast_hash": "ade230a697d3577115cd4bb0b8a841e7",
+    "semantic_hash": "ade230a697d3577115cd4bb0b8a841e7"
+  },
+  "/Users/antonio/projects/heca/docs/niri-wiki/architecture.md": {
+    "mtime": 1780491498.8783693,
+    "ast_hash": "9ad17ac1b1dd45b914cf8252acc68542",
+    "semantic_hash": "9ad17ac1b1dd45b914cf8252acc68542"
+  },
+  "/Users/antonio/projects/heca/docs/overlay-design.md": {
+    "mtime": 1780573670.6148887,
+    "ast_hash": "38166355dcdf9b53e8f7b582b2e3406c",
+    "semantic_hash": "38166355dcdf9b53e8f7b582b2e3406c"
+  },
+  "/Users/antonio/projects/heca/docs/stack-references.md": {
+    "mtime": 1780491498.8784337,
+    "ast_hash": "46f344c477dc6168b78c0f6f16ad8ab8",
+    "semantic_hash": "46f344c477dc6168b78c0f6f16ad8ab8"
+  },
+  "/Users/antonio/projects/heca/docs/the-grid-ui.md": {
+    "mtime": 1780570556.0182981,
+    "ast_hash": "e0a964f2dfe09603782e8e5ce1de83e6",
+    "semantic_hash": "e0a964f2dfe09603782e8e5ce1de83e6"
+  },
+  "/Users/antonio/projects/heca/docs/widgets.md": {
+    "mtime": 1780573670.6153407,
+    "ast_hash": "ba6fcc8c5c3cb25b6b6b89fa23d69a9d",
+    "semantic_hash": "ba6fcc8c5c3cb25b6b6b89fa23d69a9d"
+  },
+  "/Users/antonio/projects/heca/grid-ui-plan.md": {
+    "mtime": 1780604679.0771496,
+    "ast_hash": "dcfbefc88824b5d7f5d9b4e062e8d453",
+    "semantic_hash": "dcfbefc88824b5d7f5d9b4e062e8d453"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/assets/OFL.txt": {
+    "mtime": 1780568274.7722127,
+    "ast_hash": "731469c71e2aba286b1ea15a0a9b3451",
+    "semantic_hash": "731469c71e2aba286b1ea15a0a9b3451"
+  },
+  "/Users/antonio/projects/heca/heca-grid-ui/assets/README.md": {
+    "mtime": 1780568274.7722907,
+    "ast_hash": "cd206461cc38ebe0f9ac87987631706b",
+    "semantic_hash": "cd206461cc38ebe0f9ac87987631706b"
+  },
+  "/Users/antonio/projects/heca/keybinding-modes.md": {
+    "mtime": 1780491498.8823316,
+    "ast_hash": "47632d011d24875162e6ca1a845530ad",
+    "semantic_hash": "47632d011d24875162e6ca1a845530ad"
+  },
+  "/Users/antonio/projects/heca/niri-compatibility-review.md": {
+    "mtime": 1780491498.8824995,
+    "ast_hash": "e46c7fe0b191a974c02a78affaed379e",
+    "semantic_hash": "e46c7fe0b191a974c02a78affaed379e"
+  },
+  "/Users/antonio/projects/heca/plans/01-sidebar-and-actions.md": {
+    "mtime": 1780491498.8826833,
+    "ast_hash": "5e40aaf6074945e0957a96a1486f640a",
+    "semantic_hash": "5e40aaf6074945e0957a96a1486f640a"
+  },
+  "/Users/antonio/projects/heca/plans/02-action-registry-and-rpc-foundation.md": {
+    "mtime": 1780491498.8827972,
+    "ast_hash": "b0e6c15a445ddcca0adfbc325dc505a5",
+    "semantic_hash": "b0e6c15a445ddcca0adfbc325dc505a5"
+  },
+  "/Users/antonio/projects/heca/plans/03-prefix-global-chords-commands.md": {
+    "mtime": 1780491498.8828905,
+    "ast_hash": "a69a469f996c79ae6cd20221ea7a6952",
+    "semantic_hash": "a69a469f996c79ae6cd20221ea7a6952"
+  },
+  "/Users/antonio/projects/heca/pluggable-chrome-plugin-plan.md": {
+    "mtime": 1780697066.1065454,
+    "ast_hash": "1620115695c58414298e12d5e361e44b",
+    "semantic_hash": "1620115695c58414298e12d5e361e44b"
+  },
+  "/Users/antonio/projects/heca/redo-mouse.md": {
+    "mtime": 1780491498.8832438,
+    "ast_hash": "b037853e99d8d61f9952b1882bbb6938",
+    "semantic_hash": "b037853e99d8d61f9952b1882bbb6938"
+  },
+  "/Users/antonio/projects/heca/review.md": {
+    "mtime": 1780491498.8833728,
+    "ast_hash": "47dffbb0617f7797c4fe6d011615b610",
+    "semantic_hash": "47dffbb0617f7797c4fe6d011615b610"
+  },
+  "/Users/antonio/projects/heca/rust-skills-review-round2.md": {
+    "mtime": 1780491498.8834443,
+    "ast_hash": "f36a8ed40a5c098650193d9ae812d2a2",
+    "semantic_hash": "f36a8ed40a5c098650193d9ae812d2a2"
+  },
+  "/Users/antonio/projects/heca/session-resume-handoff.md": {
+    "mtime": 1780697293.6638908,
+    "ast_hash": "bac2fd1271cf81391524e0960ed491d0",
+    "semantic_hash": "bac2fd1271cf81391524e0960ed491d0"
+  },
+  "/Users/antonio/projects/heca/sidebar-gap.md": {
+    "mtime": 1780654825.930342,
+    "ast_hash": "1ff87ce5bc834ed992e5f771b366d40d",
+    "semantic_hash": "1ff87ce5bc834ed992e5f771b366d40d"
+  },
+  "/Users/antonio/projects/heca/spawn-pane-zoom-handoff.md": {
+    "mtime": 1780604855.9905012,
+    "ast_hash": "030272cd808d7a48503c3bc381ac0f9e",
+    "semantic_hash": "030272cd808d7a48503c3bc381ac0f9e"
+  },
+  "/Users/antonio/projects/heca/src/SUMMARY.md": {
+    "mtime": 1780491498.8835394,
+    "ast_hash": "3b12de1645f8afcd137486151a11db87",
+    "semantic_hash": "3b12de1645f8afcd137486151a11db87"
+  },
+  "/Users/antonio/projects/heca/src/actions.md": {
+    "mtime": 1780491498.883609,
+    "ast_hash": "a4d803cd88f238af13a440d9e62458f3",
+    "semantic_hash": "a4d803cd88f238af13a440d9e62458f3"
+  },
+  "/Users/antonio/projects/heca/src/chapter1.md": {
+    "mtime": 1780491498.8836646,
+    "ast_hash": "f49dd8bf0ccbc81067f368041546736f",
+    "semantic_hash": "f49dd8bf0ccbc81067f368041546736f"
+  },
+  "/Users/antonio/projects/heca/src/configuration.md": {
+    "mtime": 1780491498.8837485,
+    "ast_hash": "f82de5771cf1a48cceb9a3158b798f4e",
+    "semantic_hash": "f82de5771cf1a48cceb9a3158b798f4e"
+  },
+  "/Users/antonio/projects/heca/src/developer.md": {
+    "mtime": 1780491498.8838217,
+    "ast_hash": "89fb9bdc728927534207ce061a1bde4d",
+    "semantic_hash": "89fb9bdc728927534207ce061a1bde4d"
+  },
+  "/Users/antonio/projects/heca/src/introduction.md": {
+    "mtime": 1780491498.8838854,
+    "ast_hash": "87f9985651f462b1654ab41b92cd82fb",
+    "semantic_hash": "87f9985651f462b1654ab41b92cd82fb"
+  },
+  "/Users/antonio/projects/heca/src/keybindings.md": {
+    "mtime": 1780491498.883972,
+    "ast_hash": "5e9ad277c98680b74c60dbd2dca963c9",
+    "semantic_hash": "5e9ad277c98680b74c60dbd2dca963c9"
+  },
+  "/Users/antonio/projects/heca/src/modes.md": {
+    "mtime": 1780491498.8840413,
+    "ast_hash": "a289e6b9c1909d905c0dbfb41dd28eca",
+    "semantic_hash": "a289e6b9c1909d905c0dbfb41dd28eca"
+  }
+}

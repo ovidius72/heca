@@ -23,6 +23,7 @@ pub enum SidebarItemState {
 #[derive(Clone, Debug, PartialEq)]
 pub enum RenameTarget {
     Workspace(usize),
+    Column { ws_idx: usize, col_idx: usize },
     Pane(u64),
 }
 
@@ -49,6 +50,9 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
+    // Reserved for multi-key chord UX that is partially wired in the event/render
+    // flow but not yet entered by the current command paths.
+    #[allow(dead_code)]
     Chord {
         sequence: Vec<String>,
     },
@@ -59,9 +63,12 @@ pub enum InputMode {
     },
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
+    /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
+    /// instead of `Normal` after confirm/cancel.
     ConfirmDelete {
         message: String,
         action: Box<WmAction>,
+        resume_sidebar: bool,
     },
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.
@@ -104,9 +111,9 @@ pub enum DragState {
     },
     /// Phase 2: detached — pane follows pointer.
     InteractiveMove {
-        pane_id: u64,
+        _pane_id: u64,
         /// Workspace where the drag originated.
-        original_ws: usize,
+        _original_ws: usize,
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
     },
@@ -120,8 +127,9 @@ pub enum DragState {
         threshold_sq: f32,
         /// If true, drop performs a swap instead of a move.
         swap: bool,
-        /// The click action (e.g. FocusPane) to execute if released without dragging.
-        click_action: Box<WmAction>,
+        /// Optional click action to execute if released without dragging.
+        /// `None` means the press only entered/selected sidebar mode.
+        click_action: Option<Box<WmAction>>,
     },
     /// Sidebar drag — move: pane stays in layout, ghost follows cursor.
     SidebarDrag {
@@ -139,7 +147,7 @@ pub struct DetachedPane {
     pub render_pos: heca_core::layout::types::Point,
     pub size: heca_core::layout::types::Size,
     pub original_ws: usize,
-    pub original_col: usize,
+    pub _original_col: usize,
     pub original_col_id: heca_core::layout::ColumnId,
     pub original_pane: usize,
 }
@@ -173,7 +181,7 @@ pub struct SidebarDragLabel {
     pub x: f32,
     pub y: f32,
     pub width: f32,
-    pub height: f32,
+    pub _height: f32,
 }
 
 impl MouseState {

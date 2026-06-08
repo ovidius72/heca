@@ -5,7 +5,7 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::MONO_LINE_RATIO;
-use crate::reactive::{signal, Signal, SignalGet};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Border, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -148,7 +148,10 @@ impl Component for Alert {
         let text_w = (b.size.w - BAR_W - 2.0 * PAD).max(0.0);
         let title_h = title_fs as f64 * MONO_LINE_RATIO as f64;
         cx.text(
-            Rectangle::new(Point::new(text_x, b.loc.y + PAD), Size::new(text_w, title_h)),
+            Rectangle::new(
+                Point::new(text_x, b.loc.y + PAD),
+                Size::new(text_w, title_h),
+            ),
             &self.title.get_untracked(),
             color,
             title_fs,
