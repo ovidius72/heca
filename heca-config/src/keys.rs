@@ -379,6 +379,115 @@ impl Default for KeysConfig {
             bindings: resize_bindings,
         });
 
+        let sidebar_bindings = vec![
+            Mbc {
+                action: "sidebar_up".to_string(),
+                keys: "k".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_down".to_string(),
+                keys: "j".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_up".to_string(),
+                keys: "Up".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_down".to_string(),
+                keys: "Down".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_up".to_string(),
+                keys: "ArrowUp".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_down".to_string(),
+                keys: "ArrowDown".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_left_nav".to_string(),
+                keys: "h".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_right_nav".to_string(),
+                keys: "l".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_left_nav".to_string(),
+                keys: "Left".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_right_nav".to_string(),
+                keys: "Right".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_left_nav".to_string(),
+                keys: "ArrowLeft".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_right_nav".to_string(),
+                keys: "ArrowRight".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_create_workspace".to_string(),
+                keys: "w".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_create_column".to_string(),
+                keys: "c".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_split_in_column".to_string(),
+                keys: "v".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_zoom_selected_column".to_string(),
+                keys: "z".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_delete_selected".to_string(),
+                keys: "d".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_expand_toggle".to_string(),
+                keys: "Tab".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_right_nav".to_string(),
+                keys: "Space".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "sidebar_left".to_string(),
+                keys: "b".to_string(),
+                args: HashMap::new(),
+            },
+        ];
+        mode.push(KeyModeConfig {
+            name: "sidebar".to_string(),
+            trigger: String::new(),
+            sticky: true,
+            bindings: sidebar_bindings,
+        });
+
         Self {
             prefix: default_prefix_key(),
             bindings,
@@ -429,5 +538,17 @@ mod tests {
         assert!(cfg.bindings.contains_key("zoom_column"));
         assert!(cfg.bindings.contains_key("rename_column"));
         assert!(cfg.bindings.contains_key("close"));
+    }
+
+    #[test]
+    fn test_keys_config_has_default_sidebar_mode() {
+        let cfg = KeysConfig::default();
+        let sidebar = cfg
+            .mode
+            .iter()
+            .find(|mode| mode.name == "sidebar")
+            .expect("sidebar mode should exist by default");
+        assert!(sidebar.bindings.iter().any(|b| b.keys == "j"));
+        assert!(sidebar.bindings.iter().any(|b| b.keys == "Space"));
     }
 }

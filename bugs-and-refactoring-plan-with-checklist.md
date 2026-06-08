@@ -305,6 +305,11 @@ Interpretation rules:
         - sidebar-mode mutation keys are sidebar-only
         - global prefix collapse bindings act on active main-view state
         - sidebar tree collapse is UI-only, not layout collapse
+    - [x] 1.5.10 Make sidebar nav bindings configurable from `config.toml`
+      - Built-in sidebar-nav defaults now live in `[[keys.mode]] name = "sidebar"`.
+      - User configs can override sidebar-nav defaults by redefining that mode's bindings.
+      - `SidebarNav` still uses the built-in `sidebar` mode name; its trigger field is ignored because sidebar mode is entered via `SidebarFocus` or mouse interaction.
+  - [x] 1.5 complete — sidebar mode keymap + tree interaction follow-up
   - [x] 1.V Validate file/module reorganization invariants
 
 Short description:

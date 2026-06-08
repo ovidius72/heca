@@ -201,6 +201,8 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 
 Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
 
+The default sidebar-mode bindings are defined via `[[keys.mode]] name = "sidebar"` and can be overridden in `config.toml`. The trigger field is ignored for this built-in mode because `SidebarNav` is entered via `SidebarFocus` or mouse interaction.
+
 Sidebar-mode mutation keys (`w`, `c`, `v`, `z`, `d`) only work while in sidebar navigation mode and act on the selected sidebar row. Global collapse bindings (`<` and `(`) act on the active main-view workspace/column and do not open the sidebar.
 
 ### Sidebar Navigation Mode
@@ -210,8 +212,13 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Move cursor down / up |
+| `Up` / `Down` | Move cursor up / down |
 | `h` / `l` | Collapse / expand tree node |
+| `Left` / `Right` | Collapse / expand tree node |
 | `Space` | Same as `l` / `Right` (leaf focus or expand) |
+| `Tab` | Toggle collapse of the selected row |
+| `w` / `c` / `v` / `z` / `d` | Sidebar-only mutation keys (create workspace/column, split pane, zoom, delete) |
+| `b` | Toggle the left sidebar |
 | `Enter` | Activate selected item (focus pane/workspace) |
 | `Escape` | Exit sidebar mode |
 

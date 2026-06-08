@@ -138,39 +138,6 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
         }
     }
 
-    let sidebar_bindings = vec![
-        ("j", WmAction::SidebarDown),
-        ("k", WmAction::SidebarUp),
-        ("ArrowDown", WmAction::SidebarDown),
-        ("Down", WmAction::SidebarDown),
-        ("ArrowUp", WmAction::SidebarUp),
-        ("Up", WmAction::SidebarUp),
-        ("h", WmAction::SidebarLeftNav),
-        ("l", WmAction::SidebarRightNav),
-        ("ArrowLeft", WmAction::SidebarLeftNav),
-        ("Left", WmAction::SidebarLeftNav),
-        ("ArrowRight", WmAction::SidebarRightNav),
-        ("Right", WmAction::SidebarRightNav),
-        ("w", WmAction::SidebarCreateWorkspace),
-        ("c", WmAction::SidebarCreateColumn),
-        ("v", WmAction::SidebarSplitInColumn),
-        ("z", WmAction::SidebarZoomSelectedColumn),
-        ("d", WmAction::SidebarDeleteSelected),
-        ("Tab", WmAction::SidebarExpandToggle),
-        ("Space", WmAction::SidebarRightNav),
-        ("b", WmAction::SidebarLeft),
-    ];
-    for (key, action) in sidebar_bindings {
-        bind_with_conflict_tracking(
-            &mut keymap,
-            "sidebar",
-            KeyCombo::parse(key),
-            action,
-            format!("[sidebar] {key}"),
-            &mut conflicts,
-        );
-    }
-
     for cmd_cfg in &config.keys.command {
         let action = WmAction::SpawnCommand {
             command: cmd_cfg.command.clone(),
@@ -250,14 +217,18 @@ pub fn build_modes(
             );
         }
         mode_keymaps.insert(mode_cfg.name.clone(), mode_map);
-        let trigger_trimmed = mode_cfg.trigger.trim();
-        let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
-            let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
-            KeyCombo::parse(rest)
-        } else {
-            KeyCombo::parse(trigger_trimmed)
-        };
-        mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
+        // SidebarNav is entered via SidebarFocus / mouse interaction, so the
+        // built-in sidebar mode does not use a trigger entry here.
+        if mode_cfg.name != "sidebar" {
+            let trigger_trimmed = mode_cfg.trigger.trim();
+            let trigger_combo = if trigger_trimmed.starts_with("prefix+") {
+                let rest = trigger_trimmed.strip_prefix("prefix+").unwrap().trim();
+                KeyCombo::parse(rest)
+            } else {
+                KeyCombo::parse(trigger_trimmed)
+            };
+            mode_triggers.insert(mode_cfg.name.clone(), (trigger_combo, mode_cfg.sticky));
+        }
     }
 
     log_conflicts("mode", &conflicts);
@@ -580,7 +551,8 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_arrow_aliases() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let (mode_keymaps, _) = build_modes(&config);
+        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
             keymap.resolve("sidebar", &KeyCombo::parse("ArrowUp")),
@@ -607,7 +579,8 @@ mod tests {
     #[test]
     fn sidebar_mode_includes_mutation_bindings() {
         let config = heca_config::theme::Config::default();
-        let keymap = build_keymap(&config);
+        let (mode_keymaps, _) = build_modes(&config);
+        let keymap = mode_keymaps.get("sidebar").expect("sidebar mode exists");
 
         assert_eq!(
             keymap.resolve("sidebar", &KeyCombo::parse("w")),
@@ -629,6 +602,34 @@ mod tests {
             keymap.resolve("sidebar", &KeyCombo::parse("d")),
             Some(&WmAction::SidebarDeleteSelected)
         );
+    }
+
+    #[test]
+    fn user_sidebar_mode_with_same_name_overrides_defaults() {
+        let mut config = heca_config::theme::Config::default();
+        config.keys.mode.push(KeyModeConfig {
+            name: "sidebar".to_string(),
+            trigger: "prefix+e".to_string(),
+            sticky: true,
+            bindings: vec![ModeBindingConfig {
+                action: "sidebar_left_nav".to_string(),
+                keys: "j".to_string(),
+                args: HashMap::new(),
+            }],
+        });
+
+        let (mode_keymaps, mode_triggers) = build_modes(&config);
+        let sidebar = mode_keymaps.get("sidebar").expect("sidebar mode exists");
+
+        assert_eq!(
+            sidebar.resolve("sidebar", &KeyCombo::parse("j")),
+            Some(&WmAction::SidebarLeftNav)
+        );
+        assert_eq!(
+            sidebar.resolve("sidebar", &KeyCombo::parse("k")),
+            Some(&WmAction::SidebarUp)
+        );
+        assert!(!mode_triggers.contains_key("sidebar"));
     }
 
     #[test]

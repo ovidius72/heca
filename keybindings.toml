@@ -83,6 +83,7 @@ sidebar_expand_toggle = "prefix+Tab" # Expand/collapse selected sidebar node
 # Global sidebar-tree UI collapse state (works even if sidebar is hidden)
 # These affect tree UI state only, not compositor/layout visibility.
 # The current workspace/column are taken from active main-view state.
+# These are also configurable from config.toml.
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
@@ -94,11 +95,24 @@ toggle_current_column_collapsed    = "prefix+("
 #   d = delete selected item with confirmation
 #
 # Sidebar navigation (only active IN sidebar mode):
+#   The defaults below come from [[keys.mode]] name = "sidebar".
+#   Override them in config.toml by redefining that mode's bindings.
+#   Example:
+#   [[keys.mode]]
+#   name = "sidebar"
+#   trigger = ""
+#   sticky = true
+#   [[keys.mode.bindings]]
+#   action = "sidebar_up"
+#   keys = "u"
 #   h / l              → collapse / expand tree node
 #   Left / Right       → collapse / expand tree node
 #   j / k              → move cursor down / up
 #   Up / Down          → move cursor down / up
 #   Space              → focus/select pane on leaf rows; otherwise acts like Right
+#   Tab                → toggle collapse of the selected row
+#   w / c / v / z / d  → sidebar-only mutation keys (workspace, column, split, zoom, delete)
+#   b                  → toggle the left sidebar
 #   Enter              → activate selected item
 #   Escape             → exit sidebar mode
 
