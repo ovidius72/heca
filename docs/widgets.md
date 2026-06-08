@@ -17,11 +17,11 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, `Theme`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`
+- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select)
+  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
@@ -68,7 +68,7 @@ use heca_grid_ui::prelude::*;   // widgets, builders, Theme, Color, signals, eve
 The prelude re-exports: all widgets; the builder traits (`LayoutExt`, `StyleExt`,
 `Parent`); `Color`; `Component`/`Event`/`GridKey`/`Handled`/`Modifiers`; `FocusManager`;
 `signal`/`Signal`/`SignalGet`/`SignalUpdate`; `TextAlign`; `Align`/`Direction`/`Justify`/`Length`;
-`Intensity`/`Theme`; and the `Action`/`SignalData` change-event types.
+`GlowLevel`/`Intensity`/`Theme`; and the `Action`/`SignalData` change-event types.
 
 ### 2. Build a retained tree
 
@@ -90,15 +90,21 @@ let mut ui = Flex::column()
 ```rust
 use heca_grid_ui::{LayoutEngine, PaintCx, Scene, Size};
 
-// (a) size the root to the window and compute layout
+// (a) size the root to the window and compute layout. `base_font` is the size
+//     every widget inherits (see "Font sizing") — pass theme.font_size so a
+//     global font change reflows the whole tree.
 ui.base_mut().style.width  = Length::Px(win_w);
 ui.base_mut().style.height = Length::Px(win_h);
-LayoutEngine::new().compute(&mut ui, Size::new(win_w as f64, win_h as f64));
+LayoutEngine::new()
+    .base_font(theme.font_size)
+    .compute(&mut ui, Size::new(win_w as f64, win_h as f64));
 
-// (b) paint into a fresh Scene
+// (b) paint into a fresh Scene. Pass the window size as the viewport so overlay
+//     widgets (Select) can flip/cap their popup against the screen edges.
 let mut scene = Scene::new();
 {
-    let mut cx = PaintCx::new(&mut scene, &theme);
+    let mut cx = PaintCx::new(&mut scene, &theme)
+        .with_viewport(Size::new(win_w as f64, win_h as f64));
     ui.paint(&mut cx);
 }
 
@@ -154,6 +160,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `focus_visible` | `Signal<bool>` | Show the focus ring (keyboard focus only). |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
+| `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
 
 ### `Component` trait
 
@@ -162,8 +169,10 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `base(&self) -> &Base` | — | Required. |
 | `base_mut(&mut self) -> &mut Base` | — | Required. |
 | `focusable(&self) -> bool` | `false` | Interactive widgets return `true` (and `!disabled`). |
+| `overlay_active(&self) -> bool` | `false` | `true` while the widget owns an open overlay (e.g. a `Select` dropdown), so the host routes input to it first. |
 | `paint(&self, cx: &mut PaintCx)` | base chrome + children | Emit `DrawCommand`s. |
 | `event(&mut self, ev: &Event) -> Handled` | route to children | Handle input. |
+| `remeasure(&mut self)` | no-op | Recompute size from the resolved font (`Base::font`). The layout pass calls it on every node after resolving the font (see [Font sizing](#font-sizing)). Font-sized widgets override it. |
 | `on_focus(&mut self, visible: bool)` | set `focused`/`focus_visible` | Gained focus. |
 | `on_blur(&mut self)` | clear them | Lost focus. |
 | `tick(&mut self, dt: f32) -> bool` | recurse to children | Advance animations; `true` ⇒ animating. |
@@ -196,6 +205,7 @@ return `Self` for chaining.
 | `.glow(Color)` | Neon outer glow (default falloff). |
 | `.glow_with(Color, radius: f32, intensity: f32)` | Glow with explicit falloff. |
 | `.radius(f32)` | Corner radius. |
+| `.font_scale(f32)` | Semantic font multiplier vs the inherited base font (header ≈ 2.0, caption ≈ 0.8). See [Font sizing](#font-sizing). |
 
 > Layout-only `Flex` deliberately does **not** implement `StyleExt` — wrap content in a
 > `Surface`/`Card` to give it a background.
@@ -206,20 +216,57 @@ return `Self` for chaining.
 
 `Style` fields: `direction`, `justify`, `align` (default `Stretch`), `gap`, `padding`,
 `width`/`height` (`Length`), `flex_grow`, `fill`, `border`, `glow`, `accent`, `fg`,
-`radius`, `font_size`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
+`radius`, `font_size`, `font_scale`. Enums: `Direction{Row,Column}`, `Justify{Start,Center,End,SpaceBetween,SpaceAround}`,
 `Align{Start,Center,End,Stretch}`, `Length{Auto,Px(f32)}`.
 
-### `Theme` & `Intensity`
+> `font_size` defaults to `0.0` = **inherit the theme base font**; `font_scale` defaults
+> to `1.0`. See [Font sizing](#font-sizing).
+
+### Font sizing
+
+Font size is a **theme token inherited by every widget**, resolved centrally during layout
+— there is no per-widget font wiring.
+
+- `Style.font_size` is a sentinel: `0.0` (default) = *inherit*; any `> 0` value = an
+  explicit override for that widget.
+- `Style.font_scale` (default `1.0`) is a **semantic multiplier** on the inherited base —
+  e.g. a header sets `2.0`, a caption `0.8`. Ignored when `font_size` is set explicitly.
+- `LayoutEngine::new().base_font(theme.font_size)` supplies the base. For each node the
+  layout pass computes `resolved = font_size > 0 ? font_size : base_font × font_scale`,
+  writes it to **`Base::font`**, then calls **`Component::remeasure()`** so widgets whose
+  dimensions depend on the font (Input/Select height, Button/Tabs/Badge size, Item row,
+  Label box) resize. Widgets read `Base::font` (not `style.font_size`) when painting text.
+
+Result: changing `theme.font_size` (and re-running layout) reflows the entire tree live —
+no tree rebuild, no per-widget `.font_size(...)` calls. Set `.font_scale(x)` for semantic
+hierarchy, or `.font_size(x)` to pin a specific size.
+
+### `Theme`, `GlowLevel` & `Intensity`
 
 Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
 default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
-`font_family`, `font_size`, `radius`, `intensity`, `show_focus_border`.
+`font_family`, `font_size`, `radius`, `border_width`, `glow_size` (`GlowLevel`),
+`intensity`, `show_focus_border`.
 
-> **Never hard-code font family/size** — read `theme.font_family` / `theme.font_size`.
+| Token | Type | Drives |
+|-------|------|--------|
+| `radius` | `f32` | Base corner radius. Boxes use it directly; small controls use `control_radius()` (= `radius × 0.5`); pills (Badge/Toggle/ProgressBar) round at `radius × 2` clamped to their capsule. `0` ⇒ square. |
+| `border_width` | `f32` | Border stroke width for every box/pill widget. `0` ⇒ no border. |
+| `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
+| `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
+| `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
 
-`Intensity{Off, Low, Medium, Heavy}` scales glow + scanlines globally: `.glow_scale()`,
-`.scanline_opacity()`, `.next()` (cycles). At `Off`, `PaintCx` strips glow entirely.
+Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small controls).
+
+> **Never hard-code font family/size, radius, border width or glow** — read them from the
+> theme so a global change scales every widget proportionally.
+
+- **`GlowLevel{None, Thin, Medium, Large}`** — glow halo size. `.radius_scale()` (0 / 0.5 /
+  1.0 / 2.0), `.parse(&str)` (for config.toml), `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
+- **`Intensity{Off, Low, Medium, Heavy}`** — CRT scanline strength. `.scanline_opacity()`
+  (Off=0 → Heavy=0.20), `.next()` (cycles). *Glow and intensity are independent* — glow is
+  owned by `glow_size`, so changing intensity affects only the scanline overlay.
 
 ### `Color`
 
@@ -272,18 +319,22 @@ pub struct Action { pub name: String, pub data: SignalData }
 `paint` receives a `PaintCx` exposing shared Tron drawing helpers (all reused so widgets
 stay DRY):
 
-| `PaintCx` method | Draws |
-|------------------|-------|
+| `PaintCx` method | Draws / does |
+|------------------|--------------|
 | `.theme() -> &Theme` | Active theme tokens. |
+| `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
 | `.corner_brackets(rect, color)` | L-shaped corner reticle (focus ring / decoration). |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
 | `.paint_base(&Base)` | Background/border/glow from a base's style. |
+| `.with_overlay(\|cx\| …)` | Route the closure's draws to the scene's **overlay layer** (painted on top of everything) — used by dropdowns/popovers. |
 
 `DrawCommand` variants: `Rect`, `Brackets`, `Text`, `Scanline`, `Gradient`, `PushClip`/`PopClip`
-(clip TODO), `Custom`. `Scene`: `new()`, `push`, `clear`, `len`, `is_empty`, `iter`.
+(clip is currently a renderer no-op — embeddable scroll regions wait on it), `Custom`. `Scene`:
+`new()`, `push`, `clear`, `len`, `is_empty`, `iter`, plus the overlay layer
+(`begin_overlay`/`end_overlay`, `base_layer`/`overlay_layer`).
 
 ### `Flash`
 
@@ -333,15 +384,36 @@ A titled, padded column surface (header label + body).
 
 ```rust
 Card::new("POWER").background(theme.surface).border(theme.accent, 1.5)
-    .child(Label::new("98%").font_size(32.0));
+    .child(Label::new("98%").font_scale(2.0));
 ```
+
+### Pane
+
+A bracket-framed container for sidebars/panels: a dark surface with a subtle accent border
+and **rounded corner brackets** (no glow/shadow); children stack inside (default column).
+The brackets are segments of a theme-`radius` rounded border with the straight midsections
+dimmed, so the corners share the border's radius exactly. Reads `theme.radius` /
+`theme.border_width`.
+
+- **Construct**: `Pane::new()` (column) / `Pane::row()`.
+- **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
+
+```rust
+Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
+    .child(Item::new("DASHBOARD").marker(ActiveMarker::Bar).active(true))
+    .child(Item::new("SETTINGS").marker(ActiveMarker::Bar));
+```
+
+> Today `Pane` is a framed container only — the HUD header (title + status) and tab bar from
+> the design vision are still pending (see `grid-ui-plan.md` → Phase C7).
 
 ### Label
 
 A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
-- **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)`.
+- **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
+  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy).
 - **Accessor**: `.text_signal() -> Signal<String>` (set it to update reactively).
 
 ```rust
@@ -356,7 +428,8 @@ Interactive surface; look driven by variant × size, with animated per-variant h
 press flash. Focusable; Space/Enter activate like a click.
 
 - **Construct**: `Button::new(label)` (= primary) or `Button::{primary,secondary,destructive,outline,ghost,link}(label)`.
-- **Builders**: `.variant(ButtonVariant)`, `.size(ButtonSize)` (`Small`/`Medium`/`Large`),
+- **Builders**: `.variant(ButtonVariant)`, `.size(ButtonSize)` (`Small`/`Medium`/`Large` — a
+  font multiplier on the base font + padding), `.font_size(f32)` (pin an explicit size),
   `.glow(bool)`, `.bordered(bool)`, `.on_click(impl Fn() + 'static)`.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 - **Variants**: `Primary`, `Secondary`, `Destructive`, `Outline`, `Ghost`, `Link`.
@@ -406,7 +479,8 @@ Single-line editable text field with a blinking caret, placeholder, and a full
 mouse/keyboard selection + editing model. Focusable.
 
 - **Construct**: `Input::new()`.
-- **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.on_change(impl Fn(Action))`.
+- **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
+  field height tracks the font), `.on_change(impl Fn(Action))`.
 - **Accessors**: `.text() -> Signal<String>`, `.value_str() -> String`,
   `.selection() -> Option<(usize,usize)>`, `.selected_text() -> Option<String>`.
 - **Emits**: `"input-change"` / `SignalData::String` (the full new text) on every edit.
@@ -438,7 +512,8 @@ Horizontal segmented selector with an animated sliding underline; lays its own s
 from monospace metrics (no child components). Focusable; ←/→ move selection, click selects.
 
 - **Construct**: `Tabs::new(labels)` — `labels: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.on_change(impl Fn(Action))`.
+- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits;
+  strip re-measures), `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`.
 - **Emits**: `"tab-change"` / `SignalData::Usize`.
 
@@ -452,12 +527,15 @@ Tabs::new(["OVERVIEW", "SIGNALS", "LOGS"]).selected(0)
 Single-select dropdown — the first **overlay** widget. The trigger shows the current value;
 the open option list paints in the scene's overlay layer (on top of everything) and the
 widget reports `overlay_active()` so the host routes input to it first (see
-[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Long lists cap at a
-fixed number of visible rows and gain a **scrollbar** (wheel / keyboard scrolls). Focusable;
-self-contained (no child components).
+[Overlay layer](#scene--drawcommand--paintcx-for-building-widgets)). Focusable; self-contained
+(no child components). The trigger **width adapts** to the widest option at the current font;
+both trigger and rows scale with the font. The open panel **flips above** the trigger when
+there's no room below, **caps** its visible rows to what fits in the `PaintCx` viewport, and
+**scrolls** internally (scrollbar; wheel / keyboard) for longer lists.
 
 - **Construct**: `Select::new(options)` — `options: impl IntoIterator<Item = impl Into<String>>`.
-- **Builders**: `.selected(index)` (initial, clamped), `.on_change(impl Fn(Action))`.
+- **Builders**: `.selected(index)` (initial, clamped), `.font_size(f32)` (else inherits),
+  `.on_change(impl Fn(Action))`.
 - **Accessors**: `.state() -> Signal<usize>`, `.index() -> usize`, `.selected_label() -> &str`.
 - **Emits**: `"select-change"` / `SignalData::Usize`.
 - **Keys**: ↑/↓ move highlight (scroll into view), Enter/Space open & commit, Esc closes;
@@ -470,6 +548,34 @@ Select::new(["LOW", "MEDIUM", "HIGH"]).selected(1)
 
 > **Host wiring**: route pointer + `Esc` + wheel to `FocusManager::deliver_to_overlay` when
 > `overlay_active()` (see [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)).
+
+### Item
+
+Generic list/menu/sidebar **row**: an optional leading slot, a label, and an optional trailing
+slot, with hover, active (selected), and click-to-activate states. Slots accept any component
+(a `StatusDot`, a kbd-hint `Label`, a `>` chevron, …). Row height tracks the font; the
+active/hover highlight is an inset pill (rounds with the theme radius, so it tucks inside a
+rounded `Pane`). Becomes focusable/clickable once `.on_activate(...)` is set.
+
+- **Construct**: `Item::new(label)`.
+- **Builders**: `.leading(impl Component)`, `.trailing(impl Component)`,
+  `.leading_bordered(bool)` / `.trailing_bordered(bool)` (chip frame around a slot),
+  `.active(bool)`, `.marker(ActiveMarker)`, `.muted(bool)` (section-header look),
+  `.font_size(f32)`, `.on_activate(impl Fn() + 'static)`.
+- **Accessors**: `.state() -> Signal<bool>` (active), `.label_signal() -> Signal<String>`.
+- **`ActiveMarker{None, Bar, Check}`** — how the active state reads: `Bar` = vivid left bar
+  (sidebar), `Check` = small pip (menu), `None` = tinted bg + accent label only (dropdown).
+
+```rust
+// single-select sidebar: share each row's `active` signal, set on click
+let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
+// Item::new(label).marker(ActiveMarker::Bar).leading(StatusDot::online())
+//     .on_activate(move || select(i))   // host flips this row's state on, others off
+```
+
+> **Single-select pattern**: `Item` deliberately does **not** self-select — clicking only
+> fires `on_activate`, so a single source of truth can own which row is active (set the
+> clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
 ### Badge
 
@@ -611,6 +717,7 @@ impl Component for Reticle {
 impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
 ```
 
-Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed), and opt
-into builder traits. Reuse `PaintCx` helpers (`rect`, `corner_brackets`, `text`, `flash`,
-`dim`) so the Tron look stays consistent and DRY.
+Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, plus
+`remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
+builder traits. Reuse `PaintCx` helpers (`rect`, `corner_brackets`, `text`, `flash`, `dim`)
+and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
