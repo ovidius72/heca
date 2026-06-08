@@ -317,10 +317,10 @@ Short description:
 
 ### Phase 2 — Introduce a Central Mutation Boundary
 
-- [ ] Phase 2 complete
-  - [ ] 2.1 Create app-level mutation helpers
-  - [ ] 2.2 Standardize handler endings
-  - [ ] 2.V Validate centralized mutation/post-hook behavior
+- [x] Phase 2 complete
+  - [x] 2.1 Create app-level mutation helpers
+  - [x] 2.2 Standardize handler endings
+  - [x] 2.V Validate centralized mutation/post-hook behavior
 
 ### Phase 3 — Extract Shared Pane Operation Logic
 
@@ -1328,38 +1328,39 @@ Short description:
 - [x] app behavior is unchanged
 - [x] validation passes
 
-### Current active slice — Phase 2.1 App-level mutation helpers
+### Current active slice — Phase 3.1 Shared pane-ops layer
 
-#### Commit 1 — Introduce the helper contract
+#### Commit 1 — Extract the shared same-column swap helper
 
-- [x] Add a small post-mutation helper in the app layer
-- [x] Define what `after_layout_change(...)` guarantees
-- [x] Add narrower helper(s) only if they remove real duplication
-- [x] Keep `focus_pane_by_id(...)` as the canonical focus entrypoint
-- [x] Validate with `cargo check -q`
-- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
-
-#### Commit 2 — Convert repeated call-site tails
-
-- [x] Replace repeated `sync_focus(state); state.needs_redraw = true;` endings in `heca/src/handlers.rs`
-- [ ] Convert matching tails in `heca/src/mouse/drop.rs`, `heca/src/mouse/sidebar_drop.rs`, `heca/src/mouse/drag.rs`, and `heca/src/app/input.rs` where appropriate
-- [ ] Reduce direct manual `sidebar_tree.rebuild(...)` use to startup + shared focus/mutation helpers
-- [x] Keep behavior unchanged
+- [x] Add a small shared helper for same-column pane swaps
+- [x] Delegate keyboard swap paths to the shared helper
+- [x] Keep the existing swap semantics and animation behavior unchanged
 - [x] Validate with `cargo check -q`
 - [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
 - [x] Validate with `cargo test -q --workspace`
 
+#### Commit 2 — Expand shared pane ops beyond same-column swaps
+
+- [ ] Extract move/reinsert helpers used by mouse drop and cross-workspace swap logic
+- [ ] Reduce remaining ad hoc pane scan/reinsert logic in handlers and mouse paths
+- [ ] Keep behavior unchanged
+- [ ] Validate with `cargo check -q`
+- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [ ] Validate with `cargo test -q --workspace`
+
 #### Definition of done for the current slice
 
-- [ ] the post-mutation contract is explicit in code
-- [ ] repeated handler/mouse tails are materially reduced
-- [ ] sidebar rebuild responsibility is centralized
-- [x] app behavior is unchanged
-- [x] validation passes
+- [ ] common pane swap mechanics live in a shared helper
+- [ ] handlers/mouse paths reuse the same pane-op building blocks where applicable
+- [ ] behavior is unchanged
+- [ ] validation passes
 
 #### Progress note
 
-- `heca/src/handlers.rs` now routes the common post-mutation tail through `after_layout_change(...)` in the main layout/focus paths, and the shared hook module remains the central place for focus/sidebar/redraw synchronization.
+- Added `heca/src/app/pane_ops.rs` with shared same-column swap and pane insert/remove helpers.
+- `handle_swap_param()`, `handle_swap_up()`, and `handle_swap_down()` delegate to the shared same-column helper instead of each carrying the same animation/swap code inline.
+- `heca/src/mouse/drop.rs` now uses the shared insert/remove helpers for detached-pane reinsertion.
+- `heca/src/mouse/sidebar_drop.rs` still needs the same helper treatment.
 
 ---
 

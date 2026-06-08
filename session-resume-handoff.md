@@ -1,123 +1,118 @@
-# Session Resume Handoff — 2026-06-05
+# Session Resume Handoff — 2026-06-08
 
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `08eabab` — `feat(sidebar): make sidebar nav configurable`
-- `origin/main` is current at `36b8684`
-- `origin/feature/gpt-refactoring` matches local `HEAD`
-- Working tree currently has Phase 2 mutation-hook edits in progress
-- PR #29 is open against `main`
+- HEAD: `032bfa9` — `refactor(app): share pane reinsertion helpers`
+- `origin/main`: `245e725`
+- `origin/feature/gpt-refactoring`: matches local `HEAD`
+- Working tree: clean at the last checkpoint; this handoff rewrite replaces the old handoff content
+- PR #29: merged into `main`
 
-### Current Phase 2 progress
+## What was completed recently
 
-- Added `app::mutations` as the shared post-mutation hook module
-- `after_layout_change(...)` now centralizes the common post-mutation redraw/focus-sync path for layout mutations
-- `after_mutation_change(state, MutationKind::Config)` is used for config-driven refreshes in the app event path
-- Repeated `sync_focus(...); needs_redraw` tails in `heca/src/handlers.rs` were reduced materially
-- Validation currently passes: `cargo check -p heca`, `cargo test -p heca`, `cargo clippy --workspace --all-targets --all-features`
+### Phase 2 — Central Mutation Boundary
+Done and recorded in the checklist.
 
-## Must-follow workflow rules
+Implemented:
+- `heca/src/app/mutations.rs`
+- `after_layout_change(...)`
+- `after_focus_change(...)`
+- `after_config_change(...)`
+- `after_metadata_change(...)`
+- `after_mutation_change(...)`
 
-These are the active rules to keep following:
+Behavior now:
+- handlers/input/mouse paths use shared post-mutation hooks instead of repeating `sync_focus(...)` + redraw tails
+- `sync_focus(...)` still owns sidebar projection rebuild + focus bookkeeping
+- manual `sidebar_tree.rebuild(...)` calls were reduced to startup and focus-sync paths
 
-- Before starting any new phase or major sub-phase, use the **`/grill-me`** skill first.
+### Phase 3.1 — Shared pane-ops layer
+In progress.
+
+Implemented so far:
+- `heca/src/app/pane_ops.rs`
+- `swap_panes_same_column(...)`
+- `remove_pane_by_id(...)`
+- `insert_pane_at_position(...)`
+
+Wired so far:
+- `handle_swap_param()` uses the shared same-column swap helper
+- `handle_swap_up()` / `handle_swap_down()` use the shared same-column swap helper
+- `heca/src/mouse/drop.rs` uses shared move/reinsert helpers for detached-pane reinsertion
+
+Important: `heca/src/mouse/sidebar_drop.rs` was **not** finalized in this slice; it was intentionally restored to the clean committed version after a partial rewrite went wrong. It still needs the same helper treatment in a future slice.
+
+### Current validation status
+Passed on the current slice:
+- `cargo check -p heca`
+- `cargo test -p heca`
+- `cargo clippy --workspace --all-targets --all-features`
+
+## Rules and requirements now acquired
+
+### Mandatory workflow rules (added to `AGENTS.md`)
+- Before each step or sub-step, explicitly verify what is already done, what will change next, and why.
+- Before making changes, state the next action and the validation to run after it.
+- Do not start a new phase or major sub-phase until the current one is clearly complete and the user has approved the next step.
+- Before any new phase or major sub-phase, use the `/grill-me` skill first.
+- Double-check all details before updating checklists, handoffs, commits, or PRs.
+
+### Existing project rules that still apply
 - Keep work in small, behavior-preserving slices.
-- Before committing / opening a PR, wait for user review/approval.
-- When token usage is getting high (~70–80%), write a detailed handoff with enough info to restart without losing context.
-- Before starting a new task/phase slice, pull/rebase from `origin/main`.
+- Pull/rebase `origin/main` before starting a new task/phase slice.
 - Every keybinding and theme variable must be configurable from `config.toml`.
+- Every WM action must go through `registry.execute()`; no direct bypasses in event handlers.
+- After every task, run `cargo clippy --workspace --all-targets --all-features` and fix warnings.
+- Do not add `#[allow(dead_code)]` unless there is a clear, documented reason.
+- Use the NIRI layout engine, not BSP.
+- Do not refactor layout code without consulting the NIRI skill.
 
-## What is completed
+### Phase/planning rules from the user
+- The current refactor should be preparatory for the future pluggable chrome / shared AppState plan.
+- The goal is to avoid rewriting everything later.
+- The next architecture plan will own the broader AppState / host-controller boundary.
+- Before continuing any new phase slice, get user approval.
 
-### Sidebar Phase 1.5
-Completed and recorded in the checklist:
-- `1.5.1` normalize sidebar navigation contract
-- `1.5.2` add sidebar-only mutation keymap
-- `1.5.3` make sidebar actions selection-driven
-- `1.5.4` add mouse semantics for entering/exiting sidebar mode
-- `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
-- `1.5.6` add global sidebar-tree collapse action family
-- `1.5.7` preserve public config/action surface for future RPC work
-- `1.5.8` add/update tests for sidebar tree behavior
-- `1.5.9` update docs and defaults
-- `1.5.10` make sidebar nav bindings configurable from `config.toml`
-- Phase 1.5 complete marker added to the checklist
+## Checklist / plan status to preserve
 
-### RPC exposure added
-The new collapse actions are RPC-exposed in `heca/src/rpc.rs`:
-- `collapse-current-workspace`
-- `expand-current-workspace`
-- `toggle-current-workspace-collapsed`
-- `collapse-current-column`
-- `expand-current-column`
-- `toggle-current-column-collapsed`
+- `bugs-and-refactoring-plan-with-checklist.md`:
+  - Phase 2 is complete
+  - Phase 3 is the active phase
+  - Phase 3.1 Commit 1 is complete
+  - Phase 3.1 Commit 2 is still in progress
+- Current mismatch to fix next: the checklist still doesn’t explicitly name `heca/src/mouse/sidebar_drop.rs` in the Phase 3 move/reinsert work, even though that file is still the intended next target.
 
-### Sidebar test coverage added/confirmed
-`heca/src/sidebar/tests.rs` now covers:
-- workspace collapse moving cursor to workspace row
-- column collapse moving cursor to column row
-- explicit workspace index toggle behavior
-- explicit column index toggle behavior
-- collapse persistence across rebuilds
-- configurable sidebar-mode default merging/override behavior
+## Important files
 
-### Docs/defaults refreshed
-Updated user-facing references:
-- `README.md` sidebar docs
-- `keybindings.toml`
-- `heca-config/src/keys.rs`
-- `AGENTS.md` coding standard update
-
-### Validation that passed
-- `cargo test -p heca --quiet`
-- `cargo test -p heca-config --quiet`
-- `cargo check --workspace --quiet`
-- `cargo clippy --workspace --all-targets --all-features --quiet`
-
-## Still open
-
-- PR #29 needs review/merge
-- Phase 2 is next after this branch is merged or otherwise advanced
-
-## Important rules already settled
-
-- Sidebar mode is selection-driven.
-- `j/k` and arrow keys move sidebar cursor only.
-- Main scrolling/focus state does not auto-follow sidebar cursor movement.
-- Global collapse actions use active main-view state.
-- Global collapse actions do **not** open the sidebar if it is hidden.
-- Floating focus / no valid tiled current column ⇒ current-column collapse actions no-op.
-- When collapse hides the selected row, move the cursor to the collapsed parent row.
-- Sidebar-nav defaults are configurable via `[[keys.mode]] name = "sidebar"`.
-
-## Files to reference next
-
-Planning / rules:
+### New/changed code to know
+- `heca/src/app/pane_ops.rs`
+- `heca/src/app/mutations.rs`
+- `heca/src/handlers.rs`
+- `heca/src/mouse/drop.rs`
+- `heca/src/mouse/sidebar_drop.rs` (restored clean; pending helper rewrite)
+- `heca/src/app/mod.rs`
 - `AGENTS.md`
+- `bugs-and-refactoring-plan-with-checklist.md`
+
+### Planning docs
 - `bugs-and-refactoring-plan.md`
 - `bugs-and-refactoring-plan-with-checklist.md`
 - `pluggable-chrome-plugin-plan.md`
 
-Implementation areas:
-- `heca/src/input.rs`
-- `heca/src/app/input.rs`
-- `heca/src/app/registry.rs`
-- `heca/src/handlers.rs`
-- `heca/src/rpc.rs`
-- `heca/src/sidebar/model.rs`
-- `heca/src/sidebar/tests.rs`
-- `heca-config/src/keys.rs`
-- `keybindings.toml`
-- `README.md`
-
 ## Recent commits
 
-- `08eabab` — `feat(sidebar): make sidebar nav configurable`
-- `68b9415` — `docs(sidebar): finish phase 1.5 docs and tests`
-- `3f7d23f` — `docs: refresh handoff after merge sync`
-- `c60baf3` — merge of PR #27 into `main`
+- `032bfa9` — `refactor(app): share pane reinsertion helpers`
+- `f201534` — `refactor(app): extract shared same-column swap helper`
+- `10cd121` — `docs: refresh handoff after merge`
+- `b2d5155` — `refactor(app): route rename and mouse tails through hooks`
 
-## Next recommended step
+## Best next step
 
-Wait for PR #29 review/merge, then move to **Phase 2** unless redirected.
+1. Update the Phase 3 checklist so the next slice explicitly includes `heca/src/mouse/sidebar_drop.rs` and any remaining reinsertion/swap paths.
+2. Before new code changes, run `/grill-me` for the move/reinsert helper design if starting a new major sub-step.
+3. Then continue Phase 3.1 Commit 2 with a small, approved slice.
+
+## Resume summary in one line
+
+Phase 2 is done; Phase 3.1 Commit 1 is done; Phase 3.1 Commit 2 is partially done (swap helper + mouse/drop helper), but `mouse/sidebar_drop.rs` still needs the same helper treatment and the checklist should explicitly name it before continuing.

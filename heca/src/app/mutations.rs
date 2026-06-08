@@ -37,6 +37,10 @@ pub fn after_config_change(state: &mut AppState) {
     after_mutation_change_inner(state, MutationKind::Config);
 }
 
+pub fn after_metadata_change(state: &mut AppState) {
+    after_mutation_change_inner(state, MutationKind::Focus);
+}
+
 pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
     after_mutation_change_inner(state, kind);
 }

@@ -305,6 +305,5 @@ pub(super) fn cancel_interactive_move(state: &mut AppState) {
     state.mouse.insert_hint = None;
     state.mouse.sidebar_drag_source_fi = None;
     state.mouse.sidebar_drag_label = None;
-    crate::sync_focus(state);
-    state.needs_redraw = true;
+    crate::app::mutations::after_layout_change(state);
 }
