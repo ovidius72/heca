@@ -196,8 +196,12 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Toggle left sidebar | `b` | Show/hide left sidebar |
 | Toggle right sidebar | `.` | Show/hide right sidebar |
 | Sidebar focus | `e` | Enter sidebar navigation mode |
+| Collapse current workspace | `<` | Collapse the active workspace tree row (UI only) |
+| Collapse current column | `(` | Collapse the focused tiled column tree row (UI only) |
 
 Today, sidebar navigation operates on the built-in workspace tree shown in the left sidebar. Long-term, the sidebar is expected to evolve into a shell/host for pluggable containers, with the current workspace tree becoming a built-in `WorkspacesContainer`.
+
+Sidebar-mode mutation keys (`w`, `c`, `v`, `z`, `d`) only work while in sidebar navigation mode and act on the selected sidebar row. Global collapse bindings (`<` and `(`) act on the active main-view workspace/column and do not open the sidebar.
 
 ### Sidebar Navigation Mode
 
@@ -207,6 +211,7 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 |-----|--------|
 | `j` / `k` | Move cursor down / up |
 | `h` / `l` | Collapse / expand tree node |
+| `Space` | Same as `l` / `Right` (leaf focus or expand) |
 | `Enter` | Activate selected item (focus pane/workspace) |
 | `Escape` | Exit sidebar mode |
 

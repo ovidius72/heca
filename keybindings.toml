@@ -82,9 +82,17 @@ sidebar_focus        = "prefix+e"    # Focus sidebar (enter nav mode)
 sidebar_expand_toggle = "prefix+Tab" # Expand/collapse selected sidebar node
 # Global sidebar-tree UI collapse state (works even if sidebar is hidden)
 # These affect tree UI state only, not compositor/layout visibility.
+# The current workspace/column are taken from active main-view state.
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
+# Sidebar-only mutation keys (active only in SidebarNav):
+#   w = create workspace
+#   c = create column in selected workspace context
+#   v = split/add pane in selected column context
+#   z = zoom selected column
+#   d = delete selected item with confirmation
+#
 # Sidebar navigation (only active IN sidebar mode):
 #   h / l              → collapse / expand tree node
 #   Left / Right       → collapse / expand tree node

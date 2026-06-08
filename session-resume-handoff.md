@@ -3,14 +3,13 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `c60baf3` — `Merge pull request #27 from ovidius72/feature/gpt-refactoring`
-- `origin/main` and local `HEAD` are currently aligned
-- Working tree is clean
-- PR #27 is merged into `main`
+- HEAD: `3f7d23f` — `docs: refresh handoff after merge sync`
+- `origin/main` was pulled into the branch before this slice
+- Working tree is currently dirty only from the docs/defaults refresh in progress
 
 ## Must-follow workflow rules
 
-These are the rules to keep following:
+These are the active rules to keep following:
 
 - Before starting any new phase or major sub-phase, use the **`/grill-me`** skill first.
 - Keep work in small, behavior-preserving slices.
@@ -21,7 +20,7 @@ These are the rules to keep following:
 ## What is completed
 
 ### Sidebar Phase 1.5
-Merged through PR #27:
+Completed and recorded in the checklist:
 - `1.5.1` normalize sidebar navigation contract
 - `1.5.2` add sidebar-only mutation keymap
 - `1.5.3` make sidebar actions selection-driven
@@ -29,6 +28,8 @@ Merged through PR #27:
 - `1.5.5` add disclosure hit targets and visual symbols for workspace + column rows
 - `1.5.6` add global sidebar-tree collapse action family
 - `1.5.7` preserve public config/action surface for future RPC work
+- `1.5.8` add/update tests for sidebar tree behavior
+- `1.5.9` update docs and defaults
 
 ### RPC exposure added
 The new collapse actions are RPC-exposed in `heca/src/rpc.rs`:
@@ -39,7 +40,21 @@ The new collapse actions are RPC-exposed in `heca/src/rpc.rs`:
 - `expand-current-column`
 - `toggle-current-column-collapsed`
 
-### Validation that passed
+### Sidebar test coverage added/confirmed
+`heca/src/sidebar/tests.rs` now covers:
+- workspace collapse moving cursor to workspace row
+- column collapse moving cursor to column row
+- explicit workspace index toggle behavior
+- explicit column index toggle behavior
+- collapse persistence across rebuilds
+
+### Docs/defaults refreshed
+Updated user-facing references:
+- `README.md` sidebar docs
+- `keybindings.toml`
+- `heca-config/src/keys.rs`
+
+### Validation that passed in this slice
 - `cargo test -p heca --quiet`
 - `cargo clippy -p heca --all-targets --quiet`
 - `cargo check --workspace --quiet`
@@ -47,8 +62,7 @@ The new collapse actions are RPC-exposed in `heca/src/rpc.rs`:
 
 ## Still open
 
-- `1.5.8` Add/update tests for sidebar tree behavior
-- `1.5.9` Update docs and defaults
+- none for Phase 1.5
 
 ## Important rules already settled
 
@@ -82,10 +96,11 @@ Implementation areas:
 
 ## Recent commits
 
-- `c60baf3` — merged PR #27 into `main`
+- `3f7d23f` — `docs: refresh handoff after merge sync`
+- `c60baf3` — merge of PR #27 into `main`
 - `da66b26` — `feat(sidebar): expose collapse actions via rpc`
 - `f884723` — `updated agents. add graphify`
 
 ## Next recommended step
 
-Continue with **1.5.8** focused sidebar tests, then **1.5.9** docs/defaults.
+Phase 1.5 is complete; move on to the next phase from the plan unless redirected.
