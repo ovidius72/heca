@@ -3,6 +3,7 @@
 //! Extracted from `on_mouse_input()` for clarity. Each function handles
 //! one release scenario: interactive move, sidebar drag, or sidebar drag starting.
 
+use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::input::WmAction;
 use heca_grid_ui::drag::DragSurfaceId;
@@ -71,7 +72,7 @@ pub(super) fn handle_sidebar_drag_release(
 /// Handle release during sidebar drag starting (threshold not exceeded).
 ///
 /// If a pending click action was stored, dispatch it. Otherwise, just clear the drag state.
-pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Option<WmAction> {
+pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Option<(WmAction, InteractionSource)> {
     let click_action = state.mouse.pending_click_action.take();
     state.mouse.drag_ctx.cancel_all();
 
@@ -81,7 +82,7 @@ pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Opti
         {
             state.input_mode = crate::app_state::InputMode::Normal;
         }
-        return Some(action);
+        return Some((action, InteractionSource::MouseLeftSidebar));
     }
     None
 }

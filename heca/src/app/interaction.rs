@@ -57,8 +57,6 @@ pub(crate) enum InteractionSource {
     /// Mouse click or drag in the content area (tiled panes).
     MouseContent,
     /// Mouse click or drag in the left sidebar.
-    /// TODO(wire-sidebar): constructed when sidebar mouse routing goes through dispatch_action.
-    #[allow(dead_code)] // TODO(wire-sidebar): will be constructed when sidebar mouse routing is wired
     MouseLeftSidebar,
     // Future sources — not implemented yet:
     // MouseRightSidebar,
@@ -387,7 +385,7 @@ pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
     session
         .active_workspace()
         .map(|ws| ws.focus_domain == FocusDomain::Floating)
-        .unwrap_or(false)
+        .expect("active workspace must exist when checking focus domain")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
