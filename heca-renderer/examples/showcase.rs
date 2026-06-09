@@ -218,6 +218,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .child(Badge::accent("v2.0"))
                 .child(Badge::outline("BETA")),
         )
+        // Tags (G8): metadata chips that can carry a leading icon — git branch,
+        // path, filter. Quieter than a Badge; hue configurable.
+        .child(
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(Tag::new("main").leading(Icon::new(Glyph::GitBranch).size(13.0).color(theme.muted)))
+                .child(
+                    Tag::new("feature/grid-ui")
+                        .leading(Icon::new(Glyph::GitBranch).size(13.0).color(theme.accent))
+                        .color(theme.accent),
+                )
+                .child(Tag::new("src/widgets").leading(Icon::new(Glyph::Folder).size(13.0).color(theme.muted)))
+                .child(Tag::new("rust").color(theme.success)),
+        )
         // Spinner + Alert.
         .child(
             Flex::row()
@@ -411,7 +426,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                             .gap(4.0)
                             .area(icon, "dot")
                             .area(Label::new(title).color(color), "title")
-                            .area(Label::new(sub).color(theme.foreground).font_scale(0.8), "sub")
+                            // G8 recipe: the branch is a composed Tag (git-branch
+                            // icon + branch text), not plain text. Wrapped in a row
+                            // so the chip hugs its content (left) instead of
+                            // stretching to fill the grid cell.
+                            .area(
+                                Flex::row().child(
+                                    Tag::new(sub)
+                                        .leading(Icon::new(Glyph::GitBranch).size(13.0).color(color))
+                                        .color(color),
+                                ),
+                                "sub",
+                            )
                             .area(tag, "tag"),
                     );
                 let i = pane_states.borrow().len();

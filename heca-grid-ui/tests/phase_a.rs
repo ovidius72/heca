@@ -1897,3 +1897,18 @@ fn row_without_on_activate_is_not_focusable() {
     let row = Row::new().child(Label::new("static"));
     assert!(!row.focusable(), "a display-only row is not focusable");
 }
+
+#[test]
+fn tag_lays_out_leading_and_label_and_hugs_content() {
+    use heca_grid_ui::{Glyph, Icon, Tag};
+    let mut tag = Tag::new("main 1+").leading(Icon::new(Glyph::GitBranch).size(13.0));
+    LayoutEngine::new().compute(&mut tag, Size::new(300.0, 40.0));
+
+    assert_eq!(tag.base().children.len(), 2, "chip holds [leading, label]");
+    let icon_w = tag.base().children[0].base().bounds.size.w;
+    let label_w = tag.base().children[1].base().bounds.size.w;
+    assert!(icon_w > 0.0, "leading icon is laid out");
+    assert!(label_w > 0.0, "label is laid out");
+    assert!(tag.base().bounds.size.w < 300.0, "chip hugs its content, not the full width");
+    assert!(tag.base().bounds.size.w >= icon_w + label_w, "chip wraps icon + label");
+}

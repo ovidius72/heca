@@ -60,7 +60,7 @@ pub use widgets::{
     ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, Icon, Input, Item, ItemGroup, Label,
     LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
-    StatusDot, Surface, Tabs, Toggle,
+    StatusDot, Surface, Tabs, Tag, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -80,6 +80,6 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, Icon, Input, Item, ItemGroup, Label,
         LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
-        StatusDot, Surface, Tabs, Toggle,
+        StatusDot, Surface, Tabs, Tag, Toggle,
     };
 }

@@ -44,7 +44,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [x] **G2.5 `Row`** — focusable, clickable, single-selectable container for **arbitrary composed content** (`Item`'s interactive chrome — hover/active pill + `ActiveMarker` + press flash + focus ring + `on_activate`/Enter — generalized to wrap any children, e.g. a multi-line `Grid` of `Label`/`Icon`/`Badge`). Optional persistent background under the selection overlay. Unblocks clickable rich Dock rows. DONE — branch `grid-ui-row`.
-- [ ] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase mock WorkspacesDock (program/git/status rows). grid-ui stays domain-neutral; the Dock maps state→style.
+- [x] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase rich rows. Added `Tag` (bordered metadata chip with an optional leading icon — git branch/path/filter; hue-configurable, neutral). The PANES dock is now the composed recipe (state-colored leading `Icon` + program name + git-branch `Tag` + status `Badge`, in a `Grid` inside a selectable `Row`). grid-ui stays domain-neutral; the demo maps state→style. DONE — branch `grid-ui-status-rows`.
 
 **Catalog gaps:**
 - [ ] `IconButton` + **icon support** (icon-font glyphs; no renderer texture work).
