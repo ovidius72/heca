@@ -503,10 +503,13 @@ pub(crate) fn dispatch_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_core::layout::{LayoutOptions, PaneId, SessionId, Size};
+    use heca_core::layout::column::Pane;
+    use heca_core::layout::workspace::FloatingPane;
+    use heca_core::layout::types::{Point, Rectangle};
 
     /// Helper to create a minimal Session for routing tests.
     fn test_session() -> heca_core::layout::Session {
-        use heca_core::layout::{LayoutOptions, SessionId, Size};
         heca_core::layout::Session::new(
             SessionId(0),
             Size::new(800.0, 600.0),
@@ -827,5 +830,313 @@ mod tests {
         assert!(!can_focus_pane(&session, InteractionSource::Keyboard, 1));
         assert!(!can_focus_pane(&session, InteractionSource::MouseContent, 1));
         assert!(!can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 1));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Phase E — Regression tests
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // ── E.2: Floating-domain focus blocking regression tests ──
+
+    /// When floating, keyboard FocusPane targeting the active floating pane
+    /// is allowed (SourceDependent policy).
+    #[test]
+    fn floating_focus_allows_active_floating_pane_via_keyboard() {
+        let mut session = test_session();
+        session.add_pane(Pane::new(PaneId(99), "float-99"), None, true);
+        let ws = session.active_workspace_mut().unwrap();
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(99), "float-99"),
+            position: Point::new(0.0, 0.0),
+            size: Size::new(200.0, 100.0),
+            is_active: true,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        ws.focus_domain = FocusDomain::Floating;
+
+        // FocusPane targeting the active floating pane should be allowed from Keyboard.
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::Keyboard,
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 99 }),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Allow(_)),
+            "FocusPane on active floating pane should be allowed when floating, got {:?}",
+            decision,
+        );
+    }
+
+    /// When floating, keyboard FocusPane targeting a tiled pane is blocked.
+    #[test]
+    fn floating_focus_blocks_tiled_pane_via_keyboard() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        // FocusPane targeting tiled pane (ID 1) should be blocked.
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::Keyboard,
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 1 }),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Block),
+            "FocusPane on tiled pane should be blocked when floating, got {:?}",
+            decision,
+        );
+    }
+
+    /// When floating, FocusPane intent from MouseContent is blocked.
+    #[test]
+    fn floating_focus_pane_intent_blocked_via_mouse_content() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::MouseContent,
+            InteractionIntent::FocusPane { pane_id: 1 },
+        );
+        assert!(
+            matches!(decision, RouteDecision::Block),
+            "FocusPane intent from MouseContent should be blocked when floating, got {:?}",
+            decision,
+        );
+    }
+
+    /// When tiled, sidebar actions are allowed via MouseLeftSidebar.
+    #[test]
+    fn tiled_sidebar_action_allowed_via_mouse_sidebar() {
+        let session = test_session();
+        let actions = [
+            WmAction::SidebarFocus,
+            WmAction::SidebarLeft,
+            WmAction::SidebarRight,
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::MouseLeftSidebar,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Tiled domain should allow {:?} from MouseLeftSidebar, got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// When tiled, FocusPane from MouseContent is allowed.
+    #[test]
+    fn tiled_content_focus_pane_allowed_via_mouse_content() {
+        let session = test_session();
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::MouseContent,
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 1 }),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Allow(_)),
+            "Tiled domain should allow FocusPane from MouseContent, got {:?}",
+            decision,
+        );
+    }
+
+    // ── E.3: Behavior preservation tests ──
+
+    /// When tiled, keyboard navigation actions (FocusLeft/Right/Up/Down) are allowed.
+    #[test]
+    fn tiled_keyboard_focus_navigation_allowed() {
+        let session = test_session();
+        let actions = [
+            WmAction::FocusLeft,
+            WmAction::FocusRight,
+            WmAction::FocusUp,
+            WmAction::FocusDown,
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Tiled domain should allow {:?} via Keyboard, got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// When tiled, workspace actions are allowed.
+    #[test]
+    fn tiled_workspace_actions_allowed() {
+        let session = test_session();
+        let actions = [
+            WmAction::WorkspaceNext,
+            WmAction::WorkspacePrev,
+            WmAction::CreateWorkspace,
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Tiled domain should allow {:?} via Keyboard, got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// When floating, AlwaysAllowed actions (CommandPalette, ReloadConfig) are blocked
+    /// from current UI sources. This confirms the current design decision.
+    #[test]
+    fn floating_blocks_always_allowed_from_keyboard() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let actions = [
+            WmAction::CommandPalette,
+            WmAction::ReloadConfig,
+            WmAction::SpawnCommand { command: String::new() },
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Block),
+                "Floating domain should block {:?} from Keyboard (may allow from chrome later), got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane) are still allowed.
+    #[test]
+    fn floating_allows_focused_pane_local_via_keyboard() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let actions = [
+            WmAction::Float,
+            WmAction::ClosePane,
+            WmAction::RenamePane,
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Floating domain should allow {:?} via Keyboard, got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// When floating, FocusedPaneLocal actions are allowed from all sources.
+    #[test]
+    fn floating_allows_focused_pane_local_from_all_sources() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let sources = [
+            InteractionSource::Keyboard,
+            InteractionSource::MouseContent,
+            InteractionSource::MouseLeftSidebar,
+        ];
+        let actions = [WmAction::Float, WmAction::ClosePane];
+
+        for source in &sources {
+            for action in &actions {
+                let decision = route_interaction_for_session(
+                    &session,
+                    *source,
+                    InteractionIntent::ActivateAction(action.clone()),
+                );
+                assert!(
+                    matches!(decision, RouteDecision::Allow(_)),
+                    "Floating domain should allow {:?} from {:?}, got {:?}",
+                    action,
+                    source,
+                    decision,
+                );
+            }
+        }
+    }
+
+    /// Sidebar navigation intent is blocked when floating.
+    #[test]
+    fn floating_blocks_sidebar_nav_intent() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::MouseLeftSidebar,
+            InteractionIntent::EnterSidebarNav,
+        );
+        assert!(
+            matches!(decision, RouteDecision::Block),
+            "EnterSidebarNav should be blocked when floating, got {:?}",
+            decision,
+        );
+    }
+
+    /// Sidebar navigation intent is allowed when tiled.
+    #[test]
+    fn tiled_allows_sidebar_nav_intent() {
+        let session = test_session();
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::MouseLeftSidebar,
+            InteractionIntent::EnterSidebarNav,
+        );
+        assert!(
+            matches!(decision, RouteDecision::Allow(_)),
+            "EnterSidebarNav should be allowed when tiled, got {:?}",
+            decision,
+        );
+    }
+
+    /// can_focus_pane allows the active floating pane when in floating domain.
+    #[test]
+    fn can_focus_pane_allows_active_floating_pane() {
+        let mut session = test_session();
+        // Add a floating pane with ID 99, set active
+        let ws = session.active_workspace_mut().unwrap();
+        ws.update_working_area(Rectangle::new(
+            Point::new(0.0, 0.0),
+            Size::new(1280.0, 800.0),
+        ));
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(99), "float-99"),
+            position: Point::new(50.0, 50.0),
+            size: Size::new(800.0, 600.0),
+            is_active: true,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        ws.focus_domain = FocusDomain::Floating;
+
+        // The active floating pane (ID 99) can be focused from all sources.
+        assert!(can_focus_pane(&session, InteractionSource::Keyboard, 99));
+        assert!(can_focus_pane(&session, InteractionSource::MouseContent, 99));
+        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 99));
     }
 }

@@ -482,15 +482,15 @@ So this is effectively a deeper and more maintainable continuation of Phase 9.
 
 ### 5. Tests
 - [x] Add router unit tests (10 tests: tiled allows, floating blocks, focused-pane-local allows, intent blocks, policy exhaustive, domain helpers, mouse content focus block, mouse left sidebar block)
-- [ ] Add sidebar/content floating-focus regression tests
-- [ ] Add keyboard tiled-only action blocking tests in floating domain
-- [ ] Add allowed floating-local action tests
-- [ ] Re-run full validation
+- [x] Add sidebar/content floating-focus regression tests
+- [x] Add keyboard tiled-only action blocking tests in floating domain
+- [x] Add allowed floating-local action tests
+- [x] Re-run full validation
 
 ### 6. Validation
 - [x] `cargo check --workspace`
 - [x] `cargo clippy --workspace --all-targets --all-features` — 0 heca warnings
-- [x] `cargo test --workspace` — 237 tests pass (16 interaction tests)
+- [x] `cargo test --workspace` — 250 tests pass (29 interaction tests)
 - [ ] Manually smoke test floating focus vs sidebar/content click behavior
 
 ---
