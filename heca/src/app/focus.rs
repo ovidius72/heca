@@ -4,7 +4,7 @@
 //! such as `focused_pane`, focus history, and sidebar projection rebuilds.
 
 use crate::app_state::AppState;
-use heca_core::layout::Session;
+use heca_core::layout::{FocusDomain, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
 fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
@@ -48,7 +48,7 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
 
         if let Some((ci, pi)) = found {
             ws.deactivate_floating_panes();
-            ws.floating_is_active = false;
+            ws.focus_domain = FocusDomain::Tiled;
             ws.scrolling.activate_column(ci);
             if let Some(col) = ws.scrolling.columns.get_mut(ci) {
                 col.activate_pane(pi);

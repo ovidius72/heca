@@ -16,7 +16,7 @@ use crate::{
 };
 use heca_core::backend::FakeBackend;
 use crate::chrome;
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane as LayoutPane, PaneId};
+use heca_core::layout::{Column, ColumnId, ColumnWidth, FocusDomain, Pane as LayoutPane, PaneId};
 
 // ── Navigation ──
 
@@ -529,7 +529,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         true,
                     );
                 }
-                ws.floating_is_active = false;
+                ws.focus_domain = FocusDomain::Tiled;
             }
         } else {
             let found = crate::app::pane_ops::find_pane_indices_in_workspace(ws, pane_id);
@@ -550,7 +550,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                         original_column_idx: Some(col_idx),
                         original_pane_idx: Some(pane_idx),
                     });
-                ws.floating_is_active = true;
+                ws.focus_domain = FocusDomain::Floating;
             }
         }
     }
@@ -693,7 +693,7 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
                     original_column_idx: Some(col_idx),
                     original_pane_idx: Some(pane_idx),
                 });
-            ws.floating_is_active = true;
+            ws.focus_domain = FocusDomain::Floating;
     }
     after_layout_change(state);
 }
@@ -713,8 +713,8 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         {
             let removed = ws.floating_panes.remove(float_idx);
             state.backends.remove_for_pane(removed.pane.id.0);
-            if ws.floating_is_active && ws.floating_panes.is_empty() {
-                ws.floating_is_active = false;
+            if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
+                ws.focus_domain = FocusDomain::Tiled;
             }
         }
     }
@@ -950,7 +950,7 @@ pub fn handle_take_pane(state: &mut AppState, action: &WmAction) {
                 if let Some(pos) = ws.floating_panes.iter().position(|f| f.pane.id.0 == target) {
                     let fp = ws.floating_panes.remove(pos);
                     ws.deactivate_floating_panes();
-                    ws.floating_is_active = false;
+                    ws.focus_domain = FocusDomain::Tiled;
                     found = Some((ws_idx, fp.pane));
                     break;
                 }

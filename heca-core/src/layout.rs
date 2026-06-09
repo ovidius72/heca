@@ -47,4 +47,4 @@ pub use scrolling::ScrollingSpace;
 pub use session::{OverviewState, Session, WorkspaceSwitch};
 pub use types::*;
 pub use view_offset::ViewOffset;
-pub use workspace::Workspace;
+pub use workspace::{FocusDomain, Workspace};

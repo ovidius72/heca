@@ -4,11 +4,13 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
-use crate::app::mutations::after_metadata_change;
+use crate::app::interaction::dispatch_action;
+use crate::app::interaction::InteractionSource;
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_terminal_input,
 };
+use crate::app::mutations::after_metadata_change;
 use crate::app::selection::find_pane_location;
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
@@ -55,7 +57,7 @@ pub(crate) fn handle_keyboard_input(
 
             let global_action = keymap.resolve("global", ctx.event_combo).cloned();
             if let Some(act) = global_action {
-                registry.execute(&act, state);
+                dispatch_action(state, registry, InteractionSource::Keyboard, &act);
                 return;
             }
 
@@ -185,7 +187,7 @@ fn handle_confirm_delete_input(
         state.input_mode = resume_mode;
     } else if is_y {
         state.input_mode = resume_mode;
-        registry.execute(&action, state);
+        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
     state.needs_redraw = true;
     true
@@ -247,7 +249,7 @@ fn handle_prefix_mode(
     if let Some(ref act) = action {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        registry.execute(act, state);
+        dispatch_action(state, registry, InteractionSource::Keyboard, act);
     } else if !ctx.key_text.is_empty() {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -278,7 +280,7 @@ fn handle_chord_mode(
     {
         let ws_idx = (digit as usize).saturating_sub(1);
         if ws_idx < state.session.workspaces.len() {
-            registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+            dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusWorkspace { ws_idx });
             state.needs_redraw = true;
         }
         state.input_mode = InputMode::Normal;
@@ -310,7 +312,7 @@ fn handle_custom_mode(
         && let Some(action) = mode_map.resolve(name, &combo).cloned()
     {
         let sticky = mode_triggers.get(name).map(|(_, s)| *s).unwrap_or(true);
-        registry.execute(&action, state);
+        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
         if !sticky {
             state.input_mode = InputMode::Normal;
             state.needs_redraw = true;
@@ -330,11 +332,13 @@ fn handle_pane_select_mode(
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        registry.execute(
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
             &WmAction::FocusPane {
                 pane_id: *target_id,
             },
-            state,
         );
     }
     state.input_mode = InputMode::Normal;
@@ -358,27 +362,33 @@ fn handle_pane_swap_mode(
         && let Some((_, _, _)) = find_pane_location(&state.session, current_id)
         && let Some((_, _, _)) = find_pane_location(&state.session, *target_id)
     {
-        registry.execute(
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
             &WmAction::Swap {
                 a_id: current_id,
                 b_id: *target_id,
             },
-            state,
         );
 
         if focus_after {
-            registry.execute(
+            dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
                 &WmAction::FocusPane {
                     pane_id: current_id,
                 },
-                state,
             );
         } else {
-            registry.execute(
+            dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
                 &WmAction::FocusPane {
                     pane_id: *target_id,
                 },
-                state,
             );
         }
     }
@@ -399,12 +409,14 @@ fn handle_pane_take_mode(
     if let Some(ch) = typed
         && let Some((_, target_id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        registry.execute(
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
             &WmAction::TakePane {
                 pane_id: *target_id,
                 focus_after,
             },
-            state,
         );
     }
     state.needs_redraw = true;
@@ -423,7 +435,7 @@ fn handle_sidebar_nav_mode(
         if let Some(item) = state.sidebar_tree.current_item().cloned()
             && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
         {
-            registry.execute(&WmAction::FocusPane { pane_id }, state);
+            dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusPane { pane_id });
         }
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
@@ -432,14 +444,14 @@ fn handle_sidebar_nav_mode(
         match item {
             Some(crate::sidebar::SidebarItem::Pane { pane_id })
             | Some(crate::sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
-                registry.execute(&WmAction::FocusPane { pane_id }, state);
+                dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusPane { pane_id });
                 state.input_mode = InputMode::Normal;
             }
             Some(crate::sidebar::SidebarItem::Workspace { ws_idx })
             | Some(crate::sidebar::SidebarItem::Column { ws_idx, .. })
                 if ws_idx != state.session.active_workspace_idx =>
             {
-                registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+                dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusWorkspace { ws_idx });
             }
             _ => {}
         }
@@ -450,7 +462,7 @@ fn handle_sidebar_nav_mode(
             .get("sidebar")
             .and_then(|mode_map| mode_map.resolve("sidebar", &combo).cloned());
         if let Some(act) = action {
-            registry.execute(&act, state);
+            dispatch_action(state, registry, InteractionSource::Keyboard, &act);
         }
     }
 }
@@ -510,7 +522,7 @@ mod tests {
     use crate::sidebar::SidebarItem;
     use heca_core::layout::column::Pane;
     use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
-    use heca_core::layout::{PaneId, Session, SessionId};
+    use heca_core::layout::{FocusDomain, PaneId, Session, SessionId};
 
     fn make_session() -> Session {
         let mut session = Session::new(
@@ -557,7 +569,7 @@ mod tests {
             original_column_idx: None,
             original_pane_idx: None,
         });
-        ws.floating_is_active = false;
+        ws.focus_domain = FocusDomain::Tiled;
 
         assert_eq!(
             sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: 2 }),

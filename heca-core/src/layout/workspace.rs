@@ -1,6 +1,24 @@
 use super::scrolling::ScrollingSpace;
 use super::types::*;
 
+/// Which layout domain has keyboard focus.
+///
+/// When `Floating`, only pane-local actions (close, rename) operate on the
+/// active floating pane. Tiled-layout mutations (resize, zoom, swap, move,
+/// column navigation) are no-op. Navigation between floating panes is
+/// deferred to a future phase.
+///
+/// The floating domain is **modal** — mouse clicks, keyboard shortcuts, and
+/// sidebar selection cannot switch to a tiled pane while a floating pane is
+/// focused. Use `prefix+f` (unfloat), closing the floating pane, or
+/// `prefix+i` (toggle) to return to `Tiled`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FocusDomain {
+    #[default]
+    Tiled,
+    Floating,
+}
+
 /// A workspace contains a scrolling layout and optionally floating panes.
 ///
 /// This is heca's equivalent of NIRI's `Workspace<W>`, which contains
@@ -13,8 +31,8 @@ pub struct Workspace {
     pub scrolling: ScrollingSpace,
     /// Floating panes (future feature).
     pub floating_panes: Vec<FloatingPane>,
-    /// Whether the floating layout is active.
-    pub floating_is_active: bool,
+    /// Which layout domain has keyboard focus.
+    pub focus_domain: FocusDomain,
 }
 
 /// A floating pane with position and size.
@@ -43,7 +61,7 @@ impl Workspace {
             name: None,
             scrolling,
             floating_panes: Vec::new(),
-            floating_is_active: false,
+            focus_domain: FocusDomain::default(),
         }
     }
 
@@ -52,7 +70,7 @@ impl Workspace {
     }
 
     pub fn active_pane(&self) -> Option<&super::column::Pane> {
-        if self.floating_is_active {
+        if self.focus_domain == FocusDomain::Floating {
             self.floating_panes
                 .iter()
                 .find(|p| p.is_active)
@@ -77,7 +95,7 @@ impl Workspace {
             float.is_active = is_target;
             found |= is_target;
         }
-        self.floating_is_active = found;
+        self.focus_domain = if found { FocusDomain::Floating } else { FocusDomain::Tiled };
         found
     }
 
@@ -155,7 +173,7 @@ impl Workspace {
 
     /// Focus left in the scrolling layout.
     pub fn focus_left(&mut self) -> bool {
-        if self.floating_is_active {
+        if self.focus_domain == FocusDomain::Floating {
             false // TODO: floating focus
         } else {
             self.scrolling.focus_left()
@@ -164,7 +182,7 @@ impl Workspace {
 
     /// Focus right in the scrolling layout.
     pub fn focus_right(&mut self) -> bool {
-        if self.floating_is_active {
+        if self.focus_domain == FocusDomain::Floating {
             false // TODO: floating focus
         } else {
             self.scrolling.focus_right()
@@ -173,7 +191,7 @@ impl Workspace {
 
     /// Focus up (previous pane in column, or previous workspace).
     pub fn focus_up(&mut self) -> bool {
-        if self.floating_is_active {
+        if self.focus_domain == FocusDomain::Floating {
             false // TODO
         } else if let Some(col) = self.scrolling.active_column_mut() {
             if col.focus_up() {
@@ -199,7 +217,7 @@ impl Workspace {
 
     /// Focus down (next pane in column, or next workspace).
     pub fn focus_down(&mut self) -> bool {
-        if self.floating_is_active {
+        if self.focus_domain == FocusDomain::Floating {
             false // TODO
         } else if let Some(col) = self.scrolling.active_column_mut() {
             if col.focus_down() {

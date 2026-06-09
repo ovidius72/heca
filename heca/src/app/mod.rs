@@ -7,6 +7,7 @@ pub mod backend_store;
 pub mod events;
 pub mod focus;
 pub mod input;
+pub mod interaction;
 pub mod keyboard;
 pub mod lifecycle;
 pub mod mutations;

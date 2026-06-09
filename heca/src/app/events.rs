@@ -5,6 +5,7 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::input::{KeyInputContext, handle_keyboard_input};
+use crate::app::interaction::{dispatch_action, InteractionSource};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{after_mutation_change, MutationKind};
 use crate::app::render::{render_frame, update_session_viewport};
@@ -99,7 +100,7 @@ pub(crate) fn handle_window_event(
             );
             state.mouse.pos = pos;
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
-                registry.execute(&action, state);
+                dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
             state.needs_redraw = true;
         }
@@ -109,7 +110,7 @@ pub(crate) fn handle_window_event(
             ..
         } => {
             if let Some(action) = mouse::on_mouse_input(state, button, button_state) {
-                registry.execute(&action, state);
+                dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
             state.needs_redraw = true;
         }
