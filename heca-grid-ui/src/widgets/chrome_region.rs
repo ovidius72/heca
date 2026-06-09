@@ -15,11 +15,13 @@
 //! all reach the same path. [`toggle`](ChromeRegion::toggle) is the convenience
 //! intent a host binds.
 //!
-//! Buildable now: orientation + mode + collapse sizing + hosting Docks. Left as
-//! documented seams: the **icon-rail** rendering (collapsed Docks draw icon-only)
-//! needs `Icon` (G2); **scrolling** an overflowing region needs the renderer's
-//! `PushClip`/`PopClip` (G7); **Dock-level drop targets** wire onto the shipped
-//! `drag/` framework (G6).
+//! Buildable now: orientation + mode + collapse sizing + hosting Docks. The
+//! **icon-rail** rendering is built on the Dock side: a [`DockFrame`](super::DockFrame)
+//! given the region's [`mode_signal`](ChromeRegion::mode_signal) via
+//! [`DockFrame::rail`](super::DockFrame::rail) draws icon-only while the region is
+//! [`RegionMode::CollapsedRail`]. Left as documented seams: **scrolling** an
+//! overflowing region needs the renderer's `PushClip`/`PopClip` (G7);
+//! **Dock-level drop targets** wire onto the shipped `drag/` framework (G6).
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component};
@@ -42,7 +44,8 @@ pub enum RegionMode {
     /// Full extent — Docks shown normally.
     #[default]
     Expanded,
-    /// Thin icon rail — Docks collapse to icon-only (icon rendering is G2).
+    /// Thin icon rail — Docks collapse to icon-only via
+    /// [`DockFrame::rail`](super::DockFrame::rail).
     CollapsedRail,
     /// Removed from layout entirely (`display: none`).
     Hidden,
@@ -92,6 +95,15 @@ impl ChromeRegion {
     /// Set the initial display mode.
     pub fn mode(self, mode: RegionMode) -> Self {
         self.mode.set(mode);
+        self
+    }
+
+    /// Bind the region to a **caller-owned** [`RegionMode`] signal instead of its
+    /// internal one, so a host can drive collapse/expand from a central layout
+    /// store and share the *same* signal with the region's rail-aware Docks via
+    /// [`DockFrame::rail`](super::DockFrame::rail).
+    pub fn with_mode_signal(mut self, mode: Signal<RegionMode>) -> Self {
+        self.mode = mode;
         self
     }
 

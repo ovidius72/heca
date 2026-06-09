@@ -13,13 +13,22 @@
 //! `style.hidden` (`display: none`), so it folds out of layout entirely. The
 //! drag-handle grip is a visual affordance only — wiring it to the shipped
 //! `drag/` framework is G6's job (see [`child`](DockFrame::child) seam).
+//!
+//! **Rail mode (G5 seam, now built).** A Dock hosted in a
+//! [`ChromeRegion`](super::ChromeRegion) can collapse to an **icon rail**. Bind
+//! the region's [`RegionMode`](super::RegionMode) signal with
+//! [`rail`](DockFrame::rail): while the region is in
+//! [`RegionMode::CollapsedRail`](super::RegionMode::CollapsedRail) the frame
+//! folds its header + body away and shows a single centered [`Icon`] instead.
+//! Reading the mode (never writing it) keeps the chrome plan's *read-via-signals,
+//! write-via-actions* contract — the host's toggle action expands the rail back.
 
 use crate::action::{Action, SignalData};
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::style::{Align, Direction};
-use crate::widgets::{Flex, Item, Label};
+use crate::style::{Align, Direction, Justify};
+use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
 const CHEVRON_OPEN: &str = "▾";
@@ -31,14 +40,21 @@ const LEADING_GAP: f32 = 8.0;
 /// Inset of the header + body from the bracket frame, so content (title, the
 /// header-controls slot, body rows) never collides with the corner brackets.
 const CONTENT_PAD: f32 = 10.0;
+/// Tighter inset used in [`RegionMode::CollapsedRail`] so the centered icon fits
+/// a thin rail without colliding with the brackets.
+const RAIL_PAD: f32 = 6.0;
 /// Gap between the title bar and the body.
 const HEADER_BODY_GAP: f32 = 8.0;
 /// Gap between body rows.
 const BODY_GAP: f32 = 4.0;
+/// Size (logical px) of the centered glyph shown in [`RegionMode::CollapsedRail`].
+const RAIL_ICON_SIZE: f32 = 22.0;
 
-/// Index of the header (a [`Flex`] row) / body within `base.children`.
+/// Index of the header (a [`Flex`] row) / body within `base.children`. The rail
+/// icon, when configured via [`DockFrame::rail`], is appended at [`RAIL`].
 const HEADER: usize = 0;
 const BODY: usize = 1;
+const RAIL: usize = 2;
 /// Index of the controls slot within the header row (after the toggle [`Item`]).
 const CONTROLS: usize = 1;
 
@@ -49,6 +65,9 @@ pub struct DockFrame {
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
+    /// Hosting region's display mode; when present and `CollapsedRail`, the frame
+    /// renders icon-only. Read-only — the host writes it via its toggle action.
+    rail_mode: Option<Signal<RegionMode>>,
 }
 
 impl DockFrame {
@@ -97,7 +116,7 @@ impl DockFrame {
             2,
             "DockFrame header children: [toggle, CONTROLS]"
         );
-        Self { base, expanded, chevron, on_toggle: None }
+        Self { base, expanded, chevron, on_toggle: None, rail_mode: None }
     }
 
     /// Set the initial expanded state.
@@ -132,11 +151,49 @@ impl DockFrame {
         self.expanded
     }
 
-    /// Apply the current `expanded` state to body visibility + chevron glyph.
+    /// Make the frame **rail-aware**: it observes the hosting region's
+    /// [`RegionMode`] signal and, while that signal is
+    /// [`RegionMode::CollapsedRail`], folds its header + body away and shows
+    /// `glyph` (a centered [`Icon`]) instead. Obtain the signal from the region
+    /// before it is moved into `.dock(...)`:
+    ///
+    /// ```ignore
+    /// let sidebar = ChromeRegion::vertical();
+    /// let mode = sidebar.mode_signal();
+    /// let files = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen);
+    /// let sidebar = sidebar.dock(files);
+    /// ```
+    pub fn rail(mut self, mode: Signal<RegionMode>, glyph: Glyph) -> Self {
+        self.rail_mode = Some(mode);
+        // Stretch the wrapper across the rail's width and center the glyph in it.
+        let icon = Flex::row()
+            .justify(Justify::Center)
+            .child(Icon::new(glyph).size(RAIL_ICON_SIZE));
+        if self.base.children.len() > RAIL {
+            self.base.children[RAIL] = Box::new(icon);
+        } else {
+            self.base.children.push(Box::new(icon));
+        }
+        self.sync();
+        self
+    }
+
+    /// Apply the current state to child visibility + the chevron glyph. In rail
+    /// mode the header + body fold away and only the rail icon shows; otherwise
+    /// the body follows `expanded` and the rail icon (if any) stays hidden.
     fn sync(&mut self) {
         let open = self.expanded.get_untracked();
         self.chevron.set(chevron_for(open).to_string());
-        self.base.children[BODY].base_mut().style.hidden = !open;
+        let rail = self
+            .rail_mode
+            .is_some_and(|m| m.get_untracked() == RegionMode::CollapsedRail);
+        self.base.children[HEADER].base_mut().style.hidden = rail;
+        self.base.children[BODY].base_mut().style.hidden = rail || !open;
+        if self.base.children.len() > RAIL {
+            self.base.children[RAIL].base_mut().style.hidden = !rail;
+        }
+        // Tighten the frame inset in the rail so the icon fits the thin column.
+        self.base.style.padding = if rail { RAIL_PAD } else { CONTENT_PAD };
     }
 }
 
