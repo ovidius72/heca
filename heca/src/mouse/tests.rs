@@ -117,8 +117,8 @@ fn test_find_pane_multi_column() {
 #[test]
 fn test_chrome_content_rect_left_sidebar() {
     let cfg = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: 200.0,
         right_sidebar_width: 0.0,
     };
@@ -132,8 +132,8 @@ fn test_chrome_content_rect_left_sidebar() {
 #[test]
 fn test_chrome_content_rect_no_sidebars() {
     let cfg = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: 40.0,
         right_sidebar_width: 0.0,
     };

@@ -4,7 +4,7 @@
 //! of `main.rs` while preserving the current render pipeline behavior.
 
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::ChromeConfig;
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_core::backend::BackendRenderData;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -138,8 +138,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let theme = &state.theme;
 
     let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {
@@ -594,8 +594,8 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
     let win_w = phys.width as f32 / state.scale_factor as f32;
     let win_h = phys.height as f32 / state.scale_factor as f32;
     let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {

@@ -13,7 +13,7 @@ mod sidebar;
 mod sidebar_drop;
 
 use crate::app_state::{AppState, DragState};
-use crate::chrome::ChromeConfig;
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::input::WmAction;
 use winit::event::{ElementState, MouseButton};
 
@@ -346,8 +346,8 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
 
 fn chrome_config(state: &AppState) -> ChromeConfig {
     ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {
