@@ -357,11 +357,10 @@ Short description:
 
 ### Phase 5 — Backend Runtime Ownership Cleanup
 
-- [ ] Phase 5 complete
-  - [ ] 5.1 Wrap backend storage
-  - [ ] 5.2 Isolate lifecycle rules
-  - [ ] 5.3 Optional deeper follow-up
-  - [ ] 5.V Validate backend lifecycle ownership and removal rules
+- [x] Phase 5 complete
+  - [x] 5.1 Wrap backend storage — `BackendStore` struct wrapping `HashMap`, methods `insert_for_pane`/`remove_for_pane`/`get`/`get_mut`/`values_mut`, updated 16 call sites across 5 files
+  - [x] 5.2 Isolate lifecycle rules — `remove_all()` batch helper for column/workspace delete, lifecycle contract documented in `BackendStore`
+  - [x] 5.V Validate — all 204 tests pass, clippy clean
 
 ### Phase 6 — Remove Stale, Dormant, and Drifting State
 

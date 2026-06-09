@@ -233,4 +233,24 @@
 **Coverage:** 58 v1 requirements | 58 mapped | 0 unmapped ✓
 
 ---
-*Roadmap updated: 2026-05-29*
+*Roadmap updated: 2026-06-09*
+
+---
+
+## Code Refactoring Track (cross-cutting)
+
+A 10-phase code quality initiative running alongside the product phases, cleaning
+up architecture debt introduced during rapid prototyping.
+
+| Phase | Status | Focus |
+|-------|--------|-------|
+| 1 — File Reorganization | ✅ Done | Split monolithic files (main.rs, mouse.rs, sidebar.rs, config) |
+| 2 — Central Mutation Boundary | ✅ Done | after_layout_change hook, mutation helpers |
+| 3 — Shared Pane Ops | ✅ Done | pane_ops.rs, DnD refactoring, ad hoc scan removal |
+| 4 — Sidebar Projection Model | ✅ Done | SidebarItemKind, rebuild→sync, HashMap pane lookup |
+| 5 — Backend Lifecycle | ✅ Done | BackendStore wrapper, lifecycle contract, batch helper |
+| 6 — Remove Stale State | ⬜ Pending | Dead geometry, dormant fields, placeholder backends, `#[allow(dead_code)]` audit |
+| 7 — Typed Errors | ⬜ Pending | Stable boundary errors, action dispatch failure, unsafe hygiene |
+| 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
+| 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
+| 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |
