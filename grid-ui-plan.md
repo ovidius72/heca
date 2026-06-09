@@ -32,11 +32,16 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ### Phase C — finish the catalog & shells
 
-**heca-specific shells (the gap blocking Phase D):**
-- [ ] **C6 `Sidebar`** component — tree nav (expand/collapse, cursor, drag affordance), Grid-styled; mirrors `heca/src/sidebar.rs` behavior. *(Today we have `Pane` + `Item` rows, not a `Sidebar` widget.)*
-- [ ] **C7 `Pane` shell** — HUD header (title + status), optional tab bar, focused-state brackets; exposes inner content `Rectangle` for the backend. *(Today `Pane` is a bracket-framed container only.)*
-- [ ] **C5 `StatusBar`** — segmented `Flex`, signal-bound segments.
-- [ ] **C4 `CornerBrackets` decorator + `Reticle`** — shared, reusable by Pane/focus chrome.
+**Chrome vocabulary — see [`grid-ui-chrome-plan.md`](./grid-ui-chrome-plan.md)** (supersedes the old "Sidebar = tree nav" idea; the Sidebar is a **dumb shell** that hosts **Docks**, which are app-side and own their own logic). Decisions locked 2026-06-09. Build the vocabulary now; DnD waits for the incoming system; scroll waits on the renderer.
+- [ ] **G1 `Grid`** layout widget (taffy grid; tracks + named areas) — flexible item content. *Start here.*
+- [ ] **G2 `Icon`** widget + embedded, host-registered icon font.
+- [ ] **G3 `ItemGroup`** — collapsible group over `Item`.
+- [ ] **G4 `DockFrame`** — titled/collapsible frame + drag handle + header slot; reuses `Pane` brackets (new widget; keep `Pane` as the plain container).
+- [ ] **G5 `ChromeRegion`/`Sidebar` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), collapsible (icon rail, keyboard-expandable), mode-aware, hosts `DockFrame`s, Dock-level drop targets. **No** tree/workspace/drag semantics (those are the app-side `WorkspacesDock`).
+- [ ] **G6 DnD hooks** — drag handle / drop targets / item reorder onto the **incoming** DnD system (do **not** build a homegrown one). *Gated on the incoming code.*
+- [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
+- [ ] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase mock WorkspacesDock (program/git/status rows). grid-ui stays domain-neutral; the Dock maps state→style.
+- [ ] *(old C5 `StatusBar` / C4 `CornerBrackets`+`Reticle` fold into G5 region shell + existing bracket painting.)*
 
 **Catalog gaps:**
 - [ ] `IconButton` + **icon support** (icon-font glyphs; no renderer texture work).
@@ -117,13 +122,7 @@ next, and how to start.
 
 #### What's next (in priority order — full list in [📍 Remaining Work](#-remaining-work))
 
-1. **Phase C shells** — the gap that *blocks Phase D*. Suggested order:
-   - **C6 `Sidebar`** — tree nav (expand/collapse, cursor, drag affordance). Today we
-     only have `Pane` + `Item` rows; this is a new widget. Mirror `heca/src/sidebar.rs`
-     behavior; compose from `Item` rows inside a `Pane`-like frame.
-   - **C7 `Pane` shell** — add HUD header (title + status) + optional tab bar +
-     focused-state brackets to the existing `Pane`; expose an inner content `Rectangle`.
-   - **C5 `StatusBar`**, **C4 `CornerBrackets`/`Reticle`** decorator.
+1. **Chrome vocabulary** — the gap that *blocks Phase D*. **Read [`grid-ui-chrome-plan.md`](./grid-ui-chrome-plan.md) first** — it re-scopes the Sidebar from a "tree-nav widget" to a **dumb shell** that hosts app-side **Docks**, and locks all the decisions. Suggested order: **G1 `Grid`** → **G3 `ItemGroup`** / **G4 `DockFrame`** (+ **G5 region shell** alongside) → **G2 `Icon`** → **G8** rich-item showcase. DnD (**G6**) waits for the **incoming DnD system landing in this crate** — do not build a homegrown one. Scroll (**G7**) waits on the renderer's `PushClip`/`PopClip`.
 2. **Catalog gaps** — `IconButton` + icon support, `Tag`/`Chip`, `Tooltip`/`Modal`/`CommandPalette`,
    wire `Item` into `Select` options, C8 showcase/snapshot tests.
 3. **Phase D — app adoption** (D1–D7), including **D6.5 `ActionSink` keybinding integration**
