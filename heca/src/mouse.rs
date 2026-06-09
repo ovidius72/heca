@@ -62,7 +62,7 @@ pub fn on_mouse_input(
             }
 
             // Sidebar click.
-            let sidebar_action = surface_left::click_action(state, pos);
+            let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
             // Check if this is a sidebar pane hit (no button) → start drag detection.
             let is_pane_item = sidebar_pane_hit_test(state, pos).is_some();

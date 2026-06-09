@@ -5,6 +5,7 @@
 
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::input::WmAction;
+use heca_grid_ui::drag::DragSurfaceId;
 
 /// Handle release during an active interactive move (content-area drag).
 ///
@@ -33,7 +34,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
                     b_id: target_id,
                 },
             );
-        } else if super::surface_left::handle_interactive_move_drop(state, pos) {
+        } else if super::target::surface_interactive_move_drop(state, DragSurfaceId::LeftSidebar, pos) {
             // Sidebar drop handled as a move.
         } else if let Some(hint) = state.mouse.insert_hint.take() {
             // Fallback: move semantics in the content area.
@@ -41,7 +42,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         } else {
             super::interactive::cancel_interactive_move(state);
         }
-    } else if super::surface_left::handle_interactive_move_drop(state, pos) {
+    } else if super::target::surface_interactive_move_drop(state, DragSurfaceId::LeftSidebar, pos) {
         // Sidebar drop handled.
     } else if let Some(hint) = state.mouse.insert_hint.take() {
         // Move mode: pane is still in layout. Remove it and
@@ -64,7 +65,7 @@ pub(super) fn handle_sidebar_drag_release(
     swap: bool,
     pos: (f32, f32),
 ) {
-    super::surface_left::accept_drop(state, pane_id, original_ws, swap, pos);
+    super::target::surface_accept_drop(state, DragSurfaceId::LeftSidebar, pane_id, original_ws, swap, pos);
 }
 
 /// Handle release during sidebar drag starting (threshold not exceeded).

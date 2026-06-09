@@ -7,18 +7,13 @@
 //! When a new surface is added to [`DragSurfaceId`], every function here
 //! will produce a compile error until a match arm is added — this is the
 //! exhaustiveness guarantee of enum dispatch.
-//!
-//! These functions are not yet wired into the main event routing — they
-//! will replace direct `surface_left::` calls in a future phase as the
-//! DnD system is generalized to support multiple surfaces.
-
-#![allow(dead_code)] // Dispatch layer not yet wired into event routing
 
 use crate::app_state::AppState;
 use crate::input::WmAction;
 use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
 
 /// Returns true if the cursor position is within the given surface's bounds.
+#[allow(dead_code)] // Reserved for future multi-surface support
 pub(crate) fn surface_contains(state: &AppState, id: DragSurfaceId, pos: (f32, f32)) -> bool {
     match id {
         DragSurfaceId::LeftSidebar => super::surface_left::contains(state, pos),
@@ -26,6 +21,7 @@ pub(crate) fn surface_contains(state: &AppState, id: DragSurfaceId, pos: (f32, f
 }
 
 /// Returns the item at the cursor position within the given surface, if any.
+#[allow(dead_code)] // Reserved for future multi-surface support
 pub(crate) fn surface_item_at(state: &AppState, id: DragSurfaceId, pos: (f32, f32)) -> Option<DragItemId> {
     match id {
         DragSurfaceId::LeftSidebar => super::surface_left::item_at(state, pos),
@@ -40,6 +36,7 @@ pub(crate) fn surface_click_action(state: &mut AppState, id: DragSurfaceId, pos:
 }
 
 /// Check if the given surface can accept a drop of the source item onto the target item.
+#[allow(dead_code)] // Reserved for future multi-surface support
 pub(crate) fn surface_can_accept(
     state: &AppState,
     id: DragSurfaceId,
@@ -66,7 +63,22 @@ pub(crate) fn surface_accept_drop(
     }
 }
 
+/// Handle interactive-move drop on the given surface.
+///
+/// Called when a content-area drag lands on a surface. Returns `true`
+/// if the drop was handled by the surface.
+pub(crate) fn surface_interactive_move_drop(
+    state: &mut AppState,
+    id: DragSurfaceId,
+    pos: (f32, f32),
+) -> bool {
+    match id {
+        DragSurfaceId::LeftSidebar => super::surface_left::handle_interactive_move_drop(state, pos),
+    }
+}
+
 /// Update the hover highlight for the given surface.
+#[allow(dead_code)] // Reserved for future multi-surface support
 pub(crate) fn surface_update_hover(state: &mut AppState, id: DragSurfaceId) {
     match id {
         DragSurfaceId::LeftSidebar => super::surface_left::update_hover(state),
