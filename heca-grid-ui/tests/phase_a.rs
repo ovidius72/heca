@@ -1624,3 +1624,24 @@ fn grid_places_children_in_named_areas_and_cells() {
     assert!((sub.loc.x - 40.0).abs() < 1.0, "sub in column 2");
     assert!((sub.loc.y - 20.0).abs() < 1.0, "sub in bottom row");
 }
+
+#[test]
+fn dock_frame_collapses_body_out_of_layout() {
+    use heca_grid_ui::DockFrame;
+    // Title bar over a fixed-size body block.
+    let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));
+
+    // Expanded: header + body both take height.
+    LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+    let expanded_h = dock.base().bounds.size.h;
+    let body_h = dock.base().children[1].base().bounds.size.h;
+    assert!(body_h > 0.0, "expanded body has height");
+
+    // Collapse via the expanded signal, relayout: body folds away (display:none).
+    dock.state().set(false);
+    LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+    let collapsed_h = dock.base().bounds.size.h;
+    let body_hc = dock.base().children[1].base().bounds.size.h;
+    assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
+    assert_eq!(body_hc, 0.0, "collapsed body takes no layout space");
+}

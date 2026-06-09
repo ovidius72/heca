@@ -216,6 +216,17 @@ pub trait Component {
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].
 const DISABLED_SCRIM: f32 = 0.55;
 
+/// Bright bracket length along each edge of a [`PaintCx::bracket_frame`],
+/// measured from the corner (in addition to the rounded arc). The straight
+/// midsection between the two brackets on an edge is dimmed back to a line.
+const BRACKET_ARM_LEN: f32 = 12.0;
+/// Bright corner brackets are drawn thicker than the subtle border for emphasis.
+const BRACKET_WIDTH_MUL: f32 = 2.0;
+/// Alpha of the fill-colored overlay used to dim the straight border midsections.
+/// ~0.7 over the bright accent border leaves a ~30% accent line — matching the
+/// subtle continuous border, while the corners stay fully bright.
+const BRACKET_STRAIGHT_DIM: u8 = 178;
+
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
 pub struct PaintCx<'a> {
@@ -373,6 +384,54 @@ impl<'a> PaintCx<'a> {
             radius,
             None,
         );
+    }
+
+    /// Draw the prominent **flat corner-bracket frame** used by container chrome
+    /// ([`Pane`](crate::widgets::Pane), [`DockFrame`](crate::widgets::DockFrame)):
+    /// a bright accent border tracing the full rounded perimeter, with the
+    /// straight midsection of each edge dimmed back to a subtle ~30% line — so
+    /// only the rounded corners plus a short arm stay bright. `fill` is the
+    /// container's own fill (used to color the dimming overlay so it blends in);
+    /// it falls back to the theme background. DRY: the frame is defined once here
+    /// instead of per-widget.
+    pub fn bracket_frame(&mut self, rect: Rectangle, fill: Option<Color>) {
+        let (accent, background, radius, border_width) = {
+            let t = self.theme;
+            (t.accent, t.background, t.radius, t.border_width)
+        };
+        let b = rect;
+
+        // Bright accent border tracing the full rounded perimeter. The renderer's
+        // bracket primitive only draws square 90° corners, so instead of brackets
+        // we draw a full rounded border (which has the radius) and then dim its
+        // straight midsections — leaving the rounded corners + short arms bright.
+        let bracket_width = border_width * BRACKET_WIDTH_MUL;
+        self.rect(
+            b,
+            Color::TRANSPARENT,
+            Some(Border { color: accent, width: bracket_width }),
+            radius,
+            None,
+        );
+
+        // Dim the straight midsection of each edge back to a subtle ~30% line, so
+        // only the rounded corners (plus a `BRACKET_ARM_LEN` arm) stay bright. The
+        // overlay is the fill (or background) color at ~0.7 alpha, with no glow.
+        let cover = fill.unwrap_or(background).with_alpha(BRACKET_STRAIGHT_DIM);
+        let keep = f64::from(radius + BRACKET_ARM_LEN);
+        let t = f64::from(bracket_width) + 1.0;
+        let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);
+
+        let mid_w = w - 2.0 * keep;
+        if mid_w > 0.0 {
+            self.rect(Rectangle::new(Point::new(x + keep, y), Size::new(mid_w, t)), cover, None, 0.0, None);
+            self.rect(Rectangle::new(Point::new(x + keep, y + h - t), Size::new(mid_w, t)), cover, None, 0.0, None);
+        }
+        let mid_h = h - 2.0 * keep;
+        if mid_h > 0.0 {
+            self.rect(Rectangle::new(Point::new(x, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
+            self.rect(Rectangle::new(Point::new(x + w - t, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
+        }
     }
 
     /// Paint the shared chrome for a component's base (background/border/glow).
