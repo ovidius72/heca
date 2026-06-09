@@ -388,6 +388,72 @@ pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
         .expect("active workspace must exist when checking focus domain")
 }
 
+/// Returns the `FocusDomain` of the active workspace.
+///
+/// Convenience wrapper for code that needs to branch on the domain directly
+/// rather than just checking `is_floating_domain()`.
+///
+/// TODO(phase-E): used in regression tests to verify domain-based blocking.
+#[allow(dead_code)] // Phase D helper — will be consumed by handlers and tests
+pub(crate) fn active_focus_domain(session: &heca_core::layout::Session) -> FocusDomain {
+    session
+        .active_workspace()
+        .map(|ws| ws.focus_domain)
+        .expect("active workspace must exist when checking focus domain")
+}
+
+/// Returns the focused pane ID from `AppState`, if any.
+///
+/// This is the canonical accessor — handlers should read
+/// `state.focused_pane` through this helper rather than touching
+/// the field directly, so the access pattern is traceable.
+pub(crate) fn focused_pane_id(state: &AppState) -> Option<u64> {
+    state.focused_pane
+}
+
+/// Checks whether a specific pane can receive focus from the given source.
+///
+/// When in floating domain, only the active floating pane can receive focus
+/// from mouse/sidebar sources. Keyboard focus changes are blocked entirely
+/// (they go through `dispatch_action` which handles policy).
+///
+/// TODO(phase-E): used in regression tests to verify pane-targeting policy.
+#[allow(dead_code)] // Phase D helper — will be consumed by handlers and tests
+pub(crate) fn can_focus_pane(
+    session: &heca_core::layout::Session,
+    source: InteractionSource,
+    pane_id: u64,
+) -> bool {
+    if is_floating_domain(session) {
+        // In floating domain, only the active floating pane can receive focus.
+        let active_floating = session
+            .active_workspace()
+            .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
+            .map(|f| f.pane.id.0);
+        active_floating == Some(pane_id)
+    } else {
+        // In tiled domain, any pane can receive focus from any source.
+        // (Individual sources may still block via route_interaction, but
+        // this helper only answers the pane-targeting question.)
+        match source {
+            InteractionSource::Keyboard => true,
+            InteractionSource::MouseContent => true,
+            InteractionSource::MouseLeftSidebar => true,
+        }
+    }
+}
+
+/// Checks whether `pane_id` belongs to the floating panes in the active workspace.
+///
+/// Used by `handle_float` and `handle_close_pane_by_id` to decide
+/// whether to process the pane as floating or tiled.
+pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: u64) -> bool {
+    session
+        .active_workspace()
+        .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id))
+        .unwrap_or(false)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Dispatch action
 // ═══════════════════════════════════════════════════════════════════════════
@@ -708,5 +774,58 @@ mod tests {
                 decision,
             );
         }
+    }
+
+    // ── Focus-target helper tests ──
+
+    /// `active_focus_domain` returns Tiled for default workspace.
+    #[test]
+    fn active_focus_domain_default_is_tiled() {
+        let session = test_session();
+        assert_eq!(active_focus_domain(&session), FocusDomain::Tiled);
+    }
+
+    /// `active_focus_domain` returns Floating after setting.
+    #[test]
+    fn active_focus_domain_floating_after_set() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        assert_eq!(active_focus_domain(&session), FocusDomain::Floating);
+    }
+
+    /// `pane_is_floating` returns false for a pane that is in the scrolling columns.
+    #[test]
+    fn pane_is_floating_returns_false_for_tiled_pane() {
+        let session = test_session();
+        // Default session has pane ID 1 in scrolling columns, not floating.
+        assert!(!pane_is_floating(&session, 1));
+    }
+
+    /// `pane_is_floating` returns false for non-existent pane.
+    #[test]
+    fn pane_is_floating_returns_false_for_nonexistent() {
+        let session = test_session();
+        assert!(!pane_is_floating(&session, 9999));
+    }
+
+    /// `can_focus_pane` allows any pane when in tiled domain.
+    #[test]
+    fn can_focus_pane_allows_any_in_tiled_domain() {
+        let session = test_session();
+        assert!(can_focus_pane(&session, InteractionSource::Keyboard, 1));
+        assert!(can_focus_pane(&session, InteractionSource::MouseContent, 1));
+        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 1));
+    }
+
+    /// `can_focus_pane` blocks non-floating pane when in floating domain.
+    #[test]
+    fn can_focus_pane_blocks_non_floating_when_floating() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        // In a floating domain, pane 1 (in scrolling columns) is NOT the active floating pane.
+        // So can_focus_pane should block it from all sources.
+        assert!(!can_focus_pane(&session, InteractionSource::Keyboard, 1));
+        assert!(!can_focus_pane(&session, InteractionSource::MouseContent, 1));
+        assert!(!can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 1));
     }
 }
