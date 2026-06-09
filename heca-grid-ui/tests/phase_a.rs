@@ -2004,3 +2004,103 @@ fn dock_frame_rail_paints_icon_not_title() {
     assert!(texts.iter().all(|t| t != "main.rs"), "body row is not painted in rail mode");
     assert!(icons >= 2, "rail paints the duotone dock icon (secondary + primary), got {icons}");
 }
+
+#[test]
+fn rail_cell_lays_out_a_square_with_centered_icon() {
+    use heca_grid_ui::{Glyph, Icon, RailCell};
+
+    let mut cell = RailCell::new(Icon::new(Glyph::Terminal).size(20.0)).cell_size(44.0);
+    LayoutEngine::new().compute(&mut cell, Size::new(200.0, 200.0));
+
+    let b = cell.base().bounds;
+    assert_eq!(b.size.w, 44.0, "cell is its configured width");
+    assert_eq!(b.size.h, 44.0, "cell is square");
+
+    // The single icon child sits centered in the square.
+    let icon = cell.base().children[0].base().bounds;
+    let icon_cx = icon.loc.x + icon.size.w / 2.0;
+    let icon_cy = icon.loc.y + icon.size.h / 2.0;
+    assert!((icon_cx - (b.loc.x + b.size.w / 2.0)).abs() < 1.0, "icon centered horizontally");
+    assert!((icon_cy - (b.loc.y + b.size.h / 2.0)).abs() < 1.0, "icon centered vertically");
+}
+
+#[test]
+fn rail_cell_activates_on_click_and_enter() {
+    use heca_grid_ui::{Glyph, Icon, RailCell};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicks = Rc::new(Cell::new(0u32));
+    let sink = clicks.clone();
+    let mut cell = RailCell::new(Icon::new(Glyph::GitBranch).size(20.0))
+        .on_activate(move || sink.set(sink.get() + 1));
+    LayoutEngine::new().compute(&mut cell, Size::new(200.0, 200.0));
+
+    let b = cell.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    cell.event(&Event::PointerPressed { pos: center });
+    cell.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
+}
+
+#[test]
+fn key_hint_overlays_letter_only_when_set() {
+    use heca_grid_ui::{FontRole, Glyph, Icon, KeyHint};
+
+    let hint: Signal<Option<String>> = signal(None);
+    let mut wrapped = KeyHint::new(Icon::new(Glyph::Terminal).size(20.0)).hint(hint);
+
+    let paint = |w: &mut KeyHint| -> (Vec<String>, usize) {
+        LayoutEngine::new().compute(w, Size::new(80.0, 80.0));
+        let theme = Theme::grid_tron();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            w.paint(&mut cx);
+        }
+        let mut texts = Vec::new();
+        let mut icons = 0usize;
+        for c in scene.iter() {
+            if let DrawCommand::Text(t) = c {
+                match t.font {
+                    FontRole::Icon => icons += 1,
+                    FontRole::Text => texts.push(t.text.clone()),
+                }
+            }
+        }
+        (texts, icons)
+    };
+
+    // No hint: the child icon paints, no keycap letter.
+    let (texts, icons) = paint(&mut wrapped);
+    assert!(icons >= 2, "wrapped icon still paints (duotone = 2 runs)");
+    assert!(texts.iter().all(|t| t != "a"), "no keycap letter while hint is None");
+
+    // Hint set: the letter overlays; the child icon still paints underneath.
+    hint.set(Some("a".to_string()));
+    let (texts, icons) = paint(&mut wrapped);
+    assert!(icons >= 2, "child icon still paints under the keycap");
+    assert!(texts.iter().any(|t| t == "a"), "keycap letter paints while hint is Some");
+}
+
+#[test]
+fn key_hint_is_transparent_to_focus_and_activation() {
+    use heca_grid_ui::{FocusManager, KeyHint};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // A focusable child wrapped in a KeyHint must stay reachable + activatable.
+    let clicks = Rc::new(Cell::new(0u32));
+    let sink = clicks.clone();
+    let mut wrapped = KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
+    LayoutEngine::new().compute(&mut wrapped, Size::new(200.0, 60.0));
+
+    // Focus traversal recurses through the transparent wrapper to the child.
+    let mut focus = FocusManager::new();
+    focus.advance(&mut wrapped, true);
+    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
+
+    // Events route through the wrapper to the child.
+    focus.deliver_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
+    assert_eq!(clicks.get(), 1, "Enter activates the wrapped child");
+}
