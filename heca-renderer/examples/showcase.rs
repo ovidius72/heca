@@ -42,7 +42,7 @@ fn to_grid_key(key: &Key) -> Option<GridKey> {
     })
 }
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{CursorIcon, Window, WindowId};
+use winit::window::{Window, WindowId};
 
 /// Build the retained UI tree. `Flex` is layout-only; `Card`/`Button` are the
 /// styled surfaces.
@@ -354,27 +354,47 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
         })
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
-        // beside a Grid-composed rich item. DockFrame and ItemGroup headers toggle
-        // on click — or via the keyboard (Tab to focus, Enter/Space to activate).
+        // beside a PANES dock of composed, state-colored cards. Headers and the
+        // file rows respond to click and keyboard (Tab to focus, Enter to activate).
         .child({
-            // Rows are *composed*, not plain labels — the model is ready for rich,
-            // state-driven content: a status dot (color = state) + text + a status
-            // badge. (File-type/glyph icons proper land with G2 `Icon`.)
-            let git_row = |status: StatusDot, name: &str, tag: Badge| {
-                Item::new(name).leading(status).trailing(tag)
+            // Single-select highlight shared across the explorer's file rows: the
+            // clicked row goes active (accent bar), the rest clear. Immediate-mode.
+            let selected = signal(0usize);
+            let states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
+            let file = move |name: &str, dot: StatusDot| -> Item {
+                let item = Item::new(name).leading(dot).marker(ActiveMarker::Bar);
+                let i = states.borrow().len();
+                states.borrow_mut().push(item.state());
+                let states = states.clone();
+                item.on_activate(move || {
+                    selected.set(i);
+                    for (j, s) in states.borrow().iter().enumerate() {
+                        s.set(j == i);
+                    }
+                })
             };
-            // A two-line pane row: dot spanning both rows + title over a dimmed
-            // subtitle + a trailing state tag — mirroring a real pane/branch list.
-            let pane_row = |dot: StatusDot, title: &str, sub: &str, tag: Badge| {
-                Grid::new()
-                    .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
-                    .rows([Track::Auto, Track::Auto])
-                    .areas(["dot title tag", "dot sub tag"])
-                    .gap(6.0)
-                    .area(dot, "dot")
-                    .area(Label::new(title).color(theme.foreground), "title")
-                    .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
-                    .area(tag, "tag")
+
+            // A pane "card": an optional per-pane state-tinted background hosting a
+            // two-line Grid row — a status dot + a state-colored title over a dimmed
+            // subtitle, with a trailing state tag pinned to the *title* line.
+            let pane = |dot: StatusDot, color: Color, title: &str, sub: &str, tag: Badge| {
+                Surface::new()
+                    .background(color.with_alpha(22))
+                    .radius(theme.control_radius())
+                    .padding(10.0)
+                    .child(
+                        Grid::new()
+                            .columns([Track::Px(20.0), Track::Fr(1.0), Track::Auto])
+                            .rows([Track::Auto, Track::Auto])
+                            // dot · title · tag share the title row; the subtitle
+                            // sits under the title, the flanking cells left empty.
+                            .areas(["dot title tag", ". sub ."])
+                            .gap(4.0)
+                            .area(dot, "dot")
+                            .area(Label::new(title).color(color), "title")
+                            .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
+                            .area(tag, "tag"),
+                    )
             };
 
             // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.
@@ -382,18 +402,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .header(Badge::accent("3"))
                 .child(
                     ItemGroup::new("src")
-                        .child(Item::new("main.rs").leading(StatusDot::online()))
-                        .child(Item::new("chrome_region.rs").leading(StatusDot::online()))
-                        .child(Item::new("dock_frame.rs").leading(StatusDot::warning())),
+                        .child(file("main.rs", StatusDot::online()))
+                        .child(file("chrome_region.rs", StatusDot::online()))
+                        .child(file("dock_frame.rs", StatusDot::warning())),
                 )
                 .child(
                     // Collapsed group — verifies the paint fix: its rows must not
                     // bleed to the top-left while hidden.
                     ItemGroup::new("tests")
                         .expanded(false)
-                        .child(Item::new("phase_a.rs")),
+                        .child(file("phase_a.rs", StatusDot::offline())),
                 );
             // Git status rows: state-colored dot + change-kind badge (M / A / D).
+            let git_row = |status: StatusDot, name: &str, tag: Badge| {
+                Item::new(name).leading(status).trailing(tag)
+            };
             let source_control = DockFrame::new("SOURCE CONTROL")
                 .header(Badge::warning("3"))
                 .child(git_row(StatusDot::warning(), "chrome_region.rs", Badge::warning("M")))
@@ -409,46 +432,33 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .dock(explorer)
                 .dock(source_control);
 
-            // A standalone DockFrame of two-line composed pane rows
-            // (program · branch · state) — starts collapsed; click to expand.
+            // PANES: each row a state-tinted card, its tag aligned to the title line.
             let panes = DockFrame::new("PANES")
-                .child(pane_row(
+                .child(pane(
                     StatusDot::online(),
+                    theme.success,
                     "Pane 1 (nvim)",
                     "features/my-branch 1+",
                     Badge::success("RUN"),
                 ))
-                .child(pane_row(
+                .child(pane(
                     StatusDot::warning(),
+                    theme.warning,
                     "Review (diff)",
                     "features/my-branch · 2d",
                     Badge::warning("IDLE"),
                 ))
-                .child(pane_row(
+                .child(pane(
                     StatusDot::error(),
+                    theme.danger,
                     "build",
                     "exit 1",
                     Badge::danger("STOP"),
                 ));
-            let panes_col = Flex::column().width(Length::Px(360.0)).child(panes);
+            let panes_col = Flex::column().width(Length::Px(380.0)).child(panes);
 
             Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(panes_col)
         })
-}
-
-/// Resize cursor for the window edge/corner the pointer is near (else `Default`).
-fn edge_cursor(x: f64, y: f64, w: f64, h: f64) -> CursorIcon {
-    const E: f64 = 6.0;
-    let (l, r, t, b) = (x <= E, x >= w - E, y <= E, y >= h - E);
-    match (l, r, t, b) {
-        (true, _, true, _) => CursorIcon::NwResize,
-        (_, true, true, _) => CursorIcon::NeResize,
-        (true, _, _, true) => CursorIcon::SwResize,
-        (_, true, _, true) => CursorIcon::SeResize,
-        (true, _, _, _) | (_, true, _, _) => CursorIcon::EwResize,
-        (_, _, true, _) | (_, _, _, true) => CursorIcon::NsResize,
-        _ => CursorIcon::Default,
-    }
 }
 
 /// Shift every node's absolute bounds down by `dy` (negative scrolls the page up).
@@ -731,16 +741,8 @@ impl ApplicationHandler for App {
                     position.x / state.scale_factor,
                     position.y / state.scale_factor,
                 );
-                // Grip/resize cursor when near a window edge or corner.
-                let phys = state.window.inner_size();
-                let sf = state.scale_factor;
-                let cur = edge_cursor(
-                    state.cursor.x,
-                    state.cursor.y,
-                    phys.width as f64 / sf,
-                    phys.height as f64 / sf,
-                );
-                state.window.set_cursor(cur);
+                // The OS manages the cursor (arrow in content, resize at the
+                // decorated window's edges) — don't override it.
                 let moved = Event::PointerMoved { pos: state.cursor };
                 // When an overlay is open, route hover only to it — items behind
                 // the panel must not receive hover events.
