@@ -1825,3 +1825,75 @@ fn collapsed_dock_body_is_not_painted() {
         "collapsed dock must not paint its hidden body row"
     );
 }
+
+#[test]
+fn icon_lays_out_as_a_square() {
+    use heca_grid_ui::{Glyph, Icon};
+    let mut icon = Icon::new(Glyph::GitBranch).size(24.0);
+    LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
+    let b = icon.base().bounds;
+    assert_eq!(b.size.w, 24.0, "icon width = glyph size");
+    assert_eq!(b.size.h, 24.0, "icon is square");
+}
+
+#[test]
+fn icon_paints_duotone_layers_in_the_icon_font() {
+    use heca_grid_ui::{DrawCommand, FontRole, Glyph, Icon};
+    let mut icon = Icon::new(Glyph::Folder).size(24.0);
+    LayoutEngine::new().compute(&mut icon, Size::new(100.0, 100.0));
+
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        icon.paint(&mut cx);
+    }
+    let glyphs: Vec<(String, FontRole)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.font)),
+            _ => None,
+        })
+        .collect();
+
+    // Two stacked layers: secondary (:before) then primary (secondary+1), both
+    // shaped with the icon font.
+    assert_eq!(glyphs.len(), 2, "duotone icon paints two layers");
+    assert!(glyphs.iter().all(|(_, f)| *f == FontRole::Icon), "both shaped with the icon font");
+    assert_eq!(glyphs[0].0, char::from_u32(0xe24a).unwrap().to_string(), "secondary layer first");
+    assert_eq!(glyphs[1].0, char::from_u32(0xe24b).unwrap().to_string(), "primary layer on top");
+}
+
+#[test]
+fn row_activates_on_click_and_key_when_interactive() {
+    use heca_grid_ui::Row;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicks = Rc::new(Cell::new(0u32));
+    let sink = clicks.clone();
+    let mut row = Row::new()
+        .child(Label::new("PANE 1"))
+        .on_activate(move || sink.set(sink.get() + 1));
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+
+    assert!(row.focusable(), "an interactive row is focusable");
+
+    let b = row.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    let outside = Point::new(b.loc.x + b.size.w + 50.0, b.loc.y);
+
+    row.event(&Event::PointerPressed { pos: outside });
+    assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
+    row.event(&Event::PointerPressed { pos: center });
+    assert_eq!(clicks.get(), 1, "a click inside the row activates it");
+    row.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(clicks.get(), 2, "Enter activates the focused row");
+}
+
+#[test]
+fn row_without_on_activate_is_not_focusable() {
+    use heca_grid_ui::Row;
+    let row = Row::new().child(Label::new("static"));
+    assert!(!row.focusable(), "a display-only row is not focusable");
+}

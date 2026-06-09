@@ -31,6 +31,8 @@ struct TextCommand {
     align: TextAlign,
     /// Center within `(w, h)` (grid scene), or place at `(x, y)` (app labels).
     centered: bool,
+    /// Shape with the embedded icon font instead of the text family.
+    icon: bool,
 }
 
 /// A GPU-ready text label: texture + quad.
@@ -51,6 +53,7 @@ pub struct TextRenderer {
     commands: Vec<TextCommand>,
     _atlas_size: (u32, u32),
     font_family: String,
+    icon_family: String,
 }
 
 impl TextRenderer {
@@ -195,6 +198,11 @@ impl TextRenderer {
         font_system
             .db_mut()
             .load_font_data(heca_grid_ui::font::DEFAULT_MONO_BOLD_BYTES.to_vec());
+        // Embedded icon font (Phosphor Duotone), registered as a second family;
+        // selected per text run via `TextCommand::icon`.
+        font_system
+            .db_mut()
+            .load_font_data(heca_grid_ui::font::ICON_FONT_BYTES.to_vec());
 
         Self {
             font_system,
@@ -209,6 +217,7 @@ impl TextRenderer {
             commands: Vec::new(),
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
+            icon_family: heca_grid_ui::font::ICON_FONT_FAMILY.to_string(),
         }
     }
 
@@ -242,6 +251,7 @@ impl TextRenderer {
             bold: false,
             align: TextAlign::Start,
             centered: false,
+            icon: false,
         });
     }
 
@@ -260,6 +270,7 @@ impl TextRenderer {
         color: [f32; 4],
         bold: bool,
         align: TextAlign,
+        icon: bool,
     ) {
         self.commands.push(TextCommand {
             text: text.to_string(),
@@ -272,6 +283,7 @@ impl TextRenderer {
             bold,
             align,
             centered: true,
+            icon,
         });
     }
 
@@ -303,8 +315,13 @@ impl TextRenderer {
             } else {
                 Weight::NORMAL
             };
+            let family = if cmd.icon {
+                &self.icon_family
+            } else {
+                &self.font_family
+            };
             let attrs = Attrs::new()
-                .family(Family::Name(&self.font_family))
+                .family(Family::Name(family))
                 .weight(weight);
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);

@@ -52,15 +52,15 @@ pub use drag::{DragContext, DragItem, DragItemId, DragItemKind, DragLabel, DragS
 pub use effects::Flash;
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
-pub use scene::{DrawCommand, Scene};
+pub use scene::{DrawCommand, FontRole, Scene};
 pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-    ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Grid,
-    Input, Item, ItemGroup, Label,
-    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner, StatusDot,
-    Surface, Tabs, Toggle,
+    ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
+    Grid, Icon, Input, Item, ItemGroup, Label,
+    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
+    StatusDot, Surface, Tabs, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -78,8 +78,8 @@ pub mod prelude {
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
         ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
-        Grid, Input, Item, ItemGroup, Label,
-        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner,
+        Glyph, Grid, Icon, Input, Item, ItemGroup, Label,
+        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Toggle,
     };
 }

@@ -352,6 +352,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                         .trailing(Label::new(">").color(theme.muted)),
                 )
         })
+        // Duotone icons (G2): a strip of Phosphor glyphs from the icon font. Each
+        // is two stacked layers — a dimmed secondary wash + a full primary on top,
+        // same hue (secondary = primary at the theme's icon_secondary_alpha).
+        .child(
+            Flex::row()
+                .gap(20.0)
+                .align(Align::Center)
+                .child(Icon::new(Glyph::Folder).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::FileCode).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::GitBranch).color(theme.success).size(34.0))
+                .child(Icon::new(Glyph::Terminal).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::Gear).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::Lightning).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0)),
+        )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
@@ -361,8 +376,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
             // clicked row goes active (accent bar), the rest clear. Immediate-mode.
             let selected = signal(0usize);
             let states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
-            let file = move |name: &str, dot: StatusDot| -> Item {
-                let item = Item::new(name).leading(dot).marker(ActiveMarker::Bar);
+            let file = move |name: &str, icon: Icon| -> Item {
+                let item = Item::new(name).leading(icon).marker(ActiveMarker::Bar);
                 let i = states.borrow().len();
                 states.borrow_mut().push(item.state());
                 let states = states.clone();
@@ -374,27 +389,40 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 })
             };
 
-            // A pane "card": an optional per-pane state-tinted background hosting a
-            // two-line Grid row — a status dot + a state-colored title over a dimmed
-            // subtitle, with a trailing state tag pinned to the *title* line.
-            let pane = |dot: StatusDot, color: Color, title: &str, sub: &str, tag: Badge| {
-                Surface::new()
+            // A pane "card" — a clickable, single-selectable `Row` (focus + Enter
+            // + hover/active highlight) carrying composed two-line content over a
+            // persistent state-tinted background. Demonstrates that rich composed
+            // rows, not just `Item`s, can be interactive.
+            let pane_sel = signal(0usize);
+            let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
+            let pane = move |icon: Icon, color: Color, title: &str, sub: &str, tag: Badge| -> Row {
+                let row = Row::new()
                     .background(color.with_alpha(22))
                     .radius(theme.control_radius())
                     .padding(10.0)
                     .child(
                         Grid::new()
-                            .columns([Track::Px(20.0), Track::Fr(1.0), Track::Auto])
+                            .grow(1.0)
+                            .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
                             .rows([Track::Auto, Track::Auto])
-                            // dot · title · tag share the title row; the subtitle
+                            // icon · title · tag share the title row; the subtitle
                             // sits under the title, the flanking cells left empty.
                             .areas(["dot title tag", ". sub ."])
                             .gap(4.0)
-                            .area(dot, "dot")
+                            .area(icon, "dot")
                             .area(Label::new(title).color(color), "title")
                             .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
                             .area(tag, "tag"),
-                    )
+                    );
+                let i = pane_states.borrow().len();
+                pane_states.borrow_mut().push(row.state());
+                let pane_states = pane_states.clone();
+                row.on_activate(move || {
+                    pane_sel.set(i);
+                    for (j, s) in pane_states.borrow().iter().enumerate() {
+                        s.set(j == i);
+                    }
+                })
             };
 
             // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.
@@ -402,26 +430,26 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .header(Badge::accent("3"))
                 .child(
                     ItemGroup::new("src")
-                        .child(file("main.rs", StatusDot::online()))
-                        .child(file("chrome_region.rs", StatusDot::online()))
-                        .child(file("dock_frame.rs", StatusDot::warning())),
+                        .child(file("main.rs", Icon::new(Glyph::FileCode).color(theme.accent).size(18.0)))
+                        .child(file("chrome_region.rs", Icon::new(Glyph::FileCode).color(theme.foreground).size(18.0)))
+                        .child(file("dock_frame.rs", Icon::new(Glyph::FileCode).color(theme.foreground).size(18.0))),
                 )
                 .child(
                     // Collapsed group — verifies the paint fix: its rows must not
                     // bleed to the top-left while hidden.
                     ItemGroup::new("tests")
                         .expanded(false)
-                        .child(file("phase_a.rs", StatusDot::offline())),
+                        .child(file("phase_a.rs", Icon::new(Glyph::FileCode).color(theme.muted).size(18.0))),
                 );
-            // Git status rows: state-colored dot + change-kind badge (M / A / D).
-            let git_row = |status: StatusDot, name: &str, tag: Badge| {
-                Item::new(name).leading(status).trailing(tag)
+            // Git status rows: a state-colored duotone icon + change-kind badge.
+            let git_row = |icon: Icon, name: &str, tag: Badge| {
+                Item::new(name).leading(icon).trailing(tag)
             };
             let source_control = DockFrame::new("SOURCE CONTROL")
                 .header(Badge::warning("3"))
-                .child(git_row(StatusDot::warning(), "chrome_region.rs", Badge::warning("M")))
-                .child(git_row(StatusDot::online(), "showcase.rs", Badge::success("A")))
-                .child(git_row(StatusDot::error(), "old_sidebar.rs", Badge::danger("D")));
+                .child(git_row(Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0), "chrome_region.rs", Badge::warning("M")))
+                .child(git_row(Icon::new(Glyph::Plus).color(theme.success).size(18.0), "showcase.rs", Badge::success("A")))
+                .child(git_row(Icon::new(Glyph::Minus).color(theme.danger).size(18.0), "old_sidebar.rs", Badge::danger("D")));
 
             // G5 ChromeRegion: a vertical sidebar shell hosting the docks.
             let sidebar = ChromeRegion::vertical()
@@ -435,21 +463,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
             // PANES: each row a state-tinted card, its tag aligned to the title line.
             let panes = DockFrame::new("PANES")
                 .child(pane(
-                    StatusDot::online(),
+                    Icon::new(Glyph::Terminal).color(theme.success).size(20.0),
                     theme.success,
                     "Pane 1 (nvim)",
                     "features/my-branch 1+",
                     Badge::success("RUN"),
                 ))
                 .child(pane(
-                    StatusDot::warning(),
+                    Icon::new(Glyph::GitPullRequest).color(theme.warning).size(20.0),
                     theme.warning,
                     "Review (diff)",
                     "features/my-branch · 2d",
                     Badge::warning("IDLE"),
                 ))
                 .child(pane(
-                    StatusDot::error(),
+                    Icon::new(Glyph::Warning).color(theme.danger).size(20.0),
                     theme.danger,
                     "build",
                     "exit 1",

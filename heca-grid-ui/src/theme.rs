@@ -132,6 +132,12 @@ pub struct Theme {
     pub intensity: Intensity,
     /// Show the keyboard focus ring (focus-visible indicator).
     pub show_focus_border: bool,
+    /// Opacity (`0.0..=1.0`) of a duotone [`Icon`](crate::widgets::Icon)'s
+    /// secondary layer when its color isn't set explicitly — theme/config-driven,
+    /// not baked into the widget. Phosphor's web reference is `0.2` (tuned for
+    /// light backgrounds); on this dark theme the default is higher so the
+    /// two-tone reads.
+    pub icon_secondary_alpha: f32,
 }
 
 impl Default for Theme {
@@ -174,6 +180,7 @@ impl Theme {
             glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
+            icon_secondary_alpha: 0.45,
         }
     }
 
@@ -198,6 +205,7 @@ impl Theme {
             glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
+            icon_secondary_alpha: 0.45,
         }
     }
 }

@@ -6,7 +6,7 @@
 
 use crate::grid::{GlowRect, GridRenderer};
 use crate::text::TextRenderer;
-use heca_grid_ui::scene::{BracketCmd, DrawCommand, ScanlineCmd};
+use heca_grid_ui::scene::{BracketCmd, DrawCommand, FontRole, ScanlineCmd};
 use heca_grid_ui::{Rectangle, Scene};
 
 const NO_BORDER: [f32; 4] = [0.0; 4];
@@ -81,6 +81,7 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     t.color.to_f32x4(),
                     t.bold,
                     t.align,
+                    t.font == FontRole::Icon,
                 );
             }
             // Clipping isn't supported by the renderers yet (planned).

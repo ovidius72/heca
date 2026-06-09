@@ -8,7 +8,7 @@
 
 use crate::color::Color;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, Glow, RectCmd, Scene, TextAlign, TextCmd};
+use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -374,6 +374,22 @@ impl<'a> PaintCx<'a> {
             size,
             align,
             bold,
+            font: FontRole::Text,
+        }));
+    }
+
+    /// Queue a single icon glyph centered in `rect`, shaped with the icon font
+    /// ([`FontRole::Icon`]). `glyph` is the codepoint as a string; the renderer
+    /// selects the embedded icon family. Used by [`Icon`](crate::widgets::Icon).
+    pub fn icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        self.scene.push(DrawCommand::Text(TextCmd {
+            rect,
+            text: glyph.to_string(),
+            color,
+            size,
+            align: TextAlign::Center,
+            bold: false,
+            font: FontRole::Icon,
         }));
     }
 
