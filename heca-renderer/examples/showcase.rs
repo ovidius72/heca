@@ -473,7 +473,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
 
             // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.
             let explorer = DockFrame::new("EXPLORER")
-                .header(Badge::accent("3"))
+                // Inset the header count badge by the Item rows' horizontal
+                // padding (~14px) so it lines up vertically with the rows'
+                // trailing badges instead of sitting flush at the frame edge.
+                .header(
+                    Flex::row()
+                        .align(Align::Center)
+                        .child(Badge::accent("3"))
+                        .child(Flex::row().width(Length::Px(14.0))),
+                )
                 .child(
                     ItemGroup::new("src")
                         .child(file("main.rs", Icon::new(Glyph::FileCode).color(theme.accent).size(18.0)))
@@ -492,7 +500,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 Item::new(name).leading(icon).trailing(tag)
             };
             let source_control = DockFrame::new("SOURCE CONTROL")
-                .header(Badge::warning("3"))
+                .header(
+                    Flex::row()
+                        .align(Align::Center)
+                        .child(Badge::warning("3"))
+                        .child(Flex::row().width(Length::Px(14.0))),
+                )
                 .child(git_row(Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0), "chrome_region.rs", Badge::warning("M")))
                 .child(git_row(Icon::new(Glyph::Plus).color(theme.success).size(18.0), "showcase.rs", Badge::success("A")))
                 .child(git_row(Icon::new(Glyph::Minus).color(theme.danger).size(18.0), "old_sidebar.rs", Badge::danger("D")));
