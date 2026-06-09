@@ -28,6 +28,13 @@ const CHEVRON_CLOSED: &str = "▸";
 const GRIP: &str = "⠿";
 /// Gap between the grip and the chevron in the header's leading slot.
 const LEADING_GAP: f32 = 8.0;
+/// Inset of the header + body from the bracket frame, so content (title, the
+/// header-controls slot, body rows) never collides with the corner brackets.
+const CONTENT_PAD: f32 = 10.0;
+/// Gap between the title bar and the body.
+const HEADER_BODY_GAP: f32 = 8.0;
+/// Gap between body rows.
+const BODY_GAP: f32 = 4.0;
 
 /// Index of the header (a [`Flex`] row) / body within `base.children`.
 const HEADER: usize = 0;
@@ -74,10 +81,13 @@ impl DockFrame {
             .child(Flex::empty());
 
         // Body holds the dock content; folds out of layout when collapsed.
-        let body = Flex::column();
+        let body = Flex::column().gap(BODY_GAP);
 
         let mut base = Base::new();
         base.style.direction = Direction::Column;
+        // Inset content from the brackets and space the title bar off the body.
+        base.style.padding = CONTENT_PAD;
+        base.style.gap = HEADER_BODY_GAP;
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
         // Invariant relied on by `header`/`child`/`sync` index access below.
