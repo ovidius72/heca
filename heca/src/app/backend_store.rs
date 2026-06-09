@@ -49,6 +49,18 @@ impl BackendStore {
     pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn PaneBackend>> {
         self.map.values_mut()
     }
+
+    /// Remove backends for all pane IDs in the given iterator.
+    ///
+    /// Convenience helper for batch cleanup when deleting a column or workspace.
+    pub fn remove_all<'a>(&mut self, pane_ids: impl IntoIterator<Item = &'a u64>)
+    where
+        u64: 'a,
+    {
+        for pid in pane_ids {
+            self.map.remove(pid);
+        }
+    }
 }
 
 impl Default for BackendStore {

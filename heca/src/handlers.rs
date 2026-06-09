@@ -804,10 +804,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
         .map(|col| col.panes.iter().map(|p| p.id.0).collect())
         .unwrap_or_default();
 
-    // Remove backends
-    for pid in &pane_ids {
-        state.backends.remove_for_pane(*pid);
-    }
+    state.backends.remove_all(&pane_ids);
 
     // Remove the column
     if let Some(ws) = state.session.workspaces.get_mut(target_ws) {
@@ -846,10 +843,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         })
         .unwrap_or_default();
 
-    // Remove backends
-    for pid in &pane_ids {
-        state.backends.remove_for_pane(*pid);
-    }
+    state.backends.remove_all(&pane_ids);
 
     // Remove the workspace
     state.session.remove_workspace(target_ws);
