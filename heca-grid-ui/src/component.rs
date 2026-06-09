@@ -188,6 +188,14 @@ pub trait Component {
         self.base_mut().focus_visible.set(false);
     }
 
+    /// The taffy style for this component's layout node. Default: the base
+    /// style mapped via [`Style::to_taffy`]. Layout containers that need extra
+    /// taffy config (e.g. [`Grid`](crate::widgets::Grid) injecting `display:
+    /// grid` + track templates) override this.
+    fn taffy_style(&self) -> taffy::Style {
+        self.base().style.to_taffy()
+    }
+
     /// Recompute size from the resolved font ([`Base::font`]). Widgets whose
     /// dimensions depend on font size override this; the layout pass calls it on
     /// every node after resolving the font, so a global font reflows the tree

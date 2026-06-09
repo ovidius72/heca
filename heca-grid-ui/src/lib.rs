@@ -53,11 +53,11 @@ pub use effects::Flash;
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, Scene};
-pub use style::{Align, Direction, Justify, Length, Style};
+pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-    ButtonVariant, Card, Checkbox, Container, DotStatus, Flex, Gauge, Input, Item, Label,
+    ButtonVariant, Card, Checkbox, Container, DotStatus, Flex, Gauge, Grid, Input, Item, Label,
     LabelSide, Orientation, Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface,
     Tabs, Toggle,
 };
@@ -72,11 +72,11 @@ pub mod prelude {
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;
-    pub use crate::style::{Align, Direction, Justify, Length};
+    pub use crate::style::{Align, Direction, GridCell, Justify, Length, Track};
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-        ButtonVariant, Card, Checkbox, Container, DotStatus, Flex, Gauge, Input, Item, Label,
+        ButtonVariant, Card, Checkbox, Container, DotStatus, Flex, Gauge, Grid, Input, Item, Label,
         LabelSide, Orientation, Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface,
         Tabs, Toggle,
     };

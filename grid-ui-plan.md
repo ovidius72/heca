@@ -36,7 +36,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 > **What G1–G8 supersede / don't.** These are the **grid-ui (presentation) layer** for the chrome/sidebar. They **replace** the old sidebar widget plan (old `C6 Sidebar = tree-nav`) and **absorb** old `C4` (CornerBrackets/Reticle) + `C5` (StatusBar) + `C7` (Pane HUD header). They **do not** touch the rest of this plan (shipped catalog, docs pass, end-user docs, Phase D). They also **do not** include the sidebar's *behavior* — the workspace tree / panes / git / docker live in **app-side Docks** (`WorkspacesDock`, …) tracked in `pluggable-chrome-plugin-plan.md` (Phase 5+), not here. grid-ui stays domain-neutral.
 
-- [ ] **G1 `Grid`** layout widget (taffy grid; tracks + named areas) — flexible item content. *Start here.*
+- [x] **G1 `Grid`** layout widget (taffy grid; `Track{Px,Fr,Auto,MinContent,MaxContent}` + named areas + explicit `.cell()`; `Style.grid_cell` + `Component::taffy_style()` hook). DONE — branch `grid-ui-grid-widget`.
 - [ ] **G2 `Icon`** widget + embedded, host-registered icon font.
 - [ ] **G3 `ItemGroup`** — collapsible group over `Item`.
 - [ ] **G4 `DockFrame`** — titled/collapsible frame + drag handle + header slot; reuses `Pane` brackets (new widget; keep `Pane` as the plain container).
