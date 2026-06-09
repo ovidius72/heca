@@ -4,7 +4,7 @@
 //! control flow rather than GPU/window/session bootstrapping details.
 
 use crate::app_state::{self, AppState, InputMode, SidebarState};
-use crate::chrome::ChromeConfig;
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
 use crate::sidebar::SidebarTree;
@@ -101,8 +101,8 @@ pub(crate) async fn init_state(
     );
 
     let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: 200.0,
         right_sidebar_width: 200.0,
     };

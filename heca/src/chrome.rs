@@ -1,5 +1,10 @@
 use heca_core::types::Rect;
 
+/// Default tab bar height in logical pixels.
+pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
+/// Default status bar height in logical pixels.
+pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
+
 /// Layout configuration for chrome elements around the pane area.
 #[derive(Clone, Copy, Debug)]
 pub struct ChromeConfig {

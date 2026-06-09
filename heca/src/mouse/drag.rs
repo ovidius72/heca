@@ -7,9 +7,28 @@ use heca_core::layout::Point;
 
 use crate::app_state::{AppState, DragState};
 
+/// Route cursor movement to the active drag phase handler.
+///
+/// Dispatches to the appropriate phase handler based on `DragState`,
+/// then updates sidebar hover highlighting if a drag is active.
 pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     state.mouse.pos = pos;
 
+    handle_interactive_move_starting(state, pos);
+    handle_sidebar_drag_starting(state, pos);
+    handle_interactive_move_drag(state, pos);
+    handle_sidebar_drag_move(state, pos);
+
+    if !matches!(state.mouse.drag_state, DragState::None) {
+        update_sidebar_drag_hover(state);
+    }
+}
+
+// ── Interactive move starting (rubberband phase) ──────────────────────────
+
+/// Handle rubberband displacement during the threshold phase of interactive move.
+/// If the drag distance exceeds the threshold, transitions to full drag mode.
+fn handle_interactive_move_starting(state: &mut AppState, pos: (f32, f32)) {
     let mut should_transition = false;
     if let DragState::InteractiveMoveStarting {
         pane_id,
@@ -41,7 +60,13 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     {
         transition_to_moving(state, pane_id, pos, swap);
     }
+}
 
+// ── Sidebar drag starting (threshold phase) ──────────────────────────────
+
+/// Handle threshold detection for sidebar drag. On threshold exceeded,
+/// transitions to active sidebar drag mode and sets up ghost label + source highlight.
+fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
     if let DragState::SidebarDragStarting {
         pane_id,
         original_ws,
@@ -106,62 +131,66 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
             };
         }
     }
+}
 
-    if let DragState::SidebarDrag { .. } = state.mouse.drag_state
-        && let Some(label) = &mut state.mouse.sidebar_drag_label
+// ── Interactive move drag (active phase) ─────────────────────────────────
+
+/// Handle cursor movement during an active interactive drag.
+/// Updates detached pane position, in-layout offset tracking, and insert hint.
+fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)) {
+    if !matches!(state.mouse.drag_state, DragState::InteractiveMove { .. }) {
+        return;
+    }
+
+    let offset = match state.mouse.drag_state {
+        DragState::InteractiveMove { offset, .. } => offset,
+        // SAFETY: guarded by matches!() check above
+        _ => unreachable!("InteractiveMove variant guaranteed by outer matches guard"),
+    };
+    let (cx, cy) = super::content_area_origin(state);
+    let pointer_in = (pos.0 - cx, pos.1 - cy);
+
+    if let Some(det) = &mut state.mouse.detached_pane {
+        det.render_pos = Point::new(
+            (pointer_in.0 - offset.0) as f64,
+            (pointer_in.1 - offset.1) as f64,
+        );
+    }
+
+    // Swap mode: update interactive_move_offset so the pane follows the cursor.
+    // Move mode (non-detached): same — pane follows cursor via offset.
+    // This reuses the same mechanism as the rubberband starting phase,
+    // but with a direct 1:1 tracking instead of damping.
+    if state.mouse.detached_pane.is_none()
+        && let DragState::InteractiveMove { swap: _, _pane_id: source_id, .. } = state.mouse.drag_state
+        && let Some(ws) = state.session.workspaces.get_mut(state.session.active_workspace_idx)
+        && let Some((ci, pi)) = super::find_pane_in_workspace(ws, source_id)
     {
-        label.x = pos.0;
-        label.y = pos.1;
+        let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
+        let pane_y = ws.scrolling.working_area.loc.y
+            + ws.scrolling.pane_y_in_column(ci, pi);
+        let pane_layout_x = col_x;
+        let pane_layout_y = pane_y;
+        ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
+            pointer_in.0 as f64 - offset.0 as f64 - pane_layout_x,
+            pointer_in.1 as f64 - offset.1 as f64 - pane_layout_y,
+        );
     }
 
-    if matches!(state.mouse.drag_state, DragState::InteractiveMove { .. }) {
-        let offset = match state.mouse.drag_state {
-            DragState::InteractiveMove { offset, .. } => offset,
-            _ => unreachable!(),
-        };
-        let (cx, cy) = super::content_area_origin(state);
-        let pointer_in = (pos.0 - cx, pos.1 - cy);
-
-        if let Some(det) = &mut state.mouse.detached_pane {
-            det.render_pos = Point::new(
-                (pointer_in.0 - offset.0) as f64,
-                (pointer_in.1 - offset.1) as f64,
-            );
-        }
-
-        // Swap mode: update interactive_move_offset so the pane follows the cursor.
-        // Move mode (non-detached): same — pane follows cursor via offset.
-        // This reuses the same mechanism as the rubberband starting phase,
-        // but with a direct 1:1 tracking instead of damping.
-        if state.mouse.detached_pane.is_none()
-            && let DragState::InteractiveMove { swap: _, _pane_id: source_id, .. } = state.mouse.drag_state
-            && let Some(ws) = state.session.workspaces.get_mut(state.session.active_workspace_idx)
-            && let Some((ci, pi)) = super::find_pane_in_workspace(ws, source_id)
-        {
-            let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
-            let pane_y = ws.scrolling.working_area.loc.y
-                + ws.scrolling.pane_y_in_column(ci, pi);
-            let pane_layout_x = col_x;
-            let pane_layout_y = pane_y;
-            ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
-                pointer_in.0 as f64 - offset.0 as f64 - pane_layout_x,
-                pointer_in.1 as f64 - offset.1 as f64 - pane_layout_y,
-            );
-        }
-
-        if let Some(ws) = state.session.active_workspace() {
-            let space = Point::new(
-                (pointer_in.0 as f64) + ws.scrolling.view_pos(),
-                pointer_in.1 as f64,
-            );
-            state.mouse.insert_hint = Some(ws.scrolling.insert_position(space));
-        }
+    if let Some(ws) = state.session.active_workspace() {
+        let space = Point::new(
+            (pointer_in.0 as f64) + ws.scrolling.view_pos(),
+            pointer_in.1 as f64,
+        );
+        state.mouse.insert_hint = Some(ws.scrolling.insert_position(space));
     }
+}
 
-    if !matches!(state.mouse.drag_state, DragState::None) {
-        update_sidebar_drag_hover(state);
-    }
+// ── Sidebar drag move (active phase) ────────────────────────────────────
 
+/// Handle cursor movement during an active sidebar drag.
+/// Updates the ghost label position to follow the cursor.
+fn handle_sidebar_drag_move(state: &mut AppState, pos: (f32, f32)) {
     if let DragState::SidebarDrag { .. } = state.mouse.drag_state
         && let Some(label) = &mut state.mouse.sidebar_drag_label
     {
@@ -169,6 +198,8 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
         label.y = pos.1;
     }
 }
+
+// ── Public API ───────────────────────────────────────────────────────────
 
 pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
     let swap = state.modifiers.shift_key();
@@ -188,6 +219,8 @@ pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_p
 pub(super) fn sync_drag_swap_mode(state: &mut AppState) {
     set_drag_swap_mode(state, state.modifiers.shift_key());
 }
+
+// ── Internal helpers ─────────────────────────────────────────────────────
 
 fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
     match &mut state.mouse.drag_state {
