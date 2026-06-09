@@ -40,15 +40,15 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [x] **G2 `Icon`** — duotone glyph widget over an embedded, host-registered icon font (**Phosphor Duotone**, MIT, in `assets/`). Renderer loads it as a 2nd family; `FontRole::Icon` text runs select it. Duotone = two stacked layers (secondary `:before` dimmed + primary `secondary+1`); colors are theme-driven (`Theme.icon_secondary_alpha` + per-icon overrides), never baked. Curated `Glyph` enum + `from_codepoint`. DONE — branch `grid-ui-icon`.
 - [x] **G3 `ItemGroup`** — collapsible group (header Item + chevron) over `Item` rows; collapse folds rows out of layout via new `Style.hidden` (`display:none`); `expanded` signal + `on_toggle`. DONE — branch `grid-ui-itemgroup`.
 - [x] **G4 `DockFrame`** — titled/collapsible frame (drag-handle grip + chevron + title + interactive header-controls slot) over a foldable body; collapse hides the body via `Style.hidden`; `expanded` signal + `on_toggle`. Reuses `Pane` brackets via the new shared `PaintCx::bracket_frame` (extracted from `Pane`; `Pane` stays the plain container). DONE — branch `grid-ui-dockframe`.
-- [~] **G5 `ChromeRegion` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), mode-aware (`RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal), collapse sizing (rail width/height), hosts `DockFrame`s; `toggle()` intent + `mode_signal()` binding point (P2: write-via-action, read-via-signal). **No** tree/workspace/drag semantics. **Core DONE** — branch `grid-ui-region-shell`. **Seams left for deps:** icon-rail rendering (collapsed Docks icon-only) needs G2; scrolling an overflow region needs renderer clip (G7); Dock-level drop targets wire onto `src/drag/` (G6).
+- [~] **G5 `ChromeRegion` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), mode-aware (`RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal), collapse sizing (rail width/height), hosts `DockFrame`s; `toggle()` intent + `mode_signal()` binding point (P2: write-via-action, read-via-signal). **No** tree/workspace/drag semantics. **Core DONE** — branch `grid-ui-region-shell`. **One seam left:** collapsed **icon-rail rendering** (Docks icon-only) — now unblocked (G2 + Row done); this is the **next task**. (Scroll overflow still waits on renderer clip / G7; Dock drop targets are G6.)
 - [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [x] **G2.5 `Row`** — focusable, clickable, single-selectable container for **arbitrary composed content** (`Item`'s interactive chrome — hover/active pill + `ActiveMarker` + press flash + focus ring + `on_activate`/Enter — generalized to wrap any children, e.g. a multi-line `Grid` of `Label`/`Icon`/`Badge`). Optional persistent background under the selection overlay. Unblocks clickable rich Dock rows. DONE — branch `grid-ui-row`.
 - [x] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase rich rows. Added `Tag` (bordered metadata chip with an optional leading icon — git branch/path/filter; hue-configurable, neutral). The PANES dock is now the composed recipe (state-colored leading `Icon` + program name + git-branch `Tag` + status `Badge`, in a `Grid` inside a selectable `Row`). grid-ui stays domain-neutral; the demo maps state→style. DONE — branch `grid-ui-status-rows`.
 
 **Catalog gaps:**
-- [ ] `IconButton` + **icon support** (icon-font glyphs; no renderer texture work).
-- [ ] `Tag`/`Chip` (dismissible pill / selectable filter).
+- [~] `IconButton` + **icon support** — **icon support DONE** (G2 `Icon`, embedded Phosphor font, `FontRole` text path). `IconButton` (a `Button` with an icon slot) still pending.
+- [~] `Tag`/`Chip` — **DONE** as G8 `Tag` (multi-segment, leading icon, theme-driven). The **dismissible**/**selectable-filter** variants are not built yet.
 - [ ] `EnergyMeter`, `SignalIndicator`.
 - [ ] `DataCard`/`Panel`/`Hud`.
 - [ ] `Tooltip`, `Modal`/`Dialog`, `CommandPalette` (all consume the overlay layer).
@@ -89,78 +89,168 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-08 (after the theme-token pass + docs refresh)
+### 🤝 Handoff — last updated 2026-06-09 (after the **entire chrome vocabulary**: G1–G8 + Row)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
 
-#### Git / PR state (verify before you start)
+#### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
-- **Branch:** `heca-grid-ui`. **Default branch:** `main`.
-- **Merged:** PR **#30** (theme-token / font / dropdown pass) and PR **#32** (docs:
-  plan tracker + `docs/widgets.md` refresh).
-- Branch is **synced with `main`** (merged origin/main 2026-06-09; clean — incoming
-  changes were all in `heca/src/**`, which we don't own). The two doc commits since #32
-  (end-user-docs note + this handoff rewrite) are going up in their own docs PR.
-- Build is green: `cargo test -p heca-grid-ui` = **6 unit + 59 integration + doctests**; clippy clean.
+- **Default branch:** `main`. **This branch:** `grid-ui-handoff` (carries this handoff
+  rewrite + one stranded showcase commit — see below).
+- **Merged into `main`** in this session (all chrome vocabulary): **#47** ChromeRegion (G5),
+  **#48** chrome-fixes (paint hidden subtrees + DockFrame padding + selectable rows),
+  **#49** Icon (G2), **#50** Row, **#51** Row-highlight, **#53** Tag/G8. So `main` already
+  contains **G1–G5, G2, Row, G8** — the full buildable chrome vocabulary.
+- **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
+  push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
+  Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
+  This handoff PR already recovers the last stranded commit (`e228071`, header-badge align).
+  **Rule:** after the user says "merged", `git fetch` and start the next task from
+  `origin/main`; don't keep pushing to the old branch.
+- Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
+  78 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
-- **Never run `cargo fmt`** — rustfmt 1.9 churns unrelated files.
-- **Only touch our files:** `heca-grid-ui/**` and `heca-renderer/examples/showcase.rs`.
-  `heca-renderer/src/**`, `heca`, `heca-core`, `heca-config` are owned by other devs.
-- **Workflow:** one feature branch per task off up-to-date `main`; PR per task; mark
-  IN PROGRESS / DONE on the board; leave a Resume note if you stop mid-task.
-- **No hard-coded font/radius/border/glow** — read theme tokens (see [Font sizing](#font-sizing)
-  and the [Theme tokens](#theme-glowlevel--intensity) table).
+- **Never run `cargo fmt`** — rustfmt 1.9 churns unrelated files. (A linter may still
+  touch files between your Read and Edit; just re-Read and retry.)
+- **Mostly our files:** `heca-grid-ui/**` and `heca-renderer/examples/showcase.rs`.
+  `heca`, `heca-core`, `heca-config` are owned by other devs — don't touch.
+  **Exception already taken:** G2 (Icon) required `heca-renderer/src/{text.rs,scene.rs}`
+  to load the icon font as a 2nd family + select it per `FontRole`. That's merged, but
+  `heca-renderer/src/**` is the renderer dev's area — **coordinate before further edits**
+  there (e.g. the still-blocked `PushClip`/`PopClip` for scroll).
+- **Workflow:** one feature branch per task off **up-to-date `origin/main`**; PR per task;
+  mark `[x]` DONE on the board (with branch name); leave a Resume note if you stop mid-task.
+- **No hard-coded theme values** — derive font, **border width (`theme.border_width`)**,
+  **radius (`theme.radius` / `theme.control_radius()`)**, and colors from the `Theme`,
+  never literals. (Tag initially violated this and was fixed — check new widgets.)
 
 #### Where we are
 
-- **Phases A, B, C-catalog: shipped** (see [Task Board — Shipped](#-task-board--shipped)).
-  Full widget catalog + renderer; overlay layer; `Select`; `Item`/`ActiveMarker`; `Pane`
-  container; the whole theme-token + central-font-inheritance pass; dropdown flip/scroll.
-- **Docs are current:** `grid-ui-plan.md` (this file) is the activity tracker;
-  `docs/widgets.md` is the refreshed developer API reference; `docs/the-grid-ui.md` is
-  reference/vision only. End-user docs are parked as the very last task.
+- **Phases A, B, C-catalog: shipped.** Full widget catalog + renderer; overlay layer;
+  `Select`; `Item`/`ActiveMarker`; `Pane`; theme-token + central-font pass; dropdown flip/scroll.
+- **Chrome vocabulary (this session): DONE — G1–G8 + Row.** Each widget lives in
+  `heca-grid-ui/src/widgets/<file>.rs`, is exported from `widgets/mod.rs` + **both** lists in
+  `lib.rs` (top-level `pub use` and `prelude`), has integration tests in `tests/phase_a.rs`,
+  and is demoed in `examples/showcase.rs`:
+  - **G1 `Grid`** (`grid.rs`) — taffy grid: `.columns/.rows([Track::{Px,Fr,Auto,…}])`,
+    `.areas([...])` named areas, `.area(c,"name")`, explicit `.cell()`. `Style.grid_cell` +
+    `Component::taffy_style()` hook.
+  - **G2 `Icon`** (`icon.rs`) — **duotone** glyph over embedded **Phosphor Duotone**
+    (`assets/Phosphor-Duotone.ttf`, MIT). Renders two stacked layers (secondary `:before`
+    codepoint dimmed + primary `secondary+1`). `Icon::new(Glyph::…)` curated set or
+    `from_codepoint`; `.size`, `.color`, `.secondary_color`. Colors theme-driven
+    (`theme.icon_secondary_alpha`, default 0.45). Square layout.
+  - **G3 `ItemGroup`** (`item_group.rs`) — collapsible group: header Item + chevron over
+    rows; collapse folds rows via `Style.hidden` (`display:none`); `expanded` signal +
+    `on_toggle("group-toggle")`.
+  - **G4 `DockFrame`** (`dock_frame.rs`) — titled/collapsible frame: title bar (grip +
+    chevron + title + interactive header-controls slot via `.header()`) over a foldable body
+    (`.child()`); reuses `Pane`'s brackets via shared `PaintCx::bracket_frame`. Content inset
+    from the frame (`CONTENT_PAD`). `expanded` signal + `on_toggle("dock-toggle")`.
+  - **G5 `ChromeRegion`** (`chrome_region.rs`) — oriented (`vertical()`/`horizontal()`),
+    mode-aware shell hosting Docks. `RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal
+    (`mode_signal()`); collapse sizing; `toggle()` intent; `.dock()`. **No** tree/drag
+    semantics. **Seam:** collapsed icon-rail rendering is NOT built (see What's next).
+  - **`Row`** (`row.rs`) — `Item`'s interactive chrome (hover/active selection pill +
+    `ActiveMarker` + press `Flash` + focus ring + `on_activate`/Enter) generalized to wrap
+    **any** children. Highlight **derives from the row's own background** (stronger same-hue
+    fill + same-hue border) or `.highlight(c)`. This is what makes composed multi-line rows
+    clickable/selectable.
+  - **G8 `Tag`** (`tag.rs`) — bordered metadata chip; **multi-segment** (`.segment()` /
+    `.segment_text()` with thin dividers, e.g. `path │ ⎇ main │ 5 +152 -12`), optional
+    leading `Icon`, hue via `.color()`. Theme-driven radius (`theme.radius`) + border
+    (`theme.border_width`); generous x-padding (`Style.padding_x/y`).
+- **The showcase PANES dock is the realized G8 recipe**: state-colored `Icon` + program name
+  + multi-segment git `Tag` + status `Badge`, in a `Grid` inside a selectable `Row`. grid-ui
+  stays **domain-neutral**; the *demo* maps state→style.
+- **Docs:** `grid-ui-chrome-plan.md` holds the locked chrome decisions; `docs/widgets.md` is
+  the API reference (may need a refresh for the new widgets — not yet done).
 
-#### What's next (in priority order — full list in [📍 Remaining Work](#-remaining-work))
+#### Shared infra added this session (reuse it; don't re-invent)
 
-1. **Chrome vocabulary** — the gap that *blocks Phase D*. **Read [`grid-ui-chrome-plan.md`](./grid-ui-chrome-plan.md) first** — it re-scopes the Sidebar from a "tree-nav widget" to a **dumb shell** that hosts app-side **Docks**, and locks all the decisions. Suggested order: **G1 `Grid`** → **G3 `ItemGroup`** / **G4 `DockFrame`** (+ **G5 region shell** alongside) → **G2 `Icon`** → **G8** rich-item showcase. DnD (**G6**) waits for the **incoming DnD system landing in this crate** — do not build a homegrown one. Scroll (**G7**) waits on the renderer's `PushClip`/`PopClip`.
-2. **Catalog gaps** — `IconButton` + icon support, `Tag`/`Chip`, `Tooltip`/`Modal`/`CommandPalette`,
-   wire `Item` into `Select` options, C8 showcase/snapshot tests.
-3. **Phase D — app adoption** (D1–D7), including **D6.5 `ActionSink` keybinding integration**
-   (design locked in §12 — build it *here*, when widgets meet the app).
-4. **Documentation finish** — demote/merge `docs/the-grid-ui.md`; add a theme-token reference page.
-5. **End-user docs** — the very last task (config/keybindings, for people running heca).
+- **`PaintCx::bracket_frame(rect, fill)`** (`component.rs`) — the corner-bracket frame, shared
+  by `Pane` + `DockFrame`.
+- **`PaintCx::icon(rect, glyph, color, size)`** + **`FontRole::{Text,Icon}`** on `TextCmd`
+  (`scene.rs`) — icon text path; renderer selects the icon family for `FontRole::Icon`.
+- **`paint_child(c, cx)`** (`component.rs`) — skips `style.hidden` (`display:none`) children;
+  used by default `Component::paint`, `Pane`, `DockFrame`. **Why:** layout collapses a hidden
+  subtree to the top-left, so painting it stamps overlapping text there. Focus traversal
+  (`focus.rs::for_each_focusable`) **also** skips hidden subtrees (no Tab into collapsed content).
+- **`route_event(children, ev)`** (`component.rs`) — the default reverse event loop, reused by
+  `ItemGroup`/`DockFrame` that wrap event handling.
+- **`Style.padding_x/padding_y`** (`Option<f32>`, fall back to uniform `padding`) +
+  **`LayoutExt::padding_xy(x,y)`** — per-axis padding (Tag uses it).
+- **`Theme.icon_secondary_alpha`** — duotone dim factor, config-tunable.
 
-#### Starting the next task (C6 `Sidebar`) — pointers
+#### What's next (in priority order)
 
-- New file `heca-grid-ui/src/widgets/sidebar.rs`; export from `widgets/mod.rs` + `lib.rs`
-  (top-level + prelude) — copy how `pane.rs`/`item.rs` are wired.
-- Embed `Base`, implement `Component`; opt into `LayoutExt`/`StyleExt`/`Parent`.
-- Reuse `Item` for rows (it already has leading/trailing slots, `ActiveMarker`, single-select
-  via shared `state()` signals — see the [Item](#item) docs + the showcase sidebar for the
-  click-to-select pattern).
-- Add a showcase section exercising it; keep `cargo test` + clippy green; update the board.
+1. **Collapsed icon-rail for `ChromeRegion`** (G5 seam, now unblocked by G2+Row) — when
+   `RegionMode::CollapsedRail`, Docks render **icon-only** in the thin rail. Smallest next win;
+   completes G5. The region already sizes to the rail; the rendering is the gap.
+2. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
+   region drop targets onto the **already-shipped** `heca-grid-ui/src/drag/` framework
+   (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). Extend **additively**; never
+   fork. Region = a `DragSurfaceId`, a Dock = a `DragItem`. Every drop = a dispatched **action**.
+3. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
+   `effects::Flash` on a `Row`/`Item` driven by an `attention` signal. **Sound is the host's
+   job** (grid-ui is audio-free) — expose a signal/action the app maps to a beep; don't bake
+   audio in.
+4. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
+5. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
+   `heca-renderer/src/scene.rs`, renderer dev's area). Only whole-page scroll works.
+6. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
+   `docs/widgets.md` for the new widgets; **Phase D** app adoption + the §12 `ActionSink`
+   keybinding integration; end-user docs last.
+
+#### Open polish / readability levers (user-flagged, not yet "right")
+
+- `Row`: `ACTIVE_TINT_ALPHA` (90), `ACTIVE_BORDER_ALPHA` (180), `ACTIVE_BORDER_W` (1.3).
+- `theme.muted` reads dim on tinted backgrounds — pane subtitles were switched to
+  `theme.foreground`; consider a brightened-muted midpoint token.
+- `theme.icon_secondary_alpha` (0.45) — duotone visibility on dark; lower=subtler.
+- `Tag` `RADIUS_MUL` (1.0) — chip roundness.
+
+#### Starting the next task (icon-rail) — pointers
+
+- The mechanism: `ChromeRegion::mode_signal()` is `RegionMode::CollapsedRail`; the region
+  already shrinks to `rail_px`. What's missing is **how Docks render in the rail** (icon-only).
+- A Dock reads the region mode and swaps its `DockFrame` body for an icon (G2 `Icon`) — or
+  `DockFrame` itself learns a rail mode. Decide the cleaner of: (a) the Dock observes
+  `mode_signal()` and rebuilds, vs (b) `DockFrame`/`ChromeRegion` propagate mode to children.
+  Keep grid-ui neutral; the rail shows Dock **icons**, not domain content.
+- New widget wiring is always: file in `widgets/`, export in `mod.rs` + **both** `lib.rs`
+  lists, tests in `tests/phase_a.rs` (tail; relative-center asserts), demo in `showcase.rs`.
+
+#### For G6 (DnD) — pointers
+
+- The framework is **already in the crate**: `heca-grid-ui/src/drag/` (`DragContext`,
+  `DragSurfaceId`, `DragItem*`, `SurfaceDragState`, `SurfaceDragPhase`) — exported in `prelude`.
+- `DockFrame` already has a **drag-handle grip** (visual) + a `.child()` seam comment marking
+  where dragging wires in. Add variants additively; never retype/remove existing drag types.
 
 #### Gotchas
 
-- `Base.font` is the **resolved** font; widgets read it (not `style.font_size`) for text +
-  in `remeasure()`. `style.font_size > 0` = explicit override; `0` = inherit.
-- Any change to `LayoutEngine` font resolution resizes all font-derived widgets — the
-  integration tests use *relative* centers (`b.size.h/2`) so they tolerate it; keep that.
-- An **embeddable** (non-page) scroll region is blocked on the renderer implementing
-  `PushClip`/`PopClip` (no-op today in `heca-renderer/src/scene.rs` — not ours). Only
-  whole-page scroll works until then.
-- `PaintCx::new(scene, theme)` defaults to an *infinite* viewport; pass `.with_viewport(size)`
-  in a real host so `Select` can flip/cap (the 22 headless tests rely on the infinite default).
+- **Stranded commits** — see the Git/PR state box. After "merged", `git fetch` and branch
+  from `origin/main`.
+- **Duotone = two glyphs.** An `Icon` emits two `cx.icon` runs (secondary dimmed + primary).
+  Primary codepoint = secondary + 1 (Phosphor pairs them consecutively).
+- **Hidden subtrees** — never paint or focus-traverse `style.hidden` nodes directly; go through
+  `paint_child` / `for_each_focusable` which skip them.
+- **Tag in a Grid cell** stretches to fill the cell — wrap it in `Flex::row().child(tag)` to
+  hug-left (see the PANES branch tag).
+- `Base.font` is the **resolved** font; widgets read it (not `style.font_size`) in `remeasure()`.
+- Tests use **relative** centers (`b.size.h/2`) so they tolerate font-resolution changes; keep that.
+- `PaintCx::new` defaults to an *infinite* viewport; pass `.with_viewport(size)` in a real host.
 
 **Run / verify:**
 
 ```bash
-cargo run -p heca-renderer --example showcase          # the live demo (needs a display)
-cargo test -p heca-grid-ui                              # 6 unit + 59 integration + doctests
-cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean
+cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
+cargo test -p heca-grid-ui                                    # 10 unit + 78 integration + doctests
+cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 
 **Done (committed):**
