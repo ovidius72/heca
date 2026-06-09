@@ -117,7 +117,8 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     if matches!(state.mouse.drag_state, DragState::InteractiveMove { .. }) {
         let offset = match state.mouse.drag_state {
             DragState::InteractiveMove { offset, .. } => offset,
-            _ => unreachable!(),
+            // SAFETY: guarded by matches!() check above
+            _ => unreachable!("InteractiveMove variant guaranteed by outer matches guard"),
         };
         let (cx, cy) = super::content_area_origin(state);
         let pointer_in = (pos.0 - cx, pos.1 - cy);

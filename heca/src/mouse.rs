@@ -109,7 +109,8 @@ pub fn on_mouse_input(
                         drag::reset_interactive_move_offset(state);
                         let source_id = match state.mouse.drag_state {
                             DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-                            _ => unreachable!(),
+                            // SAFETY: guarded by outer match on DragState::InteractiveMove
+                            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
                         };
                         if let Some(target_id) = hit_test::hit_test_pane_excluding(
                             state,
@@ -158,7 +159,8 @@ pub fn on_mouse_input(
                         drag::reset_interactive_move_offset(state);
                         let source_id = match state.mouse.drag_state {
                             DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-                            _ => unreachable!(),
+                            // SAFETY: guarded by outer match on DragState::InteractiveMove
+                            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
                         };
                         // Remove pane from current position.
                         if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
