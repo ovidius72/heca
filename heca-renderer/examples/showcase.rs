@@ -357,60 +357,82 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
         // beside a Grid-composed rich item. DockFrame and ItemGroup headers toggle
         // on click — or via the keyboard (Tab to focus, Enter/Space to activate).
         .child({
-            // G4 DockFrame framing G3 ItemGroups of rows; header slot carries a count.
+            // Rows are *composed*, not plain labels — the model is ready for rich,
+            // state-driven content: a status dot (color = state) + text + a status
+            // badge. (File-type/glyph icons proper land with G2 `Icon`.)
+            let git_row = |status: StatusDot, name: &str, tag: Badge| {
+                Item::new(name).leading(status).trailing(tag)
+            };
+            // A two-line pane row: dot spanning both rows + title over a dimmed
+            // subtitle + a trailing state tag — mirroring a real pane/branch list.
+            let pane_row = |dot: StatusDot, title: &str, sub: &str, tag: Badge| {
+                Grid::new()
+                    .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
+                    .rows([Track::Auto, Track::Auto])
+                    .areas(["dot title tag", "dot sub tag"])
+                    .gap(6.0)
+                    .area(dot, "dot")
+                    .area(Label::new(title).color(theme.foreground), "title")
+                    .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
+                    .area(tag, "tag")
+            };
+
+            // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.
             let explorer = DockFrame::new("EXPLORER")
                 .header(Badge::accent("3"))
                 .child(
                     ItemGroup::new("src")
                         .child(Item::new("main.rs").leading(StatusDot::online()))
-                        .child(Item::new("lib.rs"))
-                        .child(Item::new("chrome_region.rs")),
+                        .child(Item::new("chrome_region.rs").leading(StatusDot::online()))
+                        .child(Item::new("dock_frame.rs").leading(StatusDot::warning())),
                 )
                 .child(
+                    // Collapsed group — verifies the paint fix: its rows must not
+                    // bleed to the top-left while hidden.
                     ItemGroup::new("tests")
                         .expanded(false)
                         .child(Item::new("phase_a.rs")),
                 );
-            // A second dock, starting collapsed — click its title bar to expand.
+            // Git status rows: state-colored dot + change-kind badge (M / A / D).
             let source_control = DockFrame::new("SOURCE CONTROL")
-                .expanded(false)
-                .child(Item::new("M chrome_region.rs"))
-                .child(Item::new("A showcase.rs"));
+                .header(Badge::warning("3"))
+                .child(git_row(StatusDot::warning(), "chrome_region.rs", Badge::warning("M")))
+                .child(git_row(StatusDot::online(), "showcase.rs", Badge::success("A")))
+                .child(git_row(StatusDot::error(), "old_sidebar.rs", Badge::danger("D")));
 
             // G5 ChromeRegion: a vertical sidebar shell hosting the docks.
             let sidebar = ChromeRegion::vertical()
-                .expanded_size(320.0)
+                .expanded_size(340.0)
                 .gap(14.0)
                 .padding(14.0)
                 .background(theme.surface)
                 .dock(explorer)
                 .dock(source_control);
 
-            // G1 Grid: a 2-col rich item — a status dot spanning both rows, with a
-            // title over a subtitle in the second column.
-            let rich = Surface::new()
-                .background(theme.surface)
-                .border(theme.accent, 1.0)
-                .padding(14.0)
-                .child(
-                    Grid::new()
-                        .columns([Track::Px(28.0), Track::Fr(1.0)])
-                        .rows([Track::Auto, Track::Auto])
-                        .areas(["icon title", "icon sub"])
-                        .gap(8.0)
-                        .width(Length::Px(240.0))
-                        .area(StatusDot::online(), "icon")
-                        .area(
-                            Label::new("GRID NODE 7").color(theme.foreground).font_scale(1.1),
-                            "title",
-                        )
-                        .area(
-                            Label::new("uplink · 42ms").color(theme.muted).font_scale(0.85),
-                            "sub",
-                        ),
-                );
+            // A standalone DockFrame of two-line composed pane rows
+            // (program · branch · state) — starts collapsed; click to expand.
+            let panes = DockFrame::new("PANES")
+                .child(pane_row(
+                    StatusDot::online(),
+                    "Pane 1 (nvim)",
+                    "features/my-branch 1+",
+                    Badge::success("RUN"),
+                ))
+                .child(pane_row(
+                    StatusDot::warning(),
+                    "Review (diff)",
+                    "features/my-branch · 2d",
+                    Badge::warning("IDLE"),
+                ))
+                .child(pane_row(
+                    StatusDot::error(),
+                    "build",
+                    "exit 1",
+                    Badge::danger("STOP"),
+                ));
+            let panes_col = Flex::column().width(Length::Px(360.0)).child(panes);
 
-            Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(rich)
+            Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(panes_col)
         })
 }
 
