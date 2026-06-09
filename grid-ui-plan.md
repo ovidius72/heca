@@ -36,6 +36,31 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 > **What G1–G8 supersede / don't.** These are the **grid-ui (presentation) layer** for the chrome/sidebar. They **replace** the old sidebar widget plan (old `C6 Sidebar = tree-nav`) and **absorb** old `C4` (CornerBrackets/Reticle) + `C5` (StatusBar) + `C7` (Pane HUD header). They **do not** touch the rest of this plan (shipped catalog, docs pass, end-user docs, Phase D). They also **do not** include the sidebar's *behavior* — the workspace tree / panes / git / docker live in **app-side Docks** (`WorkspacesDock`, …) tracked in `pluggable-chrome-plugin-plan.md` (Phase 5+), not here. grid-ui stays domain-neutral.
 
+> ### 🤝 NEXT-SESSION HANDOFF (2026-06-09) — start G4 `DockFrame`
+>
+> **Branches / PRs in flight:**
+> - **G1 `Grid`** → PR **#40 MERGED** to `main`. Adds `Track`/`GridCell` to `style.rs`, `Style.grid_cell`, the `Component::taffy_style()` hook (layout engine calls it), widget `widgets/grid.rs`.
+> - **G3 `ItemGroup`** → PR **#41 OPEN, mergeable/clean** (already merged `origin/main` so it carries G1 too). Adds `Style.hidden` (→ taffy `Display::None`), widget `widgets/item_group.rs`. **This handoff edit rides on #41.**
+> - **First action next session:** confirm #41 is merged, then **branch G4 off up-to-date `main`** (`git fetch && git checkout -b grid-ui-dockframe origin/main`). G4 needs `Style.hidden` (from G3) for body-collapse — so it must come *after* #41 merges, else branch off the G3 branch.
+>
+> **What G4 builds (`widgets/dock_frame.rs`, new widget — keep `Pane` as the plain container):**
+> A titled, collapsible frame: **title bar** (title label + collapse chevron + a **drag-handle** affordance + a **header-controls slot** the Dock fills, e.g. its own search) over a **body** that holds the Dock's content. Reuses Pane's rounded corner brackets.
+>
+> **Design notes (decided):**
+> - **Reuse Pane's brackets via a shared helper (DRY).** Pane's frame drawing lives in `widgets/pane.rs::Pane::paint` (the border + dimmed-midsection bracket logic, ~lines 63–110, consts `ARM_LEN`/`BRACKET_WIDTH_MUL`/`STRAIGHT_DIM`). Extract it into a shared fn — e.g. `PaintCx::dock_frame(rect)` in `component.rs`, or a `pub(crate) fn paint_bracket_frame(cx, rect)` in `pane.rs` — and call it from **both** `Pane::paint` and `DockFrame::paint`. Don't copy-paste.
+> - **Header** = compose an `Item` (title + a leading/trailing chevron `Label` + a header slot), mirroring how `ItemGroup` does its header (`widgets/item_group.rs` is the closest pattern: header Item flips an `expanded` signal; chevron glyph swaps; `remeasure()` syncs).
+> - **Collapse** = hide the body child via `Style.hidden = !expanded` (same mechanism as `ItemGroup`); sync in `remeasure()`.
+> - **Drag handle**: presentation affordance only (a grip glyph in the header). The actual drag wires to the **shipped** `src/drag/` framework in **G6**, not here — leave a clear seam (e.g. a `.draggable(DragItem…)` hook stub or just the visual handle).
+> - Builders: `DockFrame::new(title)`, `.expanded(bool)`, `.on_toggle(Fn(Action))` (reuse the `"group-toggle"` shape or `"dock-toggle"`), `.header(impl Component)` for the controls slot, `.child(...)` for body content. `LayoutExt`. Domain-neutral.
+>
+> **Mechanical gotchas (bit us on G3):**
+> - Exports: add `DockFrame` to `widgets/mod.rs` + **both** lists in `lib.rs` (top-level `pub use widgets::{…}` and `prelude`). G1/G3 conflicted exactly here — resolution is always **keep-both**.
+> - Tests append to `heca-grid-ui/tests/phase_a.rs` (tail). New widget = 1 focused test (e.g. collapse folds body out of layout).
+> - **Never `cargo fmt`.** Only touch `heca-grid-ui/**` (+ `showcase.rs`). Branch-per-task + PR.
+> - Verify: `cargo test -p heca-grid-ui` (currently 10 unit + 61 integration on the G3 branch) + `cargo clippy -p heca-grid-ui` clean.
+>
+> **Order after G4:** G5 region shell (alongside) → G2 `Icon` → G6 DnD hooks (build on `src/drag/`) → G8 showcase (where `Grid`/`ItemGroup`/`DockFrame` demos land). G7 scroll still gated on renderer `PushClip`/`PopClip`. Full design: `grid-ui-chrome-plan.md`.
+
 - [x] **G1 `Grid`** layout widget (taffy grid; `Track{Px,Fr,Auto,MinContent,MaxContent}` + named areas + explicit `.cell()`; `Style.grid_cell` + `Component::taffy_style()` hook). DONE — branch `grid-ui-grid-widget`.
 - [ ] **G2 `Icon`** widget + embedded, host-registered icon font.
 - [x] **G3 `ItemGroup`** — collapsible group (header Item + chevron) over `Item` rows; collapse folds rows out of layout via new `Style.hidden` (`display:none`); `expanded` signal + `on_toggle`. DONE — branch `grid-ui-itemgroup`.
