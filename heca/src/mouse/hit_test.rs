@@ -45,8 +45,8 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
 
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
-            let fx = pane_area.x + ws_offset.0 + float.position.x as f32;
-            let fy = pane_area.y + ws_offset.1 + float.position.y as f32;
+            let fx = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
+            let fy = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
             if pos.0 >= fx && pos.0 < fx + fw && pos.1 >= fy && pos.1 < fy + fh
@@ -64,8 +64,8 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
         .unwrap_or_default();
 
     for (pane_id, rect) in &pane_positions {
-        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
         if pos.0 >= px && pos.0 < px + pw && pos.1 >= py && pos.1 < py + ph

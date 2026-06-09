@@ -270,8 +270,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .unwrap_or((0.0, 0.0));
 
     for (pane_id, rect) in &pane_positions {
-        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
         let is_active = state.focused_pane == Some(pane_id.0);
@@ -471,8 +471,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.x + ws_offset.0;
-            let fy = float.position.y as f32 + pane_area.y + ws_offset.1;
+            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
+            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
             let is_focused = state.focused_pane == Some(float.pane.id.0);
@@ -526,8 +526,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
 
     let pane_area_rect = heca_core::layout::Rectangle::new(
-        heca_core::layout::Point::new(pane_area.x as f64, pane_area.y as f64),
-        heca_core::layout::Size::new(pane_area.w as f64, pane_area.h as f64),
+        heca_core::layout::Point::new(pane_area.loc.x, pane_area.loc.y),
+        heca_core::layout::Size::new(pane_area.size.w, pane_area.size.h),
     );
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
@@ -542,8 +542,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let mut found = false;
             for (pane_id, rect) in &pane_positions {
                 if pane_id.0 == *target_id {
-                    let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-                    let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+                    let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+                    let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
                     let pw = rect.size.w as f32;
                     let ph = rect.size.h as f32;
                     let lx = px + (pw - letter_size * 0.6) / 2.0;
@@ -559,8 +559,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             if !found && let Some(ws) = state.session.active_workspace() {
                 for float in &ws.floating_panes {
                     if float.pane.id.0 == *target_id {
-                        let fx = float.position.x as f32 + pane_area.x;
-                        let fy = float.position.y as f32 + pane_area.y;
+                        let fx = float.position.x as f32 + pane_area.loc.x as f32;
+                        let fy = float.position.y as f32 + pane_area.loc.y as f32;
                         let fw = float.size.w as f32;
                         let fh = float.size.h as f32;
                         let lx = fx + (fw - letter_size * 0.6) / 2.0;
@@ -609,7 +609,7 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
         },
     };
     let pane_area = chrome.content_rect(win_w, win_h);
-    let new_size = heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
+    let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     state.session.update_viewport(new_size);
 }
 

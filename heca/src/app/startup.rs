@@ -110,7 +110,7 @@ pub(crate) async fn init_state(
     let log_h = physical.height as f32 / scale_factor as f32;
     let pane_area = chrome.content_rect(log_w, log_h);
 
-    let viewport_size = heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
+    let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = heca_core::layout::types::LayoutOptions {
         always_center_single_column: app_config.config.settings.always_center_single_column,
         ..Default::default()

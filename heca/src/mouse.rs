@@ -177,21 +177,21 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
     // Compute normalized delta, covering the full horizontal range without gaps.
     // Left side: trigger from window edge through sidebar into content area.
     // Right side: trigger from content area edge through sidebar to window edge.
-    let raw = if pos.0 < pane_area.x {
+    let raw = if pos.0 < pane_area.loc.x as f32 {
         // In the left sidebar/activity area — use distance from content edge.
-        let dist = pane_area.x - pos.0;
+        let dist = pane_area.loc.x as f32 - pos.0;
         -(content_trigger + dist) / content_trigger
-    } else if pos.0 < pane_area.x + content_trigger {
+    } else if pos.0 < pane_area.loc.x as f32 + content_trigger {
         // Near the left content area edge.
-        -(content_trigger - (pos.0 - pane_area.x)) / content_trigger
-    } else if pos.0 > pane_area.x + pane_area.w - content_trigger
-        && pos.0 < pane_area.x + pane_area.w
+        -(content_trigger - (pos.0 - pane_area.loc.x as f32)) / content_trigger
+    } else if pos.0 > pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger
+        && pos.0 < pane_area.loc.x as f32 + pane_area.size.w as f32
     {
         // Near the right content area edge.
-        (pos.0 - (pane_area.x + pane_area.w - content_trigger)) / content_trigger
-    } else if pos.0 >= pane_area.x + pane_area.w {
+        (pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger)) / content_trigger
+    } else if pos.0 >= pane_area.loc.x as f32 + pane_area.size.w as f32 {
         // In the right sidebar/activity area — use distance from content edge.
-        let dist = pos.0 - (pane_area.x + pane_area.w);
+        let dist = pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32);
         (content_trigger + dist) / content_trigger
     } else {
         0.0
@@ -265,7 +265,7 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
     let (win_w, win_h) = window_logical_size(state);
     let chrome = chrome_config(state);
     let r = chrome.content_rect(win_w, win_h);
-    (r.x, r.y)
+    (r.loc.x as f32, r.loc.y as f32)
 }
 
 fn chrome_config(state: &AppState) -> ChromeConfig {
