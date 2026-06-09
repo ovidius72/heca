@@ -1,6 +1,18 @@
 use crate::app_state::SidebarItemState;
 use crate::input::WmAction;
 use heca_core::layout::session::Session;
+use std::collections::HashMap;
+
+/// Precise location of a pane within the sidebar tree.
+/// Built during `sync_from_session()` for O(1) lookup during render.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PaneTreeLocation {
+    pub ws_idx: usize,
+    /// `Some(col_idx)` for tiled panes, `None` for floating panes.
+    pub col_idx: Option<usize>,
+    /// Index within `columns[col_idx].panes` or `floating_panes`.
+    pub pane_idx: usize,
+}
 
 /// A flat item in the sidebar navigation list.
 /// Built from the tree, skipping collapsed items.
@@ -93,6 +105,8 @@ pub struct SidebarTree {
     pub scroll_offset: usize,
     /// Flat navigation list (built from tree, skipping collapsed items).
     pub flat_items: Vec<SidebarItem>,
+    /// Maps pane_id → precise tree location for O(1) render lookups.
+    pub pane_id_to_entry: HashMap<u64, PaneTreeLocation>,
     /// Button hitboxes for [+w], [+c], [+p] buttons (set during render).
     pub button_hitboxes: Vec<SidebarButtonHitbox>,
 }
@@ -117,6 +131,7 @@ impl SidebarTree {
             item_count: 0,
             scroll_offset: 0,
             flat_items: Vec::new(),
+            pane_id_to_entry: HashMap::new(),
             button_hitboxes: Vec::new(),
         }
     }
@@ -149,6 +164,9 @@ impl SidebarTree {
 
         self.workspaces.clear();
         self.flat_items.clear();
+        self.pane_id_to_entry.clear();
+
+        self.workspaces = Vec::with_capacity(session.workspaces.len());
 
         for (ws_idx, ws) in session.workspaces.iter().enumerate() {
             let is_active = ws_idx == session.active_workspace_idx;
@@ -172,8 +190,8 @@ impl SidebarTree {
                     .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1)),
                 collapsed,
                 state,
-                columns: Vec::new(),
-                floating_panes: Vec::new(),
+                columns: Vec::with_capacity(ws.scrolling.columns.len()),
+                floating_panes: Vec::with_capacity(ws.floating_panes.len()),
             };
 
             let cols_to_show: Vec<usize> = if ws.scrolling.columns.is_empty() {
@@ -196,7 +214,7 @@ impl SidebarTree {
                             .clone()
                             .unwrap_or_else(|| format!("Col {}", col_idx + 1)),
                         collapsed: col_collapsed,
-                        panes: Vec::new(),
+                        panes: Vec::with_capacity(col.panes.len()),
                     };
 
                     for pane in col.panes.iter() {
@@ -247,21 +265,31 @@ impl SidebarTree {
     /// Rebuild the flat navigation list from the tree (skipping collapsed items).
     pub fn sync_flat_items(&mut self) {
         self.flat_items.clear();
+        self.pane_id_to_entry.clear();
 
         for ws_entry in &self.workspaces {
+            let ws_idx = ws_entry.ws_idx;
             self.flat_items.push(SidebarItem::Workspace {
                 ws_idx: ws_entry.ws_idx,
             });
 
             if !ws_entry.collapsed {
-                for col_entry in &ws_entry.columns {
+                for (col_idx, col_entry) in ws_entry.columns.iter().enumerate() {
                     self.flat_items.push(SidebarItem::Column {
                         ws_idx: ws_entry.ws_idx,
                         col_idx: col_entry.col_idx,
                     });
 
                     if !col_entry.collapsed {
-                        for pane_entry in &col_entry.panes {
+                        for (pane_idx, pane_entry) in col_entry.panes.iter().enumerate() {
+                            self.pane_id_to_entry.insert(
+                                pane_entry.pane_id,
+                                PaneTreeLocation {
+                                    ws_idx,
+                                    col_idx: Some(col_idx),
+                                    pane_idx,
+                                },
+                            );
                             self.flat_items.push(SidebarItem::Pane {
                                 pane_id: pane_entry.pane_id,
                             });
@@ -269,7 +297,15 @@ impl SidebarTree {
                     }
                 }
 
-                for float_entry in &ws_entry.floating_panes {
+                for (pane_idx, float_entry) in ws_entry.floating_panes.iter().enumerate() {
+                    self.pane_id_to_entry.insert(
+                        float_entry.pane_id,
+                        PaneTreeLocation {
+                            ws_idx,
+                            col_idx: None,
+                            pane_idx,
+                        },
+                    );
                     self.flat_items.push(SidebarItem::FloatingPane {
                         pane_id: float_entry.pane_id,
                         ws_idx: ws_entry.ws_idx,
@@ -565,6 +601,17 @@ impl SidebarTree {
                 }
                 SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
             }
+        }
+    }
+
+    /// Fast pane-entry lookup using the pre-built `pane_id_to_entry` map.
+    /// Returns `None` if the pane_id is not in the tree.
+    pub fn pane_entry(&self, pane_id: u64) -> Option<&SidebarPaneEntry> {
+        let loc = self.pane_id_to_entry.get(&pane_id)?;
+        let ws = self.workspaces.get(loc.ws_idx)?;
+        match loc.col_idx {
+            Some(ci) => ws.columns.get(ci)?.panes.get(loc.pane_idx),
+            None => ws.floating_panes.get(loc.pane_idx),
         }
     }
 

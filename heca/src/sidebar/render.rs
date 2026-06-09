@@ -123,7 +123,7 @@ pub fn render_sidebar_expanded(
         let is_cursor = fi == tree.cursor && is_sidebar_nav;
         let (presentation, label) = expanded_item_label(
             flat_item,
-            &tree.workspaces,
+            tree,
             candidates,
             focused_pane,
         );
@@ -146,7 +146,7 @@ pub fn render_sidebar_expanded(
         let color = expanded_item_text_color(
             flat_item,
             is_cursor,
-            &tree.workspaces,
+            tree,
             colors,
         );
 
@@ -156,7 +156,7 @@ pub fn render_sidebar_expanded(
             x,
             line_y,
             width,
-            &tree.workspaces,
+            tree,
             colors,
         );
 
@@ -320,13 +320,13 @@ pub fn render_sidebar_collapsed(
 
 fn expanded_item_label(
     flat_item: &SidebarItem,
-    workspaces: &[SidebarWsEntry],
+    tree: &SidebarTree,
     candidates: Option<&[(char, u64)]>,
     focused_pane: Option<u64>,
 ) -> (ExpandedItemPresentation, String) {
     match flat_item {
         SidebarItem::Workspace { ws_idx } => {
-            let label = if let Some(ws) = workspaces.get(*ws_idx) {
+            let label = if let Some(ws) = tree.workspaces.get(*ws_idx) {
                 let arrow = if ws.collapsed { "▶ " } else { "▼ " };
                 format!("{}{}", arrow, ws.name)
             } else {
@@ -340,7 +340,7 @@ fn expanded_item_label(
             )
         }
         SidebarItem::Column { ws_idx, col_idx } => {
-            let label = workspaces
+            let label = tree.workspaces
                 .get(*ws_idx)
                 .and_then(|ws| ws.columns.get(*col_idx))
                 .map(|col| {
@@ -359,13 +359,13 @@ fn expanded_item_label(
             ExpandedItemPresentation {
                 indent: INDENT_PANE,
             },
-            expanded_pane_label(*pane_id, false, workspaces, candidates, focused_pane),
+            expanded_pane_label(*pane_id, false, tree, candidates, focused_pane),
         ),
         SidebarItem::FloatingPane { pane_id, .. } => (
             ExpandedItemPresentation {
                 indent: INDENT_PANE,
             },
-            expanded_pane_label(*pane_id, true, workspaces, candidates, focused_pane),
+            expanded_pane_label(*pane_id, true, tree, candidates, focused_pane),
         ),
     }
 }
@@ -373,14 +373,14 @@ fn expanded_item_label(
 fn expanded_pane_label(
     pane_id: u64,
     is_floating: bool,
-    workspaces: &[SidebarWsEntry],
+    tree: &SidebarTree,
     candidates: Option<&[(char, u64)]>,
     focused_pane: Option<u64>,
 ) -> String {
     let base = if is_floating {
-        format!("~ {}", pane_name_short(pane_id, workspaces))
+        format!("~ {}", pane_name_short(pane_id, tree))
     } else {
-        pane_name_short(pane_id, workspaces)
+        pane_name_short(pane_id, tree)
     };
 
     if let Some(ch) = candidate_char(pane_id, candidates, focused_pane) {
@@ -411,7 +411,7 @@ fn push_disclosure_hitbox(
 fn expanded_item_text_color(
     flat_item: &SidebarItem,
     is_cursor: bool,
-    workspaces: &[SidebarWsEntry],
+    tree: &SidebarTree,
     colors: RenderColors,
 ) -> [f32; 4] {
     if is_cursor {
@@ -421,14 +421,14 @@ fn expanded_item_text_color(
     if flat_item.kind() == SidebarItemKind::Workspace {
         return flat_item
             .workspace_idx()
-            .and_then(|wi| workspaces.get(wi))
+            .and_then(|wi| tree.workspaces.get(wi))
             .map(|ws| item_state_color(ws.state, colors.accent, colors.foreground, colors.visited_color))
             .unwrap_or(colors.foreground);
     }
 
     match flat_item {
         SidebarItem::Pane { pane_id } | SidebarItem::FloatingPane { pane_id, .. } => {
-            pane_entry_by_id(*pane_id, workspaces)
+            tree.pane_entry(*pane_id)
                 .map(|pane| {
                     item_state_color(pane.state, colors.accent, colors.foreground, colors.visited_color)
                 })
@@ -444,11 +444,11 @@ fn draw_expanded_pane_background(
     x: f32,
     line_y: f32,
     width: f32,
-    workspaces: &[SidebarWsEntry],
+    tree: &SidebarTree,
     colors: RenderColors,
 ) {
     if let SidebarItem::Pane { pane_id } | SidebarItem::FloatingPane { pane_id, .. } = flat_item
-        && let Some(pane) = pane_entry_by_id(*pane_id, workspaces)
+        && let Some(pane) = tree.pane_entry(*pane_id)
     {
         match pane.state {
             SidebarItemState::Active => {
@@ -870,26 +870,8 @@ fn delete_button_colors(is_hovered: bool) -> ButtonColors {
     }
 }
 
-fn pane_entry_by_id(pane_id: u64, workspaces: &[SidebarWsEntry]) -> Option<&SidebarPaneEntry> {
-    for ws in workspaces {
-        for col in &ws.columns {
-            if let Some(pane) = col.panes.iter().find(|pane| pane.pane_id == pane_id) {
-                return Some(pane);
-            }
-        }
-        if let Some(pane) = ws
-            .floating_panes
-            .iter()
-            .find(|pane| pane.pane_id == pane_id)
-        {
-            return Some(pane);
-        }
-    }
-    None
-}
-
-fn pane_name_short(pane_id: u64, workspaces: &[SidebarWsEntry]) -> String {
-    pane_entry_by_id(pane_id, workspaces)
+fn pane_name_short(pane_id: u64, tree: &SidebarTree) -> String {
+    tree.pane_entry(pane_id)
         .map(|pane| pane.name.clone())
         .unwrap_or_else(|| format!("Pane {}", pane_id))
 }
