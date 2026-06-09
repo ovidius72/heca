@@ -178,6 +178,23 @@ impl MouseState {
     }
 }
 
+/// Central application runtime state.
+///
+/// Holds the winit window, GPU resources, session layout, backends,
+/// input mode, sidebar model, theme, and all per-frame bookkeeping.
+///
+/// # Invariants
+///
+/// - `focused_pane` always matches the session's active pane ID (kept in sync
+///   by `sync_focus` after every mutation).
+/// - `backends` contains an entry for every pane in the session that has a
+///   backend. Removing a pane from the session must also remove its backend
+///   via `BackendStore::remove_for_pane`.
+/// - `input_mode` is `Normal` unless an explicit mode transition happened
+///   (prefix key, sidebar entry, rename, etc.). Mode transitions always go
+///   through the input dispatch, never by direct field mutation.
+/// - `sidebar_tree` is rebuilt via `sync_from_session()` after any layout
+///   or focus change that affects the sidebar projection.
 pub struct AppState {
     pub window: Arc<Window>,
     pub surface: wgpu::Surface<'static>,
