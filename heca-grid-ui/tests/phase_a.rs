@@ -1926,3 +1926,81 @@ fn tag_with_multiple_segments_lays_them_in_a_row() {
     let s1 = tag.base().children[1].base().bounds;
     assert!(s1.loc.x > s0.loc.x + s0.size.w - 1.0, "the second segment sits right of the first");
 }
+
+#[test]
+fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
+    use heca_grid_ui::{ChromeRegion, DockFrame, Glyph, Item, RegionMode};
+
+    // A rail-aware dock bound to its region's mode signal (obtained before the
+    // region is moved into `.dock(...)`).
+    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
+    let mode = sidebar.mode_signal();
+    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
+    let mut sidebar = sidebar.dock(dock);
+
+    // Expanded: header + body are shown; the rail icon is hidden.
+    LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
+    {
+        let dock = sidebar.base().children[0].base();
+        assert!(!dock.children[0].base().style.hidden, "header shown while expanded");
+        assert!(!dock.children[1].base().style.hidden, "body shown while expanded");
+        assert!(dock.children[2].base().style.hidden, "rail icon hidden while expanded");
+        assert!(dock.children[1].base().bounds.size.h > 0.0, "expanded body has height");
+    }
+
+    // Collapse the region to its rail: header + body fold away; the rail icon shows.
+    mode.set(RegionMode::CollapsedRail);
+    LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
+    {
+        let dock = sidebar.base().children[0].base();
+        assert!(dock.children[0].base().style.hidden, "header folds away in rail mode");
+        assert!(dock.children[1].base().style.hidden, "body folds away in rail mode");
+        assert!(!dock.children[2].base().style.hidden, "rail icon shows in rail mode");
+        assert_eq!(dock.children[1].base().bounds.size.h, 0.0, "folded body takes no layout space");
+        assert!(dock.children[2].base().bounds.size.h > 0.0, "rail icon is laid out");
+    }
+}
+
+#[test]
+fn dock_frame_rail_paints_icon_not_title() {
+    use heca_grid_ui::{ChromeRegion, DockFrame, DrawCommand, FontRole, Glyph, Item, RegionMode};
+
+    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
+    let mode = sidebar.mode_signal();
+    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
+    let mut sidebar = sidebar.dock(dock);
+
+    let paint = |sidebar: &mut ChromeRegion| -> (Vec<String>, usize) {
+        LayoutEngine::new().compute(sidebar, Size::new(400.0, 600.0));
+        let theme = Theme::grid_tron();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            sidebar.paint(&mut cx);
+        }
+        let mut texts = Vec::new();
+        let mut icons = 0usize;
+        for c in scene.iter() {
+            if let DrawCommand::Text(t) = c {
+                if t.font == FontRole::Icon {
+                    icons += 1;
+                } else {
+                    texts.push(t.text.clone());
+                }
+            }
+        }
+        (texts, icons)
+    };
+
+    // Expanded: the title + body row paint as text; no icon-rail glyph yet.
+    let (texts, _) = paint(&mut sidebar);
+    assert!(texts.iter().any(|t| t == "FILES"), "title paints while expanded");
+    assert!(texts.iter().any(|t| t == "main.rs"), "body row paints while expanded");
+
+    // Rail mode: the title + body text are gone; a duotone icon (2 glyph runs) paints.
+    mode.set(RegionMode::CollapsedRail);
+    let (texts, icons) = paint(&mut sidebar);
+    assert!(texts.iter().all(|t| t != "FILES"), "title is not painted in rail mode");
+    assert!(texts.iter().all(|t| t != "main.rs"), "body row is not painted in rail mode");
+    assert!(icons >= 2, "rail paints the duotone dock icon (secondary + primary), got {icons}");
+}

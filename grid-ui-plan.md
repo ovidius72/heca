@@ -40,7 +40,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [x] **G2 `Icon`** — duotone glyph widget over an embedded, host-registered icon font (**Phosphor Duotone**, MIT, in `assets/`). Renderer loads it as a 2nd family; `FontRole::Icon` text runs select it. Duotone = two stacked layers (secondary `:before` dimmed + primary `secondary+1`); colors are theme-driven (`Theme.icon_secondary_alpha` + per-icon overrides), never baked. Curated `Glyph` enum + `from_codepoint`. DONE — branch `grid-ui-icon`.
 - [x] **G3 `ItemGroup`** — collapsible group (header Item + chevron) over `Item` rows; collapse folds rows out of layout via new `Style.hidden` (`display:none`); `expanded` signal + `on_toggle`. DONE — branch `grid-ui-itemgroup`.
 - [x] **G4 `DockFrame`** — titled/collapsible frame (drag-handle grip + chevron + title + interactive header-controls slot) over a foldable body; collapse hides the body via `Style.hidden`; `expanded` signal + `on_toggle`. Reuses `Pane` brackets via the new shared `PaintCx::bracket_frame` (extracted from `Pane`; `Pane` stays the plain container). DONE — branch `grid-ui-dockframe`.
-- [~] **G5 `ChromeRegion` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), mode-aware (`RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal), collapse sizing (rail width/height), hosts `DockFrame`s; `toggle()` intent + `mode_signal()` binding point (P2: write-via-action, read-via-signal). **No** tree/workspace/drag semantics. **Core DONE** — branch `grid-ui-region-shell`. **One seam left:** collapsed **icon-rail rendering** (Docks icon-only) — now unblocked (G2 + Row done); this is the **next task**. (Scroll overflow still waits on renderer clip / G7; Dock drop targets are G6.)
+- [x] **G5 `ChromeRegion` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), mode-aware (`RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal), collapse sizing (rail width/height), hosts `DockFrame`s; `toggle()` intent + `mode_signal()` binding point (P2: write-via-action, read-via-signal). **No** tree/workspace/drag semantics. DONE — core on branch `grid-ui-region-shell`; **collapsed icon-rail rendering** on branch `grid-ui-icon-rail` (`DockFrame::rail(mode_signal, Glyph)` folds header+body → centered `Icon` while `RegionMode::CollapsedRail`; `ChromeRegion::with_mode_signal` lets a host own the mode signal; showcase `[` toggles the sidebar rail). (Scroll overflow still waits on renderer clip / G7; Dock drop targets are G6.)
 - [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [x] **G2.5 `Row`** — focusable, clickable, single-selectable container for **arbitrary composed content** (`Item`'s interactive chrome — hover/active pill + `ActiveMarker` + press flash + focus ring + `on_activate`/Enter — generalized to wrap any children, e.g. a multi-line `Grid` of `Label`/`Icon`/`Badge`). Optional persistent background under the selection overlay. Unblocks clickable rich Dock rows. DONE — branch `grid-ui-row`.
@@ -89,19 +89,22 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-09 (after the **entire chrome vocabulary**: G1–G8 + Row)
+### 🤝 Handoff — last updated 2026-06-09 (after the **G5 collapsed icon-rail** — G5 now fully complete)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
 
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
-- **Default branch:** `main`. **This branch:** `grid-ui-handoff` (carries this handoff
-  rewrite + one stranded showcase commit — see below).
-- **Merged into `main`** in this session (all chrome vocabulary): **#47** ChromeRegion (G5),
-  **#48** chrome-fixes (paint hidden subtrees + DockFrame padding + selectable rows),
-  **#49** Icon (G2), **#50** Row, **#51** Row-highlight, **#53** Tag/G8. So `main` already
-  contains **G1–G5, G2, Row, G8** — the full buildable chrome vocabulary.
+- **Default branch:** `main`. **This branch:** `grid-ui-icon-rail` (the G5 collapsed
+  icon-rail, off fresh `origin/main`).
+- **Merged into `main`** before this task: **#47** ChromeRegion (G5 core), **#48**
+  chrome-fixes, **#49** Icon (G2), **#50** Row, **#51** Row-highlight, **#53** Tag/G8,
+  **#55** handoff rewrite. So `main` has **G1–G5(core), G2, Row, G8**.
+- **This task (icon-rail):** completes G5. `DockFrame::rail(mode_signal, Glyph)` + a tighter
+  rail inset (`RAIL_PAD`); `ChromeRegion::with_mode_signal` (host-owned mode); showcase `[`
+  toggles the sidebar between full width and the icon rail; 2 new integration tests. **G5 is
+  now fully done** — only G6 (DnD) and G7 (scroll, renderer-blocked) remain of the vocabulary.
 - **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
   push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
   Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
@@ -109,7 +112,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  78 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  80 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -149,11 +152,14 @@ next, and how to start.
   - **G4 `DockFrame`** (`dock_frame.rs`) — titled/collapsible frame: title bar (grip +
     chevron + title + interactive header-controls slot via `.header()`) over a foldable body
     (`.child()`); reuses `Pane`'s brackets via shared `PaintCx::bracket_frame`. Content inset
-    from the frame (`CONTENT_PAD`). `expanded` signal + `on_toggle("dock-toggle")`.
+    from the frame (`CONTENT_PAD`). `expanded` signal + `on_toggle("dock-toggle")`. **Rail mode:**
+    `.rail(region.mode_signal(), Glyph)` folds header+body → a centered `Icon` while the hosting
+    region is `RegionMode::CollapsedRail` (tighter `RAIL_PAD` inset; brackets stay).
   - **G5 `ChromeRegion`** (`chrome_region.rs`) — oriented (`vertical()`/`horizontal()`),
     mode-aware shell hosting Docks. `RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal
-    (`mode_signal()`); collapse sizing; `toggle()` intent; `.dock()`. **No** tree/drag
-    semantics. **Seam:** collapsed icon-rail rendering is NOT built (see What's next).
+    (`mode_signal()` / host-owned via `with_mode_signal()`); collapse sizing; `toggle()` intent;
+    `.dock()`. **No** tree/drag semantics. **Icon-rail DONE:** a rail-aware `DockFrame` (see
+    `DockFrame::rail`) folds to a centered `Icon` in `RegionMode::CollapsedRail`.
   - **`Row`** (`row.rs`) — `Item`'s interactive chrome (hover/active selection pill +
     `ActiveMarker` + press `Flash` + focus ring + `on_activate`/Enter) generalized to wrap
     **any** children. Highlight **derives from the row's own background** (stronger same-hue
@@ -187,21 +193,18 @@ next, and how to start.
 
 #### What's next (in priority order)
 
-1. **Collapsed icon-rail for `ChromeRegion`** (G5 seam, now unblocked by G2+Row) — when
-   `RegionMode::CollapsedRail`, Docks render **icon-only** in the thin rail. Smallest next win;
-   completes G5. The region already sizes to the rail; the rendering is the gap.
-2. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
+1. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
    region drop targets onto the **already-shipped** `heca-grid-ui/src/drag/` framework
    (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). Extend **additively**; never
    fork. Region = a `DragSurfaceId`, a Dock = a `DragItem`. Every drop = a dispatched **action**.
-3. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
+2. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
    `effects::Flash` on a `Row`/`Item` driven by an `attention` signal. **Sound is the host's
    job** (grid-ui is audio-free) — expose a signal/action the app maps to a beep; don't bake
    audio in.
-4. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
-5. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
+3. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
+4. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
    `heca-renderer/src/scene.rs`, renderer dev's area). Only whole-page scroll works.
-6. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
+5. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
    `docs/widgets.md` for the new widgets; **Phase D** app adoption + the §12 `ActionSink`
    keybinding integration; end-user docs last.
 
@@ -213,15 +216,20 @@ next, and how to start.
 - `theme.icon_secondary_alpha` (0.45) — duotone visibility on dark; lower=subtler.
 - `Tag` `RADIUS_MUL` (1.0) — chip roundness.
 
-#### Starting the next task (icon-rail) — pointers
+#### How the icon-rail was built (G5 seam, now closed)
 
-- The mechanism: `ChromeRegion::mode_signal()` is `RegionMode::CollapsedRail`; the region
-  already shrinks to `rail_px`. What's missing is **how Docks render in the rail** (icon-only).
-- A Dock reads the region mode and swaps its `DockFrame` body for an icon (G2 `Icon`) — or
-  `DockFrame` itself learns a rail mode. Decide the cleaner of: (a) the Dock observes
-  `mode_signal()` and rebuilds, vs (b) `DockFrame`/`ChromeRegion` propagate mode to children.
-  Keep grid-ui neutral; the rail shows Dock **icons**, not domain content.
-- New widget wiring is always: file in `widgets/`, export in `mod.rs` + **both** `lib.rs`
+- Chose option (b)+signal-sharing: **`DockFrame` learns a rail mode** by observing the region's
+  `Signal<RegionMode>` (read-only — `Signal` is `Copy`, so obtained via `mode_signal()` before
+  the region is moved into `.dock()`). No downcasting in the region; no rebuild — `sync()` runs
+  each `remeasure` and flips `style.hidden` on the [HEADER, BODY, RAIL] children.
+- `DockFrame::rail(mode_signal, Glyph)` appends a centered `Icon` child at index `RAIL=2`. In
+  `RegionMode::CollapsedRail`, header+body fold (`display:none`), only the icon paints, and the
+  frame inset tightens to `RAIL_PAD` so the icon fits a thin rail. Brackets still draw → each
+  rail icon reads as a small framed dock button.
+- `ChromeRegion::with_mode_signal(Signal<RegionMode>)` lets a host **own** the mode signal (a
+  central layout store) and share it with the docks — the showcase uses this + binds `[` to
+  toggle the sidebar (only when nothing is focused, so it still types into an Input).
+- New widget wiring reminder: file in `widgets/`, export in `mod.rs` + **both** `lib.rs`
   lists, tests in `tests/phase_a.rs` (tail; relative-center asserts), demo in `showcase.rs`.
 
 #### For G6 (DnD) — pointers
@@ -249,7 +257,7 @@ next, and how to start.
 
 ```bash
 cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
-cargo test -p heca-grid-ui                                    # 10 unit + 78 integration + doctests
+cargo test -p heca-grid-ui                                    # 10 unit + 80 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 

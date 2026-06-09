@@ -62,7 +62,10 @@ struct ThemeCtl {
     intensity: Signal<Intensity>,
 }
 
-fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
+fn build_ui(theme: &Theme, ctl: ThemeCtl) -> (Flex, Signal<RegionMode>) {
+    // Host-owned sidebar display mode (G5): the keymap toggles it (`[`), the
+    // region sizes to it, and its rail-aware Docks fold to icons when collapsed.
+    let sidebar_mode = signal(RegionMode::Expanded);
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -109,7 +112,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
     // 20-entry list so the dropdown caps its height and shows a scrollbar.
     let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
 
-    Flex::column()
+    let ui = Flex::column()
         .padding(40.0)
         .gap(28.0)
         .align(Align::Center)
@@ -471,8 +474,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 })
             };
 
-            // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.
+            // G4 DockFrame framing G3 ItemGroups; header slot carries a count
+            // badge. `.rail(...)` makes it fold to a single icon when the sidebar
+            // collapses to its rail (G5) — bound to the host-owned mode signal.
             let explorer = DockFrame::new("EXPLORER")
+                .rail(sidebar_mode, Glyph::FolderOpen)
                 // Inset the header count badge by the Item rows' horizontal
                 // padding (~14px) so it lines up vertically with the rows'
                 // trailing badges instead of sitting flush at the frame edge.
@@ -500,6 +506,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 Item::new(name).leading(icon).trailing(tag)
             };
             let source_control = DockFrame::new("SOURCE CONTROL")
+                .rail(sidebar_mode, Glyph::GitBranch)
                 .header(
                     Flex::row()
                         .align(Align::Center)
@@ -510,9 +517,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 .child(git_row(Icon::new(Glyph::Plus).color(theme.success).size(18.0), "showcase.rs", Badge::success("A")))
                 .child(git_row(Icon::new(Glyph::Minus).color(theme.danger).size(18.0), "old_sidebar.rs", Badge::danger("D")));
 
-            // G5 ChromeRegion: a vertical sidebar shell hosting the docks.
+            // G5 ChromeRegion: a vertical sidebar shell hosting the docks. Bound
+            // to the host-owned mode signal so `[` collapses it to the icon rail.
             let sidebar = ChromeRegion::vertical()
+                .with_mode_signal(sidebar_mode)
                 .expanded_size(340.0)
+                .rail_size(64.0)
                 .gap(14.0)
                 .padding(14.0)
                 .background(theme.surface)
@@ -548,7 +558,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
             let panes_col = Flex::column().width(Length::Px(380.0)).child(panes);
 
             Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(panes_col)
-        })
+        });
+    (ui, sidebar_mode)
 }
 
 /// Shift every node's absolute bounds down by `dy` (negative scrolls the page up).
@@ -605,6 +616,8 @@ struct GpuState {
     scale_factor: f64,
     theme: Theme,
     ui: Flex,
+    /// Host-owned sidebar display mode (G5); `[` toggles expanded ⇄ icon rail.
+    sidebar_mode: Signal<RegionMode>,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -677,7 +690,7 @@ impl GpuState {
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
         };
-        let ui = build_ui(&theme, ctl);
+        let (ui, sidebar_mode) = build_ui(&theme, ctl);
 
         Self {
             window,
@@ -690,6 +703,7 @@ impl GpuState {
             scale_factor,
             theme,
             ui,
+            sidebar_mode,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -898,6 +912,16 @@ impl ApplicationHandler for App {
                             state.focus.deliver_key(&mut state.ui, GridKey::Escape);
                         }
                         GridKey::Escape => state.focus.clear(&mut state.ui),
+                        // `[` collapses the sidebar to its icon rail (G5) and back,
+                        // but only when nothing is focused — so it still types into
+                        // a focused Input.
+                        GridKey::Char('[') if state.focus.focused().is_none() => {
+                            let next = match state.sidebar_mode.get_untracked() {
+                                RegionMode::CollapsedRail => RegionMode::Expanded,
+                                _ => RegionMode::CollapsedRail,
+                            };
+                            state.sidebar_mode.set(next);
+                        }
                         // Space/Enter (and others) go to the focused widget.
                         other => {
                             state.focus.deliver_key(&mut state.ui, other);
