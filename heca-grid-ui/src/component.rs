@@ -166,12 +166,7 @@ pub trait Component {
 
     /// Handle an event. Default: route to children, last-added first.
     fn event(&mut self, ev: &Event) -> Handled {
-        for child in self.base_mut().children.iter_mut().rev() {
-            if child.event(ev) == Handled::Yes {
-                return Handled::Yes;
-            }
-        }
-        Handled::No
+        route_event(&mut self.base_mut().children, ev)
     }
 
     /// Called when this component gains keyboard focus. Default: set the focus
@@ -211,6 +206,21 @@ pub trait Component {
         }
         animating
     }
+}
+
+/// Route `ev` to `children` last-added first (top z-order wins), stopping at the
+/// first that consumes it. This is the default [`Component::event`] behavior,
+/// exposed so containers that *wrap* event handling — e.g. detecting a toggle
+/// after delegating to a header (see [`ItemGroup`](crate::widgets::ItemGroup),
+/// [`DockFrame`](crate::widgets::DockFrame)) — reuse it instead of re-rolling the
+/// reverse loop.
+pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Handled {
+    for child in children.iter_mut().rev() {
+        if child.event(ev) == Handled::Yes {
+            return Handled::Yes;
+        }
+    }
+    Handled::No
 }
 
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].

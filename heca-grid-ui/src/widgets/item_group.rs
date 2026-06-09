@@ -9,7 +9,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{Base, Component, Event, Handled};
+use crate::component::{route_event, Base, Component, Event, Handled};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::Direction;
 use crate::widgets::{Item, Label};
@@ -103,16 +103,7 @@ impl Component for ItemGroup {
     fn event(&mut self, ev: &Event) -> Handled {
         let was = self.expanded.get_untracked();
         // Default routing lets the header Item flip `expanded` on click/Enter.
-        let handled = {
-            let mut h = Handled::No;
-            for child in self.base.children.iter_mut().rev() {
-                if child.event(ev) == Handled::Yes {
-                    h = Handled::Yes;
-                    break;
-                }
-            }
-            h
-        };
+        let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {
             self.sync();

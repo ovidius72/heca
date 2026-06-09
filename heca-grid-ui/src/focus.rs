@@ -10,11 +10,20 @@ use crate::reactive::SignalGet;
 use heca_core::layout::Point;
 
 /// Visit every focusable component depth-first, calling `f(index, component)`.
+///
+/// A subtree hidden via `style.hidden` (taffy `display: none`, e.g. a collapsed
+/// [`ItemGroup`](crate::widgets::ItemGroup)/[`DockFrame`](crate::widgets::DockFrame))
+/// is skipped entirely — matching the web, where `display: none` removes an
+/// element and its descendants from the tab order — so collapsed content can't
+/// be Tab-focused or receive key events while invisible.
 fn for_each_focusable(
     c: &mut dyn Component,
     idx: &mut usize,
     f: &mut dyn FnMut(usize, &mut dyn Component),
 ) {
+    if c.base().style.hidden {
+        return;
+    }
     if c.focusable() {
         f(*idx, c);
         *idx += 1;

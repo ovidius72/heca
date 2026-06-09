@@ -1626,24 +1626,31 @@ fn grid_places_children_in_named_areas_and_cells() {
 }
 
 #[test]
-fn dock_frame_collapses_body_out_of_layout() {
+fn dock_frame_body_has_height_when_expanded() {
     use heca_grid_ui::DockFrame;
-    // Title bar over a fixed-size body block.
     let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));
 
-    // Expanded: header + body both take height.
     LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
-    let expanded_h = dock.base().bounds.size.h;
+
     let body_h = dock.base().children[1].base().bounds.size.h;
     assert!(body_h > 0.0, "expanded body has height");
+}
+
+#[test]
+fn dock_frame_collapse_folds_body_out_of_layout() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+    let expanded_h = dock.base().bounds.size.h;
 
     // Collapse via the expanded signal, relayout: body folds away (display:none).
     dock.state().set(false);
     LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+
+    let body_h = dock.base().children[1].base().bounds.size.h;
+    assert_eq!(body_h, 0.0, "collapsed body takes no layout space");
     let collapsed_h = dock.base().bounds.size.h;
-    let body_hc = dock.base().children[1].base().bounds.size.h;
     assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
-    assert_eq!(body_hc, 0.0, "collapsed body takes no layout space");
 }
 
 #[test]
@@ -1690,4 +1697,30 @@ fn dock_frame_header_control_receives_events_before_toggle() {
 
     assert_eq!(control_clicks.get(), 1, "header control received the click");
     assert!(dock.state().get_untracked(), "clicking the control did not toggle the frame");
+}
+
+#[test]
+fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
+    use heca_grid_ui::{DockFrame, FocusManager};
+
+    // Header toggle + one interactive body row are both focusable when expanded.
+    let mut dock = DockFrame::new("FILES").child(Item::new("file.rs").on_activate(|| {}));
+    LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "header toggle is first in tab order");
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(1), "body row is tabbable while expanded");
+
+    // Collapse + relayout: the body subtree becomes display:none and drops out of
+    // the tab order, so only the header toggle remains (forward Tab wraps to it).
+    dock.state().set(false);
+    LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "only the header toggle is focusable when collapsed");
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "collapsed body row is not reachable by Tab");
 }

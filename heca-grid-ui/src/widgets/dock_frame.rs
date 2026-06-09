@@ -16,7 +16,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{Base, Component, Event, Handled, PaintCx};
+use crate::component::{route_event, Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Direction};
 use crate::widgets::{Flex, Item, Label};
@@ -80,6 +80,13 @@ impl DockFrame {
         base.style.direction = Direction::Column;
         base.children.push(Box::new(header));
         base.children.push(Box::new(body));
+        // Invariant relied on by `header`/`child`/`sync` index access below.
+        debug_assert_eq!(base.children.len(), 2, "DockFrame children: [HEADER, BODY]");
+        debug_assert_eq!(
+            base.children[HEADER].base().children.len(),
+            2,
+            "DockFrame header children: [toggle, CONTROLS]"
+        );
         Self { base, expanded, chevron, on_toggle: None }
     }
 
@@ -167,16 +174,7 @@ impl Component for DockFrame {
         let was = self.expanded.get_untracked();
         // Default routing lets the header's toggle Item flip `expanded` on
         // click/Enter (and lets the controls slot consume events first).
-        let handled = {
-            let mut h = Handled::No;
-            for child in self.base.children.iter_mut().rev() {
-                if child.event(ev) == Handled::Yes {
-                    h = Handled::Yes;
-                    break;
-                }
-            }
-            h
-        };
+        let handled = route_event(&mut self.base.children, ev);
         let now = self.expanded.get_untracked();
         if now != was {
             self.sync();
