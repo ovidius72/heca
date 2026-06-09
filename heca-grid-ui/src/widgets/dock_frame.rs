@@ -16,7 +16,7 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{route_event, Base, Component, Event, Handled, PaintCx};
+use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::{Align, Direction};
 use crate::widgets::{Flex, Item, Label};
@@ -164,9 +164,10 @@ impl Component for DockFrame {
         // Prominent flat corner-bracket frame (shared with Pane).
         cx.bracket_frame(b, fill);
 
-        // Header + body draw themselves; the collapsed body has zero bounds.
+        // Header + body draw themselves; a collapsed (hidden) body is skipped so
+        // its rows don't stamp at the layout-collapsed top-left.
         for child in &self.base.children {
-            child.paint(cx);
+            paint_child(child.as_ref(), cx);
         }
     }
 

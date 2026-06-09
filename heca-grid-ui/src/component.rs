@@ -160,7 +160,7 @@ pub trait Component {
         }
         cx.paint_base(self.base());
         for child in &self.base().children {
-            child.paint(cx);
+            paint_child(child.as_ref(), cx);
         }
     }
 
@@ -221,6 +221,20 @@ pub(crate) fn route_event(children: &mut [Box<dyn Component>], ev: &Event) -> Ha
         }
     }
     Handled::No
+}
+
+/// Paint a child, unless it is hidden via `style.hidden` (taffy `display: none`).
+/// A `display: none` subtree is collapsed to zero size at the top-left by layout,
+/// so painting it would stamp its (stale, overlapping) contents there — every
+/// container skips hidden children instead, matching the web. Containers with
+/// bespoke paint loops (e.g. [`Pane`](crate::widgets::Pane),
+/// [`DockFrame`](crate::widgets::DockFrame)) reuse this so a collapsed body/group
+/// never bleeds onto the rest of the tree.
+pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
+    if c.base().style.hidden {
+        return;
+    }
+    c.paint(cx);
 }
 
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].

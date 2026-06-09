@@ -8,7 +8,7 @@
 //! brackets and defaults to a vertical (column) layout.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{Base, Component, PaintCx};
+use crate::component::{paint_child, Base, Component, PaintCx};
 use crate::reactive::SignalGet;
 use crate::style::Direction;
 
@@ -57,9 +57,9 @@ impl Component for Pane {
         // Prominent flat corner-bracket frame (shared with DockFrame).
         cx.bracket_frame(b, fill);
 
-        // Children (sidebar Items, pane content, …).
+        // Children (sidebar Items, pane content, …); skip any hidden (collapsed).
         for child in &self.base.children {
-            child.paint(cx);
+            paint_child(child.as_ref(), cx);
         }
     }
 }
