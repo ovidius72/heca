@@ -9,6 +9,9 @@ pub mod terminal;
 pub use fake::FakeBackend;
 
 /// Type of pane backend.
+///
+/// Currently only `Terminal` is implemented. Future backends (Neovim, Browser)
+/// will add variants here. The `PaneBackend::pane_type()` trait method returns this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneType {
     Terminal,
