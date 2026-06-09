@@ -144,7 +144,7 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
     // Swap mode: update interactive_move_offset so the pane follows the cursor.
     // Move mode (non-detached): same — pane follows cursor via offset.
     let source_id = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { _pane_id, .. }) => _pane_id,
+        Some(InteractiveMovePhase::Moving { pane_id, .. }) => pane_id,
         _ => return,
     };
 
@@ -225,7 +225,7 @@ fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32
     );
 
     state.mouse.interactive_move = Some(InteractiveMovePhase::Moving {
-        _pane_id: pane_id,
+        pane_id,
         _original_ws: original_ws,
         offset,
         swap,

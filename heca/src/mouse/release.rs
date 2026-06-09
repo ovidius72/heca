@@ -12,7 +12,7 @@ use crate::input::WmAction;
 /// drop target), with sidebar drop as a fallback.
 pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f32)) {
     let (swap, source_id) = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { swap, _pane_id, .. }) => (swap, _pane_id),
+        Some(InteractiveMovePhase::Moving { swap, pane_id, .. }) => (swap, pane_id),
         _ => return,
     };
 

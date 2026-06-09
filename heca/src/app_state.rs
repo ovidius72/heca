@@ -120,7 +120,7 @@ pub enum InteractiveMovePhase {
     /// Phase 2: detached — pane follows pointer (move mode).
     /// In swap mode, the pane stays in layout and only the insert hint is shown.
     Moving {
-        _pane_id: u64,
+        pane_id: u64,
         /// Workspace where the drag originated.
         _original_ws: usize,
         /// Mouse offset from pane top-left at grab time.

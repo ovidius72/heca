@@ -203,7 +203,7 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
     let pa_h = pane_area.size.h as f32;
     // Exclude the dragged source pane so it doesn't highlight itself.
     let exclude_id = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { swap: true, _pane_id, .. }) => Some(_pane_id),
+        Some(InteractiveMovePhase::Moving { swap: true, pane_id, .. }) => Some(pane_id),
         _ => None,
     };
     let target_id = match hit_test_pane_excluding(state, state.mouse.pos, exclude_id) {

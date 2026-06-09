@@ -203,11 +203,6 @@ pub(crate) fn accept_drop(
     // Clear all drag state first.
     state.mouse.drag_ctx.cancel_all();
     state.mouse.interactive_move = None;
-    if let Some(s) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
-        s.hover_item = None;
-        s.source_item = None;
-        s.ghost_label = None;
-    }
 
     if swap {
         let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
@@ -404,7 +399,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
 
     // Source pane is in the layout. Get its ID from the drag state.
     let source_id = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { _pane_id, .. }) => _pane_id,
+        Some(InteractiveMovePhase::Moving { pane_id, .. }) => pane_id,
         _ => return false,
     };
 

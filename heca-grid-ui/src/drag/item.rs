@@ -20,7 +20,7 @@ pub enum DragSurfaceId {
 /// grid coordinate, etc.). Use [`DragItemId::new`] to construct and
 /// [`DragItemId::raw`] to extract the inner value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct DragItemId(pub usize);
+pub struct DragItemId(usize);
 
 impl DragItemId {
     /// Create a new item ID from a flat index.
