@@ -1592,3 +1592,35 @@ fn item_group_collapses_rows_out_of_layout() {
     assert!(collapsed_h < expanded_h, "collapsed group is shorter ({collapsed_h} < {expanded_h})");
     assert_eq!(r1c, 0.0, "collapsed rows take no layout space");
 }
+
+#[test]
+fn grid_places_children_in_named_areas_and_cells() {
+    use heca_grid_ui::{Grid, Length, Track};
+    // 2 cols × 2 rows; areas: icon spans both rows in col 1, title top-right,
+    // sub bottom-right. Fixed sizes so we can assert exact bounds.
+    let mut grid = Grid::new()
+        .columns([Track::Px(40.0), Track::Px(100.0)])
+        .rows([Track::Px(20.0), Track::Px(20.0)])
+        .areas(["icon title", "icon sub"])
+        .area(Flex::column(), "icon")
+        .area(Flex::column(), "title")
+        .area(Flex::column(), "sub")
+        // explicit cell: a 4th child pinned to col2,row2.
+        .cell(Flex::column(), 2, 2, 1, 1);
+
+    LayoutEngine::new().compute(&mut grid, Size::new(140.0, 40.0));
+
+    let icon = grid.base().children[0].base().bounds;
+    let title = grid.base().children[1].base().bounds;
+    let sub = grid.base().children[2].base().bounds;
+
+    // icon: col 1 (x≈0), spans both rows (height≈40).
+    assert!(icon.loc.x < 1.0, "icon in column 1");
+    assert!((icon.size.h - 40.0).abs() < 1.0, "icon spans both rows");
+    // title: col 2 (x≈40), top row (y≈0).
+    assert!((title.loc.x - 40.0).abs() < 1.0, "title in column 2");
+    assert!(title.loc.y < 1.0, "title in top row");
+    // sub: col 2, bottom row (y≈20).
+    assert!((sub.loc.x - 40.0).abs() < 1.0, "sub in column 2");
+    assert!((sub.loc.y - 20.0).abs() < 1.0, "sub in bottom row");
+}

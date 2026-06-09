@@ -60,6 +60,48 @@ impl Length {
     }
 }
 
+/// One column/row track size for a [`Grid`](crate::widgets::Grid).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Track {
+    /// Fixed logical pixels.
+    Px(f32),
+    /// A fraction of the leftover free space (`1fr`, `2fr`, …).
+    Fr(f32),
+    /// Sized to fit content / grid rules.
+    Auto,
+    /// Shrink to the minimum the content allows.
+    MinContent,
+    /// Grow to the maximum the content wants.
+    MaxContent,
+}
+
+impl Track {
+    fn to_taffy(self) -> taffy::style::TrackSizingFunction {
+        use taffy::prelude::*;
+        match self {
+            Track::Px(v) => length(v),
+            Track::Fr(v) => fr(v),
+            Track::Auto => auto(),
+            Track::MinContent => min_content(),
+            Track::MaxContent => max_content(),
+        }
+    }
+}
+
+/// Placement of a child within a [`Grid`](crate::widgets::Grid): a 1-based start
+/// column/row plus a span. `Copy`, so it lives on [`Style`] without breaking it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GridCell {
+    /// 1-based start column.
+    pub col: u16,
+    /// 1-based start row.
+    pub row: u16,
+    /// Number of columns spanned (≥ 1).
+    pub col_span: u16,
+    /// Number of rows spanned (≥ 1).
+    pub row_span: u16,
+}
+
 impl Justify {
     fn to_taffy(self) -> taffy::JustifyContent {
         use taffy::JustifyContent as J;
@@ -115,6 +157,9 @@ pub struct Style {
     /// takes no space and paints nothing. Used by collapsible containers
     /// (e.g. [`ItemGroup`](crate::widgets::ItemGroup)) to fold rows away.
     pub hidden: bool,
+    /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
+    /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
+    pub grid_cell: Option<GridCell>,
 }
 
 impl Default for Style {
@@ -139,6 +184,7 @@ impl Default for Style {
             font_size: 0.0,
             font_scale: 1.0,
             hidden: false,
+            grid_cell: None,
         }
     }
 }
@@ -175,7 +221,34 @@ impl Style {
             flex_grow: self.flex_grow,
             // Widgets use explicit Px sizes; never let a flex container squish them.
             flex_shrink: 0.0,
+            // Child placement when this component sits in a Grid (else Auto).
+            grid_column: grid_line(self.grid_cell.map(|c| (c.col, c.col_span))),
+            grid_row: grid_line(self.grid_cell.map(|c| (c.row, c.row_span))),
             ..Default::default()
         }
+    }
+
+    /// Build a **grid container** taffy style: the flex/box fields from
+    /// `to_taffy()` plus `display: grid` and the given column/row tracks.
+    /// Used by [`Grid`](crate::widgets::Grid) via `Component::taffy_style`.
+    pub fn to_taffy_grid(&self, columns: &[Track], rows: &[Track]) -> taffy::Style {
+        let mut s = self.to_taffy();
+        s.display = taffy::Display::Grid;
+        s.grid_template_columns = columns.iter().map(|t| t.to_taffy()).collect();
+        s.grid_template_rows = rows.iter().map(|t| t.to_taffy()).collect();
+        s
+    }
+}
+
+/// Map a 1-based `(start, span)` to a taffy grid line, or `Auto` when `None`.
+fn grid_line(cell: Option<(u16, u16)>) -> taffy::geometry::Line<taffy::style::GridPlacement> {
+    use taffy::prelude::{line, span};
+    match cell {
+        // `line(n)` → start at grid line n; `span(k)` → end as a k-track span.
+        Some((start, sp)) => taffy::geometry::Line {
+            start: line::<taffy::style::GridPlacement>(start as i16),
+            end: span::<taffy::style::GridPlacement>(sp.max(1)),
+        },
+        None => taffy::style::Style::DEFAULT.grid_column,
     }
 }
