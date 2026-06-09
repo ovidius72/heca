@@ -349,8 +349,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         1.0,
     );
     let candidates = state.input_mode.candidates();
-    let drag_hover_fi = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.hover_item.map(|id| id.raw()));
-    let drag_source_fi = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.source_item.map(|id| id.raw()));
+    let drag_hover = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.hover_item);
+    let drag_source = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.source_item);
     let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
     let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
     if chrome.left_sidebar_width >= 80.0 {
@@ -374,8 +374,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             state.focused_pane,
             &mut state.text_renderer,
             &mut state.primitive_renderer,
-            drag_hover_fi,
-            drag_source_fi,
+            drag_hover,
+            drag_source,
             drag_source_bg,
             drag_source_border,
             state.mouse.sidebar_hovered_btn_idx,
@@ -403,8 +403,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             state.focused_pane,
             &mut state.text_renderer,
             &mut state.primitive_renderer,
-            drag_hover_fi,
-            drag_source_fi,
+            drag_hover,
+            drag_source,
             drag_source_bg,
             drag_source_border,
             state.mouse.sidebar_hovered_btn_idx,

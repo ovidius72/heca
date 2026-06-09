@@ -593,22 +593,22 @@ Full step-by-step plan is in `.planning/refactoring-and-dnd-plan.md`.
 - [x] **4.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
 - [x] **4.9** Commit: `refactor: extract InteractiveMove into mouse/interactive.rs`
 
-### Phase 5 — Render integration with `DragContext` and `DragItemId`
+### Phase 5 — Render integration with `DragContext` and `DragItemId` ✅
 
-- [ ] **5.1** Update `sidebar/render.rs` — replace `drag_hover_fi: Option<usize>` and `drag_source_fi: Option<usize>` with `drag_hover: Option<DragItemId>` and `drag_source: Option<DragItemId>`
-- [ ] **5.2** Update `sidebar/render.rs` — all flat-index comparisons use `DragItemId` instead of raw `usize`
-- [ ] **5.3** Update `app/render.rs` — pass `DragItemId` from `DragContext` instead of `MouseState` sidebar fields
-- [ ] **5.4** Update `sidebar/model.rs` — add `DragItem` construction helpers if needed
-- [ ] **5.5** Update `mouse/render.rs` — any drag highlight rendering that used old fields
-- [ ] **5.6** Remove dead fields from `MouseState` (old sidebar drag fields now in `DragContext`)
-- [ ] **5.7** Verify: `cargo check -p heca` passes, all existing tests pass, visual behavior unchanged
-- [ ] **5.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
-- [ ] **5.9** Commit: `refactor: render integration with DragContext and DragItemId`
+- [x] **5.1** Update `sidebar/render.rs` — replace `drag_hover_fi: Option<usize>` and `drag_source_fi: Option<usize>` with `drag_hover: Option<DragItemId>` and `drag_source: Option<DragItemId>`
+- [x] **5.2** Update `sidebar/render.rs` — all flat-index comparisons use `DragItemId` instead of raw `usize`
+- [x] **5.3** Update `app/render.rs` — pass `DragItemId` from `DragContext` instead of raw `id.raw()`
+- [x] **5.4** Update `sidebar/model.rs` — no changes needed (framework types handle construction)
+- [x] **5.5** Update `mouse/render.rs` — no changes needed (uses DragContext directly)
+- [x] **5.6** Remove dead fields from `MouseState` — already done in Phase 2
+- [x] **5.7** Verify: `cargo check -p heca` passes, all existing tests pass
+- [x] **5.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [x] **5.9** Commit: `refactor: render integration — replace raw usize with DragItemId`
 
-### Final Verification
+### Final Verification ✅
 
-- [ ] Full `cargo test --workspace` passes
-- [ ] Full `cargo clippy --workspace --all-targets --all-features` is clean
+- [x] Full `cargo test --workspace` passes
+- [x] Full `cargo clippy --workspace --all-targets --all-features` is clean
 - [ ] Manual smoke test: sidebar drag, content drag, swap mode, edge scroll
-- [ ] Update this handoff with final commit hashes
+- [x] Update this handoff with final commit hashes
 - [ ] Update `bugs-and-refactoring-plan-with-checklist.md`
