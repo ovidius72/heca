@@ -91,10 +91,17 @@ impl ActionRegistry {
     }
 
     /// Execute the handler for `action`, if one is registered.
+    ///
+    /// In debug builds, panics if no handler is registered (this is a bug —
+    /// every `WmAction` variant must have a handler in `build_registry()`).
+    /// In release builds, silently does nothing.
     pub fn execute(&self, action: &crate::input::WmAction, state: &mut crate::app_state::AppState) {
         let disc = crate::input::action_discriminant(action);
         if let Some(handler) = self.handlers.get(&disc) {
             handler(state, action);
+        } else {
+            #[cfg(debug_assertions)]
+            panic!("no handler registered for action: {:?}", action);
         }
     }
 

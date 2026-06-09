@@ -2,80 +2,53 @@
 
 ## Current state
 
-- Branch: `feature/gpt-refactoring` (29 commits ahead of main)
-- PR #36 open → main (merged by user)
+- Branch: `feature/phase6-stale-state` (7 commits, PR #42 open → main)
+- Previous PRs: #34 (Track 1, merged), #36 (Track 2 + Phases 1-5, merged), #42 (Phase 6, open)
 - Working tree: **clean**
-- All 204 tests pass, clippy clean
+- All 204 tests pass, clippy clean (except `block v0.1.6` external dep warning from metal/wgpu)
 
 ## What was completed
 
-### Track 1 — Rust Code Hygiene (7 commits)
+### Phases 1-5 (PR #36, merged)
+
+| Phase | Focus |
+|-------|-------|
+| 1 — File Reorganization | Split monolithic files, sidebar mode keymap |
+| 2 — Central Mutation Boundary | after_layout_change hook, mutation helpers |
+| 3 — DnD Surface Dispatch + Shared Pane Ops | DragContext, enum dispatch, pane_ops, ad hoc scan removal |
+| 4 — Sidebar Projection Model | SidebarItemKind, sync_from_session, HashMap pane lookup |
+| 5 — Backend Lifecycle | BackendStore wrapper, lifecycle contract, batch helper |
+
+### Phase 6 (PR #42, open)
 
 | Commit | What |
 |--------|------|
-| `0f8732b` | Delete dead `mouse/drop.rs`, clean `InputMode::Chord` allow |
-| `dfec127` | Descriptive messages to 4 `unreachable!()` calls |
-| `9caa0e9` | `Rectangle` type instead of `(f32,f32,f32,f32)` tuples |
-| `52d16f6` | Chrome constants (`DEFAULT_TAB_BAR_HEIGHT`, etc.) into `chrome.rs` |
-| `a9af698` | Split 163-line `on_cursor_moved()` into 4 named helpers |
-| `3a54281` | Extract mouse release handlers into `mouse/release.rs` |
-| `7329096` | Trailing newline fix, doc improvements |
+| `95986dd` | 6.1: Migrate Rect→Rectangle, delete heca-core/src/types.rs |
+| `ab05f43` | 6.2: Remove dormant fields (floating_visible, is_pinned, active_tab, tab_names) |
+| `9be4372` | 6.3: Remove placeholder backend variants (PaneType::Neovim/Browser) |
+| `c48903f` | 6.4: Fix ActionRegistry::ALL metadata drift |
+| `05e9903` | 6.5: Replace broad #![allow(dead_code)] with targeted per-item allows |
+| `d9f8d52` | Docs: mark Phase 6 complete |
+| `86d409a` | Rust skill review: add forward-compat doc on PaneType |
 
-### Track 2 — Surface-Agnostic DnD Architecture (5 phases)
+## Remaining phases
 
-| # | Phase | Commit | What |
-|---|-------|--------|------|
-| 1 | Framework types | `631c11a` | `DragSurfaceId`, `DragItemId`, `SurfaceDragPhase`, `DragContext`, `rubberband()` |
-| 2 | App integration | `4fb4a0f` | Replace `DragState` with `DragContext` + `InteractiveMovePhase` |
-| 3 | Enum dispatch | `ff9ba65` | `target.rs` + `surface_left.rs`; delete `sidebar.rs`/`sidebar_drop.rs` |
-| 4 | InteractiveMove | `3d196c2` | Extract `mouse/interactive.rs`; `drag.rs` shrinks 45% |
-| 5 | Render types | `da22633` | `Option<DragItemId>` instead of raw `usize` in render path |
-| — | Wire dispatch | `94c1c66` | Route mouse.rs/release.rs through `target::surface_*()` dispatch |
+| Phase | Status | Focus |
+|-------|--------|-------|
+| 7 — Typed Errors | ⬜ Pending | Stable boundary errors, action dispatch failure, unsafe hygiene |
+| 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
+| 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
+| 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |
 
-### Rust Skill Review Fixes (1 commit)
+## Key rules to remember
 
-| Commit | What |
-|--------|------|
-| `d4a7c78` | `DragItemId` field private; remove redundant state clear; rename `_pane_id`→`pane_id` |
+1. **Load Rust skill file and check every rule before committing** — not just a quick summary
+2. **Run `cargo clippy --workspace --all-targets --all-features` without filtering warnings**
+3. **Wait for user approval before committing**
+4. **`block v0.1.6` warning** — external dep (metal→wgpu), not ours to fix
 
-## Files changed
+## Important files
 
-- **Created (6):** `heca-grid-ui/src/drag/{mod,item,state,context,math}.rs`, `heca/src/mouse/{target,interactive,release,surface_left}.rs`
-- **Deleted (2):** `heca/src/mouse/{sidebar,sidebar_drop}.rs`
-- **Modified (13+):** `app_state.rs`, `mouse.rs`, `drag.rs`, `render.rs` (sidebar + app), `Cargo.toml`, etc.
-
-## Remaining work in original refactoring plan
-
-### Phase 3 — Extract Shared Pane Operation Logic (in progress)
-- [x] 3.1 Pane-ops layer exists (`app/pane_ops.rs`) — done
-- [~] 3.2 Simplify handlers to dispatchers — **partial** (target.rs dispatch done, `handle_swap_param` still needs delegation)
-- [ ] 3.3 Reduce cross-file ad hoc search logic — not started
-
-### Phase 4 — Redesign Sidebar Projection and Interaction Model
-- Not started
-
-### Phase 5 — Backend Runtime Ownership Cleanup
-- Not started
-
-### Phase 6 — Remove Stale/Dormant/Drifting State
-- Track 1 partially addressed (removed `drop.rs`, cleaned unreachable, removed sidebar.rs/ sidebar_drop.rs)
-- Review of dormant fields, placeholder backends, action metadata drift remaining
-
-### Phase 7 — Typed Errors
-- Not started
-
-### Phase 8 — Constants, Polish, Performance
-- Track 1 extracted chrome constants; Track 2 added `DEFAULT_COLLAPSED_SIDEBAR_WIDTH` and `DEFAULT_DRAG_THRESHOLD_SQ`
-- Rest not started
-
-### Phase 9 — Floating vs Tiled Focus-Domain Routing
-- Not started
-
-### Phase 10 — Final Verification
-- Not started
-
-## Next steps
-
-1. **Merge PR #36** (user doing this)
-2. **Start Phase 3.2 remainder** — refactor `handle_swap_param()` to delegate to shared helpers from `pane_ops.rs`
-3. Or pivot to higher-priority work (user to decide)
+- Checklist: `bugs-and-refactoring-plan-with-checklist.md`
+- Roadmap: `.planning/ROADMAP.md`
+- Agent rules: `AGENTS.md` (rule #9: Rust skill review before every commit)

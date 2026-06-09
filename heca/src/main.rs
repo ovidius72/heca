@@ -57,12 +57,12 @@ struct HecaApp {
 
 impl HecaApp {
     /// Parse and execute an RPC command string.
-    /// Returns the parsed action on success, or an error string on failure.
+    /// Returns the parsed action on success, or an error on failure.
     // Transitional: will be used by the RPC server / socket listener in Phase 5.
     #[allow(dead_code)]
-    pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<WmAction, String> {
-        let state = self.state.as_mut().ok_or("app not initialized")?;
-        let action = rpc::parse_rpc_command(cmd).map_err(|e| e.to_string())?;
+    pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<WmAction, rpc::RpcError> {
+        let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
+        let action = rpc::parse_rpc_command(cmd)?;
         self.registry.execute(&action, state);
         Ok(action)
     }

@@ -7,6 +7,7 @@ pub mod fake;
 pub mod terminal;
 
 pub use fake::FakeBackend;
+pub use terminal::PtyError;
 
 /// Type of pane backend.
 ///

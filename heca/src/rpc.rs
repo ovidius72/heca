@@ -30,6 +30,8 @@ pub enum RpcError {
     MissingArgument { cmd: String, arg: String },
     ParseInt { cmd: String, value: String },
     ParseFloat { cmd: String, value: String },
+    /// The app is not yet initialized (no state available).
+    NotInitialized,
 }
 
 impl std::fmt::Display for RpcError {
@@ -45,6 +47,7 @@ impl std::fmt::Display for RpcError {
             RpcError::ParseFloat { cmd, value } => {
                 write!(f, "command '{cmd}' expected float, got: {value}")
             }
+            RpcError::NotInitialized => write!(f, "app not initialized"),
         }
     }
 }

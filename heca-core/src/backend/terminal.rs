@@ -371,6 +371,45 @@ impl vte::Perform for Grid {
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
 }
 
+/// Errors that can occur when creating a PTY.
+#[derive(Debug)]
+pub enum PtyError {
+    /// The `openpty` call failed (Unix).
+    OpenPtyFailed,
+    /// The `dup` call failed on a slave file descriptor (Unix).
+    DupSlaveFailed,
+    /// Could not spawn the child shell process.
+    SpawnFailed(std::io::Error),
+    /// Could not dup the master FD for the reader thread (Unix).
+    DupMasterFailed,
+    /// Could not take stdin/stdout from the child (non-Unix stub).
+    NoStdio(&'static str),
+}
+
+impl std::fmt::Display for PtyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PtyError::OpenPtyFailed => write!(f, "openpty failed"),
+            PtyError::DupSlaveFailed => write!(f, "dup slave fd failed"),
+            PtyError::SpawnFailed(e) => write!(f, "spawn failed: {e}"),
+            PtyError::DupMasterFailed => write!(f, "failed to dup PTY master fd"),
+            PtyError::NoStdio(which) => write!(f, "no {which} from child process"),
+        }
+    }
+}
+
+impl std::error::Error for PtyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            PtyError::SpawnFailed(e) => Some(e),
+            PtyError::OpenPtyFailed => None,
+            PtyError::DupSlaveFailed => None,
+            PtyError::DupMasterFailed => None,
+            PtyError::NoStdio(_) => None,
+        }
+    }
+}
+
 /// Cross-platform PTY handle.
 enum PtyHandle {
     #[cfg(unix)]
@@ -385,12 +424,15 @@ enum PtyHandle {
 
 impl PtyHandle {
     #[cfg(unix)]
-    fn new_unix(cols: u16, rows: u16) -> Result<Self, String> {
+    fn new_unix(cols: u16, rows: u16) -> Result<Self, PtyError> {
         use std::os::fd::FromRawFd;
 
         let mut master: libc::c_int = 0;
         let mut slave: libc::c_int = 0;
 
+        // SAFETY: openpty is a POSIX syscall. The pointers to master/slave are valid
+        // stack-local i32s. The termios and winsize pointers are NULL (use defaults).
+        // The returned fds are checked for <0 (error) before use.
         unsafe {
             if libc::openpty(
                 &mut master,
@@ -400,7 +442,7 @@ impl PtyHandle {
                 std::ptr::null_mut(),
             ) < 0
             {
-                return Err("openpty failed".to_string());
+                return Err(PtyError::OpenPtyFailed);
             }
         }
 
@@ -410,6 +452,8 @@ impl PtyHandle {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
+        // SAFETY: master is a valid open PTY fd from openpty. ioctl(TIOCSWINSZ)
+        // sets the terminal window size; &ws is a valid pointer to a winsize struct.
         unsafe {
             libc::ioctl(master, libc::TIOCSWINSZ, &ws);
         }
@@ -422,23 +466,28 @@ impl PtyHandle {
             }
         });
 
-        // Dup the slave fd for each stdio stream so each OwnedFd owns a unique fd.
+        // SAFETY: slave is a valid open fd from openpty. dup() creates a new fd
+        // referring to the same PTY slave. Each dup result is checked for <0 below.
         let slave_in = unsafe { libc::dup(slave) };
         let slave_out = unsafe { libc::dup(slave) };
         let slave_err = unsafe { libc::dup(slave) };
         if slave_in < 0 || slave_out < 0 || slave_err < 0 {
-            return Err("dup slave fd failed".to_string());
+            return Err(PtyError::DupSlaveFailed);
         }
 
         use std::os::unix::process::CommandExt;
         let _child = std::process::Command::new(&shell)
             .arg0(&shell)
+            // SAFETY: slave_in/out/err are valid dup'd fds. from_raw_fd takes ownership;
+            // the child process inherits these as its stdin/stdout/stderr.
             .stdin(unsafe { std::process::Stdio::from_raw_fd(slave_in) })
             .stdout(unsafe { std::process::Stdio::from_raw_fd(slave_out) })
             .stderr(unsafe { std::process::Stdio::from_raw_fd(slave_err) })
             .spawn()
-            .map_err(|e| format!("spawn failed: {e}"))?;
+            .map_err(PtyError::SpawnFailed)?;
 
+        // SAFETY: slave is no longer needed after the child has inherited it.
+        // Closing it here prevents the parent from accidentally leaking the slave fd.
         unsafe {
             libc::close(slave);
         }
@@ -447,16 +496,16 @@ impl PtyHandle {
     }
 
     #[cfg(not(unix))]
-    fn new_stub() -> Result<Self, String> {
+    fn new_stub() -> Result<Self, PtyError> {
         let mut child = std::process::Command::new("cmd.exe")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| format!("spawn failed: {e}"))?;
+            .map_err(PtyError::SpawnFailed)?;
 
-        let stdin = child.stdin.take().ok_or("no stdin")?;
-        let stdout = child.stdout.take().ok_or("no stdout")?;
+        let stdin = child.stdin.take().ok_or(PtyError::NoStdio("stdin"))?;
+        let stdout = child.stdout.take().ok_or(PtyError::NoStdio("stdout"))?;
 
         Ok(Self::Stub {
             child,
@@ -465,7 +514,7 @@ impl PtyHandle {
         })
     }
 
-    fn new(cols: u16, rows: u16) -> Result<Self, String> {
+    fn new(cols: u16, rows: u16) -> Result<Self, PtyError> {
         #[cfg(unix)]
         {
             Self::new_unix(cols, rows)
@@ -483,6 +532,8 @@ impl Drop for PtyHandle {
         #[cfg(unix)]
         {
             let PtyHandle::Unix { master, .. } = self;
+            // SAFETY: master is a valid open PTY fd. close() releases it; after this
+            // the fd is no longer valid and must not be used.
             unsafe {
                 libc::close(*master);
             }
@@ -495,6 +546,8 @@ impl Read for PtyHandle {
         match self {
             #[cfg(unix)]
             PtyHandle::Unix { master, .. } => {
+                // SAFETY: master is a valid open PTY fd. read() is a POSIX syscall;
+                // buf is a valid mutable slice with length passed as the count argument.
                 let n = unsafe { libc::read(*master, buf.as_mut_ptr() as *mut _, buf.len()) };
                 if n < 0 {
                     Err(std::io::Error::last_os_error())
@@ -522,6 +575,8 @@ impl Write for PtyHandle {
         match self {
             #[cfg(unix)]
             PtyHandle::Unix { master, .. } => {
+                // SAFETY: master is a valid open PTY fd. write() is a POSIX syscall;
+                // buf is a valid shared slice, ptr and length are correct.
                 let n = unsafe { libc::write(*master, buf.as_ptr() as *const _, buf.len()) };
                 if n < 0 {
                     Err(std::io::Error::last_os_error())
@@ -558,7 +613,7 @@ pub struct TerminalBackend {
 
 impl TerminalBackend {
     /// Spawn a new terminal with the given grid size.
-    pub fn new(cols: usize, rows: usize) -> Result<Self, String> {
+    pub fn new(cols: usize, rows: usize) -> Result<Self, PtyError> {
         let pty = PtyHandle::new(cols as u16, rows as u16)?;
 
         // Spawn reader thread.
@@ -568,10 +623,14 @@ impl TerminalBackend {
             use std::os::fd::{AsRawFd, FromRawFd};
 
             let raw_fd = pty.as_raw_fd();
+            // SAFETY: raw_fd is a valid PTY master fd. dup creates a new fd for the
+            // reader thread so the original isn't closed when the TerminalBackend is dropped.
             let duped = unsafe { libc::dup(raw_fd) };
             if duped < 0 {
-                return Err("Failed to dup PTY fd".to_string());
+                return Err(PtyError::DupMasterFailed);
             }
+            // SAFETY: duped is a valid dup'd fd. from_raw_fd takes ownership, creating
+            // a File that owns and will close this fd when dropped.
             let mut reader = unsafe { std::fs::File::from_raw_fd(duped) };
             std::thread::spawn(move || {
                 let mut buf = [0u8; 4096];
@@ -629,6 +688,9 @@ impl PaneBackend for TerminalBackend {
                 ws_xpixel: 0,
                 ws_ypixel: 0,
             };
+            // SAFETY: self.pty.as_raw_fd() returns a valid PTY master fd.
+            // ioctl(TIOCSWINSZ) sets terminal dimensions; &ws is a valid winsize pointer.
+            // Result is discarded — resize is best-effort.
             let _ = unsafe { libc::ioctl(self.pty.as_raw_fd(), libc::TIOCSWINSZ, &ws) };
         }
     }

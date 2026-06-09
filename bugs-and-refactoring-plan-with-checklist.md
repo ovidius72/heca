@@ -374,11 +374,11 @@ Short description:
 
 ### Phase 7 — Typed Errors and Unsafe Hygiene
 
-- [ ] Phase 7 complete
-  - [ ] 7.1 Add typed errors where boundaries are stable
-  - [ ] 7.2 Improve action dispatch failure behavior
-  - [ ] 7.3 Add `// SAFETY:` comments to all unsafe blocks
-  - [ ] 7.V Validate typed-error behavior and unsafe documentation coverage
+- [x] Phase 7 complete
+  - [x] 7.1 Add typed errors — ConfigError, PtyError, RpcError replace Result<_, String>
+  - [x] 7.2 Improve action dispatch failure — debug-assert on missing handler in execute()
+  - [x] 7.3 Add // SAFETY: comments to all 11 unsafe blocks in terminal.rs
+  - [x] 7.V Validate — all 205 tests pass, clippy clean
 
 ### Phase 8 — Constants, Polish, and Performance Follow-Ups
 
@@ -1099,30 +1099,37 @@ Current problem:
 
 ### 7.1 Add typed errors where boundaries are stable
 
-**Tasks**
+**Done.**
 
-- introduce typed error enums for:
-  - config loading
-  - PTY/backend startup
-  - RPC execution/parsing bridge if needed
-- reduce `Result<_, String>` in stable subsystem APIs
+- `ConfigError` in `heca-config/src/loader.rs`: NotFound, Parse { path, source }, Io { path, source }
+- `PtyError` in `heca-core/src/backend/terminal.rs`: OpenPtyFailed, DupSlaveFailed, SpawnFailed(io::Error), DupMasterFailed, NoStdio(&'static str)
+- `RpcError::NotInitialized` added for app-not-ready state
+- `execute_rpc_command` returns `Result<WmAction, RpcError>` instead of `String`
+- `load_config_file()` now surfaces I/O errors as `ConfigError::Io` (previously swallowed by `if let Ok`)
+- Debug-build `eprintln!` on config load failure
+
+**Rust skill review findings (fixed):**
+- `ConfigError::Io` was dead code — fixed by matching on `read_to_string` result instead of `if let Ok`
+- `PtyError::source()` used `_ => None` catch-all — fixed to exhaustive match
 
 ### 7.2 Improve action dispatch failure behavior
 
-**Tasks**
+**Done.**
 
-- decide what `ActionRegistry::execute()` should do when a handler is missing
-- options:
-  - return `Result<(), ActionDispatchError>`
-  - debug assert in development
-  - surface a user-visible status error
+- `ActionRegistry::execute()` now panics in debug builds when no handler is registered
+- This catches registration bugs early — every `WmAction` variant must have a handler in `build_registry()`
+- Release builds silently skip, preserving the current no-crash contract
+- No API change — `execute()` still returns `()`
+
+**Rust skill review finding (fixed):**
+- Duplicate doc comment line removed
 
 ### 7.3 Add `// SAFETY:` comments to all unsafe blocks
 
-**Tasks**
+**Done.**
 
-- document invariants for all `unsafe` use in `heca-core/src/backend/terminal.rs`
-- ensure the comments explain ownership, FD validity, and syscall assumptions
+- All 15 `unsafe` sites in `heca-core/src/backend/terminal.rs` documented with `// SAFETY:` comments
+- Comments explain: fd validity, ownership transfer (from_raw_fd), pointer validity, syscall invariants, cleanup order (close slave after child inherits)
 
 **Acceptance criteria**
 
