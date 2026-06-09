@@ -7,6 +7,10 @@ use heca_core::layout::Point;
 
 use crate::app_state::{AppState, DragState};
 
+/// Route cursor movement to the active drag phase handler.
+///
+/// Dispatches to the appropriate phase handler based on `DragState`,
+/// then updates sidebar hover highlighting if a drag is active.
 pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
     state.mouse.pos = pos;
 
