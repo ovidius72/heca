@@ -8,7 +8,9 @@
 
 ## 1. What Was Done (Track 1)
 
-Six refactoring commits landed on `feature/gpt-refactoring`:
+Six Track 1 refactoring commits and five Track 2 DnD commits landed on `feature/gpt-refactoring`:
+
+**Track 1 — Code review fixes:**
 
 | # | Commit | What |
 |---|--------|------|
@@ -20,7 +22,15 @@ Six refactoring commits landed on `feature/gpt-refactoring`:
 | 6 | `3a54281` | Extract mouse release handlers into `mouse/release.rs` |
 | 7 | `7324096` | Trailing newline fix, improve `on_cursor_moved` doc comment |
 
-All pass `cargo check`, `cargo clippy --workspace`, `cargo test --workspace`.
+**Track 2 — DnD surface-agnostic architecture:**
+
+| # | Phase | Commit | What |
+|---|-------|--------|------|
+| 1 | 1 | `631c11a` | `feat(grid-ui): add drag framework types module` — 5 files, 430+ lines |
+| 2 | 2 | `4fb4a0f` | `refactor: replace DragState with DragContext and InteractiveMoveState` — 13 files |
+| 3 | 3 | `ff9ba65` | `refactor: create target.rs enum dispatch and surface_left.rs handler` — delete sidebar.rs/sidebar_drop.rs |
+| 4 | 4 | `3d196c2` | `refactor: extract InteractiveMove into mouse/interactive.rs` |
+| 5 | 5 | `da22633` | `refactor: render integration — replace raw usize with DragItemId` |
 
 ---
 
