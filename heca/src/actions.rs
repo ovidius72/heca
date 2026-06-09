@@ -3,10 +3,6 @@
 //! This module provides the `ActionRegistry` which maps `WmAction` discriminants
 //! to named handler functions. It also preserves the static metadata catalog
 //! (labels, categories, default bindings) for the command palette and docs.
-//!
-//! Note: ActionRegistry methods appear unused in the binary until Phase 5
-//! when `execute_action()` is replaced by `registry.execute()`.
-#![allow(dead_code)]
 
 use std::collections::HashMap;
 
@@ -29,6 +25,7 @@ pub enum ActionCategory {
     /// Workspace creation, renaming, switching.
     Workspace,
     /// Session-level: overview, save, load.
+    #[allow(dead_code)] // No session-level actions yet; will be used when overview/save/load are implemented.
     Session,
     /// UI chrome: sidebar toggle, tab management.
     Chrome,
@@ -36,6 +33,9 @@ pub enum ActionCategory {
     System,
 }
 
+// ActionCategory and its label() are used by ActionDescriptor metadata.
+// The metadata catalog is preserved for the command palette (not yet implemented).
+#[allow(dead_code)]
 impl ActionCategory {
     /// Human-readable category name for UI display.
     pub const fn label(self) -> &'static str {
@@ -53,6 +53,8 @@ impl ActionCategory {
 
 /// Static descriptor for a window-manager action.
 #[derive(Debug, Clone, Copy)]
+// Preserved for the command palette and RPC introspection (not yet implemented).
+#[allow(dead_code)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
@@ -97,14 +99,17 @@ impl ActionRegistry {
     }
 
     /// Check whether a handler is registered for the given action.
+    // Used in tests and debugging; kept for future RPC introspection.
+    #[allow(dead_code)]
     pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
         let disc = crate::input::action_discriminant(action);
         self.handlers.contains_key(&disc)
     }
 }
 
-// ── Static metadata catalog (unchanged from before) ──
-
+// ── Static metadata catalog for command palette and RPC introspection ──
+// Not yet consumed by runtime UI; preserved for planned features.
+#[allow(dead_code)]
 impl ActionRegistry {
     /// All registered actions in a stable order.
     pub const ALL: &[ActionDescriptor] = &[
