@@ -1,61 +1,94 @@
-//! [`Tag`] — a small **chip**: an optional leading slot (e.g. an
-//! [`Icon`](super::Icon)) plus a label, in a rounded, subtly-bordered pill.
+//! [`Tag`] — a small **chip**: one or more segments (each an optional leading
+//! [`Icon`](super::Icon) + a label) in a rounded, subtly-bordered pill, with a
+//! thin divider between segments.
 //!
 //! Where [`Badge`](super::Badge) is a solid status token (`RUN`, `M`, `OFFLINE`),
-//! `Tag` is the quieter metadata chip that can **carry an icon** — a git branch
-//! (`⎇ main`), a label, a filter. It is a display widget: it lays out its slot +
-//! label and paints the pill chrome; the slots draw themselves, so it stays
-//! composable and domain-neutral. The pill hue is configurable via
-//! [`color`](Tag::color) (default: the theme's muted token).
+//! `Tag` is the quieter metadata chip that can **carry an icon** and **multiple
+//! sections** — e.g. a status-bar segment `⎇ main │ 5 • +152 -12`. It is a
+//! display widget: it lays out its segments and paints the pill chrome (radius,
+//! border width and colors all from the [`Theme`](crate::theme::Theme) — nothing
+//! hardcoded); the slots draw themselves, so it stays composable and neutral.
 
-use crate::builders::LayoutExt;
+use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::SignalGet;
 use crate::scene::Border;
 use crate::style::{Align, Direction};
-use crate::widgets::Label;
+use crate::widgets::{Flex, Label};
+use heca_core::layout::{Point, Rectangle, Size};
 
 /// Horizontal inner padding — generous, so the chip has breathing room.
 const PAD_X: f32 = 12.0;
 /// Vertical inner padding — tight, to keep the pill slim.
 const PAD_Y: f32 = 4.0;
-/// Gap between the leading slot and the label.
-const GAP: f32 = 6.0;
+/// Gap between segments (holds the divider).
+const SEG_GAP: f32 = 12.0;
+/// Gap between a leading slot and its label, within a segment.
+const SLOT_GAP: f32 = 6.0;
 /// Chip text size relative to the base font.
 const FONT_SCALE: f32 = 0.8;
 /// Translucent fill alpha for the chip background.
 const FILL_ALPHA: u8 = 22;
-/// Border alpha — a quiet edge in the chip hue.
+/// Alpha of the border + segment dividers, in the chip hue.
 const BORDER_ALPHA: u8 = 130;
+/// Vertical inset of a segment divider as a fraction of the chip height.
+const DIVIDER_INSET_FRAC: f64 = 0.18;
+/// `Theme.radius` multiplier for the pill (rounder than a box), clamped to a
+/// capsule — so the corner radius follows the theme, never hardcoded.
+const RADIUS_MUL: f32 = 2.0;
 
-/// A small labeled chip with an optional leading slot.
+/// A small labeled chip of one or more segments.
 pub struct Tag {
     base: Base,
-    /// Pill hue for the fill + border (default: theme muted).
+    /// Pill hue for the fill, border and dividers (default: theme muted).
     color: Option<Color>,
 }
 
+/// Build an empty segment container (a centered row of slots).
+fn segment() -> Flex {
+    Flex::row().align(Align::Center).gap(SLOT_GAP)
+}
+
 impl Tag {
-    /// A new chip showing `label`. Add a leading icon with [`leading`](Tag::leading).
+    /// A new chip whose first segment shows `label`. Add a leading icon with
+    /// [`leading`](Tag::leading), or further segments with [`segment`](Tag::segment).
     pub fn new(label: impl Into<String>) -> Self {
         let mut base = Base::new();
         base.style.direction = Direction::Row;
         base.style.align = Align::Center;
         base.style.padding_x = Some(PAD_X);
         base.style.padding_y = Some(PAD_Y);
-        base.style.gap = GAP;
-        base.children.push(Box::new(Label::new(label).font_scale(FONT_SCALE)));
+        base.style.gap = SEG_GAP;
+        base.children.push(Box::new(segment().child(Label::new(label).font_scale(FONT_SCALE))));
         Self { base, color: None }
     }
 
-    /// Set the leading slot — any component (typically an [`Icon`](super::Icon)).
+    /// Set the leading slot of the **first** segment — typically an
+    /// [`Icon`](super::Icon).
     pub fn leading(mut self, c: impl Component + 'static) -> Self {
-        self.base.children.insert(0, Box::new(c));
+        self.base.children[0].base_mut().children.insert(0, Box::new(c));
         self
     }
 
-    /// Pill hue for the fill + border (default: the theme's muted token).
+    /// Append a segment (its own composed content, e.g. a row of `Icon`/`Label`).
+    /// A thin divider is drawn before it.
+    pub fn segment(mut self, c: impl Component + 'static) -> Self {
+        self.base.children.push(Box::new(c));
+        self
+    }
+
+    /// Append a `label` segment with an optional leading icon — a convenience over
+    /// [`segment`](Tag::segment) for the common icon-plus-text section.
+    pub fn segment_text(self, label: impl Into<String>, leading: Option<Box<dyn Component>>) -> Self {
+        let mut seg = segment().child(Label::new(label).font_scale(FONT_SCALE));
+        if let Some(icon) = leading {
+            seg.base_mut().children.insert(0, icon);
+        }
+        self.segment(seg)
+    }
+
+    /// Pill hue for the fill, border and dividers (default: the theme muted token).
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self
@@ -74,18 +107,42 @@ impl Component for Tag {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let c = self.color.unwrap_or_else(|| cx.theme().muted);
+        let (muted, radius_tok, border_w) = {
+            let t = cx.theme();
+            (t.muted, t.radius, t.border_width)
+        };
+        let c = self.color.unwrap_or(muted);
         let pill = self.base.bounds;
-        // Capsule: round to half the height.
-        let radius = (pill.size.h / 2.0) as f32;
+        // Radius from the theme (rounder than a box), clamped to a capsule.
+        let radius = (radius_tok * RADIUS_MUL).min((pill.size.h / 2.0) as f32);
         cx.rect(
             pill,
             c.with_alpha(FILL_ALPHA),
-            Some(Border { color: c.with_alpha(BORDER_ALPHA), width: 1.0 }),
+            Some(Border { color: c.with_alpha(BORDER_ALPHA), width: border_w }),
             radius,
             None,
         );
-        // Leading slot + label draw themselves.
+
+        // Thin dividers in the gap between consecutive segments.
+        let divider = c.with_alpha(BORDER_ALPHA);
+        let inset = pill.size.h * DIVIDER_INSET_FRAC;
+        for i in 1..self.base.children.len() {
+            let prev = self.base.children[i - 1].base().bounds;
+            let cur = self.base.children[i].base().bounds;
+            let x = (prev.loc.x + prev.size.w + cur.loc.x) / 2.0;
+            cx.rect(
+                Rectangle::new(
+                    Point::new(x, pill.loc.y + inset),
+                    Size::new(f64::from(border_w), pill.size.h - 2.0 * inset),
+                ),
+                divider,
+                None,
+                0.0,
+                None,
+            );
+        }
+
+        // Segments draw themselves.
         for child in &self.base.children {
             child.paint(cx);
         }
