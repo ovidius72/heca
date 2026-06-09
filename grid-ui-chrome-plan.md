@@ -80,7 +80,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 ### 2.5 `ChromeRegion` / `Sidebar` shell (generic, all 4 regions)
 - **Oriented** shell: vertical (sidebars) or horizontal (top/bottom bars). One widget covers all four regions.
 - Toggle/collapse, **mode-aware**: informs children of `Expanded` / `CollapsedRail` / hidden via a signal.
-- **Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/peek — P2). DockFrames render icon-only in rail mode.
+- **Collapsed = icon rail** (thin rail of dock icons; click *or keyboard action* to expand/peek — P2). **Two rail flavors (locked 2026-06-10):** a *tool* dock **folds** to a single icon (`DockFrame::rail(mode_signal, Glyph)`); a *list* dock (workspaces/columns/panes) **enumerates** — one `RailCell` (square icon cell) **per item**, so every pane stays visible + addressable when collapsed (matches `heca`'s current `render_sidebar_collapsed`). **Icons by default**, not letters. The move/swap/focus-select **pick letters** appear over the cells via the generic **`KeyHint`** overlay (a reusable wrapper, not rail-specific — also for content-area panes, command palettes), driven by a host-owned `Signal<Option<String>>` so mouse/keyboard/**RPC** all light them up identically (P2). The app feeds those signals from its existing `collect_all_pane_candidates()` flow. **Shipped (grid-ui side):** `RailCell` + `KeyHint` + showcase `p`-pick demo. **Pending:** the app-side mapping in the real `heca` Workspaces dock.
 - Stacks `DockFrame`s, scrolls (§2.8), exposes **Dock-level drop targets**.
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".
 - **Status:** new.

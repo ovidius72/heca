@@ -62,10 +62,29 @@ struct ThemeCtl {
     intensity: Signal<Intensity>,
 }
 
-fn build_ui(theme: &Theme, ctl: ThemeCtl) -> (Flex, Signal<RegionMode>) {
+/// Handles the host keeps after building the UI, to drive chrome interactions
+/// from the keymap (the same signals an RPC layer would write).
+struct BuiltUi {
+    ui: Flex,
+    /// Sidebar display mode (G5); `[` toggles full width ⇄ icon rail.
+    sidebar_mode: Signal<RegionMode>,
+    /// Per-cell pick-letter hints for the workspaces rail; `p` lights them up.
+    rail_hints: Vec<Signal<Option<String>>>,
+    /// Per-cell selection state for the workspaces rail (the focused pane).
+    rail_states: Vec<Signal<bool>>,
+    /// The letter assigned to each rail cell during a pick.
+    rail_letters: Vec<char>,
+}
+
+fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Host-owned sidebar display mode (G5): the keymap toggles it (`[`), the
     // region sizes to it, and its rail-aware Docks fold to icons when collapsed.
     let sidebar_mode = signal(RegionMode::Expanded);
+    // Workspaces rail (enumerate flavor): one icon cell per pane, with a generic
+    // KeyHint keycap that lights up on a move/swap/select pick (`p` in the demo).
+    let rail_letters = vec!['a', 'b', 'c', 'd', 'e'];
+    let rail_hints: Vec<Signal<Option<String>>> = rail_letters.iter().map(|_| signal(None)).collect();
+    let rail_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -557,9 +576,52 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> (Flex, Signal<RegionMode>) {
                 ));
             let panes_col = Flex::column().width(Length::Px(380.0)).child(panes);
 
-            Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(panes_col)
+            // Workspaces rail (enumerate flavor): one icon cell PER pane, so every
+            // pane stays visible + addressable when collapsed — unlike a tool dock
+            // that folds to a single icon. Each cell is wrapped in the generic
+            // KeyHint, whose keycap lights up during a move/swap/select pick (`p`).
+            let rail_icons = [
+                (Glyph::Terminal, theme.success),
+                (Glyph::FileCode, theme.accent),
+                (Glyph::GitBranch, theme.warning),
+                (Glyph::Gear, theme.foreground),
+                (Glyph::Warning, theme.danger),
+            ];
+            let mut workspaces_rail = Flex::column().gap(8.0).align(Align::Center);
+            for (i, (glyph, color)) in rail_icons.iter().enumerate() {
+                let cell = RailCell::new(Icon::new(*glyph).color(*color).size(22.0))
+                    .cell_size(44.0)
+                    .active(i == 0);
+                rail_states.borrow_mut().push(cell.state());
+                let states = rail_states.clone();
+                let cell = cell.on_activate(move || {
+                    for (j, s) in states.borrow().iter().enumerate() {
+                        s.set(j == i);
+                    }
+                });
+                workspaces_rail = workspaces_rail
+                    .child(KeyHint::new(cell).hint(rail_hints[i]).placement(HintPlacement::TopCenter));
+            }
+            let rail_col = Flex::column()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(Label::new("WS").color(theme.muted).font_scale(0.8))
+                .child(workspaces_rail);
+
+            Flex::row()
+                .gap(28.0)
+                .align(Align::Start)
+                .child(rail_col)
+                .child(sidebar)
+                .child(panes_col)
         });
-    (ui, sidebar_mode)
+    BuiltUi {
+        ui,
+        sidebar_mode,
+        rail_hints,
+        rail_states: rail_states.borrow().clone(),
+        rail_letters,
+    }
 }
 
 /// Shift every node's absolute bounds down by `dy` (negative scrolls the page up).
@@ -618,6 +680,11 @@ struct GpuState {
     ui: Flex,
     /// Host-owned sidebar display mode (G5); `[` toggles expanded ⇄ icon rail.
     sidebar_mode: Signal<RegionMode>,
+    /// Workspaces-rail pick state: `p` lights the keycaps, a letter selects, Esc cancels.
+    rail_hints: Vec<Signal<Option<String>>>,
+    rail_states: Vec<Signal<bool>>,
+    rail_letters: Vec<char>,
+    rail_pick: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -690,7 +757,8 @@ impl GpuState {
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
         };
-        let (ui, sidebar_mode) = build_ui(&theme, ctl);
+        let built = build_ui(&theme, ctl);
+        let BuiltUi { ui, sidebar_mode, rail_hints, rail_states, rail_letters } = built;
 
         Self {
             window,
@@ -704,6 +772,10 @@ impl GpuState {
             theme,
             ui,
             sidebar_mode,
+            rail_hints,
+            rail_states,
+            rail_letters,
+            rail_pick: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -718,6 +790,26 @@ impl GpuState {
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
         self.window.request_redraw();
+    }
+
+    /// Light up (or clear) the workspaces-rail pick keycaps — the move/swap/select
+    /// prefix. The host writes the per-cell hint signals; a real app would also
+    /// reach this from RPC, hence the signal-driven path (input parity).
+    fn set_rail_pick(&mut self, on: bool) {
+        self.rail_pick = on;
+        for (i, h) in self.rail_hints.iter().enumerate() {
+            h.set(on.then(|| self.rail_letters[i].to_string()));
+        }
+    }
+
+    /// Resolve a pressed letter to its rail cell: select that pane + end the pick.
+    fn rail_pick_select(&mut self, c: char) {
+        if let Some(i) = self.rail_letters.iter().position(|&l| l == c) {
+            for (j, s) in self.rail_states.iter().enumerate() {
+                s.set(j == i);
+            }
+            self.set_rail_pick(false);
+        }
     }
 
     fn render(&mut self) {
@@ -911,7 +1003,11 @@ impl ApplicationHandler for App {
                         GridKey::Escape if state.focus.overlay_active(&mut state.ui) => {
                             state.focus.deliver_key(&mut state.ui, GridKey::Escape);
                         }
-                        GridKey::Escape => state.focus.clear(&mut state.ui),
+                        // Escape clears focus and cancels an open rail pick.
+                        GridKey::Escape => {
+                            state.set_rail_pick(false);
+                            state.focus.clear(&mut state.ui);
+                        }
                         // `[` collapses the sidebar to its icon rail (G5) and back,
                         // but only when nothing is focused — so it still types into
                         // a focused Input.
@@ -922,6 +1018,14 @@ impl ApplicationHandler for App {
                             };
                             state.sidebar_mode.set(next);
                         }
+                        // `p` opens/closes a workspaces-rail pick: every pane cell
+                        // shows its letter keycap (the generic KeyHint overlay).
+                        GridKey::Char('p') if state.focus.focused().is_none() => {
+                            let on = !state.rail_pick;
+                            state.set_rail_pick(on);
+                        }
+                        // While a pick is open, a letter selects its pane cell.
+                        GridKey::Char(c) if state.rail_pick => state.rail_pick_select(c),
                         // Space/Enter (and others) go to the focused widget.
                         other => {
                             state.focus.deliver_key(&mut state.ui, other);

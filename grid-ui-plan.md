@@ -41,6 +41,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [x] **G3 `ItemGroup`** — collapsible group (header Item + chevron) over `Item` rows; collapse folds rows out of layout via new `Style.hidden` (`display:none`); `expanded` signal + `on_toggle`. DONE — branch `grid-ui-itemgroup`.
 - [x] **G4 `DockFrame`** — titled/collapsible frame (drag-handle grip + chevron + title + interactive header-controls slot) over a foldable body; collapse hides the body via `Style.hidden`; `expanded` signal + `on_toggle`. Reuses `Pane` brackets via the new shared `PaintCx::bracket_frame` (extracted from `Pane`; `Pane` stays the plain container). DONE — branch `grid-ui-dockframe`.
 - [x] **G5 `ChromeRegion` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), mode-aware (`RegionMode::{Expanded,CollapsedRail,Hidden}` via a signal), collapse sizing (rail width/height), hosts `DockFrame`s; `toggle()` intent + `mode_signal()` binding point (P2: write-via-action, read-via-signal). **No** tree/workspace/drag semantics. DONE — core on branch `grid-ui-region-shell`; **collapsed icon-rail rendering** on branch `grid-ui-icon-rail` (`DockFrame::rail(mode_signal, Glyph)` folds header+body → centered `Icon` while `RegionMode::CollapsedRail`; `ChromeRegion::with_mode_signal` lets a host own the mode signal; showcase `[` toggles the sidebar rail). (Scroll overflow still waits on renderer clip / G7; Dock drop targets are G6.)
+- [x] **G5.5 enumerate rail (`RailCell`) + generic pick overlay (`KeyHint`)** — a *list* dock (workspaces/columns/panes) must keep **one cell per pane** when collapsed, not fold to a single icon. `RailCell` = focusable square icon cell (state tint + same-hue border + glow, press flash, focus ring, `on_activate`). `KeyHint` = a **generic, reusable** transparent wrapper that overlays a glowing keycap letter over **any** actionable child while a host-owned `Signal<Option<String>>` is `Some` — the move/swap/select pick prefix (and reusable for content-area panes, command palettes, expanded rows). Signal-driven so mouse/keyboard/RPC all reach it (input parity). Showcase: a workspaces rail of icon cells; `p` opens the pick (letters appear), a letter selects, Esc cancels. **Mirrors `heca`'s existing collapsed-sidebar `candidates` flow** (`heca/src/sidebar/render.rs` + `app/selection.rs`). DONE — branch `grid-ui-rail-panes`.
 - [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [x] **G2.5 `Row`** — focusable, clickable, single-selectable container for **arbitrary composed content** (`Item`'s interactive chrome — hover/active pill + `ActiveMarker` + press flash + focus ring + `on_activate`/Enter — generalized to wrap any children, e.g. a multi-line `Grid` of `Label`/`Icon`/`Badge`). Optional persistent background under the selection overlay. Unblocks clickable rich Dock rows. DONE — branch `grid-ui-row`.
@@ -89,22 +90,26 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-09 (after the **G5 collapsed icon-rail** — G5 now fully complete)
+### 🤝 Handoff — last updated 2026-06-10 (after the **enumerate rail `RailCell` + generic `KeyHint` pick overlay**)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
 
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
-- **Default branch:** `main`. **This branch:** `grid-ui-icon-rail` (the G5 collapsed
-  icon-rail, off fresh `origin/main`).
-- **Merged into `main`** before this task: **#47** ChromeRegion (G5 core), **#48**
-  chrome-fixes, **#49** Icon (G2), **#50** Row, **#51** Row-highlight, **#53** Tag/G8,
-  **#55** handoff rewrite. So `main` has **G1–G5(core), G2, Row, G8**.
-- **This task (icon-rail):** completes G5. `DockFrame::rail(mode_signal, Glyph)` + a tighter
-  rail inset (`RAIL_PAD`); `ChromeRegion::with_mode_signal` (host-owned mode); showcase `[`
-  toggles the sidebar between full width and the icon rail; 2 new integration tests. **G5 is
-  now fully done** — only G6 (DnD) and G7 (scroll, renderer-blocked) remain of the vocabulary.
+- **Default branch:** `main` (in another worktree — `git fetch` + branch off `origin/main`).
+  **This branch:** `grid-ui-rail-panes` (enumerate rail + `KeyHint`, off fresh `origin/main`).
+- **Merged into `main`** before this task: …**#55** handoff rewrite, **#57** G5 icon-rail
+  (`DockFrame::rail`). So `main` has the full chrome vocabulary **G1–G5 (incl. fold rail), G2,
+  Row, G8**.
+- **This task (enumerate rail):** **`RailCell`** (focusable square icon cell — state tint +
+  same-hue border + glow + flash + focus ring + `on_activate`) and **`KeyHint`** (a generic,
+  reusable transparent wrapper overlaying a glowing keycap letter on any actionable child while
+  a host-owned `Signal<Option<String>>` is `Some`). Showcase: a workspaces rail of icon cells;
+  `p` opens a pick (letters appear over the icons), a letter selects the pane, Esc cancels.
+  +4 integration tests. **Why two flavors:** a *tool* dock folds to one icon (`DockFrame::rail`,
+  #57); a *list* dock (workspaces/panes) enumerates — one icon cell per pane — so every pane
+  stays visible + addressable, matching `heca`'s current collapsed sidebar.
 - **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
   push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
   Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
@@ -112,7 +117,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  80 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  84 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -169,6 +174,16 @@ next, and how to start.
     `.segment_text()` with thin dividers, e.g. `path │ ⎇ main │ 5 +152 -12`), optional
     leading `Icon`, hue via `.color()`. Theme-driven radius (`theme.radius`) + border
     (`theme.border_width`); generous x-padding (`Style.padding_x/y`).
+  - **`RailCell`** (`rail_cell.rs`) — focusable **square icon cell** for the *enumerate* rail:
+    centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash + focus
+    ring; `on_activate`; `.cell_size()`. The per-pane unit a collapsed *list* dock shows (vs a
+    tool dock folding to one icon). Domain-neutral: the icon's color carries pane status.
+  - **`KeyHint`** (`key_hint.rs`) — **generic** transparent wrapper that overlays a glowing
+    accent **keycap letter** on any actionable child while a host-owned `Signal<Option<String>>`
+    is `Some`. Reusable everywhere a keyboard pick/jump lights up targets (rail cells, content
+    panes, command palettes). Transparent to focus + events (default container routing); only
+    adds paint. `.hint(signal)`, `.placement(TopCenter|Center)`, `.size(px)`. **Signal-driven =
+    input parity** (mouse/keyboard/RPC write the same signal).
 - **The showcase PANES dock is the realized G8 recipe**: state-colored `Icon` + program name
   + multi-segment git `Tag` + status `Badge`, in a `Grid` inside a selectable `Row`. grid-ui
   stays **domain-neutral**; the *demo* maps state→style.
@@ -193,18 +208,26 @@ next, and how to start.
 
 #### What's next (in priority order)
 
-1. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
+1. **Wire the enumerate rail into the real `heca` Workspaces dock** (app-side, `heca/src/**` —
+   coordinate; not ours to edit unilaterally). grid-ui now ships the primitives (`RailCell` +
+   `KeyHint`); the app maps ws/cols/panes → cells (icons), feeds per-cell `KeyHint` signals from
+   its existing `collect_all_pane_candidates()` during `PaneSelect`/`PaneSwap`/`PaneTake`, and
+   dispatches the focus/swap/move **action** on cell activate. **icons not letters** by default;
+   letters only during a pick. This *replaces* `heca/src/sidebar/render.rs::render_sidebar_collapsed`
+   eventually. Likely the cleanest path: prototype the mapping in the showcase first (done — the
+   `p`-pick demo), then port behind the chrome-plugin work.
+2. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
    region drop targets onto the **already-shipped** `heca-grid-ui/src/drag/` framework
    (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). Extend **additively**; never
    fork. Region = a `DragSurfaceId`, a Dock = a `DragItem`. Every drop = a dispatched **action**.
-2. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
+3. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
    `effects::Flash` on a `Row`/`Item` driven by an `attention` signal. **Sound is the host's
    job** (grid-ui is audio-free) — expose a signal/action the app maps to a beep; don't bake
    audio in.
-3. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
-4. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
+4. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
+5. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
    `heca-renderer/src/scene.rs`, renderer dev's area). Only whole-page scroll works.
-5. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
+6. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
    `docs/widgets.md` for the new widgets; **Phase D** app adoption + the §12 `ActionSink`
    keybinding integration; end-user docs last.
 
@@ -257,7 +280,7 @@ next, and how to start.
 
 ```bash
 cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
-cargo test -p heca-grid-ui                                    # 10 unit + 80 integration + doctests
+cargo test -p heca-grid-ui                                    # 10 unit + 84 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 

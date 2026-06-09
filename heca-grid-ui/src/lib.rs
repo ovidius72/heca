@@ -58,8 +58,8 @@ pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
     ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
-    Grid, Icon, Input, Item, ItemGroup, Label,
-    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
+    Grid, HintPlacement, Icon, Input, Item, ItemGroup, KeyHint, Label,
+    LabelSide, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toggle,
 };
 
@@ -78,8 +78,8 @@ pub mod prelude {
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
         ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
-        Glyph, Grid, Icon, Input, Item, ItemGroup, Label,
-        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
+        Glyph, Grid, HintPlacement, Icon, Input, Item, ItemGroup, KeyHint, Label,
+        LabelSide, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toggle,
     };
 }
