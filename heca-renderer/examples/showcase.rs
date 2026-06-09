@@ -352,20 +352,31 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                         .trailing(Label::new(">").color(theme.muted)),
                 )
         })
-        // Duotone icons (G2): a strip of Phosphor glyphs, theme-colored. Each is
-        // two stacked layers (dimmed secondary + full primary) from the icon font.
+        // Duotone icons (G2): a strip of Phosphor glyphs from the icon font. Each
+        // is two stacked layers — a dimmed secondary wash + a full primary on top.
+        // First group: single-hue duotone (secondary = primary at the theme alpha).
+        // Last two: an explicit contrasting secondary color via `.secondary_color`.
         .child(
             Flex::row()
                 .gap(20.0)
                 .align(Align::Center)
-                .child(Icon::new(Glyph::Folder).size(30.0))
-                .child(Icon::new(Glyph::FileCode).color(theme.accent).size(30.0))
-                .child(Icon::new(Glyph::GitBranch).color(theme.success).size(30.0))
-                .child(Icon::new(Glyph::Terminal).size(30.0))
-                .child(Icon::new(Glyph::Gear).color(theme.muted).size(30.0))
-                .child(Icon::new(Glyph::Lightning).color(theme.accent).size(30.0))
-                .child(Icon::new(Glyph::Warning).color(theme.warning).size(30.0))
-                .child(Icon::new(Glyph::Check).color(theme.success).size(30.0)),
+                .child(Icon::new(Glyph::Folder).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::FileCode).color(theme.accent).size(34.0))
+                .child(Icon::new(Glyph::GitBranch).color(theme.success).size(34.0))
+                .child(Icon::new(Glyph::Terminal).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0))
+                .child(
+                    Icon::new(Glyph::Gear)
+                        .color(theme.accent)
+                        .secondary_color(theme.warning.with_alpha(160))
+                        .size(34.0),
+                )
+                .child(
+                    Icon::new(Glyph::Lightning)
+                        .color(theme.foreground)
+                        .secondary_color(theme.accent.with_alpha(160))
+                        .size(34.0),
+                ),
         )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
