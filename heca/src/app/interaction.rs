@@ -662,4 +662,53 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         assert!(is_floating_domain(&session));
     }
+
+    /// MouseContent FocusPane is blocked when floating.
+    #[test]
+    fn floating_blocks_mouse_content_focus_pane() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        // MouseContent FocusPane should be blocked when floating
+        // (only the active floating pane could receive focus, and this targets a tiled pane)
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::MouseContent,
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 99 }),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Block),
+            "MouseContent FocusPane should be blocked when floating, got {:?}",
+            decision,
+        );
+    }
+
+    /// MouseLeftSidebar actions are blocked when floating (via the guard in mouse.rs,
+    /// tested here as part of the router's policy).
+    #[test]
+    fn floating_blocks_mouse_left_sidebar_actions() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        // Sidebar actions should be blocked when floating.
+        let actions = [
+            WmAction::SidebarFocus,
+            WmAction::SidebarLeft,
+            WmAction::SidebarUp,
+        ];
+        for action in &actions {
+            // Test via MouseLeftSidebar source (same result as Keyboard, but testing the source explicitly)
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::MouseLeftSidebar,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Block),
+                "MouseLeftSidebar should block {:?} when floating, got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
 }

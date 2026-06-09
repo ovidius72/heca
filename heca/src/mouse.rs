@@ -61,6 +61,12 @@ pub fn on_mouse_input(
                 return None;
             }
 
+            // When a floating pane is modal, block all sidebar interaction.
+            // No clicks, no drags, no mode changes.
+            if crate::app::interaction::is_floating_domain(&state.session) {
+                return None;
+            }
+
             // Sidebar click.
             let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
