@@ -364,13 +364,13 @@ Short description:
 
 ### Phase 6 — Remove Stale, Dormant, and Drifting State
 
-- [ ] Phase 6 complete
-  - [ ] 6.1 Remove dead legacy geometry
-  - [ ] 6.2 Review dormant fields
-  - [ ] 6.3 Remove placeholder backend variants
-  - [ ] 6.4 Fix action metadata drift
-  - [ ] 6.5 Review `#[allow(dead_code)]`
-  - [ ] 6.V Validate dead-state removals and metadata consistency
+- [x] Phase 6 complete
+  - [x] 6.1 Remove dead legacy geometry — migrated Rect→Rectangle, deleted heca-core/src/types.rs
+  - [x] 6.2 Review dormant fields — removed floating_visible, is_pinned, active_tab, tab_names; removed dormant tab bar loop from render
+  - [x] 6.3 Remove placeholder backend variants — removed PaneType::Neovim/Browser, BackendRenderData::Neovim/Browser; fixed irrefutable if let→let
+  - [x] 6.4 Fix action metadata drift — fixed swap_and_focus→swap_and_focus_pane, removed swap_select/tab_next/tab_prev, added delete_column/delete_workspace/reload_config
+  - [x] 6.5 Review #[allow(dead_code)] — replaced broad #![allow(dead_code)] in actions.rs with targeted per-item allows + reason comments
+  - [x] 6.V Validate — all 204 tests pass, clippy clean
 
 ### Phase 7 — Typed Errors and Unsafe Hygiene
 

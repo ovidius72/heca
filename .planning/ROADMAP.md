@@ -249,7 +249,7 @@ up architecture debt introduced during rapid prototyping.
 | 3 — Shared Pane Ops | ✅ Done | pane_ops.rs, DnD refactoring, ad hoc scan removal |
 | 4 — Sidebar Projection Model | ✅ Done | SidebarItemKind, rebuild→sync, HashMap pane lookup |
 | 5 — Backend Lifecycle | ✅ Done | BackendStore wrapper, lifecycle contract, batch helper |
-| 6 — Remove Stale State | ⬜ Pending | Dead geometry, dormant fields, placeholder backends, `#[allow(dead_code)]` audit |
+| 6 — Stale State | ✅ Done | Remove dead Rect, dormant fields, placeholder variants, metadata drift, #[allow] audit |
 | 7 — Typed Errors | ⬜ Pending | Stable boundary errors, action dispatch failure, unsafe hygiene |
 | 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
 | 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
