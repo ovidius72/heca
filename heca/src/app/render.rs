@@ -23,59 +23,57 @@ pub(crate) fn render_backend_data(
     primitive_renderer: &mut PrimitiveRenderer,
     _theme: &heca_config::theme::Theme,
 ) {
-    if let BackendRenderData::Terminal {
+    let BackendRenderData::Terminal {
         lines,
         cursor_col,
         cursor_row,
         cell_w,
         cell_h,
-    } = data
-    {
-        let cell_h = *cell_h;
-        let cell_w = *cell_w;
+    } = data;
+    let cell_h = *cell_h;
+    let cell_w = *cell_w;
 
-        primitive_renderer.draw_rect(px, py, pw, ph, [0.0, 0.0, 0.0, 1.0]);
+    primitive_renderer.draw_rect(px, py, pw, ph, [0.0, 0.0, 0.0, 1.0]);
 
-        for (row, line) in lines.iter().enumerate() {
-            let y = py + row as f32 * cell_h;
-            let mut current_text = String::new();
-            let mut current_fg = [1.0f32; 4];
-            let mut start_col = 0usize;
+    for (row, line) in lines.iter().enumerate() {
+        let y = py + row as f32 * cell_h;
+        let mut current_text = String::new();
+        let mut current_fg = [1.0f32; 4];
+        let mut start_col = 0usize;
 
-            for (col, cell) in line.cells.iter().enumerate() {
-                if cell.c == ' ' || cell.c == '\0' {
-                    if !current_text.is_empty() {
-                        let x = px + start_col as f32 * cell_w;
-                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                        current_text.clear();
-                    }
-                    start_col = col + 1;
-                    continue;
+        for (col, cell) in line.cells.iter().enumerate() {
+            if cell.c == ' ' || cell.c == '\0' {
+                if !current_text.is_empty() {
+                    let x = px + start_col as f32 * cell_w;
+                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                    current_text.clear();
                 }
-
-                if col > start_col && cell.fg != current_fg {
-                    if !current_text.is_empty() {
-                        let x = px + start_col as f32 * cell_w;
-                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                        current_text.clear();
-                    }
-                    current_fg = cell.fg;
-                    start_col = col;
-                }
-
-                current_text.push(cell.c);
+                start_col = col + 1;
+                continue;
             }
 
-            if !current_text.is_empty() {
-                let x = px + start_col as f32 * cell_w;
-                text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+            if col > start_col && cell.fg != current_fg {
+                if !current_text.is_empty() {
+                    let x = px + start_col as f32 * cell_w;
+                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                    current_text.clear();
+                }
+                current_fg = cell.fg;
+                start_col = col;
             }
+
+            current_text.push(cell.c);
         }
 
-        let cursor_x = px + *cursor_col as f32 * cell_w;
-        let cursor_y = py + *cursor_row as f32 * cell_h;
-        primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+        if !current_text.is_empty() {
+            let x = px + start_col as f32 * cell_w;
+            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+        }
     }
+
+    let cursor_x = px + *cursor_col as f32 * cell_w;
+    let cursor_y = py + *cursor_row as f32 * cell_h;
+    primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
 }
 
 /// Human-readable status mode label and suffix for the status bar.
@@ -191,25 +189,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
-    for (i, tab_name) in state.tab_names.iter().enumerate() {
-        let tab_x = 4.0 + i as f32 * 120.0;
-        let tab_color = if i == state.active_tab {
-            theme.accent.to_f32x4()
-        } else {
-            theme.border.to_f32x4()
-        };
-        state
-            .primitive_renderer
-            .draw_rect(tab_x, 2.0, 116.0, tb.tab_bar_height - 4.0, tab_color);
-        let tab_text_y = (tb.tab_bar_height - chrome_text) / 2.0;
-        state.text_renderer.queue_text(
-            tab_name,
-            tab_x + 4.0,
-            tab_text_y,
-            chrome_text,
-            theme.foreground.to_f32x4(),
-        );
-    }
 
     let sb_y = h - tb.status_bar_height;
     state
@@ -270,8 +249,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .unwrap_or((0.0, 0.0));
 
     for (pane_id, rect) in &pane_positions {
-        let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
         let is_active = state.focused_pane == Some(pane_id.0);
@@ -471,8 +450,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.x + ws_offset.0;
-            let fy = float.position.y as f32 + pane_area.y + ws_offset.1;
+            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
+            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
             let is_focused = state.focused_pane == Some(float.pane.id.0);
@@ -526,8 +505,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
 
     let pane_area_rect = heca_core::layout::Rectangle::new(
-        heca_core::layout::Point::new(pane_area.x as f64, pane_area.y as f64),
-        heca_core::layout::Size::new(pane_area.w as f64, pane_area.h as f64),
+        heca_core::layout::Point::new(pane_area.loc.x, pane_area.loc.y),
+        heca_core::layout::Size::new(pane_area.size.w, pane_area.size.h),
     );
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
@@ -542,8 +521,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let mut found = false;
             for (pane_id, rect) in &pane_positions {
                 if pane_id.0 == *target_id {
-                    let px = pane_area.x + ws_offset.0 + rect.loc.x as f32;
-                    let py = pane_area.y + ws_offset.1 + rect.loc.y as f32;
+                    let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+                    let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
                     let pw = rect.size.w as f32;
                     let ph = rect.size.h as f32;
                     let lx = px + (pw - letter_size * 0.6) / 2.0;
@@ -559,8 +538,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             if !found && let Some(ws) = state.session.active_workspace() {
                 for float in &ws.floating_panes {
                     if float.pane.id.0 == *target_id {
-                        let fx = float.position.x as f32 + pane_area.x;
-                        let fy = float.position.y as f32 + pane_area.y;
+                        let fx = float.position.x as f32 + pane_area.loc.x as f32;
+                        let fy = float.position.y as f32 + pane_area.loc.y as f32;
                         let fw = float.size.w as f32;
                         let fh = float.size.h as f32;
                         let lx = fx + (fw - letter_size * 0.6) / 2.0;
@@ -609,7 +588,7 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
         },
     };
     let pane_area = chrome.content_rect(win_w, win_h);
-    let new_size = heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
+    let new_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     state.session.update_viewport(new_size);
 }
 

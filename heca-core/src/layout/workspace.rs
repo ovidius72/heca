@@ -15,10 +15,6 @@ pub struct Workspace {
     pub floating_panes: Vec<FloatingPane>,
     /// Whether the floating layout is active.
     pub floating_is_active: bool,
-    /// Whether floating panes should render on top even when not active.
-    pub floating_visible: bool,
-    /// Whether this workspace should be kept even when empty.
-    pub is_pinned: bool,
 }
 
 /// A floating pane with position and size.
@@ -48,8 +44,6 @@ impl Workspace {
             scrolling,
             floating_panes: Vec::new(),
             floating_is_active: false,
-            floating_visible: true,
-            is_pinned: false,
         }
     }
 

@@ -123,10 +123,10 @@ fn test_chrome_content_rect_left_sidebar() {
         right_sidebar_width: 0.0,
     };
     let r = cfg.content_rect(1280.0, 800.0);
-    assert_eq!(r.x, 200.0);
-    assert_eq!(r.y, 32.0);
-    assert_eq!(r.w, 1080.0);
-    assert_eq!(r.h, 744.0);
+    assert_eq!(r.loc.x, 200.0);
+    assert_eq!(r.loc.y, 32.0);
+    assert_eq!(r.size.w, 1080.0);
+    assert_eq!(r.size.h, 744.0);
 }
 
 #[test]
@@ -138,10 +138,10 @@ fn test_chrome_content_rect_no_sidebars() {
         right_sidebar_width: 0.0,
     };
     let r = cfg.content_rect(1280.0, 800.0);
-    assert_eq!(r.x, 40.0);
-    assert_eq!(r.y, 32.0);
-    assert_eq!(r.w, 1240.0);
-    assert_eq!(r.h, 744.0);
+    assert_eq!(r.loc.x, 40.0);
+    assert_eq!(r.loc.y, 32.0);
+    assert_eq!(r.size.w, 1240.0);
+    assert_eq!(r.size.h, 744.0);
 }
 
 #[test]

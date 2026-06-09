@@ -110,7 +110,7 @@ pub(crate) async fn init_state(
     let log_h = physical.height as f32 / scale_factor as f32;
     let pane_area = chrome.content_rect(log_w, log_h);
 
-    let viewport_size = heca_core::layout::types::Size::new(pane_area.w as f64, pane_area.h as f64);
+    let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = heca_core::layout::types::LayoutOptions {
         always_center_single_column: app_config.config.settings.always_center_single_column,
         ..Default::default()
@@ -154,9 +154,7 @@ pub(crate) async fn init_state(
             right_visible: true,
             right_width: 200.0,
         },
-        active_tab: 0,
         sidebar_tree,
-        tab_names: vec!["Main".to_string()],
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         last_focused: None,

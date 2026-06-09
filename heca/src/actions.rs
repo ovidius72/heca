@@ -3,10 +3,6 @@
 //! This module provides the `ActionRegistry` which maps `WmAction` discriminants
 //! to named handler functions. It also preserves the static metadata catalog
 //! (labels, categories, default bindings) for the command palette and docs.
-//!
-//! Note: ActionRegistry methods appear unused in the binary until Phase 5
-//! when `execute_action()` is replaced by `registry.execute()`.
-#![allow(dead_code)]
 
 use std::collections::HashMap;
 
@@ -29,6 +25,7 @@ pub enum ActionCategory {
     /// Workspace creation, renaming, switching.
     Workspace,
     /// Session-level: overview, save, load.
+    #[allow(dead_code)] // No session-level actions yet; will be used when overview/save/load are implemented.
     Session,
     /// UI chrome: sidebar toggle, tab management.
     Chrome,
@@ -36,6 +33,9 @@ pub enum ActionCategory {
     System,
 }
 
+// ActionCategory and its label() are used by ActionDescriptor metadata.
+// The metadata catalog is preserved for the command palette (not yet implemented).
+#[allow(dead_code)]
 impl ActionCategory {
     /// Human-readable category name for UI display.
     pub const fn label(self) -> &'static str {
@@ -53,6 +53,8 @@ impl ActionCategory {
 
 /// Static descriptor for a window-manager action.
 #[derive(Debug, Clone, Copy)]
+// Preserved for the command palette and RPC introspection (not yet implemented).
+#[allow(dead_code)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
@@ -97,14 +99,17 @@ impl ActionRegistry {
     }
 
     /// Check whether a handler is registered for the given action.
+    // Used in tests and debugging; kept for future RPC introspection.
+    #[allow(dead_code)]
     pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
         let disc = crate::input::action_discriminant(action);
         self.handlers.contains_key(&disc)
     }
 }
 
-// ── Static metadata catalog (unchanged from before) ──
-
+// ── Static metadata catalog for command palette and RPC introspection ──
+// Not yet consumed by runtime UI; preserved for planned features.
+#[allow(dead_code)]
 impl ActionRegistry {
     /// All registered actions in a stable order.
     pub const ALL: &[ActionDescriptor] = &[
@@ -306,6 +311,13 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             default_binding: "]",
         },
+        ActionDescriptor {
+            name: "delete_column",
+            label: "Delete Column",
+            description: "Delete the focused column and all its panes.",
+            category: ActionCategory::Layout,
+            default_binding: "unbound",
+        },
         // ── Pane ──
         ActionDescriptor {
             name: "close",
@@ -328,15 +340,9 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "q",
         },
+
         ActionDescriptor {
-            name: "swap_select",
-            label: "Quick-Swap Pane",
-            description: "Show letter labels on all columns; press a letter to swap with it.",
-            category: ActionCategory::Pane,
-            default_binding: "Shift+q",
-        },
-        ActionDescriptor {
-            name: "swap_and_focus",
+            name: "swap_and_focus_pane",
             label: "Swap and Focus",
             description: "Like Quick-Swap, but focus the target after swapping.",
             category: ActionCategory::Pane,
@@ -370,6 +376,13 @@ impl ActionRegistry {
             description: "Rename the current workspace.",
             category: ActionCategory::Workspace,
             default_binding: "Shift+w",
+        },
+        ActionDescriptor {
+            name: "delete_workspace",
+            label: "Delete Workspace",
+            description: "Delete a workspace and all its panes (not the last workspace).",
+            category: ActionCategory::Workspace,
+            default_binding: "unbound",
         },
         // ── Chrome ──
         ActionDescriptor {
@@ -470,20 +483,7 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             default_binding: "(",
         },
-        ActionDescriptor {
-            name: "tab_next",
-            label: "Next Tab",
-            description: "Switch to the next tab.",
-            category: ActionCategory::Chrome,
-            default_binding: "Ctrl+]",
-        },
-        ActionDescriptor {
-            name: "tab_prev",
-            label: "Previous Tab",
-            description: "Switch to the previous tab.",
-            category: ActionCategory::Chrome,
-            default_binding: "Ctrl+[",
-        },
+
         // ── System ──
         ActionDescriptor {
             name: "command_palette",
@@ -491,6 +491,13 @@ impl ActionRegistry {
             description: "Open the command palette (not yet implemented).",
             category: ActionCategory::System,
             default_binding: "p",
+        },
+        ActionDescriptor {
+            name: "reload_config",
+            label: "Reload Config",
+            description: "Reload keymaps, theme, and settings from config.toml without restarting.",
+            category: ActionCategory::System,
+            default_binding: "Shift+r",
         },
     ];
 

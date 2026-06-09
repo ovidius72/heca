@@ -197,8 +197,6 @@ pub struct AppState {
     pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
-    pub active_tab: usize,
-    pub tab_names: Vec<String>,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).
