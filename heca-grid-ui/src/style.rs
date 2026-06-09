@@ -153,6 +153,10 @@ pub struct Style {
     /// Semantic multiplier applied to the inherited base font (header ≈ 2.0,
     /// caption ≈ 0.8, body = 1.0). Ignored when `font_size` is set explicitly.
     pub font_scale: f32,
+    /// When true the node is removed from layout entirely (`display: none`) — it
+    /// takes no space and paints nothing. Used by collapsible containers
+    /// (e.g. [`ItemGroup`](crate::widgets::ItemGroup)) to fold rows away.
+    pub hidden: bool,
     /// Placement when this component is a child of a [`Grid`](crate::widgets::Grid).
     /// `None` ⇒ grid auto-placement. Set by `Grid::cell`/`Grid::area`.
     pub grid_cell: Option<GridCell>,
@@ -179,6 +183,7 @@ impl Default for Style {
             // (x > 0) overrides it. Resolved centrally during layout.
             font_size: 0.0,
             font_scale: 1.0,
+            hidden: false,
             grid_cell: None,
         }
     }
@@ -188,6 +193,9 @@ impl Style {
     /// Map the layout fields onto a `taffy::Style` for the layout engine.
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;
+        if self.hidden {
+            return taffy::Style { display: Display::None, ..Default::default() };
+        }
         taffy::Style {
             display: Display::Flex,
             flex_direction: match self.direction {
