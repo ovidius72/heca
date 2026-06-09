@@ -32,16 +32,18 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ### Phase C — finish the catalog & shells
 
-**Chrome vocabulary — see [`grid-ui-chrome-plan.md`](./grid-ui-chrome-plan.md)** (supersedes the old "Sidebar = tree nav" idea; the Sidebar is a **dumb shell** that hosts **Docks**, which are app-side and own their own logic). Decisions locked 2026-06-09. Build the vocabulary now; DnD waits for the incoming system; scroll waits on the renderer.
+**Chrome vocabulary — see [`grid-ui-chrome-plan.md`](./grid-ui-chrome-plan.md).** Decisions locked 2026-06-09. The DnD framework already shipped (`heca-grid-ui/src/drag/`); build the rest of the vocabulary now; scroll waits on the renderer.
+
+> **What G1–G8 supersede / don't.** These are the **grid-ui (presentation) layer** for the chrome/sidebar. They **replace** the old sidebar widget plan (old `C6 Sidebar = tree-nav`) and **absorb** old `C4` (CornerBrackets/Reticle) + `C5` (StatusBar) + `C7` (Pane HUD header). They **do not** touch the rest of this plan (shipped catalog, docs pass, end-user docs, Phase D). They also **do not** include the sidebar's *behavior* — the workspace tree / panes / git / docker live in **app-side Docks** (`WorkspacesDock`, …) tracked in `pluggable-chrome-plugin-plan.md` (Phase 5+), not here. grid-ui stays domain-neutral.
+
 - [ ] **G1 `Grid`** layout widget (taffy grid; tracks + named areas) — flexible item content. *Start here.*
 - [ ] **G2 `Icon`** widget + embedded, host-registered icon font.
 - [ ] **G3 `ItemGroup`** — collapsible group over `Item`.
 - [ ] **G4 `DockFrame`** — titled/collapsible frame + drag handle + header slot; reuses `Pane` brackets (new widget; keep `Pane` as the plain container).
 - [ ] **G5 `ChromeRegion`/`Sidebar` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), collapsible (icon rail, keyboard-expandable), mode-aware, hosts `DockFrame`s, Dock-level drop targets. **No** tree/workspace/drag semantics (those are the app-side `WorkspacesDock`).
-- [ ] **G6 DnD hooks** — drag handle / drop targets / item reorder onto the **incoming** DnD system (do **not** build a homegrown one). *Gated on the incoming code.*
+- [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [ ] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase mock WorkspacesDock (program/git/status rows). grid-ui stays domain-neutral; the Dock maps state→style.
-- [ ] *(old C5 `StatusBar` / C4 `CornerBrackets`+`Reticle` fold into G5 region shell + existing bracket painting.)*
 
 **Catalog gaps:**
 - [ ] `IconButton` + **icon support** (icon-font glyphs; no renderer texture work).
