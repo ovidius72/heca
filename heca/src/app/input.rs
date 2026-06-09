@@ -510,7 +510,7 @@ mod tests {
     use crate::sidebar::SidebarItem;
     use heca_core::layout::column::Pane;
     use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
-    use heca_core::layout::{PaneId, Session, SessionId};
+    use heca_core::layout::{FocusDomain, PaneId, Session, SessionId};
 
     fn make_session() -> Session {
         let mut session = Session::new(
@@ -557,7 +557,7 @@ mod tests {
             original_column_idx: None,
             original_pane_idx: None,
         });
-        ws.floating_is_active = false;
+        ws.focus_domain = FocusDomain::Tiled;
 
         assert_eq!(
             sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: 2 }),
