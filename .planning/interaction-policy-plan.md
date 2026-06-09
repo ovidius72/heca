@@ -446,23 +446,26 @@ So this is effectively a deeper and more maintainable continuation of Phase 9.
 ## Checklist
 
 ### 0. Clean up current WIP
-- [ ] Identify and remove ad hoc modal checks that should be superseded by router logic
-- [ ] Preserve only `FocusDomain` if it remains the right core primitive
-- [ ] Keep behavior stable while transitioning
+- [x] Identify and remove ad hoc modal checks that should be superseded by router logic
+- [x] Preserve only `FocusDomain` if it remains the right core primitive
+- [x] Keep behavior stable while transitioning
 
 ### 1. Core types
-- [ ] Add `heca/src/app/interaction.rs`
-- [ ] Add `InteractionSource`
-- [ ] Add `InteractionIntent`
-- [ ] Add `RouteDecision`
-- [ ] Add `ActionPolicy`
-- [ ] Add `action_policy(&WmAction)`
-- [ ] Add `route_interaction(...)`
-- [ ] Add `can_focus_pane(...)` or equivalent helper
+- [x] Add `heca/src/app/interaction.rs`
+- [x] Add `InteractionSource`
+- [x] Add `InteractionIntent`
+- [x] Add `RouteDecision`
+- [x] Add `ActionPolicy`
+- [x] Add `action_policy(&WmAction)`
+- [x] Add `route_interaction(...)`
+- [x] Add `route_interaction_for_session(...)` (testable variant)
+- [x] Add `dispatch_action(state, registry, source, action)`
+- [x] Add `is_floating_domain(...)` and `current_focus_domain(...)` helpers
+- [x] Module wire-up in `heca/src/app/mod.rs`
 
 ### 2. Wire first sources
-- [ ] Route keyboard action execution through interaction router
-- [ ] Route content click focus through interaction router
+- [x] Route keyboard action execution through interaction router
+- [x] Route content click focus through interaction router
 - [ ] Route left sidebar click through interaction router
 - [ ] Route left sidebar drag-start through interaction router
 
@@ -478,16 +481,16 @@ So this is effectively a deeper and more maintainable continuation of Phase 9.
 - [ ] Reduce direct tiled/floating branching in handlers
 
 ### 5. Tests
-- [ ] Add router unit tests
+- [x] Add router unit tests (8 tests: tiled allows, floating blocks, focused-pane-local allows, intent blocks, policy exhaustive, is_floating_domain, floating detection)
 - [ ] Add sidebar/content floating-focus regression tests
 - [ ] Add keyboard tiled-only action blocking tests in floating domain
 - [ ] Add allowed floating-local action tests
 - [ ] Re-run full validation
 
 ### 6. Validation
-- [ ] `cargo check --workspace`
-- [ ] `cargo clippy --workspace --all-targets --all-features`
-- [ ] `cargo test --workspace`
+- [x] `cargo check --workspace`
+- [x] `cargo clippy --workspace --all-targets --all-features` — 0 heca warnings
+- [x] `cargo test --workspace` — 226 tests pass
 - [ ] Manually smoke test floating focus vs sidebar/content click behavior
 
 ---
@@ -524,35 +527,72 @@ Everything else can be layered in later.
 _Update this section after each phase or on demand._
 
 ### Current status
-- Active branch:
-- Current phase/slice:
-- Overall status:
-- Last validated at:
+- Active branch: feature/interaction-policy
+- Current phase/slice: Phase 1+2 (core types, real policy, keyboard/mouse wired)
+- Overall status: Core types and real floating-domain policy implemented, keyboard and mouse content wired
+- Last validated at: 2026-06-09
 
 ### Completed work
-- 
+- Core types in heca/src/app/interaction.rs:
+  - InteractionSource enum (Keyboard, MouseContent, MouseLeftSidebar)
+  - InteractionIntent enum (ActivateAction, FocusPane, FocusWorkspace, EnterSidebarNav, StartSidebarDrag)
+  - RouteDecision enum (Allow(intent), Block)
+  - ActionPolicy enum (private: AlwaysAllowed, TiledOnly, FocusedPaneLocal, WorkspaceLevel, SourceDependent)
+  - action_policy() function with exhaustive WmAction matching (no catch-all)
+  - route_interaction() / route_interaction_for_session() — real floating-domain policy
+  - dispatch_action() — single public entry point, routes through router then registry
+  - is_floating_domain() helper
+- Floating-domain blocking policy implemented:
+  - When FocusDomain::Floating, only Float/ClosePane/RenamePane allowed from keyboard
+  - All TiledOnly, WorkspaceLevel, and AlwaysAllowed actions blocked when floating
+  - FocusPane from mouse/sidebar blocked when floating
+  - EnterSidebarNav and StartSidebarDrag blocked when floating
+- Keyboard dispatch wired through dispatch_action() in heca/src/app/input.rs
+- Mouse content dispatch wired through dispatch_action() with InteractionSource::MouseContent in heca/src/app/events.rs
+- 8 unit tests covering: tiled allows, floating blocks, focused-pane-local allows, intent blocks, policy exhaustive, domain helpers
+- Rust skills review completed: stale docs fixed, pub->pub(crate), #[allow(dead_code)] with TODO for Phase B types
+  - Phase A unit tests (5 tests: exhaustive policy, allow-all intents, allow-all sources, focus domain helpers)
+- Stashed ad hoc guards from old branch (stash@{0})
+- FocusDomain enum preserved in heca-core
 
 ### In-progress work
-- 
+- Phase 2 remaining: Route left sidebar click through interaction router
 
 ### Pending work
-- 
+- Phase C: Remove ad hoc modal checks from focus.rs, mouse.rs, surface_left.rs
+- Phase D: Add focus-target helpers
+- Phase E: Regression tests for floating-domain blocking
 
 ### Open questions / decisions needed
-- 
+- AlwaysAllowed actions: blocked when floating from keyboard/sidebar, but may be allowed from future chrome sources
+- Scratchpad feature (future): may allow multiple floating panes
+- RPC source policy: deferred
 
 ### Files changed in current slice
-- 
+- heca/src/app/interaction.rs (new, ~650 lines)
+- heca/src/app/mod.rs (added interaction module)
+- heca/src/app/input.rs (replaced registry.execute with dispatch_action, InteractionSource::Keyboard)
+- heca/src/app/events.rs (replaced registry.execute with dispatch_action, InteractionSource::MouseContent)
+- heca-core/src/layout/workspace.rs (FocusDomain enum, docs — from prior commit)
+- heca/src/app/focus.rs (FocusDomain import — from prior commit)
 
 ### Validation run
-- `cargo check --workspace`:
-- `cargo clippy --workspace --all-targets --all-features`:
-- `cargo test --workspace`:
+- `cargo check --workspace`: ✅ clean
+- `cargo clippy --workspace --all-targets --all-features`: ✅ 0 heca warnings
+- `cargo test --workspace`: ✅ 226 tests pass (8 new interaction tests)
 
 ### Rust skill review status
-- Review completed:
-- Findings:
-- User acknowledged review:
+- Review completed: yes (both rust-skills and rust-best-practices)
+- Findings addressed:
+  - R4/R5: Stale "Phase A" doc comments updated to reflect real policy
+  - R6: Changed `pub` to `pub(crate)` for InteractionSource, InteractionIntent, RouteDecision
+  - R3: Added `#[allow(dead_code)]` with TODO justification for Phase B types
+  - R1/R2: Accepted clone pattern — WmAction ownership model is acceptable for now
+  - R8: Accepted `#[cfg(debug_assertions)]` eprintln — may add tracing later
+- User acknowledged review: yes
 
 ### Next recommended step
-- 
+- Phase B: Wire sidebar click through dispatch_action() with InteractionSource::MouseLeftSidebar
+- Phase C: Remove ad hoc modal checks from focus.rs, mouse.rs, surface_left.rs
+- Phase D: Add focus-target helpers
+- Phase E: Add regression tests for floating-domain blocking behavior

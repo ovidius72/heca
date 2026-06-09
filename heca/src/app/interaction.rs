@@ -1,0 +1,665 @@
+//! Central interaction policy layer.
+//!
+//! Every user-initiated action that changes WM state must flow through
+//! `dispatch_action()` — the single chokepoint that decides whether an
+//! interaction is allowed based on the current focus domain, input mode,
+//! and interaction source.
+//!
+//! # Architecture
+//!
+//! ```text
+//! User input → InteractionIntent → route_interaction() → RouteDecision
+//!                                                        ├─ Allow(intent) → registry.execute()
+//!                                                        └─ Block          → no-op
+//! ```
+//!
+//! For keyboard actions:
+//! ```text
+//! KeyCombo → WmAction → dispatch_action(state, Keyboard, &action)
+//! ```
+//!
+//! For mouse/sidebar actions:
+//! ```text
+//! Click/Drag → InteractionIntent::FocusPane { .. } → dispatch_action(state, MouseContent, &WmAction)
+//! ```
+//!
+//! Handler-to-handler calls bypass the router and use `registry.execute()` directly.
+//!
+//! # Floating domain policy
+//!
+//! When `FocusDomain::Floating` is active, only `FocusedPaneLocal` actions
+//! (Float/Unfloat, ClosePane, RenamePane) are allowed. Everything else is
+//! blocked — tiled layout actions, sidebar, workspace switching, command
+//! palette, mouse drag, and pane selection overlays.
+//!
+//! The only escape from floating is `prefix+f` (Float toggle) or closing the
+//! floating pane (ClosePane).
+
+use crate::actions::ActionRegistry;
+use crate::app_state::AppState;
+use crate::input::WmAction;
+use heca_core::layout::FocusDomain;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Interaction source
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Where did the interaction come from?
+///
+/// Different sources may have different policy for the same action.
+/// Example: a keyboard `FocusLeft` is blocked when floating, but a
+/// future top-menu-bar "Focus Left" button might be allowed even while
+/// floating if it explicitly refocuses the tiled domain first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InteractionSource {
+    /// Keyboard shortcut (prefix mode, global binding, mode binding).
+    Keyboard,
+    /// Mouse click or drag in the content area (tiled panes).
+    MouseContent,
+    /// Mouse click or drag in the left sidebar.
+    /// TODO(wire-sidebar): constructed when sidebar mouse routing goes through dispatch_action.
+    #[allow(dead_code)] // TODO(wire-sidebar): will be constructed when sidebar mouse routing is wired
+    MouseLeftSidebar,
+    // Future sources — not implemented yet:
+    // MouseRightSidebar,
+    // MouseTopMenu,
+    // MouseStatusBar,
+    // Rpc,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Interaction intent
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// What the interaction is trying to do.
+///
+/// Keyboard actions are wrapped in `ActivateAction`. Mouse and sidebar
+/// interactions use specific intent variants because they carry semantic
+/// information that a raw `WmAction` wouldn't capture (e.g., sidebar drag
+/// start has no `WmAction` equivalent).
+///
+/// TODO(wire-intents): FocusPane, FocusWorkspace, EnterSidebarNav, StartSidebarDrag
+/// will be constructed when sidebar/mouse click routing goes through dispatch_action.
+#[derive(Debug, Clone)]
+pub(crate) enum InteractionIntent {
+    /// A keyboard shortcut resolved to a WM action.
+    ActivateAction(WmAction),
+    /// Focus a specific pane (from sidebar click, content click, or RPC).
+    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
+    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    FocusPane { pane_id: u64 },
+    /// Focus a specific workspace (from sidebar click).
+    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
+    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    FocusWorkspace { ws_idx: usize },
+    /// Enter sidebar navigation mode (from keyboard shortcut or click).
+    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
+    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    EnterSidebarNav,
+    /// Start dragging a sidebar item (no WmAction equivalent).
+    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
+    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    StartSidebarDrag { #[allow(dead_code)] pane_id: u64 },
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Route decision
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Decision returned by the interaction router.
+///
+/// `Allow(intent)` carries the intent forward so the router can
+/// transform it in the future (e.g., retarget a focus change).
+/// `Block` silently discards the interaction — no state change occurs.
+#[derive(Debug, Clone)]
+pub(crate) enum RouteDecision {
+    Allow(InteractionIntent),
+    Block,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Action policy (private — only used internally by the router)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Policy classification for a WM action.
+///
+/// This determines how the action behaves under different focus domains.
+/// It is **private** to the interaction module — callers should use
+/// `dispatch_action()` or `route_interaction()` and never check policy
+/// directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ActionPolicy {
+    /// Always allowed regardless of focus domain.
+    AlwaysAllowed,
+    /// Only meaningful in Tiled domain — blocked when Floating.
+    TiledOnly,
+    /// Operates on the focused pane regardless of domain (close, rename, float/unfloat).
+    FocusedPaneLocal,
+    /// Affects workspace structure — blocked when Floating (for now).
+    WorkspaceLevel,
+    /// Policy depends on the interaction source.
+    SourceDependent,
+}
+
+/// Classify a WM action into its policy category.
+fn action_policy(action: &WmAction) -> ActionPolicy {
+    match action {
+        // ── Tiled-only: blocked when Floating ──
+        WmAction::FocusLeft
+        | WmAction::FocusRight
+        | WmAction::FocusUp
+        | WmAction::FocusDown
+        | WmAction::NextPane
+        | WmAction::PrevPane
+        | WmAction::FocusToggleLocal
+        | WmAction::FocusToggleGlobal
+        | WmAction::SplitHorizontal
+        | WmAction::SplitVertical
+        | WmAction::ZoomColumn
+        | WmAction::ResizeIncrease
+        | WmAction::ResizeDecrease
+        | WmAction::PaneHeightIncrease
+        | WmAction::PaneHeightDecrease
+        | WmAction::SwapLeft
+        | WmAction::SwapRight
+        | WmAction::SwapUp
+        | WmAction::SwapDown
+        | WmAction::MovePaneLeft
+        | WmAction::MovePaneRight
+        | WmAction::MoveColumnUp
+        | WmAction::MoveColumnDown
+        | WmAction::Swap { .. }
+        | WmAction::Move { .. }
+        | WmAction::MovePaneToWorkspace { .. }
+        | WmAction::MovePaneToColumn { .. }
+        | WmAction::MoveColumnToWorkspace { .. }
+        | WmAction::Resize { .. }
+        | WmAction::ResizeTo { .. }
+        | WmAction::RenameColumn
+        | WmAction::DeleteColumn { .. }
+        | WmAction::AddPaneToColumn { .. }
+        // Sidebar actions: blocked when Floating
+        | WmAction::SidebarLeft
+        | WmAction::SidebarRight
+        | WmAction::SidebarFocus
+        | WmAction::SidebarUp
+        | WmAction::SidebarDown
+        | WmAction::SidebarLeftNav
+        | WmAction::SidebarRightNav
+        | WmAction::SidebarExpandToggle
+        | WmAction::SidebarCreateWorkspace
+        | WmAction::SidebarCreateColumn
+        | WmAction::SidebarSplitInColumn
+        | WmAction::SidebarZoomSelectedColumn
+        | WmAction::SidebarDeleteSelected
+        | WmAction::CollapseCurrentWorkspace
+        | WmAction::ExpandCurrentWorkspace
+        | WmAction::ToggleCurrentWorkspaceCollapsed
+        | WmAction::CollapseCurrentColumn
+        | WmAction::ExpandCurrentColumn
+        | WmAction::ToggleCurrentColumnCollapsed
+        // Pane select/swap/take overlays: blocked when Floating
+        | WmAction::PaneSelect
+        | WmAction::SwapPane
+        | WmAction::SwapAndFocusPane
+        | WmAction::PaneTake
+        | WmAction::PaneTakeAndFocus
+        | WmAction::TakePane { .. }
+        // FloatAt: spawns new floating pane — blocked when already floating
+        | WmAction::FloatAt { .. } => ActionPolicy::TiledOnly,
+
+        // ── Focused-pane-local: allowed in both domains ──
+        WmAction::Float
+        | WmAction::ClosePane
+        | WmAction::ClosePaneById { .. }
+        | WmAction::RenamePane
+        | WmAction::RenameTarget { .. } => ActionPolicy::FocusedPaneLocal,
+
+        // ── Workspace-level: blocked when Floating ──
+        WmAction::WorkspaceNext
+        | WmAction::WorkspacePrev
+        | WmAction::FocusWorkspace { .. }
+        | WmAction::CreateWorkspace
+        | WmAction::RenameWorkspace
+        | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
+
+        // ── Always-allowed: work regardless of domain ──
+        WmAction::CommandPalette
+        | WmAction::SpawnCommand { .. }
+        | WmAction::EnterMode { .. }
+        | WmAction::ReloadConfig => ActionPolicy::AlwaysAllowed,
+
+        // ── Source-dependent: may be allowed from some sources ──
+        WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Route interaction
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Decide whether an interaction is allowed under the current state.
+///
+/// Delegates to `route_interaction_for_session()` with `state.session`.
+/// Applies floating-domain policy: when `FocusDomain::Floating` is active,
+/// only `FocusedPaneLocal` actions are allowed from keyboard/mouse sources.
+pub(crate) fn route_interaction(
+    state: &AppState,
+    source: InteractionSource,
+    intent: InteractionIntent,
+) -> RouteDecision {
+    route_interaction_for_session(&state.session, source, intent)
+}
+
+/// Session-only routing logic, extracted for testability.
+///
+/// This is the core policy function. `route_interaction()` delegates here,
+/// passing `state.session`. Tests call this directly.
+///
+/// # Floating domain policy
+///
+/// When `FocusDomain::Floating` is active, only `FocusedPaneLocal` actions
+/// (Float/Unfloat, ClosePane, RenamePane) are allowed. Everything else is
+/// blocked — tiled layout actions, sidebar, workspace switching, command
+/// palette, mouse drag, and pane selection overlays.
+///
+/// The only escape from floating is `prefix+f` (Float toggle) or closing the
+/// floating pane (ClosePane).
+pub(crate) fn route_interaction_for_session(
+    session: &heca_core::layout::Session,
+    source: InteractionSource,
+    intent: InteractionIntent,
+) -> RouteDecision {
+    match &intent {
+        InteractionIntent::ActivateAction(action) => {
+            route_action(session, source, action)
+        }
+        InteractionIntent::FocusPane { .. } => {
+            // FocusPane from mouse content/sidebar: blocked when floating.
+            // Only the active floating pane can receive focus in floating domain.
+            if is_floating_domain(session) {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(intent)
+            }
+        }
+        InteractionIntent::FocusWorkspace { .. } => {
+            // Workspace switching: blocked when floating.
+            if is_floating_domain(session) {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(intent)
+            }
+        }
+        InteractionIntent::EnterSidebarNav => {
+            // Sidebar navigation: blocked when floating.
+            if is_floating_domain(session) {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(intent)
+            }
+        }
+        InteractionIntent::StartSidebarDrag { .. } => {
+            // Sidebar drag: blocked when floating.
+            if is_floating_domain(session) {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(intent)
+            }
+        }
+    }
+}
+
+/// Route a WmAction based on the current focus domain and interaction source.
+fn route_action(
+    session: &heca_core::layout::Session,
+    source: InteractionSource,
+    action: &WmAction,
+) -> RouteDecision {
+    let floating = is_floating_domain(session);
+    let policy = action_policy(action);
+
+    match policy {
+        ActionPolicy::AlwaysAllowed => {
+            // AlwaysAllowed actions (CommandPalette, SpawnCommand, ReloadConfig, EnterMode)
+            // are blocked when floating from current sources (Keyboard, MouseContent, MouseLeftSidebar).
+            // Future chrome sources (MouseTopMenu, MouseStatusBar) may allow these even while floating.
+            if floating {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+            }
+        }
+        ActionPolicy::FocusedPaneLocal => RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone())),
+        ActionPolicy::TiledOnly => {
+            if floating {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+            }
+        }
+        ActionPolicy::WorkspaceLevel => {
+            if floating {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+            }
+        }
+        ActionPolicy::SourceDependent => {
+            // FocusPane: allowed if targeting the active floating pane, otherwise blocked.
+            if let WmAction::FocusPane { pane_id } = action {
+                if floating {
+                    // Only allow focus if it targets the active floating pane.
+                    let active_floating = session
+                        .active_workspace()
+                        .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
+                        .map(|f| f.pane.id.0);
+                    if active_floating == Some(*pane_id) {
+                        RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+                    } else {
+                        RouteDecision::Block
+                    }
+                } else {
+                    RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+                }
+            } else {
+                // Other source-dependent actions: defer to source when floating.
+                if floating {
+                    match source {
+                        InteractionSource::Keyboard => RouteDecision::Block,
+                        InteractionSource::MouseContent => RouteDecision::Block,
+                        InteractionSource::MouseLeftSidebar => RouteDecision::Block,
+                    }
+                } else {
+                    RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Focus-target helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Returns `true` when the active workspace is in `FocusDomain::Floating`.
+pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
+    session
+        .active_workspace()
+        .map(|ws| ws.focus_domain == FocusDomain::Floating)
+        .unwrap_or(false)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Dispatch action
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// The single public entry point for user-initiated WM actions.
+///
+/// Routes the action through the interaction policy layer. If allowed,
+/// executes via the registry. If blocked, silently discards.
+///
+/// Handler-to-handler calls should use `registry.execute()` directly —
+/// they bypass the router because they're inside an already-allowed
+/// interaction.
+pub(crate) fn dispatch_action(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+    action: &WmAction,
+) {
+    let intent = InteractionIntent::ActivateAction(action.clone());
+    let decision = route_interaction(state, source, intent);
+
+    match decision {
+        RouteDecision::Allow(InteractionIntent::ActivateAction(act)) => {
+            registry.execute(&act, state);
+        }
+        RouteDecision::Allow(other_intent) => {
+            // Non-action intents (FocusPane, EnterSidebarNav, etc.)
+            // are dispatched differently — for now, log and treat as no-op
+            // until Phase B wires them.
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] interaction: allowed non-action intent {:?} (dispatch not yet wired)",
+                other_intent
+            );
+        }
+        RouteDecision::Block => {
+            #[cfg(debug_assertions)]
+            eprintln!("[heca] interaction: blocked action {:?}", action);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create a minimal Session for routing tests.
+    fn test_session() -> heca_core::layout::Session {
+        use heca_core::layout::{LayoutOptions, SessionId, Size};
+        heca_core::layout::Session::new(
+            SessionId(0),
+            Size::new(800.0, 600.0),
+            1.0,
+            LayoutOptions::default(),
+        )
+    }
+
+    /// In Tiled domain, TiledOnly actions are allowed from any source.
+    #[test]
+    fn tiled_domain_allows_tiled_actions() {
+        let session = test_session();
+        let actions = [
+            WmAction::FocusLeft,
+            WmAction::FocusRight,
+            WmAction::SplitHorizontal,
+            WmAction::ZoomColumn,
+            WmAction::SidebarLeft,
+            WmAction::SidebarFocus,
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Tiled domain should allow {:?} but got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// In Tiled domain, FocusedPaneLocal actions are allowed.
+    #[test]
+    fn tiled_domain_allows_focused_pane_local() {
+        let session = test_session();
+        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Tiled domain should allow {:?} but got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// In Floating domain, TiledOnly actions are blocked.
+    #[test]
+    fn floating_domain_blocks_tiled_only() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let actions = [
+            WmAction::FocusLeft,
+            WmAction::FocusRight,
+            WmAction::FocusUp,
+            WmAction::FocusDown,
+            WmAction::SplitHorizontal,
+            WmAction::ZoomColumn,
+            WmAction::SidebarFocus,
+            WmAction::SidebarLeft,
+            WmAction::WorkspaceNext,
+            WmAction::CommandPalette,
+            WmAction::FocusToggleLocal,
+            WmAction::PaneSelect,
+            WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+        ];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Block),
+                "Floating domain should block {:?} but got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// In Floating domain, FocusedPaneLocal actions are allowed.
+    #[test]
+    fn floating_domain_allows_focused_pane_local() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane];
+        for action in &actions {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                InteractionIntent::ActivateAction(action.clone()),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Allow(_)),
+                "Floating domain should allow {:?} but got {:?}",
+                action,
+                decision,
+            );
+        }
+    }
+
+    /// Intent variants are blocked when floating.
+    #[test]
+    fn floating_domain_blocks_intent_variants() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let intents = [
+            InteractionIntent::FocusPane { pane_id: 99 },
+            InteractionIntent::FocusWorkspace { ws_idx: 0 },
+            InteractionIntent::EnterSidebarNav,
+            InteractionIntent::StartSidebarDrag { pane_id: 42 },
+        ];
+        for intent in &intents {
+            let decision = route_interaction_for_session(
+                &session,
+                InteractionSource::Keyboard,
+                intent.clone(),
+            );
+            assert!(
+                matches!(decision, RouteDecision::Block),
+                "Floating domain should block {:?} but got {:?}",
+                intent,
+                decision,
+            );
+        }
+    }
+
+    /// Action policy classifications are exhaustive — every variant is matched.
+    #[test]
+    fn action_policy_covers_all_variants() {
+        let unit_actions: Vec<WmAction> = vec![
+            WmAction::FocusLeft, WmAction::FocusRight, WmAction::FocusUp, WmAction::FocusDown,
+            WmAction::NextPane, WmAction::PrevPane, WmAction::FocusToggleLocal, WmAction::FocusToggleGlobal,
+            WmAction::SplitHorizontal, WmAction::SplitVertical, WmAction::ZoomColumn,
+            WmAction::ResizeIncrease, WmAction::ResizeDecrease,
+            WmAction::PaneHeightIncrease, WmAction::PaneHeightDecrease,
+            WmAction::SwapLeft, WmAction::SwapRight, WmAction::SwapUp, WmAction::SwapDown,
+            WmAction::MovePaneLeft, WmAction::MovePaneRight, WmAction::MoveColumnUp, WmAction::MoveColumnDown,
+            WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
+            WmAction::PaneTake, WmAction::PaneTakeAndFocus,
+            WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::RenameColumn,
+            WmAction::SidebarLeft, WmAction::SidebarRight, WmAction::SidebarFocus,
+            WmAction::SidebarUp, WmAction::SidebarDown,
+            WmAction::SidebarLeftNav, WmAction::SidebarRightNav, WmAction::SidebarExpandToggle,
+            WmAction::SidebarCreateWorkspace, WmAction::SidebarCreateColumn,
+            WmAction::SidebarSplitInColumn, WmAction::SidebarZoomSelectedColumn,
+            WmAction::SidebarDeleteSelected,
+            WmAction::CollapseCurrentWorkspace, WmAction::ExpandCurrentWorkspace,
+            WmAction::ToggleCurrentWorkspaceCollapsed,
+            WmAction::CollapseCurrentColumn, WmAction::ExpandCurrentColumn,
+            WmAction::ToggleCurrentColumnCollapsed,
+            WmAction::WorkspaceNext, WmAction::WorkspacePrev,
+            WmAction::CreateWorkspace, WmAction::RenameWorkspace,
+            WmAction::CommandPalette, WmAction::ReloadConfig,
+        ];
+        for action in &unit_actions {
+            let _policy = action_policy(action);
+        }
+
+        let param_actions = [
+            WmAction::FocusPane { pane_id: 0 },
+            WmAction::FocusWorkspace { ws_idx: 0 },
+            WmAction::Swap { a_id: 0, b_id: 0 },
+            WmAction::Move { pane_id: 0, target_col: 0 },
+            WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 },
+            WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 },
+            WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
+            WmAction::Resize { target: crate::input::ResizeTarget::Column, axis: crate::input::ResizeAxis::X, amount: 0.0 },
+            WmAction::ResizeTo { target: crate::input::ResizeTarget::Column, width: 0.0, height: 0.0 },
+            WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            WmAction::ClosePaneById { pane_id: 0 },
+            WmAction::RenameTarget { pane_id: 0, name: String::new() },
+            WmAction::SpawnCommand { command: String::new() },
+            WmAction::EnterMode { name: String::new() },
+            WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
+            WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+            WmAction::DeleteWorkspace { ws_idx: 0 },
+            WmAction::TakePane { pane_id: 0, focus_after: false },
+        ];
+        for action in &param_actions {
+            let _policy = action_policy(action);
+        }
+
+        // Spot-check specific classifications
+        assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
+        assert_eq!(action_policy(&WmAction::Float), ActionPolicy::FocusedPaneLocal);
+        assert_eq!(action_policy(&WmAction::ClosePane), ActionPolicy::FocusedPaneLocal);
+        assert_eq!(action_policy(&WmAction::CommandPalette), ActionPolicy::AlwaysAllowed);
+        assert_eq!(action_policy(&WmAction::WorkspaceNext), ActionPolicy::WorkspaceLevel);
+        assert_eq!(action_policy(&WmAction::FocusPane { pane_id: 0 }), ActionPolicy::SourceDependent);
+    }
+
+    /// is_floating_domain returns false for default (Tiled) workspace.
+    #[test]
+    fn is_floating_domain_default_is_tiled() {
+        let session = test_session();
+        assert!(!is_floating_domain(&session));
+    }
+
+    /// Setting focus_domain to Floating is detected by helpers.
+    #[test]
+    fn floating_domain_detected_after_set() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+        assert!(is_floating_domain(&session));
+    }
+}
