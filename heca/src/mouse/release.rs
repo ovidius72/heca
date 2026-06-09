@@ -106,7 +106,7 @@ fn handle_content_move(
                 removed,
                 hint,
                 new_col_id,
-                heca_core::layout::ColumnWidth::Proportion(0.5),
+                crate::chrome::default_column_width(),
                 true,
             );
         }

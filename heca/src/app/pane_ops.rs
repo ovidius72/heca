@@ -4,6 +4,7 @@
 //! and mouse paths can delegate to one implementation.
 
 use heca_core::layout::animation::AnimationConfig;
+use crate::chrome;
 use heca_core::layout::workspace::Workspace;
 use heca_core::layout::types::{Point, Rectangle};
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane};
@@ -269,7 +270,7 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
             let placeholder = Pane::new(heca_core::layout::PaneId(ph_pid), pane_name_fn(ph_pid));
             ws.scrolling.add_column(
                 Some(pos),
-                Column::new(new_cid, placeholder, ColumnWidth::Proportion(0.5)),
+                Column::new(new_cid, placeholder, chrome::default_column_width()),
                 true,
             );
         }
@@ -474,7 +475,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         if b_was_only {
             // B's column was deleted when B was removed. Recreate it with A.
             let insert_pos = b_col.min(ws_b.scrolling.columns.len());
-            let mut new_col = Column::new(b_original_col_id, removed_a, ColumnWidth::Proportion(0.5));
+            let mut new_col = Column::new(b_original_col_id, removed_a, chrome::default_column_width());
             if let Some(wa) = b_wa {
                 new_col.compute_pane_sizes(wa.size.h, b_gaps);
             }
@@ -514,7 +515,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         if a_was_only {
             // A's column was deleted when A was removed. Recreate it with B.
             let insert_pos = a_col.min(ws_a.scrolling.columns.len());
-            let mut new_col = Column::new(a_original_col_id, removed_b, ColumnWidth::Proportion(0.5));
+            let mut new_col = Column::new(a_original_col_id, removed_b, chrome::default_column_width());
             if let Some(wa) = a_wa {
                 new_col.compute_pane_sizes(wa.size.h, a_gaps);
             }
