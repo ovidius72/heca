@@ -7,7 +7,7 @@ struct Vertex {
     color: [f32; 4],
 }
 
-/// GPU renderer for primitive shapes: rectangles, borders, rounded corners.
+/// GPU renderer for primitive shapes: rectangles, borders.
 pub struct PrimitiveRenderer {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
@@ -193,6 +193,11 @@ impl PrimitiveRenderer {
 
     /// Queue a filled rectangle with a border.
     #[allow(clippy::too_many_arguments)]
+    /// Draw a filled rectangle with a border.
+    ///
+    /// Note: `radius` is currently ignored. True rounded corners (SDF or
+    /// geometry-based) are planned for a future phase. The function name is
+    /// kept for API stability but the output is currently sharp-cornered.
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
@@ -204,7 +209,6 @@ impl PrimitiveRenderer {
         border_width: f32,
         _radius: f32,
     ) {
-        // For Phase 1, draw filled rect + border (true rounded corners in Phase 2+)
         self.draw_rect(x, y, w, h, fill);
         self.draw_border(x, y, w, h, border, border_width);
     }
