@@ -352,6 +352,66 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                         .trailing(Label::new(">").color(theme.muted)),
                 )
         })
+        // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
+        // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
+        // beside a Grid-composed rich item. DockFrame and ItemGroup headers toggle
+        // on click — or via the keyboard (Tab to focus, Enter/Space to activate).
+        .child({
+            // G4 DockFrame framing G3 ItemGroups of rows; header slot carries a count.
+            let explorer = DockFrame::new("EXPLORER")
+                .header(Badge::accent("3"))
+                .child(
+                    ItemGroup::new("src")
+                        .child(Item::new("main.rs").leading(StatusDot::online()))
+                        .child(Item::new("lib.rs"))
+                        .child(Item::new("chrome_region.rs")),
+                )
+                .child(
+                    ItemGroup::new("tests")
+                        .expanded(false)
+                        .child(Item::new("phase_a.rs")),
+                );
+            // A second dock, starting collapsed — click its title bar to expand.
+            let source_control = DockFrame::new("SOURCE CONTROL")
+                .expanded(false)
+                .child(Item::new("M chrome_region.rs"))
+                .child(Item::new("A showcase.rs"));
+
+            // G5 ChromeRegion: a vertical sidebar shell hosting the docks.
+            let sidebar = ChromeRegion::vertical()
+                .expanded_size(320.0)
+                .gap(14.0)
+                .padding(14.0)
+                .background(theme.surface)
+                .dock(explorer)
+                .dock(source_control);
+
+            // G1 Grid: a 2-col rich item — a status dot spanning both rows, with a
+            // title over a subtitle in the second column.
+            let rich = Surface::new()
+                .background(theme.surface)
+                .border(theme.accent, 1.0)
+                .padding(14.0)
+                .child(
+                    Grid::new()
+                        .columns([Track::Px(28.0), Track::Fr(1.0)])
+                        .rows([Track::Auto, Track::Auto])
+                        .areas(["icon title", "icon sub"])
+                        .gap(8.0)
+                        .width(Length::Px(240.0))
+                        .area(StatusDot::online(), "icon")
+                        .area(
+                            Label::new("GRID NODE 7").color(theme.foreground).font_scale(1.1),
+                            "title",
+                        )
+                        .area(
+                            Label::new("uplink · 42ms").color(theme.muted).font_scale(0.85),
+                            "sub",
+                        ),
+                );
+
+            Flex::row().gap(28.0).align(Align::Start).child(sidebar).child(rich)
+        })
 }
 
 /// Resize cursor for the window edge/corner the pointer is near (else `Default`).
