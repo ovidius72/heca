@@ -306,6 +306,13 @@ impl ActionRegistry {
             category: ActionCategory::Layout,
             default_binding: "]",
         },
+        ActionDescriptor {
+            name: "delete_column",
+            label: "Delete Column",
+            description: "Delete the focused column and all its panes.",
+            category: ActionCategory::Layout,
+            default_binding: "unbound",
+        },
         // ── Pane ──
         ActionDescriptor {
             name: "close",
@@ -328,15 +335,9 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "q",
         },
+
         ActionDescriptor {
-            name: "swap_select",
-            label: "Quick-Swap Pane",
-            description: "Show letter labels on all columns; press a letter to swap with it.",
-            category: ActionCategory::Pane,
-            default_binding: "Shift+q",
-        },
-        ActionDescriptor {
-            name: "swap_and_focus",
+            name: "swap_and_focus_pane",
             label: "Swap and Focus",
             description: "Like Quick-Swap, but focus the target after swapping.",
             category: ActionCategory::Pane,
@@ -370,6 +371,13 @@ impl ActionRegistry {
             description: "Rename the current workspace.",
             category: ActionCategory::Workspace,
             default_binding: "Shift+w",
+        },
+        ActionDescriptor {
+            name: "delete_workspace",
+            label: "Delete Workspace",
+            description: "Delete a workspace and all its panes (not the last workspace).",
+            category: ActionCategory::Workspace,
+            default_binding: "unbound",
         },
         // ── Chrome ──
         ActionDescriptor {
@@ -470,20 +478,7 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             default_binding: "(",
         },
-        ActionDescriptor {
-            name: "tab_next",
-            label: "Next Tab",
-            description: "Switch to the next tab.",
-            category: ActionCategory::Chrome,
-            default_binding: "Ctrl+]",
-        },
-        ActionDescriptor {
-            name: "tab_prev",
-            label: "Previous Tab",
-            description: "Switch to the previous tab.",
-            category: ActionCategory::Chrome,
-            default_binding: "Ctrl+[",
-        },
+
         // ── System ──
         ActionDescriptor {
             name: "command_palette",
@@ -491,6 +486,13 @@ impl ActionRegistry {
             description: "Open the command palette (not yet implemented).",
             category: ActionCategory::System,
             default_binding: "p",
+        },
+        ActionDescriptor {
+            name: "reload_config",
+            label: "Reload Config",
+            description: "Reload keymaps, theme, and settings from config.toml without restarting.",
+            category: ActionCategory::System,
+            default_binding: "Shift+r",
         },
     ];
 
