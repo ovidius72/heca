@@ -57,10 +57,10 @@ pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-    ButtonVariant, Card, Checkbox, Container, DockFrame, DotStatus, Flex, Gauge, Grid, Input, Item,
-    ItemGroup, Label,
-    LabelSide, Orientation, Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface,
-    Tabs, Toggle,
+    ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Grid,
+    Input, Item, ItemGroup, Label,
+    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner, StatusDot,
+    Surface, Tabs, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -77,9 +77,9 @@ pub mod prelude {
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-        ButtonVariant, Card, Checkbox, Container, DockFrame, DotStatus, Flex, Gauge, Grid, Input,
-        Item, ItemGroup, Label,
-        LabelSide, Orientation, Pane, ProgressBar, Select, Separator, Spinner, StatusDot, Surface,
-        Tabs, Toggle,
+        ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
+        Grid, Input, Item, ItemGroup, Label,
+        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner,
+        StatusDot, Surface, Tabs, Toggle,
     };
 }

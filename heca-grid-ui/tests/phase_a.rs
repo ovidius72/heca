@@ -1645,3 +1645,67 @@ fn dock_frame_collapses_body_out_of_layout() {
     assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
     assert_eq!(body_hc, 0.0, "collapsed body takes no layout space");
 }
+
+#[test]
+fn chrome_region_expanded_uses_full_width() {
+    use heca_grid_ui::ChromeRegion;
+    let mut region = ChromeRegion::vertical()
+        .expanded_size(240.0)
+        .rail_size(48.0)
+        .dock(fixed_box(100.0, 60.0));
+
+    LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
+
+    assert_eq!(region.base().bounds.size.w, 240.0, "expanded sidebar uses its full width");
+}
+
+#[test]
+fn chrome_region_collapses_to_rail_width() {
+    use heca_grid_ui::{ChromeRegion, RegionMode};
+    let mut region = ChromeRegion::vertical()
+        .expanded_size(240.0)
+        .rail_size(48.0)
+        .dock(fixed_box(100.0, 60.0));
+
+    region.mode_signal().set(RegionMode::CollapsedRail);
+    LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
+
+    assert_eq!(region.base().bounds.size.w, 48.0, "collapsed sidebar shrinks to the rail width");
+}
+
+#[test]
+fn chrome_region_hidden_folds_out_of_layout() {
+    use heca_grid_ui::{ChromeRegion, RegionMode};
+    let mut region = ChromeRegion::vertical().dock(fixed_box(100.0, 60.0));
+
+    region.mode_signal().set(RegionMode::Hidden);
+    LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
+
+    assert_eq!(region.base().bounds.size.w, 0.0, "hidden region takes no layout space");
+}
+
+#[test]
+fn chrome_region_horizontal_bar_collapses_height() {
+    use heca_grid_ui::{ChromeRegion, RegionMode};
+    let mut bar = ChromeRegion::horizontal()
+        .expanded_size(200.0)
+        .rail_size(40.0)
+        .dock(fixed_box(60.0, 100.0));
+
+    bar.mode_signal().set(RegionMode::CollapsedRail);
+    LayoutEngine::new().compute(&mut bar, Size::new(800.0, 300.0));
+
+    assert_eq!(bar.base().bounds.size.h, 40.0, "collapsed top/bottom bar shrinks to the rail height");
+}
+
+#[test]
+fn chrome_region_toggle_flips_expanded_and_rail() {
+    use heca_grid_ui::{ChromeRegion, RegionMode};
+    let region = ChromeRegion::vertical();
+    assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded);
+
+    region.toggle();
+    assert_eq!(region.mode_signal().get_untracked(), RegionMode::CollapsedRail, "toggle collapses to rail");
+    region.toggle();
+    assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded, "toggle expands again");
+}
