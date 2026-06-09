@@ -490,7 +490,7 @@ So this is effectively a deeper and more maintainable continuation of Phase 9.
 ### 6. Validation
 - [x] `cargo check --workspace`
 - [x] `cargo clippy --workspace --all-targets --all-features` — 0 heca warnings
-- [x] `cargo test --workspace` — 234 tests pass
+- [x] `cargo test --workspace` — 237 tests pass (16 interaction tests)
 - [ ] Manually smoke test floating focus vs sidebar/content click behavior
 
 ---
