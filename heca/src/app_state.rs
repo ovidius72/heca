@@ -1,12 +1,11 @@
+use crate::app::backend_store::BackendStore;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
-use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
 use heca_grid_ui::drag::DragContext;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
-use std::collections::HashMap;
 use std::sync::Arc;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
@@ -189,7 +188,7 @@ pub struct AppState {
     pub text_renderer: TextRenderer,
     pub session: Session,
     /// Content backends for panes that have one.
-    pub backends: HashMap<u64, Box<dyn PaneBackend>>,
+    pub backends: BackendStore,
     pub theme: Theme,
     pub scale_factor: f64,
     pub needs_redraw: bool,

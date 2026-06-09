@@ -53,7 +53,7 @@
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Should have 2 workspaces
         assert_eq!(tree.workspaces.len(), 2, "should have 2 workspaces");
@@ -80,7 +80,7 @@
     fn test_tree_flat_items() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Flat items should contain workspaces, columns, and panes
         assert!(
@@ -106,7 +106,7 @@
     fn test_cursor_movement() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         assert_eq!(tree.cursor, 0, "cursor starts at 0");
 
@@ -137,7 +137,7 @@
     fn test_expand_collapse_workspace() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Initially not collapsed
         assert!(
@@ -179,7 +179,7 @@
         session.switch_to_workspace(1);
 
         // Rebuild with last_visited_ws_idx = 0 (WS 0 was visited before)
-        tree.rebuild(&session, Some(0), Some(5), &[]);
+        tree.sync_from_session(&session, Some(0), Some(5), &[]);
 
         // WS 1 should be active (current)
         assert_eq!(
@@ -201,11 +201,11 @@
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
         let first_count = tree.flat_items.len();
 
         // Rebuild again — should be same result
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
         assert_eq!(
             tree.flat_items.len(),
             first_count,
@@ -214,7 +214,7 @@
 
         // Cursor should be clamped if it was out of bounds
         tree.cursor = 9999;
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
         assert!(
             tree.cursor < tree.flat_items.len(),
             "cursor should be clamped after rebuild"
@@ -232,7 +232,7 @@
         );
         let mut tree = SidebarTree::new();
 
-        tree.rebuild(&session, None, None, &[]);
+        tree.sync_from_session(&session, None, None, &[]);
 
         // Even an empty session has at least 1 workspace (the initial one)
         assert!(
@@ -246,7 +246,7 @@
     fn test_cursor_down_collapsed_skips_columns() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Start at first workspace (index 0). In collapsed mode cursor_down
         // should skip the Column item and land on the first Pane.
@@ -263,7 +263,7 @@
     fn test_cursor_up_collapsed_skips_columns() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Put cursor on the first Pane item after its Column.
         // cursor_up_collapsed should skip the Column and land on Workspace.
@@ -285,7 +285,7 @@
     fn test_toggle_expand_clamps_cursor() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Place cursor deep inside workspace 0 (e.g. on a pane).
         let ws0_last_idx = tree
@@ -302,7 +302,7 @@
 
         // Collapse workspace 0 — its children disappear.
         tree.workspaces[0].collapsed = true;
-        tree.rebuild_flat_items();
+        tree.sync_flat_items();
         tree.clamp_cursor();
 
         // clamp_cursor() only bounds-checks; cursor may end up on a later workspace.
@@ -319,7 +319,7 @@
     fn test_column_expand_collapse() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Find first Column item in flat list.
         let col_idx = tree
@@ -352,7 +352,7 @@
     fn test_collapse_workspace_moves_cursor_to_workspace_row() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         let pane_idx = tree
             .flat_items
@@ -373,7 +373,7 @@
     fn test_collapse_column_moves_cursor_to_column_row() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         let pane_idx = tree
             .flat_items
@@ -405,7 +405,7 @@
     fn test_toggle_workspace_collapsed_by_index_updates_cursor() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         let pane_idx = tree
             .flat_items
@@ -433,7 +433,7 @@
     fn test_toggle_column_collapsed_by_index_updates_cursor() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         let pane_idx = tree
             .flat_items
@@ -477,7 +477,7 @@
         let tree = SidebarTree::new();
         // Rebuild into a fresh tree (cursor at 0)
         let mut tree = tree;
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // sidebar_top=32, 4px padding, then [+w] button row (24px), then first flat item.
         // First flat item starts at y = 32 + 4 + 24 = 60. Click middle of that row.
@@ -497,7 +497,7 @@
     fn test_collapse_persists_across_rebuild() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Collapse workspace 0.
         tree.cursor = 0;
@@ -509,7 +509,7 @@
         let collapsed_count = tree.flat_items.len();
 
         // Rebuild from session — collapse state should survive.
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
         assert!(
             tree.workspaces[0].collapsed,
             "WS 0 collapse should persist across rebuild"
@@ -525,7 +525,7 @@
     fn test_sidebar_hit_test_collapsed() {
         let (session, _ids) = make_test_session();
         let mut tree = SidebarTree::new();
-        tree.rebuild(&session, None, Some(1), &[]);
+        tree.sync_from_session(&session, None, Some(1), &[]);
 
         // Collapsed mode (width < 80). Click on second visible line.
         // Rows: 4px pad, [+w] row (24px), then visible lines.

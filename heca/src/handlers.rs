@@ -124,7 +124,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -142,7 +142,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     }
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -531,18 +531,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                 ws.floating_is_active = false;
             }
         } else {
-            let mut found = None;
-            for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-                for (pi, pane) in col.panes.iter().enumerate() {
-                    if pane.id.0 == pane_id {
-                        found = Some((ci, pi));
-                        break;
-                    }
-                }
-                if found.is_some() {
-                    break;
-                }
-            }
+            let found = crate::app::pane_ops::find_pane_indices_in_workspace(ws, pane_id);
             if let Some((col_idx, pane_idx)) = found
                 && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
             {
@@ -574,7 +563,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         if let Some(col) = ws.scrolling.active_column() {
             let pane_idx = col.active_pane_idx;
             if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                state.backends.remove(&removed.id.0);
+                state.backends.remove_for_pane(removed.id.0);
             }
         }
     }
@@ -596,7 +585,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         state.session.add_pane(pane, None, true);
         state
             .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     }
     after_layout_change(state);
 }
@@ -688,22 +677,11 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
     else {
         return;
     };
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let mut found = None;
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            for (pi, pane) in col.panes.iter().enumerate() {
-                if pane.id.0 == *pane_id {
-                    found = Some((ci, pi));
-                    break;
-                }
-            }
-            if found.is_some() {
-                break;
-            }
-        }
-        if let Some((col_idx, pane_idx)) = found
-            && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
-        {
+    if let Some(ws) = state.session.active_workspace_mut()
+        && let Some((col_idx, pane_idx)) =
+            crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id)
+        && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
+    {
             ws.deactivate_floating_panes();
             ws.floating_panes
                 .push(heca_core::layout::workspace::FloatingPane {
@@ -715,7 +693,6 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
                     original_pane_idx: Some(pane_idx),
                 });
             ws.floating_is_active = true;
-        }
     }
     after_layout_change(state);
 }
@@ -725,21 +702,16 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         return;
     };
     if let Some(ws) = state.session.active_workspace_mut() {
-        let mut found = None;
-        for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-            if let Some(pi) = col.panes.iter().position(|p| p.id.0 == *pane_id) {
-                found = Some((ci, pi));
-                break;
-            }
-        }
-        if let Some((ci, pi)) = found {
+        if let Some((ci, pi)) =
+            crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id)
+        {
             if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                state.backends.remove(&removed.id.0);
+                state.backends.remove_for_pane(removed.id.0);
             }
         } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == *pane_id)
         {
             let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove(&removed.pane.id.0);
+            state.backends.remove_for_pane(removed.pane.id.0);
             if ws.floating_is_active && ws.floating_panes.is_empty() {
                 ws.floating_is_active = false;
             }
@@ -762,7 +734,7 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         state.session.add_pane(pane, None, true);
         state
             .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     }
     after_layout_change(state);
 }
@@ -810,7 +782,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
     }
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -832,10 +804,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
         .map(|col| col.panes.iter().map(|p| p.id.0).collect())
         .unwrap_or_default();
 
-    // Remove backends
-    for pid in &pane_ids {
-        state.backends.remove(pid);
-    }
+    state.backends.remove_all(&pane_ids);
 
     // Remove the column
     if let Some(ws) = state.session.workspaces.get_mut(target_ws) {
@@ -874,10 +843,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         })
         .unwrap_or_default();
 
-    // Remove backends
-    for pid in &pane_ids {
-        state.backends.remove(pid);
-    }
+    state.backends.remove_all(&pane_ids);
 
     // Remove the workspace
     state.session.remove_workspace(target_ws);
@@ -1051,7 +1017,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
@@ -1381,7 +1347,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
