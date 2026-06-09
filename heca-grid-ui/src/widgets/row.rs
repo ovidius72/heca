@@ -1,0 +1,236 @@
+//! [`Row`] — a **focusable, clickable container** for arbitrary composed content.
+//!
+//! [`Item`](super::Item) is the fixed leading/label/trailing row; `Row` is its
+//! open cousin: it provides the same interactive chrome — hover tint, active
+//! (selected) state with an [`ActiveMarker`], press flash, focus ring, and
+//! `on_activate` (mouse + Enter/Space) — but holds **any** children (a
+//! [`Grid`](super::Grid) of [`Label`](super::Label)/[`Icon`](super::Icon)/
+//! [`Badge`](super::Badge), a multi-line card, …). Use it for rich Dock rows
+//! that need to be clicked and selected, where `Item`'s slots aren't enough.
+//!
+//! An optional persistent background (via [`StyleExt`]) is painted *under* the
+//! interactive hover/active overlay — e.g. a state tint that stays while the
+//! selection highlight layers on top.
+
+use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::effects::Flash;
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::scene::Glow;
+use crate::style::{Align, Direction};
+use crate::widgets::ActiveMarker;
+use heca_core::layout::{Point, Rectangle, Size};
+
+/// Inset of the active/hover selection pill from the row edges, so its rounded
+/// corners never contend with a rounded container's corners.
+const SEL_INSET: f64 = 3.0;
+/// Active-row fill alpha.
+const ACTIVE_FILL_ALPHA: u8 = 30;
+/// Hover-row fill alpha.
+const HOVER_FILL_ALPHA: u8 = 16;
+/// Width of the left accent bar shown when active.
+const BAR_W: f64 = 3.0;
+/// Active left bar height as a fraction of the row (centered, not full height).
+const BAR_FRAC: f64 = 0.65;
+/// Size of the [`ActiveMarker::Check`] pip (logical px).
+const CHECK_SIZE: f64 = 10.0;
+/// Left gutter the check pip centers in.
+const CHECK_GUTTER: f64 = 14.0;
+
+/// A focusable, selectable container holding arbitrary child content.
+pub struct Row {
+    base: Base,
+    /// Active (selected/current) state: tinted bg + optional marker.
+    active: Signal<bool>,
+    marker: ActiveMarker,
+    hovered: Signal<bool>,
+    flash: Flash,
+    on_activate: Option<Box<dyn Fn()>>,
+}
+
+impl Row {
+    /// A new (horizontal) row. Add content with `.child(...)`; make it
+    /// clickable/selectable with [`on_activate`](Row::on_activate).
+    pub fn new() -> Self {
+        let mut base = Base::new();
+        base.style.direction = Direction::Row;
+        base.style.align = Align::Center;
+        Self {
+            base,
+            active: signal(false),
+            marker: ActiveMarker::Bar,
+            hovered: signal(false),
+            flash: Flash::new(),
+            on_activate: None,
+        }
+    }
+
+    /// Make the row clickable/keyboard-activatable (also makes it focusable).
+    pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_activate = Some(Box::new(f));
+        self
+    }
+
+    /// Set the active (selected) state.
+    pub fn active(self, active: bool) -> Self {
+        self.active.set(active);
+        self
+    }
+
+    /// How the active state is indicated (default [`ActiveMarker::Bar`]).
+    pub fn marker(mut self, marker: ActiveMarker) -> Self {
+        self.marker = marker;
+        self
+    }
+
+    /// The active-state signal — bind UI to it reactively.
+    pub fn state(&self) -> Signal<bool> {
+        self.active
+    }
+
+    fn interactive(&self) -> bool {
+        self.on_activate.is_some()
+    }
+
+    fn activate(&mut self) {
+        self.flash.trigger();
+        if let Some(f) = &self.on_activate {
+            f();
+        }
+    }
+}
+
+impl Component for Row {
+    fn base(&self) -> &Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut Base {
+        &mut self.base
+    }
+
+    fn focusable(&self) -> bool {
+        self.interactive() && !self.base.disabled.get_untracked()
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        let disabled = self.base.disabled.get_untracked();
+        let active = self.active.get_untracked();
+        let (accent, glow_c, foreground, ctrl_radius) = {
+            let t = cx.theme();
+            (t.accent, t.glow, t.foreground, t.control_radius())
+        };
+        let b = self.base.bounds;
+
+        // Persistent background (e.g. a state tint) under the interactive overlay.
+        cx.paint_base(&self.base);
+
+        // Selection pill: tinted when active, faint on hover. Inset so its rounded
+        // corners never contend with a rounded container's corners.
+        let sel = Rectangle::new(
+            Point::new(b.loc.x + SEL_INSET, b.loc.y + SEL_INSET),
+            Size::new(
+                (b.size.w - 2.0 * SEL_INSET).max(0.0),
+                (b.size.h - 2.0 * SEL_INSET).max(0.0),
+            ),
+        );
+        let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
+        if active {
+            cx.rect(sel, accent.with_alpha(ACTIVE_FILL_ALPHA), None, sel_radius, None);
+        } else if self.hovered.get_untracked() {
+            cx.rect(sel, foreground.with_alpha(HOVER_FILL_ALPHA), None, sel_radius, None);
+        }
+
+        // Active indicator.
+        if active {
+            match self.marker {
+                ActiveMarker::Bar => {
+                    let bar_h = b.size.h * BAR_FRAC;
+                    let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
+                    cx.rect(
+                        Rectangle::new(Point::new(b.loc.x, bar_y), Size::new(BAR_W, bar_h)),
+                        accent,
+                        None,
+                        (BAR_W / 2.0) as f32,
+                        Some(Glow { color: glow_c, radius: 8.0, intensity: 0.16 }),
+                    );
+                }
+                ActiveMarker::Check => {
+                    let pip_x = b.loc.x + CHECK_GUTTER / 2.0 - CHECK_SIZE / 2.0;
+                    let pip_y = b.loc.y + (b.size.h - CHECK_SIZE) / 2.0;
+                    cx.rect(
+                        Rectangle::new(Point::new(pip_x, pip_y), Size::new(CHECK_SIZE, CHECK_SIZE)),
+                        accent,
+                        None,
+                        (CHECK_SIZE / 2.0) as f32,
+                        None,
+                    );
+                }
+                ActiveMarker::None => {}
+            }
+        }
+
+        // Content.
+        for child in &self.base.children {
+            child.paint(cx);
+        }
+
+        if self.interactive() && !disabled {
+            cx.flash(b, self.flash.amount() * 0.5, 0.0);
+        }
+        if disabled {
+            cx.dim(b, self.base.style.radius);
+        }
+        if self.interactive()
+            && !disabled
+            && self.base.focus_visible.get_untracked()
+            && cx.theme().show_focus_border
+        {
+            cx.corner_brackets(b, accent);
+        }
+    }
+
+    fn event(&mut self, ev: &Event) -> Handled {
+        if !self.interactive() || self.base.disabled.get_untracked() {
+            return Handled::No;
+        }
+        match ev {
+            Event::PointerMoved { pos } => {
+                let inside = self.base.bounds.contains(*pos);
+                if self.hovered.get_untracked() != inside {
+                    self.hovered.set(inside);
+                }
+                Handled::No
+            }
+            Event::PointerPressed { pos } if self.base.bounds.contains(*pos) => {
+                self.activate();
+                Handled::Yes
+            }
+            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+                self.activate();
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let mut animating = self.flash.tick(dt);
+        for child in self.base.children.iter_mut() {
+            animating |= child.tick(dt);
+        }
+        animating
+    }
+}
+
+impl Default for Row {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LayoutExt for Row {}
+impl StyleExt for Row {}
+impl Parent for Row {}

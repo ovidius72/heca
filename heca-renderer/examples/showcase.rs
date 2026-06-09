@@ -389,16 +389,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                 })
             };
 
-            // A pane "card": an optional per-pane state-tinted background hosting a
-            // two-line Grid row — a status dot + a state-colored title over a dimmed
-            // subtitle, with a trailing state tag pinned to the *title* line.
-            let pane = |icon: Icon, color: Color, title: &str, sub: &str, tag: Badge| {
-                Surface::new()
+            // A pane "card" — a clickable, single-selectable `Row` (focus + Enter
+            // + hover/active highlight) carrying composed two-line content over a
+            // persistent state-tinted background. Demonstrates that rich composed
+            // rows, not just `Item`s, can be interactive.
+            let pane_sel = signal(0usize);
+            let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
+            let pane = move |icon: Icon, color: Color, title: &str, sub: &str, tag: Badge| -> Row {
+                let row = Row::new()
                     .background(color.with_alpha(22))
                     .radius(theme.control_radius())
                     .padding(10.0)
                     .child(
                         Grid::new()
+                            .grow(1.0)
                             .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
                             .rows([Track::Auto, Track::Auto])
                             // icon · title · tag share the title row; the subtitle
@@ -409,7 +413,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                             .area(Label::new(title).color(color), "title")
                             .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
                             .area(tag, "tag"),
-                    )
+                    );
+                let i = pane_states.borrow().len();
+                pane_states.borrow_mut().push(row.state());
+                let pane_states = pane_states.clone();
+                row.on_activate(move || {
+                    pane_sel.set(i);
+                    for (j, s) in pane_states.borrow().iter().enumerate() {
+                        s.set(j == i);
+                    }
+                })
             };
 
             // G4 DockFrame framing G3 ItemGroups; header slot carries a count badge.

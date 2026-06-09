@@ -59,8 +59,8 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
     ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, Icon, Input, Item, ItemGroup, Label,
-    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner, StatusDot,
-    Surface, Tabs, Toggle,
+    LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
+    StatusDot, Surface, Tabs, Toggle,
 };
 
 /// Common imports for building UIs.
@@ -79,7 +79,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
         ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, Icon, Input, Item, ItemGroup, Label,
-        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Select, Separator, Spinner,
+        LabelSide, Orientation, Pane, ProgressBar, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Toggle,
     };
 }
