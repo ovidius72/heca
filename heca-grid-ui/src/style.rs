@@ -136,7 +136,13 @@ pub struct Style {
     pub justify: Justify,
     pub align: Align,
     pub gap: f32,
+    /// Uniform inner padding (all sides), unless overridden per axis by
+    /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
     pub padding: f32,
+    /// Horizontal (left+right) padding override; `None` ⇒ use [`padding`](Self::padding).
+    pub padding_x: Option<f32>,
+    /// Vertical (top+bottom) padding override; `None` ⇒ use [`padding`](Self::padding).
+    pub padding_y: Option<f32>,
     pub width: Length,
     pub height: Length,
     pub flex_grow: f32,
@@ -170,6 +176,8 @@ impl Default for Style {
             align: Align::Stretch,
             gap: 0.0,
             padding: 0.0,
+            padding_x: None,
+            padding_y: None,
             width: Length::Auto,
             height: Length::Auto,
             flex_grow: 0.0,
@@ -208,11 +216,15 @@ impl Style {
                 width: length(self.gap),
                 height: length(self.gap),
             },
-            padding: Rect {
-                left: length(self.padding),
-                right: length(self.padding),
-                top: length(self.padding),
-                bottom: length(self.padding),
+            padding: {
+                let px = self.padding_x.unwrap_or(self.padding);
+                let py = self.padding_y.unwrap_or(self.padding);
+                Rect {
+                    left: length(px),
+                    right: length(px),
+                    top: length(py),
+                    bottom: length(py),
+                }
             },
             size: Size {
                 width: self.width.to_taffy(),

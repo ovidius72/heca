@@ -1897,3 +1897,32 @@ fn row_without_on_activate_is_not_focusable() {
     let row = Row::new().child(Label::new("static"));
     assert!(!row.focusable(), "a display-only row is not focusable");
 }
+
+#[test]
+fn tag_lays_out_leading_and_label_and_hugs_content() {
+    use heca_grid_ui::{Glyph, Icon, Tag};
+    let mut tag = Tag::new("main 1+").leading(Icon::new(Glyph::GitBranch).size(13.0));
+    LayoutEngine::new().compute(&mut tag, Size::new(300.0, 40.0));
+
+    // The first segment holds [leading, label].
+    let seg0 = tag.base().children[0].base();
+    assert_eq!(seg0.children.len(), 2, "first segment holds [leading, label]");
+    assert!(seg0.children[0].base().bounds.size.w > 0.0, "leading icon is laid out");
+    assert!(seg0.children[1].base().bounds.size.w > 0.0, "label is laid out");
+    assert!(tag.base().bounds.size.w < 300.0, "chip hugs its content, not the full width");
+}
+
+#[test]
+fn tag_with_multiple_segments_lays_them_in_a_row() {
+    use heca_grid_ui::{Component, Glyph, Icon, Tag};
+    let leading: Option<Box<dyn Component>> = Some(Box::new(Icon::new(Glyph::File).size(13.0)));
+    let mut tag = Tag::new("main")
+        .leading(Icon::new(Glyph::GitBranch).size(13.0))
+        .segment_text("5 +152 -12", leading);
+    LayoutEngine::new().compute(&mut tag, Size::new(400.0, 40.0));
+
+    assert_eq!(tag.base().children.len(), 2, "two segments");
+    let s0 = tag.base().children[0].base().bounds;
+    let s1 = tag.base().children[1].base().bounds;
+    assert!(s1.loc.x > s0.loc.x + s0.size.w - 1.0, "the second segment sits right of the first");
+}

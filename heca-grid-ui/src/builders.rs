@@ -42,6 +42,13 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.padding = p;
         self
     }
+    /// Inner padding split per axis: `x` left+right, `y` top+bottom.
+    fn padding_xy(mut self, x: f32, y: f32) -> Self {
+        let s = &mut self.base_mut().style;
+        s.padding_x = Some(x);
+        s.padding_y = Some(y);
+        self
+    }
     /// Width along the main/cross axis.
     fn width(mut self, w: Length) -> Self {
         self.base_mut().style.width = w;
