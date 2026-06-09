@@ -120,8 +120,8 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         state.last_focused = prev_focused;
     }
 
-    // Rebuild sidebar tree.
-    state.sidebar_tree.rebuild(
+    // Sync sidebar tree from session state.
+    state.sidebar_tree.sync_from_session(
         &state.session,
         state.last_visited_ws_idx,
         state.focused_pane,

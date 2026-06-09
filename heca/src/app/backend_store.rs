@@ -1,0 +1,70 @@
+//! Backend storage — wraps the raw `HashMap<u64, Box<dyn PaneBackend>>` with
+//! a narrow, explicit API so lifecycle logic is not scattered across handlers.
+
+use heca_core::backend::PaneBackend;
+use std::collections::HashMap;
+
+/// Typed wrapper around the backend map.
+///
+/// Exposes only the operations that the rest of the app needs, keeping
+/// pane/backend lifecycle ownership explicit.
+pub struct BackendStore {
+    map: HashMap<u64, Box<dyn PaneBackend>>,
+}
+
+impl BackendStore {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    /// Insert a backend for the given pane ID.
+    pub fn insert_for_pane(&mut self, pane_id: u64, backend: Box<dyn PaneBackend>) {
+        self.map.insert(pane_id, backend);
+    }
+
+    /// Remove and return the backend for the given pane ID, if any.
+    pub fn remove_for_pane(&mut self, pane_id: u64) -> Option<Box<dyn PaneBackend>> {
+        self.map.remove(&pane_id)
+    }
+
+    /// Get an immutable reference to a backend.
+    pub fn get(&self, pane_id: u64) -> Option<&dyn PaneBackend> {
+        match self.map.get(&pane_id) {
+            Some(b) => Some(b.as_ref()),
+            None => None,
+        }
+    }
+
+    /// Get a mutable reference to a backend.
+    pub fn get_mut(&mut self, pane_id: u64) -> Option<&mut dyn PaneBackend> {
+        match self.map.get_mut(&pane_id) {
+            Some(b) => Some(b.as_mut()),
+            None => None,
+        }
+    }
+
+    /// Iterate over all backends mutably (e.g. for per-frame polling).
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn PaneBackend>> {
+        self.map.values_mut()
+    }
+
+    /// Remove backends for all pane IDs in the given iterator.
+    ///
+    /// Convenience helper for batch cleanup when deleting a column or workspace.
+    pub fn remove_all<'a>(&mut self, pane_ids: impl IntoIterator<Item = &'a u64>)
+    where
+        u64: 'a,
+    {
+        for pid in pane_ids {
+            self.map.remove(pid);
+        }
+    }
+}
+
+impl Default for BackendStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}

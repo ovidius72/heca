@@ -3,6 +3,7 @@
 //! These modules keep runtime wiring concerns out of `main.rs` while preserving
 //! the current behavior and ownership boundaries.
 
+pub mod backend_store;
 pub mod events;
 pub mod focus;
 pub mod input;

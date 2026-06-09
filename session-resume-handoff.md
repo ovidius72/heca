@@ -1,59 +1,81 @@
-# Session Resume Handoff — 2026-06-08
+# Session Resume Handoff — 2026-06-09
 
 ## Current state
 
-- Branch: `feature/gpt-refactoring`
-- Working tree: **modified** — Phase 3.2 refactor in progress; not yet committed
-- All validation passes: `cargo check`, `cargo clippy`, `cargo test`
+- Branch: `feature/gpt-refactoring` (29 commits ahead of main)
+- PR #36 open → main (merged by user)
+- Working tree: **clean**
+- All 204 tests pass, clippy clean
 
-## What was completed this session
+## What was completed
 
-### Phase 3.1 Commit 2 — Shared pane ops in sidebar_drop.rs
-- `heca/src/mouse/sidebar_drop.rs` now uses `remove_pane_by_id`, `find_pane_location`, and `insert_pane_at_position` from shared helpers instead of hand-rolled scan/reinsert logic
-- `heca/src/app/pane_ops.rs` — `PaneInsertTarget` rename from `InsertPosition`
-- Behavior preserved: all refactoring-only, no semantic changes
+### Track 1 — Rust Code Hygiene (7 commits)
 
-### Rename: InsertPosition → PaneInsertTarget
-- `heca-core/src/layout/types.rs` — enum definition renamed
-- `heca-core/src/layout/scrolling.rs` — re-export + return type + 4 variant usages
-- `heca/src/app/pane_ops.rs` — import + parameter type + 2 match arms
-- `heca/src/app_state.rs` — field type on `DragState`
-- `heca/src/mouse/drop.rs` — import + 4 variant usages
-- `heca/src/mouse/sidebar_drop.rs` — import + 5 variant usages
-- `heca/src/mouse/render.rs` — import + 2 match arms
+| Commit | What |
+|--------|------|
+| `0f8732b` | Delete dead `mouse/drop.rs`, clean `InputMode::Chord` allow |
+| `dfec127` | Descriptive messages to 4 `unreachable!()` calls |
+| `9caa0e9` | `Rectangle` type instead of `(f32,f32,f32,f32)` tuples |
+| `52d16f6` | Chrome constants (`DEFAULT_TAB_BAR_HEIGHT`, etc.) into `chrome.rs` |
+| `a9af698` | Split 163-line `on_cursor_moved()` into 4 named helpers |
+| `3a54281` | Extract mouse release handlers into `mouse/release.rs` |
+| `7329096` | Trailing newline fix, doc improvements |
 
-### Bug fix: swap_panes_same_column focus tracking
-- `heca/src/app/pane_ops.rs` — `active_pane_idx` now tracks the originally-active pane after swap instead of always setting it to the higher index. Computed before the swap based on which position was active.
+### Track 2 — Surface-Agnostic DnD Architecture (5 phases)
 
-### Bug fix: swap animation direction inverted
-- `heca/src/app/pane_ops.rs` — Swapped animation offset assignments so the top pane slides down and the bottom pane slides up. The offsets were applied before `panes.swap()` but named as if applied after.
+| # | Phase | Commit | What |
+|---|-------|--------|------|
+| 1 | Framework types | `631c11a` | `DragSurfaceId`, `DragItemId`, `SurfaceDragPhase`, `DragContext`, `rubberband()` |
+| 2 | App integration | `4fb4a0f` | Replace `DragState` with `DragContext` + `InteractiveMovePhase` |
+| 3 | Enum dispatch | `ff9ba65` | `target.rs` + `surface_left.rs`; delete `sidebar.rs`/`sidebar_drop.rs` |
+| 4 | InteractiveMove | `3d196c2` | Extract `mouse/interactive.rs`; `drag.rs` shrinks 45% |
+| 5 | Render types | `da22633` | `Option<DragItemId>` instead of raw `usize` in render path |
+| — | Wire dispatch | `94c1c66` | Route mouse.rs/release.rs through `target::surface_*()` dispatch |
 
-### Feature: Shift+drag swap (content area)
-- `heca/src/app_state.rs` — Added `swap: bool` to `InteractiveMoveStarting` and `InteractiveMove` variants
-- `heca/src/mouse/drag.rs` — `start_interactive_move` captures `shift_key()` as swap flag; `transition_to_moving` skips pane detach when swap=true; added `reset_interactive_move_offset()` helper
-- `heca/src/mouse.rs` — Swap drop handler: finds target pane via `hit_test_pane_excluding`, calls `handle_swap_param`
-- `heca/src/mouse/hit_test.rs` — New `hit_test_pane_excluding()` that skips a specified pane ID during hit testing
-- `heca/src/mouse/render.rs` — `render_insert_hint` now routes swap-mode drags to `render_swap_target_hint` which shows the full target pane rectangle instead of a thin strip
-- Swap-mode drag: pane stays in layout, follows mouse via `interactive_move_offset`, offset computed relative to grab point
+### Rust Skill Review Fixes (1 commit)
 
-### Remaining known work
-- Phase 3.2: Simplify handlers to dispatchers (in progress)
-- Phase 3.3: Reduce cross-file ad hoc search logic
-- Phases 4–9 from the refactoring plan
+| Commit | What |
+|--------|------|
+| `d4a7c78` | `DragItemId` field private; remove redundant state clear; rename `_pane_id`→`pane_id` |
 
-## Important files changed this session
+## Files changed
 
-- `heca-core/src/layout/types.rs` — PaneInsertTarget enum
-- `heca-core/src/layout/scrolling.rs` — PaneInsertTarget re-export + insert_position return type
-- `heca/src/app/pane_ops.rs` — swap_panes_same_column focus fix, animation direction fix, PaneInsertTarget parameter
-- `heca/src/app_state.rs` — DragState swap flag
-- `heca/src/mouse/drag.rs` — swap mode support, reset_interactive_move_offset
-- `heca/src/mouse/drop.rs` — PaneInsertTarget usage
-- `heca/src/mouse/sidebar_drop.rs` — shared helper usage + PaneInsertTarget
-- `heca/src/mouse/render.rs` — swap target hint rendering
-- `heca/src/mouse/hit_test.rs` — hit_test_pane_excluding
-- `heca/src/mouse.rs` — swap drop handler, shift+drag routing
+- **Created (6):** `heca-grid-ui/src/drag/{mod,item,state,context,math}.rs`, `heca/src/mouse/{target,interactive,release,surface_left}.rs`
+- **Deleted (2):** `heca/src/mouse/{sidebar,sidebar_drop}.rs`
+- **Modified (13+):** `app_state.rs`, `mouse.rs`, `drag.rs`, `render.rs` (sidebar + app), `Cargo.toml`, etc.
 
-## Resume summary in one line
+## Remaining work in original refactoring plan
 
-Phase 3.1 complete and Phase 3.2 underway; PaneInsertTarget rename done; swap focus/animation bugs fixed; shared swap helpers now also cover same-workspace diff-column and cross-workspace swaps; live Shift press/release now toggles move↔swap during active drags; sidebar drops still use move semantics; awaiting user approval to commit.
+### Phase 3 — Extract Shared Pane Operation Logic (in progress)
+- [x] 3.1 Pane-ops layer exists (`app/pane_ops.rs`) — done
+- [~] 3.2 Simplify handlers to dispatchers — **partial** (target.rs dispatch done, `handle_swap_param` still needs delegation)
+- [ ] 3.3 Reduce cross-file ad hoc search logic — not started
+
+### Phase 4 — Redesign Sidebar Projection and Interaction Model
+- Not started
+
+### Phase 5 — Backend Runtime Ownership Cleanup
+- Not started
+
+### Phase 6 — Remove Stale/Dormant/Drifting State
+- Track 1 partially addressed (removed `drop.rs`, cleaned unreachable, removed sidebar.rs/ sidebar_drop.rs)
+- Review of dormant fields, placeholder backends, action metadata drift remaining
+
+### Phase 7 — Typed Errors
+- Not started
+
+### Phase 8 — Constants, Polish, Performance
+- Track 1 extracted chrome constants; Track 2 added `DEFAULT_COLLAPSED_SIDEBAR_WIDTH` and `DEFAULT_DRAG_THRESHOLD_SQ`
+- Rest not started
+
+### Phase 9 — Floating vs Tiled Focus-Domain Routing
+- Not started
+
+### Phase 10 — Final Verification
+- Not started
+
+## Next steps
+
+1. **Merge PR #36** (user doing this)
+2. **Start Phase 3.2 remainder** — refactor `handle_swap_param()` to delegate to shared helpers from `pane_ops.rs`
+3. Or pivot to higher-priority work (user to decide)
