@@ -42,6 +42,11 @@ const PAD_Y_FRAC: f32 = 0.22;
 const TOP_INSET: f64 = 2.0;
 /// Per-glyph advance estimate (fraction of font) for sizing the keycap to its text.
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
+/// Keycap fill alpha — slightly translucent so it reads as an overlay, not a
+/// solid bright block over the target.
+const KEYCAP_ALPHA: u8 = 200;
+/// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
+const KEYCAP_GLOW: f32 = 0.45;
 
 /// A transparent wrapper that overlays a glowing key letter on its child while a
 /// host-driven pick/jump hint is active.
@@ -142,8 +147,15 @@ impl Component for KeyHint {
         };
         let cap = self.keycap_rect(self.base.bounds, &text);
         let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
-        // Glowing accent keycap, dark bold glyph on top for contrast on dark.
-        cx.rect(cap, accent, None, radius, Some(Glow { color: glow_c, radius: 7.0, intensity: 0.9 }));
+        // Softly-glowing, slightly translucent accent keycap; dark bold glyph on
+        // top for contrast on dark.
+        cx.rect(
+            cap,
+            accent.with_alpha(KEYCAP_ALPHA),
+            None,
+            radius,
+            Some(Glow { color: glow_c, radius: 6.0, intensity: KEYCAP_GLOW }),
+        );
         cx.text(cap, &text, background, self.hint_font(), TextAlign::Center, true);
     }
 }

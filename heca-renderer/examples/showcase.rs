@@ -600,7 +600,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     }
                 });
                 workspaces_rail = workspaces_rail
-                    .child(KeyHint::new(cell).hint(rail_hints[i]).placement(HintPlacement::TopCenter));
+                    .child(KeyHint::new(cell).hint(rail_hints[i]).placement(HintPlacement::Center));
             }
             let rail_col = Flex::column()
                 .gap(8.0)
