@@ -564,22 +564,22 @@ Full step-by-step plan is in `.planning/refactoring-and-dnd-plan.md`.
 - [x] **2.9** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
 - [x] **2.10** Commit: `refactor: replace DragState with DragContext and InteractiveMoveState`
 
-### Phase 3 — Create enum dispatch (`target.rs`) and left sidebar handler (`surface_left.rs`)
+### Phase 3 — Create enum dispatch (`target.rs`) and left sidebar handler (`surface_left.rs`) ✅
 
-- [ ] **3.1** Create `heca/src/mouse/target.rs` — `surface_contains`, `surface_item_at`, `surface_can_accept`, `surface_accept_drop`, `surface_click_action`, `surface_bounds`
-- [ ] **3.2** Create `heca/src/mouse/surface_left.rs` — left sidebar implementations of all target.rs dispatch functions
-- [ ] **3.3** Move `sidebar.rs::click()` → `surface_left.rs::click_action()`
-- [ ] **3.4** Move `sidebar_drop.rs::drag_drop()` → `surface_left.rs::accept_drop()`
-- [ ] **3.5** Move `sidebar_drop.rs::handle_drop()` → `surface_left.rs::accept_drop()` (merge with drag_drop)
-- [ ] **3.6** Move `sidebar_drop.rs::update_sidebar_drag_hover()` → `surface_left.rs::hover_item_at()`
-- [ ] **3.7** Move `sidebar.rs::sidebar_pane_hit_test()` → `surface_left.rs::item_at()`
-- [ ] **3.8** Delete `mouse/sidebar.rs`
-- [ ] **3.9** Delete `mouse/sidebar_drop.rs`
-- [ ] **3.10** Update `mouse/mod.rs` — remove `mod sidebar; mod sidebar_drop;` add `mod target; mod surface_left;`
-- [ ] **3.11** Update all call sites in `drag.rs`, `release.rs`, `mouse.rs` to use `target::` dispatch
-- [ ] **3.12** Verify: `cargo check -p heca` passes, all existing tests pass
-- [ ] **3.13** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
-- [ ] **3.14** Commit: `refactor: create target.rs enum dispatch and surface_left.rs handler`
+- [x] **3.1** Create `heca/src/mouse/target.rs` — `surface_contains`, `surface_item_at`, `surface_can_accept`, `surface_accept_drop`, `surface_click_action`, `surface_bounds`
+- [x] **3.2** Create `heca/src/mouse/surface_left.rs` — left sidebar implementations of all target.rs dispatch functions
+- [x] **3.3** Move `sidebar.rs::click()` → `surface_left.rs::click_action()`
+- [x] **3.4** Move `sidebar_drop.rs::drag_drop()` → `surface_left.rs::accept_drop()`
+- [x] **3.5** Move `sidebar_drop.rs::handle_drop()` → `surface_left.rs::handle_interactive_move_drop()` (merged)
+- [x] **3.6** Move `sidebar_drop.rs::update_sidebar_drag_hover()` → `surface_left.rs::update_hover()`
+- [x] **3.7** Move `sidebar.rs::sidebar_pane_hit_test()` → `surface_left.rs::item_at()` (kept in hit_test.rs, called from surface_left)
+- [x] **3.8** Delete `mouse/sidebar.rs`
+- [x] **3.9** Delete `mouse/sidebar_drop.rs`
+- [x] **3.10** Update `mouse/mod.rs` — remove `mod sidebar; mod sidebar_drop;` add `mod target; mod surface_left;`
+- [x] **3.11** Update all call sites in `drag.rs`, `release.rs`, `mouse.rs` to use `surface_left::` dispatch
+- [x] **3.12** Verify: `cargo check -p heca` passes, all existing tests pass
+- [x] **3.13** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [x] **3.14** Commit: `refactor: create target.rs enum dispatch and surface_left.rs handler`
 
 ### Phase 4 — Extract `InteractiveMove` into `mouse/interactive.rs`
 

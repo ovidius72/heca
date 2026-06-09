@@ -10,8 +10,8 @@ mod drag;
 mod hit_test;
 mod release;
 mod render;
-mod sidebar;
-mod sidebar_drop;
+mod surface_left;
+mod target;
 
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
@@ -61,7 +61,7 @@ pub fn on_mouse_input(
             }
 
             // Sidebar click.
-            let sidebar_action = sidebar::click(state, pos);
+            let sidebar_action = surface_left::click_action(state, pos);
 
             // Check if this is a sidebar pane hit (no button) → start drag detection.
             let is_pane_item = sidebar_pane_hit_test(state, pos).is_some();

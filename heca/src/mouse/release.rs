@@ -33,7 +33,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
                     b_id: target_id,
                 },
             );
-        } else if super::sidebar_drop::handle_drop(state, pos) {
+        } else if super::surface_left::handle_interactive_move_drop(state, pos) {
             // Sidebar drop handled as a move.
         } else if let Some(hint) = state.mouse.insert_hint.take() {
             // Fallback: move semantics in the content area.
@@ -41,7 +41,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         } else {
             super::drag::cancel_interactive_move(state);
         }
-    } else if super::sidebar_drop::handle_drop(state, pos) {
+    } else if super::surface_left::handle_interactive_move_drop(state, pos) {
         // Sidebar drop handled.
     } else if let Some(hint) = state.mouse.insert_hint.take() {
         // Move mode: pane is still in layout. Remove it and
@@ -64,7 +64,7 @@ pub(super) fn handle_sidebar_drag_release(
     swap: bool,
     pos: (f32, f32),
 ) {
-    super::sidebar_drop::drag_drop(state, pane_id, original_ws, swap, pos);
+    super::surface_left::accept_drop(state, pane_id, original_ws, swap, pos);
 }
 
 /// Handle release during sidebar drag starting (threshold not exceeded).
