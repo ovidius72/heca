@@ -89,6 +89,8 @@ pub(crate) fn handle_window_event(
         }
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
+            mouse::on_modifiers_changed(state);
+            state.needs_redraw = true;
         }
         WindowEvent::CursorMoved { position, .. } => {
             let pos = (

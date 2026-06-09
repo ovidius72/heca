@@ -4,7 +4,7 @@
 **Excluded:** `heca-ui`, `heca-grid-ui`  
 **Based on:** `bugs-and-refactoring.md`  
 **Date:** 2026-06-04  
-**Last updated:** 2026-06-05
+**Last updated:** 2026-06-08
 
 ---
 
@@ -1341,26 +1341,51 @@ Short description:
 
 #### Commit 2 — Expand shared pane ops beyond same-column swaps
 
-- [ ] Extract move/reinsert helpers used by mouse drop and cross-workspace swap logic
-- [ ] Reduce remaining ad hoc pane scan/reinsert logic in handlers and mouse paths
-- [ ] Keep behavior unchanged
-- [ ] Validate with `cargo check -q`
-- [ ] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
-- [ ] Validate with `cargo test -q --workspace`
+- [x] Extract move/reinsert helpers used by mouse drop and cross-workspace swap logic
+- [x] Reduce remaining ad hoc pane scan/reinsert logic in handlers and mouse paths
+- [x] Keep behavior unchanged
+- [x] Validate with `cargo check -q`
+- [x] Validate with `cargo clippy --workspace --all-targets --all-features --quiet`
+- [x] Validate with `cargo test -q --workspace`
 
 #### Definition of done for the current slice
 
-- [ ] common pane swap mechanics live in a shared helper
-- [ ] handlers/mouse paths reuse the same pane-op building blocks where applicable
-- [ ] behavior is unchanged
-- [ ] validation passes
+- [x] common pane swap mechanics live in a shared helper
+- [x] handlers/mouse paths reuse the same pane-op building blocks where applicable
+- [x] behavior is unchanged
+- [x] validation passes
+
+#### Phase 3.2 follow-up
+
+- [x] same-workspace diff-column swap is now extracted into shared helpers
+- [x] cross-workspace swap is now extracted into shared helpers
+- [x] `handle_swap_param()` is now a dispatcher instead of a large inline implementation
+- [x] validation passes after the refactor
+
+#### Live drag-mode sync follow-up
+
+- [x] Shift press/release now updates the active drag mode live during an in-progress drag
+- [x] swap mode falls back to normal move behavior when the target is the sidebar
+- [x] validation passes after the drag-mode sync change
 
 #### Progress note
 
 - Added `heca/src/app/pane_ops.rs` with shared same-column swap and pane insert/remove helpers.
 - `handle_swap_param()`, `handle_swap_up()`, and `handle_swap_down()` delegate to the shared same-column helper instead of each carrying the same animation/swap code inline.
 - `heca/src/mouse/drop.rs` now uses the shared insert/remove helpers for detached-pane reinsertion.
-- `heca/src/mouse/sidebar_drop.rs` still needs the same helper treatment.
+- `heca/src/mouse/sidebar_drop.rs` now uses the same helpers:
+  - `remove_pane_by_id()` replaces the manual pane-by-id search+remove scan in `drag_drop()`.
+  - `find_pane_location()` replaces the triply-nested manual pane location loop in `handle_drop()`.
+  - `insert_pane_at_position()` replaces `add_pane_to_column`/`add_column` fork patterns in both `drag_drop()` and `handle_drop()` shift and non-shift paths.
+  - `Column` import removed from `sidebar_drop.rs` since `insert_pane_at_position` handles column creation internally.
+  - `PaneInsertTarget` import added.
+- Phase 3.2 in progress:
+  - `handle_swap_param()` now dispatches into shared helpers for same-column, same-workspace diff-column, and cross-workspace swaps.
+  - the new swap helpers live in `heca/src/app/pane_ops.rs` so the handler is much thinner and easier to read.
+  - drag modifier changes now sync live move↔swap mode during an active drag instead of only latching at drag start.
+  - swap mode falls back to normal move behavior when the drop target is in the sidebar, so sidebar placement still works.
+  - validation currently passes after the dispatch refactor and live drag-mode sync.
+- Phase 3.2 began: `heca/src/app/pane_ops.rs` now also hosts shared same-workspace diff-column and cross-workspace swap helpers, and `handle_swap_param()` was slimmed to dispatch into them.
 
 ---
 

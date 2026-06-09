@@ -5,9 +5,15 @@
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, DragState};
-use heca_core::layout::types::InsertPosition;
+use heca_core::layout::types::PaneInsertTarget;
 use heca_core::layout::{ColumnId, ColumnWidth};
 
+/// Handle drop during interactive move (non-swap mode).
+///
+/// Currently unused — move mode now keeps the pane in layout and re-inserts
+/// at the target position via the mouse.rs drop handler. Kept for potential
+/// reversion or future detach-on-move behavior.
+#[allow(dead_code)]
 pub(super) fn drop_pane(state: &mut AppState) {
     let hint = match state.mouse.insert_hint.take() {
         Some(h) => h,
@@ -48,12 +54,12 @@ pub(super) fn drop_pane(state: &mut AppState) {
                 if let Some(removed_target) = removed_target {
                     if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
                         let target_position = if t_col < ws.scrolling.columns.len() {
-                            InsertPosition::InColumn {
+                            PaneInsertTarget::InColumn {
                                 col_idx: t_col,
                                 pane_idx: t_pi,
                             }
                         } else {
-                            InsertPosition::NewColumn(t_col)
+                            PaneInsertTarget::NewColumn(t_col)
                         };
                         let _ = insert_pane_at_position(
                             ws,
@@ -75,12 +81,12 @@ pub(super) fn drop_pane(state: &mut AppState) {
                             .iter()
                             .position(|c| c.id == det.original_col_id)
                         {
-                            InsertPosition::InColumn {
+                            PaneInsertTarget::InColumn {
                                 col_idx: orig_idx,
                                 pane_idx: det.original_pane,
                             }
                         } else {
-                            InsertPosition::NewColumn(ws.scrolling.columns.len())
+                            PaneInsertTarget::NewColumn(ws.scrolling.columns.len())
                         };
                         let _ = insert_pane_at_position(
                             ws,

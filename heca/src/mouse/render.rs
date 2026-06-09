@@ -3,7 +3,9 @@
 //! This module owns the temporary drag visuals rendered on top of pane content.
 
 use crate::app_state::AppState;
-use heca_core::layout::types::InsertPosition;
+use heca_core::layout::types::PaneInsertTarget;
+
+use super::hit_test_pane_excluding;
 
 /// Render the detached pane during interactive move.
 pub(crate) fn render_detached_pane(state: &mut AppState, pane_area: (f32, f32, f32, f32)) {
@@ -38,7 +40,18 @@ pub(crate) fn render_detached_pane(state: &mut AppState, pane_area: (f32, f32, f
 }
 
 /// Render the insert hint (placeholder rectangle) during interactive move.
+///
+/// In move mode, shows a thin strip indicating where the pane will be inserted.
+/// In swap mode, highlights the full target pane rectangle.
 pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32, f32)) {
+    // Swap mode: highlight the full target pane under cursor.
+    if matches!(&state.mouse.drag_state, crate::app_state::DragState::InteractiveMove { swap: true, .. })
+        && state.mouse.detached_pane.is_none()
+    {
+        render_swap_target_hint(state, pane_area);
+        return;
+    }
+
     let hint = match state.mouse.insert_hint {
         Some(h) => h,
         None => return,
@@ -53,7 +66,7 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32
     let view_pos = ws.scrolling.view_pos();
 
     let (rx, ry, rw, rh) = match hint {
-        InsertPosition::NewColumn(col_idx) => {
+        PaneInsertTarget::NewColumn(col_idx) => {
             let space_x = if col_idx == 0 {
                 0.0
             } else if col_idx < ws.scrolling.columns.len() {
@@ -79,7 +92,7 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32
             let h = wa.size.h * 0.6;
             (x, y, w, h)
         }
-        InsertPosition::InColumn { col_idx, pane_idx } => {
+        PaneInsertTarget::InColumn { col_idx, pane_idx } => {
             let col_len = ws.scrolling.columns.len();
             let space_x = if col_idx < col_len {
                 ws.scrolling.column_x(col_idx)
@@ -173,5 +186,74 @@ pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: (f32, f32, f32
         render_h,
         [accent[0], accent[1], accent[2], 0.6],
         2.0,
+    );
+}
+
+/// Render a full-pane highlight for swap mode, showing the exact target pane bounds.
+fn render_swap_target_hint(state: &mut AppState, pane_area: (f32, f32, f32, f32)) {
+    // Exclude the dragged source pane so it doesn't highlight itself.
+    let exclude_id = match state.mouse.drag_state {
+        crate::app_state::DragState::InteractiveMove { swap: true, _pane_id, .. } => Some(_pane_id),
+        _ => None,
+    };
+    let target_id = match hit_test_pane_excluding(state, state.mouse.pos, exclude_id) {
+        Some(id) => id,
+        None => return,
+    };
+
+    let ws = match state.session.active_workspace() {
+        Some(w) => w,
+        None => return,
+    };
+
+    // Find the target pane's bounds.
+    let mut found = None;
+    for (ci, col) in ws.scrolling.columns.iter().enumerate() {
+        for (pi, pane) in col.panes.iter().enumerate() {
+            if pane.id.0 == target_id {
+                found = Some((ci, pi));
+                break;
+            }
+        }
+        if found.is_some() {
+            break;
+        }
+    }
+    let (col_idx, pane_idx) = match found {
+        Some(v) => v,
+        None => return,
+    };
+
+    let col_x = ws.scrolling.column_x(col_idx) - ws.scrolling.view_pos();
+    let pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
+    let col_w = ws.scrolling.column_widths.get(col_idx).copied().unwrap_or(0.0);
+    let pane_h = ws.scrolling.columns.get(col_idx)
+        .and_then(|c| c.pane_sizes.get(pane_idx))
+        .map(|s| s.h)
+        .unwrap_or(0.0);
+
+    let rx = pane_area.0 + col_x as f32;
+    let ry = pane_area.1 + pane_y as f32;
+    let rw = col_w as f32;
+    let rh = pane_h as f32;
+
+    // Clip to content area.
+    let ca_r = pane_area.0 + pane_area.2;
+    let ca_b = pane_area.1 + pane_area.3;
+    if rx >= ca_r || ry >= ca_b {
+        return;
+    }
+    let rw = rw.min(ca_r - rx).max(4.0);
+    let rh = rh.min(ca_b - ry).max(4.0);
+
+    let accent = state.theme.accent.to_f32x4();
+    state.primitive_renderer.draw_rect(
+        rx, ry, rw, rh,
+        [accent[0], accent[1], accent[2], 0.15],
+    );
+    state.primitive_renderer.draw_border(
+        rx, ry, rw, rh,
+        [accent[0], accent[1], accent[2], 0.6],
+        4.0,
     );
 }

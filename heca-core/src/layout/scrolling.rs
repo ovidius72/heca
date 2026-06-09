@@ -3,8 +3,8 @@ use super::column::{Column, Pane};
 use super::types::*;
 use super::view_offset::{ViewOffset, compute_new_view_offset};
 
-// Re-export InsertPosition for convenience.
-pub use super::types::InsertPosition;
+// Re-export PaneInsertTarget for convenience.
+pub use super::types::PaneInsertTarget;
 
 /// Direction for creating a new column when moving a pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -890,7 +890,7 @@ impl ScrollingSpace {
     /// 1. Transform to space coords and aim for center of gaps.
     /// 2. Find closest column gap vs closest tile gap.
     /// 3. Return whichever is closer.
-    pub fn insert_position(&self, pos: Point) -> InsertPosition {
+    pub fn insert_position(&self, pos: Point) -> PaneInsertTarget {
         let gaps = self.options.gaps;
         // pos is already in space coordinates (caller adds view_pos).
         let x = pos.x + gaps / 2.0;
@@ -898,7 +898,7 @@ impl ScrollingSpace {
 
         // Before first column → NewColumn(0)
         if x < 0.0 {
-            return InsertPosition::NewColumn(0);
+            return PaneInsertTarget::NewColumn(0);
         }
 
         // Find the column containing x.
@@ -915,7 +915,7 @@ impl ScrollingSpace {
 
         // Past last column → NewColumn at end.
         if !found_col {
-            return InsertPosition::NewColumn(self.columns.len());
+            return PaneInsertTarget::NewColumn(self.columns.len());
         }
 
         // Find closest column gap.
@@ -961,9 +961,9 @@ impl ScrollingSpace {
 
         // Compare distances: column gap vs tile gap.
         if closest_col_gap_dist <= closest_tile_gap_dist {
-            InsertPosition::NewColumn(closest_col_gap_idx.min(self.columns.len()))
+            PaneInsertTarget::NewColumn(closest_col_gap_idx.min(self.columns.len()))
         } else {
-            InsertPosition::InColumn {
+            PaneInsertTarget::InColumn {
                 col_idx,
                 pane_idx: closest_tile_idx.min(col.panes.len()),
             }

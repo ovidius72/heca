@@ -3,116 +3,57 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- HEAD: `032bfa9` — `refactor(app): share pane reinsertion helpers`
-- `origin/main`: `245e725`
-- `origin/feature/gpt-refactoring`: matches local `HEAD`
-- Working tree: clean at the last checkpoint; this handoff rewrite replaces the old handoff content
-- PR #29: merged into `main`
+- Working tree: **modified** — Phase 3.2 refactor in progress; not yet committed
+- All validation passes: `cargo check`, `cargo clippy`, `cargo test`
 
-## What was completed recently
+## What was completed this session
 
-### Phase 2 — Central Mutation Boundary
-Done and recorded in the checklist.
+### Phase 3.1 Commit 2 — Shared pane ops in sidebar_drop.rs
+- `heca/src/mouse/sidebar_drop.rs` now uses `remove_pane_by_id`, `find_pane_location`, and `insert_pane_at_position` from shared helpers instead of hand-rolled scan/reinsert logic
+- `heca/src/app/pane_ops.rs` — `PaneInsertTarget` rename from `InsertPosition`
+- Behavior preserved: all refactoring-only, no semantic changes
 
-Implemented:
-- `heca/src/app/mutations.rs`
-- `after_layout_change(...)`
-- `after_focus_change(...)`
-- `after_config_change(...)`
-- `after_metadata_change(...)`
-- `after_mutation_change(...)`
+### Rename: InsertPosition → PaneInsertTarget
+- `heca-core/src/layout/types.rs` — enum definition renamed
+- `heca-core/src/layout/scrolling.rs` — re-export + return type + 4 variant usages
+- `heca/src/app/pane_ops.rs` — import + parameter type + 2 match arms
+- `heca/src/app_state.rs` — field type on `DragState`
+- `heca/src/mouse/drop.rs` — import + 4 variant usages
+- `heca/src/mouse/sidebar_drop.rs` — import + 5 variant usages
+- `heca/src/mouse/render.rs` — import + 2 match arms
 
-Behavior now:
-- handlers/input/mouse paths use shared post-mutation hooks instead of repeating `sync_focus(...)` + redraw tails
-- `sync_focus(...)` still owns sidebar projection rebuild + focus bookkeeping
-- manual `sidebar_tree.rebuild(...)` calls were reduced to startup and focus-sync paths
+### Bug fix: swap_panes_same_column focus tracking
+- `heca/src/app/pane_ops.rs` — `active_pane_idx` now tracks the originally-active pane after swap instead of always setting it to the higher index. Computed before the swap based on which position was active.
 
-### Phase 3.1 — Shared pane-ops layer
-In progress.
+### Bug fix: swap animation direction inverted
+- `heca/src/app/pane_ops.rs` — Swapped animation offset assignments so the top pane slides down and the bottom pane slides up. The offsets were applied before `panes.swap()` but named as if applied after.
 
-Implemented so far:
-- `heca/src/app/pane_ops.rs`
-- `swap_panes_same_column(...)`
-- `remove_pane_by_id(...)`
-- `insert_pane_at_position(...)`
+### Feature: Shift+drag swap (content area)
+- `heca/src/app_state.rs` — Added `swap: bool` to `InteractiveMoveStarting` and `InteractiveMove` variants
+- `heca/src/mouse/drag.rs` — `start_interactive_move` captures `shift_key()` as swap flag; `transition_to_moving` skips pane detach when swap=true; added `reset_interactive_move_offset()` helper
+- `heca/src/mouse.rs` — Swap drop handler: finds target pane via `hit_test_pane_excluding`, calls `handle_swap_param`
+- `heca/src/mouse/hit_test.rs` — New `hit_test_pane_excluding()` that skips a specified pane ID during hit testing
+- `heca/src/mouse/render.rs` — `render_insert_hint` now routes swap-mode drags to `render_swap_target_hint` which shows the full target pane rectangle instead of a thin strip
+- Swap-mode drag: pane stays in layout, follows mouse via `interactive_move_offset`, offset computed relative to grab point
 
-Wired so far:
-- `handle_swap_param()` uses the shared same-column swap helper
-- `handle_swap_up()` / `handle_swap_down()` use the shared same-column swap helper
-- `heca/src/mouse/drop.rs` uses shared move/reinsert helpers for detached-pane reinsertion
+### Remaining known work
+- Phase 3.2: Simplify handlers to dispatchers (in progress)
+- Phase 3.3: Reduce cross-file ad hoc search logic
+- Phases 4–9 from the refactoring plan
 
-Important: `heca/src/mouse/sidebar_drop.rs` was **not** finalized in this slice; it was intentionally restored to the clean committed version after a partial rewrite went wrong. It still needs the same helper treatment in a future slice.
+## Important files changed this session
 
-### Current validation status
-Passed on the current slice:
-- `cargo check -p heca`
-- `cargo test -p heca`
-- `cargo clippy --workspace --all-targets --all-features`
-
-## Rules and requirements now acquired
-
-### Mandatory workflow rules (added to `AGENTS.md`)
-- Before each step or sub-step, explicitly verify what is already done, what will change next, and why.
-- Before making changes, state the next action and the validation to run after it.
-- Do not start a new phase or major sub-phase until the current one is clearly complete and the user has approved the next step.
-- Before any new phase or major sub-phase, use the `/grill-me` skill first.
-- Double-check all details before updating checklists, handoffs, commits, or PRs.
-
-### Existing project rules that still apply
-- Keep work in small, behavior-preserving slices.
-- Pull/rebase `origin/main` before starting a new task/phase slice.
-- Every keybinding and theme variable must be configurable from `config.toml`.
-- Every WM action must go through `registry.execute()`; no direct bypasses in event handlers.
-- After every task, run `cargo clippy --workspace --all-targets --all-features` and fix warnings.
-- Do not add `#[allow(dead_code)]` unless there is a clear, documented reason.
-- Use the NIRI layout engine, not BSP.
-- Do not refactor layout code without consulting the NIRI skill.
-
-### Phase/planning rules from the user
-- The current refactor should be preparatory for the future pluggable chrome / shared AppState plan.
-- The goal is to avoid rewriting everything later.
-- The next architecture plan will own the broader AppState / host-controller boundary.
-- Before continuing any new phase slice, get user approval.
-
-## Checklist / plan status to preserve
-
-- `bugs-and-refactoring-plan-with-checklist.md`:
-  - Phase 2 is complete
-  - Phase 3 is the active phase
-  - Phase 3.1 Commit 1 is complete
-  - Phase 3.1 Commit 2 is still in progress
-- Current mismatch to fix next: the checklist still doesn’t explicitly name `heca/src/mouse/sidebar_drop.rs` in the Phase 3 move/reinsert work, even though that file is still the intended next target.
-
-## Important files
-
-### New/changed code to know
-- `heca/src/app/pane_ops.rs`
-- `heca/src/app/mutations.rs`
-- `heca/src/handlers.rs`
-- `heca/src/mouse/drop.rs`
-- `heca/src/mouse/sidebar_drop.rs` (restored clean; pending helper rewrite)
-- `heca/src/app/mod.rs`
-- `AGENTS.md`
-- `bugs-and-refactoring-plan-with-checklist.md`
-
-### Planning docs
-- `bugs-and-refactoring-plan.md`
-- `bugs-and-refactoring-plan-with-checklist.md`
-- `pluggable-chrome-plugin-plan.md`
-
-## Recent commits
-
-- `032bfa9` — `refactor(app): share pane reinsertion helpers`
-- `f201534` — `refactor(app): extract shared same-column swap helper`
-- `10cd121` — `docs: refresh handoff after merge`
-- `b2d5155` — `refactor(app): route rename and mouse tails through hooks`
-
-## Best next step
-
-1. Update the Phase 3 checklist so the next slice explicitly includes `heca/src/mouse/sidebar_drop.rs` and any remaining reinsertion/swap paths.
-2. Before new code changes, run `/grill-me` for the move/reinsert helper design if starting a new major sub-step.
-3. Then continue Phase 3.1 Commit 2 with a small, approved slice.
+- `heca-core/src/layout/types.rs` — PaneInsertTarget enum
+- `heca-core/src/layout/scrolling.rs` — PaneInsertTarget re-export + insert_position return type
+- `heca/src/app/pane_ops.rs` — swap_panes_same_column focus fix, animation direction fix, PaneInsertTarget parameter
+- `heca/src/app_state.rs` — DragState swap flag
+- `heca/src/mouse/drag.rs` — swap mode support, reset_interactive_move_offset
+- `heca/src/mouse/drop.rs` — PaneInsertTarget usage
+- `heca/src/mouse/sidebar_drop.rs` — shared helper usage + PaneInsertTarget
+- `heca/src/mouse/render.rs` — swap target hint rendering
+- `heca/src/mouse/hit_test.rs` — hit_test_pane_excluding
+- `heca/src/mouse.rs` — swap drop handler, shift+drag routing
 
 ## Resume summary in one line
 
-Phase 2 is done; Phase 3.1 Commit 1 is done; Phase 3.1 Commit 2 is partially done (swap helper + mouse/drop helper), but `mouse/sidebar_drop.rs` still needs the same helper treatment and the checklist should explicitly name it before continuing.
+Phase 3.1 complete and Phase 3.2 underway; PaneInsertTarget rename done; swap focus/animation bugs fixed; shared swap helpers now also cover same-workspace diff-column and cross-workspace swaps; live Shift press/release now toggles move↔swap during active drags; sidebar drops still use move semantics; awaiting user approval to commit.
