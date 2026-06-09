@@ -413,7 +413,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     let original_ws = state.session.active_workspace_idx;
 
     // Reset drag offset so layout positions are correct for removal.
-    crate::mouse::drag::reset_interactive_move_offset(state);
+    crate::mouse::interactive::reset_interactive_move_offset(state);
 
     // Remove the pane from its current position.
     let removed_pane = match state.session.workspaces.get_mut(original_ws) {

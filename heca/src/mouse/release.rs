@@ -20,7 +20,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         // Swap mode: pane stays in layout. If the pointer is over
         // a sidebar target, fall back to normal move semantics.
         // Otherwise, swap with the content-area target pane.
-        super::drag::reset_interactive_move_offset(state);
+        super::interactive::reset_interactive_move_offset(state);
         if let Some(target_id) = super::hit_test::hit_test_pane_excluding(
             state,
             state.mouse.pos,
@@ -39,17 +39,17 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
             // Fallback: move semantics in the content area.
             handle_content_move(state, source_id, hint);
         } else {
-            super::drag::cancel_interactive_move(state);
+            super::interactive::cancel_interactive_move(state);
         }
     } else if super::surface_left::handle_interactive_move_drop(state, pos) {
         // Sidebar drop handled.
     } else if let Some(hint) = state.mouse.insert_hint.take() {
         // Move mode: pane is still in layout. Remove it and
         // re-insert at the drop target position.
-        super::drag::reset_interactive_move_offset(state);
+        super::interactive::reset_interactive_move_offset(state);
         handle_content_move(state, source_id, hint);
     } else {
-        super::drag::cancel_interactive_move(state);
+        super::interactive::cancel_interactive_move(state);
     }
 
     state.mouse.interactive_move = None;

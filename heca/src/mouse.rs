@@ -8,6 +8,7 @@
 
 mod drag;
 mod hit_test;
+mod interactive;
 mod release;
 mod render;
 mod surface_left;
@@ -30,7 +31,7 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
 pub fn on_modifiers_changed(state: &mut AppState) {
-    drag::sync_drag_swap_mode(state);
+    interactive::sync_drag_swap_mode(state);
     if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
         drag::on_cursor_moved(state, state.mouse.pos);
     }
@@ -56,7 +57,7 @@ pub fn on_mouse_input(
             if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)
             {
-                drag::start_interactive_move(state, pane_id, pos);
+                interactive::start_interactive_move(state, pane_id, pos);
                 return None;
             }
 
@@ -116,7 +117,7 @@ pub fn on_mouse_input(
         (MouseButton::Left, ElementState::Released) => {
             // Check for interactive move release first.
             if let Some(InteractiveMovePhase::Starting { .. }) = state.mouse.interactive_move {
-                drag::cancel_interactive_move(state);
+                interactive::cancel_interactive_move(state);
                 return None;
             }
             if let Some(InteractiveMovePhase::Moving { .. }) = state.mouse.interactive_move {

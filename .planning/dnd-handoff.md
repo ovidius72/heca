@@ -581,17 +581,17 @@ Full step-by-step plan is in `.planning/refactoring-and-dnd-plan.md`.
 - [x] **3.13** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
 - [x] **3.14** Commit: `refactor: create target.rs enum dispatch and surface_left.rs handler`
 
-### Phase 4 — Extract `InteractiveMove` into `mouse/interactive.rs`
+### Phase 4 — Extract `InteractiveMove` into `mouse/interactive.rs` ✅
 
-- [ ] **4.1** Create `heca/src/mouse/interactive.rs`
-- [ ] **4.2** Move `start_interactive_move`, `transition_to_moving`, `cancel_interactive_move`, `reset_interactive_move_offset`, `sync_drag_swap_mode` from `drag.rs` to `interactive.rs`
-- [ ] **4.3** Move `handle_interactive_move_starting`, `handle_interactive_move_drag` from `drag.rs` to `interactive.rs`
-- [ ] **4.4** Move interactive move release logic from `release.rs` to `interactive.rs` (keep `handle_interactive_move_release` in `release.rs` as thin router if needed)
-- [ ] **4.5** Update `mouse/mod.rs` — add `mod interactive;`
-- [ ] **4.6** Update `drag.rs` — `on_cursor_moved` routes InteractiveMove phases to `interactive::` functions
-- [ ] **4.7** Verify: `cargo check -p heca` passes, all existing tests pass
-- [ ] **4.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
-- [ ] **4.9** Commit: `refactor: extract InteractiveMove into mouse/interactive.rs`
+- [x] **4.1** Create `heca/src/mouse/interactive.rs`
+- [x] **4.2** Move `start_interactive_move`, `cancel_interactive_move`, `reset_interactive_move_offset`, `sync_drag_swap_mode` from `drag.rs` to `interactive.rs`
+- [x] **4.3** Move `handle_interactive_move_starting`, `handle_interactive_move_drag` from `drag.rs` to `interactive.rs`
+- [x] **4.4** Move `transition_to_moving`, `set_drag_swap_mode` from `drag.rs` to `interactive.rs`
+- [x] **4.5** Update `mouse/mod.rs` — add `mod interactive;`
+- [x] **4.6** Update `drag.rs` — `on_cursor_moved` routes InteractiveMove phases to `interactive::` functions
+- [x] **4.7** Verify: `cargo check -p heca` passes, all existing tests pass
+- [x] **4.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [x] **4.9** Commit: `refactor: extract InteractiveMove into mouse/interactive.rs`
 
 ### Phase 5 — Render integration with `DragContext` and `DragItemId`
 
