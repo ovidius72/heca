@@ -374,11 +374,11 @@ Short description:
 
 ### Phase 7 — Typed Errors and Unsafe Hygiene
 
-- [ ] Phase 7 complete
-  - [ ] 7.1 Add typed errors where boundaries are stable
-  - [ ] 7.2 Improve action dispatch failure behavior
-  - [ ] 7.3 Add `// SAFETY:` comments to all unsafe blocks
-  - [ ] 7.V Validate typed-error behavior and unsafe documentation coverage
+- [x] Phase 7 complete
+  - [x] 7.1 Add typed errors — ConfigError, PtyError, RpcError replace Result<_, String>
+  - [x] 7.2 Improve action dispatch failure — debug-assert on missing handler in execute()
+  - [x] 7.3 Add // SAFETY: comments to all 11 unsafe blocks in terminal.rs
+  - [x] 7.V Validate — all 205 tests pass, clippy clean
 
 ### Phase 8 — Constants, Polish, and Performance Follow-Ups
 

@@ -250,7 +250,7 @@ up architecture debt introduced during rapid prototyping.
 | 4 — Sidebar Projection Model | ✅ Done | SidebarItemKind, rebuild→sync, HashMap pane lookup |
 | 5 — Backend Lifecycle | ✅ Done | BackendStore wrapper, lifecycle contract, batch helper |
 | 6 — Stale State | ✅ Done | Remove dead Rect, dormant fields, placeholder variants, metadata drift, #[allow] audit |
-| 7 — Typed Errors | ⬜ Pending | Stable boundary errors, action dispatch failure, unsafe hygiene |
+| 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, debug-assert dispatch, SAFETY comments |
 | 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
 | 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
 | 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |
