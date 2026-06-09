@@ -243,6 +243,8 @@
 ---
 *Roadmap updated: 2026-06-09*
 
+*Phase 9 (Focus Separation) completed: interaction policy layer with 29 regression tests.*
+
 ---
 
 ## Code Refactoring Track (cross-cutting)
@@ -260,5 +262,5 @@ up architecture debt introduced during rapid prototyping.
 | 6 — Stale State | ✅ Done | Remove dead Rect, dormant fields, placeholder variants, metadata drift, #[allow] audit |
 | 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, debug-assert dispatch, SAFETY comments |
 | 8 — Constants & Polish | ✅ Done | Centralize constants, renderer API doc, invariant docs (8.3 deferred) |
-| 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
+| 9 — Focus Separation | ✅ Done | Interaction policy layer: FocusDomain, ActionPolicy, route_interaction, dispatch_action, focus-target helpers, 29 regression tests |
 | 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |

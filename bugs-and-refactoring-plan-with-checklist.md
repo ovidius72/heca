@@ -391,13 +391,13 @@ Short description:
 
 ### Phase 9 — Fix Floating vs Tiled Focus-Domain Routing
 
-- [ ] Phase 9 complete
-  - [ ] 9.1 Define the focus domain explicitly
-  - [ ] 9.2 Define action policy by domain
-  - [ ] 9.3 Route handlers through the domain guard
-  - [ ] 9.4 Centralize focused-pane targeting helpers
-  - [ ] 9.5 Add regression tests for domain routing
-  - [ ] 9.V Validate floating vs tiled action targeting correctness
+- [x] Phase 9 complete
+  - [x] 9.1 Define the focus domain explicitly
+  - [x] 9.2 Define action policy by domain
+  - [x] 9.3 Route handlers through the domain guard
+  - [x] 9.4 Centralize focused-pane targeting helpers
+  - [x] 9.5 Add regression tests for domain routing
+  - [ ] 9.V Validate floating vs tiled action targeting correctness (manual smoke test)
 
 ### Phase 10 — Final Whole-Program Verification
 
