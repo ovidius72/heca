@@ -411,7 +411,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                             .gap(4.0)
                             .area(icon, "dot")
                             .area(Label::new(title).color(color), "title")
-                            .area(Label::new(sub).color(theme.muted).font_scale(0.8), "sub")
+                            .area(Label::new(sub).color(theme.foreground).font_scale(0.8), "sub")
                             .area(tag, "tag"),
                     );
                 let i = pane_states.borrow().len();

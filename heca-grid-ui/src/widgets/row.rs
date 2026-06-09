@@ -17,7 +17,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::Glow;
+use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction};
 use crate::widgets::ActiveMarker;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -32,9 +32,14 @@ const ACTIVE_FILL_ALPHA: u8 = 30;
 const HOVER_FILL_ALPHA: u8 = 16;
 /// Active fill alpha when tinting the row's **own background** color — higher, so
 /// the same-hue highlight reads as a lighter/stronger version of the background.
-const ACTIVE_TINT_ALPHA: u8 = 64;
+const ACTIVE_TINT_ALPHA: u8 = 90;
 /// Hover fill alpha when tinting the row's own background color.
-const HOVER_TINT_ALPHA: u8 = 38;
+const HOVER_TINT_ALPHA: u8 = 40;
+/// Alpha of the crisp same-hue border drawn around the *active* pill — the main
+/// cue that distinguishes a selected row from a merely tinted/hovered one.
+const ACTIVE_BORDER_ALPHA: u8 = 180;
+/// Width of the active pill's border (logical px).
+const ACTIVE_BORDER_W: f32 = 1.3;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
@@ -162,10 +167,19 @@ impl Component for Row {
         // clashing accent overlay. Plain rows fall back to accent/foreground.
         let highlight_base = self.highlight.or(self.base.style.fill);
         if active {
-            let c = highlight_base
+            let fill = highlight_base
                 .map(|h| h.with_alpha(ACTIVE_TINT_ALPHA))
                 .unwrap_or(accent.with_alpha(ACTIVE_FILL_ALPHA));
-            cx.rect(sel, c, None, sel_radius, None);
+            // A crisp same-hue border is the clearest "selected" cue — a tinted
+            // fill alone is hard to tell apart from the row's background.
+            let edge = highlight_base.unwrap_or(accent).with_alpha(ACTIVE_BORDER_ALPHA);
+            cx.rect(
+                sel,
+                fill,
+                Some(Border { color: edge, width: ACTIVE_BORDER_W }),
+                sel_radius,
+                None,
+            );
         } else if self.hovered.get_untracked() {
             let c = highlight_base
                 .map(|h| h.with_alpha(HOVER_TINT_ALPHA))
