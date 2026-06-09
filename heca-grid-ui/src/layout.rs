@@ -64,7 +64,7 @@ impl LayoutEngine {
         };
         c.base_mut().font = resolved;
         c.remeasure();
-        let style = c.base().style.to_taffy();
+        let style = c.taffy_style();
         let child_count = c.base().children.len();
         let mut child_nodes = Vec::with_capacity(child_count);
         for i in 0..child_count {
