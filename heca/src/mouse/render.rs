@@ -26,7 +26,7 @@ pub(crate) fn render_detached_pane(state: &mut AppState, pane_area: Rectangle) {
         .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 0.7]);
 
     let pane_name = &det.pane.title;
-    let name_size = (pw.min(ph) * 0.25).clamp(24.0, 72.0);
+    let name_size = (pw.min(ph) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
     let name_w = name_size * pane_name.len() as f32 * 0.6;
     let name_x = px + (pw - name_w) / 2.0;
     let name_y = py + (ph - name_size) / 2.0;

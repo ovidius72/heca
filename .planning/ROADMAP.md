@@ -24,6 +24,7 @@
 **Goal:** Open a native OS window and render styled text, rectangles, and borders using `wgpu` and `cosmic-text`. Establish the config and theme system.
 
 **Requirements:**
+
 - COMP-01: App opens a native OS window via `winit` with a `wgpu` surface
 - COMP-02: GPU renders colored rectangles, borders, and rounded corners
 - COMP-03: `cosmic-text` renders text with a configurable font family and size
@@ -34,6 +35,7 @@
 - CONF-04: Fallback defaults if config file missing or key omitted
 
 **Success Criteria:**
+
 1. Window opens successfully on Linux, macOS, and Windows.
 2. Renders styled text in a custom font with theme-defined colors.
 3. Renders colored rectangles with rounded corners and borders.
@@ -48,6 +50,7 @@
 **Goal:** Build the NIRI-inspired layout engine with horizontal scrolling columns, vertical workspace stacks, animated transitions, and overview/expose mode.
 
 **Requirements:**
+
 - COMP-05: Tab bar chrome rendered at the top of the window
 - COMP-06: Pane borders and titles rendered around each pane
 - COMP-07: Status bar or minimal chrome rendered at the bottom
@@ -78,6 +81,7 @@
 - ANIM-04: Column move animations (slide when columns added/removed)
 
 **Success Criteria:**
+
 1. Can create new columns (horizontal split) and new panes in columns (vertical split).
 2. Can navigate between columns with H/L — view scrolls smoothly to active column.
 3. Can navigate between panes with J/K — wraps to next/prev column at boundaries.
@@ -95,6 +99,7 @@
 **Goal:** Terminal and Neovim run as live panes inside the workspace.
 
 **Requirements:**
+
 - PANE-01: Terminal pane — spawns PTY, renders cell grid via `vte` parser
 - PANE-02: Terminal pane forwards keyboard input to PTY
 - PANE-03: Terminal pane forwards mouse input as SGR mouse sequences
@@ -108,6 +113,7 @@
 - PLUG-05: Plugin can draw text and primitives via host's RenderContext
 
 **Success Criteria:**
+
 1. Terminal pane spawns a shell (e.g., zsh) and renders its output accurately.
 2. Terminal pane accepts keyboard input and mouse scrolling.
 3. Neovim pane spawns, renders the editor grid, and updates on edits.
@@ -124,6 +130,7 @@
 **Goal:** Make sessions persistent, expose remote control, and load third-party plugins.
 
 **Requirements:**
+
 - PANE-08: Neovim pane handles `ext_tabline` by updating chrome tab bar
 - PANE-09: Neovim pane handles `ext_cmdline` / `ext_popupmenu` in chrome overlays
 - SESS-01: Named sessions stored on disk
@@ -147,6 +154,7 @@
 - CONF-05: Hot-reload config without restart
 
 **Success Criteria:**
+
 1. Neovim's tabline renders in the app's chrome tab bar instead of the terminal grid.
 2. Command palette overlay opens via keyboard and fuzzy-searches commands.
 3. Session saves to disk on quit and restores layout + pane metadata on launch.
@@ -251,6 +259,6 @@ up architecture debt introduced during rapid prototyping.
 | 5 — Backend Lifecycle | ✅ Done | BackendStore wrapper, lifecycle contract, batch helper |
 | 6 — Stale State | ✅ Done | Remove dead Rect, dormant fields, placeholder variants, metadata drift, #[allow] audit |
 | 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, debug-assert dispatch, SAFETY comments |
-| 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
+| 8 — Constants & Polish | ✅ Done | Centralize constants, renderer API doc, invariant docs (8.3 deferred) |
 | 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
 | 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |

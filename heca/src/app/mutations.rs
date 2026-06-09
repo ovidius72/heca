@@ -7,7 +7,8 @@
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
 use heca_core::backend::FakeBackend;
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
+use crate::chrome;
+use heca_core::layout::{Column, ColumnId, Pane, PaneId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutationKind {
@@ -78,7 +79,7 @@ pub(crate) fn move_pane_to_workspace_column(
             let insert_pos = target_col.min(ws.scrolling.columns.len());
             ws.scrolling.add_column(
                 Some(insert_pos),
-                Column::new(new_col_id, pane, ColumnWidth::Proportion(0.5)),
+                Column::new(new_col_id, pane, chrome::default_column_width()),
                 true,
             );
             state.focused_pane = Some(pane_id);
@@ -176,7 +177,7 @@ pub(crate) fn move_pane_to_column(
                 let cid = new_col_id.unwrap_or(ColumnId(pane.id.0));
                 ws.scrolling.add_column(
                     Some(target_pos),
-                    Column::new(cid, pane, ColumnWidth::Proportion(0.5)),
+                    Column::new(cid, pane, chrome::default_column_width()),
                     true,
                 );
             }
@@ -241,7 +242,7 @@ pub(crate) fn move_column_to_workspace(
         let placeholder_col = Column::new(
             ColumnId(state.session.next_id()),
             placeholder_pane,
-            ColumnWidth::Proportion(0.5),
+            chrome::default_column_width(),
         );
         if let Some(ws) = state.session.workspaces.get_mut(current_ws) {
             ws.scrolling.add_column(None, placeholder_col, true);

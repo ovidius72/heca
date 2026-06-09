@@ -1,4 +1,13 @@
+//! Chrome metrics and central application constants.
+//!
+//! UI dimensions, timing defaults, layout proportions, and render parameters
+//! that were previously scattered as magic numbers across the codebase.
+
 use heca_core::layout::types::{Point, Rectangle, Size};
+use heca_core::layout::ColumnWidth;
+use std::time::Duration;
+
+// ── Chrome metrics ──
 
 /// Default tab bar height in logical pixels.
 pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
@@ -6,6 +15,43 @@ pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
 /// Default collapsed sidebar width in logical pixels.
 pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
+/// Minimum sidebar width to be considered expanded (for rendering decisions).
+pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
+
+// ── Timing ──
+
+/// Prefix mode auto-exit timeout (ms). After this time with no key, prefix mode cancels.
+pub const PREFIX_TIMEOUT: Duration = Duration::from_millis(500);
+/// Target frame interval (~60 FPS).
+pub const FRAME_INTERVAL: Duration = Duration::from_millis(16);
+
+// ── Layout defaults ──
+
+/// Default width proportion for newly created columns.
+pub(crate) const DEFAULT_COLUMN_PROPORTION: f64 = 0.5;
+/// Helper to get the default ColumnWidth for new columns.
+pub const fn default_column_width() -> ColumnWidth {
+    ColumnWidth::Proportion(DEFAULT_COLUMN_PROPORTION)
+}
+
+// ── Pane name overlay ──
+
+/// Font size factor for the pane name overlay (fraction of min(width, height)).
+pub const PANE_NAME_SIZE_FACTOR: f32 = 0.25;
+/// Minimum pane name font size in logical pixels.
+pub const PANE_NAME_SIZE_MIN: f32 = 24.0;
+/// Maximum pane name font size in logical pixels.
+pub const PANE_NAME_SIZE_MAX: f32 = 72.0;
+
+// ── Chrome text ──
+
+/// Default font size for chrome text (tab bar, status bar).
+pub const CHROME_TEXT_SIZE: f32 = 14.0;
+
+// ── Mouse ──
+
+/// Distance from content area edge that triggers edge scrolling (logical pixels).
+pub const EDGE_SCROLL_TRIGGER: f32 = 80.0;
 
 /// Layout configuration for chrome elements around the pane area.
 #[derive(Clone, Copy, Debug)]

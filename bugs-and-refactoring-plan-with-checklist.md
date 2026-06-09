@@ -382,12 +382,12 @@ Short description:
 
 ### Phase 8 — Constants, Polish, and Performance Follow-Ups
 
-- [ ] Phase 8 complete
-  - [ ] 8.1 Centralize constants
-  - [ ] 8.2 Clarify renderer API truthfulness
-  - [ ] 8.3 Revisit terminal render-data cloning
-  - [ ] 8.4 Improve docs
-  - [ ] 8.V Validate constants cleanup, renderer API clarity, and targeted perf expectations
+- [x] Phase 8 complete
+  - [x] 8.1 Centralize constants — 9 new named constants in chrome.rs, replaced 13 ColumnWidth::Proportion(0.5) + 5 sidebar thresholds + 2 timing values + 4 pane name sizes + 1 chrome text size + 1 edge scroll trigger
+  - [x] 8.2 Clarify renderer API — documented draw_rounded_rect radius is ignored, fixed PrimitiveRenderer module doc
+  - [x] 8.3 Revisit terminal render-data cloning — DEFERRED (terminal backend not wired, no profiling data)
+  - [x] 8.4 Improve docs — added invariant docs to AppState and ActionRegistry
+  - [x] 8.V Validate — all 205 tests pass, clippy clean
 
 ### Phase 9 — Fix Floating vs Tiled Focus-Domain Routing
 

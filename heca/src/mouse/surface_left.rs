@@ -8,7 +8,7 @@
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
 use crate::app_state::{AppState, InteractiveMovePhase};
-use crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH;
+use crate::chrome::{DEFAULT_COLLAPSED_SIDEBAR_WIDTH, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth};
@@ -328,7 +328,7 @@ fn place_pane_at_sidebar_target(
                         pane,
                         position,
                         new_col_id,
-                        ColumnWidth::Proportion(0.5),
+                        default_column_width(),
                         true,
                     );
                 }
@@ -482,7 +482,7 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
                                 pane,
                                 position,
                                 col_id,
-                                ColumnWidth::Proportion(0.5),
+                                default_column_width(),
                                 true,
                             );
                         }

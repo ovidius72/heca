@@ -70,8 +70,19 @@ pub struct ActionDescriptor {
 
 /// Registry that maps action discriminants to handler functions.
 ///
+/// Registry that maps action discriminants to handler functions.
+///
 /// Call `register()` during app initialization to wire up all actions,
 /// then `execute()` at runtime to dispatch.
+///
+/// # Invariants
+///
+/// - Every `WmAction` variant must have a registered handler in
+///   `build_registry()`. In debug builds, `execute()` panics if a handler
+///   is missing. In release builds, missing handlers are silently skipped.
+/// - Handlers are keyed by `Discriminant<WmAction>`, so all parameterized
+///   variants of the same action share one handler (the handler destructures
+///   the action to extract arguments).
 pub struct ActionRegistry {
     handlers: HashMap<std::mem::Discriminant<crate::input::WmAction>, ActionHandler>,
 }

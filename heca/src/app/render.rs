@@ -179,7 +179,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         timestamp_writes: None,
     });
 
-    let chrome_text = 14.0f32;
+    let chrome_text = crate::chrome::CHROME_TEXT_SIZE;
     let tb = &chrome;
     let side_bg = if theme.name == "Catppuccin Mocha" {
         [0.067, 0.067, 0.106, 1.0]
@@ -284,7 +284,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             .and_then(|ws| ws.find_pane(*pane_id))
             .map(|p| p.title.as_str())
             .unwrap_or("?");
-        let name_size = (pw.min(ph) * 0.25).clamp(24.0, 72.0);
+        let name_size = (pw.min(ph) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
         let name_color = if is_active {
             [1.0, 1.0, 1.0, 0.9]
         } else {
@@ -332,7 +332,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let drag_source = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.source_item);
     let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
     let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
-    if chrome.left_sidebar_width >= 80.0 {
+    if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
         sidebar::render_sidebar_expanded(
             &mut state.sidebar_tree,
             0.0,
@@ -438,7 +438,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         theme.border.to_f32x4(),
         1.0,
     );
-    if chrome.right_sidebar_width >= 80.0 {
+    if chrome.right_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
         state.text_renderer.queue_text(
             "Details",
             rsx + 8.0,
@@ -485,7 +485,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 .primitive_renderer
                 .draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
             let float_name = &float.pane.title;
-            let f_name_size = (fw.min(fh) * 0.25).clamp(24.0, 72.0);
+            let f_name_size = (fw.min(fh) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
             let f_name_color = if is_focused {
                 [1.0, 1.0, 1.0, 0.9]
             } else {

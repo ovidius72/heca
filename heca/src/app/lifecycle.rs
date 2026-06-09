@@ -6,7 +6,7 @@
 use crate::app::mutations::after_config_change;
 use crate::app_state::{AppState, InputMode};
 use crate::mouse;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
@@ -15,7 +15,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         InputMode::Prefix | InputMode::Chord { .. }
     ) && state
         .prefix_entered_at
-        .is_some_and(|entered| entered.elapsed() >= Duration::from_millis(500));
+        .is_some_and(|entered| entered.elapsed() >= crate::chrome::PREFIX_TIMEOUT);
     if should_timeout {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
@@ -48,7 +48,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     if state.session.are_animations_ongoing() {
         event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_millis(16),
+            Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
     } else {
         event_loop.set_control_flow(ControlFlow::Wait);
