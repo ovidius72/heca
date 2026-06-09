@@ -532,3 +532,83 @@ Full step-by-step plan is in `.planning/refactoring-and-dnd-plan.md`.
 - **Use `DEFAULT_TAB_BAR_HEIGHT` / `DEFAULT_STATUS_BAR_HEIGHT`** — not hardcoded `32.0` / `24.0`
 - **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers
 - **Run `cargo clippy --workspace --all-targets --all-features` before committing** — must be clean
+- **After each commit, update the corresponding checkbox in this checklist** — mark it `[x]` and note the commit hash
+
+---
+
+## 7. PLAN CHECKLIST
+
+> **Rule:** After committing each task, update its checkbox below (`[ ]` → `[x]`) and add the commit hash. Push the updated handoff in the same commit or an immediate follow-up.
+
+### Phase 2.1 — Create `heca-grid-ui/src/drag/` framework types
+
+- [ ] **2.1.1** Create `heca-grid-ui/src/drag/mod.rs` — module re-exports
+- [ ] **2.1.2** Create `heca-grid-ui/src/drag/item.rs` — `DragSurfaceId`, `DragItemId`, `DragItemKind`, `DragItem`
+- [ ] **2.1.3** Create `heca-grid-ui/src/drag/state.rs` — `SurfaceDragPhase`, `SurfaceDragState`, `DragLabel`
+- [ ] **2.1.4** Create `heca-grid-ui/src/drag/context.rs` — `DragContext` with `active_surface` and `surfaces` map
+- [ ] **2.1.5** Create `heca-grid-ui/src/drag/math.rs` — `rubberband()`, `DEFAULT_DRAG_THRESHOLD_SQ`
+- [ ] **2.1.6** Add `mod drag;` to `heca-grid-ui/src/lib.rs` and wire re-exports into `prelude::*`
+- [ ] **2.1.7** Verify: `cargo check -p heca-grid-ui` passes, `cargo test -p heca-grid-ui` passes
+- [ ] **2.1.8** Commit: `feat(grid-ui): add drag framework types module`
+
+### Phase 2.2 — Replace `DragState` / `MouseState` fields with framework types
+
+- [ ] **2.2.1** Add `heca-grid-ui` dependency to `heca/Cargo.toml`
+- [ ] **2.2.2** Replace `DragState` enum in `app_state.rs` with `DragContext` + `Option<InteractiveMoveState>`
+- [ ] **2.2.3** Replace `MouseState` fields (`drag_hover_sidebar_fi`, `sidebar_drag_source_fi`, `sidebar_drag_label`) with `DragContext`
+- [ ] **2.2.4** Replace `SidebarDragLabel` with `drag::DragLabel` from heca-grid-ui
+- [ ] **2.2.5** Update all match arms on `DragState` to use `DragContext` + `InteractiveMoveState`
+- [ ] **2.2.6** Update `on_mouse_input`, `on_cursor_moved`, `on_modifiers_changed` to route through `DragContext`
+- [ ] **2.2.7** Update `process_edge_scroll` to check `InteractiveMoveState` instead of `DragState::InteractiveMove`
+- [ ] **2.2.8** Verify: `cargo check -p heca` passes, all existing tests pass
+- [ ] **2.2.9** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [ ] **2.2.10** Commit: `refactor: replace DragState with DragContext and InteractiveMoveState`
+
+### Phase 2.3 — Create enum dispatch (`target.rs`) and left sidebar handler (`surface_left.rs`)
+
+- [ ] **2.3.1** Create `heca/src/mouse/target.rs` — `surface_contains`, `surface_item_at`, `surface_can_accept`, `surface_accept_drop`, `surface_click_action`, `surface_bounds`
+- [ ] **2.3.2** Create `heca/src/mouse/surface_left.rs` — left sidebar implementations of all target.rs dispatch functions
+- [ ] **2.3.3** Move `sidebar.rs::click()` → `surface_left.rs::click_action()`
+- [ ] **2.3.4** Move `sidebar_drop.rs::drag_drop()` → `surface_left.rs::accept_drop()`
+- [ ] **2.3.5** Move `sidebar_drop.rs::handle_drop()` → `surface_left.rs::accept_drop()` (merge with drag_drop)
+- [ ] **2.3.6** Move `sidebar_drop.rs::update_sidebar_drag_hover()` → `surface_left.rs::hover_item_at()`
+- [ ] **2.3.7** Move `sidebar.rs::sidebar_pane_hit_test()` → `surface_left.rs::item_at()`
+- [ ] **2.3.8** Delete `mouse/sidebar.rs`
+- [ ] **2.3.9** Delete `mouse/sidebar_drop.rs`
+- [ ] **2.3.10** Update `mouse/mod.rs` — remove `mod sidebar; mod sidebar_drop;` add `mod target; mod surface_left;`
+- [ ] **2.3.11** Update all call sites in `drag.rs`, `release.rs`, `mouse.rs` to use `target::` dispatch
+- [ ] **2.3.12** Verify: `cargo check -p heca` passes, all existing tests pass
+- [ ] **2.3.13** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [ ] **2.3.14** Commit: `refactor: create target.rs enum dispatch and surface_left.rs handler`
+
+### Phase 2.4 — Extract `InteractiveMove` into `mouse/interactive.rs`
+
+- [ ] **2.4.1** Create `heca/src/mouse/interactive.rs`
+- [ ] **2.4.2** Move `start_interactive_move`, `transition_to_moving`, `cancel_interactive_move`, `reset_interactive_move_offset`, `sync_drag_swap_mode` from `drag.rs` to `interactive.rs`
+- [ ] **2.4.3** Move `handle_interactive_move_starting`, `handle_interactive_move_drag` from `drag.rs` to `interactive.rs`
+- [ ] **2.4.4** Move interactive move release logic from `release.rs` to `interactive.rs` (keep `handle_interactive_move_release` in `release.rs` as thin router if needed)
+- [ ] **2.4.5** Update `mouse/mod.rs` — add `mod interactive;`
+- [ ] **2.4.6** Update `drag.rs` — `on_cursor_moved` routes InteractiveMove phases to `interactive::` functions
+- [ ] **2.4.7** Verify: `cargo check -p heca` passes, all existing tests pass
+- [ ] **2.4.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [ ] **2.4.9** Commit: `refactor: extract InteractiveMove into mouse/interactive.rs`
+
+### Phase 2.5 — Render integration with `DragContext` and `DragItemId`
+
+- [ ] **2.5.1** Update `sidebar/render.rs` — replace `drag_hover_fi: Option<usize>` and `drag_source_fi: Option<usize>` with `drag_hover: Option<DragItemId>` and `drag_source: Option<DragItemId>`
+- [ ] **2.5.2** Update `sidebar/render.rs` — all flat-index comparisons use `DragItemId` instead of raw `usize`
+- [ ] **2.5.3** Update `app/render.rs` — pass `DragItemId` from `DragContext` instead of `MouseState` sidebar fields
+- [ ] **2.5.4** Update `sidebar/model.rs` — add `DragItem` construction helpers if needed
+- [ ] **2.5.5** Update `mouse/render.rs` — any drag highlight rendering that used old fields
+- [ ] **2.5.6** Remove dead fields from `MouseState` (old sidebar drag fields now in `DragContext`)
+- [ ] **2.5.7** Verify: `cargo check -p heca` passes, all existing tests pass, visual behavior unchanged
+- [ ] **2.5.8** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [ ] **2.5.9** Commit: `refactor: render integration with DragContext and DragItemId`
+
+### Final Verification
+
+- [ ] Full `cargo test --workspace` passes
+- [ ] Full `cargo clippy --workspace --all-targets --all-features` is clean
+- [ ] Manual smoke test: sidebar drag, content drag, swap mode, edge scroll
+- [ ] Update this handoff with final commit hashes
+- [ ] Update `bugs-and-refactoring-plan-with-checklist.md`
