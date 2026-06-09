@@ -347,12 +347,13 @@ Short description:
 
 ### Phase 4 — Redesign Sidebar Projection and Interaction Model
 
-- [ ] Phase 4 complete
-  - [ ] 4.1 Preserve UI state across rebuilds
-  - [ ] 4.2 Separate projection rows from interaction rules
-  - [ ] 4.3 Introduce `sync()` semantics
-  - [ ] 4.4 Performance/readability cleanup
-  - [ ] 4.V Validate projection/state preservation and interaction-row behavior
+- [x] Phase 4 complete
+  - [x] 4.1 Preserve UI state across rebuilds — collapsed state persisted via prev_*_collapsed maps
+  - [x] 4.2 Separate projection rows from interaction rules — SidebarItemKind, is_selectable(), is_expandable()
+  - [x] 4.3 Introduce `sync()` semantics — rebuild → sync_from_session, rebuild_flat_items → sync_flat_items
+  - [x] 4.4 Performance/readability cleanup — Vec::with_capacity, HashMap pane-id map for O(1) render lookups,
+       replaces 15-line O(n) scan per pane
+  - [x] 4.V Validate — all 204 tests pass, clippy clean
 
 ### Phase 5 — Backend Runtime Ownership Cleanup
 
