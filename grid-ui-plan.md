@@ -90,11 +90,10 @@ next, and how to start.
 
 - **Branch:** `heca-grid-ui`. **Default branch:** `main`.
 - **Merged:** PR **#30** (theme-token / font / dropdown pass) and PR **#32** (docs:
-  plan tracker + `docs/widgets.md` refresh). `main` is at `4e85422`.
-- **⚠️ One dangling commit:** `c28973d` ("note end-user docs as the final task") is on
-  `origin/heca-grid-ui` but **not yet in `main`** (the branch is 1 ahead / 9 behind main).
-  **First action when resuming:** sync the branch with `main` (`git fetch && git merge
-  origin/main` or rebase) and open a tiny PR for `c28973d`, *or* fold it into the next PR.
+  plan tracker + `docs/widgets.md` refresh).
+- Branch is **synced with `main`** (merged origin/main 2026-06-09; clean — incoming
+  changes were all in `heca/src/**`, which we don't own). The two doc commits since #32
+  (end-user-docs note + this handoff rewrite) are going up in their own docs PR.
 - Build is green: `cargo test -p heca-grid-ui` = **6 unit + 59 integration + doctests**; clippy clean.
 
 #### Hard rules (do not violate)
