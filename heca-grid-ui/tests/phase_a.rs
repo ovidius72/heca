@@ -1569,3 +1569,26 @@ fn pane_draws_rounded_accent_border_no_brackets() {
     });
     assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
 }
+
+#[test]
+fn item_group_collapses_rows_out_of_layout() {
+    use heca_grid_ui::ItemGroup;
+    let row = || Item::new("row").on_activate(|| {});
+    let mut group = ItemGroup::new("GROUP")
+        .child(row())
+        .child(row());
+
+    // Expanded: header + 2 rows all take height.
+    LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
+    let expanded_h = group.base().bounds.size.h;
+    let r1 = group.base().children[1].base().bounds.size.h;
+    assert!(r1 > 0.0, "expanded rows have height");
+
+    // Collapse via the expanded signal, relayout: rows fold away (display:none).
+    group.state().set(false);
+    LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
+    let collapsed_h = group.base().bounds.size.h;
+    let r1c = group.base().children[1].base().bounds.size.h;
+    assert!(collapsed_h < expanded_h, "collapsed group is shorter ({collapsed_h} < {expanded_h})");
+    assert_eq!(r1c, 0.0, "collapsed rows take no layout space");
+}
