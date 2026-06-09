@@ -429,7 +429,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
             // rows, not just `Item`s, can be interactive.
             let pane_sel = signal(0usize);
             let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
-            let pane = move |icon: Icon, color: Color, title: &str, sub: &str, tag: Badge| -> Row {
+            let pane = move |icon: Icon, color: Color, title: &str, branch: &str, info: &str, tag: Badge| -> Row {
                 let row = Row::new()
                     .background(color.with_alpha(22))
                     .radius(theme.control_radius())
@@ -445,14 +445,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                             .gap(4.0)
                             .area(icon, "dot")
                             .area(Label::new(title).color(color), "title")
-                            // G8 recipe: the branch is a composed Tag (git-branch
-                            // icon + branch text), not plain text. Wrapped in a row
-                            // so the chip hugs its content (left) instead of
-                            // stretching to fill the grid cell.
+                            // G8 recipe: the branch is a composed, *multi-segment*
+                            // Tag — git-branch icon + branch │ change info — not
+                            // plain text. Wrapped in a row so the chip hugs its
+                            // content (left) instead of stretching to fill the cell.
                             .area(
                                 Flex::row().child(
-                                    Tag::new(sub)
+                                    Tag::new(branch)
                                         .leading(Icon::new(Glyph::GitBranch).size(13.0).color(color))
+                                        .segment_text(info, None)
                                         .color(color),
                                 ),
                                 "sub",
@@ -511,20 +512,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> Flex {
                     Icon::new(Glyph::Terminal).color(theme.success).size(20.0),
                     theme.success,
                     "Pane 1 (nvim)",
-                    "features/my-branch 1+",
+                    "my-branch",
+                    "1+",
                     Badge::success("RUN"),
                 ))
                 .child(pane(
                     Icon::new(Glyph::GitPullRequest).color(theme.warning).size(20.0),
                     theme.warning,
                     "Review (diff)",
-                    "features/my-branch · 2d",
+                    "my-branch",
+                    "· 2d",
                     Badge::warning("IDLE"),
                 ))
                 .child(pane(
                     Icon::new(Glyph::Warning).color(theme.danger).size(20.0),
                     theme.danger,
                     "build",
+                    "main",
                     "exit 1",
                     Badge::danger("STOP"),
                 ));

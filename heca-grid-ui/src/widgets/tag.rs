@@ -14,7 +14,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::SignalGet;
 use crate::scene::Border;
-use crate::style::{Align, Direction};
+use crate::style::{Align, Direction, Justify};
 use crate::widgets::{Flex, Label};
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -34,9 +34,10 @@ const FILL_ALPHA: u8 = 22;
 const BORDER_ALPHA: u8 = 130;
 /// Vertical inset of a segment divider as a fraction of the chip height.
 const DIVIDER_INSET_FRAC: f64 = 0.18;
-/// `Theme.radius` multiplier for the pill (rounder than a box), clamped to a
-/// capsule — so the corner radius follows the theme, never hardcoded.
-const RADIUS_MUL: f32 = 2.0;
+/// `Theme.radius` multiplier for the chip corners, clamped to a capsule — so the
+/// corner radius follows the theme, never hardcoded. A modest, rounded-rect look
+/// (not a full capsule).
+const RADIUS_MUL: f32 = 1.0;
 
 /// A small labeled chip of one or more segments.
 pub struct Tag {
@@ -57,6 +58,7 @@ impl Tag {
         let mut base = Base::new();
         base.style.direction = Direction::Row;
         base.style.align = Align::Center;
+        base.style.justify = Justify::Center;
         base.style.padding_x = Some(PAD_X);
         base.style.padding_y = Some(PAD_Y);
         base.style.gap = SEG_GAP;
