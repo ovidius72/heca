@@ -524,8 +524,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
-    mouse::render_detached_pane(state, (pane_area.x, pane_area.y, pane_area.w, pane_area.h));
-    mouse::render_insert_hint(state, (pane_area.x, pane_area.y, pane_area.w, pane_area.h));
+    let pane_area_rect = heca_core::layout::Rectangle::new(
+        heca_core::layout::Point::new(pane_area.x as f64, pane_area.y as f64),
+        heca_core::layout::Size::new(pane_area.w as f64, pane_area.h as f64),
+    );
+    mouse::render_detached_pane(state, pane_area_rect);
+    mouse::render_insert_hint(state, pane_area_rect);
 
     if let Some(candidates) = state.input_mode.candidates() {
         let letter_size = 48.0f32;
