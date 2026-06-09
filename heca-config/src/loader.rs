@@ -85,17 +85,26 @@ impl AppConfig {
             Some(config_dir().join("config.toml")),
         ];
         for path in paths.into_iter().flatten() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                match toml::from_str::<Config>(&content) {
-                    Ok(config) => {
-                        return Ok(config);
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    match toml::from_str::<Config>(&content) {
+                        Ok(config) => {
+                            return Ok(config);
+                        }
+                        Err(e) => {
+                            return Err(ConfigError::Parse {
+                                path: path.clone(),
+                                source: e,
+                            });
+                        }
                     }
-                    Err(e) => {
-                        return Err(ConfigError::Parse {
-                            path: path.clone(),
-                            source: e,
-                        });
-                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => {
+                    return Err(ConfigError::Io {
+                        path: path.clone(),
+                        source: e,
+                    });
                 }
             }
         }

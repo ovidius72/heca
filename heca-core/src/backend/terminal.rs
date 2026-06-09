@@ -402,7 +402,10 @@ impl std::error::Error for PtyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PtyError::SpawnFailed(e) => Some(e),
-            _ => None,
+            PtyError::OpenPtyFailed => None,
+            PtyError::DupSlaveFailed => None,
+            PtyError::DupMasterFailed => None,
+            PtyError::NoStdio(_) => None,
         }
     }
 }

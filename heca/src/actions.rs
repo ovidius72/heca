@@ -91,7 +91,6 @@ impl ActionRegistry {
     }
 
     /// Execute the handler for `action`, if one is registered.
-    /// Execute the handler for `action`, if one is registered.
     ///
     /// In debug builds, panics if no handler is registered (this is a bug —
     /// every `WmAction` variant must have a handler in `build_registry()`).
