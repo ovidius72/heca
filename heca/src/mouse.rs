@@ -14,6 +14,7 @@ mod render;
 mod surface_left;
 mod target;
 
+use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
@@ -44,7 +45,7 @@ pub fn on_mouse_input(
     state: &mut AppState,
     button: MouseButton,
     button_state: ElementState,
-) -> Option<WmAction> {
+) -> Option<(WmAction, InteractionSource)> {
     if !state.mouse_enabled {
         return None;
     }
@@ -78,7 +79,7 @@ pub fn on_mouse_input(
                 if let Some(pane_id) = sidebar_pane_hit_test(state, pos) {
                     let (ws_idx, _, _) = match crate::find_pane_location(&state.session, pane_id) {
                         Some(loc) => loc,
-                        None => return sidebar_action,
+                        None => return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar)),
                     };
                     let swap = state.modifiers.shift_key();
                     // Store click action at the app layer (not in SurfaceDragPhase).
@@ -112,12 +113,12 @@ pub fn on_mouse_input(
 
             // Sidebar button clicks / non-pane item clicks dispatch immediately.
             if let Some(action) = sidebar_action {
-                return Some(action);
+                return Some((action, InteractionSource::MouseLeftSidebar));
             }
 
             // Content click → focus.
             if let Some(pane_id) = hit_test_pane(state, pos) {
-                return Some(WmAction::FocusPane { pane_id });
+                return Some((WmAction::FocusPane { pane_id }, InteractionSource::MouseContent));
             }
         }
         (MouseButton::Left, ElementState::Released) => {

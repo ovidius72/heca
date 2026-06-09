@@ -109,8 +109,8 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
-            if let Some(action) = mouse::on_mouse_input(state, button, button_state) {
-                dispatch_action(state, registry, InteractionSource::MouseContent, &action);
+            if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
+                dispatch_action(state, registry, source, &action);
             }
             state.needs_redraw = true;
         }
