@@ -326,10 +326,18 @@ Short description:
 ### Phase 3 — Extract Shared Pane Operation Logic
 
 - [ ] Phase 3 complete
-  - [ ] 3.1 Create a shared pane-ops layer
-  - [ ] 3.2 Simplify handlers to dispatchers
-  - [ ] 3.3 Reduce cross-file ad hoc search logic
-  - [ ] 3.V Validate shared pane-op behavior across keyboard/mouse/sidebar flows
+  - [x] **3.1** Create shared pane-ops layer (`heca/src/app/pane_ops.rs`) — done in prior session
+    - `insert_pane_at_position`, `remove_pane_by_id`, `swap_panes_same_column`,
+      `swap_panes_same_workspace`, `swap_panes_cross_workspace`, `move_pane_between_columns`
+  - [~] **3.2** Simplify handlers to dispatchers — **partial progress in Track 2:**
+    - [x] Created `mouse/target.rs` enum dispatch layer (DragSurfaceId → surface handler)
+    - [x] Extracted `mouse/interactive.rs` (content-area drag from drag.rs)
+    - [x] Deleted `mouse/sidebar.rs` + `mouse/sidebar_drop.rs`, replaced with `surface_left.rs`
+    - [x] Replaced `DragState` enum with `DragContext` (per-surface state) + `InteractiveMovePhase`
+    - [x] Wired `target.rs` dispatch into app event routing (`mouse.rs`, `release.rs`)
+    - [ ] `handle_swap_param()` still needs delegation to shared helpers
+    - [ ] Move-related handlers still call session internals directly
+  - [ ] **3.3** Reduce cross-file ad hoc search logic — not yet addressed
 
 ### Phase 4 — Redesign Sidebar Projection and Interaction Model
 

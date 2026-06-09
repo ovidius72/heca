@@ -1,7 +1,7 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-06-05
+> Last updated: 2026-06-09
 
 ---
 
@@ -708,6 +708,7 @@ See `.planning/PROJECT.md` for project overview, `.planning/ROADMAP.md` for phas
 | 2 — The Workspace | ✅ ~Complete (NIRI layout, animations, input) | 28 of 28 |
 | 3 — The Content | 🔄 In Progress (terminal backend wired) | PANE-01, PANE-02 done |
 | 3b — Sidebar + Actions | ✅ **DONE** (sidebar tree, naming, cross-ws ops, command palette backend, registry system) | 9 phases complete |
+| **3c — DnD Refactoring** | ✅ **DONE** (surface-agnostic DnD: framework types, enum dispatch, DragContext, InteractiveMove extraction) | 5 phases complete, PR #36 |
 | 4 — The Platform | ❌ Pending | Session persistence, RPC, plugins |
 
 ---
@@ -752,6 +753,44 @@ See `niri-compatibility-review.md` for full details. Key issues:
 | `Monitor` | (not implemented) | heca is single-window; monitor = output is future |
 
 ---
+
+## Session Addendum — 2026-06-09
+
+Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactoring`. PR #36 ready to merge.
+
+### Work completed
+
+**Track 1 — Rust code hygiene (PR #34, merged):**
+- Remove dead `mouse/drop.rs`, clean `InputMode::Chord` allow
+- Descriptive messages to 4 `unreachable!()` calls
+- `Rectangle` type instead of `(f32,f32,f32,f32)` tuples
+- Chrome constants (`DEFAULT_TAB_BAR_HEIGHT`, `DEFAULT_STATUS_BAR_HEIGHT`) into `chrome.rs`
+- Split 163-line `on_cursor_moved()` into 4 named helpers
+- Extract mouse release handlers into `mouse/release.rs`
+
+**Track 2 — Surface-agnostic DnD (PR #36, open):**
+- `heca-grid-ui/src/drag/` framework types (5 files, 430+ lines):
+  - `DragSurfaceId` (enum), `DragItemId` (newtype), `DragContext` (per-surface state), `SurfaceDragPhase` (state machine)
+  - `rubberband()` math with unit tests
+- App integration: replace `DragState` with `DragContext` + `InteractiveMovePhase` (13 files)
+- Enum dispatch: `mouse/target.rs` — compiler exhaustiveness when adding surfaces
+- `mouse/surface_left.rs` — left sidebar handler; deleted `sidebar.rs`/`sidebar_drop.rs` (528 lines removed)
+- `mouse/interactive.rs` — content-area drag extracted; `drag.rs` shrinks 45%
+- Render: `Option<DragItemId>` instead of raw `usize`
+- Dispatch wired into app: `mouse.rs` + `release.rs` route through `target::surface_*()`
+- 3 Rust skill findings fixed (private field, redundant clear, `_pane_id` rename)
+
+**DnD plan files deleted** — `.planning/dnd-*.md` and `.planning/refactoring-and-dnd-plan.md` removed.
+
+### Remaining in original refactoring plan
+
+- Phase 3.2: `handle_swap_param()` still needs delegation to shared helpers (partial progress)
+- Phase 3.3: Reduce cross-file ad hoc search logic — not started
+- Phase 4-10: Not started beyond what Track 1/2 incidentally touched
+
+### Next start point
+
+The original refactoring plan resumes at **Phase 3.2 remainder** (refactor `handle_swap_param`). See `bugs-and-refactoring-plan-with-checklist.md` for full checklist.
 
 ## Session Addendum — 2026-06-05
 
