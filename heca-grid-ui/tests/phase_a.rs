@@ -1709,3 +1709,40 @@ fn chrome_region_toggle_flips_expanded_and_rail() {
     region.toggle();
     assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded, "toggle expands again");
 }
+
+#[test]
+fn collapsed_dock_body_is_not_painted() {
+    use heca_grid_ui::{DockFrame, DrawCommand};
+
+    // A row whose label must NOT be painted while the dock is collapsed — a
+    // display:none subtree is collapsed to the top-left by layout, so painting it
+    // would stamp overlapping text there (the showcase artifact this guards).
+    let collect_labels = |dock: &mut DockFrame| -> Vec<String> {
+        LayoutEngine::new().compute(dock, Size::new(220.0, 400.0));
+        let theme = Theme::grid_tron();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            dock.paint(&mut cx);
+        }
+        scene
+            .iter()
+            .filter_map(|c| match c {
+                DrawCommand::Text(t) => Some(t.text.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let mut open = DockFrame::new("FILES").child(Item::new("SECRET.rs"));
+    assert!(
+        collect_labels(&mut open).iter().any(|t| t == "SECRET.rs"),
+        "expanded dock paints its body row"
+    );
+
+    let mut collapsed = DockFrame::new("FILES").expanded(false).child(Item::new("SECRET.rs"));
+    assert!(
+        collect_labels(&mut collapsed).iter().all(|t| t != "SECRET.rs"),
+        "collapsed dock must not paint its hidden body row"
+    );
+}
