@@ -10,7 +10,7 @@ mod rpc;
 mod sidebar;
 
 use app::events::handle_window_event;
-pub(crate) use app::focus::{focus_pane_by_id, switch_workspace_tracked, sync_focus};
+pub(crate) use app::focus::{focus_pane_by_id, switch_workspace_tracked};
 use app::lifecycle::handle_about_to_wait;
 pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,

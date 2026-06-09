@@ -50,9 +50,10 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
-    // Reserved for multi-key chord UX that is partially wired in the event/render
-    // flow but not yet entered by the current command paths.
-    #[allow(dead_code)]
+    /// 
+    /// Partially wired: render and input handling exist, but no command path
+    /// constructs this variant yet. See handle_chord_mode() in app/input.rs.
+    #[allow(dead_code)] // Reserved for multi-key chord UX; will be constructed when chord entry is implemented.
     Chord {
         sequence: Vec<String>,
     },
@@ -108,14 +109,19 @@ pub enum DragState {
         original_ws: usize,
         start_mouse: (f32, f32),
         threshold_sq: f32,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
     },
-    /// Phase 2: detached — pane follows pointer.
+    /// Phase 2: detached — pane follows pointer (move mode).
+    /// In swap mode, the pane stays in layout and only the insert hint is shown.
     InteractiveMove {
         _pane_id: u64,
         /// Workspace where the drag originated.
         _original_ws: usize,
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
     },
     /// Phase 0: potential sidebar drag — mouse pressed, waiting for threshold.
     /// On threshold exceeded → transitions to SidebarDrag (move) or SwapSidebarDrag.
@@ -161,7 +167,7 @@ pub struct MouseState {
     /// Pane being dragged (detached from layout).
     pub detached_pane: Option<DetachedPane>,
     /// Computed drop target during drag.
-    pub insert_hint: Option<heca_core::layout::types::InsertPosition>,
+    pub insert_hint: Option<heca_core::layout::types::PaneInsertTarget>,
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
     /// Flat index of sidebar item being hovered during drag (for visual highlight).

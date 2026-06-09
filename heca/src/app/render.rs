@@ -4,7 +4,7 @@
 //! of `main.rs` while preserving the current render pipeline behavior.
 
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::ChromeConfig;
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_core::backend::BackendRenderData;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -138,8 +138,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let theme = &state.theme;
 
     let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {
@@ -524,8 +524,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
-    mouse::render_detached_pane(state, (pane_area.x, pane_area.y, pane_area.w, pane_area.h));
-    mouse::render_insert_hint(state, (pane_area.x, pane_area.y, pane_area.w, pane_area.h));
+    let pane_area_rect = heca_core::layout::Rectangle::new(
+        heca_core::layout::Point::new(pane_area.x as f64, pane_area.y as f64),
+        heca_core::layout::Size::new(pane_area.w as f64, pane_area.h as f64),
+    );
+    mouse::render_detached_pane(state, pane_area_rect);
+    mouse::render_insert_hint(state, pane_area_rect);
 
     if let Some(candidates) = state.input_mode.candidates() {
         let letter_size = 48.0f32;
@@ -590,8 +594,8 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
     let win_w = phys.width as f32 / state.scale_factor as f32;
     let win_h = phys.height as f32 / state.scale_factor as f32;
     let chrome = ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {

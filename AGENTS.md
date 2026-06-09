@@ -886,6 +886,14 @@ After that:
 
 ## Agent Rules
 
+### Workflow / Step Control
+
+1. Before each step or sub-step, explicitly verify what has already been done, what will change next, and why.
+2. Before making changes, state the next action and the validation you will run after it.
+3. Do not start a new phase or major sub-phase until the current one is clearly complete and the user has approved the next step.
+4. Before any new phase or major sub-phase, use the `/grill-me` skill first.
+5. Double-check all details before updating checklists, handoffs, commits, or PRs.
+
 ### When Reading Code
 
 1. Read `.planning/research/ARCHITECTURE.md` and `.planning/PROJECT.md` for context first.

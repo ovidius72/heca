@@ -47,7 +47,7 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
                         };
                         format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label)
                     }
-                    _ => unreachable!(),
+                    _ => unreachable!("DeleteWorkspace/DeleteColumn guaranteed by is_delete check"),
                 };
                 state.input_mode = crate::app_state::InputMode::ConfirmDelete {
                     message,

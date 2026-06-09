@@ -7,14 +7,14 @@
 //! mouse-specific state (detached pane, insert position).
 
 mod drag;
-mod drop;
 mod hit_test;
+mod release;
 mod render;
 mod sidebar;
 mod sidebar_drop;
 
 use crate::app_state::{AppState, DragState};
-use crate::chrome::ChromeConfig;
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::input::WmAction;
 use winit::event::{ElementState, MouseButton};
 
@@ -23,6 +23,16 @@ use winit::event::{ElementState, MouseButton};
 pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     drag::on_cursor_moved(state, pos);
     None
+}
+
+/// Sync the current drag mode with modifier state changes.
+///
+/// This keeps move/swap behavior live while the user presses or releases Shift.
+pub fn on_modifiers_changed(state: &mut AppState) {
+    drag::sync_drag_swap_mode(state);
+    if !matches!(state.mouse.drag_state, DragState::None) {
+        drag::on_cursor_moved(state, state.mouse.pos);
+    }
 }
 
 /// Check the focus-follows-mouse timer on every frame (even without cursor movement).
@@ -92,39 +102,17 @@ pub fn on_mouse_input(
                     drag::cancel_interactive_move(state);
                 }
                 DragState::InteractiveMove { .. } => {
-                    // Check if dropping on a sidebar entry (workspace, column, or pane).
-                    // This must be done BEFORE drop_pane since the pane is detached.
-                    if sidebar_drop::handle_drop(state, pos) {
-                        // Sidebar drop handled; detached pane already placed.
-                    } else if state.mouse.insert_hint.is_some() {
-                        drop::drop_pane(state);
-                    } else {
-                        drag::cancel_interactive_move(state);
-                    }
+                    release::handle_interactive_move_release(state, pos);
                 }
                 DragState::SidebarDrag {
                     pane_id,
                     original_ws,
                     swap,
                 } => {
-                    sidebar_drop::drag_drop(state, pane_id, original_ws, swap, pos);
+                    release::handle_sidebar_drag_release(state, pane_id, original_ws, swap, pos);
                 }
                 DragState::SidebarDragStarting { .. } => {
-                    // Released before threshold: execute the click action if one exists.
-                    if let DragState::SidebarDragStarting { click_action, .. } =
-                        &state.mouse.drag_state
-                    {
-                        let action = click_action.as_deref().cloned();
-                        state.mouse.drag_state = DragState::None;
-                        if let Some(action) = action {
-                            if matches!(action, WmAction::FocusPane { .. })
-                                && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
-                            {
-                                state.input_mode = crate::app_state::InputMode::Normal;
-                            }
-                            return Some(action);
-                        }
-                    }
+                    return release::handle_sidebar_drag_starting_release(state);
                 }
                 _ => {}
             }
@@ -230,7 +218,7 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
 //  Hit testing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-pub(crate) use hit_test::hit_test_pane;
+pub(crate) use hit_test::{hit_test_pane, hit_test_pane_excluding};
 use hit_test::sidebar_pane_hit_test;
 
 pub(crate) use render::{render_detached_pane, render_insert_hint};
@@ -256,8 +244,8 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
 
 fn chrome_config(state: &AppState) -> ChromeConfig {
     ChromeConfig {
-        tab_bar_height: 32.0,
-        status_bar_height: 24.0,
+        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {
