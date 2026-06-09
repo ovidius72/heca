@@ -18,7 +18,7 @@ use crate::action::{Action, SignalData};
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::style::{Align, Direction, Length};
+use crate::style::{Align, Direction};
 use crate::widgets::{Flex, Item, Label};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -42,11 +42,6 @@ pub struct DockFrame {
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
-}
-
-/// A zero-size placeholder used for an empty controls slot.
-fn spacer() -> Flex {
-    Flex::row().width(Length::Px(0.0)).height(Length::Px(0.0))
 }
 
 impl DockFrame {
@@ -76,7 +71,7 @@ impl DockFrame {
         let header = Flex::row()
             .align(Align::Center)
             .child(toggle)
-            .child(spacer());
+            .child(Flex::empty());
 
         // Body holds the dock content; folds out of layout when collapsed.
         let body = Flex::column();
