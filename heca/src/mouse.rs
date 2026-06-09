@@ -8,6 +8,7 @@
 
 mod drag;
 mod hit_test;
+mod release;
 mod render;
 mod sidebar;
 mod sidebar_drop;
@@ -100,121 +101,18 @@ pub fn on_mouse_input(
                 DragState::InteractiveMoveStarting { .. } => {
                     drag::cancel_interactive_move(state);
                 }
-                DragState::InteractiveMove { swap, .. } => {
-                    let mut post_layout_change = false;
-                    if swap {
-                        // Swap mode: pane stays in layout. If the pointer is over
-                        // a sidebar target, fall back to normal move semantics.
-                        // Otherwise, swap with the content-area target pane.
-                        drag::reset_interactive_move_offset(state);
-                        let source_id = match state.mouse.drag_state {
-                            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-                            // SAFETY: guarded by outer match on DragState::InteractiveMove
-                            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
-                        };
-                        if let Some(target_id) = hit_test::hit_test_pane_excluding(
-                            state,
-                            state.mouse.pos,
-                            Some(source_id),
-                        ) {
-                            crate::handlers::handle_swap_param(
-                                state,
-                                &WmAction::Swap {
-                                    a_id: source_id,
-                                    b_id: target_id,
-                                },
-                            );
-                        } else if sidebar_drop::handle_drop(state, pos) {
-                            // Sidebar drop handled as a move.
-                        } else if let Some(hint) = state.mouse.insert_hint.take() {
-                            // Fallback: move semantics in the content area.
-                            drag::reset_interactive_move_offset(state);
-                            if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
-                                && let Some(ws) = state.session.workspaces.get_mut(ws_idx)
-                                && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
-                            {
-                                let target_ws = state.session.active_workspace_idx;
-                                let new_col_id = heca_core::layout::ColumnId(state.session.next_id());
-                                if let Some(target_ws_mut) = state.session.workspaces.get_mut(target_ws) {
-                                    crate::app::pane_ops::insert_pane_at_position(
-                                        target_ws_mut,
-                                        removed,
-                                        hint,
-                                        new_col_id,
-                                        heca_core::layout::ColumnWidth::Proportion(0.5),
-                                        true,
-                                    );
-                                }
-                            }
-                            state.focused_pane = Some(source_id);
-                            post_layout_change = true;
-                        } else {
-                            drag::cancel_interactive_move(state);
-                        }
-                    } else if sidebar_drop::handle_drop(state, pos) {
-                        // Sidebar drop handled.
-                    } else if let Some(hint) = state.mouse.insert_hint.take() {
-                        // Move mode: pane is still in layout. Remove it and
-                        // re-insert at the drop target position.
-                        drag::reset_interactive_move_offset(state);
-                        let source_id = match state.mouse.drag_state {
-                            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-                            // SAFETY: guarded by outer match on DragState::InteractiveMove
-                            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
-                        };
-                        // Remove pane from current position.
-                        if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
-                            && let Some(ws) = state.session.workspaces.get_mut(ws_idx)
-                            && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
-                        {
-                            // Determine target.
-                            let target_ws = state.session.active_workspace_idx;
-                            let new_col_id = heca_core::layout::ColumnId(state.session.next_id());
-                            if let Some(target_ws_mut) = state.session.workspaces.get_mut(target_ws) {
-                                crate::app::pane_ops::insert_pane_at_position(
-                                    target_ws_mut,
-                                    removed,
-                                    hint,
-                                    new_col_id,
-                                    heca_core::layout::ColumnWidth::Proportion(0.5),
-                                    true,
-                                );
-                            }
-                        }
-                        state.focused_pane = Some(source_id);
-                        post_layout_change = true;
-                    } else {
-                        drag::cancel_interactive_move(state);
-                    }
-                    state.mouse.drag_state = DragState::None;
-                    state.mouse.insert_hint = None;
-                    if post_layout_change {
-                        crate::app::mutations::after_layout_change(state);
-                    }
+                DragState::InteractiveMove { .. } => {
+                    release::handle_interactive_move_release(state, pos);
                 }
                 DragState::SidebarDrag {
                     pane_id,
                     original_ws,
                     swap,
                 } => {
-                    sidebar_drop::drag_drop(state, pane_id, original_ws, swap, pos);
+                    release::handle_sidebar_drag_release(state, pane_id, original_ws, swap, pos);
                 }
                 DragState::SidebarDragStarting { .. } => {
-                    // Released before threshold: execute the click action if one exists.
-                    if let DragState::SidebarDragStarting { click_action, .. } =
-                        &state.mouse.drag_state
-                    {
-                        let action = click_action.as_deref().cloned();
-                        state.mouse.drag_state = DragState::None;
-                        if let Some(action) = action {
-                            if matches!(action, WmAction::FocusPane { .. })
-                                && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
-                            {
-                                state.input_mode = crate::app_state::InputMode::Normal;
-                            }
-                            return Some(action);
-                        }
-                    }
+                    return release::handle_sidebar_drag_starting_release(state);
                 }
                 _ => {}
             }
