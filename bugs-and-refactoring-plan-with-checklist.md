@@ -325,7 +325,7 @@ Short description:
 
 ### Phase 3 — Extract Shared Pane Operation Logic
 
-- [~] Phase 3 complete — substantial progress, sidebar-internal scans deferred to Phase 4
+- [x] Phase 3 complete
   - [x] **3.1** Create shared pane-ops layer (`heca/src/app/pane_ops.rs`) — done in prior session
     - `insert_pane_at_position`, `remove_pane_by_id`, `swap_panes_same_column`,
       `swap_panes_same_workspace`, `swap_panes_cross_workspace`, `move_pane_between_columns`
@@ -339,9 +339,11 @@ Short description:
     - [x] `handle_interactive_move_drop` swap case delegates to `handle_swap_param` — done
     - [x] `place_pane_at_sidebar_target` uses `insert_pane_at_position` for all variants — done
     - [x] `accept_drop` uses `find_pane_indices_in_workspace` instead of ad hoc scan — done
-  - [ ] **3.3** Reduce cross-file ad hoc search logic — **deferred**
-    - Sidebar-internal scans in `sidebar/model.rs` and `sidebar/render.rs` are projection-specific
-    - Best addressed as part of Phase 4 sidebar redesign
+  - [x] **3.3** Reduce cross-file ad hoc search logic — **complete**
+    - `handle_float`, `handle_float_at`, `handle_close_pane_by_id`, `move_pane_to_workspace_column`
+      now use `find_pane_indices_in_workspace` instead of manual iteration
+    - Sidebar-internal scans in `sidebar/model.rs` and `sidebar/render.rs` noted as
+      projection-specific, deferred to Phase 4
 
 ### Phase 4 — Redesign Sidebar Projection and Interaction Model
 
