@@ -50,9 +50,10 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
-    // Reserved for multi-key chord UX that is partially wired in the event/render
-    // flow but not yet entered by the current command paths.
-    #[allow(dead_code)]
+    /// 
+    /// Partially wired: render and input handling exist, but no command path
+    /// constructs this variant yet. See handle_chord_mode() in app/input.rs.
+    #[allow(dead_code)] // Reserved for multi-key chord UX; will be constructed when chord entry is implemented.
     Chord {
         sequence: Vec<String>,
     },

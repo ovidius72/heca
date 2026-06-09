@@ -7,7 +7,6 @@
 //! mouse-specific state (detached pane, insert position).
 
 mod drag;
-mod drop;
 mod hit_test;
 mod render;
 mod sidebar;
