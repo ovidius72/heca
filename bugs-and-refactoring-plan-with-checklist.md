@@ -174,7 +174,7 @@ Interpretation rules:
   - [x] 1.2 Split `heca/src/mouse.rs`
   - [x] 1.3 Split `heca/src/sidebar.rs`
   - [x] 1.4 Split `heca-config/src/theme.rs`
-  - [ ] 1.5 Sidebar mode keymap + tree interaction follow-up
+  - [x] 1.5 Sidebar mode keymap + tree interaction follow-up
     - [x] 1.5.1 Normalize sidebar navigation contract
       - Sidebar mode is a selection-driven tree navigator for the built-in workspace tree.
       - `j/k` and `Down/Up` move the sidebar cursor only.
@@ -325,19 +325,23 @@ Short description:
 
 ### Phase 3 — Extract Shared Pane Operation Logic
 
-- [ ] Phase 3 complete
+- [~] Phase 3 complete — substantial progress, sidebar-internal scans deferred to Phase 4
   - [x] **3.1** Create shared pane-ops layer (`heca/src/app/pane_ops.rs`) — done in prior session
     - `insert_pane_at_position`, `remove_pane_by_id`, `swap_panes_same_column`,
       `swap_panes_same_workspace`, `swap_panes_cross_workspace`, `move_pane_between_columns`
-  - [~] **3.2** Simplify handlers to dispatchers — **partial progress in Track 2:**
+  - [x] **3.2** Simplify handlers to dispatchers — **complete**
     - [x] Created `mouse/target.rs` enum dispatch layer (DragSurfaceId → surface handler)
     - [x] Extracted `mouse/interactive.rs` (content-area drag from drag.rs)
     - [x] Deleted `mouse/sidebar.rs` + `mouse/sidebar_drop.rs`, replaced with `surface_left.rs`
     - [x] Replaced `DragState` enum with `DragContext` (per-surface state) + `InteractiveMovePhase`
     - [x] Wired `target.rs` dispatch into app event routing (`mouse.rs`, `release.rs`)
-    - [ ] `handle_swap_param()` still needs delegation to shared helpers
-    - [ ] Move-related handlers still call session internals directly
-  - [ ] **3.3** Reduce cross-file ad hoc search logic — not yet addressed
+    - [x] `handle_swap_param()` delegates to `swap_panes_same_column`/`diff_columns`/`cross_workspace` — done
+    - [x] `handle_interactive_move_drop` swap case delegates to `handle_swap_param` — done
+    - [x] `place_pane_at_sidebar_target` uses `insert_pane_at_position` for all variants — done
+    - [x] `accept_drop` uses `find_pane_indices_in_workspace` instead of ad hoc scan — done
+  - [ ] **3.3** Reduce cross-file ad hoc search logic — **deferred**
+    - Sidebar-internal scans in `sidebar/model.rs` and `sidebar/render.rs` are projection-specific
+    - Best addressed as part of Phase 4 sidebar redesign
 
 ### Phase 4 — Redesign Sidebar Projection and Interaction Model
 
