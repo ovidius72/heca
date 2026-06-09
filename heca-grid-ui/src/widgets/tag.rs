@@ -16,10 +16,12 @@ use crate::scene::Border;
 use crate::style::{Align, Direction};
 use crate::widgets::Label;
 
-/// Inner padding of the pill (logical px).
-const PAD: f32 = 5.0;
+/// Horizontal inner padding — generous, so the chip has breathing room.
+const PAD_X: f32 = 12.0;
+/// Vertical inner padding — tight, to keep the pill slim.
+const PAD_Y: f32 = 4.0;
 /// Gap between the leading slot and the label.
-const GAP: f32 = 5.0;
+const GAP: f32 = 6.0;
 /// Chip text size relative to the base font.
 const FONT_SCALE: f32 = 0.8;
 /// Translucent fill alpha for the chip background.
@@ -40,7 +42,8 @@ impl Tag {
         let mut base = Base::new();
         base.style.direction = Direction::Row;
         base.style.align = Align::Center;
-        base.style.padding = PAD;
+        base.style.padding_x = Some(PAD_X);
+        base.style.padding_y = Some(PAD_Y);
         base.style.gap = GAP;
         base.children.push(Box::new(Label::new(label).font_scale(FONT_SCALE)));
         Self { base, color: None }
