@@ -191,25 +191,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
-    for (i, tab_name) in state.tab_names.iter().enumerate() {
-        let tab_x = 4.0 + i as f32 * 120.0;
-        let tab_color = if i == state.active_tab {
-            theme.accent.to_f32x4()
-        } else {
-            theme.border.to_f32x4()
-        };
-        state
-            .primitive_renderer
-            .draw_rect(tab_x, 2.0, 116.0, tb.tab_bar_height - 4.0, tab_color);
-        let tab_text_y = (tb.tab_bar_height - chrome_text) / 2.0;
-        state.text_renderer.queue_text(
-            tab_name,
-            tab_x + 4.0,
-            tab_text_y,
-            chrome_text,
-            theme.foreground.to_f32x4(),
-        );
-    }
 
     let sb_y = h - tb.status_bar_height;
     state
