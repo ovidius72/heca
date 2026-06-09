@@ -181,6 +181,26 @@ pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_p
     };
 }
 
+/// Keep the current drag operation in sync with the Shift modifier.
+///
+/// This updates both the content-area drag states and the sidebar drag states so
+/// the operation can switch live while the pointer is held down.
+pub(super) fn sync_drag_swap_mode(state: &mut AppState) {
+    set_drag_swap_mode(state, state.modifiers.shift_key());
+}
+
+fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
+    match &mut state.mouse.drag_state {
+        DragState::InteractiveMoveStarting { swap: s, .. }
+        | DragState::InteractiveMove { swap: s, .. }
+        | DragState::SidebarDragStarting { swap: s, .. }
+        | DragState::SidebarDrag { swap: s, .. } => {
+            *s = swap;
+        }
+        DragState::None => {}
+    }
+}
+
 /// Transition from rubberband (InteractiveMoveStarting) to active drag
 /// (InteractiveMove). Both move and swap modes keep the pane in the layout
 /// and track it via interactive_move_offset.

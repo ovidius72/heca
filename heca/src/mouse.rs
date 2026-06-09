@@ -25,6 +25,16 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
     None
 }
 
+/// Sync the current drag mode with modifier state changes.
+///
+/// This keeps move/swap behavior live while the user presses or releases Shift.
+pub fn on_modifiers_changed(state: &mut AppState) {
+    drag::sync_drag_swap_mode(state);
+    if !matches!(state.mouse.drag_state, DragState::None) {
+        drag::on_cursor_moved(state, state.mouse.pos);
+    }
+}
+
 /// Check the focus-follows-mouse timer on every frame (even without cursor movement).
 /// Call from `about_to_wait` for frame-rate-independent debounce.
 /// Handle mouse button events. Returns a `WmAction` if one should be dispatched.
@@ -92,10 +102,11 @@ pub fn on_mouse_input(
                     drag::cancel_interactive_move(state);
                 }
                 DragState::InteractiveMove { swap, .. } => {
+                    let mut post_layout_change = false;
                     if swap {
-                        // Swap mode: pane stays in layout. Find the target pane
-                        // (excluding the source) and swap. Reset offset first so
-                        // hit-testing uses layout positions.
+                        // Swap mode: pane stays in layout. If the pointer is over
+                        // a sidebar target, fall back to normal move semantics.
+                        // Otherwise, swap with the content-area target pane.
                         drag::reset_interactive_move_offset(state);
                         let source_id = match state.mouse.drag_state {
                             DragState::InteractiveMove { _pane_id, .. } => _pane_id,
@@ -113,6 +124,32 @@ pub fn on_mouse_input(
                                     b_id: target_id,
                                 },
                             );
+                        } else if sidebar_drop::handle_drop(state, pos) {
+                            // Sidebar drop handled as a move.
+                        } else if let Some(hint) = state.mouse.insert_hint.take() {
+                            // Fallback: move semantics in the content area.
+                            drag::reset_interactive_move_offset(state);
+                            if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)
+                                && let Some(ws) = state.session.workspaces.get_mut(ws_idx)
+                                && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
+                            {
+                                let target_ws = state.session.active_workspace_idx;
+                                let new_col_id = heca_core::layout::ColumnId(state.session.next_id());
+                                if let Some(target_ws_mut) = state.session.workspaces.get_mut(target_ws) {
+                                    crate::app::pane_ops::insert_pane_at_position(
+                                        target_ws_mut,
+                                        removed,
+                                        hint,
+                                        new_col_id,
+                                        heca_core::layout::ColumnWidth::Proportion(0.5),
+                                        true,
+                                    );
+                                }
+                            }
+                            state.focused_pane = Some(source_id);
+                            post_layout_change = true;
+                        } else {
+                            drag::cancel_interactive_move(state);
                         }
                     } else if sidebar_drop::handle_drop(state, pos) {
                         // Sidebar drop handled.
@@ -144,12 +181,15 @@ pub fn on_mouse_input(
                             }
                         }
                         state.focused_pane = Some(source_id);
+                        post_layout_change = true;
                     } else {
                         drag::cancel_interactive_move(state);
                     }
                     state.mouse.drag_state = DragState::None;
                     state.mouse.insert_hint = None;
-                    crate::app::mutations::after_layout_change(state);
+                    if post_layout_change {
+                        crate::app::mutations::after_layout_change(state);
+                    }
                 }
                 DragState::SidebarDrag {
                     pane_id,

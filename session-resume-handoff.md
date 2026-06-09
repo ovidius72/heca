@@ -3,7 +3,7 @@
 ## Current state
 
 - Branch: `feature/gpt-refactoring`
-- Working tree: **modified** — multiple changes; not yet committed
+- Working tree: **modified** — Phase 3.2 refactor in progress; not yet committed
 - All validation passes: `cargo check`, `cargo clippy`, `cargo test`
 
 ## What was completed this session
@@ -37,7 +37,7 @@
 - Swap-mode drag: pane stays in layout, follows mouse via `interactive_move_offset`, offset computed relative to grab point
 
 ### Remaining known work
-- Phase 3.2: Simplify handlers to dispatchers
+- Phase 3.2: Simplify handlers to dispatchers (in progress)
 - Phase 3.3: Reduce cross-file ad hoc search logic
 - Phases 4–9 from the refactoring plan
 
@@ -56,4 +56,4 @@
 
 ## Resume summary in one line
 
-Phase 3.1 Commit 2 complete; PaneInsertTarget rename done; swap focus/animation bugs fixed; Shift+drag swap feature implemented with pane-follows-mouse, target hint, and hit-test exclusion; awaiting user approval to commit.
+Phase 3.1 complete and Phase 3.2 underway; PaneInsertTarget rename done; swap focus/animation bugs fixed; shared swap helpers now also cover same-workspace diff-column and cross-workspace swaps; live Shift press/release now toggles move↔swap during active drags; sidebar drops still use move semantics; awaiting user approval to commit.
