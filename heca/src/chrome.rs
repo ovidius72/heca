@@ -4,6 +4,8 @@ use heca_core::types::Rect;
 pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 /// Default status bar height in logical pixels.
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
+/// Default collapsed sidebar width in logical pixels.
+pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
 
 /// Layout configuration for chrome elements around the pane area.
 #[derive(Clone, Copy, Debug)]

@@ -4,7 +4,7 @@
 //! `main.rs`.
 
 use crate::app::mutations::after_config_change;
-use crate::app_state::{AppState, DragState, InputMode};
+use crate::app_state::{AppState, InputMode};
 use crate::mouse;
 use std::time::{Duration, Instant};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -27,7 +27,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         after_config_change(state);
     }
 
-    if !matches!(state.mouse.drag_state, DragState::None) {
+    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
         state.needs_redraw = true;
     }
 

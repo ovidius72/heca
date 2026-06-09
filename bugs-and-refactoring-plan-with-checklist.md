@@ -313,6 +313,7 @@ Interpretation rules:
   - [x] 1.V Validate file/module reorganization invariants
 
 Short description:
+
 - the 1.5 block above is a clarified sidebar follow-up implementation plan based on agreed keyboard, mouse, action-registry, config-binding, and future RPC/token semantics gathered during planning discussion
 
 ### Phase 2 — Introduce a Central Mutation Boundary
@@ -1285,6 +1286,7 @@ Rule for this checklist:
 ### Preserved completed slice history — Phase 1.3 `heca/src/sidebar.rs`
 
 Short description:
+
 - this completed checklist is intentionally preserved for history so prior refactor commit slices do not disappear from the plan document
 
 #### Commit 1 — Extract rendering module
@@ -1404,4 +1406,3 @@ So the right answer is:
 - **smaller modules everywhere**
 
 That is the path that will make the code clear.
-
