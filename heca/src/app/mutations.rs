@@ -62,18 +62,8 @@ pub(crate) fn move_pane_to_workspace_column(
             Some(ws) => ws,
             None => return,
         };
-        let mut removed = None;
-        for ci in 0..ws.scrolling.columns.len() {
-            if let Some(pi) = ws.scrolling.columns[ci]
-                .panes
-                .iter()
-                .position(|p| p.id.0 == pane_id)
-            {
-                removed = ws.scrolling.remove_pane(ci, pi);
-                break;
-            }
-        }
-        removed
+        crate::app::pane_ops::find_pane_indices_in_workspace(ws, pane_id)
+            .and_then(|(ci, pi)| ws.scrolling.remove_pane(ci, pi))
     };
 
     if let Some(pane) = removed_pane {
