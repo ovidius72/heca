@@ -5,7 +5,7 @@
 **Pairs with:** [`pluggable-chrome-plugin-plan.md`](./pluggable-chrome-plugin-plan.md) (the **app** side: ChromeHost, AppState, providers, dynamic actions, WASM). This doc realizes that plan's **Phase 7 — "heca-grid-ui Chrome Widget Expansion"**, plus the **flexible item layout** and the **Drag-and-Drop** hooks it implies.
 **Tracker:** progress lives in [`grid-ui-plan.md`](./grid-ui-plan.md); this doc supersedes its old `C6 Sidebar = tree-nav` framing.
 
-> **Decisions locked (2026-06-09):** build the non-DnD vocabulary **now**; region shell is **generic across all 4 regions**; `DockFrame` is a **new widget reusing Pane's brackets**; grid-ui **stays domain-neutral** for status styling; **adopt the incoming DnD system** (don't build a homegrown one); `Grid` exposes **tracks + named areas**; icons via an **embedded, host-registered icon font**; **request renderer `PushClip`/`PopClip`** for scroll; collapsed region = **icon rail, keyboard-expandable**; shared state = a **namespaced signal store** read via signals / written via actions.
+> **Decisions locked (2026-06-09):** build the non-DnD vocabulary **now**; region shell is **generic across all 4 regions**; `DockFrame` is a **new widget reusing Pane's brackets**; grid-ui **stays domain-neutral** for status styling; **build on the shipped DnD framework** (`src/drag/`) — extend additively, don't fork; `Grid` exposes **tracks + named areas**; icons via an **embedded, host-registered icon font**; **request renderer `PushClip`/`PopClip`** for scroll; collapsed region = **icon rail, keyboard-expandable**; shared state = a **namespaced signal store** read via signals / written via actions.
 
 ---
 
@@ -24,8 +24,8 @@ ChromeHost (regions, placement)    ChromeRegion / Sidebar shell      Scene → G
 AppState (namespaced signal store) DockFrame (title/collapse/handle) PushClip/PopClip
 Docks: WorkspacesDock, GitDock…    Grid (tracks + named areas)       (needed for scroll)
   └ own logic + internal items     Item / ItemGroup (rows)
-Actions (the only writes)          Icon, StatusDot, Badge, Tag       incoming DnD lands
-DnD meaning = dispatch(action)     DnD hooks → incoming DnD system    in this crate soon
+Actions (the only writes)          Icon, StatusDot, Badge, Tag       (shipped: src/drag/
+DnD meaning = dispatch(action)     DnD hooks → shipped src/drag/      DragContext etc.)
 ```
 
 ---
@@ -85,10 +85,11 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - **No** workspace/tree/expand/drag *semantics* — those belong to the mounted Dock. Replaces the old "Sidebar = tree-nav".
 - **Status:** new.
 
-### 2.6 Drag-and-Drop — adopt the incoming system (see §3)
-- **Do not build a homegrown DragManager.** A DnD system is landing in this crate; DockFrame's drag handle, region drop-targets, and item-reorder will be **thin hooks onto it**.
-- grid-ui's job here: expose draggable/drop-target *affordances* on `DockFrame`/`ChromeRegion`/`Item`, and ensure every drop is expressed as an **action** (P2), not a direct mutation.
-- **Status:** **deferred until the incoming DnD code lands**, then hook in.
+### 2.6 Drag-and-Drop — extend the shipped framework (see §3)
+- **The DnD system has landed** in `heca-grid-ui/src/drag/` (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). **Do not build a parallel one.**
+- grid-ui's job: drive `SurfaceDragState`/`DragContext` from `DockFrame`'s drag handle + `ChromeRegion`/`Item` drop targets; ensure every drop is an **action** (P2).
+- Extend **additively** (new `DragSurfaceId`/`DragItemKind` variants); never modify/retype existing drag types or remove variants.
+- **Status:** framework present; DockFrame/region **hooks** are new work (G6).
 
 ### 2.7 Status-driven item composition — neutral primitives + a recipe
 - The rich pane row (program name · git status+icon · exit code · running/idle/stopped style) is **composed**, not a monolith: `Grid` + `Label` + `StatusDot` + `Badge`/`Tag` + `Icon`.
@@ -103,25 +104,37 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 
 ---
 
-## 3. Drag-and-Drop — how grid-ui hooks the incoming system
+## 3. Drag-and-Drop — build on the **shipped** framework (`heca-grid-ui/src/drag/`)
 
-grid-ui does **not** own the DnD mechanism (the incoming system does). grid-ui owns the *affordances* and keeps DnD honest about input parity.
+The DnD system **landed** (merged from `feature/gpt-refactoring`, 2026-06-09). grid-ui now contains `src/drag/` — a **surface-agnostic, GPU-free state framework**. We **extend** it; we do not invent a parallel one.
 
-### Two altitudes (same mechanism, payload-typed)
-- **Dock-level** — move/reorder a `DockFrame` within a region or **between regions** (left ↔ right sidebar, into a bar). Drop targets = region shells / inter-dock gaps. Payload = a dock id.
-- **Item-level** — reorder rows *inside* a Dock (e.g. panes within `WorkspacesDock`). Drop targets = the Dock's rows/gaps. Payload = an item id. Stays inside the Dock.
+### What shipped (the real API)
+- **`DragSurfaceId`** — a **closed enum** of drag surfaces (`LeftSidebar` today; `RightSidebar`/`Inspector` are TODO variants). Enum (not trait) on purpose: compiler-checked exhaustiveness, zero-cost dispatch, and it avoids the `Box<dyn> + &mut AppState` self-borrow.
+- **`DragItem { surface, id: DragItemId, kind: DragItemKind, pane_id: Option<u64> }`** — `DragItemId(usize)` is an opaque flat index each surface interprets; `DragItemKind` = `{Pane, Workspace, Column, FloatingPane}`.
+- **`SurfaceDragState { phase, hover_item, source_item, ghost_label }`** — `phase: SurfaceDragPhase = Idle → Starting{threshold,…} → Dragging`. Helpers: `is_dragging`, `dragged_pane_id`, `original_ws`, `is_swap`, `reset`.
+- **`DragContext { active_surface, surfaces: HashMap<DragSurfaceId, SurfaceDragState> }`** — one mouse ⇒ one active surface, but **all** surfaces update `hover_item`, so multiple drop targets highlight at once. This already *is* the cross-region "drag a Dock from one sidebar to another" model.
+- **`DragLabel`** (ghost geometry the renderer follows); **`math::rubberband()` + `DEFAULT_DRAG_THRESHOLD_SQ`**.
+- **Dispatch + meaning are app-side** (`heca/src/mouse/{target.rs (enum dispatch), surface_left.rs, interactive.rs}`); every drop routes through the WM **action registry**. `InteractiveMove` (content-area pane drag) stays a separate app concept, *not* a `SurfaceDragState`.
 
-Distinguished by **payload kind**; a drop target declares which kinds it accepts. Payloads are **opaque ids** (same philosophy as the deferred `ActionSink` opaque action ids).
+### Two altitudes — both map onto the shipped model (G6 is extension, not a new system)
+- **Dock-level** (move/reorder a `DockFrame` within a region or **between regions**) → a **region is a `DragSurfaceId`**; a Dock is a `DragItem` on it — `DragContext`'s multi-surface hover already supports this.
+- **Item-level** (reorder rows inside a Dock, e.g. panes in `WorkspacesDock`) → the Dock's own surface + its `DragItem`s.
 
-### grid-ui's responsibilities
-- Mark `DockFrame` (via its drag handle) and `Item` as drag **sources** carrying an opaque payload.
-- Mark `ChromeRegion` / inter-dock gaps / `Item` rows as drop **targets** with an `accepts(kind)` predicate + a drop position (before/after/into).
-- Render the incoming system's ghost/insertion visuals in the **overlay layer** (already exists).
+### grid-ui's responsibilities (presentation + state)
+- `DockFrame` (via its drag handle) and `Item` drive `SurfaceDragState.phase` (`Starting`/`Dragging`) carrying a `DragItem`.
+- `ChromeRegion` / inter-dock gaps / `Item` rows set `hover_item` when they can receive.
+- Render ghost/insertion visuals in the **overlay layer** (exists). Clipping the ghost / dropping inside a scroll region needs `PushClip`/`PopClip` (blocked, §2.8).
 
-### App's responsibilities (P2 + P3)
-- Decide **what's draggable** and **what a drop does**: a drop emits an **intent**, the app **dispatches an action** (`chrome.dock.move_to_region`, `chrome.dock.reorder_before`, a Dock-internal `workspace.pane.move`, …).
-- The **same move must be reachable by keyboard + RPC** via that action — DnD is only the mouse surface.
-- Persist placement in AppState.
+### App's responsibilities (P2 + P3) — unchanged from what shipped
+- Decide what's draggable; on drop, **dispatch an action** (`chrome.dock.move_to_region`, `chrome.dock.reorder_before`, Dock-internal `workspace.pane.move`, …) through the registry — never mutate directly. Persist placement in AppState.
+- The **same move must be reachable by keyboard + RPC** via that action. DnD is only the mouse surface.
+
+### Extensibility gap & its cheap fix (closed enum ↔ plugins)
+The closed `DragSurfaceId` / `DragItemKind` enums are **correct for built-in surfaces** but a plugin can't extend them at runtime. This **does not bite yet** (built-in-first; plugins = chrome-plan Phase 9). Resolve later, **additively**, with *closed-core + one open variant*:
+- `DragItemKind::Custom(u32)` — so non-WM Docks (Git/Docker) don't inherit WM nouns.
+- `DragSurfaceId::Plugin(PluginSurfaceId)` — one variant funnels dynamic surfaces through runtime dispatch; built-ins keep zero-cost enum dispatch.
+
+> **Additive-only rule (no app impact).** *Extend* the shipped framework — add surfaces, item kinds, and new widget files. **Never** modify/retype an existing drag type (keep `(f32,f32)` as-is; don't swap to `Rectangle`) and **never** remove/rename a variant — the app constructs and exhaustively matches these. Adding a variant changes no behavior; the compiler simply requires new `match` arms at dispatch sites (the point of the closed enum).
 
 ---
 
@@ -162,14 +175,14 @@ Distinguished by **payload kind**; a drop target declares which kinds it accepts
 - `ChromeHost`, region registry, dock placement/order, persistence.
 - `AppState` (the namespaced store), canonical state, the **action registry**, keybindings, RPC.
 - The **Docks** themselves — `WorkspacesDock` (the current `sidebar.rs` logic, migrated per chrome plan Phase 5), `GitDock`, the docker dock, …
-- The **DnD mechanism** (incoming system) and the **meaning** of a drop (action dispatch).
+- The **DnD dispatch + meaning** (`heca/src/mouse/{target,surface_left,interactive}.rs`) — the drop's action. (The drag *state framework* itself lives in grid-ui's `src/drag/`.)
 - Overlay *ownership* (host-owned per chrome plan §2.7) — grid-ui provides the overlay *layer*; the host owns z-order/focus-trap/ESC/anchoring.
 
 ---
 
 ## 6. Phases / tasks (grid-ui side)
 
-Realizes chrome plan Phase 7. Build the vocabulary **now**; app integration is gated behind chrome plan Phase 0 (the refactor); DnD is gated on the incoming system; scroll is gated on the renderer.
+Realizes chrome plan Phase 7. Build the vocabulary **now**; app integration is gated behind chrome plan Phase 0 (the refactor); the **DnD framework is already shipped** (`src/drag/`) so G6 is hooks/extension, not a build; scroll is gated on the renderer.
 
 | # | Task | Depends on | Gate |
 |---|------|-----------|------|
@@ -178,22 +191,23 @@ Realizes chrome plan Phase 7. Build the vocabulary **now**; app integration is g
 | **G3** | `ItemGroup` (collapsible group over `Item`) | Item (done) | none |
 | **G4** | `DockFrame` (title + collapse + drag handle + header slot; reuse Pane brackets) | — | none |
 | **G5** | `ChromeRegion`/`Sidebar` shell (oriented all-4, collapsible w/ icon-rail, mode-aware, hosts DockFrames, drop targets) | G4 | none for shell; rail uses G2; full use needs G6 + ChromeHost |
-| **G6** | DnD **hooks** (drag handle / drop targets / item reorder) onto the **incoming** DnD system | incoming DnD code; G4/G5 | **wait for incoming DnD** |
+| **G6** | DnD **hooks** onto the **shipped** `src/drag/` framework: a region `DragSurfaceId` + Dock-level `DragItem`, `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`; additive variants only | shipped `src/drag/`; G4/G5 | none — framework present |
 | **G7** | Scroll/list primitive (embeddable) | **renderer `PushClip`/`PopClip`** | **request + wait on renderer** |
-| **G8** | Rich status-item recipe + `Tag`/`Chip`; showcase: mock WorkspacesDock with program/git/status rows, collapse, (DnD reorder once G6) | G1, G2, G3 | none (DnD reorder after G6) |
+| **G8** | Rich status-item recipe + `Tag`/`Chip`; showcase: mock WorkspacesDock with program/git/status rows, collapse, (DnD reorder via G6) | G1, G2, G3 | none |
 
-**Suggested order now:** G1 → G3/G4 (+G5 alongside) → G2 → G8 (visible payoff). Then G6 when the DnD code lands, G7 when clip lands.
+**Suggested order now:** G1 → G3/G4 (+G5 alongside) → G2 → G6 (framework's already there) → G8 (visible payoff). G7 when clip lands.
 
-Each task: showcase section, `cargo test -p heca-grid-ui` + clippy green, board update, branch+PR per workflow. **Watch for the incoming DnD code in this crate** — coordinate before adding any drag types.
+Each task: showcase section, `cargo test -p heca-grid-ui` + clippy green, board update, branch+PR per workflow. **The DnD framework (`src/drag/`) is shipped and the app already consumes it** — extend additively (new variants/files), never modify or re-type existing drag types.
 
 ---
 
 ## 7. Open questions (resolved + remaining)
 
-**Resolved 2026-06-09:** sequencing (vocabulary now, DnD waits) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (adopt incoming) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
+**Resolved 2026-06-09:** sequencing (vocabulary now) · region scope (generic all-4) · DockFrame (new, reuse Pane) · status styling (neutral) · DnD (build on shipped `src/drag/`, extend additively) · Grid API (tracks + areas) · icons (embedded, host-registered) · scroll (request renderer clip) · collapsed mode (icon rail, keyboard-expandable) · state (namespaced signal store; read=signals, write=actions; inject explicitly first, context handle later) · selection (namespaced key, app-owned).
 
 **Remaining:**
-- **DnD ↔ action bridge signature** — finalize once the incoming DnD lands; align with the `ActionSink` opaque-id design (grid-ui-plan §12) so DnD + shortcuts share one path.
+- **DnD ↔ action bridge signature** — define the `DockFrame`/region hook → `dispatch(action)` shape on top of `DragContext`; align with the `ActionSink` opaque-id design (grid-ui-plan §12) so DnD + shortcuts share one path.
+- **Closed-enum ↔ plugins** — when non-WM Docks / plugins arrive, add `DragItemKind::Custom(..)` / `DragSurfaceId::Plugin(..)` (additive; chrome-plan Phase 9). Don't genericize now.
 - **Icon font choice** — which family + licensing; confirm renderer 2nd-font registration.
 - **`Grid` surface detail** — how much of taffy grid to expose (min-viable: tracks + areas + span).
 - **`ChromeCtx` shape** — defer until enough docks exist to justify (b) over (a).
