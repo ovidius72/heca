@@ -1,4 +1,7 @@
 //! Pane content backends — abstraction over terminal, neovim, and browser panes.
+//!
+//! Currently only `Terminal` is implemented. `Neovim` and `Browser` are
+//! planned future backends and should be added here when implemented.
 
 pub mod fake;
 pub mod terminal;
@@ -9,8 +12,6 @@ pub use fake::FakeBackend;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaneType {
     Terminal,
-    Neovim,
-    Browser,
 }
 
 /// A single cell in a terminal grid.
@@ -41,8 +42,6 @@ pub enum BackendRenderData {
         /// Logical cell height for coordinate conversion.
         cell_h: f32,
     },
-    Neovim,
-    Browser,
 }
 
 /// Trait for pane content backends.

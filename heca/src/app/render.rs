@@ -23,59 +23,57 @@ pub(crate) fn render_backend_data(
     primitive_renderer: &mut PrimitiveRenderer,
     _theme: &heca_config::theme::Theme,
 ) {
-    if let BackendRenderData::Terminal {
+    let BackendRenderData::Terminal {
         lines,
         cursor_col,
         cursor_row,
         cell_w,
         cell_h,
-    } = data
-    {
-        let cell_h = *cell_h;
-        let cell_w = *cell_w;
+    } = data;
+    let cell_h = *cell_h;
+    let cell_w = *cell_w;
 
-        primitive_renderer.draw_rect(px, py, pw, ph, [0.0, 0.0, 0.0, 1.0]);
+    primitive_renderer.draw_rect(px, py, pw, ph, [0.0, 0.0, 0.0, 1.0]);
 
-        for (row, line) in lines.iter().enumerate() {
-            let y = py + row as f32 * cell_h;
-            let mut current_text = String::new();
-            let mut current_fg = [1.0f32; 4];
-            let mut start_col = 0usize;
+    for (row, line) in lines.iter().enumerate() {
+        let y = py + row as f32 * cell_h;
+        let mut current_text = String::new();
+        let mut current_fg = [1.0f32; 4];
+        let mut start_col = 0usize;
 
-            for (col, cell) in line.cells.iter().enumerate() {
-                if cell.c == ' ' || cell.c == '\0' {
-                    if !current_text.is_empty() {
-                        let x = px + start_col as f32 * cell_w;
-                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                        current_text.clear();
-                    }
-                    start_col = col + 1;
-                    continue;
+        for (col, cell) in line.cells.iter().enumerate() {
+            if cell.c == ' ' || cell.c == '\0' {
+                if !current_text.is_empty() {
+                    let x = px + start_col as f32 * cell_w;
+                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                    current_text.clear();
                 }
-
-                if col > start_col && cell.fg != current_fg {
-                    if !current_text.is_empty() {
-                        let x = px + start_col as f32 * cell_w;
-                        text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
-                        current_text.clear();
-                    }
-                    current_fg = cell.fg;
-                    start_col = col;
-                }
-
-                current_text.push(cell.c);
+                start_col = col + 1;
+                continue;
             }
 
-            if !current_text.is_empty() {
-                let x = px + start_col as f32 * cell_w;
-                text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+            if col > start_col && cell.fg != current_fg {
+                if !current_text.is_empty() {
+                    let x = px + start_col as f32 * cell_w;
+                    text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+                    current_text.clear();
+                }
+                current_fg = cell.fg;
+                start_col = col;
             }
+
+            current_text.push(cell.c);
         }
 
-        let cursor_x = px + *cursor_col as f32 * cell_w;
-        let cursor_y = py + *cursor_row as f32 * cell_h;
-        primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+        if !current_text.is_empty() {
+            let x = px + start_col as f32 * cell_w;
+            text_renderer.queue_text(&current_text, x, y, cell_h, current_fg);
+        }
     }
+
+    let cursor_x = px + *cursor_col as f32 * cell_w;
+    let cursor_y = py + *cursor_row as f32 * cell_h;
+    primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
 }
 
 /// Human-readable status mode label and suffix for the status bar.
