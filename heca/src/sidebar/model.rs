@@ -4,6 +4,14 @@ use heca_core::layout::session::Session;
 
 /// A flat item in the sidebar navigation list.
 /// Built from the tree, skipping collapsed items.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidebarItemKind {
+    Workspace,
+    Column,
+    Pane,
+    FloatingPane,
+}
+
 #[derive(Debug, Clone)]
 pub enum SidebarItem {
     Workspace { ws_idx: usize },
@@ -13,6 +21,26 @@ pub enum SidebarItem {
 }
 
 impl SidebarItem {
+    /// Returns the kind of this sidebar item.
+    pub fn kind(&self) -> SidebarItemKind {
+        match self {
+            SidebarItem::Workspace { .. } => SidebarItemKind::Workspace,
+            SidebarItem::Column { .. } => SidebarItemKind::Column,
+            SidebarItem::Pane { .. } => SidebarItemKind::Pane,
+            SidebarItem::FloatingPane { .. } => SidebarItemKind::FloatingPane,
+        }
+    }
+
+    /// Returns whether this row can be selected/highlighted by the cursor.
+    pub fn is_selectable(&self) -> bool {
+        !matches!(self, SidebarItem::FloatingPane { .. })
+    }
+
+    /// Returns whether this row can be expanded/collapsed (shows a disclosure symbol).
+    pub fn is_expandable(&self) -> bool {
+        matches!(self, SidebarItem::Workspace { .. } | SidebarItem::Column { .. })
+    }
+
     /// Returns the workspace index for Workspace, Column, and FloatingPane variants.
     /// For Pane, returns None.
     pub fn workspace_idx(&self) -> Option<usize> {
@@ -96,7 +124,7 @@ impl SidebarTree {
     /// Rebuild the tree from the current session state.
     /// `last_visited_pane_per_ws` provides per-workspace last-visited pane IDs
     /// for toggle highlighting (Prefix+i).
-    pub fn rebuild(
+    pub fn sync_from_session(
         &mut self,
         session: &Session,
         last_visited_ws_idx: Option<usize>,
@@ -212,12 +240,12 @@ impl SidebarTree {
             self.workspaces.push(ws_entry);
         }
 
-        self.rebuild_flat_items();
+        self.sync_flat_items();
         self.clamp_cursor();
     }
 
     /// Rebuild the flat navigation list from the tree (skipping collapsed items).
-    pub fn rebuild_flat_items(&mut self) {
+    pub fn sync_flat_items(&mut self) {
         self.flat_items.clear();
 
         for ws_entry in &self.workspaces {
@@ -265,7 +293,7 @@ impl SidebarTree {
     fn is_navigable(&self, idx: usize) -> bool {
         self.flat_items
             .get(idx)
-            .is_some_and(|item| !matches!(item, SidebarItem::FloatingPane { .. }))
+            .is_some_and(|item| item.is_selectable())
     }
 
     /// Move selection up, keeping cursor visible.
@@ -302,10 +330,8 @@ impl SidebarTree {
 
     fn is_navigable_collapsed(&self, idx: usize) -> bool {
         self.flat_items.get(idx).is_some_and(|item| {
-            !matches!(
-                item,
-                SidebarItem::Column { .. } | SidebarItem::FloatingPane { .. }
-            )
+            item.kind() != SidebarItemKind::Column
+                && item.kind() != SidebarItemKind::FloatingPane
         })
     }
 
@@ -402,7 +428,7 @@ impl SidebarTree {
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
             ws_entry.collapsed = !ws_entry.collapsed;
             let now_collapsed = ws_entry.collapsed;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             if move_cursor_to_parent
                 && now_collapsed
                 && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
@@ -418,7 +444,7 @@ impl SidebarTree {
             && ws_entry.collapsed
         {
             ws_entry.collapsed = false;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             self.clamp_cursor();
         }
     }
@@ -428,7 +454,7 @@ impl SidebarTree {
             && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx);
         if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
             ws_entry.collapsed = true;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             if move_cursor_to_parent
                 && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
             {
@@ -446,7 +472,7 @@ impl SidebarTree {
         {
             col_entry.collapsed = !col_entry.collapsed;
             let now_collapsed = col_entry.collapsed;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             if move_cursor_to_parent
                 && now_collapsed
                 && let Some(parent_idx) = self.column_flat_index(ws_idx, col_idx)
@@ -463,7 +489,7 @@ impl SidebarTree {
             && col_entry.collapsed
         {
             col_entry.collapsed = false;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             self.clamp_cursor();
         }
     }
@@ -475,7 +501,7 @@ impl SidebarTree {
             && let Some(col_entry) = ws_entry.columns.get_mut(col_idx)
         {
             col_entry.collapsed = true;
-            self.rebuild_flat_items();
+            self.sync_flat_items();
             if move_cursor_to_parent
                 && let Some(parent_idx) = self.column_flat_index(ws_idx, col_idx)
             {
@@ -488,12 +514,18 @@ impl SidebarTree {
     /// Toggle expand/collapse of the item under cursor.
     pub fn toggle_expand(&mut self) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
-            match item {
-                SidebarItem::Workspace { ws_idx } => self.toggle_workspace_collapsed(ws_idx),
-                SidebarItem::Column { ws_idx, col_idx } => {
-                    self.toggle_column_collapsed(ws_idx, col_idx)
+            match item.kind() {
+                SidebarItemKind::Workspace => {
+                    if let SidebarItem::Workspace { ws_idx } = item {
+                        self.toggle_workspace_collapsed(ws_idx);
+                    }
                 }
-                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
+                SidebarItemKind::Column => {
+                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                        self.toggle_column_collapsed(ws_idx, col_idx);
+                    }
+                }
+                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
             }
         }
     }
@@ -501,10 +533,18 @@ impl SidebarTree {
     /// Expand the item under cursor (recurse into children).
     pub fn expand(&mut self) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
-            match item {
-                SidebarItem::Workspace { ws_idx } => self.expand_workspace(ws_idx),
-                SidebarItem::Column { ws_idx, col_idx } => self.expand_column(ws_idx, col_idx),
-                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
+            match item.kind() {
+                SidebarItemKind::Workspace => {
+                    if let SidebarItem::Workspace { ws_idx } = item {
+                        self.expand_workspace(ws_idx);
+                    }
+                }
+                SidebarItemKind::Column => {
+                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                        self.expand_column(ws_idx, col_idx);
+                    }
+                }
+                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
             }
         }
     }
@@ -512,10 +552,18 @@ impl SidebarTree {
     /// Collapse the item under cursor.
     pub fn collapse(&mut self) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
-            match item {
-                SidebarItem::Workspace { ws_idx } => self.collapse_workspace(ws_idx),
-                SidebarItem::Column { ws_idx, col_idx } => self.collapse_column(ws_idx, col_idx),
-                SidebarItem::Pane { .. } | SidebarItem::FloatingPane { .. } => {}
+            match item.kind() {
+                SidebarItemKind::Workspace => {
+                    if let SidebarItem::Workspace { ws_idx } = item {
+                        self.collapse_workspace(ws_idx);
+                    }
+                }
+                SidebarItemKind::Column => {
+                    if let SidebarItem::Column { ws_idx, col_idx } = item {
+                        self.collapse_column(ws_idx, col_idx);
+                    }
+                }
+                SidebarItemKind::Pane | SidebarItemKind::FloatingPane => {}
             }
         }
     }

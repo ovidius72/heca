@@ -5,7 +5,8 @@ use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
 use super::{
-    SidebarButtonHitbox, SidebarItem, SidebarPaneEntry, SidebarTree, SidebarWsEntry,
+    SidebarButtonHitbox, SidebarItem, SidebarItemKind, SidebarPaneEntry, SidebarTree,
+    SidebarWsEntry,
 };
 
 pub(crate) const ITEM_HEIGHT: f32 = 24.0;
@@ -48,7 +49,6 @@ struct ButtonPlacement {
 #[derive(Clone, Copy)]
 struct ExpandedItemPresentation {
     indent: f32,
-    is_workspace: bool,
 }
 
 /// Render the expanded sidebar tree (width >= 80px).
@@ -146,7 +146,6 @@ pub fn render_sidebar_expanded(
         let color = expanded_item_text_color(
             flat_item,
             is_cursor,
-            presentation.is_workspace,
             &tree.workspaces,
             colors,
         );
@@ -336,7 +335,6 @@ fn expanded_item_label(
             (
                 ExpandedItemPresentation {
                     indent: INDENT_WS,
-                    is_workspace: true,
                 },
                 label,
             )
@@ -353,7 +351,6 @@ fn expanded_item_label(
             (
                 ExpandedItemPresentation {
                     indent: INDENT_COL,
-                    is_workspace: false,
                 },
                 label,
             )
@@ -361,14 +358,12 @@ fn expanded_item_label(
         SidebarItem::Pane { pane_id } => (
             ExpandedItemPresentation {
                 indent: INDENT_PANE,
-                is_workspace: false,
             },
             expanded_pane_label(*pane_id, false, workspaces, candidates, focused_pane),
         ),
         SidebarItem::FloatingPane { pane_id, .. } => (
             ExpandedItemPresentation {
                 indent: INDENT_PANE,
-                is_workspace: false,
             },
             expanded_pane_label(*pane_id, true, workspaces, candidates, focused_pane),
         ),
@@ -401,10 +396,7 @@ fn push_disclosure_hitbox(
     text_x: f32,
     line_y: f32,
 ) {
-    if matches!(
-        flat_item,
-        SidebarItem::Workspace { .. } | SidebarItem::Column { .. }
-    ) {
+    if flat_item.is_expandable() {
         button_hitboxes.push(SidebarButtonHitbox {
             action: WmAction::SidebarExpandToggle,
             ws_idx: None,
@@ -419,7 +411,6 @@ fn push_disclosure_hitbox(
 fn expanded_item_text_color(
     flat_item: &SidebarItem,
     is_cursor: bool,
-    is_workspace: bool,
     workspaces: &[SidebarWsEntry],
     colors: RenderColors,
 ) -> [f32; 4] {
@@ -427,7 +418,7 @@ fn expanded_item_text_color(
         return colors.accent;
     }
 
-    if is_workspace {
+    if flat_item.kind() == SidebarItemKind::Workspace {
         return flat_item
             .workspace_idx()
             .and_then(|wi| workspaces.get(wi))

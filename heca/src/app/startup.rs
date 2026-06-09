@@ -131,7 +131,7 @@ pub(crate) async fn init_state(
 
     let ws_count = session.workspaces.len();
     let mut sidebar_tree = SidebarTree::new();
-    sidebar_tree.rebuild(&session, None, Some(pane_id), &vec![None; ws_count]);
+    sidebar_tree.sync_from_session(&session, None, Some(pane_id), &vec![None; ws_count]);
 
     Box::new(AppState {
         window,
