@@ -74,6 +74,8 @@ struct BuiltUi {
     rail_states: Vec<Signal<bool>>,
     /// The letter assigned to each rail cell during a pick.
     rail_letters: Vec<char>,
+    /// A pane's "needs attention" request; `n` sets it (flash + host beep).
+    attention_req: Signal<bool>,
 }
 
 fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
@@ -85,6 +87,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let rail_letters = vec!['a', 'b', 'c', 'd', 'e'];
     let rail_hints: Vec<Signal<Option<String>>> = rail_letters.iter().map(|_| signal(None)).collect();
     let rail_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
+    // Host-owned "needs attention" request for a pane (`n` fires it): the row
+    // flashes and the host plays its own beep — grid-ui stays audio-free.
+    let attention_req = signal(false);
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -550,14 +555,19 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
 
             // PANES: each row a state-tinted card, its tag aligned to the title line.
             let panes = DockFrame::new("PANES")
-                .child(pane(
-                    Icon::new(Glyph::Terminal).color(theme.success).size(20.0),
-                    theme.success,
-                    "Pane 1 (nvim)",
-                    "my-branch",
-                    "1+",
-                    Badge::success("RUN"),
-                ))
+                .child(
+                    pane(
+                        Icon::new(Glyph::Terminal).color(theme.success).size(20.0),
+                        theme.success,
+                        "Pane 1 (nvim)",
+                        "my-branch",
+                        "1+",
+                        Badge::success("RUN"),
+                    )
+                    // `n` fires a "needs attention" pulse on this pane.
+                    .attention(attention_req)
+                    .attention_color(theme.warning),
+                )
                 .child(pane(
                     Icon::new(Glyph::GitPullRequest).color(theme.warning).size(20.0),
                     theme.warning,
@@ -621,6 +631,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_hints,
         rail_states: rail_states.borrow().clone(),
         rail_letters,
+        attention_req,
     }
 }
 
@@ -685,6 +696,8 @@ struct GpuState {
     rail_states: Vec<Signal<bool>>,
     rail_letters: Vec<char>,
     rail_pick: bool,
+    /// A pane's "needs attention" request; `n` fires the pulse + a host beep.
+    attention_req: Signal<bool>,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -758,7 +771,8 @@ impl GpuState {
             intensity: signal(theme.intensity),
         };
         let built = build_ui(&theme, ctl);
-        let BuiltUi { ui, sidebar_mode, rail_hints, rail_states, rail_letters } = built;
+        let BuiltUi { ui, sidebar_mode, rail_hints, rail_states, rail_letters, attention_req } =
+            built;
 
         Self {
             window,
@@ -776,6 +790,7 @@ impl GpuState {
             rail_states,
             rail_letters,
             rail_pick: false,
+            attention_req,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1026,6 +1041,15 @@ impl ApplicationHandler for App {
                         }
                         // While a pick is open, a letter selects its pane cell.
                         GridKey::Char(c) if state.rail_pick => state.rail_pick_select(c),
+                        // `n` fires a "needs attention" pulse on a pane. The widget
+                        // flashes; the *host* plays the sound (grid-ui is audio-free)
+                        // — here, the terminal bell.
+                        GridKey::Char('n') if state.focus.focused().is_none() => {
+                            state.attention_req.set(true);
+                            print!("\x07");
+                            use std::io::Write;
+                            let _ = std::io::stdout().flush();
+                        }
                         // Space/Enter (and others) go to the focused widget.
                         other => {
                             state.focus.deliver_key(&mut state.ui, other);
