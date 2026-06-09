@@ -17,6 +17,7 @@ use crate::{
 use heca_core::backend::FakeBackend;
 use crate::chrome;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, FocusDomain, Pane as LayoutPane, PaneId};
+use crate::app::interaction::{pane_is_floating, focused_pane_id};
 
 // ── Navigation ──
 
@@ -484,13 +485,16 @@ pub fn handle_resize_to(state: &mut AppState, action: &WmAction) {
 // ── Pane ──
 
 pub fn handle_float(state: &mut AppState, _action: &WmAction) {
-    if let Some(pane_id) = state.focused_pane
-        && let Some(ws) = state.session.active_workspace_mut()
-    {
-        let wa = ws.scrolling.working_area;
-        let is_floating = ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id);
+    let pane_id = match focused_pane_id(state) {
+        Some(id) => id,
+        None => return,
+    };
+    let is_flt = pane_is_floating(&state.session, pane_id);
 
-        if is_floating {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        let wa = ws.scrolling.working_area;
+
+        if is_flt {
             if let Some(idx) = ws
                 .floating_panes
                 .iter()
@@ -634,7 +638,7 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
-    if let Some(pane_id) = state.focused_pane {
+    if let Some(pane_id) = focused_pane_id(state) {
         let current_title = state
             .session
             .active_workspace()
@@ -1155,7 +1159,7 @@ fn current_active_workspace_idx(state: &AppState) -> Option<usize> {
 }
 
 fn current_tiled_column_target(state: &AppState) -> Option<(usize, usize)> {
-    let pane_id = state.focused_pane?;
+    let pane_id = focused_pane_id(state)?;
     let (ws_idx, col_idx, _) = find_pane_location(&state.session, pane_id)?;
     (ws_idx == state.session.active_workspace_idx).then_some((ws_idx, col_idx))
 }
