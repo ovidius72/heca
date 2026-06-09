@@ -84,11 +84,6 @@ pub struct Item {
     on_activate: Option<Box<dyn Fn()>>,
 }
 
-/// A zero-size placeholder used for an empty slot.
-fn spacer() -> Flex {
-    Flex::row().width(Length::Px(0.0)).height(Length::Px(0.0))
-}
-
 impl Item {
     /// A new row showing `label`, with empty slots.
     pub fn new(label: impl Into<String>) -> Self {
@@ -99,8 +94,8 @@ impl Item {
         base.style.padding = PAD_H as f32;
         base.style.height = Length::Px(ROW_H);
         // children[LEADING], children[TRAILING] — replaced by the slot builders.
-        base.children.push(Box::new(spacer()));
-        base.children.push(Box::new(spacer()));
+        base.children.push(Box::new(Flex::empty()));
+        base.children.push(Box::new(Flex::empty()));
         Self {
             base,
             label: signal(label.into()),

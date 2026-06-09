@@ -1595,7 +1595,7 @@ fn item_group_collapses_rows_out_of_layout() {
 
 #[test]
 fn grid_places_children_in_named_areas_and_cells() {
-    use heca_grid_ui::{Grid, Length, Track};
+    use heca_grid_ui::{Grid, Track};
     // 2 cols × 2 rows; areas: icon spans both rows in col 1, title top-right,
     // sub bottom-right. Fixed sizes so we can assert exact bounds.
     let mut grid = Grid::new()
@@ -1626,22 +1626,101 @@ fn grid_places_children_in_named_areas_and_cells() {
 }
 
 #[test]
-fn dock_frame_collapses_body_out_of_layout() {
+fn dock_frame_body_has_height_when_expanded() {
     use heca_grid_ui::DockFrame;
-    // Title bar over a fixed-size body block.
     let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));
 
-    // Expanded: header + body both take height.
     LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
-    let expanded_h = dock.base().bounds.size.h;
+
     let body_h = dock.base().children[1].base().bounds.size.h;
     assert!(body_h > 0.0, "expanded body has height");
+}
+
+#[test]
+fn dock_frame_collapse_folds_body_out_of_layout() {
+    use heca_grid_ui::DockFrame;
+    let mut dock = DockFrame::new("FILES").child(fixed_box(120.0, 80.0));
+    LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+    let expanded_h = dock.base().bounds.size.h;
 
     // Collapse via the expanded signal, relayout: body folds away (display:none).
     dock.state().set(false);
     LayoutEngine::new().compute(&mut dock, Size::new(200.0, 400.0));
+
+    let body_h = dock.base().children[1].base().bounds.size.h;
+    assert_eq!(body_h, 0.0, "collapsed body takes no layout space");
     let collapsed_h = dock.base().bounds.size.h;
-    let body_hc = dock.base().children[1].base().bounds.size.h;
     assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
-    assert_eq!(body_hc, 0.0, "collapsed body takes no layout space");
+}
+
+#[test]
+fn dock_frame_header_click_toggles_and_emits_dock_toggle() {
+    use heca_grid_ui::{Action, DockFrame, SignalData};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let log: Rc<RefCell<Vec<Action>>> = Rc::new(RefCell::new(Vec::new()));
+    let sink = log.clone();
+    let mut dock = DockFrame::new("FILES").on_toggle(move |a| sink.borrow_mut().push(a));
+    LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
+    assert!(dock.state().get_untracked(), "starts expanded");
+
+    // Click the toggle area of the title bar (header child 0): collapses + reports.
+    let toggle = dock.base().children[0].base().children[0].base().bounds;
+    let center = Point::new(toggle.loc.x + toggle.size.w / 2.0, toggle.loc.y + toggle.size.h / 2.0);
+    dock.event(&Event::PointerPressed { pos: center });
+
+    assert!(!dock.state().get_untracked(), "header click collapses the frame");
+    assert_eq!(
+        log.borrow().last(),
+        Some(&Action::value("dock-toggle", SignalData::Bool(false))),
+    );
+}
+
+#[test]
+fn dock_frame_header_control_receives_events_before_toggle() {
+    use heca_grid_ui::DockFrame;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // A search-like interactive control living in the header-controls slot.
+    let control_clicks = Rc::new(Cell::new(0u32));
+    let sink = control_clicks.clone();
+    let control = Item::new("search").on_activate(move || sink.set(sink.get() + 1));
+    let mut dock = DockFrame::new("FILES").header(control);
+    LayoutEngine::new().compute(&mut dock, Size::new(260.0, 400.0));
+
+    // Click the control (header child 1): it consumes the event; frame must NOT toggle.
+    let ctrl = dock.base().children[0].base().children[1].base().bounds;
+    let center = Point::new(ctrl.loc.x + ctrl.size.w / 2.0, ctrl.loc.y + ctrl.size.h / 2.0);
+    dock.event(&Event::PointerPressed { pos: center });
+
+    assert_eq!(control_clicks.get(), 1, "header control received the click");
+    assert!(dock.state().get_untracked(), "clicking the control did not toggle the frame");
+}
+
+#[test]
+fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
+    use heca_grid_ui::{DockFrame, FocusManager};
+
+    // Header toggle + one interactive body row are both focusable when expanded.
+    let mut dock = DockFrame::new("FILES").child(Item::new("file.rs").on_activate(|| {}));
+    LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "header toggle is first in tab order");
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(1), "body row is tabbable while expanded");
+
+    // Collapse + relayout: the body subtree becomes display:none and drops out of
+    // the tab order, so only the header toggle remains (forward Tab wraps to it).
+    dock.state().set(false);
+    LayoutEngine::new().compute(&mut dock, Size::new(220.0, 400.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "only the header toggle is focusable when collapsed");
+    focus.advance(&mut dock, true);
+    assert_eq!(focus.focused(), Some(0), "collapsed body row is not reachable by Tab");
 }
