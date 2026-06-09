@@ -124,7 +124,7 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -142,7 +142,7 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     }
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -563,7 +563,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         if let Some(col) = ws.scrolling.active_column() {
             let pane_idx = col.active_pane_idx;
             if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                state.backends.remove(&removed.id.0);
+                state.backends.remove_for_pane(removed.id.0);
             }
         }
     }
@@ -585,7 +585,7 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
         state.session.add_pane(pane, None, true);
         state
             .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     }
     after_layout_change(state);
 }
@@ -706,12 +706,12 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
             crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id)
         {
             if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
-                state.backends.remove(&removed.id.0);
+                state.backends.remove_for_pane(removed.id.0);
             }
         } else if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == *pane_id)
         {
             let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove(&removed.pane.id.0);
+            state.backends.remove_for_pane(removed.pane.id.0);
             if ws.floating_is_active && ws.floating_panes.is_empty() {
                 ws.floating_is_active = false;
             }
@@ -734,7 +734,7 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         state.session.add_pane(pane, None, true);
         state
             .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     }
     after_layout_change(state);
 }
@@ -782,7 +782,7 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
     }
     state
         .backends
-        .insert(backend_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(backend_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 
@@ -806,7 +806,7 @@ pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
 
     // Remove backends
     for pid in &pane_ids {
-        state.backends.remove(pid);
+        state.backends.remove_for_pane(*pid);
     }
 
     // Remove the column
@@ -848,7 +848,7 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
 
     // Remove backends
     for pid in &pane_ids {
-        state.backends.remove(pid);
+        state.backends.remove_for_pane(*pid);
     }
 
     // Remove the workspace
@@ -1023,7 +1023,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
@@ -1353,7 +1353,7 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     state.session.add_pane(pane, None, true);
     state
         .backends
-        .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+        .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     after_layout_change(state);
 }
 

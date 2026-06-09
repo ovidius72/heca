@@ -3,17 +3,17 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
+use crate::app::backend_store::BackendStore;
 use crate::app_state::{self, AppState, InputMode, SidebarState};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
-use heca_core::backend::{FakeBackend, PaneBackend};
+use heca_core::backend::FakeBackend;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
-use std::collections::HashMap;
 use std::sync::Arc;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
@@ -126,8 +126,8 @@ pub(crate) async fn init_state(
     let pane_id = fake_pane.id.0;
     session.add_pane(fake_pane, None, true);
 
-    let mut backends: HashMap<u64, Box<dyn PaneBackend>> = HashMap::new();
-    backends.insert(pane_id, Box::new(FakeBackend::new(80, 24)));
+    let mut backends = BackendStore::new();
+    backends.insert_for_pane(pane_id, Box::new(FakeBackend::new(80, 24)));
 
     let ws_count = session.workspaces.len();
     let mut sidebar_tree = SidebarTree::new();

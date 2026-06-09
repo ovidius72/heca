@@ -60,7 +60,7 @@ pub(crate) fn handle_keyboard_input(
             }
 
             if let Some(pane_id) = state.focused_pane
-                && let Some(backend) = state.backends.get_mut(&pane_id)
+                && let Some(backend) = state.backends.get_mut(pane_id)
             {
                 let input_bytes =
                     winit_key_to_terminal_input(ctx.logical_key, ctx.key_text, ctx.is_ctrl);
@@ -202,7 +202,7 @@ fn handle_prefix_mode(
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
         if let Some(pane_id) = state.focused_pane
-            && let Some(backend) = state.backends.get_mut(&pane_id)
+            && let Some(backend) = state.backends.get_mut(pane_id)
         {
             let literal = prefix_combo_to_literal_input(&state.prefix_combo);
             if !literal.is_empty() {

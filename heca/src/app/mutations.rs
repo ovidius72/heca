@@ -248,7 +248,7 @@ pub(crate) fn move_column_to_workspace(
         }
         state
             .backends
-            .insert(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
     }
 
     state.session.switch_to_workspace(target_ws);

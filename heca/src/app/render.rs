@@ -281,7 +281,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             [theme_border[0], theme_border[1], theme_border[2], 0.5]
         };
 
-        if let Some(backend) = state.backends.get(&pane_id.0) {
+        if let Some(backend) = state.backends.get(pane_id.0) {
             let data = backend.render_data();
             render_backend_data(
                 &data,
@@ -481,7 +481,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             } else {
                 theme.float_accent.to_f32x4()
             };
-            if let Some(backend) = state.backends.get(&float.pane.id.0) {
+            if let Some(backend) = state.backends.get(float.pane.id.0) {
                 let data = backend.render_data();
                 render_backend_data(
                     &data,
