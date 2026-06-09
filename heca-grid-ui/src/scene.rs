@@ -169,6 +169,17 @@ pub enum TextAlign {
     End,
 }
 
+/// Which embedded font family a text run is shaped with: the default monospace
+/// text face, or the icon glyph font ([`Icon`](crate::widgets::Icon)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FontRole {
+    /// The theme's monospace text family (default).
+    #[default]
+    Text,
+    /// The embedded icon font (Phosphor); the codepoint is a glyph.
+    Icon,
+}
+
 /// A run of text positioned within a rectangle.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextCmd {
@@ -179,6 +190,8 @@ pub struct TextCmd {
     pub align: TextAlign,
     /// Render with the bold weight.
     pub bold: bool,
+    /// Which font family shapes this run (text vs. icon glyph font).
+    pub font: FontRole,
 }
 
 /// A scanline overlay confined to a region.

@@ -38,6 +38,23 @@ pub const DEFAULT_MONO_BOLD_BYTES: &[u8] = include_bytes!("../assets/GeistMono-B
 /// oblique/italic from the upright faces, since Geist Mono has no italic face.
 pub const OBLIQUE_SKEW: f32 = 0.21;
 
+/// Family name of the embedded icon font — **Phosphor Duotone** (MIT licensed;
+/// see `assets/PHOSPHOR-LICENSE.txt`). <https://phosphoricons.com>. The host
+/// registers it as a second family alongside [`DEFAULT_MONO_FAMILY`]; the
+/// renderer selects it for [`FontRole::Icon`](crate::scene::FontRole) text runs.
+pub const ICON_FONT_FAMILY: &str = "Phosphor-Duotone";
+
+/// Embedded bytes of the icon font (Phosphor Duotone, MIT). Load alongside the
+/// mono faces:
+/// ```ignore
+/// font_system.db_mut().load_font_data(ICON_FONT_BYTES.to_vec());
+/// ```
+/// Duotone glyphs come in consecutive codepoint pairs: the **secondary** layer
+/// (the `:before` codepoint, drawn at ~0.2 alpha) and the **primary** layer
+/// (secondary + 1, full alpha) stacked at the same spot — see
+/// [`Icon`](crate::widgets::Icon).
+pub const ICON_FONT_BYTES: &[u8] = include_bytes!("../assets/Phosphor-Duotone.ttf");
+
 /// Approximate advance width of a monospace glyph as a fraction of font size.
 /// Used for the Phase-A naive text measure until `cosmic-text` shaping lands.
 pub const MONO_ADVANCE_RATIO: f32 = 0.6;

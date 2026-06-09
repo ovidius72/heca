@@ -1825,3 +1825,41 @@ fn collapsed_dock_body_is_not_painted() {
         "collapsed dock must not paint its hidden body row"
     );
 }
+
+#[test]
+fn icon_lays_out_as_a_square() {
+    use heca_grid_ui::{Glyph, Icon};
+    let mut icon = Icon::new(Glyph::GitBranch).size(24.0);
+    LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
+    let b = icon.base().bounds;
+    assert_eq!(b.size.w, 24.0, "icon width = glyph size");
+    assert_eq!(b.size.h, 24.0, "icon is square");
+}
+
+#[test]
+fn icon_paints_duotone_layers_in_the_icon_font() {
+    use heca_grid_ui::{DrawCommand, FontRole, Glyph, Icon};
+    let mut icon = Icon::new(Glyph::Folder).size(24.0);
+    LayoutEngine::new().compute(&mut icon, Size::new(100.0, 100.0));
+
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        icon.paint(&mut cx);
+    }
+    let glyphs: Vec<(String, FontRole)> = scene
+        .iter()
+        .filter_map(|c| match c {
+            DrawCommand::Text(t) => Some((t.text.clone(), t.font)),
+            _ => None,
+        })
+        .collect();
+
+    // Two stacked layers: secondary (:before) then primary (secondary+1), both
+    // shaped with the icon font.
+    assert_eq!(glyphs.len(), 2, "duotone icon paints two layers");
+    assert!(glyphs.iter().all(|(_, f)| *f == FontRole::Icon), "both shaped with the icon font");
+    assert_eq!(glyphs[0].0, char::from_u32(0xe24a).unwrap().to_string(), "secondary layer first");
+    assert_eq!(glyphs[1].0, char::from_u32(0xe24b).unwrap().to_string(), "primary layer on top");
+}
