@@ -3,7 +3,9 @@
 //! This module owns sidebar-targeted drop and sidebar-drag move/swap behavior.
 
 use crate::app::pane_ops::{insert_pane_at_position, remove_pane_by_id};
-use crate::app_state::{AppState, DragState};
+use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH;
+use heca_grid_ui::drag::DragSurfaceId;
 use crate::input::WmAction;
 use heca_core::layout::types::{PaneInsertTarget, Point};
 use heca_core::layout::{ColumnId, ColumnWidth};
@@ -19,10 +21,13 @@ pub(super) fn drag_drop(
     swap: bool,
     pos: (f32, f32),
 ) {
-    state.mouse.drag_state = DragState::None;
-    state.mouse.drag_hover_sidebar_fi = None;
-    state.mouse.sidebar_drag_source_fi = None;
-    state.mouse.sidebar_drag_label = None;
+    state.mouse.drag_ctx.cancel_all();
+    state.mouse.interactive_move = None;
+    if let Some(s) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
+        s.hover_item = None;
+        s.source_item = None;
+        s.ghost_label = None;
+    }
 
     if swap {
         let (_win_w, win_h) = super::window_logical_size(state);
@@ -32,7 +37,7 @@ pub(super) fn drag_drop(
         let sw = if state.sidebar.left_visible {
             chrome.left_sidebar_width
         } else {
-            40.0
+            DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         };
 
         if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
@@ -85,7 +90,7 @@ pub(super) fn drag_drop(
     let sw = if state.sidebar.left_visible {
         chrome.left_sidebar_width
     } else {
-        40.0
+        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
 
     let on_sidebar = pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom;
@@ -208,7 +213,7 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
     let sw = if state.sidebar.left_visible {
         chrome.left_sidebar_width
     } else {
-        40.0
+        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
 
     if pos.0 < 0.0 || pos.0 >= sw || pos.1 < sidebar_top || pos.1 >= sidebar_bottom {
@@ -234,8 +239,8 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
 
     // Source pane is in the layout. Get its ID from the drag state
     // and find its current position before removing it.
-    let source_id = match state.mouse.drag_state {
-        DragState::InteractiveMove { _pane_id, .. } => _pane_id,
+    let source_id = match state.mouse.interactive_move {
+        Some(InteractiveMovePhase::Moving { _pane_id, .. }) => _pane_id,
         _ => return false,
     };
 
@@ -380,9 +385,12 @@ pub(super) fn handle_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
         }
     }
 
-    state.mouse.drag_state = DragState::None;
+    state.mouse.drag_ctx.cancel_all();
+    state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
-    state.mouse.drag_hover_sidebar_fi = None;
+    if let Some(s) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
+        s.hover_item = None;
+    }
     crate::app::mutations::after_layout_change(state);
     true
 }

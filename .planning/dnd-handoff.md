@@ -551,18 +551,18 @@ Full step-by-step plan is in `.planning/refactoring-and-dnd-plan.md`.
 - [x] **1.7** Verify: `cargo check -p heca-grid-ui` passes, `cargo test -p heca-grid-ui` passes
 - [x] **1.8** Commit: `feat(grid-ui): add drag framework types module`
 
-### Phase 2 — Replace `DragState` / `MouseState` fields with framework types
+### Phase 2 — Replace `DragState` / `MouseState` fields with framework types ✅
 
-- [ ] **2.1** Add `heca-grid-ui` dependency to `heca/Cargo.toml`
-- [ ] **2.2** Replace `DragState` enum in `app_state.rs` with `DragContext` + `Option<InteractiveMoveState>`
-- [ ] **2.3** Replace `MouseState` fields (`drag_hover_sidebar_fi`, `sidebar_drag_source_fi`, `sidebar_drag_label`) with `DragContext`
-- [ ] **2.4** Replace `SidebarDragLabel` with `drag::DragLabel` from heca-grid-ui
-- [ ] **2.5** Update all match arms on `DragState` to use `DragContext` + `InteractiveMoveState`
-- [ ] **2.6** Update `on_mouse_input`, `on_cursor_moved`, `on_modifiers_changed` to route through `DragContext`
-- [ ] **2.7** Update `process_edge_scroll` to check `InteractiveMoveState` instead of `DragState::InteractiveMove`
-- [ ] **2.8** Verify: `cargo check -p heca` passes, all existing tests pass
-- [ ] **2.9** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
-- [ ] **2.10** Commit: `refactor: replace DragState with DragContext and InteractiveMoveState`
+- [x] **2.1** Add `heca-grid-ui` dependency to `heca/Cargo.toml`
+- [x] **2.2** Replace `DragState` enum in `app_state.rs` with `DragContext` + `Option<InteractiveMoveState>`
+- [x] **2.3** Replace `MouseState` fields (`drag_hover_sidebar_fi`, `sidebar_drag_source_fi`, `sidebar_drag_label`) with `DragContext`
+- [x] **2.4** Replace `SidebarDragLabel` with `drag::DragLabel` from heca-grid-ui
+- [x] **2.5** Update all match arms on `DragState` to use `DragContext` + `InteractiveMoveState`
+- [x] **2.6** Update `on_mouse_input`, `on_cursor_moved`, `on_modifiers_changed` to route through `DragContext`
+- [x] **2.7** Update `process_edge_scroll` to check `InteractiveMoveState` instead of `DragState::InteractiveMove`
+- [x] **2.8** Verify: `cargo check -p heca` passes, all existing tests pass
+- [x] **2.9** Verify: `cargo clippy --workspace --all-targets --all-features` is clean
+- [x] **2.10** Commit: `refactor: replace DragState with DragContext and InteractiveMoveState`
 
 ### Phase 3 — Create enum dispatch (`target.rs`) and left sidebar handler (`surface_left.rs`)
 

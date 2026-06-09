@@ -7,6 +7,7 @@ use crate::app_state::{AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_core::backend::BackendRenderData;
+use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
@@ -348,8 +349,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         1.0,
     );
     let candidates = state.input_mode.candidates();
-    let drag_hover_fi = state.mouse.drag_hover_sidebar_fi;
-    let drag_source_fi = state.mouse.sidebar_drag_source_fi;
+    let drag_hover_fi = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.hover_item.map(|id| id.raw()));
+    let drag_source_fi = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.source_item.map(|id| id.raw()));
     let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
     let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
     if chrome.left_sidebar_width >= 80.0 {
@@ -412,7 +413,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         );
     }
 
-    if let Some(label) = &state.mouse.sidebar_drag_label {
+    if let Some(label) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar).and_then(|s| s.ghost_label.as_ref()) {
         let ghost_w = label.width;
         let ghost_h = 22.0;
         let ghost_x = label.x + 10.0;

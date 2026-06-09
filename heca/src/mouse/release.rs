@@ -3,7 +3,7 @@
 //! Extracted from `on_mouse_input()` for clarity. Each function handles
 //! one release scenario: interactive move, sidebar drag, or sidebar drag starting.
 
-use crate::app_state::{AppState, DragState};
+use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::input::WmAction;
 
 /// Handle release during an active interactive move (content-area drag).
@@ -11,8 +11,8 @@ use crate::input::WmAction;
 /// Dispatches between swap mode (swap with target) and move mode (reinsert at
 /// drop target), with sidebar drop as a fallback.
 pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f32)) {
-    let swap = match state.mouse.drag_state {
-        DragState::InteractiveMove { swap, .. } => swap,
+    let (swap, source_id) = match state.mouse.interactive_move {
+        Some(InteractiveMovePhase::Moving { swap, _pane_id, .. }) => (swap, _pane_id),
         _ => return,
     };
 
@@ -21,11 +21,6 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         // a sidebar target, fall back to normal move semantics.
         // Otherwise, swap with the content-area target pane.
         super::drag::reset_interactive_move_offset(state);
-        let source_id = match state.mouse.drag_state {
-            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-            // SAFETY: guarded by outer match on DragState::InteractiveMove
-            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
-        };
         if let Some(target_id) = super::hit_test::hit_test_pane_excluding(
             state,
             state.mouse.pos,
@@ -52,17 +47,12 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         // Move mode: pane is still in layout. Remove it and
         // re-insert at the drop target position.
         super::drag::reset_interactive_move_offset(state);
-        let source_id = match state.mouse.drag_state {
-            DragState::InteractiveMove { _pane_id, .. } => _pane_id,
-            // SAFETY: guarded by outer match on DragState::InteractiveMove
-            _ => unreachable!("InteractiveMove guaranteed by outer match arm"),
-        };
         handle_content_move(state, source_id, hint);
     } else {
         super::drag::cancel_interactive_move(state);
     }
 
-    state.mouse.drag_state = DragState::None;
+    state.mouse.interactive_move = None;
     state.mouse.insert_hint = None;
 }
 
@@ -79,19 +69,18 @@ pub(super) fn handle_sidebar_drag_release(
 
 /// Handle release during sidebar drag starting (threshold not exceeded).
 ///
-/// If a click action was stored, dispatch it. Otherwise, just clear the drag state.
+/// If a pending click action was stored, dispatch it. Otherwise, just clear the drag state.
 pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Option<WmAction> {
-    if let DragState::SidebarDragStarting { click_action, .. } = &state.mouse.drag_state {
-        let action = click_action.as_deref().cloned();
-        state.mouse.drag_state = DragState::None;
-        if let Some(action) = action {
-            if matches!(action, WmAction::FocusPane { .. })
-                && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
-            {
-                state.input_mode = crate::app_state::InputMode::Normal;
-            }
-            return Some(action);
+    let click_action = state.mouse.pending_click_action.take();
+    state.mouse.drag_ctx.cancel_all();
+
+    if let Some(action) = click_action {
+        if matches!(action, WmAction::FocusPane { .. })
+            && matches!(state.input_mode, crate::app_state::InputMode::SidebarNav)
+        {
+            state.input_mode = crate::app_state::InputMode::Normal;
         }
+        return Some(action);
     }
     None
 }

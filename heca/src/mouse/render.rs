@@ -2,7 +2,7 @@
 //!
 //! This module owns the temporary drag visuals rendered on top of pane content.
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, InteractiveMovePhase};
 use heca_core::layout::types::PaneInsertTarget;
 use heca_core::layout::Rectangle;
 
@@ -46,7 +46,7 @@ pub(crate) fn render_detached_pane(state: &mut AppState, pane_area: Rectangle) {
 /// In swap mode, highlights the full target pane rectangle.
 pub(crate) fn render_insert_hint(state: &mut AppState, pane_area: Rectangle) {
     // Swap mode: highlight the full target pane under cursor.
-    if matches!(&state.mouse.drag_state, crate::app_state::DragState::InteractiveMove { swap: true, .. })
+    if let Some(InteractiveMovePhase::Moving { swap: true, .. }) = state.mouse.interactive_move
         && state.mouse.detached_pane.is_none()
     {
         render_swap_target_hint(state, pane_area);
@@ -202,8 +202,8 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
     let pa_w = pane_area.size.w as f32;
     let pa_h = pane_area.size.h as f32;
     // Exclude the dragged source pane so it doesn't highlight itself.
-    let exclude_id = match state.mouse.drag_state {
-        crate::app_state::DragState::InteractiveMove { swap: true, _pane_id, .. } => Some(_pane_id),
+    let exclude_id = match state.mouse.interactive_move {
+        Some(InteractiveMovePhase::Moving { swap: true, _pane_id, .. }) => Some(_pane_id),
         _ => None,
     };
     let target_id = match hit_test_pane_excluding(state, state.mouse.pos, exclude_id) {

@@ -3,6 +3,7 @@
 //! This module owns sidebar click routing.
 
 use crate::app_state::AppState;
+use crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH;
 use crate::input::WmAction;
 
 pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
@@ -15,7 +16,7 @@ pub(super) fn click(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
     let sw = if state.sidebar.left_visible {
         chrome.left_sidebar_width
     } else {
-        40.0
+        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         if let Some((btn_idx, button)) =
