@@ -371,6 +371,42 @@ impl vte::Perform for Grid {
     fn esc_dispatch(&mut self, _intermediates: &[u8], _ignore: bool, _byte: u8) {}
 }
 
+/// Errors that can occur when creating a PTY.
+#[derive(Debug)]
+pub enum PtyError {
+    /// The `openpty` call failed (Unix).
+    OpenPtyFailed,
+    /// The `dup` call failed on a slave file descriptor (Unix).
+    DupSlaveFailed,
+    /// Could not spawn the child shell process.
+    SpawnFailed(std::io::Error),
+    /// Could not dup the master FD for the reader thread (Unix).
+    DupMasterFailed,
+    /// Could not take stdin/stdout from the child (non-Unix stub).
+    NoStdio(&'static str),
+}
+
+impl std::fmt::Display for PtyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PtyError::OpenPtyFailed => write!(f, "openpty failed"),
+            PtyError::DupSlaveFailed => write!(f, "dup slave fd failed"),
+            PtyError::SpawnFailed(e) => write!(f, "spawn failed: {e}"),
+            PtyError::DupMasterFailed => write!(f, "failed to dup PTY master fd"),
+            PtyError::NoStdio(which) => write!(f, "no {which} from child process"),
+        }
+    }
+}
+
+impl std::error::Error for PtyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            PtyError::SpawnFailed(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 /// Cross-platform PTY handle.
 enum PtyHandle {
     #[cfg(unix)]
@@ -385,7 +421,7 @@ enum PtyHandle {
 
 impl PtyHandle {
     #[cfg(unix)]
-    fn new_unix(cols: u16, rows: u16) -> Result<Self, String> {
+    fn new_unix(cols: u16, rows: u16) -> Result<Self, PtyError> {
         use std::os::fd::FromRawFd;
 
         let mut master: libc::c_int = 0;
@@ -400,7 +436,7 @@ impl PtyHandle {
                 std::ptr::null_mut(),
             ) < 0
             {
-                return Err("openpty failed".to_string());
+                return Err(PtyError::OpenPtyFailed);
             }
         }
 
@@ -427,7 +463,7 @@ impl PtyHandle {
         let slave_out = unsafe { libc::dup(slave) };
         let slave_err = unsafe { libc::dup(slave) };
         if slave_in < 0 || slave_out < 0 || slave_err < 0 {
-            return Err("dup slave fd failed".to_string());
+            return Err(PtyError::DupSlaveFailed);
         }
 
         use std::os::unix::process::CommandExt;
@@ -437,7 +473,7 @@ impl PtyHandle {
             .stdout(unsafe { std::process::Stdio::from_raw_fd(slave_out) })
             .stderr(unsafe { std::process::Stdio::from_raw_fd(slave_err) })
             .spawn()
-            .map_err(|e| format!("spawn failed: {e}"))?;
+            .map_err(PtyError::SpawnFailed)?;
 
         unsafe {
             libc::close(slave);
@@ -447,16 +483,16 @@ impl PtyHandle {
     }
 
     #[cfg(not(unix))]
-    fn new_stub() -> Result<Self, String> {
+    fn new_stub() -> Result<Self, PtyError> {
         let mut child = std::process::Command::new("cmd.exe")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| format!("spawn failed: {e}"))?;
+            .map_err(PtyError::SpawnFailed)?;
 
-        let stdin = child.stdin.take().ok_or("no stdin")?;
-        let stdout = child.stdout.take().ok_or("no stdout")?;
+        let stdin = child.stdin.take().ok_or(PtyError::NoStdio("stdin"))?;
+        let stdout = child.stdout.take().ok_or(PtyError::NoStdio("stdout"))?;
 
         Ok(Self::Stub {
             child,
@@ -465,7 +501,7 @@ impl PtyHandle {
         })
     }
 
-    fn new(cols: u16, rows: u16) -> Result<Self, String> {
+    fn new(cols: u16, rows: u16) -> Result<Self, PtyError> {
         #[cfg(unix)]
         {
             Self::new_unix(cols, rows)
@@ -558,7 +594,7 @@ pub struct TerminalBackend {
 
 impl TerminalBackend {
     /// Spawn a new terminal with the given grid size.
-    pub fn new(cols: usize, rows: usize) -> Result<Self, String> {
+    pub fn new(cols: usize, rows: usize) -> Result<Self, PtyError> {
         let pty = PtyHandle::new(cols as u16, rows as u16)?;
 
         // Spawn reader thread.
@@ -570,7 +606,7 @@ impl TerminalBackend {
             let raw_fd = pty.as_raw_fd();
             let duped = unsafe { libc::dup(raw_fd) };
             if duped < 0 {
-                return Err("Failed to dup PTY fd".to_string());
+                return Err(PtyError::DupMasterFailed);
             }
             let mut reader = unsafe { std::fs::File::from_raw_fd(duped) };
             std::thread::spawn(move || {

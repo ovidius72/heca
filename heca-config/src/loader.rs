@@ -5,6 +5,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Errors that can occur when loading the configuration file.
+#[derive(Debug)]
+pub enum ConfigError {
+    /// No config file found in any search path.
+    NotFound,
+    /// Config file found but could not be parsed as valid TOML.
+    Parse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+    /// Config file could not be read from disk.
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConfigError::NotFound => write!(f, "no config file found"),
+            ConfigError::Parse { path, source } => {
+                write!(f, "parse error in {}: {source}", path.display())
+            }
+            ConfigError::Io { path, source } => {
+                write!(f, "io error reading {}: {source}", path.display())
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ConfigError::NotFound => None,
+            ConfigError::Parse { source, .. } => Some(source),
+            ConfigError::Io { source, .. } => Some(source),
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Config
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -29,12 +70,16 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> Self {
-        let config = Self::load_config_file().unwrap_or_else(|_| Config::default());
+        let config = Self::load_config_file().unwrap_or_else(|e| {
+            #[cfg(debug_assertions)]
+            eprintln!("[heca] config load: {e}, using defaults");
+            Config::default()
+        });
         let theme = Theme::load(&config.settings.theme);
         Self { config, theme }
     }
 
-    fn load_config_file() -> Result<Config, String> {
+    fn load_config_file() -> Result<Config, ConfigError> {
         let paths = [
             dirs::home_dir().map(|h| h.join(".config").join("heca").join("config.toml")),
             Some(config_dir().join("config.toml")),
@@ -46,12 +91,15 @@ impl AppConfig {
                         return Ok(config);
                     }
                     Err(e) => {
-                        return Err(format!("parse error in {}: {}", path.display(), e));
+                        return Err(ConfigError::Parse {
+                            path: path.clone(),
+                            source: e,
+                        });
                     }
                 }
             }
         }
-        Err("no config file found".to_string())
+        Err(ConfigError::NotFound)
     }
 }
 
