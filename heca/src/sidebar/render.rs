@@ -1,5 +1,6 @@
 use crate::app_state::SidebarItemState;
 use crate::input::WmAction;
+use heca_grid_ui::drag::DragItemId;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
@@ -69,8 +70,8 @@ pub fn render_sidebar_expanded(
     focused_pane: Option<u64>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
-    drag_hover_fi: Option<usize>,
-    drag_source_fi: Option<usize>,
+    drag_hover: Option<DragItemId>,
+    drag_source: Option<DragItemId>,
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
     hovered_btn_idx: Option<usize>,
@@ -131,7 +132,7 @@ pub fn render_sidebar_expanded(
             primitive_renderer.draw_rect(x, line_y, width, ITEM_HEIGHT, colors.cursor_bg);
         }
 
-        draw_drag_hover(primitive_renderer, x, line_y, width, colors.accent, 0.25, drag_hover_fi == Some(fi));
+        draw_drag_hover(primitive_renderer, x, line_y, width, colors.accent, 0.25, drag_hover == Some(DragItemId::new(fi)));
         draw_drag_source(
             primitive_renderer,
             x,
@@ -139,7 +140,7 @@ pub fn render_sidebar_expanded(
             width,
             colors.drag_source_bg,
             colors.drag_source_border,
-            drag_source_fi == Some(fi),
+            drag_source == Some(DragItemId::new(fi)),
         );
 
         let color = expanded_item_text_color(
@@ -204,8 +205,8 @@ pub fn render_sidebar_collapsed(
     focused_pane: Option<u64>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
-    drag_hover_fi: Option<usize>,
-    drag_source_fi: Option<usize>,
+    drag_hover: Option<DragItemId>,
+    drag_source: Option<DragItemId>,
     drag_source_bg: [f32; 4],
     drag_source_border: [f32; 4],
     _hovered_btn_idx: Option<usize>,
@@ -258,7 +259,7 @@ pub fn render_sidebar_collapsed(
             width,
             colors.accent,
             0.25,
-            drag_hover_fi == Some(workspace_fi),
+            drag_hover == Some(DragItemId::new(workspace_fi)),
         );
         draw_drag_source(
             primitive_renderer,
@@ -267,7 +268,7 @@ pub fn render_sidebar_collapsed(
             width,
             colors.drag_source_bg,
             colors.drag_source_border,
-            drag_source_fi == Some(workspace_fi),
+            drag_source == Some(DragItemId::new(workspace_fi)),
         );
 
         let ws_label = ws.name.chars().take(2).collect::<String>();
@@ -294,8 +295,8 @@ pub fn render_sidebar_collapsed(
                 candidates,
                 focused_pane,
                 colors,
-                drag_hover_fi,
-                drag_source_fi,
+                drag_hover,
+                drag_source,
                 text_renderer,
                 primitive_renderer,
             );
@@ -310,7 +311,7 @@ pub fn render_sidebar_collapsed(
                 candidates,
                 focused_pane,
                 colors,
-                drag_hover_fi,
+                drag_hover,
                 text_renderer,
                 primitive_renderer,
             );
@@ -666,8 +667,8 @@ fn render_collapsed_columns(
     candidates: Option<&[(char, u64)]>,
     focused_pane: Option<u64>,
     colors: RenderColors,
-    drag_hover_fi: Option<usize>,
-    drag_source_fi: Option<usize>,
+    drag_hover: Option<DragItemId>,
+    drag_source: Option<DragItemId>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
 ) {
@@ -689,7 +690,7 @@ fn render_collapsed_columns(
                 width,
                 colors.accent,
                 0.25,
-                drag_hover_fi == Some(item_idx),
+                drag_hover == Some(DragItemId::new(item_idx)),
             );
             draw_drag_source(
                 primitive_renderer,
@@ -698,7 +699,7 @@ fn render_collapsed_columns(
                 width,
                 colors.drag_source_bg,
                 colors.drag_source_border,
-                drag_source_fi == Some(item_idx),
+                drag_source == Some(DragItemId::new(item_idx)),
             );
 
             let pane_char = collapsed_pane_label(pane, candidates, focused_pane, '?');
@@ -726,7 +727,7 @@ fn render_collapsed_floating_panes(
     candidates: Option<&[(char, u64)]>,
     focused_pane: Option<u64>,
     colors: RenderColors,
-    drag_hover_fi: Option<usize>,
+    drag_hover: Option<DragItemId>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
 ) {
@@ -741,7 +742,7 @@ fn render_collapsed_floating_panes(
             width,
             colors.accent,
             0.18,
-            drag_hover_fi == Some(item_idx),
+            drag_hover == Some(DragItemId::new(item_idx)),
         );
 
         let pane_char = collapsed_pane_label(pane, candidates, focused_pane, '~');

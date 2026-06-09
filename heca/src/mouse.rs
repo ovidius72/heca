@@ -1,21 +1,23 @@
 //! Mouse interaction system.
 //!
 //! Handles focus-follows-mouse, click-to-focus, interactive drag-and-drop,
-//! and edge scrolling. All WM actions (focus, sidebat clicks) are returned
+//! and edge scrolling. All WM actions (focus, sidebar clicks) are returned
 //! as `Option<WmAction>` for the caller to dispatch via `registry.execute()`.
 //! Drag-and-drop state machine is managed internally since it involves
 //! mouse-specific state (detached pane, insert position).
 
 mod drag;
 mod hit_test;
+mod interactive;
 mod release;
 mod render;
-mod sidebar;
-mod sidebar_drop;
+mod surface_left;
+mod target;
 
-use crate::app_state::{AppState, DragState};
-use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
+use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
+use heca_grid_ui::drag::{DragItemKind, DragItemId, DragSurfaceId, SurfaceDragPhase, DEFAULT_DRAG_THRESHOLD_SQ};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -29,8 +31,8 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
 pub fn on_modifiers_changed(state: &mut AppState) {
-    drag::sync_drag_swap_mode(state);
-    if !matches!(state.mouse.drag_state, DragState::None) {
+    interactive::sync_drag_swap_mode(state);
+    if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
         drag::on_cursor_moved(state, state.mouse.pos);
     }
 }
@@ -55,12 +57,12 @@ pub fn on_mouse_input(
             if interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)
             {
-                drag::start_interactive_move(state, pane_id, pos);
+                interactive::start_interactive_move(state, pane_id, pos);
                 return None;
             }
 
             // Sidebar click.
-            let sidebar_action = sidebar::click(state, pos);
+            let sidebar_action = surface_left::click_action(state, pos);
 
             // Check if this is a sidebar pane hit (no button) → start drag detection.
             let is_pane_item = sidebar_pane_hit_test(state, pos).is_some();
@@ -73,15 +75,31 @@ pub fn on_mouse_input(
                         None => return sidebar_action,
                     };
                     let swap = state.modifiers.shift_key();
-                    let click_action = sidebar_action.clone().map(Box::new);
-                    state.mouse.drag_state = DragState::SidebarDragStarting {
-                        pane_id,
-                        original_ws: ws_idx,
-                        start_mouse: pos,
-                        threshold_sq: 100.0, // 10px threshold
-                        swap,
-                        click_action,
+                    // Store click action at the app layer (not in SurfaceDragPhase).
+                    state.mouse.pending_click_action = sidebar_action.clone();
+                    // Compute source_fi before mutable borrow of drag_ctx.
+                    let source_fi = {
+                        let chrome = chrome_config(state);
+                        let (_win_w, win_h) = window_logical_size(state);
+                        let sidebar_top = chrome.tab_bar_height;
+                        let sidebar_bottom = win_h - chrome.status_bar_height;
+                        let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { DEFAULT_COLLAPSED_SIDEBAR_WIDTH };
+                        crate::sidebar::sidebar_hit_test(
+                            &state.sidebar_tree, sidebar_top, sidebar_bottom - sidebar_top, sw, pos.1
+                        ).unwrap_or(0)
                     };
+                    if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
+                        left.phase = SurfaceDragPhase::Starting {
+                            kind: DragItemKind::Pane,
+                            pane_id: Some(pane_id),
+                            original_ws: ws_idx,
+                            start_pos: pos,
+                            threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
+                            swap,
+                        };
+                        left.source_item = Some(DragItemId::new(source_fi));
+                    }
+                    state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
                     return None;
                 }
             }
@@ -97,24 +115,32 @@ pub fn on_mouse_input(
             }
         }
         (MouseButton::Left, ElementState::Released) => {
-            match state.mouse.drag_state {
-                DragState::InteractiveMoveStarting { .. } => {
-                    drag::cancel_interactive_move(state);
+            // Check for interactive move release first.
+            if let Some(InteractiveMovePhase::Starting { .. }) = state.mouse.interactive_move {
+                interactive::cancel_interactive_move(state);
+                return None;
+            }
+            if let Some(InteractiveMovePhase::Moving { .. }) = state.mouse.interactive_move {
+                release::handle_interactive_move_release(state, pos);
+                return None;
+            }
+            // Then check surface drags.
+            if let Some(active) = state.mouse.drag_ctx.active_surface {
+                match active {
+                    DragSurfaceId::LeftSidebar => {
+                        let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar).expect("LeftSidebar pre-populated in DragContext::default");
+                        let phase = std::mem::replace(&mut left.phase, SurfaceDragPhase::Idle);
+                        match phase {
+                            SurfaceDragPhase::Dragging { pane_id, original_ws, swap, .. } => {
+                                release::handle_sidebar_drag_release(state, pane_id.unwrap_or(0), original_ws, swap, pos);
+                            }
+                            SurfaceDragPhase::Starting { .. } => {
+                                return release::handle_sidebar_drag_starting_release(state);
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-                DragState::InteractiveMove { .. } => {
-                    release::handle_interactive_move_release(state, pos);
-                }
-                DragState::SidebarDrag {
-                    pane_id,
-                    original_ws,
-                    swap,
-                } => {
-                    release::handle_sidebar_drag_release(state, pane_id, original_ws, swap, pos);
-                }
-                DragState::SidebarDragStarting { .. } => {
-                    return release::handle_sidebar_drag_starting_release(state);
-                }
-                _ => {}
             }
         }
         _ => {}
@@ -131,8 +157,8 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
     }
 
     let is_dragging = matches!(
-        state.mouse.drag_state,
-        DragState::InteractiveMove { .. } | DragState::InteractiveMoveStarting { .. }
+        state.mouse.interactive_move,
+        Some(InteractiveMovePhase::Moving { .. }) | Some(InteractiveMovePhase::Starting { .. })
     );
     if !is_dragging {
         return false;
@@ -249,12 +275,12 @@ fn chrome_config(state: &AppState) -> ChromeConfig {
         left_sidebar_width: if state.sidebar.left_visible {
             state.sidebar.left_width
         } else {
-            40.0
+            DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },
         right_sidebar_width: if state.sidebar.right_visible {
             state.sidebar.right_width
         } else {
-            40.0
+            DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },
     }
 }

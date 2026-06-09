@@ -683,6 +683,7 @@ version = "0.1.0"
 dependencies = [
  "heca-config",
  "heca-core",
+ "heca-grid-ui",
  "heca-renderer",
  "pollster",
  "wgpu",

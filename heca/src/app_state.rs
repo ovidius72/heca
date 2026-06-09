@@ -3,6 +3,7 @@ use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::backend::PaneBackend;
 use heca_core::layout::Session;
+use heca_grid_ui::drag::DragContext;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::collections::HashMap;
@@ -98,12 +99,16 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
-/// State for the interactive drag-and-drop system.
+/// State for the interactive content-area drag (pane moved by mouse).
+///
+/// This is separate from the surface drag system (`DragContext`) because
+/// interactive move detaches a pane from the layout, shows a ghost pane
+/// following the cursor, and computes an insert hint — all content-area
+/// concepts that don't apply to sidebar/inspector surfaces.
 #[derive(Clone, Debug)]
-pub enum DragState {
-    None,
-    /// Phase 1: rubberband — pane still in layout.
-    InteractiveMoveStarting {
+pub enum InteractiveMovePhase {
+    /// Phase 1: rubberband — pane still in layout, waiting for threshold.
+    Starting {
         pane_id: u64,
         /// Workspace where the drag originated.
         original_ws: usize,
@@ -114,34 +119,13 @@ pub enum DragState {
     },
     /// Phase 2: detached — pane follows pointer (move mode).
     /// In swap mode, the pane stays in layout and only the insert hint is shown.
-    InteractiveMove {
-        _pane_id: u64,
+    Moving {
+        pane_id: u64,
         /// Workspace where the drag originated.
         _original_ws: usize,
         /// Mouse offset from pane top-left at grab time.
         offset: (f32, f32),
         /// If true, drop performs a swap instead of a move.
-        swap: bool,
-    },
-    /// Phase 0: potential sidebar drag — mouse pressed, waiting for threshold.
-    /// On threshold exceeded → transitions to SidebarDrag (move) or SwapSidebarDrag.
-    /// On release without threshold → executes click_action instead.
-    SidebarDragStarting {
-        pane_id: u64,
-        original_ws: usize,
-        start_mouse: (f32, f32),
-        threshold_sq: f32,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
-        /// Optional click action to execute if released without dragging.
-        /// `None` means the press only entered/selected sidebar mode.
-        click_action: Option<Box<WmAction>>,
-    },
-    /// Sidebar drag — move: pane stays in layout, ghost follows cursor.
-    SidebarDrag {
-        pane_id: u64,
-        /// Workspace where the pane lives.
-        original_ws: usize,
         swap: bool,
     },
 }
@@ -162,45 +146,34 @@ pub struct DetachedPane {
 #[derive(Clone, Debug)]
 pub struct MouseState {
     pub pos: (f32, f32),
-    /// Current drag state machine.
-    pub drag_state: DragState,
+    /// Surface drag coordinator (sidebar, inspector, etc.).
+    pub drag_ctx: DragContext,
+    /// Content-area interactive move state (separate from surface drags).
+    pub interactive_move: Option<InteractiveMovePhase>,
     /// Pane being dragged (detached from layout).
     pub detached_pane: Option<DetachedPane>,
-    /// Computed drop target during drag.
+    /// Computed drop target during interactive move.
     pub insert_hint: Option<heca_core::layout::types::PaneInsertTarget>,
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
-    /// Flat index of sidebar item being hovered during drag (for visual highlight).
-    pub drag_hover_sidebar_fi: Option<usize>,
-    /// Flat index of sidebar item being dragged (for drag source visual effect).
-    pub sidebar_drag_source_fi: Option<usize>,
-    /// Label text and position of the item being dragged (for ghost label rendering).
-    pub sidebar_drag_label: Option<SidebarDragLabel>,
+    /// Pending click action when a sidebar drag doesn't exceed threshold.
+    /// Stored here instead of in `SurfaceDragPhase` to keep the framework
+    /// dependency-free (no `WmAction` in `heca-grid-ui`).
+    pub pending_click_action: Option<WmAction>,
     /// Index of the button currently hovered in the sidebar (for hover visual effect).
     pub sidebar_hovered_btn_idx: Option<usize>,
-}
-
-/// Visual info for a sidebar drag ghost label.
-#[derive(Clone, Debug)]
-pub struct SidebarDragLabel {
-    pub text: String,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub _height: f32,
 }
 
 impl MouseState {
     pub fn new() -> Self {
         Self {
             pos: (0.0, 0.0),
-            drag_state: DragState::None,
+            drag_ctx: DragContext::new(),
+            interactive_move: None,
             detached_pane: None,
             insert_hint: None,
             last_edge_scroll_time: None,
-            drag_hover_sidebar_fi: None,
-            sidebar_drag_source_fi: None,
-            sidebar_drag_label: None,
+            pending_click_action: None,
             sidebar_hovered_btn_idx: None,
         }
     }
