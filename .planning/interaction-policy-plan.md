@@ -527,36 +527,44 @@ Everything else can be layered in later.
 _Update this section after each phase or on demand._
 
 ### Current status
-- Active branch: feature/interaction-focus-helpers
-- Current phase/slice: Phase D (focus-target helpers) complete
-- Overall status: All three interaction sources wired, focus-target helpers added, handler patterns centralized
+- Active branch: feature/interaction-regression-tests
+- Current phase/slice: Phase E (regression tests) complete
+- Overall status: All interaction sources wired, focus-target helpers added, 29 regression tests passing
 - Last validated at: 2026-06-09
-- Tests: 16 interaction tests (10 router + 6 helpers), 237 total workspace pass
+- Tests: 29 interaction tests (16 router + helpers + 13 regression), 250 total workspace pass
 
-### Completed work (Phase D)
+### Completed work (Phase E — Regression tests)
 
-**New focus-target helpers in `heca/src/app/interaction.rs`:**
-- `focused_pane_id(state)` — canonical accessor for focused pane ID
-- `active_focus_domain(session)` — canonical accessor for FocusDomain (#[allow(dead_code)] for Phase E)
-- `can_focus_pane(session, source, pane_id)` — checks pane focus permission by source and domain (#[allow(dead_code)] for Phase E)
-- `pane_is_floating(session, pane_id)` — replaces `ws.floating_panes.iter().any()` pattern
+**13 new regression tests in `heca/src/app/interaction.rs`:**
 
-**Handler refactoring in `heca/src/handlers.rs`:**
-- `handle_float`: uses `focused_pane_id()` + `pane_is_floating()` instead of raw field access
-- `handle_rename_pane`: uses `focused_pane_id()`
-- `current_tiled_column_target`: uses `focused_pane_id()`
+Floating-domain focus blocking:
+- `floating_focus_allows_active_floating_pane_via_keyboard` — FocusPane on active floating pane → Allow
+- `floating_focus_blocks_tiled_pane_via_keyboard` — FocusPane on tiled pane → Block
+- `floating_focus_pane_intent_blocked_via_mouse_content` — FocusPane intent from MouseContent → Block
+- `floating_blocks_sidebar_nav_intent` — EnterSidebarNav when floating → Block
+- `floating_blocks_always_allowed_from_keyboard` — CommandPalette/ReloadConfig/SpawnCommand → Block
 
-**New unit tests (6):**
-- `active_focus_domain_default_is_tiled`
-- `active_focus_domain_floating_after_set`
-- `pane_is_floating_returns_false_for_tiled_pane`
-- `pane_is_floating_returns_false_for_nonexistent`
-- `can_focus_pane_allows_any_in_tiled_domain`
-- `can_focus_pane_blocks_non_floating_when_floating`
+Floating-domain FocusedPaneLocal allowance:
+- `floating_allows_focused_pane_local_via_keyboard` — Float/ClosePane/RenamePane → Allow
+- `floating_allows_focused_pane_local_from_all_sources` — Float/ClosePane from Keyboard/MouseContent/MouseLeftSidebar → Allow
 
-**Intentionally skipped:**
-- `close_focused_pane()` — handler logic too divergent for thin wrapper
-- `rename_focused_pane()` — already a one-liner that now uses `focused_pane_id()`
+Tiled-domain behavior preservation:
+- `tiled_sidebar_action_allowed_via_mouse_sidebar` — SidebarFocus/Left/Right → Allow
+- `tiled_content_focus_pane_allowed_via_mouse_content` — FocusPane from MouseContent → Allow
+- `tiled_keyboard_focus_navigation_allowed` — FocusLeft/Right/Up/Down → Allow
+- `tiled_workspace_actions_allowed` — WorkspaceNext/Prev/CreateWorkspace → Allow
+- `tiled_allows_sidebar_nav_intent` — EnterSidebarNav from MouseLeftSidebar → Allow
+
+Focus-target helper regression:
+- `can_focus_pane_allows_active_floating_pane` — active floating pane from all sources → true
+
+**Refactoring:**
+- Consolidated test imports at module level (PaneId, Size, Pane, FloatingPane, Point, Rectangle)
+- Removed unused `session_with_floating_pane` helper
+
+**Rust skill review findings:**
+- R5: 3 tests partially overlap existing coverage — acceptable as regression tests that name behavioral contracts
+- All other findings: clean
 
 ### Prior completed work
 
@@ -578,15 +586,10 @@ Wiring (Phase 2):
 - None
 
 ### Pending work
-- Phase E: Regression tests for floating-domain blocking behavior
-  - Sidebar/content floating-focus tests
-  - Keyboard tiled-only action blocking tests in floating domain
-  - Allowed floating-local action tests
-  - Existing behavior preservation tests
 - Sidebar intent routing: upgrade sidebar clicks to produce InteractionIntent variants
 - Chrome sources (MouseTopMenu, MouseStatusBar)
 - RPC source
-- Future polish: convert `focused_pane_id` return type from `Option<u64>` to `Option<PaneId>` for type safety (R6 from Phase D review); requires changing `state.focused_pane` from `Option<u64>` to `Option<PaneId>` across the codebase
+- Future polish: convert `focused_pane_id` return type from `Option<u64>` to `Option<PaneId>` for type safety (R6 from Phase D review)
 
 ### Open decisions
 - AlwaysAllowed + floating: blocked from Keyboard/MouseContent/MouseLeftSidebar when floating; may allow from chrome sources
@@ -597,6 +600,17 @@ Wiring (Phase 2):
 - heca/src/app/interaction.rs (4 focus-target helpers + 6 tests)
 - heca/src/handlers.rs (handle_float, handle_rename_pane, current_tiled_column_target use helpers)
 
+### Validation run (Phase E)
+- `cargo check --workspace`: ✅ clean
+- `cargo clippy --workspace --all-targets --all-features`: ✅ 0 heca warnings
+- `cargo test --workspace`: ✅ 250 tests pass (29 interaction tests)
+
+### Rust skill review (Phase E)
+- 14 findings, all pass:
+  - R5: 3 tests partially overlap existing coverage — acceptable as regression tests
+  - All others: clean (naming, isolation, ownership, doc comments, no unwrap issues)
+- User review: approved
+
 ### Validation run (Phase D)
 - `cargo check --workspace`: ✅ clean
 - `cargo clippy --workspace --all-targets --all-features`: ✅ 0 heca warnings
@@ -605,14 +619,17 @@ Wiring (Phase 2):
 ### Rust skill review (Phase D)
 - Inline review against rust-skills SKILL.md
 - Findings: all clear — pub(crate) visibility, doc comments, no unwrap, #[allow(dead_code)] with TODO+Phase E, minimal borrowing
-- User acknowledged review: pending
+- User review: approved
 
 ### PRs
 - PR #52: feature/interaction-policy (merged)
 - PR #54: feature/interaction-sidebar-wiring (merged, superseded by #56)
 - PR #56: feature/interaction-sidebar-wiring (merged)
-- Phase D PR: pending user approval
+- PR #58: feature/interaction-focus-helpers (merged)
+- PR #59: feature/interaction-regression-tests (open)
 
 ### Next recommended step
-- Phase E: Regression tests for floating-domain blocking behavior
-- Then: Sidebar intent routing upgrade
+- Sidebar intent routing: upgrade sidebar clicks to produce InteractionIntent variants
+- Chrome sources (MouseTopMenu, MouseStatusBar)
+- RPC source policy
+- Future polish: convert focused_pane_id return type to Option<PaneId>
