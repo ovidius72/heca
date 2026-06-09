@@ -13,6 +13,7 @@
 //! selection highlight layers on top.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
@@ -24,10 +25,16 @@ use heca_core::layout::{Point, Rectangle, Size};
 /// Inset of the active/hover selection pill from the row edges, so its rounded
 /// corners never contend with a rounded container's corners.
 const SEL_INSET: f64 = 3.0;
-/// Active-row fill alpha.
+/// Active-row fill alpha when the highlight is the **theme accent** (no row
+/// background to tint).
 const ACTIVE_FILL_ALPHA: u8 = 30;
-/// Hover-row fill alpha.
+/// Hover-row fill alpha when the highlight is the theme foreground.
 const HOVER_FILL_ALPHA: u8 = 16;
+/// Active fill alpha when tinting the row's **own background** color — higher, so
+/// the same-hue highlight reads as a lighter/stronger version of the background.
+const ACTIVE_TINT_ALPHA: u8 = 64;
+/// Hover fill alpha when tinting the row's own background color.
+const HOVER_TINT_ALPHA: u8 = 38;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
@@ -46,6 +53,9 @@ pub struct Row {
     hovered: Signal<bool>,
     flash: Flash,
     on_activate: Option<Box<dyn Fn()>>,
+    /// Override for the hover/active highlight color. Defaults to the row's own
+    /// background (a stronger tint of the same hue), else the theme accent.
+    highlight: Option<Color>,
 }
 
 impl Row {
@@ -62,7 +72,17 @@ impl Row {
             hovered: signal(false),
             flash: Flash::new(),
             on_activate: None,
+            highlight: None,
         }
+    }
+
+    /// Override the hover/active highlight color. By default the highlight derives
+    /// from the row's background — a stronger tint of the **same hue** — so a
+    /// state-tinted row highlights in its own color (not the accent); rows with no
+    /// background fall back to the theme accent.
+    pub fn highlight(mut self, c: Color) -> Self {
+        self.highlight = Some(c);
+        self
     }
 
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
@@ -137,10 +157,20 @@ impl Component for Row {
             ),
         );
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
+        // Highlight in the row's own color (a stronger same-hue tint) when it has
+        // a background or an explicit override — so a state-tinted row never gets a
+        // clashing accent overlay. Plain rows fall back to accent/foreground.
+        let highlight_base = self.highlight.or(self.base.style.fill);
         if active {
-            cx.rect(sel, accent.with_alpha(ACTIVE_FILL_ALPHA), None, sel_radius, None);
+            let c = highlight_base
+                .map(|h| h.with_alpha(ACTIVE_TINT_ALPHA))
+                .unwrap_or(accent.with_alpha(ACTIVE_FILL_ALPHA));
+            cx.rect(sel, c, None, sel_radius, None);
         } else if self.hovered.get_untracked() {
-            cx.rect(sel, foreground.with_alpha(HOVER_FILL_ALPHA), None, sel_radius, None);
+            let c = highlight_base
+                .map(|h| h.with_alpha(HOVER_TINT_ALPHA))
+                .unwrap_or(foreground.with_alpha(HOVER_FILL_ALPHA));
+            cx.rect(sel, c, None, sel_radius, None);
         }
 
         // Active indicator.
@@ -149,12 +179,15 @@ impl Component for Row {
                 ActiveMarker::Bar => {
                     let bar_h = b.size.h * BAR_FRAC;
                     let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
+                    // The bar (and its glow) follow the highlight hue too.
+                    let bar_c = highlight_base.map(|h| h.with_alpha(255)).unwrap_or(accent);
+                    let bar_glow = highlight_base.map(|h| h.with_alpha(255)).unwrap_or(glow_c);
                     cx.rect(
                         Rectangle::new(Point::new(b.loc.x, bar_y), Size::new(BAR_W, bar_h)),
-                        accent,
+                        bar_c,
                         None,
                         (BAR_W / 2.0) as f32,
-                        Some(Glow { color: glow_c, radius: 8.0, intensity: 0.16 }),
+                        Some(Glow { color: bar_glow, radius: 8.0, intensity: 0.16 }),
                     );
                 }
                 ActiveMarker::Check => {
@@ -162,7 +195,7 @@ impl Component for Row {
                     let pip_y = b.loc.y + (b.size.h - CHECK_SIZE) / 2.0;
                     cx.rect(
                         Rectangle::new(Point::new(pip_x, pip_y), Size::new(CHECK_SIZE, CHECK_SIZE)),
-                        accent,
+                        highlight_base.map(|h| h.with_alpha(255)).unwrap_or(accent),
                         None,
                         (CHECK_SIZE / 2.0) as f32,
                         None,
