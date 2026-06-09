@@ -39,7 +39,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [x] **G1 `Grid`** layout widget (taffy grid; `Track{Px,Fr,Auto,MinContent,MaxContent}` + named areas + explicit `.cell()`; `Style.grid_cell` + `Component::taffy_style()` hook). DONE — branch `grid-ui-grid-widget`.
 - [ ] **G2 `Icon`** widget + embedded, host-registered icon font.
 - [x] **G3 `ItemGroup`** — collapsible group (header Item + chevron) over `Item` rows; collapse folds rows out of layout via new `Style.hidden` (`display:none`); `expanded` signal + `on_toggle`. DONE — branch `grid-ui-itemgroup`.
-- [ ] **G4 `DockFrame`** — titled/collapsible frame + drag handle + header slot; reuses `Pane` brackets (new widget; keep `Pane` as the plain container).
+- [x] **G4 `DockFrame`** — titled/collapsible frame (drag-handle grip + chevron + title + interactive header-controls slot) over a foldable body; collapse hides the body via `Style.hidden`; `expanded` signal + `on_toggle`. Reuses `Pane` brackets via the new shared `PaintCx::bracket_frame` (extracted from `Pane`; `Pane` stays the plain container). DONE — branch `grid-ui-dockframe`.
 - [ ] **G5 `ChromeRegion`/`Sidebar` shell** — generic across all 4 regions (vertical sidebars + horizontal bars), collapsible (icon rail, keyboard-expandable), mode-aware, hosts `DockFrame`s, Dock-level drop targets. **No** tree/workspace/drag semantics (those are the app-side `WorkspacesDock`).
 - [ ] **G6 DnD hooks** — region `DragSurfaceId` + Dock `DragItem`; `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`. Build on the **shipped** `src/drag/` framework; extend additively, never fork.
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
