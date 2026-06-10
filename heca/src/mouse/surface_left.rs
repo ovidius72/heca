@@ -11,7 +11,7 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::chrome::{DEFAULT_COLLAPSED_SIDEBAR_WIDTH, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
-use heca_core::layout::{ColumnId, ColumnWidth};
+use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
 use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -182,7 +182,7 @@ pub(crate) fn update_hover(state: &mut AppState) {
 
 /// Check if the left sidebar can accept a drop of the given source pane
 /// onto the target item (by flat index).
-pub(crate) fn can_accept(state: &AppState, _source_pane_id: u64, target_fi: usize, _swap: bool) -> bool {
+pub(crate) fn can_accept(state: &AppState, _source_pane_id: PaneId, target_fi: usize, _swap: bool) -> bool {
     // Floating panes cannot be drop targets (they float over the content area).
     !matches!(
         state.sidebar_tree.flat_items.get(target_fi),
@@ -195,7 +195,7 @@ pub(crate) fn can_accept(state: &AppState, _source_pane_id: u64, target_fi: usiz
 /// Ported from the former `sidebar_drop::drag_drop()`.
 pub(crate) fn accept_drop(
     state: &mut AppState,
-    pane_id: u64,
+    pane_id: PaneId,
     original_ws: usize,
     swap: bool,
     pos: (f32, f32),
@@ -236,7 +236,7 @@ pub(crate) fn accept_drop(
         ws.scrolling
             .panes_with_positions()
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(pane_id))
+            .find(|(pid, _)| *pid == pane_id)
             .map(|(_, r)| r)
     });
 
@@ -283,7 +283,7 @@ pub(crate) fn accept_drop(
         let new_rects = ws.scrolling.panes_with_positions();
         if let Some((_, new_rect)) = new_rects
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(pane_id))
+            .find(|(pid, _)| *pid == pane_id)
         {
             let dx = old_rect.loc.x - new_rect.loc.x;
             let dy = old_rect.loc.y - new_rect.loc.y;

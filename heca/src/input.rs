@@ -1,3 +1,5 @@
+use heca_core::layout::PaneId;
+
 /// Target for resize actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResizeTarget {
@@ -62,7 +64,7 @@ pub enum WmAction {
 
     // ── Navigation (parameterized) ──
     FocusPane {
-        pane_id: u64,
+        pane_id: PaneId,
     },
     FocusWorkspace {
         ws_idx: usize,
@@ -87,19 +89,19 @@ pub enum WmAction {
 
     // ── Layout (parameterized) ──
     Swap {
-        a_id: u64,
-        b_id: u64,
+        a_id: PaneId,
+        b_id: PaneId,
     },
     Move {
-        pane_id: u64,
+        pane_id: PaneId,
         target_col: usize,
     },
     MovePaneToWorkspace {
-        pane_id: u64,
+        pane_id: PaneId,
         ws_idx: usize,
     },
     MovePaneToColumn {
-        pane_id: u64,
+        pane_id: PaneId,
         ws_idx: usize,
         col_idx: usize,
     },
@@ -130,17 +132,17 @@ pub enum WmAction {
 
     // ── Pane (parameterized) ──
     FloatAt {
-        pane_id: u64,
+        pane_id: PaneId,
         x: f64,
         y: f64,
         width: f64,
         height: f64,
     },
     ClosePaneById {
-        pane_id: u64,
+        pane_id: PaneId,
     },
     RenameTarget {
-        pane_id: u64,
+        pane_id: PaneId,
         name: String,
     },
 
@@ -203,7 +205,7 @@ pub enum WmAction {
 
     // ── Take pane (parameterized) ──
     TakePane {
-        pane_id: u64,
+        pane_id: PaneId,
         focus_after: bool,
     },
 
@@ -273,11 +275,11 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "move_column_up" => Some(WmAction::MoveColumnUp),
         "move_column_down" => Some(WmAction::MoveColumnDown),
         "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
-            pane_id: 0,
+            pane_id: PaneId(0),
             ws_idx: 0,
         }),
         "move_pane_to_column" => Some(WmAction::MovePaneToColumn {
-            pane_id: 0,
+            pane_id: PaneId(0),
             ws_idx: 0,
             col_idx: 0,
         }),
@@ -345,15 +347,15 @@ fn get_enum<T: std::str::FromStr>(
 /// Returns `None` if the action name is unknown or args are missing/invalid.
 ///
 /// Supported names and required args:
-///   "focus_pane"          → pane_id: u64
+///   "focus_pane"          → pane_id: PaneId
 ///   "focus_workspace"     → ws_idx: usize
-///   "swap"                → a_id: u64, b_id: u64
-///   "move"                → pane_id: u64, target_col: usize
+///   "swap"                → a_id: PaneId, b_id: PaneId
+///   "move"                → pane_id: PaneId, target_col: usize
 ///   "resize"              → target: "column"|"pane", axis: "x"|"y", amount: f64
 ///   "resize_to"           → target: "column"|"pane", width: f64, height: f64
-///   "float_at"            → pane_id: u64, x: f64, y: f64, width: f64, height: f64
-///   "close_pane_by_id"    → pane_id: u64
-///   "rename_target"       → pane_id: u64, name: String
+///   "float_at"            → pane_id: PaneId, x: f64, y: f64, width: f64, height: f64
+///   "close_pane_by_id"    → pane_id: PaneId
+///   "rename_target"       → pane_id: PaneId, name: String
 ///   "spawn_command"       → command: String
 pub fn build_action(
     name: &str,
@@ -361,25 +363,25 @@ pub fn build_action(
 ) -> Option<WmAction> {
     match name {
         "focus_pane" => Some(WmAction::FocusPane {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
         }),
         "focus_workspace" => Some(WmAction::FocusWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
         "swap" => Some(WmAction::Swap {
-            a_id: get_u64(args, "a_id")?,
-            b_id: get_u64(args, "b_id")?,
+            a_id: PaneId(get_u64(args, "a_id")?),
+            b_id: PaneId(get_u64(args, "b_id")?),
         }),
         "move" => Some(WmAction::Move {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             target_col: get_usize(args, "target_col")?,
         }),
         "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             ws_idx: get_usize(args, "ws_idx")?,
         }),
         "move_pane_to_column" => Some(WmAction::MovePaneToColumn {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
         }),
@@ -394,21 +396,21 @@ pub fn build_action(
             height: get_f64(args, "height")?,
         }),
         "float_at" => Some(WmAction::FloatAt {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             x: get_f64(args, "x")?,
             y: get_f64(args, "y")?,
             width: get_f64(args, "width")?,
             height: get_f64(args, "height")?,
         }),
         "close_pane_by_id" => Some(WmAction::ClosePaneById {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
         }),
         "rename_target" => Some(WmAction::RenameTarget {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             name: get_string(args, "name")?,
         }),
         "take_pane" => Some(WmAction::TakePane {
-            pane_id: get_u64(args, "pane_id")?,
+            pane_id: PaneId(get_u64(args, "pane_id")?),
             focus_after: args
                 .get("focus_after")
                 .and_then(|v| v.parse().ok())
@@ -727,19 +729,19 @@ mod tests {
     #[test]
     fn test_parameterized_variants_constructible() {
         // Exercise all parameterized variants so they are not flagged as dead code.
-        let _ = WmAction::FocusPane { pane_id: 1 };
+        let _ = WmAction::FocusPane { pane_id: PaneId(1) };
         let _ = WmAction::FocusWorkspace { ws_idx: 0 };
-        let _ = WmAction::Swap { a_id: 1, b_id: 2 };
+        let _ = WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) };
         let _ = WmAction::Move {
-            pane_id: 1,
+            pane_id: PaneId(1),
             target_col: 0,
         };
         let _ = WmAction::MovePaneToWorkspace {
-            pane_id: 1,
+            pane_id: PaneId(1),
             ws_idx: 0,
         };
         let _ = WmAction::MovePaneToColumn {
-            pane_id: 1,
+            pane_id: PaneId(1),
             ws_idx: 0,
             col_idx: 0,
         };
@@ -760,15 +762,15 @@ mod tests {
             height: 200.0,
         };
         let _ = WmAction::FloatAt {
-            pane_id: 1,
+            pane_id: PaneId(1),
             x: 0.0,
             y: 0.0,
             width: 100.0,
             height: 100.0,
         };
-        let _ = WmAction::ClosePaneById { pane_id: 1 };
+        let _ = WmAction::ClosePaneById { pane_id: PaneId(1) };
         let _ = WmAction::RenameTarget {
-            pane_id: 1,
+            pane_id: PaneId(1),
             name: "test".to_string(),
         };
         let _ = WmAction::AddPaneToColumn {
@@ -781,7 +783,7 @@ mod tests {
         };
         let _ = WmAction::DeleteWorkspace { ws_idx: 0 };
         let _ = WmAction::TakePane {
-            pane_id: 1,
+            pane_id: PaneId(1),
             focus_after: false,
         };
         let _ = WmAction::RenameColumn;
@@ -791,8 +793,8 @@ mod tests {
 
     #[test]
     fn test_action_discriminant_groups_variants() {
-        let a = WmAction::FocusPane { pane_id: 1 };
-        let b = WmAction::FocusPane { pane_id: 2 };
+        let a = WmAction::FocusPane { pane_id: PaneId(1) };
+        let b = WmAction::FocusPane { pane_id: PaneId(2) };
         let c = WmAction::FocusLeft;
         assert_eq!(action_discriminant(&a), action_discriminant(&b));
         assert_ne!(action_discriminant(&a), action_discriminant(&c));

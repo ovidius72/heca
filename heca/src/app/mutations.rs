@@ -49,7 +49,7 @@ pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
 /// Move a pane from one workspace into a new/existing column position in another workspace.
 pub(crate) fn move_pane_to_workspace_column(
     state: &mut AppState,
-    pane_id: u64,
+    pane_id: PaneId,
     target_ws: usize,
     target_col: usize,
 ) {
@@ -68,6 +68,7 @@ pub(crate) fn move_pane_to_workspace_column(
     };
 
     if let Some(pane) = removed_pane {
+        let pane_id = pane.id;
         state.session.switch_to_workspace(target_ws);
 
         // Insert the pane into the target workspace. Treat `target_col` as the desired
@@ -95,7 +96,7 @@ pub(crate) fn move_pane_to_workspace_column(
 /// Handles column removal when a column becomes empty after the move.
 pub(crate) fn move_pane_to_column(
     state: &mut AppState,
-    pane_id: u64,
+    pane_id: PaneId,
     src_col: usize,
     dst_col: usize,
 ) {
@@ -121,7 +122,7 @@ pub(crate) fn move_pane_to_column(
             .scrolling
             .columns
             .get(src_col)
-            .and_then(|col| col.panes.iter().position(|p| p.id.0 == pane_id))
+            .and_then(|col| col.panes.iter().position(|p| p.id == pane_id))
         {
             ws.scrolling.remove_pane(src_col, pi)
         } else {
@@ -132,6 +133,7 @@ pub(crate) fn move_pane_to_column(
     };
 
     if let Some(pane) = removed_pane {
+        let pane_id = pane.id;
         // Check if the source column was removed (became empty after removal).
         let col_count_after = state
             .session
@@ -174,7 +176,7 @@ pub(crate) fn move_pane_to_column(
                     .add_pane_to_column(target_pos, None, pane, true);
             } else {
                 // Create a new column at target_pos (append if equal to current len)
-                let cid = new_col_id.unwrap_or(ColumnId(pane.id.0));
+                let cid = new_col_id.unwrap_or(ColumnId(pane_id.0));
                 ws.scrolling.add_column(
                     Some(target_pos),
                     Column::new(cid, pane, chrome::default_column_width()),
@@ -249,7 +251,7 @@ pub(crate) fn move_column_to_workspace(
         }
         state
             .backends
-            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(PaneId(next_id), Box::new(FakeBackend::new(80, 24)));
     }
 
     state.session.switch_to_workspace(target_ws);

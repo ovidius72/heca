@@ -7,7 +7,7 @@ use heca_core::layout::animation::AnimationConfig;
 use crate::chrome;
 use heca_core::layout::workspace::Workspace;
 use heca_core::layout::types::{Point, Rectangle};
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane};
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
 use heca_core::layout::types::PaneInsertTarget;
 
 /// Information about a pane removed from a workspace.
@@ -34,9 +34,9 @@ pub(crate) struct RemovedPaneInfo {
 /// Remove a pane from a workspace by pane id.
 ///
 /// Returns basic removal info (just the pane).
-pub(crate) fn remove_pane_by_id(ws: &mut Workspace, pane_id: u64) -> Option<RemovedPane> {
+pub(crate) fn remove_pane_by_id(ws: &mut Workspace, pane_id: PaneId) -> Option<RemovedPane> {
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-        if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+        if let Some(pi) = col.panes.iter().position(|p| p.id == pane_id) {
             let pane = ws.scrolling.remove_pane(ci, pi)?;
             return Some(RemovedPane { pane });
         }
@@ -50,10 +50,10 @@ pub(crate) fn remove_pane_by_id(ws: &mut Workspace, pane_id: u64) -> Option<Remo
 /// (meaning the column was deleted), and the column's ID before removal.
 pub(crate) fn remove_pane_by_id_with_info(
     ws: &mut Workspace,
-    pane_id: u64,
+    pane_id: PaneId,
 ) -> Option<RemovedPaneInfo> {
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-        if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+        if let Some(pi) = col.panes.iter().position(|p| p.id == pane_id) {
             let col_id = col.id;
             let was_only = col.panes.len() == 1;
             let pane = ws.scrolling.remove_pane(ci, pi)?;
@@ -126,10 +126,10 @@ pub(crate) fn clamped_move_offset(
 /// Find a pane's (column_index, pane_index) within a workspace by its pane ID.
 pub(crate) fn find_pane_indices_in_workspace(
     ws: &Workspace,
-    pane_id: u64,
+    pane_id: PaneId,
 ) -> Option<(usize, usize)> {
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
-        if let Some(pi) = col.panes.iter().position(|p| p.id.0 == pane_id) {
+        if let Some(pi) = col.panes.iter().position(|p| p.id == pane_id) {
             return Some((ci, pi));
         }
     }
@@ -204,17 +204,17 @@ pub(crate) fn swap_panes_same_column(
 /// column IDs via `session.next_id()` before calling this function.
 pub(crate) struct SwapDiffColumnsArgs<'a> {
     pub ws: &'a mut Workspace,
-    pub a_id: u64,
-    pub b_id: u64,
+    pub a_id: PaneId,
+    pub b_id: PaneId,
     pub a_col: usize,
     pub a_pi: usize,
     pub b_col: usize,
     pub b_pi: usize,
-    pub placeholder_a_id: u64,
-    pub placeholder_b_id: u64,
+    pub placeholder_a_id: PaneId,
+    pub placeholder_b_id: PaneId,
     pub new_col_for_a: ColumnId,
     pub new_col_for_b: ColumnId,
-    pub pane_name_fn: &'a dyn Fn(u64) -> String,
+    pub pane_name_fn: &'a dyn Fn(PaneId) -> String,
     pub viewport_w: f64,
     pub viewport_h: f64,
 }
@@ -243,11 +243,11 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
     let old_rects = ws.scrolling.panes_with_positions();
     let old_a_rect = old_rects
         .iter()
-        .find(|(pid, _)| *pid == heca_core::layout::PaneId(a_pid))
+        .find(|(pid, _)| *pid == a_pid)
         .map(|(_, r)| *r);
     let old_b_rect = old_rects
         .iter()
-        .find(|(pid, _)| *pid == heca_core::layout::PaneId(b_pid))
+        .find(|(pid, _)| *pid == b_pid)
         .map(|(_, r)| *r);
 
     // Insert placeholders in descending column index order to avoid shifting
@@ -262,12 +262,12 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
     for (col_pos, pane_idx, ph_pid, new_cid) in inserts {
         if col_pos < ws.scrolling.columns.len() {
             let insert_idx = pane_idx.min(ws.scrolling.columns[col_pos].panes.len());
-            let placeholder = Pane::new(heca_core::layout::PaneId(ph_pid), pane_name_fn(ph_pid));
+            let placeholder = Pane::new(ph_pid, pane_name_fn(ph_pid));
             ws.scrolling
                 .add_pane_to_column(col_pos, Some(insert_idx), placeholder, true);
         } else {
             let pos = col_pos.min(ws.scrolling.columns.len());
-            let placeholder = Pane::new(heca_core::layout::PaneId(ph_pid), pane_name_fn(ph_pid));
+            let placeholder = Pane::new(ph_pid, pane_name_fn(ph_pid));
             ws.scrolling.add_column(
                 Some(pos),
                 Column::new(new_cid, placeholder, chrome::default_column_width()),
@@ -281,10 +281,10 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
     let mut found_b = None;
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
         for (pi, pane) in col.panes.iter().enumerate() {
-            if pane.id == heca_core::layout::PaneId(a_pid) {
+            if pane.id == a_pid {
                 found_a = Some((ci, pi));
             }
-            if pane.id == heca_core::layout::PaneId(b_pid) {
+            if pane.id == b_pid {
                 found_b = Some((ci, pi));
             }
         }
@@ -345,7 +345,7 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
 /// animate from the old position to the new one.
 fn replace_placeholder_and_animate(
     ws: &mut Workspace,
-    placeholder_id: u64,
+    placeholder_id: PaneId,
     new_pane: Pane,
     old_rect: Option<Rectangle>,
     max_dx: f64,
@@ -381,8 +381,8 @@ fn replace_placeholder_and_animate(
 /// in its column, the column is recreated for the incoming pane.
 pub(crate) struct SwapCrossWorkspaceArgs<'a> {
     pub session: &'a mut heca_core::layout::session::Session,
-    pub a_id: u64,
-    pub b_id: u64,
+    pub a_id: PaneId,
+    pub b_id: PaneId,
     pub a_ws: usize,
     pub a_col: usize,
     pub a_pi: usize,
@@ -427,14 +427,14 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         ws.scrolling
             .panes_with_positions()
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(a_id))
+            .find(|(pid, _)| *pid == a_id)
             .map(|(_, r)| r)
     });
     let old_b_rect = session.workspaces.get(b_ws).and_then(|ws| {
         ws.scrolling
             .panes_with_positions()
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(b_id))
+            .find(|(pid, _)| *pid == b_id)
             .map(|(_, r)| r)
     });
 
@@ -502,7 +502,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         let new_rects = ws_b.scrolling.panes_with_positions();
         if let Some((_, new_rect)) = new_rects
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(a_id))
+            .find(|(pid, _)| *pid == a_id)
         {
             let offset = clamped_move_offset(old_rect, new_rect, max_dx, max_dy);
             ws_b.scrolling.columns[new_ci].panes[new_pi]
@@ -542,7 +542,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         let new_rects = ws_a.scrolling.panes_with_positions();
         if let Some((_, new_rect)) = new_rects
             .into_iter()
-            .find(|(pid, _)| *pid == heca_core::layout::PaneId(b_id))
+            .find(|(pid, _)| *pid == b_id)
         {
             let offset = clamped_move_offset(old_rect, new_rect, max_dx, max_dy);
             ws_a.scrolling.columns[new_ci].panes[new_pi]

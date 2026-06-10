@@ -38,7 +38,7 @@
 use crate::actions::ActionRegistry;
 use crate::app_state::AppState;
 use crate::input::WmAction;
-use heca_core::layout::FocusDomain;
+use heca_core::layout::{FocusDomain, PaneId};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Interaction source
@@ -89,7 +89,7 @@ pub(crate) enum InteractionIntent {
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
     #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
-    FocusPane { pane_id: u64 },
+    FocusPane { pane_id: PaneId },
     /// Focus a specific workspace (from sidebar click).
     ///
     /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
@@ -106,7 +106,7 @@ pub(crate) enum InteractionIntent {
     #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     StartSidebarDrag {
         #[allow(dead_code)] // read when constructed from mouse input
-        pane_id: u64,
+        pane_id: PaneId,
     },
 }
 
@@ -361,7 +361,7 @@ fn route_action(
                     let active_floating = session
                         .active_workspace()
                         .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
-                        .map(|f| f.pane.id.0);
+                        .map(|f| f.pane.id);
                     if active_floating == Some(*pane_id) {
                         RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
                     } else {
@@ -420,7 +420,7 @@ pub(crate) fn active_focus_domain(session: &heca_core::layout::Session) -> Focus
 /// This is the canonical accessor — handlers should read
 /// `state.focused_pane` through this helper rather than touching
 /// the field directly, so the access pattern is traceable.
-pub(crate) fn focused_pane_id(state: &AppState) -> Option<u64> {
+pub(crate) fn focused_pane_id(state: &AppState) -> Option<PaneId> {
     state.focused_pane
 }
 
@@ -435,14 +435,14 @@ pub(crate) fn focused_pane_id(state: &AppState) -> Option<u64> {
 pub(crate) fn can_focus_pane(
     session: &heca_core::layout::Session,
     source: InteractionSource,
-    pane_id: u64,
+    pane_id: PaneId,
 ) -> bool {
     if is_floating_domain(session) {
         // In floating domain, only the active floating pane can receive focus.
         let active_floating = session
             .active_workspace()
             .and_then(|ws| ws.floating_panes.iter().find(|f| f.is_active))
-            .map(|f| f.pane.id.0);
+            .map(|f| f.pane.id);
         active_floating == Some(pane_id)
     } else {
         // In tiled domain, any pane can receive focus from any source.
@@ -460,10 +460,10 @@ pub(crate) fn can_focus_pane(
 ///
 /// Used by `handle_float` and `handle_close_pane_by_id` to decide
 /// whether to process the pane as floating or tiled.
-pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: u64) -> bool {
+pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: PaneId) -> bool {
     session
         .active_workspace()
-        .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id.0 == pane_id))
+        .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id == pane_id))
         .unwrap_or(false)
 }
 
@@ -605,7 +605,7 @@ mod tests {
             WmAction::CommandPalette,
             WmAction::FocusToggleLocal,
             WmAction::PaneSelect,
-            WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
         ];
         for action in &actions {
             let decision = route_interaction_for_session(
@@ -651,10 +651,10 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         let intents = [
-            InteractionIntent::FocusPane { pane_id: 99 },
+            InteractionIntent::FocusPane { pane_id: PaneId(99) },
             InteractionIntent::FocusWorkspace { ws_idx: 0 },
             InteractionIntent::EnterSidebarNav,
-            InteractionIntent::StartSidebarDrag { pane_id: 42 },
+            InteractionIntent::StartSidebarDrag { pane_id: PaneId(42) },
         ];
         for intent in &intents {
             let decision = route_interaction_for_session(
@@ -704,24 +704,24 @@ mod tests {
         }
 
         let param_actions = [
-            WmAction::FocusPane { pane_id: 0 },
+            WmAction::FocusPane { pane_id: PaneId(0) },
             WmAction::FocusWorkspace { ws_idx: 0 },
-            WmAction::Swap { a_id: 0, b_id: 0 },
-            WmAction::Move { pane_id: 0, target_col: 0 },
-            WmAction::MovePaneToWorkspace { pane_id: 0, ws_idx: 0 },
-            WmAction::MovePaneToColumn { pane_id: 0, ws_idx: 0, col_idx: 0 },
+            WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) },
+            WmAction::Move { pane_id: PaneId(0), target_col: 0 },
+            WmAction::MovePaneToWorkspace { pane_id: PaneId(0), ws_idx: 0 },
+            WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
             WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
             WmAction::Resize { target: crate::input::ResizeTarget::Column, axis: crate::input::ResizeAxis::X, amount: 0.0 },
             WmAction::ResizeTo { target: crate::input::ResizeTarget::Column, width: 0.0, height: 0.0 },
-            WmAction::FloatAt { pane_id: 0, x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
-            WmAction::ClosePaneById { pane_id: 0 },
-            WmAction::RenameTarget { pane_id: 0, name: String::new() },
+            WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            WmAction::ClosePaneById { pane_id: PaneId(0) },
+            WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
             WmAction::SpawnCommand { command: String::new() },
             WmAction::EnterMode { name: String::new() },
             WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
             WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
             WmAction::DeleteWorkspace { ws_idx: 0 },
-            WmAction::TakePane { pane_id: 0, focus_after: false },
+            WmAction::TakePane { pane_id: PaneId(0), focus_after: false },
         ];
         for action in &param_actions {
             let _policy = action_policy(action);
@@ -733,7 +733,7 @@ mod tests {
         assert_eq!(action_policy(&WmAction::ClosePane), ActionPolicy::FocusedPaneLocal);
         assert_eq!(action_policy(&WmAction::CommandPalette), ActionPolicy::AlwaysAllowed);
         assert_eq!(action_policy(&WmAction::WorkspaceNext), ActionPolicy::WorkspaceLevel);
-        assert_eq!(action_policy(&WmAction::FocusPane { pane_id: 0 }), ActionPolicy::SourceDependent);
+        assert_eq!(action_policy(&WmAction::FocusPane { pane_id: PaneId(0) }), ActionPolicy::SourceDependent);
     }
 
     /// is_floating_domain returns false for default (Tiled) workspace.
@@ -762,7 +762,7 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::MouseContent,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 99 }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(99) }),
         );
         assert!(
             matches!(decision, RouteDecision::Block),
@@ -822,23 +822,23 @@ mod tests {
     fn pane_is_floating_returns_false_for_tiled_pane() {
         let session = test_session();
         // Default session has pane ID 1 in scrolling columns, not floating.
-        assert!(!pane_is_floating(&session, 1));
+        assert!(!pane_is_floating(&session, PaneId(1)));
     }
 
     /// `pane_is_floating` returns false for non-existent pane.
     #[test]
     fn pane_is_floating_returns_false_for_nonexistent() {
         let session = test_session();
-        assert!(!pane_is_floating(&session, 9999));
+        assert!(!pane_is_floating(&session, PaneId(9999)));
     }
 
     /// `can_focus_pane` allows any pane when in tiled domain.
     #[test]
     fn can_focus_pane_allows_any_in_tiled_domain() {
         let session = test_session();
-        assert!(can_focus_pane(&session, InteractionSource::Keyboard, 1));
-        assert!(can_focus_pane(&session, InteractionSource::MouseContent, 1));
-        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 1));
+        assert!(can_focus_pane(&session, InteractionSource::Keyboard, PaneId(1)));
+        assert!(can_focus_pane(&session, InteractionSource::MouseContent, PaneId(1)));
+        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(1)));
     }
 
     /// `can_focus_pane` blocks non-floating pane when in floating domain.
@@ -848,9 +848,9 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         // In a floating domain, pane 1 (in scrolling columns) is NOT the active floating pane.
         // So can_focus_pane should block it from all sources.
-        assert!(!can_focus_pane(&session, InteractionSource::Keyboard, 1));
-        assert!(!can_focus_pane(&session, InteractionSource::MouseContent, 1));
-        assert!(!can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 1));
+        assert!(!can_focus_pane(&session, InteractionSource::Keyboard, PaneId(1)));
+        assert!(!can_focus_pane(&session, InteractionSource::MouseContent, PaneId(1)));
+        assert!(!can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(1)));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -880,7 +880,7 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::Keyboard,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 99 }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(99) }),
         );
         assert!(
             matches!(decision, RouteDecision::Allow(_)),
@@ -899,7 +899,7 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::Keyboard,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 1 }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(1) }),
         );
         assert!(
             matches!(decision, RouteDecision::Block),
@@ -917,7 +917,7 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::MouseContent,
-            InteractionIntent::FocusPane { pane_id: 1 },
+            InteractionIntent::FocusPane { pane_id: PaneId(1) },
         );
         assert!(
             matches!(decision, RouteDecision::Block),
@@ -957,7 +957,7 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::MouseContent,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: 1 }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(1) }),
         );
         assert!(
             matches!(decision, RouteDecision::Allow(_)),
@@ -1156,8 +1156,8 @@ mod tests {
         ws.focus_domain = FocusDomain::Floating;
 
         // The active floating pane (ID 99) can be focused from all sources.
-        assert!(can_focus_pane(&session, InteractionSource::Keyboard, 99));
-        assert!(can_focus_pane(&session, InteractionSource::MouseContent, 99));
-        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, 99));
+        assert!(can_focus_pane(&session, InteractionSource::Keyboard, PaneId(99)));
+        assert!(can_focus_pane(&session, InteractionSource::MouseContent, PaneId(99)));
+        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(99)));
     }
 }

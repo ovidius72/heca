@@ -20,6 +20,7 @@
 //!   command-palette
 
 use crate::input::{ResizeTarget, WmAction};
+use heca_core::layout::PaneId;
 
 /// Errors that can occur when parsing an RPC command.
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
@@ -63,7 +64,7 @@ impl std::error::Error for RpcError {}
 ///
 /// assert_eq!(
 ///     parse_rpc_command("focus-pane 42"),
-///     Ok(WmAction::FocusPane { pane_id: 42 }),
+///     Ok(WmAction::FocusPane { pane_id: PaneId(42) }),
 /// );
 /// ```
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
@@ -116,7 +117,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
     match cmd.as_str() {
         "focus-pane" => {
             let arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(arg, "pane_id"));
             Ok(WmAction::FocusPane { pane_id })
         }
         "focus-workspace" => {
@@ -136,13 +137,13 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "close-pane" => Ok(WmAction::ClosePane),
         "close-pane-id" => {
             let arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(arg, "pane_id"));
             Ok(WmAction::ClosePaneById { pane_id })
         }
         "float" => Ok(WmAction::Float),
         "float-at" => {
             let pane_arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(pane_arg, "pane_id"));
             let x_arg = expect_arg!("x");
             let x = parse_f64!(x_arg, "x");
             let y_arg = expect_arg!("y");
@@ -197,7 +198,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }
         "move-pane" => {
             let pane_arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(pane_arg, "pane_id"));
             let col_arg = expect_arg!("target_col");
             let target_col = parse_usize!(col_arg, "target_col");
             Ok(WmAction::Move {
@@ -207,14 +208,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }
         "move-pane-to-workspace" => {
             let pane_arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(pane_arg, "pane_id"));
             let ws_arg = expect_arg!("ws_idx");
             let ws_idx = parse_usize!(ws_arg, "ws_idx");
             Ok(WmAction::MovePaneToWorkspace { pane_id, ws_idx })
         }
         "move-pane-to-column" => {
             let pane_arg = expect_arg!("pane_id");
-            let pane_id = parse_u64!(pane_arg, "pane_id");
+            let pane_id = PaneId(parse_u64!(pane_arg, "pane_id"));
             let ws_arg = expect_arg!("ws_idx");
             let ws_idx = parse_usize!(ws_arg, "ws_idx");
             let col_arg = expect_arg!("col_idx");
@@ -227,9 +228,9 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         }
         "swap" => {
             let a_arg = expect_arg!("a_id");
-            let a_id = parse_u64!(a_arg, "a_id");
+            let a_id = PaneId(parse_u64!(a_arg, "a_id"));
             let b_arg = expect_arg!("b_id");
-            let b_id = parse_u64!(b_arg, "b_id");
+            let b_id = PaneId(parse_u64!(b_arg, "b_id"));
             Ok(WmAction::Swap { a_id, b_id })
         }
         "rename-pane" => Ok(WmAction::RenamePane),
@@ -254,12 +255,13 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
 mod tests {
     use super::*;
     use crate::input::{ResizeTarget, WmAction};
+use heca_core::layout::PaneId;
 
     #[test]
     fn test_focus_pane() {
         assert_eq!(
             parse_rpc_command("focus-pane 42"),
-            Ok(WmAction::FocusPane { pane_id: 42 }),
+            Ok(WmAction::FocusPane { pane_id: PaneId(42) }),
         );
     }
 
@@ -328,7 +330,7 @@ mod tests {
     fn test_close_pane_by_id() {
         assert_eq!(
             parse_rpc_command("close-pane-id 7"),
-            Ok(WmAction::ClosePaneById { pane_id: 7 }),
+            Ok(WmAction::ClosePaneById { pane_id: PaneId(7) }),
         );
     }
 
@@ -342,7 +344,7 @@ mod tests {
         assert_eq!(
             parse_rpc_command("float-at 3 10.5 20.0 300 200"),
             Ok(WmAction::FloatAt {
-                pane_id: 3,
+                pane_id: PaneId(3),
                 x: 10.5,
                 y: 20.0,
                 width: 300.0,
@@ -376,7 +378,7 @@ mod tests {
         assert_eq!(
             parse_rpc_command("move-pane 5 2"),
             Ok(WmAction::Move {
-                pane_id: 5,
+                pane_id: PaneId(5),
                 target_col: 2,
             }),
         );
@@ -386,7 +388,7 @@ mod tests {
     fn test_swap() {
         assert_eq!(
             parse_rpc_command("swap 1 2"),
-            Ok(WmAction::Swap { a_id: 1, b_id: 2 }),
+            Ok(WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) }),
         );
     }
 
@@ -395,7 +397,7 @@ mod tests {
         assert_eq!(
             parse_rpc_command("move-pane-to-workspace 5 1"),
             Ok(WmAction::MovePaneToWorkspace {
-                pane_id: 5,
+                pane_id: PaneId(5),
                 ws_idx: 1
             }),
         );
@@ -406,7 +408,7 @@ mod tests {
         assert_eq!(
             parse_rpc_command("move-pane-to-column 5 0 2"),
             Ok(WmAction::MovePaneToColumn {
-                pane_id: 5,
+                pane_id: PaneId(5),
                 ws_idx: 0,
                 col_idx: 2
             }),

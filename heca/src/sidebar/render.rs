@@ -2,6 +2,7 @@ use crate::app_state::SidebarItemState;
 use crate::input::WmAction;
 use heca_grid_ui::drag::DragItemId;
 use heca_renderer::primitive::PrimitiveRenderer;
+use heca_core::layout::PaneId;
 use heca_renderer::text::TextRenderer;
 
 use super::{
@@ -66,8 +67,8 @@ pub fn render_sidebar_expanded(
     foreground: [f32; 4],
     cursor_bg: [f32; 4],
     visited_color: [f32; 4],
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
     drag_hover: Option<DragItemId>,
@@ -200,8 +201,8 @@ pub fn render_sidebar_collapsed(
     foreground: [f32; 4],
     visited_color: [f32; 4],
     cursor_bg: [f32; 4],
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
     drag_hover: Option<DragItemId>,
@@ -321,8 +322,8 @@ pub fn render_sidebar_collapsed(
 fn expanded_item_label(
     flat_item: &SidebarItem,
     tree: &SidebarTree,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
 ) -> (ExpandedItemPresentation, String) {
     match flat_item {
         SidebarItem::Workspace { ws_idx } => {
@@ -371,11 +372,11 @@ fn expanded_item_label(
 }
 
 fn expanded_pane_label(
-    pane_id: u64,
+    pane_id: PaneId,
     is_floating: bool,
     tree: &SidebarTree,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
 ) -> String {
     let base = if is_floating {
         format!("~ {}", pane_name_short(pane_id, tree))
@@ -655,8 +656,8 @@ fn render_collapsed_columns(
     text_x: f32,
     font_size: f32,
     is_sidebar_nav: bool,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
     colors: RenderColors,
     drag_hover: Option<DragItemId>,
     drag_source: Option<DragItemId>,
@@ -715,8 +716,8 @@ fn render_collapsed_floating_panes(
     width: f32,
     text_x: f32,
     font_size: f32,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
     colors: RenderColors,
     drag_hover: Option<DragItemId>,
     text_renderer: &mut TextRenderer,
@@ -801,9 +802,9 @@ fn draw_drag_source(
 }
 
 fn candidate_char(
-    pane_id: u64,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    pane_id: PaneId,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
 ) -> Option<char> {
     candidates.and_then(|cands| {
         if focused_pane == Some(pane_id) {
@@ -816,8 +817,8 @@ fn candidate_char(
 
 fn collapsed_pane_label(
     pane: &SidebarPaneEntry,
-    candidates: Option<&[(char, u64)]>,
-    focused_pane: Option<u64>,
+    candidates: Option<&[(char, PaneId)]>,
+    focused_pane: Option<PaneId>,
     fallback: char,
 ) -> String {
     candidate_char(pane.pane_id, candidates, focused_pane)
@@ -870,7 +871,7 @@ fn delete_button_colors(is_hovered: bool) -> ButtonColors {
     }
 }
 
-fn pane_name_short(pane_id: u64, tree: &SidebarTree) -> String {
+fn pane_name_short(pane_id: PaneId, tree: &SidebarTree) -> String {
     tree.pane_entry(pane_id)
         .map(|pane| pane.name.clone())
         .unwrap_or_else(|| format!("Pane {}", pane_id))

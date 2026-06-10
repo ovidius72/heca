@@ -122,8 +122,8 @@ pub(crate) async fn init_state(
         layout_options,
     );
 
-    let fake_pane = LayoutPane::new(PaneId(1), pane_name(1));
-    let pane_id = fake_pane.id.0;
+    let fake_pane = LayoutPane::new(PaneId(1), pane_name(PaneId(1)));
+    let pane_id = fake_pane.id;
     session.add_pane(fake_pane, None, true);
 
     let mut backends = BackendStore::new();

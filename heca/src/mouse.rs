@@ -16,6 +16,7 @@ mod target;
 
 use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
+use heca_core::layout::PaneId;
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
 use heca_grid_ui::drag::{DragItemKind, DragItemId, DragSurfaceId, SurfaceDragPhase, DEFAULT_DRAG_THRESHOLD_SQ};
@@ -98,7 +99,7 @@ pub fn on_mouse_input(
                     if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
                         left.phase = SurfaceDragPhase::Starting {
                             kind: DragItemKind::Pane,
-                            pane_id: Some(pane_id),
+                            pane_id: Some(pane_id.0),
                             original_ws: ws_idx,
                             start_pos: pos,
                             threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
@@ -139,7 +140,7 @@ pub fn on_mouse_input(
                         let phase = std::mem::replace(&mut left.phase, SurfaceDragPhase::Idle);
                         match phase {
                             SurfaceDragPhase::Dragging { pane_id, original_ws, swap, .. } => {
-                                release::handle_sidebar_drag_release(state, pane_id.unwrap_or(0), original_ws, swap, pos);
+                                release::handle_sidebar_drag_release(state, PaneId(pane_id.unwrap_or(0)), original_ws, swap, pos);
                             }
                             SurfaceDragPhase::Starting { .. } => {
                                 return release::handle_sidebar_drag_starting_release(state);
@@ -300,11 +301,11 @@ fn window_logical_size(state: &AppState) -> (f32, f32) {
 
 fn find_pane_in_workspace(
     ws: &mut heca_core::layout::workspace::Workspace,
-    pane_id: u64,
+    pane_id: PaneId,
 ) -> Option<(usize, usize)> {
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
         for (pi, pane) in col.panes.iter().enumerate() {
-            if pane.id.0 == pane_id {
+            if pane.id == pane_id {
                 return Some((ci, pi));
             }
         }

@@ -10,6 +10,7 @@
 
 use crate::app_state::AppState;
 use crate::input::WmAction;
+use heca_core::layout::PaneId;
 use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
 
 /// Returns true if the cursor position is within the given surface's bounds.
@@ -40,7 +41,7 @@ pub(crate) fn surface_click_action(state: &mut AppState, id: DragSurfaceId, pos:
 pub(crate) fn surface_can_accept(
     state: &AppState,
     id: DragSurfaceId,
-    source_pane_id: u64,
+    source_pane_id: PaneId,
     target_fi: usize,
     swap: bool,
 ) -> bool {
@@ -53,7 +54,7 @@ pub(crate) fn surface_can_accept(
 pub(crate) fn surface_accept_drop(
     state: &mut AppState,
     id: DragSurfaceId,
-    pane_id: u64,
+    pane_id: PaneId,
     original_ws: usize,
     swap: bool,
     pos: (f32, f32),

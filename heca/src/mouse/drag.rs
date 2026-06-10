@@ -3,6 +3,7 @@
 //! This module owns the `on_cursor_moved` router and sidebar-drag handlers.
 //! Interactive move logic lives in `mouse/interactive.rs`.
 
+use heca_core::layout::PaneId;
 use heca_grid_ui::drag::{DragItemKind, DragItemId, DragLabel, DragSurfaceId, SurfaceDragPhase};
 
 use crate::app_state::AppState;
@@ -34,7 +35,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
         .expect("LeftSidebar pre-populated in DragContext::default");
     let phase = std::mem::replace(&mut left.phase, SurfaceDragPhase::Idle);
     if let SurfaceDragPhase::Starting {
-        pane_id: Some(pane_id),
+        pane_id: Some(raw_pane_id),
         original_ws,
         start_pos,
         threshold_sq,
@@ -42,6 +43,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
         ..
     } = phase
     {
+        let pane_id = PaneId(raw_pane_id);
         let dx = pos.0 - start_pos.0;
         let dy = pos.1 - start_pos.1;
         let sq_dist = dx * dx + dy * dy;
@@ -83,7 +85,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
             });
             left.phase = SurfaceDragPhase::Dragging {
                 kind: DragItemKind::Pane,
-                pane_id: Some(pane_id),
+                pane_id: Some(raw_pane_id),
                 original_ws,
                 swap,
             };
@@ -94,7 +96,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
                 .expect("LeftSidebar pre-populated in DragContext::default")
                 .phase = SurfaceDragPhase::Starting {
                     kind: DragItemKind::Pane,
-                    pane_id: Some(pane_id),
+                    pane_id: Some(raw_pane_id),
                     original_ws,
                     start_pos,
                     threshold_sq,

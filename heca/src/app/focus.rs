@@ -4,15 +4,14 @@
 //! such as `focused_pane`, focus history, and sidebar projection rebuilds.
 
 use crate::app_state::AppState;
-use heca_core::layout::{FocusDomain, Session};
+use heca_core::layout::{FocusDomain, PaneId, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
-fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
-    let target = heca_core::layout::PaneId(pane_id);
+fn find_pane_workspace(session: &Session, pane_id: PaneId) -> Option<usize> {
     session
         .workspaces
         .iter()
-        .position(|ws| ws.find_pane(target).is_some())
+        .position(|ws| ws.find_pane(pane_id).is_some())
 }
 
 /// The single canonical way to focus a pane.
@@ -23,7 +22,7 @@ fn find_pane_workspace(session: &Session, pane_id: u64) -> Option<usize> {
 ///
 /// **All** focus changes must go through this function — mouse clicks, keyboard nav,
 /// sidebar selection, pane select, swap-and-focus, etc.
-pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
+pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: PaneId) {
     // Switch workspace if the target pane is not in the current workspace.
     if let Some(target_ws) = find_pane_workspace(&state.session, pane_id)
         && target_ws != state.session.active_workspace_idx
@@ -36,7 +35,7 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
         let mut found = None;
         for (ci, col) in ws.scrolling.columns.iter().enumerate() {
             for (pi, pane) in col.panes.iter().enumerate() {
-                if pane.id.0 == pane_id {
+                if pane.id == pane_id {
                     found = Some((ci, pi));
                     break;
                 }
@@ -55,7 +54,7 @@ pub(crate) fn focus_pane_by_id(state: &mut AppState, pane_id: u64) {
             }
         } else {
             // Not in scrolling columns — check floating panes.
-            ws.activate_floating_pane(heca_core::layout::PaneId(pane_id));
+            ws.activate_floating_pane(pane_id);
         }
     }
 
@@ -88,7 +87,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .session
         .active_workspace()
         .and_then(|ws| ws.active_pane())
-        .map(|p| p.id.0);
+        .map(|p| p.id);
 
     let focus_changed = prev_focused != state.focused_pane;
     let current_ws = state.session.active_workspace_idx;
@@ -101,7 +100,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
             .session
             .workspaces
             .get(current_ws)
-            .map(|ws| ws.find_pane(heca_core::layout::PaneId(pid)).is_some())
+            .map(|ws| ws.find_pane(pid).is_some())
             .unwrap_or(false)
     });
     if focus_changed

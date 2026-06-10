@@ -8,11 +8,16 @@ pub struct WorkspaceId(pub u64);
 
 /// Unique identifier for a column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ColumnId(pub u64);
-
-/// Unique identifier for a pane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PaneId(pub u64);
+
+impl std::fmt::Display for PaneId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ColumnId(pub u64);
 
 /// Width of a column.
 #[derive(Debug, Clone, Copy, PartialEq)]

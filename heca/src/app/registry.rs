@@ -7,6 +7,7 @@ use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, WmAction, action_from_name, build_action};
 use crate::keymap::{KeyCombo, KeymapRegistry};
+use heca_core::layout::PaneId;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Debug)]
@@ -250,7 +251,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::WorkspacePrev, handle_workspace_prev);
     registry.register(&WmAction::FocusToggleLocal, handle_focus_toggle_local);
     registry.register(&WmAction::FocusToggleGlobal, handle_focus_toggle_global);
-    registry.register(&WmAction::FocusPane { pane_id: 0 }, handle_focus_pane);
+    registry.register(&WmAction::FocusPane { pane_id: PaneId(0) }, handle_focus_pane);
     registry.register(
         &WmAction::FocusWorkspace { ws_idx: 0 },
         handle_focus_workspace,
@@ -272,24 +273,24 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::MovePaneRight, handle_move_pane_right);
     registry.register(&WmAction::MoveColumnUp, handle_move_column_up);
     registry.register(&WmAction::MoveColumnDown, handle_move_column_down);
-    registry.register(&WmAction::Swap { a_id: 0, b_id: 0 }, handle_swap_param);
+    registry.register(&WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) }, handle_swap_param);
     registry.register(
         &WmAction::Move {
-            pane_id: 0,
+            pane_id: PaneId(0),
             target_col: 0,
         },
         handle_move_param,
     );
     registry.register(
         &WmAction::MovePaneToWorkspace {
-            pane_id: 0,
+            pane_id: PaneId(0),
             ws_idx: 0,
         },
         handle_move_pane_to_workspace,
     );
     registry.register(
         &WmAction::MovePaneToColumn {
-            pane_id: 0,
+            pane_id: PaneId(0),
             ws_idx: 0,
             col_idx: 0,
         },
@@ -330,7 +331,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::PaneTakeAndFocus, handle_pane_take_and_focus);
     registry.register(
         &WmAction::TakePane {
-            pane_id: 0,
+            pane_id: PaneId(0),
             focus_after: false,
         },
         handle_take_pane,
@@ -339,7 +340,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::RenameColumn, handle_rename_column);
     registry.register(
         &WmAction::FloatAt {
-            pane_id: 0,
+            pane_id: PaneId(0),
             x: 0.0,
             y: 0.0,
             width: 0.0,
@@ -348,12 +349,12 @@ pub fn build_registry() -> ActionRegistry {
         handle_float_at,
     );
     registry.register(
-        &WmAction::ClosePaneById { pane_id: 0 },
+        &WmAction::ClosePaneById { pane_id: PaneId(0) },
         handle_close_pane_by_id,
     );
     registry.register(
         &WmAction::RenameTarget {
-            pane_id: 0,
+            pane_id: PaneId(0),
             name: String::new(),
         },
         handle_rename_target,

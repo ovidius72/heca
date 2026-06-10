@@ -335,14 +335,36 @@ with `InteractionSource::MouseContent`.
 After the router is active for the key paths above:
 
 - remove policy logic from `focus.rs` that duplicates routing decisions
-- remove sidebar-specific modal checks from `mouse.rs`
-- remove sidebar-specific modal checks from `surface_left.rs`
+- **keep** `is_floating_domain()` guard in `mouse.rs` — it prevents sidebar side effects, not action dispatch
+- remove sidebar-specific modal checks from `mouse/surface_left.rs` — no ad hoc guards found
 - keep only the minimal execution logic in those modules
+
+#### Why `is_floating_domain()` must stay in `mouse.rs`
+
+The router (`route_interaction_for_session`) gates **action dispatch** — it decides whether a `WmAction` reaches its handler.
+But `surface_left::click_action()` has **side effects before any action exists**:
+
+1. **Mode change**: sets `InputMode::SidebarNav` before returning the action
+2. **Pending click storage**: stores `pending_click_action` for drag detection
+3. **Drag state mutation**: enters `SurfaceDragPhase::Starting` for pane items
+
+If we remove the guard and let `click_action()` run when floating, the mode changes
+to `SidebarNav` and pending actions get stored — even though the router would block
+the resulting `WmAction`. The side effects already happened.
+
+The `ConfirmDelete` flow is worse: the action is stored in `InputMode::ConfirmDelete`
+and executed later via `dispatch_action(Keyboard)`, which the router may allow
+differently than `MouseLeftSidebar`.
+
+So `is_floating_domain()` in `mouse.rs` is **not a duplicated policy check** —
+it prevents side effects that the router cannot prevent. It complements the router
+by blocking interaction at the entry point, while the router blocks at the dispatch point.
 
 Goal:
 
 - input producers create intents
-- router decides allow/block
+- router decides allow/block for **action dispatch**
+- `is_floating_domain()` guard decides allow/block for **sidebar side effects**
 - handlers execute allowed interactions
 
 ---
@@ -471,7 +493,7 @@ So this is effectively a deeper and more maintainable continuation of Phase 9.
 
 ### 3. Remove drift
 - [x] Remove duplicated modal policy checks from `focus.rs` — no ad hoc guards found
-- [x] Remove duplicated modal policy checks from `mouse.rs` — replaced by central router guard
+- [x] Remove duplicated modal policy checks from `mouse.rs` — kept: `is_floating_domain()` guard prevents sidebar side effects (mode changes, drag state) that the router cannot gate. See Phase C writeup for rationale.
 - [x] Remove duplicated modal policy checks from `mouse/surface_left.rs` — no ad hoc guards found
 - [x] Confirm policy now lives centrally
 
@@ -583,7 +605,7 @@ Wiring (Phase 2):
   - Keyboard tiled-only action blocking tests in floating domain
   - Allowed floating-local action tests
   - Existing behavior preservation tests
-- Sidebar intent routing: upgrade sidebar clicks to produce InteractionIntent variants
+- ~~Sidebar intent routing: upgrade sidebar clicks to produce InteractionIntent variants~~ — investigated and decided against. See Phase C writeup for why `is_floating_domain()` guard in `mouse.rs` must stay.
 - Chrome sources (MouseTopMenu, MouseStatusBar)
 - RPC source
 - Future polish: convert `focused_pane_id` return type from `Option<u64>` to `Option<PaneId>` for type safety (R6 from Phase D review); requires changing `state.focused_pane` from `Option<u64>` to `Option<PaneId>` across the codebase
@@ -617,6 +639,6 @@ Wiring (Phase 2):
 - PR #64: fix/close-floating-pane (this PR, includes Phase 9.6 + 9.7)
 
 ### Next recommended step
-- Manual smoke test (9.V): verify floating focus vs sidebar/content click behavior
-- Sidebar intent routing upgrade (Phase B wire-intents)
+- ~~Sidebar intent routing upgrade (Phase B wire-intents)~~ — decided against. `is_floating_domain()` guard in `mouse.rs` must stay to prevent sidebar side effects.
 - Future: convert `focused_pane_id` return type to `Option<PaneId>`
+- Future: chrome sources (MouseTopMenu, MouseStatusBar) and RPC source

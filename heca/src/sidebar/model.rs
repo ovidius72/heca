@@ -1,6 +1,6 @@
 use crate::app_state::SidebarItemState;
 use crate::input::WmAction;
-use heca_core::layout::session::Session;
+use heca_core::layout::{PaneId, session::Session};
 use std::collections::HashMap;
 
 /// Precise location of a pane within the sidebar tree.
@@ -28,8 +28,8 @@ pub enum SidebarItemKind {
 pub enum SidebarItem {
     Workspace { ws_idx: usize },
     Column { ws_idx: usize, col_idx: usize },
-    Pane { pane_id: u64 },
-    FloatingPane { pane_id: u64, ws_idx: usize },
+    Pane { pane_id: PaneId },
+    FloatingPane { pane_id: PaneId, ws_idx: usize },
 }
 
 impl SidebarItem {
@@ -68,7 +68,7 @@ impl SidebarItem {
 /// A pane entry in the sidebar tree.
 #[derive(Debug, Clone)]
 pub struct SidebarPaneEntry {
-    pub pane_id: u64,
+    pub pane_id: PaneId,
     pub name: String,
     pub state: SidebarItemState,
 }
@@ -106,7 +106,7 @@ pub struct SidebarTree {
     /// Flat navigation list (built from tree, skipping collapsed items).
     pub flat_items: Vec<SidebarItem>,
     /// Maps pane_id → precise tree location for O(1) render lookups.
-    pub pane_id_to_entry: HashMap<u64, PaneTreeLocation>,
+    pub pane_id_to_entry: HashMap<PaneId, PaneTreeLocation>,
     /// Button hitboxes for [+w], [+c], [+p] buttons (set during render).
     pub button_hitboxes: Vec<SidebarButtonHitbox>,
 }
@@ -143,8 +143,8 @@ impl SidebarTree {
         &mut self,
         session: &Session,
         last_visited_ws_idx: Option<usize>,
-        focused_pane: Option<u64>,
-        last_visited_pane_per_ws: &[Option<u64>],
+        focused_pane: Option<PaneId>,
+        last_visited_pane_per_ws: &[Option<PaneId>],
     ) {
         // Preserve collapsed state across rebuild.
         let prev_ws_collapsed: std::collections::HashMap<usize, bool> = self
@@ -218,11 +218,11 @@ impl SidebarTree {
                     };
 
                     for pane in col.panes.iter() {
-                        let is_active_pane = Some(pane.id.0) == focused_pane;
+                        let is_active_pane = Some(pane.id) == focused_pane;
                         let is_visited_pane =
-                            !is_active_pane && Some(pane.id.0) == last_visited_in_ws;
+                            !is_active_pane && Some(pane.id) == last_visited_in_ws;
                         col_entry.panes.push(SidebarPaneEntry {
-                            pane_id: pane.id.0,
+                            pane_id: pane.id,
                             name: pane.title.clone(),
                             state: if is_active_pane {
                                 SidebarItemState::Active
@@ -239,11 +239,11 @@ impl SidebarTree {
             }
 
             for float in &ws.floating_panes {
-                let is_active_float = Some(float.pane.id.0) == focused_pane;
+                let is_active_float = Some(float.pane.id) == focused_pane;
                 let is_visited_float =
-                    !is_active_float && Some(float.pane.id.0) == last_visited_in_ws;
+                    !is_active_float && Some(float.pane.id) == last_visited_in_ws;
                 ws_entry.floating_panes.push(SidebarPaneEntry {
-                    pane_id: float.pane.id.0,
+                    pane_id: float.pane.id,
                     name: float.pane.title.clone(),
                     state: if is_active_float {
                         SidebarItemState::Active
@@ -397,7 +397,7 @@ impl SidebarTree {
         }
     }
 
-    fn pane_location(&self, pane_id: u64) -> Option<(usize, Option<usize>)> {
+    fn pane_location(&self, pane_id: PaneId) -> Option<(usize, Option<usize>)> {
         for ws_entry in &self.workspaces {
             for col_entry in &ws_entry.columns {
                 if col_entry.panes.iter().any(|pane| pane.pane_id == pane_id) {
@@ -606,7 +606,7 @@ impl SidebarTree {
 
     /// Fast pane-entry lookup using the pre-built `pane_id_to_entry` map.
     /// Returns `None` if the pane_id is not in the tree.
-    pub fn pane_entry(&self, pane_id: u64) -> Option<&SidebarPaneEntry> {
+    pub fn pane_entry(&self, pane_id: PaneId) -> Option<&SidebarPaneEntry> {
         let loc = self.pane_id_to_entry.get(&pane_id)?;
         let ws = self.workspaces.get(loc.ws_idx)?;
         match loc.col_idx {
