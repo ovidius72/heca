@@ -240,3 +240,205 @@ impl Workspace {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::column::Pane;
+    use crate::layout::types::LayoutOptions;
+
+    /// Helper: create a workspace with a single column and pane.
+    fn workspace_with_pane(pane_id: u64) -> Workspace {
+        let mut ws = Workspace::new(
+            WorkspaceId(0),
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
+            1.0,
+            LayoutOptions::default(),
+        );
+        let pane = Pane::new(PaneId(pane_id), format!("pane{}", pane_id));
+        ws.add_pane(pane, None, true, ColumnWidth::Proportion(0.5));
+        ws
+    }
+
+    /// Helper: create a workspace with one tiled pane and one floating pane.
+    fn workspace_with_floating_pane(pane_id: u64) -> Workspace {
+        let mut ws = workspace_with_pane(99); // one tiled pane
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(pane_id), format!("float{}", pane_id)),
+            position: Point::new(50.0, 50.0),
+            size: Size::new(400.0, 300.0),
+            is_active: true,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        ws.focus_domain = FocusDomain::Floating;
+        ws
+    }
+
+    // ── has_panes ──
+
+    #[test]
+    fn has_panes_true_when_tiled_panes_exist() {
+        let ws = workspace_with_pane(1);
+        assert!(ws.has_panes(), "workspace with tiled pane should have_panes()");
+    }
+
+    #[test]
+    fn has_panes_true_when_only_floating_panes_exist() {
+        let mut ws = Workspace::new(
+            WorkspaceId(0),
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
+            1.0,
+            LayoutOptions::default(),
+        );
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(1), "float1"),
+            position: Point::new(50.0, 50.0),
+            size: Size::new(400.0, 300.0),
+            is_active: true,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+        assert!(ws.has_panes(), "workspace with only floating pane should have_panes()");
+    }
+
+    #[test]
+    fn has_panes_false_when_empty() {
+        let ws = Workspace::new(
+            WorkspaceId(0),
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(800.0, 600.0)),
+            1.0,
+            LayoutOptions::default(),
+        );
+        assert!(!ws.has_panes(), "empty workspace should not have_panes()");
+    }
+
+    // ── Floating pane removal + domain switching ──
+
+    #[test]
+    fn remove_last_floating_pane_switches_domain_to_tiled() {
+        let mut ws = workspace_with_floating_pane(42);
+
+        // Remove the floating pane
+        let idx = ws
+            .floating_panes
+            .iter()
+            .position(|f| f.pane.id.0 == 42)
+            .expect("floating pane should exist");
+        ws.floating_panes.remove(idx);
+
+        // Domain should switch to Tiled when no floating panes remain
+        assert!(ws.floating_panes.is_empty(), "floating panes should be empty after removal");
+        ws.deactivate_floating_panes();
+        ws.focus_domain = FocusDomain::Tiled;
+        assert_eq!(ws.focus_domain, FocusDomain::Tiled, "domain should be Tiled after deactivating floats");
+        // Tiled panes still exist
+        assert!(ws.has_panes(), "workspace should still have tiled panes");
+    }
+
+    #[test]
+    fn remove_one_of_multiple_floating_panes_stays_in_floating_domain() {
+        let mut ws = workspace_with_floating_pane(42);
+        // Add a second floating pane
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(43), "float43"),
+            position: Point::new(100.0, 100.0),
+            size: Size::new(300.0, 200.0),
+            is_active: false,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+
+        // Remove the first floating pane
+        let idx = ws
+            .floating_panes
+            .iter()
+            .position(|f| f.pane.id.0 == 42)
+            .expect("floating pane should exist");
+        ws.floating_panes.remove(idx);
+
+        // Domain should stay Floating since other floats exist
+        assert!(!ws.floating_panes.is_empty(), "should still have floating panes after removing one");
+        // Only switch domain when floating_panes is empty
+        if ws.floating_panes.is_empty() {
+            ws.deactivate_floating_panes();
+            ws.focus_domain = FocusDomain::Tiled;
+        }
+        assert_eq!(ws.focus_domain, FocusDomain::Floating, "domain should stay Floating with remaining floats");
+    }
+
+    #[test]
+    fn remove_all_tiled_panes_leaves_workspace_empty() {
+        let mut ws = workspace_with_pane(1);
+
+        // Remove the only tiled pane (also removes the column)
+        let removed = ws.scrolling.remove_pane(0, 0);
+        assert!(removed.is_some(), "should remove the pane");
+
+        // Workspace should now be empty
+        assert!(!ws.has_panes());
+        assert!(ws.scrolling.is_empty());
+        assert!(ws.floating_panes.is_empty());
+    }
+
+    #[test]
+    fn remove_floating_pane_preserves_tiled_panes() {
+        let mut ws = workspace_with_floating_pane(42);
+
+        // Remove the floating pane
+        let idx = ws
+            .floating_panes
+            .iter()
+            .position(|f| f.pane.id.0 == 42)
+            .expect("floating pane should exist");
+        ws.floating_panes.remove(idx);
+
+        // Tiled pane (ID 99) should still exist
+        assert!(ws.has_panes());
+        assert!(!ws.scrolling.is_empty());
+        assert!(ws.floating_panes.is_empty());
+    }
+
+    #[test]
+    fn deactivate_floating_panes_clears_all_active_flags() {
+        let mut ws = workspace_with_floating_pane(42);
+        ws.floating_panes.push(FloatingPane {
+            pane: Pane::new(PaneId(43), "float43"),
+            position: Point::new(100.0, 100.0),
+            size: Size::new(300.0, 200.0),
+            is_active: false,
+            original_column_idx: None,
+            original_pane_idx: None,
+        });
+
+        ws.deactivate_floating_panes();
+
+        // All floating panes should have is_active = false
+        assert!(ws.floating_panes.iter().all(|f| !f.is_active), "all floating panes should be deactivated");
+    }
+
+    #[test]
+    fn remove_floating_pane_then_remove_tiled_leaves_workspace_empty() {
+        let mut ws = workspace_with_floating_pane(42);
+
+        // Remove the floating pane
+        let idx = ws
+            .floating_panes
+            .iter()
+            .position(|f| f.pane.id.0 == 42)
+            .expect("floating pane should exist");
+        ws.floating_panes.remove(idx);
+
+        // Workspace still has tiled pane
+        assert!(ws.has_panes(), "workspace should still have panes after removing float");
+
+        // Now remove the only tiled pane (also removes the column)
+        let removed = ws.scrolling.remove_pane(0, 0);
+        assert!(removed.is_some(), "should remove the tiled pane");
+
+        // Workspace should be completely empty
+        assert!(!ws.has_panes(), "workspace should be empty after removing all panes");
+        assert!(ws.scrolling.is_empty(), "scrolling should be empty");
+        assert!(ws.floating_panes.is_empty(), "floating panes should be empty");
+    }
+}

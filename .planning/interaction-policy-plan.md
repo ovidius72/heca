@@ -611,8 +611,12 @@ Wiring (Phase 2):
 - PR #52: feature/interaction-policy (merged)
 - PR #54: feature/interaction-sidebar-wiring (merged, superseded by #56)
 - PR #56: feature/interaction-sidebar-wiring (merged)
-- Phase D PR: pending user approval
+- PR #58: feature/interaction-focus-helpers (Phase D, merged)
+- PR #59: feature/interaction-policy-tests (Phase E, merged)
+- PR #62: feature/phase10-final-verification (Phase 10 docs, merged)
+- PR #64: fix/close-floating-pane (this PR, includes Phase 9.6 + 9.7)
 
 ### Next recommended step
-- Phase E: Regression tests for floating-domain blocking behavior
-- Then: Sidebar intent routing upgrade
+- Manual smoke test (9.V): verify floating focus vs sidebar/content click behavior
+- Sidebar intent routing upgrade (Phase B wire-intents)
+- Future: convert `focused_pane_id` return type to `Option<PaneId>`

@@ -253,10 +253,10 @@ mouse = true
 
 # Keybindings — prefix+ syntax for prefix bindings, direct for global
 [keys]
-focus_left = "prefix+h"
-focus_right = "prefix+l"
-focus_up = "prefix+k"
-focus_down = "prefix+j"
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+focus_right = ["prefix+l", "prefix+ArrowRight"]
+focus_up = ["prefix+k", "prefix+ArrowUp"]
+focus_down = ["prefix+j", "prefix+ArrowDown"]
 split_horizontal = "prefix+Enter"
 split_vertical = "prefix+v"
 zoom_column = "prefix+z"

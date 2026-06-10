@@ -126,10 +126,22 @@ impl Default for KeysConfig {
         use BindingValue::*;
 
         // ── Navigation ──
-        bindings.insert("focus_left".to_string(), Single("prefix+h".to_string()));
-        bindings.insert("focus_right".to_string(), Single("prefix+l".to_string()));
-        bindings.insert("focus_up".to_string(), Single("prefix+k".to_string()));
-        bindings.insert("focus_down".to_string(), Single("prefix+j".to_string()));
+        bindings.insert(
+            "focus_left".to_string(),
+            Many(vec!["prefix+h".to_string(), "prefix+ArrowLeft".to_string()]),
+        );
+        bindings.insert(
+            "focus_right".to_string(),
+            Many(vec!["prefix+l".to_string(), "prefix+ArrowRight".to_string()]),
+        );
+        bindings.insert(
+            "focus_up".to_string(),
+            Many(vec!["prefix+k".to_string(), "prefix+ArrowUp".to_string()]),
+        );
+        bindings.insert(
+            "focus_down".to_string(),
+            Many(vec!["prefix+j".to_string(), "prefix+ArrowDown".to_string()]),
+        );
 
         // ── Splits ──
         bindings.insert(
