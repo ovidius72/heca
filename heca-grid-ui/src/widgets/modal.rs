@@ -12,7 +12,9 @@
 //! Open/close is a host-owned [`Signal<bool>`](crate::reactive::Signal) so mouse,
 //! keyboard, and RPC all drive it. Dismissal paths: the **Confirm**/**Cancel**
 //! buttons, **Esc** (= cancel), and a click on the **scrim** (= cancel). Each
-//! fires the matching callback and closes.
+//! fires the matching callback and closes. Set [`dismissible(false)`](Modal::dismissible)
+//! for a **forced-decision** dialog — Esc/scrim are swallowed and only the buttons
+//! close it.
 
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
@@ -56,6 +58,9 @@ pub struct Modal {
     cancel_label: Option<String>,
     /// Tint the confirm button with the danger hue (destructive action).
     danger: bool,
+    /// When `false`, Esc / scrim clicks are swallowed but don't close — the user
+    /// must pick a button (a forced-decision dialog). Default `true`.
+    dismissible: bool,
     on_confirm: Option<Box<dyn Fn()>>,
     on_cancel: Option<Box<dyn Fn()>>,
     /// Hovered action: `Some(false)` = cancel, `Some(true)` = confirm.
@@ -76,6 +81,7 @@ impl Modal {
             confirm_label: "OK".to_string(),
             cancel_label: None,
             danger: false,
+            dismissible: true,
             on_confirm: None,
             on_cancel: None,
             hovered: None,
@@ -100,6 +106,14 @@ impl Modal {
     /// Tint the confirm button with the danger hue (for destructive actions).
     pub fn danger(mut self, on: bool) -> Self {
         self.danger = on;
+        self
+    }
+
+    /// Whether Esc / a scrim click dismiss the dialog (default `true`). Set
+    /// `false` to force an explicit choice — only the buttons close it. Pair with
+    /// a `.cancel(...)` so there's always a non-destructive way out.
+    pub fn dismissible(mut self, on: bool) -> Self {
+        self.dismissible = on;
         self
     }
 
@@ -287,15 +301,17 @@ impl Component for Modal {
                     self.do_confirm();
                 } else if r.cancel.is_some_and(|cr| cr.contains(*pos)) {
                     self.do_cancel();
-                } else if !r.panel.contains(*pos) {
-                    // Click on the scrim dismisses (= cancel).
+                } else if !r.panel.contains(*pos) && self.dismissible {
+                    // Click on the scrim dismisses (= cancel) unless non-dismissible.
                     self.do_cancel();
                 }
                 // Always swallow input while open (modal).
                 Handled::Yes
             }
             Event::Key { key: GridKey::Escape, pressed: true } => {
-                self.do_cancel();
+                if self.dismissible {
+                    self.do_cancel();
+                }
                 Handled::Yes
             }
             Event::Key { key: GridKey::Enter, pressed: true } => {

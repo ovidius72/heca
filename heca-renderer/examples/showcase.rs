@@ -464,7 +464,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             let modal = Modal::new("Delete pane?", "This action cannot be undone.")
                 .confirm("Delete", || println!("[showcase] pane deleted"))
                 .cancel("Cancel", || println!("[showcase] cancelled"))
-                .danger(true);
+                .danger(true)
+                // Destructive → force an explicit choice: Esc / scrim won't dismiss.
+                .dismissible(false);
             let open = modal.open_signal();
             Flex::row()
                 .gap(12.0)

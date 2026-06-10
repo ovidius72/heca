@@ -892,7 +892,9 @@ manually** on the overlay layer (no child subtree to relocate). Open/close is a 
 
 - **Construct**: `Modal::new(title, message)`.
 - **Builders**: `.confirm(label, impl Fn())` (default `OK`), `.cancel(label, impl Fn())`
-  (optional; Esc/scrim also cancel), `.danger(bool)` (danger-tinted confirm), `.open(bool)`.
+  (optional; Esc/scrim also cancel), `.danger(bool)` (danger-tinted confirm),
+  `.dismissible(bool)` (default `true`; `false` = **forced-decision** — Esc/scrim are swallowed,
+  only the buttons close it), `.open(bool)`.
 - **Accessor**: `.open_signal() -> Signal<bool>` — bind a trigger to it to show the dialog.
 
 ```rust

@@ -2360,3 +2360,37 @@ fn modal_scrim_click_dismisses_but_panel_body_does_not() {
     assert_eq!(cancels.get(), 1, "clicking the panel body does not dismiss");
     assert!(m.overlay_active(), "panel-body click keeps the dialog open");
 }
+
+#[test]
+fn modal_non_dismissible_forces_a_button_choice() {
+    use heca_grid_ui::{Component, Modal};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let confirms = Rc::new(Cell::new(0u32));
+    let c = confirms.clone();
+    let mut m = Modal::new("Apply changes?", "Pick one")
+        .confirm("Apply", move || c.set(c.get() + 1))
+        .cancel("Cancel", || {})
+        .dismissible(false)
+        .open(true);
+
+    let vp = Size::new(400.0, 300.0);
+    LayoutEngine::new().compute(&mut m, vp);
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        m.paint(&mut cx);
+    }
+
+    // Esc + scrim click are swallowed but DON'T close a non-dismissible dialog.
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
+    m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
+    assert!(m.overlay_active(), "non-dismissible dialog ignores Esc + scrim");
+
+    // Only a button closes it (Enter = confirm).
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    assert_eq!(confirms.get(), 1, "a button still works");
+    assert!(!m.overlay_active(), "closed once a button is chosen");
+}
