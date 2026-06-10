@@ -1104,12 +1104,16 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                if state.focus.overlay_active(&mut state.ui) {
-                    state
-                        .focus
-                        .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
-                } else {
-                    // No overlay open → scroll the whole page (clamped in render).
+                // An open overlay (Select dropdown / Modal) gets scroll first, but
+                // only swallows it if it actually consumes it — a non-scrolling
+                // overlay like the ToastStack lets the page scroll through under it.
+                let consumed = state.focus.overlay_active(&mut state.ui)
+                    && state.focus.deliver_to_overlay(
+                        &mut state.ui,
+                        &Event::Scroll { delta: lines },
+                    ) == Handled::Yes;
+                if !consumed {
+                    // Scroll the whole page (clamped in render).
                     state.scroll_y += lines * 40.0;
                 }
                 state.window.request_redraw();
