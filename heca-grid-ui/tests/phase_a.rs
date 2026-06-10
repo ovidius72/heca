@@ -2394,3 +2394,57 @@ fn modal_non_dismissible_forces_a_button_choice() {
     assert_eq!(confirms.get(), 1, "a button still works");
     assert!(!m.overlay_active(), "closed once a button is chosen");
 }
+
+// --- CommandPalette --------------------------------------------------------
+
+fn palette_with_markers() -> (heca_grid_ui::CommandPalette, std::rc::Rc<std::cell::Cell<u8>>) {
+    use heca_grid_ui::{Command, CommandPalette};
+    let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
+    let (r1, r2, r3) = (ran.clone(), ran.clone(), ran.clone());
+    let p = CommandPalette::new()
+        .command(Command::new("Split pane", move || r1.set(1)))
+        .command(Command::new("Close pane", move || r2.set(2)))
+        .command(Command::new("Toggle sidebar", move || r3.set(3)));
+    (p, ran)
+}
+
+#[test]
+fn command_palette_is_overlay_active_only_while_open() {
+    use heca_grid_ui::Component;
+    let (p, _) = palette_with_markers();
+    assert!(!p.overlay_active() && !p.focusable(), "inert while closed");
+    let p = p.open(true);
+    assert!(p.overlay_active() && p.focusable(), "captures input while open");
+}
+
+#[test]
+fn command_palette_typing_filters_then_enter_runs_top_result() {
+    use heca_grid_ui::{Component, GridKey};
+    let (mut p, ran) = palette_with_markers();
+    p = p.open(true);
+
+    // Type "tog" → "Toggle sidebar" is the top (only) match.
+    for c in "tog".chars() {
+        p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 3, "Enter runs the filtered top result (Toggle sidebar)");
+    assert!(!p.overlay_active(), "palette closes after running a command");
+}
+
+#[test]
+fn command_palette_navigates_with_arrows_and_ctrl_jk() {
+    use heca_grid_ui::{Component, GridKey, Modifiers};
+    let (mut p, ran) = palette_with_markers();
+    p = p.open(true);
+
+    // No query → all three; selection starts at 0. Ctrl+J moves down twice → idx 2.
+    p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
+    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
+    // ArrowUp moves back to idx 1.
+    p.event(&Event::ModifiersChanged(Modifiers::default()));
+    p.event(&Event::Key { key: GridKey::ArrowUp, pressed: true });
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 2, "Ctrl+J ×2 then ArrowUp lands on the 2nd command (Close pane)");
+}

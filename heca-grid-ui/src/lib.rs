@@ -57,7 +57,7 @@ pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-    ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
+    ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
     LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toggle, Tooltip, TooltipSide,
@@ -77,7 +77,7 @@ pub mod prelude {
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
-        ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
+        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
         LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toggle, Tooltip, TooltipSide,
