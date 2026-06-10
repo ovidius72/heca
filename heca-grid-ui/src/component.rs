@@ -250,6 +250,13 @@ const BRACKET_WIDTH_MUL: f32 = 2.0;
 /// ~0.7 over the bright accent border leaves a ~30% accent line — matching the
 /// subtle continuous border, while the corners stay fully bright.
 const BRACKET_STRAIGHT_DIM: u8 = 178;
+/// With box borders off (`border_width == 0`) a container still needs definition,
+/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline
+/// (these are its width + alpha) instead of the reticle — whose corners vanish
+/// when the bright stroke collapses. The alpha matches the ~30% the straight
+/// midsections dim to at `border_width > 0`, so the two cases read consistently.
+const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
+const BRACKET_HAIRLINE_ALPHA: u8 = 80;
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
@@ -312,6 +319,16 @@ impl<'a> PaintCx<'a> {
             radius,
             glow: self.scaled_glow(glow),
         }));
+    }
+
+    /// Build a box border in `color` at the **theme's** [`border_width`](crate::theme::Theme::border_width),
+    /// or `None` when borders are off (`border_width == 0`). Widgets should build
+    /// their box border with this instead of hardcoding a stroke, so they all
+    /// honor the token (and disappear together at width 0). The single chokepoint
+    /// that keeps border width theme-driven across the widget set.
+    pub fn border(&self, color: Color) -> Option<Border> {
+        let w = self.theme.border_width;
+        (w > 0.0).then_some(Border { color, width: w })
     }
 
     /// Queue **flat** L-shaped corner brackets framing `rect` — prominent angles
@@ -440,6 +457,25 @@ impl<'a> PaintCx<'a> {
             (t.accent, t.background, t.radius, t.border_width)
         };
         let b = rect;
+
+        // Box borders off: a container still reads as framed, but via a thin SOLID
+        // uniform hairline around the whole perimeter — not the bracket reticle,
+        // whose bright corners collapse to nothing at width 0 (leaving the old
+        // "empty corners + lingering straight edges" look). Scales back up to the
+        // reticle as soon as `border_width > 0`.
+        if border_width <= 0.0 {
+            self.rect(
+                b,
+                Color::TRANSPARENT,
+                Some(Border {
+                    color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
+                    width: BRACKET_HAIRLINE_WIDTH,
+                }),
+                radius,
+                None,
+            );
+            return;
+        }
 
         // Bright accent border tracing the full rounded perimeter. The renderer's
         // bracket primitive only draws square 90° corners, so instead of brackets

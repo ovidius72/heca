@@ -20,7 +20,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Glow, TextAlign};
 use crate::widgets::{Glyph, Input};
 use std::cell::{Cell, RefCell};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -320,10 +320,11 @@ impl Component for CommandPalette {
             let vp = self.viewport.get();
             let scrim = if vp.w.is_finite() { Rectangle::new(Point::new(0.0, 0.0), vp) } else { panel };
             cx.rect(scrim, background.with_alpha(140), None, 0.0, None);
+            let panel_border = cx.border(accent.with_alpha(200));
             cx.rect(
                 panel,
                 surface,
-                Some(Border { color: accent.with_alpha(200), width: 1.5 }),
+                panel_border,
                 radius,
                 Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
             );
@@ -354,7 +355,8 @@ impl Component for CommandPalette {
                 let row = self.row_rect(panel, list_top, row_h, vi);
                 let is_sel = ri == self.selected;
                 if is_sel {
-                    cx.rect(row, accent.with_alpha(30), Some(Border { color: accent.with_alpha(150), width: 1.0 }), ctrl_radius, None);
+                    let row_border = cx.border(accent.with_alpha(150));
+                    cx.rect(row, accent.with_alpha(30), row_border, ctrl_radius, None);
                     // Left accent bar.
                     cx.rect(
                         Rectangle::new(Point::new(row.loc.x, row.loc.y + row.size.h * 0.2), Size::new(2.5, row.size.h * 0.6)),

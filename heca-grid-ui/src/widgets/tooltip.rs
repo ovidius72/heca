@@ -18,7 +18,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -167,10 +167,11 @@ impl Component for Tooltip {
 
         // Drawn on the overlay layer so it sits above later siblings.
         cx.with_overlay(|cx| {
+            let border = cx.border(accent.with_alpha(180));
             cx.rect(
                 rect,
                 surface,
-                Some(Border { color: accent.with_alpha(180), width: 1.0 }),
+                border,
                 radius,
                 Some(Glow { color: glow_c, radius: 5.0, intensity: 0.2 }),
             );
