@@ -9,9 +9,10 @@
 //! tooltip never eats clicks — so it does not use the `overlay_active` path that
 //! input-grabbing popovers (`Select`) do.
 //!
-//! Placement is theme/viewport-aware: the bubble centers on the chosen
-//! [`TooltipSide`] of the target, is clamped horizontally to the viewport, and a
-//! `Top` bubble flips to `Bottom` when there's no room above.
+//! Placement is **viewport-aware on all four sides**: the bubble centers on the
+//! chosen [`TooltipSide`] of the target, but flips to the opposite side when there
+//! isn't room (`Top`↔`Bottom`, `Left`↔`Right`), and its cross-axis is clamped to
+//! the viewport so it never spills off-screen.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
@@ -85,28 +86,49 @@ impl Tooltip {
         self.hovered.get_untracked() && self.elapsed >= self.delay
     }
 
-    /// The bubble rect for `bubble` sized text, anchored to target `b`, clamped to
-    /// `vp` (and flipping `Top`→`Bottom` when there's no room above).
+    /// Whether a `w×h` bubble fits on `side` of target `b` within viewport `vp`.
+    fn fits(side: TooltipSide, b: Rectangle, w: f64, h: f64, vp: Size) -> bool {
+        match side {
+            TooltipSide::Top => b.loc.y - h - GAP >= 0.0,
+            TooltipSide::Bottom => b.loc.y + b.size.h + h + GAP <= vp.h,
+            TooltipSide::Left => b.loc.x - w - GAP >= 0.0,
+            TooltipSide::Right => b.loc.x + b.size.w + w + GAP <= vp.w,
+        }
+    }
+
+    /// The bubble rect for `w×h` text, anchored to target `b` and made
+    /// **space-aware**: the preferred [`side`](Tooltip::side) flips to its opposite
+    /// when there's no room (all four sides), and the cross-axis is clamped to the
+    /// viewport so the bubble never spills off-screen.
     fn bubble_rect(&self, b: Rectangle, w: f64, h: f64, vp: Size) -> Rectangle {
-        let (mut x, mut y) = match self.side {
-            TooltipSide::Top | TooltipSide::Bottom => {
-                (b.loc.x + (b.size.w - w) / 2.0, 0.0)
-            }
+        // Flip to the opposite side if the preferred one doesn't fit but it does.
+        let opposite = match self.side {
+            TooltipSide::Top => TooltipSide::Bottom,
+            TooltipSide::Bottom => TooltipSide::Top,
+            TooltipSide::Left => TooltipSide::Right,
+            TooltipSide::Right => TooltipSide::Left,
+        };
+        let side = if Self::fits(self.side, b, w, h, vp) || !Self::fits(opposite, b, w, h, vp) {
+            self.side
+        } else {
+            opposite
+        };
+
+        let (mut x, mut y) = match side {
+            TooltipSide::Top => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y - h - GAP),
+            TooltipSide::Bottom => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + b.size.h + GAP),
             TooltipSide::Left => (b.loc.x - w - GAP, b.loc.y + (b.size.h - h) / 2.0),
             TooltipSide::Right => (b.loc.x + b.size.w + GAP, b.loc.y + (b.size.h - h) / 2.0),
         };
-        match self.side {
-            TooltipSide::Top => {
-                let above = b.loc.y - h - GAP;
-                // Flip below the target if the bubble would clip the top edge.
-                y = if above < 0.0 { b.loc.y + b.size.h + GAP } else { above };
+        // Clamp the cross-axis (the one the side doesn't pin) into the viewport.
+        match side {
+            TooltipSide::Top | TooltipSide::Bottom if vp.w.is_finite() => {
+                x = x.clamp(0.0, (vp.w - w).max(0.0));
             }
-            TooltipSide::Bottom => y = b.loc.y + b.size.h + GAP,
+            TooltipSide::Left | TooltipSide::Right if vp.h.is_finite() => {
+                y = y.clamp(0.0, (vp.h - h).max(0.0));
+            }
             _ => {}
-        }
-        // Keep the bubble within the viewport horizontally.
-        if vp.w.is_finite() {
-            x = x.clamp(0.0, (vp.w - w).max(0.0));
         }
         Rectangle::new(Point::new(x, y), Size::new(w, h))
     }
@@ -150,7 +172,7 @@ impl Component for Tooltip {
                 surface,
                 Some(Border { color: accent.with_alpha(180), width: 1.0 }),
                 radius,
-                Some(Glow { color: glow_c, radius: 8.0, intensity: 0.5 }),
+                Some(Glow { color: glow_c, radius: 5.0, intensity: 0.2 }),
             );
             cx.text(rect, &self.text, foreground, font, TextAlign::Center, false);
         });
