@@ -428,22 +428,34 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Icon::new(Glyph::Lightning).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0)),
         )
-        // IconButton: a toolbar of compact, clickable icon affordances — ghost at
-        // rest, tinted hover frame + press flash + focus ring. The danger one uses
-        // a `.tone()` override.
+        // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
+        // ghost at rest, tinted hover frame + press flash + focus ring — each
+        // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.
         .child(
             Flex::row()
                 .gap(8.0)
                 .align(Align::Center)
-                .child(IconButton::new(Icon::new(Glyph::Search).color(theme.foreground).size(20.0))
-                    .on_click(|| println!("[showcase] search")))
-                .child(IconButton::new(Icon::new(Glyph::Gear).color(theme.foreground).size(20.0))
-                    .on_click(|| println!("[showcase] settings")))
-                .child(IconButton::new(Icon::new(Glyph::Plus).color(theme.foreground).size(20.0))
-                    .on_click(|| println!("[showcase] add")))
-                .child(IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
-                    .tone(theme.danger)
-                    .on_click(|| println!("[showcase] close"))),
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Search).color(theme.foreground).size(20.0))
+                        .on_click(|| println!("[showcase] search")),
+                    "Search",
+                ))
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Gear).color(theme.foreground).size(20.0))
+                        .on_click(|| println!("[showcase] settings")),
+                    "Settings",
+                ))
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Plus).color(theme.foreground).size(20.0))
+                        .on_click(|| println!("[showcase] add")),
+                    "New pane",
+                ))
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
+                        .tone(theme.danger)
+                        .on_click(|| println!("[showcase] close")),
+                    "Close",
+                ).side(TooltipSide::Bottom)),
         )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,

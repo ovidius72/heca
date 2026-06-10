@@ -53,7 +53,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [~] `Tag`/`Chip` — **DONE** as G8 `Tag` (multi-segment, leading icon, theme-driven). The **dismissible**/**selectable-filter** variants are not built yet.
 - [ ] `EnergyMeter`, `SignalIndicator`.
 - [ ] `DataCard`/`Panel`/`Hud`.
-- [ ] `Tooltip`, `Modal`/`Dialog`, `CommandPalette` (all consume the overlay layer).
+- [~] `Tooltip`, `Modal`/`Dialog`, `CommandPalette` (all consume the overlay layer). **`Tooltip` DONE** (branch `grid-ui-tooltip`) — a transparent hover-delay wrapper that paints a viewport-clamped, flip-aware bubble via `PaintCx::with_overlay`; captures no input; `.side()`/`.delay()`. `Modal`/`Dialog` + `CommandPalette` still pending.
 - [ ] Wire `Item` into `Select` options (label + `value: SignalData` + slots) — unify the two row models.
 - [ ] **C8** extend showcase to exercise every component; visual/snapshot tests.
 
@@ -121,7 +121,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  88 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  90 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 - **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
   push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
   Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
@@ -129,7 +129,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  88 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  90 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -300,7 +300,7 @@ next, and how to start.
 
 ```bash
 cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
-cargo test -p heca-grid-ui                                    # 10 unit + 88 integration + doctests
+cargo test -p heca-grid-ui                                    # 10 unit + 90 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 

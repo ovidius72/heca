@@ -2190,3 +2190,59 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     btn.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
 }
+
+#[test]
+fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
+    use heca_grid_ui::Tooltip;
+
+    let mut tip = Tooltip::new(Item::new("X"), "HELP").delay(0.5);
+
+    // Render + report whether the bubble text was painted.
+    let shows_help = |tip: &mut Tooltip| -> bool {
+        LayoutEngine::new().compute(tip, Size::new(300.0, 200.0));
+        let theme = Theme::grid_tron();
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            tip.paint(&mut cx);
+        }
+        scene.iter().any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
+    };
+
+    // Idle: no bubble.
+    assert!(!shows_help(&mut tip), "hidden before hover");
+
+    // Hover, but not past the delay yet.
+    LayoutEngine::new().compute(&mut tip, Size::new(300.0, 200.0));
+    let b = tip.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    tip.event(&Event::PointerMoved { pos: center });
+    tip.tick(0.3);
+    assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
+
+    // Past the delay: the bubble shows.
+    tip.tick(0.3);
+    assert!(shows_help(&mut tip), "bubble reveals after the hover delay");
+
+    // Pointer leaves: hidden again immediately.
+    tip.event(&Event::PointerMoved { pos: Point::new(-50.0, -50.0) });
+    assert!(!shows_help(&mut tip), "hidden once the pointer leaves");
+}
+
+#[test]
+fn tooltip_is_transparent_to_child_events() {
+    use heca_grid_ui::{FocusManager, Tooltip};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let clicks = Rc::new(Cell::new(0u32));
+    let sink = clicks.clone();
+    let mut tip = Tooltip::new(Item::new("file").on_activate(move || sink.set(sink.get() + 1)), "open");
+    LayoutEngine::new().compute(&mut tip, Size::new(200.0, 60.0));
+
+    let mut focus = FocusManager::new();
+    focus.advance(&mut tip, true);
+    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
+    focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
+    assert_eq!(clicks.get(), 1, "Enter activates the wrapped child through the tooltip");
+}

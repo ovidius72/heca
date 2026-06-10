@@ -24,6 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
+  - Overlay wrappers: [`Tooltip`](#tooltip)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -858,6 +859,25 @@ let pick = signal(None);
 let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
     .hint(pick).placement(HintPlacement::Center);
 // during a pick the host sets pick.set(Some("a".into())); clears it on exit
+```
+
+### Tooltip
+
+A transparent wrapper that reveals a floating label when the pointer rests over its child past a
+short delay. The bubble (rounded surface + accent border + glow + text) is drawn on the **overlay
+layer** so it sits above siblings, is clamped to the viewport, and a `Top` bubble flips to
+`Bottom` when there's no room above. It captures **no** input — the wrapped widget stays fully
+interactive (forwards events + focus).
+
+- **Construct**: `Tooltip::new(child, text)`.
+- **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
+  `.delay(seconds)` (hover delay before reveal, default `0.5`).
+
+```rust
+Tooltip::new(
+    IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0)).on_click(|| close()),
+    "Close",
+).side(TooltipSide::Bottom);
 ```
 
 ---
