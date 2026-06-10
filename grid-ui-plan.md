@@ -225,7 +225,7 @@ next, and how to start.
 | HUD Frame | ✅ `Pane` / `DockFrame` (corner-bracket frame, titled, collapsible) |
 | Metric Row / SidebarItem 1–4 | ✅ `Item` / `Row` + `Badge`/`Tag` (recipes) |
 | Status Dots | ✅ `StatusDot` · Tags | ✅ `Tag` · Modal | ✅ `Modal` (now bracket-framed) |
-| **Toast** / Notification | 🟡 **PR1 `Toast` content widget DONE** (branch `grid-ui-toast-widget`); **PR2 `ToastStack` overlay pending** |
+| **Toast** / Notification | ✅ **PR1 `Toast` content widget + PR2 `ToastStack` overlay DONE** (merged / branch `grid-ui-toast-stack`). App-side notification store still a follow-up. |
 
 #### What's next (in priority order)
 
@@ -240,12 +240,14 @@ next, and how to start.
      reusable **inline** (sidebar notification row). Exported both lists in `lib.rs`; 5 tests in
      `tests/phase_a.rs` (105 total); demoed as a stacked list in `examples/showcase.rs`;
      `docs/widgets.md` entry added. Build + clippy green.
-   - **PR2 — `ToastStack` overlay helper (NEXT):** arranges a **host-supplied** set of toasts into a
-     corner stack on the overlay layer (`PaintCx::with_overlay`), plays enter/exit fade, hit-tests
-     ×/action, and reports `on_dismiss(id)`/`on_action(id)` back. Keeps only *transient animation
-     state keyed by id* — **never** the queue or lifetime policy. Auto-dismiss *timing* is driven
-     by the app (it removes from its store); the stack just animates the exit. Demo: the showcase
-     example plays the "app" with a tiny local queue.
+   - **PR2 — `ToastStack` overlay helper: ✅ DONE** (branch `grid-ui-toast-stack`,
+     `widgets/toast_stack.rs`). Reads a host-owned `Signal<Vec<ToastSpec>>`, reconciles cached
+     `Toast` widgets by id, corner-anchors them on the overlay layer (`ToastCorner`), slides new
+     ones in (`tick`), routes events to the toast under the cursor, reports
+     `on_dismiss(id)`/`on_action(id)`, and **passes through** clicks that miss every toast
+     (`overlay_active` only while non-empty). No queue/timer/policy. Demoed in `showcase.rs`
+     (pre-populated list + `t` pushes one + × removes). 3 tests; `docs/widgets.md` entry added.
+     *Note: enter slide + reflow-on-remove only; explicit exit-fade animation deferred.*
    - **Later (app-side, coordinate):** the real notification store/manager in `heca` — queue,
      lifetime, dedup, click dispatch, sound — feeding `ToastStack`. Like the rail→Workspaces wiring.
 2. **§11 plan cleanup** (partly done in the handoff PR) — finish making **§11 the source of truth**

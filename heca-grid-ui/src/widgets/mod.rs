@@ -36,6 +36,7 @@ mod surface;
 mod tabs;
 mod tag;
 mod toast;
+mod toast_stack;
 mod toggle;
 mod tooltip;
 
@@ -70,5 +71,6 @@ pub use surface::Surface;
 pub use tabs::Tabs;
 pub use tag::Tag;
 pub use toast::{Toast, ToastSeverity};
+pub use toast_stack::{ToastCorner, ToastSpec, ToastStack};
 pub use toggle::Toggle;
 pub use tooltip::{Tooltip, TooltipSide};

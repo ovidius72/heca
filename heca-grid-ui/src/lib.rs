@@ -60,7 +60,7 @@ pub use widgets::{
     ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
     LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Tooltip, TooltipSide,
+    StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
 };
 
 /// Common imports for building UIs.
@@ -80,6 +80,6 @@ pub mod prelude {
         ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
         LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
-        StatusDot, Surface, Tabs, Tag, Toast, ToastSeverity, Toggle, Tooltip, TooltipSide,
+        StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
     };
 }
