@@ -2146,3 +2146,47 @@ fn row_attention_request_pulses_then_settles() {
     }
     assert!(settled, "attention pulse sequence ends and the row stops animating");
 }
+
+#[test]
+fn icon_button_hugs_icon_by_default_and_pins_an_explicit_size() {
+    use heca_grid_ui::{Glyph, Icon, IconButton};
+
+    // Default: hugs the icon + padding (square-ish, larger than the glyph).
+    let mut hug = IconButton::new(Icon::new(Glyph::Gear).size(18.0));
+    LayoutEngine::new().compute(&mut hug, Size::new(200.0, 200.0));
+    let b = hug.base().bounds;
+    assert!(b.size.w > 18.0 && b.size.h > 18.0, "hugs icon + padding");
+    assert!((b.size.w - b.size.h).abs() < 2.0, "roughly square");
+
+    // Pinned: an exact square.
+    let mut pinned = IconButton::new(Icon::new(Glyph::Gear).size(18.0)).size(40.0);
+    LayoutEngine::new().compute(&mut pinned, Size::new(200.0, 200.0));
+    let pb = pinned.base().bounds;
+    assert_eq!(pb.size.w, 40.0, "pinned width");
+    assert_eq!(pb.size.h, 40.0, "pinned square");
+}
+
+#[test]
+fn icon_button_activates_on_click_and_enter_only_when_wired() {
+    use heca_grid_ui::{Glyph, Icon, IconButton};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // No on_click → inert + unfocusable.
+    let mut bare = IconButton::new(Icon::new(Glyph::Search).size(18.0));
+    LayoutEngine::new().compute(&mut bare, Size::new(100.0, 100.0));
+    assert!(!bare.focusable(), "an icon button without on_click is not focusable");
+
+    let clicks = Rc::new(Cell::new(0u32));
+    let sink = clicks.clone();
+    let mut btn = IconButton::new(Icon::new(Glyph::Search).size(18.0))
+        .on_click(move || sink.set(sink.get() + 1));
+    LayoutEngine::new().compute(&mut btn, Size::new(100.0, 100.0));
+    assert!(btn.focusable(), "wired icon button is focusable");
+
+    let b = btn.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    btn.event(&Event::PointerPressed { pos: center });
+    btn.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
+}

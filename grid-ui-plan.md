@@ -49,7 +49,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [x] **Pane "needs attention" cue** (user-requested) — `effects::Attention` (N-pulse repeating flash) + `Row.attention(Signal<bool>)` / `.attention_color()`. Host sets the request signal → row flashes 4× + signal consumed; **sound stays host-side** (grid-ui audio-free; the app beeps when it sets the signal). Showcase `n` fires it + a terminal bell. DONE — branch `grid-ui-attention`.
 
 **Catalog gaps:**
-- [~] `IconButton` + **icon support** — **icon support DONE** (G2 `Icon`, embedded Phosphor font, `FontRole` text path). `IconButton` (a `Button` with an icon slot) still pending.
+- [x] `IconButton` + **icon support** — **DONE**. Icon support via G2 `Icon`; `IconButton` is a compact clickable icon affordance (ghost at rest → animated tone-tinted hover frame + glow, press `Flash`, focus ring, `on_click`; hugs the icon or `.size(px)` to pin a square; `.tone(Color)` hue). Branch `grid-ui-iconbutton`.
 - [~] `Tag`/`Chip` — **DONE** as G8 `Tag` (multi-segment, leading icon, theme-driven). The **dismissible**/**selectable-filter** variants are not built yet.
 - [ ] `EnergyMeter`, `SignalIndicator`.
 - [ ] `DataCard`/`Panel`/`Hud`.
@@ -121,7 +121,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  86 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  88 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 - **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
   push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
   Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
@@ -129,7 +129,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  86 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  88 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -300,7 +300,7 @@ next, and how to start.
 
 ```bash
 cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
-cargo test -p heca-grid-ui                                    # 10 unit + 86 integration + doctests
+cargo test -p heca-grid-ui                                    # 10 unit + 88 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 
