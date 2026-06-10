@@ -107,6 +107,9 @@ pub struct Toast {
     /// Sub-region currently hovered (for highlight).
     hovered: Region,
     flash: Flash,
+    /// Which sub-region the active press flash belongs to (so it's drawn over
+    /// just that rect, not the whole card).
+    flash_region: Region,
 }
 
 impl Toast {
@@ -130,6 +133,7 @@ impl Toast {
             on_dismiss: None,
             hovered: Region::None,
             flash: Flash::new(),
+            flash_region: Region::None,
         };
         toast.remeasure();
         toast
@@ -307,9 +311,9 @@ impl Component for Toast {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (surface, foreground, muted, radius) = {
+        let (surface, foreground, muted, radius, card_radius) = {
             let t = cx.theme();
-            (t.surface, t.foreground, t.muted, t.control_radius())
+            (t.surface, t.foreground, t.muted, t.control_radius(), t.radius)
         };
         let tone = match self.severity {
             ToastSeverity::Info => cx.theme().accent,
@@ -324,7 +328,7 @@ impl Component for Toast {
 
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79).
-        cx.rect(b, surface.lerp(tone, TINT_ALPHA as f32 / 255.0), None, cx.theme().radius, None);
+        cx.rect(b, surface.lerp(tone, TINT_ALPHA as f32 / 255.0), None, card_radius, None);
         cx.bracket_frame(b, Some(surface));
 
         // Leading severity icon (single-layer, toned).
@@ -359,8 +363,20 @@ impl Component for Toast {
             }
         }
 
-        // Press flash over the whole card; focus ring when clickable + focused.
-        cx.flash(b, self.flash.amount() * 0.4, cx.theme().radius);
+        // Press flash localized to the pressed sub-region, so pressing the action
+        // (e.g. "Retry") or the × doesn't light up the whole card. A whole-card
+        // press (body `on_click` / keyboard) flashes the full card.
+        if self.flash.amount() > 0.0 {
+            let (frect, frad) = match self.flash_region {
+                Region::Action => (r.action, radius),
+                Region::Dismiss => (r.dismiss, radius),
+                _ => (Some(b), card_radius),
+            };
+            if let Some(fr) = frect {
+                cx.flash(fr, self.flash.amount() * 0.4, frad);
+            }
+        }
+        // Focus ring when clickable + focused.
         if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
             cx.corner_brackets(b, tone);
         }
@@ -382,6 +398,7 @@ impl Component for Toast {
             }
             Event::PointerPressed { pos } => match self.region_at(&r, *pos) {
                 Region::Dismiss => {
+                    self.flash_region = Region::Dismiss;
                     self.flash.trigger();
                     if let Some(f) = &self.on_dismiss {
                         f();
@@ -389,6 +406,7 @@ impl Component for Toast {
                     Handled::Yes
                 }
                 Region::Action => {
+                    self.flash_region = Region::Action;
                     self.flash.trigger();
                     if let Some(f) = &self.on_action {
                         f();
@@ -396,6 +414,7 @@ impl Component for Toast {
                     Handled::Yes
                 }
                 Region::Body if self.on_click.is_some() => {
+                    self.flash_region = Region::Body;
                     self.flash.trigger();
                     if let Some(f) = &self.on_click {
                         f();
@@ -405,6 +424,7 @@ impl Component for Toast {
                 _ => Handled::No,
             },
             Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } if self.focusable() => {
+                self.flash_region = Region::Body;
                 self.flash.trigger();
                 if let Some(f) = &self.on_click {
                     f();
