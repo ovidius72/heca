@@ -1,44 +1,30 @@
-# Session Resume Handoff — 2026-06-09
+# Session Resume Handoff — 2026-06-10
 
 ## Current state
 
-- Branch: `feature/phase6-stale-state` (7 commits, PR #42 open → main)
-- Previous PRs: #34 (Track 1, merged), #36 (Track 2 + Phases 1-5, merged), #42 (Phase 6, open)
+- Branch: `main` (all refactoring PRs merged)
 - Working tree: **clean**
-- All 204 tests pass, clippy clean (except `block v0.1.6` external dep warning from metal/wgpu)
+- 279 tests pass, clippy clean
+- Refactoring track (Phases 0–10) is **complete**
 
-## What was completed
+## What was completed (refactoring track)
 
-### Phases 1-5 (PR #36, merged)
+| Phase | Focus | PR |
+|-------|-------|-----|
+| 0 — Safety Net | Test audit, behavior coverage | early PRs |
+| 1 — File Reorganization | Split monolithic files | #34 |
+| 2 — Central Mutation Boundary | after_layout_change hook, mutation helpers | #36 |
+| 3 — Shared Pane Ops | pane_ops, DnD refactoring, ad hoc scan removal | #36 |
+| 4 — Sidebar Projection Model | SidebarItemKind, sync, HashMap pane lookup | #36 |
+| 5 — Backend Lifecycle | BackendStore wrapper, lifecycle contract | #42 |
+| 6 — Stale State | Remove dead Rect, dormant fields, #[allow] audit | #42 |
+| 7 — Typed Errors | ConfigError, PtyError, RpcError, SAFETY comments | various |
+| 8 — Constants & Polish | Centralize constants, renderer API doc | various |
+| 9 — Focus Separation | Interaction policy, FocusDomain, close pane fix, arrow keys | #58, #59, #64, #69 |
+| 10 — Final Verification | Automated validation, doc reconciliation | #62 |
 
-| Phase | Focus |
-|-------|-------|
-| 1 — File Reorganization | Split monolithic files, sidebar mode keymap |
-| 2 — Central Mutation Boundary | after_layout_change hook, mutation helpers |
-| 3 — DnD Surface Dispatch + Shared Pane Ops | DragContext, enum dispatch, pane_ops, ad hoc scan removal |
-| 4 — Sidebar Projection Model | SidebarItemKind, sync_from_session, HashMap pane lookup |
-| 5 — Backend Lifecycle | BackendStore wrapper, lifecycle contract, batch helper |
-
-### Phase 6 (PR #42, open)
-
-| Commit | What |
-|--------|------|
-| `95986dd` | 6.1: Migrate Rect→Rectangle, delete heca-core/src/types.rs |
-| `ab05f43` | 6.2: Remove dormant fields (floating_visible, is_pinned, active_tab, tab_names) |
-| `9be4372` | 6.3: Remove placeholder backend variants (PaneType::Neovim/Browser) |
-| `c48903f` | 6.4: Fix ActionRegistry::ALL metadata drift |
-| `05e9903` | 6.5: Replace broad #![allow(dead_code)] with targeted per-item allows |
-| `d9f8d52` | Docs: mark Phase 6 complete |
-| `86d409a` | Rust skill review: add forward-compat doc on PaneType |
-
-## Remaining phases
-
-| Phase | Status | Focus |
-|-------|--------|-------|
-| 7 — Typed Errors | ⬜ Pending | Stable boundary errors, action dispatch failure, unsafe hygiene |
-| 8 — Constants & Polish | ⬜ Pending | Centralize constants, renderer API cleanup, perf follow-ups |
-| 9 — Focus Separation | ⬜ Pending | Floating vs tiled focus domain routing |
-| 10 — Final Verification | ⬜ Pending | Full workspace validation, smoke tests, doc reconciliation |
+Additional:
+- PR #72: Intent dispatch wiring (FocusPane/FocusWorkspace/EnterSidebarNav reach handlers)
 
 ## Key rules to remember
 
@@ -49,6 +35,15 @@
 
 ## Important files
 
-- Checklist: `bugs-and-refactoring-plan-with-checklist.md`
 - Roadmap: `.planning/ROADMAP.md`
-- Agent rules: `AGENTS.md` (rule #9: Rust skill review before every commit)
+- State: `.planning/STATE.md`
+- Interaction policy plan: `.planning/interaction-policy-plan.md`
+- Chrome/plugin architecture: `pluggable-chrome-plugin-plan.md`
+- Agent rules: `AGENTS.md`
+
+## Next steps (post-refactoring)
+
+1. **Sidebar intent routing** (Phase B/C) — Convert mouse/sidebar clicks from raw `WmAction` to `InteractionIntent` variants, remove ad hoc local guards
+2. **Phase 3 — The Content** — Neovim backend, terminal mouse forwarding
+3. **Phase 4 — The Platform** — Session persistence, RPC server, plugin runtime
+4. **Chrome/plugin architecture** — See `pluggable-chrome-plugin-plan.md`
