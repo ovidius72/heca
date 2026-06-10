@@ -2,76 +2,67 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 01 of 2 (the shell)
+current_phase: 10 of 10 (refactoring track)
 status: executing
-last_updated: "2026-06-08T08:47:57.350Z"
+last_updated: "2026-06-09T23:30:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 0
-  total_plans: 2
+  total_phases: 10
+  completed_phases: 9
+  total_plans: 1
   completed_plans: 0
-  percent: 0
+  percent: 90
 ---
 
 # State: heca
 
-**Current Phase:** 01 of 2 (the shell)
-**Status:** Executing Phase 01
-**Last Action:** NIRI layout engine built; terminal backend implemented; integrating into app
+**Current Phase:** 10 — Final Whole-Program Verification
+**Status:** Running automated validation; manual smoke tests pending
+**Last Action:** Completed Phase 9 (Focus Separation / Interaction Policy)
 
-## Progress
+## Refactoring Track Progress
 
-| Phase | Status | Requirements | Success Criteria |
-| ----- | ------ | ------------ | ---------------- |
-| 1 — The Shell | ○ In Progress | 8 | 3/4 |
-| 2 — The Workspace | ○ In Progress | 28 | 5/7 |
-| 3 — The Content | ○ Pending | 13 | 0/6 |
-| 4 — The Platform | ○ Pending | 14 | 0/7 |
+| Phase | Status | Focus |
+|-------|--------|-------|
+| 0 — Safety Net | ✅ Done | Test audit, behavior coverage |
+| 1 — File Reorganization | ✅ Done | Split monolithic files |
+| 2 — Central Mutation Boundary | ✅ Done | after_layout_change hook, mutation helpers |
+| 3 — Shared Pane Ops | ✅ Done | pane_ops, DnD refactoring, ad hoc scan removal |
+| 4 — Sidebar Projection Model | ✅ Done | SidebarItemKind, sync, HashMap pane lookup |
+| 5 — Backend Lifecycle | ✅ Done | BackendStore wrapper, lifecycle contract |
+| 6 — Stale State | ✅ Done | Remove dead Rect, dormant fields, placeholders, #[allow] audit |
+| 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, SAFETY comments |
+| 8 — Constants & Polish | ✅ Done | Centralize constants, renderer API doc (8.3 deferred) |
+| 9 — Focus Separation | ✅ Done | Interaction policy layer, FocusDomain, 29 regression tests |
+| 10 — Final Verification | 🔄 In Progress | Full validation, smoke tests, doc reconciliation |
 
-## Phase 1 Deliverables
+## Product Phase Progress
 
-- ✅ **GPU shell** — winit + wgpu window, cosmic-text rendering, primitive shapes
-- ✅ **Theme system** — TOML config with Catppuccin Latte/Mocha themes
-- ✅ **Chrome** — Tab bar, status bar, left/right sidebars, pane borders
+| Phase | Status | Requirements |
+|-------|--------|-------------|
+| 1 — The Shell | ✅ Done | 8/8 |
+| 2 — The Workspace | ✅ Done | 28/28 |
+| 3 — The Content | 🔄 In Progress | PANE-01/02 done, Neovim pending |
+| 4 — The Platform | ⬜ Pending | Session, RPC, plugins |
 
-## Phase 2 Deliverables (NIRI Layout)
+## Validation (Phase 10.1)
 
-- ✅ **NIRI layout engine** (`heca-core/src/layout/`):
-  - `Session` — workspace stack + overview/expose mode + workspace switching
-  - `Workspace` — scrolling space + floating panes
-  - `ScrollingSpace` — horizontal columns with `ViewOffset` animated scroll
-  - `Column` — vertical pane stack with height distribution
-  - `Pane` — content-agnostic layout leaf
-  - `Animation` system — easing, swipe tracker, `Animated<T>`
-  - `ViewOffset` — three-state scroll (Static/Animation/Gesture)
-- ✅ **PaneBackend trait** — abstract interface for terminal, neovim, browser
-- ✅ **Terminal backend** — PTY + `vte` parser + cell grid
-- ✅ **NIRI layout wired into app** — `Session` replaces `PaneTree` in `main.rs`, render loop uses `panes_with_positions()`
-- ⏳ **Input routing** — keyboard → active pane, focus left/right/up/down via session
-- ⏳ **Overview mode rendering** — zoomed workspace thumbnails
+- `cargo check --workspace`: ✅ clean
+- `cargo clippy --workspace --all-targets --all-features`: ✅ 0 heca warnings
+- `cargo test --workspace`: ✅ 264 tests pass, 0 failures
 
-## Keyboard Bindings (NIRI-style)
+## Remaining Phase 10 Items
 
-| Binding | Action |
-|---------|--------|
-| Ctrl+B → h | Focus column left (animated scroll) |
-| Ctrl+B → l | Focus column right (animated scroll) |
-| Ctrl+B → j | Focus pane down / next workspace |
-| Ctrl+B → k | Focus pane up / prev workspace |
-| Ctrl+B → - | Split horizontal (new column) |
-| Ctrl+B → v | Split vertical (new pane in column) |
-| Ctrl+B → x | Close active pane |
-| Ctrl+B → Space | Toggle left sidebar |
-| Ctrl+B → o | Toggle overview/expose mode |
+- 10.2: Manual smoke tests (requires running the app)
+- 10.3: Reconcile docs/checklists/roadmaps ✅ (in progress)
+- 10.4: Confirm no phase-level regressions without explicit deferment ✅ (only 9.V manual test remains)
+
+## Open Deferments
+
+- 8.3: Terminal render-data cloning (terminal backend not fully wired)
+- 9.V: Manual smoke test of floating focus vs sidebar/content click
+- Interaction policy: sidebar intent routing, chrome sources, RPC source (future phases)
+- Interaction policy R6: convert `focused_pane_id` return type to `Option<PaneId>` (future polish)
 
 ## Blockers
 
 None.
-
-## Notes
-
-- Old BSP tree (`heca-core/src/pane.rs`) kept for reference but no longer used.
-- NIRI layout engine is the canonical layout system.
-- Browser pane deferred to v2.
-- Out-of-process plugins deferred to v2.
-- Cross-platform from day one: Linux, macOS, Windows.

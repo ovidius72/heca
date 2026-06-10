@@ -162,10 +162,10 @@ Interpretation rules:
 
 ### Phase 0 — Safety Net Before Refactoring
 
-- [ ] Phase 0 complete
-  - [ ] 0.1 Audit current tests
-  - [ ] 0.2 Add high-value behavior tests
-  - [ ] 0.V Validate Phase 0 safety net coverage
+- [x] Phase 0 complete
+  - [x] 0.1 Audit current tests
+  - [x] 0.2 Add high-value behavior tests
+  - [x] 0.V Validate Phase 0 safety net coverage
 
 ### Phase 1 — Reorganize the Giant Files
 
@@ -391,21 +391,21 @@ Short description:
 
 ### Phase 9 — Fix Floating vs Tiled Focus-Domain Routing
 
-- [ ] Phase 9 complete
-  - [ ] 9.1 Define the focus domain explicitly
-  - [ ] 9.2 Define action policy by domain
-  - [ ] 9.3 Route handlers through the domain guard
-  - [ ] 9.4 Centralize focused-pane targeting helpers
-  - [ ] 9.5 Add regression tests for domain routing
-  - [ ] 9.V Validate floating vs tiled action targeting correctness
+- [x] Phase 9 complete
+  - [x] 9.1 Define the focus domain explicitly
+  - [x] 9.2 Define action policy by domain
+  - [x] 9.3 Route handlers through the domain guard
+  - [x] 9.4 Centralize focused-pane targeting helpers
+  - [x] 9.5 Add regression tests for domain routing
+  - [ ] 9.V Validate floating vs tiled action targeting correctness (manual smoke test)
 
 ### Phase 10 — Final Whole-Program Verification
 
 - [ ] Phase 10 complete
-  - [ ] 10.1 Run full workspace validation (`cargo check`, `cargo clippy`, `cargo test`)
+  - [x] 10.1 Run full workspace validation (`cargo check`, `cargo clippy`, `cargo test`)
   - [ ] 10.2 Run focused smoke tests for keybindings, sidebar/workspace behavior, floating/tiled behavior, and config reload
-  - [ ] 10.3 Reconcile docs/checklists/roadmaps with final refactor state
-  - [ ] 10.4 Confirm no phase-level regressions remain open without explicit deferment
+  - [x] 10.3 Reconcile docs/checklists/roadmaps with final refactor state
+  - [x] 10.4 Confirm no phase-level regressions remain open without explicit deferment
 
 ---
 
