@@ -560,31 +560,10 @@ impl TextRenderer {
         let vertex_data = bytemuck::cast_slice(&vertices);
         let index_data = bytemuck::cast_slice(&indices);
 
-        let staging_v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_vertex_staging"),
-            contents: vertex_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        let staging_i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_index_staging"),
-            contents: index_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-
-        encoder.copy_buffer_to_buffer(
-            &staging_v,
-            0,
-            &self.vertex_buffer,
-            0,
-            vertex_data.len() as u64,
-        );
-        encoder.copy_buffer_to_buffer(
-            &staging_i,
-            0,
-            &self.index_buffer,
-            0,
-            index_data.len() as u64,
-        );
+        // Write directly into the persistent buffers — no per-frame staging-buffer
+        // allocation (which churned the heap 60×/sec and caused the jittery CPU).
+        queue.write_buffer(&self.vertex_buffer, 0, vertex_data);
+        queue.write_buffer(&self.index_buffer, 0, index_data);
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),
