@@ -439,6 +439,11 @@ impl<'a> PaintCx<'a> {
             let t = self.theme;
             (t.accent, t.background, t.radius, t.border_width)
         };
+        // `border_width == 0` means borders off — draw no frame at all (neither the
+        // bright corners nor the dim midsections), rather than a half-drawn frame.
+        if border_width <= 0.0 {
+            return;
+        }
         let b = rect;
 
         // Bright accent border tracing the full rounded perimeter. The renderer's

@@ -1,7 +1,7 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size, Theme};
+use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -2481,4 +2481,36 @@ fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
     // Ctrl+U = delete from caret to line start.
     inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
     assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+}
+
+// --- bracket_frame ----------------------------------------------------------
+
+#[test]
+fn bracket_frame_draws_nothing_at_zero_border_width() {
+    // `border_width == 0` means borders off: the bracket frame must draw NOTHING
+    // — no bright corners and no dim midsection lines. (Previously it half-drew,
+    // leaving faint straight edges with empty corners.)
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0;
+
+    let mut scene = Scene::new();
+    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    assert!(scene.is_empty(), "bracket_frame must emit no commands when border_width == 0");
+
+    // Sanity: with a non-zero border it does draw the bright accent perimeter.
+    theme.border_width = 1.0;
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    let drew_bright = scene.iter().any(|cmd| matches!(
+        cmd,
+        DrawCommand::Rect(r) if r.border.is_some_and(|bd| bd.color == theme.accent && bd.width > 0.0)
+    ));
+    assert!(drew_bright, "a non-zero border still draws the bright bracket frame");
 }
