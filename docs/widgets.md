@@ -864,10 +864,11 @@ let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
 ### Tooltip
 
 A transparent wrapper that reveals a floating label when the pointer rests over its child past a
-short delay. The bubble (rounded surface + accent border + glow + text) is drawn on the **overlay
-layer** so it sits above siblings, is clamped to the viewport, and a `Top` bubble flips to
-`Bottom` when there's no room above. It captures **no** input — the wrapped widget stays fully
-interactive (forwards events + focus).
+short delay. The bubble (rounded surface + accent border + soft glow + text) is drawn on the
+**overlay layer** so it sits above siblings. Placement is **viewport-aware on all four sides**:
+the preferred side flips to its opposite when there's no room (`Top`↔`Bottom`, `Left`↔`Right`)
+and the cross-axis is clamped on-screen. It captures **no** input — the wrapped widget stays
+fully interactive (forwards events + focus).
 
 - **Construct**: `Tooltip::new(child, text)`.
 - **Builders**: `.side(TooltipSide)` (`Top` | `Bottom` | `Left` | `Right`, default `Top`),
