@@ -92,10 +92,18 @@ impl Input {
 
     /// Set the initial text (caret lands at the end).
     pub fn value(mut self, value: impl Into<String>) -> Self {
+        self.set_value(value);
+        self
+    }
+
+    /// Replace the text at runtime (caret to end, selection cleared) — e.g. to
+    /// reset a reused field. Does **not** fire `on_change` (it's a host action,
+    /// not a user edit).
+    pub fn set_value(&mut self, value: impl Into<String>) {
         let s = value.into();
         self.cursor = s.chars().count();
+        self.anchor = None;
         self.text.set(s);
-        self
     }
 
     /// Set the placeholder shown while empty and unfocused.
