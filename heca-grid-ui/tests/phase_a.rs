@@ -2448,3 +2448,37 @@ fn command_palette_navigates_with_arrows_and_ctrl_jk() {
     p.event(&Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(ran.get(), 2, "Ctrl+J ×2 then ArrowUp lands on the 2nd command (Close pane)");
 }
+
+#[test]
+fn command_palette_query_reuses_input_word_delete() {
+    use heca_grid_ui::{GridKey, Modifiers};
+    let (mut p, ran) = palette_with_markers();
+    p = p.open(true);
+
+    // "Toggle xyz" matches nothing (no command contains "...xyz").
+    for c in "Toggle xyz".chars() {
+        p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
+    }
+    // Ctrl+Backspace word-deletes the whole "xyz" (not one char), leaving
+    // "Toggle " — which now matches "Toggle sidebar". A char-delete would leave
+    // "Toggle xy" (still no match), so this proves the Input editing is wired.
+    p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    p.event(&Event::Key { key: GridKey::Backspace, pressed: true });
+    p.event(&Event::ModifiersChanged(Modifiers::default()));
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
+}
+
+#[test]
+fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
+    use heca_grid_ui::{Input, Modifiers};
+    let mut inp = Input::new().value("hello world");
+
+    inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    // Ctrl+H = delete one char back.
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true });
+    assert_eq!(inp.value_str(), "hello worl", "Ctrl+H deletes one char back");
+    // Ctrl+U = delete from caret to line start.
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
+    assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+}

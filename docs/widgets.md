@@ -912,9 +912,11 @@ let open = modal.open_signal();
 ### CommandPalette
 
 A fuzzy **command launcher** overlay (same input-capturing contract as `Modal`): a query line
-over a scrollable list of commands. Typing filters with a **fuzzy subsequence** match,
-**smart-case** (case-insensitive unless the query has an uppercase letter), ranked, with matched
-characters highlighted in the accent. Selecting a command fires its callback and closes.
+over a scrollable list of commands. The query line is a real [`Input`](#input), so full editing
+comes for free — selection, multi-click, and char/word/line delete (Ctrl/Alt/⌘ + Backspace/Delete).
+Typing filters with a **fuzzy subsequence** match, **smart-case** (case-insensitive unless the
+query has an uppercase letter), ranked, with matched characters highlighted in the accent.
+Selecting a command fires its callback and closes.
 
 - **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
   .icon(Glyph)?.key("⌘K")?)`; `.placeholder(text)`, `.open(bool)`.

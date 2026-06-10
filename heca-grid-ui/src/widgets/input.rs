@@ -92,10 +92,18 @@ impl Input {
 
     /// Set the initial text (caret lands at the end).
     pub fn value(mut self, value: impl Into<String>) -> Self {
+        self.set_value(value);
+        self
+    }
+
+    /// Replace the text at runtime (caret to end, selection cleared) — e.g. to
+    /// reset a reused field. Does **not** fire `on_change` (it's a host action,
+    /// not a user edit).
+    pub fn set_value(&mut self, value: impl Into<String>) {
         let s = value.into();
         self.cursor = s.chars().count();
+        self.anchor = None;
         self.text.set(s);
-        self
     }
 
     /// Set the placeholder shown while empty and unfocused.
@@ -276,6 +284,14 @@ impl Input {
                 if (self.mods.ctrl || self.mods.meta) && c.eq_ignore_ascii_case(&'a') =>
             {
                 self.select_all();
+            }
+            // Emacs/readline backspace bindings: Ctrl+H deletes one char back,
+            // Ctrl+U deletes from the caret to the start of the line.
+            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'h') => {
+                self.backspace(Granularity::Char)
+            }
+            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'u') => {
+                self.backspace(Granularity::Line)
             }
             GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
             GridKey::Char(c) => self.insert(c),

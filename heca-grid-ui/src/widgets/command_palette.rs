@@ -21,8 +21,8 @@ use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, Pain
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow, TextAlign};
-use crate::widgets::Glyph;
-use std::cell::Cell;
+use crate::widgets::{Glyph, Input};
+use std::cell::{Cell, RefCell};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// One command in a [`CommandPalette`].
@@ -117,7 +117,10 @@ fn fuzzy(query: &str, text: &str, case_sensitive: bool) -> Option<(i32, Vec<usiz
 pub struct CommandPalette {
     base: Base,
     commands: Vec<Command>,
-    query: String,
+    /// The query field — a real [`Input`], so editing (selection, word/line
+    /// delete, multi-click, caret) comes for free. Driven manually since the
+    /// palette is overlay-drawn: its bounds/font/focus are set at paint time.
+    query: RefCell<Input>,
     selected: usize,
     scroll: usize,
     placeholder: String,
@@ -132,7 +135,7 @@ impl CommandPalette {
         Self {
             base: Base::new(),
             commands: Vec::new(),
-            query: String::new(),
+            query: RefCell::new(Input::new()),
             selected: 0,
             scroll: 0,
             placeholder: "Type a command…".to_string(),
@@ -169,15 +172,21 @@ impl CommandPalette {
         self.open.get_untracked()
     }
 
+    /// The current query text (read from the [`Input`]).
+    fn query_text(&self) -> String {
+        self.query.borrow().value_str()
+    }
+
     /// The current filtered + ranked results.
     fn results(&self) -> Vec<Match> {
-        let case_sensitive = self.query.chars().any(|c| c.is_uppercase());
+        let query = self.query_text();
+        let case_sensitive = query.chars().any(|c| c.is_uppercase());
         let mut out: Vec<Match> = self
             .commands
             .iter()
             .enumerate()
             .filter_map(|(i, c)| {
-                fuzzy(&self.query, &c.label, case_sensitive).map(|(score, hits)| Match { cmd: i, score, hits })
+                fuzzy(&query, &c.label, case_sensitive).map(|(score, hits)| Match { cmd: i, score, hits })
             })
             .collect();
         // Stable sort by score desc (filter_map preserved original order for ties).
@@ -230,7 +239,7 @@ impl CommandPalette {
 
     fn close(&mut self) {
         self.open.set(false);
-        self.query.clear();
+        self.query.borrow_mut().set_value("");
         self.selected = 0;
         self.scroll = 0;
     }
@@ -319,26 +328,22 @@ impl Component for CommandPalette {
                 Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
             );
 
-            // Query line.
-            cx.rect(query, background.with_alpha(120), None, ctrl_radius, None);
-            let q_text = Rectangle::new(
-                Point::new(query.loc.x + ROW_PAD_X, query.loc.y),
-                Size::new(query.size.w - 2.0 * ROW_PAD_X, query.size.h),
-            );
-            if self.query.is_empty() {
-                cx.text(q_text, &self.placeholder, muted, font, TextAlign::Start, false);
-            } else {
-                cx.text(q_text, &self.query, foreground, font, TextAlign::Start, false);
-                // A thin caret after the typed text.
-                let cx0 = q_text.loc.x + self.query.chars().count() as f64 * adv + 1.0;
-                let cy = query.loc.y + (query.size.h - font as f64) / 2.0;
-                cx.rect(
-                    Rectangle::new(Point::new(cx0, cy), Size::new(1.5, font as f64)),
-                    accent,
-                    None,
-                    0.0,
-                    None,
+            // Query line: a real Input, positioned + focused + painted manually
+            // (it draws its own box, caret, selection, and text).
+            {
+                let mut q = self.query.borrow_mut();
+                q.base_mut().bounds = query;
+                q.base_mut().font = font;
+                q.base_mut().focused.set(true); // so the caret shows + blinks
+                q.paint(cx);
+            }
+            // The Input hides its placeholder while focused; draw ours when empty.
+            if self.query_text().is_empty() {
+                let q_text = Rectangle::new(
+                    Point::new(query.loc.x + ROW_PAD_X, query.loc.y),
+                    Size::new(query.size.w - 2.0 * ROW_PAD_X, query.size.h),
                 );
+                cx.text(q_text, &self.placeholder, muted, font, TextAlign::Start, false);
             }
 
             // Result rows (the visible scroll window).
@@ -392,9 +397,11 @@ impl Component for CommandPalette {
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
-        // Track modifiers even while closed (broadcast); never consume.
+        // Track modifiers even while closed; keep the query field's copy in sync
+        // (it needs them for word/line delete). Observe, don't consume.
         if let Event::ModifiersChanged(m) = ev {
             self.modifiers = *m;
+            self.query.borrow_mut().event(ev);
             return Handled::No;
         }
         if !self.is_open() {
@@ -402,6 +409,18 @@ impl Component for CommandPalette {
         }
         match ev {
             Event::Key { key, pressed: true } => {
+                // The query field gets first crack: it owns every editing key
+                // (typing, selection, char/word/line delete, caret moves) and
+                // returns `No` for Ctrl+char / Enter / Esc / Up-Down — which we
+                // then interpret as navigation. Only reset the selection when the
+                // text actually changed (not on bare caret moves).
+                let before = self.query_text();
+                if self.query.borrow_mut().event(ev) == Handled::Yes {
+                    if self.query_text() != before {
+                        self.on_query_changed();
+                    }
+                    return Handled::Yes;
+                }
                 match key {
                     GridKey::Escape => self.close(),
                     GridKey::Enter => self.run_selected(),
@@ -409,15 +428,6 @@ impl Component for CommandPalette {
                     GridKey::ArrowUp => self.select_prev(),
                     GridKey::Char('j') if self.modifiers.ctrl => self.select_next(),
                     GridKey::Char('k') if self.modifiers.ctrl => self.select_prev(),
-                    GridKey::Backspace => {
-                        self.query.pop();
-                        self.on_query_changed();
-                    }
-                    // Plain typing edits the query; modified chars are swallowed.
-                    GridKey::Char(c) if !self.modifiers.ctrl && !self.modifiers.meta => {
-                        self.query.push(*c);
-                        self.on_query_changed();
-                    }
                     _ => {}
                 }
                 Handled::Yes
@@ -440,7 +450,17 @@ impl Component for CommandPalette {
             }
             Event::PointerPressed { pos } => {
                 let results = self.results();
-                let (panel, _q, list_top, row_h, visible) = self.layout(results.len());
+                let (panel, query_rect, list_top, row_h, visible) = self.layout(results.len());
+                // A click on the query line places the caret / selects (the Input
+                // needs its current bounds + font to hit-test the char position).
+                if query_rect.contains(*pos) {
+                    let font = self.base.font;
+                    let mut q = self.query.borrow_mut();
+                    q.base_mut().bounds = query_rect;
+                    q.base_mut().font = font;
+                    q.event(ev);
+                    return Handled::Yes;
+                }
                 let mut ran = false;
                 for vi in 0..visible {
                     let ri = self.scroll + vi;
@@ -463,6 +483,18 @@ impl Component for CommandPalette {
             // Swallow all other input while open.
             _ => Handled::Yes,
         }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let open = self.is_open();
+        {
+            // Keep the query field focused (caret) while open; advance its blink.
+            let mut q = self.query.borrow_mut();
+            q.base_mut().focused.set(open);
+            q.tick(dt);
+        }
+        // Keep frames coming while open so the caret blinks.
+        open
     }
 }
 
