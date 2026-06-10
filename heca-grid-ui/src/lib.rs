@@ -59,7 +59,7 @@ pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
     ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
+    LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toggle, Tooltip, TooltipSide,
 };
 
@@ -79,7 +79,7 @@ pub mod prelude {
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
         ButtonVariant, Card, Checkbox, ChromeRegion, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
+        LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toggle, Tooltip, TooltipSide,
     };
 }
