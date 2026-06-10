@@ -14,7 +14,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, Glow};
+use crate::scene::{Glow};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -136,10 +136,7 @@ impl Component for Toggle {
         // muted → solid accent (active border stays 100% opaque, unlike the
         // fill); a glow rises as it turns on.
         let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
-        let border = Border {
-            color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
-            width: 1.5,
-        };
+        let border = cx.border(muted.lerp(accent, p).with_alpha(border_a.round() as u8));
         let track_glow = (!disabled && p > 0.0).then_some(Glow {
             color: glow_c,
             radius: GLOW_RADIUS,
@@ -149,7 +146,7 @@ impl Component for Toggle {
         // to the pill max — so at a moderate theme radius it reads as a capsule.
         let radius = (theme_radius * PILL_RADIUS_MUL).min((TRACK_H / 2.0) as f32);
         let fill = surface.lerp(accent.with_alpha(ON_FILL_ALPHA), p);
-        cx.rect(track, fill, Some(border), radius, track_glow);
+        cx.rect(track, fill, border, radius, track_glow);
 
         // Knob: muted gray (off) → light (on) so it reads against the accent
         // fill; slides across the track and glows on.

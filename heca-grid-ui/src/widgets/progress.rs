@@ -6,7 +6,7 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, Glow};
+use crate::scene::{Glow};
 use crate::style::Length;
 use heca_core::layout::{Rectangle, Size};
 
@@ -82,17 +82,9 @@ impl Component for ProgressBar {
         // Follow the theme radius, clamped to the bar's pill max (0 → square).
         let radius = theme_radius.min((b.size.h / 2.0) as f32);
 
-        // Track.
-        cx.rect(
-            b,
-            surface,
-            Some(Border {
-                color: muted,
-                width: 1.0,
-            }),
-            radius,
-            None,
-        );
+        // Track (theme-width border; none when borders are off).
+        let border = cx.border(muted);
+        cx.rect(b, surface, border, radius, None);
 
         // Accent fill from the left, eased to the current fraction.
         let frac = self.shown.clamp(0.0, 1.0) as f64;

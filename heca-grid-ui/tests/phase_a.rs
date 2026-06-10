@@ -1,7 +1,7 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size, Theme};
+use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -2575,4 +2575,126 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     assert!(t.focusable(), "a clickable toast is focusable");
     t.event(&Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
+}
+
+// --- Button respects theme border_width + radius ----------------------------
+
+#[test]
+fn button_derives_border_width_and_radius_from_theme() {
+    use heca_grid_ui::{Button, Component};
+
+    // A theme with a distinctive radius + border width.
+    let mut theme = Theme::grid_tron();
+    theme.radius = 10.0;
+    theme.border_width = 2.0;
+    let expected_radius = theme.control_radius();
+
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+
+    // The button's background box uses the surface fill; it must round to the
+    // theme's control radius and stroke at the theme's border width — not the
+    // old hardcoded 0.0 / 1.5.
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button paints a surface-filled background box");
+    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.control_radius()");
+    assert_eq!(
+        bg.border.expect("primary button has a border").width,
+        theme.border_width,
+        "button border width follows theme.border_width",
+    );
+
+    // border_width == 0 → no border drawn (borders off, like every surface).
+    theme.border_width = 0.0;
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button still paints its background box");
+    assert!(bg.border.is_none(), "border_width == 0 means no button border");
+}
+
+// --- border_width == 0 ⇒ no borders (containers keep a thin uniform hairline) -
+
+#[test]
+fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
+    // Containers stay defined at border_width == 0, but via a single thin SOLID
+    // uniform border — NOT the reticle (whose bright corners collapsed to nothing,
+    // leaving empty corners + lingering dim straight edges).
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0;
+    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    let rects: Vec<_> = scene.iter().filter_map(|c| match c {
+        DrawCommand::Rect(r) => Some(*r),
+        _ => None,
+    }).collect();
+    assert_eq!(rects.len(), 1, "border=0 frame is one uniform hairline (no dim-edge overlays)");
+    assert!(rects[0].border.is_some_and(|b| b.width > 0.0), "the hairline is solid + visible");
+
+    // With a real border the bright accent reticle (+ dim midsection overlays) returns.
+    theme.border_width = 2.0;
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    let bright = scene.iter().any(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    ));
+    let n_rects = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
+    assert!(bright, "border>0 draws the bright accent reticle border");
+    assert!(n_rects > 1, "border>0 also dims the straight midsections (overlay rects)");
+}
+
+/// Paint `w` under `border_width == 0` and return every visible (width>0) Rect
+/// border stroke it emitted.
+fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f32> {
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0;
+    let vp = Size::new(400.0, 200.0);
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut w, vp);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        w.paint(&mut cx);
+    }
+    scene.iter().filter_map(|c| match c {
+        DrawCommand::Rect(r) => r.border.map(|b| b.width),
+        _ => None,
+    }).filter(|w| *w > 0.0).collect()
+}
+
+#[test]
+fn non_container_widgets_drop_their_border_at_zero_border_width() {
+    use heca_grid_ui::{Alert, Badge, Button, ProgressBar, Toggle};
+    // Guard against the recurring regression: a widget that hardcodes a border
+    // stroke instead of routing it through the theme (cx.border / border_width).
+    for (name, widths) in [
+        ("button", visible_border_widths_at_zero(Button::primary("OK"))),
+        ("badge", visible_border_widths_at_zero(Badge::success("ON"))),
+        ("alert", visible_border_widths_at_zero(Alert::warning("W").body("b"))),
+        ("progress", visible_border_widths_at_zero(ProgressBar::new().value(0.5))),
+        ("toggle", visible_border_widths_at_zero(Toggle::new().on(true))),
+    ] {
+        assert!(widths.is_empty(), "{name}: expected no border at border_width=0, got {widths:?}");
+    }
 }
