@@ -17,12 +17,13 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 
 - [Mental model](#mental-model)
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
-- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`
+- [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge)
+  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -341,6 +342,13 @@ stay DRY):
 A reusable press effect: `Flash::new()` / `Flash::with_duration(s)`; `.trigger()` on press,
 `.tick(dt)` each frame (`true` while fading), `.amount()` (0–1) to paint via `cx.flash`.
 
+### `Attention`
+
+A "needs attention" pulse: `Attention::new()`; `.trigger(pulses)` runs a fixed number of
+sawtooth flashes (snap to `1.0`, fade to `0.0`, repeat) then stops; `.tick(dt)` (`true` while
+pulsing), `.amount()` (0–1), `.is_active()`. Used by [`Row.attention`](#row) — the widget
+flashes; the host plays any **sound** (the library is audio-free).
+
 ---
 
 ## Widgets
@@ -406,6 +414,30 @@ Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
 
 > Today `Pane` is a framed container only — the HUD header (title + status) and tab bar from
 > the design vision are still pending (see `grid-ui-plan.md` → Phase C7).
+
+### Grid
+
+CSS-grid layout (taffy `display: grid`): explicit column/row tracks, named template areas, and
+per-child placement. Pure layout (no styling) — the building block for rich composed rows.
+
+- **Construct**: `Grid::new()`.
+- **Builders**: `.columns([Track])`, `.rows([Track])` (`Track::{Px(f32), Fr(f32), Auto,
+  MinContent, MaxContent}`); `.areas(["a b", "a c"])` named template areas; `.area(child,
+  "name")` places a child in an area; `.cell(child, col, row, col_span, row_span)` explicit
+  placement.
+- **Traits**: `LayoutExt`, `Parent`.
+
+```rust
+// icon · title · tag on the top row; subtitle under the title
+Grid::new()
+    .columns([Track::Px(22.0), Track::Fr(1.0), Track::Auto])
+    .rows([Track::Auto, Track::Auto])
+    .areas(["dot title tag", ".  sub   ."])
+    .gap(4.0)
+    .area(Icon::new(Glyph::Terminal), "dot")
+    .area(Label::new("nvim"), "title")
+    .area(Badge::success("RUN"), "tag");
+```
 
 ### Label
 
@@ -577,6 +609,30 @@ let rows = ["DASHBOARD", "PROFILE", "SETTINGS"];
 > fires `on_activate`, so a single source of truth can own which row is active (set the
 > clicked row's `state()` to `true`, the rest to `false`). This keeps multi-select possible.
 
+### Row
+
+`Item`'s open cousin: the same interactive chrome (hover tint, active/selected pill +
+`ActiveMarker`, press flash, focus ring, `on_activate` on click / Enter / Space) wrapped around
+**any** children — e.g. a multi-line [`Grid`](#grid) of `Label`/`Icon`/`Badge`. Use it for rich,
+clickable, selectable Dock rows. The active/hover highlight derives from the row's own
+background (a stronger same-hue tint) so a state-tinted row never gets a clashing accent overlay.
+
+- **Construct**: `Row::new()`. Add content with `.child(...)`.
+- **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
+  `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
+  `.attention(Signal<bool>)` + `.attention_color(Color)`, plus `StyleExt` for a persistent
+  background under the selection overlay.
+- **Accessors**: `.state() -> Signal<bool>` (active).
+- **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
+  times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
+  the library is audio-free.
+
+```rust
+let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radius())
+    .child(/* a Grid of icon + title + Tag + Badge */)
+    .on_activate(move || select(i));
+```
+
 ### Badge
 
 Self-sizing neon pill for status/metadata (display-only).
@@ -655,6 +711,135 @@ Segmented Tron energy meter; lit segments grow with the value and shift colour
 
 ```rust
 Gauge::new().value(0.85);
+```
+
+### Icon
+
+A single **duotone** glyph from the embedded Phosphor Duotone font. Renders two stacked layers
+— a dimmed *secondary* wash + a full-strength *primary* — in the same hue. Colors are
+theme-driven (primary defaults to the foreground; secondary = primary at
+`theme.icon_secondary_alpha`), never baked in. Square, font-sized.
+
+- **Construct**: `Icon::new(Glyph)` (curated set) or `Icon::from_codepoint(secondary_cp)`.
+- **Builders**: `.size(px)`, `.color(Color)` (primary), `.secondary_color(Color)`.
+- **`Glyph`**: a curated enum — `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`,
+  `GitCommit`, `GitMerge`, `GitPullRequest`, `Terminal`, `Gear`, `Search`, `Close`, `Check`,
+  `Play`, `Pause`, `Stop`, `Warning`, `Info`, `Lightning`, `List`, `Sidebar`, … (or use
+  `from_codepoint` for any glyph).
+
+```rust
+Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);
+```
+
+### Tag
+
+A bordered metadata chip — git branch / path / filter, hue-configurable and domain-neutral.
+**Multi-segment**: chain `.segment_*` to render thin-divided sections (e.g. `path │ ⎇ main │ 5
++152 -12`). Theme-driven radius + border; generous per-axis padding. In a `Grid` cell, wrap in
+`Flex::row().child(tag)` so it hugs its content instead of stretching.
+
+- **Construct**: `Tag::new(label)`.
+- **Builders**: `.leading(impl Component)` (e.g. an `Icon`), `.segment(impl Component)` /
+  `.segment_text(label, Option<leading>)` (add a divided segment), `.color(Color)` (hue).
+
+```rust
+Tag::new("main").leading(Icon::new(Glyph::GitBranch).size(13.0))
+    .segment_text("5 +152 -12", None).color(theme.warning);
+```
+
+### ItemGroup
+
+A collapsible group: a header `Item` (label + chevron) over a set of rows. Collapsing folds the
+rows out of layout (`display: none`); a hidden subtree is never painted or Tab-focused.
+
+- **Construct**: `ItemGroup::new(label)`. Add rows with `.child(...)`.
+- **Builders**: `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`Action::value("group-toggle",
+  Bool)`).
+- **Accessors**: `.state() -> Signal<bool>` (expanded).
+
+```rust
+ItemGroup::new("src")
+    .child(Item::new("main.rs"))
+    .child(Item::new("lib.rs"));
+```
+
+### DockFrame
+
+A titled, collapsible, bracket-framed shell for a Dock: a title bar (drag-handle grip + chevron
++ title + a header-controls slot) over a foldable body. Reuses `Pane`'s corner brackets.
+**Rail-aware**: bound to a region's [`RegionMode`](#chromeregion) signal, it folds header + body
+away to a single centered `Icon` while the region is collapsed to a rail.
+
+- **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`.
+- **Builders**: `.header(impl Component)` (fill the controls slot, e.g. a search field or count
+  `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
+  `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`).
+- **Accessors**: `.state() -> Signal<bool>` (expanded).
+
+```rust
+let sidebar = ChromeRegion::vertical();
+let mode = sidebar.mode_signal();
+let files = DockFrame::new("EXPLORER")
+    .rail(mode, Glyph::FolderOpen)
+    .header(Badge::accent("3"))
+    .child(ItemGroup::new("src").child(Item::new("main.rs")));
+```
+
+### ChromeRegion
+
+The generic, oriented **chrome shell** that hosts Docks — one widget for all four regions
+(left/right sidebars = vertical; top/bottom bars = horizontal). A dumb, mode-aware container: it
+stacks `DockFrame`s and sizes itself to its mode; it owns **no** tree/workspace/drag semantics.
+Per the chrome plan's *read-via-signals, write-via-actions* rule, it reacts to a
+[`RegionMode`](#chromeregion) signal the host drives.
+
+- **Construct**: `ChromeRegion::vertical()` / `::horizontal()`. Add docks with `.dock(...)`.
+- **Builders**: `.expanded_size(px)`, `.rail_size(px)`, `.mode(RegionMode)` (initial),
+  `.with_mode_signal(Signal<RegionMode>)` (adopt a host-owned mode signal).
+- **Accessors / intents**: `.mode_signal() -> Signal<RegionMode>` (binding point — share it with
+  rail-aware Docks before `.dock(...)`), `.toggle()` (flip Expanded ⇄ CollapsedRail).
+- **`RegionMode`**: `Expanded`, `CollapsedRail` (thin icon rail), `Hidden` (`display: none`).
+
+```rust
+let sidebar = ChromeRegion::vertical().expanded_size(320.0).rail_size(64.0)
+    .dock(explorer).dock(source_control);
+sidebar.toggle();   // or the host sets mode_signal() from a key / RPC
+```
+
+### RailCell
+
+A focusable **square icon cell** — the per-item unit a *list* Dock (workspaces / panes) shows
+when collapsed to a rail, so every pane stays visible and addressable (vs a tool Dock folding to
+one icon). Centers one `Icon`; active = accent tint + same-hue border + glow; hover/press flash;
+focus ring. Wrap it in a [`KeyHint`](#keyhint) for the move/swap/select pick letters.
+
+- **Construct**: `RailCell::new(Icon)`.
+- **Builders**: `.cell_size(px)`, `.active(bool)`, `.on_activate(impl Fn())`.
+- **Accessors**: `.state() -> Signal<bool>` (active/selected).
+
+```rust
+RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
+    .cell_size(44.0).active(true).on_activate(move || focus_pane(i));
+```
+
+### KeyHint
+
+A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
+actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
+jump prefix (move/swap/select, command palettes, content panes). It is transparent to focus and
+events (the wrapped widget stays clickable/focusable); it only adds paint. Signal-driven, so
+mouse, keyboard, and RPC all light it up identically.
+
+- **Construct**: `KeyHint::new(child)`.
+- **Builders**: `.hint(Signal<Option<String>>)`, `.placement(HintPlacement)`
+  (`TopCenter` | `Center`), `.size(px)`.
+- **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
+
+```rust
+let pick = signal(None);
+let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
+    .hint(pick).placement(HintPlacement::Center);
+// during a pick the host sets pick.set(Some("a".into())); clears it on exit
 ```
 
 ---
