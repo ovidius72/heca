@@ -804,6 +804,16 @@ struct GpuState {
     ctrl: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
+    /// Layout is recomputed only when a layout-affecting input changed (resize,
+    /// font size, or a content event) — never on pure-animation frames (the
+    /// spinner/hover/flash/toast slide only change *paint*). This keeps the
+    /// always-on spinner from forcing a full taffy relayout 60×/sec.
+    layout_dirty: bool,
+    /// Cached natural content height (from the last layout) for scroll clamping.
+    content_h: f32,
+    /// Scroll offset currently baked into the tree's bounds (so we can reapply
+    /// only the delta each frame instead of recomputing).
+    applied_scroll: f32,
     cursor: Point,
     last_frame: Instant,
     focus: FocusManager,
@@ -909,6 +919,9 @@ impl GpuState {
             ctrl: false,
             ctl,
             scroll_y: 0.0,
+            layout_dirty: true,
+            content_h: 0.0,
+            applied_scroll: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
             focus: FocusManager::new(),
@@ -920,6 +933,7 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
+        self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
 
@@ -956,27 +970,42 @@ impl GpuState {
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
 
-        // Fold live theme controls in before painting.
+        // Fold live theme controls in before painting. Most are paint-only (glow,
+        // radius, border, intensity); only the font size changes widget *layout*,
+        // so it flips `layout_dirty`.
         self.theme.glow_size = self.ctl.glow.get_untracked();
         self.theme.radius = self.ctl.radius.get_untracked();
         self.theme.border_width = self.ctl.border.get_untracked();
         self.theme.intensity = self.ctl.intensity.get_untracked();
-        self.theme.font_size = self.ctl.font.get_untracked();
+        let font = self.ctl.font.get_untracked();
+        if (font - self.theme.font_size).abs() > f32::EPSILON {
+            self.theme.font_size = font;
+            self.layout_dirty = true;
+        }
 
-        // Lay the tree out at its natural (content) height — which may exceed the
-        // window — then translate it up by the scroll offset. The window edges do
-        // the clipping (the renderer has no scissor yet), so this is a whole-page
-        // scroll, not an embedded scroll region. The engine resolves every widget's
-        // font from `base_font` (= theme.font_size), so a font change reflows the
-        // whole tree live — no per-widget wiring, no rebuild.
-        self.ui.base_mut().style.width = Length::Px(w);
-        self.ui.base_mut().style.height = Length::Auto;
-        LayoutEngine::new()
-            .base_font(self.theme.font_size)
-            .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
-        let content_h = self.ui.base().bounds.size.h as f32;
-        self.scroll_y = self.scroll_y.clamp(0.0, (content_h - h).max(0.0));
-        offset_tree(&mut self.ui, -(self.scroll_y as f64));
+        // Lay the tree out at its natural (content) height — but ONLY when a
+        // layout input changed (size/font/content event). Animations (spinner,
+        // hover, flash, toast slide) change paint, not layout, so on those frames
+        // we reuse the cached bounds and skip the full taffy relayout. The engine
+        // resolves every widget's font from `base_font` (= theme.font_size).
+        if self.layout_dirty {
+            self.ui.base_mut().style.width = Length::Px(w);
+            self.ui.base_mut().style.height = Length::Auto;
+            LayoutEngine::new()
+                .base_font(self.theme.font_size)
+                .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
+            self.content_h = self.ui.base().bounds.size.h as f32;
+            self.applied_scroll = 0.0; // fresh bounds carry no scroll offset
+            self.layout_dirty = false;
+        }
+        // Whole-page scroll: translate the cached tree by only the *delta* since
+        // the offset already baked into its bounds (the window edges clip).
+        self.scroll_y = self.scroll_y.clamp(0.0, (self.content_h - h).max(0.0));
+        let scroll_delta = (self.applied_scroll - self.scroll_y) as f64;
+        if scroll_delta != 0.0 {
+            offset_tree(&mut self.ui, scroll_delta);
+            self.applied_scroll = self.scroll_y;
+        }
 
         let scene = build_scene(&self.ui, &self.theme, w, h);
 
@@ -1096,6 +1125,8 @@ impl ApplicationHandler for App {
                     state.focus.focus_at(&mut state.ui, pos);
                     state.ui.event(&press);
                 }
+                // A click can change content/size (select, tabs, collapse, …) → relayout.
+                state.layout_dirty = true;
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -1196,6 +1227,8 @@ impl ApplicationHandler for App {
                             state.focus.deliver_key(&mut state.ui, other);
                         }
                     }
+                    // A key can change content/size (typing, collapse, push) → relayout.
+                    state.layout_dirty = true;
                     state.window.request_redraw();
                 }
             }
