@@ -35,6 +35,7 @@ mod status_dot;
 mod surface;
 mod tabs;
 mod tag;
+mod toast;
 mod toggle;
 mod tooltip;
 
@@ -68,5 +69,6 @@ pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
 pub use tabs::Tabs;
 pub use tag::Tag;
+pub use toast::{Toast, ToastSeverity};
 pub use toggle::Toggle;
 pub use tooltip::{Tooltip, TooltipSide};

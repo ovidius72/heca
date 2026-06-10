@@ -225,15 +225,29 @@ next, and how to start.
 | HUD Frame | ✅ `Pane` / `DockFrame` (corner-bracket frame, titled, collapsible) |
 | Metric Row / SidebarItem 1–4 | ✅ `Item` / `Row` + `Badge`/`Tag` (recipes) |
 | Status Dots | ✅ `StatusDot` · Tags | ✅ `Tag` · Modal | ✅ `Modal` (now bracket-framed) |
-| **Toast** / Notification | ⬜ **the one genuinely-new widget left** |
+| **Toast** / Notification | 🟡 **PR1 `Toast` content widget DONE** (branch `grid-ui-toast-widget`); **PR2 `ToastStack` overlay pending** |
 
 #### What's next (in priority order)
 
-1. **`Toast`** (the only genuinely-new §11 widget) — a **transient, auto-dismissing** notification
-   (doubles as "Notification"; "usable as a sidebar item" per the user). Overlay-drawn like
-   `Tooltip`/`Modal` (`PaintCx::with_overlay`); auto-dismiss via a `tick(dt)` timer; host-owned
-   queue/signal; optional action + icon. Use the **corner-bracket frame** (`cx.bracket_frame`) for
-   GridCN fidelity — see the Modal fix (#79).
+1. **`Toast`** (the last genuinely-new §11 widget) — split into two PRs.
+   **Boundary (user-confirmed):** grid-ui ships *presentation only*; the **notification system**
+   (queue, ids, lifetime/auto-dismiss policy, dedup, click dispatch, sound) is the **app's** job.
+   - **PR1 — `Toast` content widget: ✅ DONE** (branch `grid-ui-toast-widget`, `widgets/toast.rs`).
+     Bracket-framed card (`cx.bracket_frame`, GridCN fidelity — see #79); severity-toned leading
+     `Icon` + strong title + small `.body()` + optional inline `.action(label,f)` + `×`
+     (`.dismissible`/`.on_dismiss`); whole-card `.on_click` (focusable, Enter/Space). **No timer,
+     no queue** — emits intents via callbacks; the host removes it. In-tree (not overlay) so it's
+     reusable **inline** (sidebar notification row). Exported both lists in `lib.rs`; 5 tests in
+     `tests/phase_a.rs` (105 total); demoed as a stacked list in `examples/showcase.rs`;
+     `docs/widgets.md` entry added. Build + clippy green.
+   - **PR2 — `ToastStack` overlay helper (NEXT):** arranges a **host-supplied** set of toasts into a
+     corner stack on the overlay layer (`PaintCx::with_overlay`), plays enter/exit fade, hit-tests
+     ×/action, and reports `on_dismiss(id)`/`on_action(id)` back. Keeps only *transient animation
+     state keyed by id* — **never** the queue or lifetime policy. Auto-dismiss *timing* is driven
+     by the app (it removes from its store); the stack just animates the exit. Demo: the showcase
+     example plays the "app" with a tiny local queue.
+   - **Later (app-side, coordinate):** the real notification store/manager in `heca` — queue,
+     lifetime, dedup, click dispatch, sound — feeding `ToastStack`. Like the rail→Workspaces wiring.
 2. **§11 plan cleanup** (partly done in the handoff PR) — finish making **§11 the source of truth**
    (mark the ✅ mappings above), **retire the stale "Catalog gaps" / "PLANNED enhancements"**
    sections, and **remove `EnergyMeter`/`SignalIndicator`** (lines ~54/517/563) + the speculative

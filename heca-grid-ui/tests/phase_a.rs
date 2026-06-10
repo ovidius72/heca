@@ -2482,3 +2482,97 @@ fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
     inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
     assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
 }
+
+// --- Toast ------------------------------------------------------------------
+
+/// Lay a toast out as the root at its fixed width so `bounds` are set for
+/// hit-testing, returning its resolved height.
+fn layout_toast(t: &mut heca_grid_ui::Toast) -> f64 {
+    LayoutEngine::new().compute(t, Size::new(400.0, 300.0));
+    t.base().bounds.size.h
+}
+
+#[test]
+fn toast_height_grows_with_body_then_action() {
+    use heca_grid_ui::Toast;
+    let bare = layout_toast(&mut Toast::info("Saved"));
+    let with_body = layout_toast(&mut Toast::info("Saved").body("All files written"));
+    let with_action =
+        layout_toast(&mut Toast::info("Saved").body("All files written").action("Undo", || {}));
+    assert!(with_body > bare, "a body line adds height");
+    assert!(with_action > with_body, "an action row adds further height");
+}
+
+#[test]
+fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let dismissed = Rc::new(Cell::new(0u32));
+    let d = dismissed.clone();
+    let mut t = Toast::warning("Disk almost full").on_dismiss(move || d.set(d.get() + 1));
+    layout_toast(&mut t);
+
+    // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(296.0, 23.0) });
+    assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
+    assert!(matches!(hit, Handled::Yes), "the × consumes the click");
+}
+
+#[test]
+fn toast_action_button_fires_on_action() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let acted = Rc::new(Cell::new(0u32));
+    let a = acted.clone();
+    let mut t = Toast::info("File deleted").action("Undo", move || a.set(a.get() + 1));
+    layout_toast(&mut t);
+
+    // Action row sits below the title, left-aligned in the text column.
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
+}
+
+#[test]
+fn toast_body_click_fires_on_click_only_when_set() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // Without on_click, a body click is not consumed (it can fall through).
+    let mut inert = Toast::info("Build finished").dismissible(false);
+    layout_toast(&mut inert);
+    let hit = inert.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
+
+    // With on_click, the same click activates + consumes.
+    let clicked = Rc::new(Cell::new(0u32));
+    let c = clicked.clone();
+    let mut t = Toast::info("Build finished")
+        .dismissible(false)
+        .on_click(move || c.set(c.get() + 1));
+    layout_toast(&mut t);
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    assert_eq!(clicked.get(), 1, "body click fires on_click");
+    assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
+}
+
+#[test]
+fn toast_focusable_only_when_clickable_and_enter_activates() {
+    use heca_grid_ui::{Component, GridKey, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let plain = Toast::info("Just an FYI");
+    assert!(!plain.focusable(), "a non-clickable toast is not focusable");
+
+    let clicked = Rc::new(Cell::new(0u32));
+    let c = clicked.clone();
+    let mut t = Toast::info("Open log?").on_click(move || c.set(c.get() + 1));
+    assert!(t.focusable(), "a clickable toast is focusable");
+    t.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
+}

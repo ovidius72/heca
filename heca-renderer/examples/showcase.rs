@@ -301,6 +301,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Spinner::new())
                 .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
         )
+        // Toasts: bracket-framed notification cards. Severity-toned, with a body
+        // line, an optional inline action, and a × dismiss. Presentation only —
+        // here the example plays the "host" (its callbacks just print); a real app
+        // owns the queue + lifecycle. Stacked like a notification list (also the
+        // shape they take inline in a sidebar).
+        .child(
+            Flex::column()
+                .gap(10.0)
+                .child(Toast::success("Build succeeded").body("12 crates compiled in 4.2s"))
+                .child(
+                    Toast::danger("Connection lost")
+                        .body("Reconnecting to the grid…")
+                        .action("Retry", click("toast-retry"))
+                        .on_dismiss(click("toast-dismiss")),
+                )
+                // A clickable card with no body — the inline "notification row" case.
+                .child(Toast::info("New message from GRID-7").on_click(click("toast-open"))),
+        )
         // Value displays: progress bar + energy gauge.
         .child(
             Flex::row()
