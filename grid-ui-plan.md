@@ -5,7 +5,7 @@
 
 **Doc roles (single source of truth for each):**
 - **`grid-ui-plan.md`** (this file) — the **activity tracker**: what's done, what remains, phases/tasks. *Update this as work lands.*
-- **`docs/widgets.md`** — canonical **per-widget API reference** (props/methods/events + examples). *Currently stale (Jun 4) — predates the theme-token/font pass; refresh is the [Documentation pass](#-remaining-work) task.*
+- **`docs/widgets.md`** — canonical **per-widget API reference** (props/methods/events + examples). *Refreshed 2026-06-10 with the chrome vocabulary (`Grid`, `Icon`, `Tag`, `ItemGroup`, `DockFrame`+rail, `ChromeRegion`/`RegionMode`, `Row`+attention, `RailCell`, `KeyHint`) + `Attention`. Theme-token reference + the `docs/the-grid-ui.md` demotion are the remaining [Documentation pass](#-remaining-work) bits.*
 - **`docs/the-grid-ui.md`** — **reference & vision only** (external GridCN analysis + original design vision + GridCN reference links). Describes an *older, never-implemented* architecture; do **not** track activity here.
 
 ---
@@ -68,7 +68,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [ ] D7 `cargo clippy --workspace` clean; update README + AGENTS.md.
 
 ### Documentation pass — **developer-facing** (do before/with Phase D)
-- [ ] Refresh **`docs/widgets.md`** to the current API — `font_scale`/`GlowLevel`/`control_radius`/`remeasure`/`PaintCx::with_viewport`, adaptive `Select`, per-widget theme-token behavior.
+- [x] Refresh **`docs/widgets.md`** with the **chrome vocabulary** + `Attention` — `Grid`, `Icon`/`Glyph`, `Tag`, `ItemGroup`, `DockFrame` (+ rail), `ChromeRegion`/`RegionMode`, `Row` (+ attention), `RailCell`, `KeyHint`/`HintPlacement`, `effects::Attention`; TOC + groups updated. DONE 2026-06-10 — branch `grid-ui-docs-refresh`. (The foundation sections — Font sizing, `GlowLevel`/`Intensity`, `control_radius`, `with_viewport` — were already current.)
 - [ ] Add a **theme-token reference** (`glow_size`, `intensity`, `radius`, `border_width`, `font_size`/`font_scale`) + config.toml configurability.
 - [ ] Formally demote **`docs/the-grid-ui.md`** to reference-only (or fold its still-useful catalog/links into widgets.md) and delete the stale architecture section.
 
