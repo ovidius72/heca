@@ -22,7 +22,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
@@ -703,6 +703,30 @@ Callout surface: colored left bar + title + optional body, themed by variant (di
 
 ```rust
 Alert::warning("LINK UNSTABLE").body("retrying handshake…");
+```
+
+### Toast
+
+A compact **notification card**: a bracket-framed surface (the shared Pane/Modal reticle frame)
+with a severity-toned leading `Icon`, a strong title, optional small body, an optional inline
+**action** button, and an optional **×** dismiss. **Presentation only** — it holds no queue,
+timer, or global state; the host app owns lifecycle (when it appears, how long it lives,
+auto-dismiss policy, sound) and reacts to the reported interactions. An ordinary in-tree
+component (not overlay-drawn), so it is equally usable **inline** — e.g. a notification row in a
+sidebar. Severity maps to theme tokens, never literals.
+
+- **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
+- **Builders**: `.severity(ToastSeverity)`, `.icon(Glyph)` / `.no_icon()`, `.body(text)`,
+  `.action(label, on_click)`, `.dismissible(bool)` (default `true`).
+- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
+  `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
+  Enter/Space activates).
+
+```rust
+Toast::danger("Connection lost")
+    .body("Reconnecting to the grid…")
+    .action("Retry", || retry())
+    .on_dismiss(|| dismiss(id));
 ```
 
 ### ProgressBar
