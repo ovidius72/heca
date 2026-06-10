@@ -10,7 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
@@ -19,7 +19,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
@@ -155,10 +155,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // ToastStack (G-overlay): the app owns the render list (`toasts`) and the
     // lifecycle; the stack just corner-anchors + animates them and reports
     // intents. `t` pushes one (see the keymap); clicking × removes it here.
-    let toasts = signal(vec![
-        ToastSpec::new(1, "Build succeeded").severity(ToastSeverity::Success).body("12 crates in 4.2s"),
-        ToastSpec::new(2, "Connection lost").severity(ToastSeverity::Danger).body("Reconnecting…").action("Retry"),
-    ]);
+    // Start empty — press `t` to push toasts (keeps them out of the dropdown's
+    // corner by default; the overlapping-overlays text-bleed is a separate
+    // renderer limitation to fix later).
+    let toasts = signal(Vec::<ToastSpec>::new());
     let toast_stack = ToastStack::new(toasts)
         .corner(ToastCorner::TopRight)
         .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
@@ -806,6 +806,13 @@ struct GpuState {
     scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
+    /// Whether the last frame was still animating (drives the capped redraw loop).
+    animating: bool,
+    /// Layout is recomputed only when a layout input changed (resize/font/content
+    /// event) — not on pure-animation frames.
+    layout_dirty: bool,
+    content_h: f32,
+    applied_scroll: f32,
     focus: FocusManager,
     shift: bool,
 }
@@ -911,6 +918,10 @@ impl GpuState {
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
+            animating: false,
+            layout_dirty: true,
+            content_h: 0.0,
+            applied_scroll: 0.0,
             focus: FocusManager::new(),
             shift: false,
         }
@@ -920,6 +931,7 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
+        self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
 
@@ -956,27 +968,38 @@ impl GpuState {
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
 
-        // Fold live theme controls in before painting.
+        // Fold live theme controls in (paint-only except font, which reflows layout).
         self.theme.glow_size = self.ctl.glow.get_untracked();
         self.theme.radius = self.ctl.radius.get_untracked();
         self.theme.border_width = self.ctl.border.get_untracked();
         self.theme.intensity = self.ctl.intensity.get_untracked();
-        self.theme.font_size = self.ctl.font.get_untracked();
+        let font = self.ctl.font.get_untracked();
+        if (font - self.theme.font_size).abs() > f32::EPSILON {
+            self.theme.font_size = font;
+            self.layout_dirty = true;
+        }
 
-        // Lay the tree out at its natural (content) height — which may exceed the
-        // window — then translate it up by the scroll offset. The window edges do
-        // the clipping (the renderer has no scissor yet), so this is a whole-page
-        // scroll, not an embedded scroll region. The engine resolves every widget's
-        // font from `base_font` (= theme.font_size), so a font change reflows the
-        // whole tree live — no per-widget wiring, no rebuild.
-        self.ui.base_mut().style.width = Length::Px(w);
-        self.ui.base_mut().style.height = Length::Auto;
-        LayoutEngine::new()
-            .base_font(self.theme.font_size)
-            .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
-        let content_h = self.ui.base().bounds.size.h as f32;
-        self.scroll_y = self.scroll_y.clamp(0.0, (content_h - h).max(0.0));
-        offset_tree(&mut self.ui, -(self.scroll_y as f64));
+        // Recompute layout ONLY when an input changed it (resize / font / content
+        // event) — never on pure-animation frames. The full per-frame taffy
+        // relayout was the bulk of the render() CPU.
+        if self.layout_dirty {
+            self.ui.base_mut().style.width = Length::Px(w);
+            self.ui.base_mut().style.height = Length::Auto;
+            LayoutEngine::new()
+                .base_font(self.theme.font_size)
+                .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
+            self.content_h = self.ui.base().bounds.size.h as f32;
+            self.applied_scroll = 0.0;
+            self.layout_dirty = false;
+        }
+        // Whole-page scroll: shift the cached tree by only the delta since the
+        // offset already baked into its bounds (window edges clip).
+        self.scroll_y = self.scroll_y.clamp(0.0, (self.content_h - h).max(0.0));
+        let scroll_delta = (self.applied_scroll - self.scroll_y) as f64;
+        if scroll_delta != 0.0 {
+            offset_tree(&mut self.ui, scroll_delta);
+            self.applied_scroll = self.scroll_y;
+        }
 
         let scene = build_scene(&self.ui, &self.theme, w, h);
 
@@ -1035,10 +1058,11 @@ impl GpuState {
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
-        // Keep redrawing while a hover animation is in flight.
-        if animating {
-            self.window.request_redraw();
-        }
+        // Record whether anything is still animating; the event loop schedules the
+        // next frame at a capped rate (see `RedrawRequested` + `new_events`) rather
+        // than redrawing immediately, so a perpetual animation (spinner) doesn't
+        // peg a core at the full refresh rate.
+        self.animating = animating;
     }
 }
 
@@ -1048,6 +1072,17 @@ struct App {
 }
 
 impl ApplicationHandler for App {
+    /// When the capped-frame timer (set via `WaitUntil`) fires, request the next
+    /// animation frame.
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        if let StartCause::ResumeTimeReached { .. } = cause
+            && let Some(state) = &self.state
+            && state.animating
+        {
+            state.window.request_redraw();
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             let state = pollster::block_on(GpuState::new(event_loop));
@@ -1071,11 +1106,13 @@ impl ApplicationHandler for App {
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
                 let moved = Event::PointerMoved { pos: state.cursor };
-                // When an overlay is open, route hover only to it — items behind
-                // the panel must not receive hover events.
-                if state.focus.overlay_active(&mut state.ui) {
-                    state.focus.deliver_to_overlay(&mut state.ui, &moved);
-                } else {
+                // An open overlay gets hover first, but only swallows it if it
+                // consumes it: an input-grabbing overlay (Modal/dropdown) returns
+                // Yes so items behind don't hover, while the ToastStack returns No
+                // — so buttons behind it still hover/animate while toasts show.
+                let consumed = state.focus.overlay_active(&mut state.ui)
+                    && state.focus.deliver_to_overlay(&mut state.ui, &moved) == Handled::Yes;
+                if !consumed {
                     state.ui.event(&moved);
                 }
                 state.window.request_redraw();
@@ -1096,6 +1133,7 @@ impl ApplicationHandler for App {
                     state.focus.focus_at(&mut state.ui, pos);
                     state.ui.event(&press);
                 }
+                state.layout_dirty = true; // a click can change content/size
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -1104,12 +1142,16 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                if state.focus.overlay_active(&mut state.ui) {
-                    state
-                        .focus
-                        .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
-                } else {
-                    // No overlay open → scroll the whole page (clamped in render).
+                // An open overlay (Select dropdown / Modal) gets scroll first, but
+                // only swallows it if it actually consumes it — a non-scrolling
+                // overlay like the ToastStack lets the page scroll through under it.
+                let consumed = state.focus.overlay_active(&mut state.ui)
+                    && state.focus.deliver_to_overlay(
+                        &mut state.ui,
+                        &Event::Scroll { delta: lines },
+                    ) == Handled::Yes;
+                if !consumed {
+                    // Scroll the whole page (clamped in render).
                     state.scroll_y += lines * 40.0;
                 }
                 state.window.request_redraw();
@@ -1196,10 +1238,21 @@ impl ApplicationHandler for App {
                             state.focus.deliver_key(&mut state.ui, other);
                         }
                     }
+                    state.layout_dirty = true; // a key can change content/size
                     state.window.request_redraw();
                 }
             }
-            WindowEvent::RedrawRequested => state.render(),
+            WindowEvent::RedrawRequested => {
+                state.render();
+                // Cap animation to ~30fps: schedule the next frame instead of
+                // redrawing immediately. Idle (nothing animating) → wait for events.
+                if state.animating {
+                    let next = state.last_frame + Duration::from_millis(33);
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(next));
+                } else {
+                    event_loop.set_control_flow(ControlFlow::Wait);
+                }
+            }
             _ => {}
         }
     }

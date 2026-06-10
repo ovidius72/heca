@@ -326,6 +326,9 @@ impl Component for Modal {
             }
             // Swallow every other key while the dialog owns input.
             Event::Key { .. } => Handled::Yes,
+            // A modal blocks the content behind it — swallow scroll too, so the
+            // page doesn't scroll underneath the scrim.
+            Event::Scroll { .. } => Handled::Yes,
             _ => Handled::No,
         }
     }

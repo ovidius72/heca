@@ -36,8 +36,35 @@ struct TextCommand {
 }
 
 /// A GPU-ready text label: texture + quad.
-struct TextLabel {
+/// Identity of a rasterized label: same text + size + weight + family produces
+/// the same alpha mask, so it's cached and reused across frames. Color is **not**
+/// part of the key — the mask is tinted per-draw in the shader (vertex color).
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct LabelKey {
+    text: String,
+    /// Scaled font size in `f32::to_bits()` form (exact, hashable).
+    size_bits: u32,
+    bold: bool,
+    icon: bool,
+}
+
+/// A rasterized label cached on the GPU: its alpha-mask texture + bind group plus
+/// the measured geometry needed to place its quad. Re-emitting the quad each frame
+/// is cheap; only a cache **miss** re-shapes + re-rasterizes + uploads.
+struct CachedLabel {
+    /// Kept alive so the bind group's texture view stays valid.
+    _texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
+    /// Ink size in physical px (`0` width = empty/whitespace → nothing to draw).
+    content_w: u32,
+    content_h: u32,
+    /// Stable line-box metrics (physical px) for baseline-anchored centering.
+    line_top: f32,
+    line_height: f32,
+    /// Top of the ink box (physical px) for the ink offset within the line box.
+    min_y: i32,
+    /// Last frame this label was used, for eviction of stale (dynamic) text.
+    last_used: u64,
 }
 
 pub struct TextRenderer {
@@ -54,7 +81,16 @@ pub struct TextRenderer {
     _atlas_size: (u32, u32),
     font_family: String,
     icon_family: String,
+    /// Rasterized-label cache, keyed by [`LabelKey`]. Lets static text skip
+    /// per-frame shaping + rasterization + texture/bind-group creation.
+    label_cache: std::collections::HashMap<LabelKey, CachedLabel>,
+    /// Monotonic build counter driving cache eviction.
+    frame: u64,
 }
+
+/// Drop labels unused for this many builds (~a few seconds) so dynamic text
+/// (counters, clocks) doesn't leak GPU textures.
+const LABEL_EVICT_AFTER: u64 = 240;
 
 impl TextRenderer {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
@@ -218,6 +254,8 @@ impl TextRenderer {
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
             icon_family: heca_grid_ui::font::ICON_FONT_FAMILY.to_string(),
+            label_cache: std::collections::HashMap::new(),
+            frame: 0,
         }
     }
 
@@ -292,194 +330,178 @@ impl TextRenderer {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (Vec<TextVertex>, Vec<u16>, Vec<TextLabel>) {
-        if self.commands.is_empty() {
+    ) -> (Vec<TextVertex>, Vec<u16>, Vec<LabelKey>) {
+        let commands = std::mem::take(&mut self.commands);
+        if commands.is_empty() {
             return (Vec::new(), Vec::new(), Vec::new());
         }
+        self.frame += 1;
 
         let scale = self.scale_factor as f32;
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        let mut labels = Vec::new();
+        let mut keys: Vec<LabelKey> = Vec::new();
         let mut base = 0u16;
 
-        for cmd in &self.commands {
-            // 1. Shape text
+        for cmd in &commands {
             let scaled_size = cmd.font_size * scale;
-            let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
-            let mut buffer = Buffer::new(&mut self.font_system, metrics);
-            // Very large wrap size to prevent any line wrapping for single-line labels
-            buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-            let weight = if cmd.bold {
-                Weight::BOLD
-            } else {
-                Weight::NORMAL
+            let key = LabelKey {
+                text: cmd.text.clone(),
+                size_bits: scaled_size.to_bits(),
+                bold: cmd.bold,
+                icon: cmd.icon,
             };
-            let family = if cmd.icon {
-                &self.icon_family
-            } else {
-                &self.font_family
-            };
-            let attrs = Attrs::new()
-                .family(Family::Name(family))
-                .weight(weight);
-            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
-            buffer.shape_until_scroll(&mut self.font_system, false);
 
-            // 2. Measure exact bounds
-            let mut min_x = i32::MAX;
-            let mut min_y = i32::MAX;
-            let mut max_x = i32::MIN;
-            let mut max_y = i32::MIN;
-            let mut has_glyphs = false;
-            // Stable, glyph-independent line metrics (scaled px) for vertical
-            // centering: the typographic line box doesn't change with ascenders/
-            // descenders, so the baseline stays put instead of the ink box jumping.
-            let mut line_top = 0.0f32;
-            let mut line_height = 0.0f32;
+            // Cache miss → shape + rasterize + upload (the expensive path). On a
+            // cache hit we skip straight to re-emitting the quad below, so static
+            // text costs nothing per frame beyond a few vertices.
+            if !self.label_cache.contains_key(&key) {
+                // 1. Shape text
+                let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
+                let mut buffer = Buffer::new(&mut self.font_system, metrics);
+                // Very large wrap size to prevent any line wrapping for single-line labels
+                buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
+                let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+                let family = if cmd.icon { &self.icon_family } else { &self.font_family };
+                let attrs = Attrs::new().family(Family::Name(family)).weight(weight);
+                buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
+                buffer.shape_until_scroll(&mut self.font_system, false);
 
-            for run in buffer.layout_runs() {
-                line_top = run.line_top;
-                line_height = run.line_height;
-                for glyph in run.glyphs {
-                    // Use cosmic-text's own formula: offset by (0, line_y) so physical.y already includes baseline
-                    let physical = glyph.physical((0.0, run.line_y), 1.0);
-                    let img_opt = self
-                        .swash_cache
-                        .get_image(&mut self.font_system, physical.cache_key);
-                    let img = match img_opt.as_ref() {
-                        Some(img) => img,
-                        None => continue,
-                    };
-                    let gw = img.placement.width;
-                    let gh = img.placement.height;
-                    if gw == 0 || gh == 0 {
-                        continue;
+                // 2. Measure exact bounds. Stable, glyph-independent line metrics
+                // for vertical centering so the baseline doesn't jump with
+                // ascenders/descenders.
+                let mut min_x = i32::MAX;
+                let mut min_y = i32::MAX;
+                let mut max_x = i32::MIN;
+                let mut max_y = i32::MIN;
+                let mut has_glyphs = false;
+                let mut line_top = 0.0f32;
+                let mut line_height = 0.0f32;
+                for run in buffer.layout_runs() {
+                    line_top = run.line_top;
+                    line_height = run.line_height;
+                    for glyph in run.glyphs {
+                        let physical = glyph.physical((0.0, run.line_y), 1.0);
+                        let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
+                        let img = match img_opt.as_ref() {
+                            Some(img) => img,
+                            None => continue,
+                        };
+                        let gw = img.placement.width;
+                        let gh = img.placement.height;
+                        if gw == 0 || gh == 0 {
+                            continue;
+                        }
+                        let left = physical.x + img.placement.left;
+                        let top = physical.y - img.placement.top;
+                        min_x = min_x.min(left);
+                        min_y = min_y.min(top);
+                        max_x = max_x.max(left + gw as i32);
+                        max_y = max_y.max(top + gh as i32);
+                        has_glyphs = true;
                     }
-
-                    // Cosmic-text draw formula: physical.x + placement.left, physical.y - placement.top
-                    let left = physical.x + img.placement.left;
-                    let top = physical.y - img.placement.top;
-                    let right = left + gw as i32;
-                    let bottom = top + gh as i32;
-
-                    min_x = min_x.min(left);
-                    min_y = min_y.min(top);
-                    max_x = max_x.max(right);
-                    max_y = max_y.max(bottom);
-                    has_glyphs = true;
                 }
-            }
+                if !has_glyphs {
+                    continue; // empty / whitespace — nothing to draw (not cached)
+                }
+                let content_w = (max_x - min_x) as u32;
+                let content_h = (max_y - min_y) as u32;
+                if content_w == 0 || content_h == 0 {
+                    continue;
+                }
 
-            if !has_glyphs {
-                continue;
-            }
-
-            let content_w = (max_x - min_x) as u32;
-            let content_h = (max_y - min_y) as u32;
-            if content_w == 0 || content_h == 0 {
-                continue;
-            }
-
-            // 3. Manually blit glyph images into pixel buffer
-            // (buffer.draw() produces nothing — use the same loop that measures bounds)
-            let align = |v: u32| v.div_ceil(256) * 256;
-            let stride = align(content_w);
-            let mut pixels = vec![0u8; (stride * content_h) as usize];
-
-            for run in buffer.layout_runs() {
-                for glyph in run.glyphs {
-                    let physical = glyph.physical((0.0, run.line_y), 1.0);
-                    let img_opt = self
-                        .swash_cache
-                        .get_image(&mut self.font_system, physical.cache_key);
-                    let img = match img_opt.as_ref() {
-                        Some(img) => img,
-                        None => continue,
-                    };
-                    let gw = img.placement.width;
-                    let gh = img.placement.height;
-                    if gw == 0 || gh == 0 {
-                        continue;
-                    }
-
-                    // Cosmic-text formula: physical.x + placement.left, physical.y - placement.top
-                    let dst_x = (physical.x + img.placement.left - min_x) as u32;
-                    let dst_y = (physical.y - img.placement.top - min_y) as u32;
-
-                    for py in 0..gh {
-                        for px in 0..gw {
-                            let src_idx = (py * gw + px) as usize;
-                            let dst_idx = ((dst_y + py) * stride + (dst_x + px)) as usize;
-                            if dst_idx < pixels.len() {
-                                pixels[dst_idx] = pixels[dst_idx].saturating_add(img.data[src_idx]);
+                // 3. Blit glyph images into a CPU pixel buffer (alpha mask).
+                let align = |v: u32| v.div_ceil(256) * 256;
+                let stride = align(content_w);
+                let mut pixels = vec![0u8; (stride * content_h) as usize];
+                for run in buffer.layout_runs() {
+                    for glyph in run.glyphs {
+                        let physical = glyph.physical((0.0, run.line_y), 1.0);
+                        let img_opt = self.swash_cache.get_image(&mut self.font_system, physical.cache_key);
+                        let img = match img_opt.as_ref() {
+                            Some(img) => img,
+                            None => continue,
+                        };
+                        let gw = img.placement.width;
+                        let gh = img.placement.height;
+                        if gw == 0 || gh == 0 {
+                            continue;
+                        }
+                        let dst_x = (physical.x + img.placement.left - min_x) as u32;
+                        let dst_y = (physical.y - img.placement.top - min_y) as u32;
+                        for py in 0..gh {
+                            for px in 0..gw {
+                                let src_idx = (py * gw + px) as usize;
+                                let dst_idx = ((dst_y + py) * stride + (dst_x + px)) as usize;
+                                if dst_idx < pixels.len() {
+                                    pixels[dst_idx] = pixels[dst_idx].saturating_add(img.data[src_idx]);
+                                }
                             }
                         }
                     }
                 }
+
+                // 4. Upload as an alpha-mask texture + bind group, cached by key.
+                let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("text_label"),
+                    size: wgpu::Extent3d { width: content_w, height: content_h, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::R8Unorm,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &pixels,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(stride),
+                        rows_per_image: Some(content_h),
+                    },
+                    wgpu::Extent3d { width: content_w, height: content_h, depth_or_array_layers: 1 },
+                );
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("text_label_bind_group"),
+                    layout: &self.bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buffer.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&view) },
+                        wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                    ],
+                });
+
+                self.label_cache.insert(
+                    key.clone(),
+                    CachedLabel {
+                        _texture: texture,
+                        bind_group,
+                        content_w,
+                        content_h,
+                        line_top,
+                        line_height,
+                        min_y,
+                        last_used: self.frame,
+                    },
+                );
             }
 
-            // 4. Upload as individual texture
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("text_label"),
-                size: wgpu::Extent3d {
-                    width: content_w,
-                    height: content_h,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::R8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &pixels,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(stride),
-                    rows_per_image: Some(content_h),
-                },
-                wgpu::Extent3d {
-                    width: content_w,
-                    height: content_h,
-                    depth_or_array_layers: 1,
-                },
-            );
-
-            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("text_label_bind_group"),
-                layout: &self.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.uniform_buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&self.sampler),
-                    },
-                ],
-            });
+            let cl = self.label_cache.get_mut(&key).unwrap();
+            cl.last_used = self.frame;
+            // Pull the cached geometry; the centering math below is unchanged.
+            let (content_w, content_h, line_top, line_height, min_y) =
+                (cl.content_w, cl.content_h, cl.line_top, cl.line_height, cl.min_y);
 
             // 5. Build quad. Box mode centers within `(w, h)`: horizontally per
-            // `align` on the ink width; vertically on the **stable line box** (not
-            // the ink box) so the baseline doesn't shift when glyphs gain
-            // ascenders/descenders (p, q, g, b, t). The ink box is then placed at
-            // its measured offset from the line top, so existing glyphs stay put.
+            // `align` on the ink width; vertically on the **stable line box** so
+            // the baseline doesn't shift when glyphs gain ascenders/descenders.
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
             let (screen_x, screen_y) = if cmd.centered {
@@ -496,39 +518,25 @@ impl TextRenderer {
                 (cmd.x, cmd.y)
             };
 
-            vertices.push(TextVertex {
-                position: [screen_x, screen_y],
-                texcoord: [0.0, 0.0],
-                color: cmd.color,
-            });
-            vertices.push(TextVertex {
-                position: [screen_x + screen_w, screen_y],
-                texcoord: [1.0, 0.0],
-                color: cmd.color,
-            });
-            vertices.push(TextVertex {
-                position: [screen_x + screen_w, screen_y + screen_h],
-                texcoord: [1.0, 1.0],
-                color: cmd.color,
-            });
-            vertices.push(TextVertex {
-                position: [screen_x, screen_y + screen_h],
-                texcoord: [0.0, 1.0],
-                color: cmd.color,
-            });
+            vertices.push(TextVertex { position: [screen_x, screen_y], texcoord: [0.0, 0.0], color: cmd.color });
+            vertices.push(TextVertex { position: [screen_x + screen_w, screen_y], texcoord: [1.0, 0.0], color: cmd.color });
+            vertices.push(TextVertex { position: [screen_x + screen_w, screen_y + screen_h], texcoord: [1.0, 1.0], color: cmd.color });
+            vertices.push(TextVertex { position: [screen_x, screen_y + screen_h], texcoord: [0.0, 1.0], color: cmd.color });
             indices.push(base);
             indices.push(base + 1);
             indices.push(base + 2);
             indices.push(base);
             indices.push(base + 2);
             indices.push(base + 3);
-
-            labels.push(TextLabel { bind_group });
-
+            keys.push(key);
             base += 4;
         }
 
-        (vertices, indices, labels)
+        // Evict labels unused for a while (dynamic text) so GPU textures don't leak.
+        let frame = self.frame;
+        self.label_cache.retain(|_, cl| frame.saturating_sub(cl.last_used) <= LABEL_EVICT_AFTER);
+
+        (vertices, indices, keys)
     }
 
     pub fn render(
@@ -542,7 +550,7 @@ impl TextRenderer {
             return;
         }
 
-        let (vertices, indices, labels) = self.build_labels(device, queue);
+        let (vertices, indices, keys) = self.build_labels(device, queue);
 
         if vertices.is_empty() {
             self.commands.clear();
@@ -552,6 +560,12 @@ impl TextRenderer {
         let vertex_data = bytemuck::cast_slice(&vertices);
         let index_data = bytemuck::cast_slice(&indices);
 
+        // Stage + copy via the encoder (NOT queue.write_buffer): the showcase
+        // renders text in two passes (base, then overlay) into one buffer, and
+        // copies are encoder commands that interleave with the draws — so the base
+        // pass draws before the overlay pass overwrites the buffer. A queue write
+        // would land before *all* draws, corrupting the base-layer text whenever
+        // an overlay (e.g. toasts) adds a second pass.
         let staging_v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("text_vertex_staging"),
             contents: vertex_data,
@@ -562,21 +576,8 @@ impl TextRenderer {
             contents: index_data,
             usage: wgpu::BufferUsages::COPY_SRC,
         });
-
-        encoder.copy_buffer_to_buffer(
-            &staging_v,
-            0,
-            &self.vertex_buffer,
-            0,
-            vertex_data.len() as u64,
-        );
-        encoder.copy_buffer_to_buffer(
-            &staging_i,
-            0,
-            &self.index_buffer,
-            0,
-            index_data.len() as u64,
-        );
+        encoder.copy_buffer_to_buffer(&staging_v, 0, &self.vertex_buffer, 0, vertex_data.len() as u64);
+        encoder.copy_buffer_to_buffer(&staging_i, 0, &self.index_buffer, 0, index_data.len() as u64);
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),
@@ -597,9 +598,10 @@ impl TextRenderer {
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-        // Draw each label with its own bind group
-        for (i, label) in labels.iter().enumerate() {
-            rpass.set_bind_group(0, &label.bind_group, &[]);
+        // Draw each label with its cached bind group (looked up by key).
+        for (i, key) in keys.iter().enumerate() {
+            let Some(cl) = self.label_cache.get(key) else { continue };
+            rpass.set_bind_group(0, &cl.bind_group, &[]);
             let start = i as u32 * 6;
             rpass.draw_indexed(start..start + 6, 0, 0..1);
         }
