@@ -2246,3 +2246,47 @@ fn tooltip_is_transparent_to_child_events() {
     focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 1, "Enter activates the wrapped child through the tooltip");
 }
+
+#[test]
+fn tooltip_flips_to_fit_the_viewport() {
+    use heca_grid_ui::{Component, DrawCommand, Tooltip, TooltipSide};
+
+    // A `Bottom` tooltip whose target sits near the viewport's bottom edge has no
+    // room below → it must flip above the target.
+    let vp = Size::new(300.0, 100.0);
+    let mut tip = Tooltip::new(Item::new("X"), "HELP").side(TooltipSide::Bottom).delay(0.0);
+    LayoutEngine::new().compute(&mut tip, vp);
+
+    // Shove the whole subtree down so the target is near the bottom edge.
+    fn shift(c: &mut dyn Component, dy: f64) {
+        c.base_mut().bounds.loc.y += dy;
+        for ch in c.base_mut().children.iter_mut() {
+            shift(ch.as_mut(), dy);
+        }
+    }
+    shift(&mut tip, 82.0);
+
+    let b = tip.base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+    tip.event(&Event::PointerMoved { pos: center });
+
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        tip.paint(&mut cx);
+    }
+    let bubble = scene
+        .iter()
+        .find_map(|c| match c {
+            DrawCommand::Text(t) if t.text == "HELP" => Some(t.rect),
+            _ => None,
+        })
+        .expect("tooltip bubble is painted");
+    assert!(
+        bubble.loc.y < b.loc.y,
+        "Bottom tooltip with no room below flips above the target (bubble {} < target {})",
+        bubble.loc.y,
+        b.loc.y
+    );
+}
