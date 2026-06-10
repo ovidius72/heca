@@ -64,10 +64,10 @@ Session                          ← manages all workspaces + overview/expose mo
 ### Keybinding Style (tmux-style prefix)
 
 ```
-Ctrl+B → h    Focus column left (animated scroll)
-Ctrl+B → l    Focus column right (animated scroll)
-Ctrl+B → j    Focus pane down
-Ctrl+B → k    Focus pane up
+Ctrl+B → h / ←    Focus column left (animated scroll)
+Ctrl+B → l / →    Focus column right (animated scroll)
+Ctrl+B → j / ↓    Focus pane down
+Ctrl+B → k / ↑    Focus pane up
 Ctrl+B → Enter Split horizontal (new column to the right)
 Ctrl+B → v    Split vertical (new pane in current column)
 Ctrl+B → x    Close active pane
@@ -249,8 +249,10 @@ interactive_move_modifier = "Super"
 
 [keys]
 # Prefix bindings (checked in Prefix mode)
-focus_left = "prefix+h"
-focus_right = "prefix+l"
+focus_left = ["prefix+h", "prefix+ArrowLeft"]
+focus_right = ["prefix+l", "prefix+ArrowRight"]
+focus_up = ["prefix+k", "prefix+ArrowUp"]
+focus_down = ["prefix+j", "prefix+ArrowDown"]
 # ...
 
 # Global bindings (checked in Normal mode, before terminal forwarding)

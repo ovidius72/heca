@@ -34,10 +34,10 @@
 # -----------------------------------------------------------------------------
 # Navigation (within workspace)
 # -----------------------------------------------------------------------------
-focus_left  = "prefix+h"   # Focus column left (animated scroll)
-focus_right = "prefix+l"   # Focus column right (animated scroll)
-focus_up    = "prefix+k"   # Focus pane up within column
-focus_down  = "prefix+j"   # Focus pane down within column
+focus_left  = ["prefix+h", "prefix+ArrowLeft"]    # Focus column left (animated scroll)
+focus_right = ["prefix+l", "prefix+ArrowRight"]   # Focus column right (animated scroll)
+focus_up    = ["prefix+k", "prefix+ArrowUp"]       # Focus pane up within column
+focus_down  = ["prefix+j", "prefix+ArrowDown"]     # Focus pane down within column
 
 # -----------------------------------------------------------------------------
 # Splits

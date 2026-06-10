@@ -562,94 +562,110 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Close the currently focused pane.
+///
+/// Delegates to the floating or tiled close path based on the focused pane's
+/// domain. After removal, destroys the workspace if it's empty and others
+/// remain, or leaves it empty if it's the only one.
+///
+/// # Floating domain
+///
+/// - Removes the floating pane and its backend.
+/// - Switches to `FocusDomain::Tiled` only when no floating panes remain.
+/// - Focuses the last visited tiled pane (or syncs from session state).
+///
+/// # Tiled domain
+///
+/// - Removes the active pane from the active column.
+/// - Removes its backend.
+///
+/// # Empty workspace handling
+///
+/// If the workspace becomes empty after closing and there are multiple
+/// workspaces, the empty one is destroyed and focus switches. If it's
+/// the only workspace, it's left empty — the user can create a new pane
+/// with `prefix+Enter` or `prefix+v`.
 pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
-    let pane_id = match focused_pane_id(state) {
-        Some(id) => id,
-        None => return,
+    let Some(pane_id) = focused_pane_id(state) else {
+        return;
     };
-    let is_flt = pane_is_floating(&state.session, pane_id);
+    let is_floating = pane_is_floating(&state.session, pane_id);
 
-    if is_flt {
-        // Closing a floating pane: remove it, switch domain to Tiled
-        // if no floating panes remain, and focus the last visited tiled pane.
-        if let Some(ws) = state.session.active_workspace_mut() {
-            if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
-                let removed = ws.floating_panes.remove(float_idx);
-                state.backends.remove_for_pane(removed.pane.id.0);
-            }
-            // Only switch back to tiled domain if no floating panes remain.
-            if ws.floating_panes.is_empty() {
-                ws.deactivate_floating_panes();
-                ws.focus_domain = FocusDomain::Tiled;
-            }
-        }
-        // Focus the last visited pane in the tiled area.
-        let last_tiled = state
-            .last_visited_pane_per_ws
-            .get(state.session.active_workspace_idx)
-            .copied()
-            .flatten();
-        if let Some(target_id) = last_tiled {
-            focus_pane_by_id(state, target_id);
-        } else {
-            // No last-visited pane recorded; sync focus from session state.
-            sync_focus(state);
-        }
-
-        // Check if workspace is now empty (no tiled or floating panes).
-        let current_ws = state.session.active_workspace_idx;
-        let ws_is_empty = state
-            .session
-            .workspaces
-            .get(current_ws)
-            .map(|ws| !ws.has_panes())
-            .unwrap_or(true);
-        if ws_is_empty && state.session.workspaces.len() > 1 {
-            destroy_empty_workspace(state, current_ws);
-            let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-            state.session.switch_to_workspace(new_idx);
-        } else if ws_is_empty {
-            let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-            state.session.add_pane(pane, None, true);
-            state
-                .backends
-                .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
-        }
+    if is_floating {
+        close_floating_pane(state, pane_id);
     } else {
-        // Closing a tiled pane: existing behavior.
-        let current_ws = state.session.active_workspace_idx;
-        if let Some(ws) = state.session.active_workspace_mut() {
-            let col_idx = ws.scrolling.active_column_idx;
-            if let Some(col) = ws.scrolling.active_column() {
-                let pane_idx = col.active_pane_idx;
-                if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                    state.backends.remove_for_pane(removed.id.0);
-                }
-            }
+        close_tiled_pane(state);
+    }
+    close_workspace_if_empty(state);
+    after_layout_change(state);
+}
+
+/// Remove a floating pane by ID, switch domain to Tiled if no floats remain,
+/// and focus the last visited tiled pane.
+fn close_floating_pane(state: &mut AppState, pane_id: u64) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
+            let removed = ws.floating_panes.remove(float_idx);
+            state.backends.remove_for_pane(removed.pane.id.0);
+        } else {
+            // pane_is_floating returned true but the pane was not found in
+            // floating_panes — this indicates a state inconsistency.
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] warning: pane {} reported as floating but not found in floating_panes",
+                pane_id
+            );
         }
-
-        let ws_is_empty = state
-            .session
-            .workspaces
-            .get(current_ws)
-            .map(|ws| !ws.has_panes())
-            .unwrap_or(true);
-
-        if ws_is_empty && state.session.workspaces.len() > 1 {
-            destroy_empty_workspace(state, current_ws);
-            let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-            state.session.switch_to_workspace(new_idx);
-        } else if ws_is_empty {
-            let next_id = state.session.next_id();
-            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-            state.session.add_pane(pane, None, true);
-            state
-                .backends
-                .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
+        // Only switch back to tiled domain if no floating panes remain.
+        if ws.floating_panes.is_empty() {
+            ws.deactivate_floating_panes();
+            ws.focus_domain = FocusDomain::Tiled;
         }
     }
-    after_layout_change(state);
+    // Focus the last visited pane in the tiled area.
+    let last_tiled = state
+        .last_visited_pane_per_ws
+        .get(state.session.active_workspace_idx)
+        .copied()
+        .flatten();
+    if let Some(target_id) = last_tiled {
+        focus_pane_by_id(state, target_id);
+    } else {
+        // No last-visited pane recorded; sync focus from session state.
+        sync_focus(state);
+    }
+}
+
+/// Remove the active pane from the active column in the scrolling layout.
+fn close_tiled_pane(state: &mut AppState) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        let col_idx = ws.scrolling.active_column_idx;
+        if let Some(col) = ws.scrolling.active_column() {
+            let pane_idx = col.active_pane_idx;
+            if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                state.backends.remove_for_pane(removed.id.0);
+            }
+        }
+    }
+}
+
+/// Destroy the active workspace if it's empty and other workspaces exist.
+/// If it's the only workspace, leave it empty — the user can create a new
+/// pane with `prefix+Enter` or `prefix+v`.
+fn close_workspace_if_empty(state: &mut AppState) {
+    let current_ws = state.session.active_workspace_idx;
+    let ws_is_empty = state
+        .session
+        .workspaces
+        .get(current_ws)
+        .map(|ws| !ws.has_panes())
+        .unwrap_or(true);
+    if ws_is_empty && state.session.workspaces.len() > 1 {
+        destroy_empty_workspace(state, current_ws);
+        let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
+        state.session.switch_to_workspace(new_idx);
+    }
+    // If workspace is empty and it's the only one, leave it empty.
 }
 
 pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
@@ -759,6 +775,12 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Close a specific pane by ID (RPC-style).
+///
+/// Handles both tiled and floating panes. After removal, destroys the
+/// workspace if it's empty and other workspaces remain. If it's the only
+/// workspace, leaves it empty — the user can create a new pane with
+/// `prefix+Enter` or `prefix+v`.
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
     let WmAction::ClosePaneById { pane_id } = action else {
         return;
@@ -775,29 +797,12 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
             let removed = ws.floating_panes.remove(float_idx);
             state.backends.remove_for_pane(removed.pane.id.0);
             if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
+                ws.deactivate_floating_panes();
                 ws.focus_domain = FocusDomain::Tiled;
             }
         }
     }
-    let current_ws = state.session.active_workspace_idx;
-    let ws_is_empty = state
-        .session
-        .workspaces
-        .get(current_ws)
-        .map(|ws| !ws.has_panes())
-        .unwrap_or(true);
-    if ws_is_empty && state.session.workspaces.len() > 1 {
-        destroy_empty_workspace(state, current_ws);
-        let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-        state.session.switch_to_workspace(new_idx);
-    } else if ws_is_empty {
-        let next_id = state.session.next_id();
-        let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-        state.session.add_pane(pane, None, true);
-        state
-            .backends
-            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
-    }
+    close_workspace_if_empty(state);
     after_layout_change(state);
 }
 

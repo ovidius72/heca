@@ -76,28 +76,25 @@ pub(crate) enum InteractionSource {
 /// information that a raw `WmAction` wouldn't capture (e.g., sidebar drag
 /// start has no `WmAction` equivalent).
 ///
-/// TODO(wire-intents): FocusPane, FocusWorkspace, EnterSidebarNav, StartSidebarDrag
+/// Intent variants for sidebar/mouse interactions.
+/// FocusPane, FocusWorkspace, EnterSidebarNav, StartSidebarDrag
 /// will be constructed when sidebar/mouse click routing goes through dispatch_action.
 #[derive(Debug, Clone)]
 pub(crate) enum InteractionIntent {
     /// A keyboard shortcut resolved to a WM action.
     ActivateAction(WmAction),
     /// Focus a specific pane (from sidebar click, content click, or RPC).
-    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
-    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
     FocusPane { pane_id: u64 },
     /// Focus a specific workspace (from sidebar click).
-    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
-    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
     FocusWorkspace { ws_idx: usize },
     /// Enter sidebar navigation mode (from keyboard shortcut or click).
-    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
-    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
+    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
     EnterSidebarNav,
     /// Start dragging a sidebar item (no WmAction equivalent).
-    /// TODO(wire-intents): will be constructed when sidebar/mouse routing uses intents
-    #[allow(dead_code)] // TODO(wire-intents): wired in Phase B
-    StartSidebarDrag { #[allow(dead_code)] pane_id: u64 },
+    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
+    StartSidebarDrag { pane_id: u64 },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -393,8 +390,11 @@ pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
 /// Convenience wrapper for code that needs to branch on the domain directly
 /// rather than just checking `is_floating_domain()`.
 ///
-/// TODO(phase-E): used in regression tests to verify domain-based blocking.
-#[allow(dead_code)] // Phase D helper — will be consumed by handlers and tests
+/// Returns the `FocusDomain` of the active workspace.
+///
+/// Convenience wrapper for code that needs to branch on the domain directly
+/// rather than just checking `is_floating_domain()`.
+#[allow(dead_code)] // consumed by handlers and sidebar routing in Phase E
 pub(crate) fn active_focus_domain(session: &heca_core::layout::Session) -> FocusDomain {
     session
         .active_workspace()
@@ -417,8 +417,8 @@ pub(crate) fn focused_pane_id(state: &AppState) -> Option<u64> {
 /// from mouse/sidebar sources. Keyboard focus changes are blocked entirely
 /// (they go through `dispatch_action` which handles policy).
 ///
-/// TODO(phase-E): used in regression tests to verify pane-targeting policy.
-#[allow(dead_code)] // Phase D helper — will be consumed by handlers and tests
+/// Checks whether `pane_id` can receive focus from the given source.
+#[allow(dead_code)] // consumed by handlers and sidebar routing in Phase E
 pub(crate) fn can_focus_pane(
     session: &heca_core::layout::Session,
     source: InteractionSource,
