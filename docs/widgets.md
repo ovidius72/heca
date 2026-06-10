@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlay wrappers: [`Tooltip`](#tooltip)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -880,6 +880,32 @@ Tooltip::new(
     "Close",
 ).side(TooltipSide::Bottom);
 ```
+
+### Modal
+
+A centered **confirm / alert dialog** over a dimming scrim. Like `Select`, it captures input
+while open — it reports `overlay_active` + is `focusable` only while open, so the host routes
+pointer/keys to it first; its content (title, message, one or two buttons) is **drawn + hit-tested
+manually** on the overlay layer (no child subtree to relocate). Open/close is a host-owned
+`Signal<bool>` (mouse/keyboard/RPC all drive it). Dismissal: the buttons, **Esc** (= cancel), or a
+**scrim** click (= cancel) — each fires its callback and closes.
+
+- **Construct**: `Modal::new(title, message)`.
+- **Builders**: `.confirm(label, impl Fn())` (default `OK`), `.cancel(label, impl Fn())`
+  (optional; Esc/scrim also cancel), `.danger(bool)` (danger-tinted confirm), `.open(bool)`.
+- **Accessor**: `.open_signal() -> Signal<bool>` — bind a trigger to it to show the dialog.
+
+```rust
+let modal = Modal::new("Delete pane?", "This action cannot be undone.")
+    .confirm("Delete", || wm.delete_focused())
+    .cancel("Cancel", || {})
+    .danger(true);
+let open = modal.open_signal();
+// … Button::destructive("DELETE").on_click(move || open.set(true)); add `modal` to the tree
+```
+
+> Host wiring: while `focus.overlay_active(root)`, route pointer **and keys** to the overlay
+> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog.
 
 ---
 

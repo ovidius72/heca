@@ -457,6 +457,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     "Close",
                 ).side(TooltipSide::Bottom)),
         )
+        // Modal: a centered confirm dialog over a scrim. The destructive button
+        // opens it; Esc / scrim / the dialog buttons close it (keys route to the
+        // overlay while open). The Modal renders nothing until opened.
+        .child({
+            let modal = Modal::new("Delete pane?", "This action cannot be undone.")
+                .confirm("Delete", || println!("[showcase] pane deleted"))
+                .cancel("Cancel", || println!("[showcase] cancelled"))
+                .danger(true);
+            let open = modal.open_signal();
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(Button::destructive("DELETE PANE…").on_click(move || open.set(true)))
+                .child(modal)
+        })
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
@@ -1041,12 +1056,15 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
+                        // While an overlay (Select dropdown, Modal dialog) is open it
+                        // owns input: route every key to it (Esc/Enter dismiss/confirm).
+                        gk if state.focus.overlay_active(&mut state.ui) => {
+                            state
+                                .focus
+                                .deliver_to_overlay(&mut state.ui, &Event::Key { key: gk, pressed: true });
+                        }
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
-                        // Escape closes an open overlay first, else clears focus.
-                        GridKey::Escape if state.focus.overlay_active(&mut state.ui) => {
-                            state.focus.deliver_key(&mut state.ui, GridKey::Escape);
-                        }
                         // Escape clears focus and cancels an open rail pick.
                         GridKey::Escape => {
                             state.set_rail_pick(false);
