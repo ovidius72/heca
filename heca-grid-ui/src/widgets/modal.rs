@@ -225,9 +225,9 @@ impl Component for Modal {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, surface, accent, danger, glow_c, foreground, muted, ctrl_radius, radius) = {
+        let (background, surface, accent, danger, foreground, muted, ctrl_radius, radius) = {
             let t = cx.theme();
-            (t.background, t.surface, t.accent, t.danger, t.glow, t.foreground, t.muted, t.control_radius(), t.radius)
+            (t.background, t.surface, t.accent, t.danger, t.foreground, t.muted, t.control_radius(), t.radius)
         };
         let r = self.rects();
         let confirm_tone = if self.danger { danger } else { accent };
@@ -242,14 +242,10 @@ impl Component for Modal {
             };
             cx.rect(scrim, background.with_alpha(SCRIM_ALPHA), None, 0.0, None);
 
-            // Panel: surface + accent border + soft glow.
-            cx.rect(
-                r.panel,
-                surface,
-                Some(Border { color: accent.with_alpha(200), width: 1.5 }),
-                radius,
-                Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
-            );
+            // Panel: surface fill + the shared Pane/DockFrame corner-bracket
+            // reticle frame (matches the linked GridCN modal — no plain border).
+            cx.rect(r.panel, surface, None, radius, None);
+            cx.bracket_frame(r.panel, Some(surface));
             cx.text(r.title, &self.title, foreground, self.base.font, TextAlign::Start, true);
             cx.text(r.message, &self.message, muted, self.base.font, TextAlign::Start, false);
 
