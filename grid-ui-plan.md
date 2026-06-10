@@ -91,7 +91,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-10 (after the **pane "needs attention" cue** — `Attention` effect + `Row.attention`)
+### 🤝 Handoff — last updated 2026-06-10 (after the **§11 catalog audit** + **Modal bracket-frame fix**; the catalog is essentially complete)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
@@ -99,37 +99,29 @@ next, and how to start.
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
 - **Default branch:** `main` (in another worktree — `git fetch` + branch off `origin/main`).
-  **This branch:** `grid-ui-attention` (attention cue, off fresh `origin/main`).
-- **Merged into `main`** before this task: …**#57** G5 icon-rail (`DockFrame::rail`), **#60**
-  enumerate rail (`RailCell` + `KeyHint`). So `main` has the full chrome vocabulary **G1–G5 (both
-  rail flavors), G2, Row, G8, RailCell, KeyHint**.
-- **This task (attention cue, user-requested):** **`effects::Attention`** (an N-pulse repeating
-  sawtooth flash) + **`Row.attention(Signal<bool>)`** / `.attention_color()`. The host sets the
-  request signal → the row flashes `ATTENTION_PULSES` (4)× and the signal is consumed back to
-  `false`. **Sound stays the host's job** (grid-ui is audio-free): the app plays its beep when it
-  sets the signal — showcase `n` does both (sets the signal + terminal bell `\x07`). +2 tests.
-- **⚠️ G6 (dock DnD) is partly coordination-blocked — important.** `heca/src/mouse.rs:136` matches
-  `DragSurfaceId` **exhaustively** (no wildcard), and `heca` owns those dispatch sites. So adding
-  a region/dock `DragSurfaceId` variant (needed for cross-region dock move) **breaks `heca`'s
-  build** until that dev adds the match arms — can't be done unilaterally. A *reorder-within-one-
-  region* slice is still doable heca-safe (region-local state + `on_reorder` callback, reuse
-  `drag::DEFAULT_DRAG_THRESHOLD_SQ`, no closed-enum changes). Coordinate with the WM dev before
-  the cross-region/`SurfaceDragState` integration.
-- **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
-  push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
-  Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
-  **Rule:** after the user says "merged", `git fetch` and start the next task from
-  `origin/main`; don't keep pushing to the old branch.
-- Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **12 unit +
-  99 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
-- **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
-  push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
-  Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
-  This handoff PR already recovers the last stranded commit (`e228071`, header-badge align).
-  **Rule:** after the user says "merged", `git fetch` and start the next task from
-  `origin/main`; don't keep pushing to the old branch.
-- Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **12 unit +
-  99 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+- **Merged this session (all into `main`):** **#61** attention cue (`effects::Attention` +
+  `Row.attention`), **#65** `IconButton`, **#68**/#70 `Tooltip` (+ softer glow / 4-side flip),
+  **#71** `Modal` (+ `.dismissible()`), **#73** `CommandPalette`, **#74** `Input` Ctrl+H/Ctrl+U
+  **+ recovered the stranded palette-reuses-`Input` refactor** (incl. `Input::set_value`),
+  **#76** renderer text **baseline-centering fix**, **#79** `Modal` corner-bracket frame.
+- **Earlier:** the full chrome vocabulary **G1–G5 (both rail flavors), G2 Icon, Row, G8 Tag,
+  RailCell, KeyHint**, and the **developer docs pass** (`docs/widgets.md` refreshed for all
+  widgets + theme tokens; `docs/the-grid-ui.md` demoted to reference-only).
+- **⚠️ THE COMPONENT LIST IS §11 (line ~641 `## 11`), not "Catalog gaps".** The "Catalog gaps /
+  PLANNED enhancements" sections are the **stale GridCN-React wishlist** — ignore them. §11
+  "NEW COMPONENTS TO ADD" is what the user actually wants, and it is **essentially complete** —
+  see the mapping in [Where we are]. The only genuinely-new widget left is **`Toast`**.
+- **⚠️ Stranding gotcha (bit us ~5× now):** the user merges PRs between turns. Commits pushed
+  **after** a PR merges get stranded (not in `main`). Twice this session a follow-up was stranded
+  (the tooltip-fix, and the palette-`Input` refactor — recovered via cherry-pick in #74).
+  **Rule:** after "merged", `git fetch` + branch the next task off fresh `origin/main`; don't keep
+  pushing to the old branch. Recover a strand by cherry-picking it onto a fresh branch.
+- **⚠️ G6 (dock DnD) partly coordination-blocked:** `heca/src/mouse.rs:136` matches `DragSurfaceId`
+  **exhaustively**; a new region/dock surface variant breaks `heca`'s build (the WM dev owns those
+  sites). A *reorder-within-one-region* slice is heca-safe (region-local state + `on_reorder`
+  callback, reuse `drag::DEFAULT_DRAG_THRESHOLD_SQ`); cross-region needs WM-dev coordination.
+- Build green on `main`: `cargo test -p heca-grid-ui` = **12 unit + 100 integration + doctests**;
+  clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -137,10 +129,12 @@ next, and how to start.
   touch files between your Read and Edit; just re-Read and retry.)
 - **Mostly our files:** `heca-grid-ui/**` and `heca-renderer/examples/showcase.rs`.
   `heca`, `heca-core`, `heca-config` are owned by other devs — don't touch.
-  **Exception already taken:** G2 (Icon) required `heca-renderer/src/{text.rs,scene.rs}`
-  to load the icon font as a 2nd family + select it per `FontRole`. That's merged, but
-  `heca-renderer/src/**` is the renderer dev's area — **coordinate before further edits**
-  there (e.g. the still-blocked `PushClip`/`PopClip` for scroll).
+  **Exceptions taken (both user-authorized):** G2 (Icon) loaded the icon font in
+  `heca-renderer/src/{text.rs,scene.rs}`; and **#76** fixed vertical text centering in
+  `text.rs` to anchor on the **stable line box** (was centering the ink box, so the baseline
+  jumped when a glyph gained an ascender/descender — `p`/`q`/`b`/`t`). `heca-renderer/src/**`
+  is the renderer dev's area — **get explicit authorization before further edits** there
+  (e.g. the still-blocked `PushClip`/`PopClip` for scroll).
 - **Workflow:** one feature branch per task off **up-to-date `origin/main`**; PR per task;
   mark `[x]` DONE on the board (with branch name); leave a Resume note if you stop mid-task.
 - **No hard-coded theme values** — derive font, **border width (`theme.border_width`)**,
@@ -221,35 +215,46 @@ next, and how to start.
   driven N-pulse "needs attention" flash (host sets the signal → row flashes 4× + consumes it;
   the **host** plays any sound, grid-ui is audio-free). Reuse the effect for other widgets.
 
+#### §11 catalog status (the authoritative list — most items map to shipped widgets)
+
+| §11 item | Status |
+|----------|--------|
+| Command Menu (Palette) | ✅ `CommandPalette` (fuzzy, smart-case, real `Input` query, host-bound `open_signal()`) |
+| **Search Input** / Workspaces Container | ✅ **same pattern as `CommandPalette`** (search field + filtered list over ws/cols/panes; app supplies data) |
+| Accordion | ✅ `ItemGroup` (collapsible header + rows) |
+| HUD Frame | ✅ `Pane` / `DockFrame` (corner-bracket frame, titled, collapsible) |
+| Metric Row / SidebarItem 1–4 | ✅ `Item` / `Row` + `Badge`/`Tag` (recipes) |
+| Status Dots | ✅ `StatusDot` · Tags | ✅ `Tag` · Modal | ✅ `Modal` (now bracket-framed) |
+| **Toast** / Notification | ⬜ **the one genuinely-new widget left** |
+
 #### What's next (in priority order)
 
-1. **Wire the enumerate rail into the real `heca` Workspaces dock** (app-side, `heca/src/**` —
-   coordinate; not ours to edit unilaterally). grid-ui now ships the primitives (`RailCell` +
-   `KeyHint`); the app maps ws/cols/panes → cells (icons), feeds per-cell `KeyHint` signals from
-   its existing `collect_all_pane_candidates()` during `PaneSelect`/`PaneSwap`/`PaneTake`, and
-   dispatches the focus/swap/move **action** on cell activate. **icons not letters** by default;
-   letters only during a pick. This *replaces* `heca/src/sidebar/render.rs::render_sidebar_collapsed`
-   eventually. Likely the cleanest path: prototype the mapping in the showcase first (done — the
-   `p`-pick demo), then port behind the chrome-plugin work.
-2. **G6 — DnD hooks** — make Docks movable/reorderable by wiring `DockFrame`'s drag handle +
-   region drop targets onto the **already-shipped** `heca-grid-ui/src/drag/` framework
-   (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). Extend **additively**; never
-   fork. Region = a `DragSurfaceId`, a Dock = a `DragItem`. Every drop = a dispatched **action**.
-   **⚠️ Partly blocked:** `heca/src/mouse.rs:136` matches `DragSurfaceId` exhaustively, so a new
-   region/dock surface variant breaks `heca`'s build until that dev adds arms — **coordinate**.
-   The heca-safe slice you *can* do solo: **reorder within one region** (region-local drag state
-   + `on_reorder(from,to)` callback + drop-indicator paint; reuse `drag::DEFAULT_DRAG_THRESHOLD_SQ`;
-   no closed-enum changes). The grip is currently inside `DockFrame`'s toggle `Item` — making it a
-   non-toggling drag handle likely means splitting it into a dedicated header child.
-3. **`Pane`/`Item` adopt `Row.attention`** (optional) — the attention cue is built on `Row`
-   (`effects::Attention` + `Row.attention(signal)`); extend to `Pane`/`Item` if the app needs it
-   there. Sound stays host-side (the app beeps when it sets the signal).
-4. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
-5. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
-   `heca-renderer/src/scene.rs`, renderer dev's area). Only whole-page scroll works.
-6. **Catalog gaps / docs** — `IconButton`, `Tooltip`/`Modal`/`CommandPalette`; refresh
-   `docs/widgets.md` for the new widgets; **Phase D** app adoption + the §12 `ActionSink`
-   keybinding integration; end-user docs last.
+1. **`Toast`** (the only genuinely-new §11 widget) — a **transient, auto-dismissing** notification
+   (doubles as "Notification"; "usable as a sidebar item" per the user). Overlay-drawn like
+   `Tooltip`/`Modal` (`PaintCx::with_overlay`); auto-dismiss via a `tick(dt)` timer; host-owned
+   queue/signal; optional action + icon. Use the **corner-bracket frame** (`cx.bracket_frame`) for
+   GridCN fidelity — see the Modal fix (#79).
+2. **§11 plan cleanup** (partly done in the handoff PR) — finish making **§11 the source of truth**
+   (mark the ✅ mappings above), **retire the stale "Catalog gaps" / "PLANNED enhancements"**
+   sections, and **remove `EnergyMeter`/`SignalIndicator`** (lines ~54/517/563) + the speculative
+   "Tag dismissible" note (line ~53). The user explicitly asked for these removals.
+3. **Fidelity pass vs the GridCN links in §11** — the user is reviewing built widgets against the
+   `thegridcn.com/components#…` references. `Modal` was off (plain border → bracket frame, #79).
+   When the user flags a mismatch, match the linked design (bracket frames, spacing, etc.). I can't
+   fetch the links or eyeball — **rely on the user pointing out specifics.**
+4. **Wire the enumerate rail into the real `heca` Workspaces dock** (app-side `heca/src/**` —
+   coordinate). grid-ui ships `RailCell` + `KeyHint`; the app maps ws/cols/panes → cells, feeds
+   `KeyHint` signals from `collect_all_pane_candidates()`, dispatches the focus/swap/move action.
+   Replaces `heca/src/sidebar/render.rs::render_sidebar_collapsed`.
+5. **G6 reorder-within-one-region** (heca-safe slice — see Git/PR box). Cross-region needs WM dev.
+6. **Color/readability pass** (user keeps flagging) — levers below.
+7. **G7 scroll** — **BLOCKED** on renderer `PushClip`/`PopClip` (no-op; renderer dev's area).
+8. **Phase D** app adoption + §12 `ActionSink` keybinding integration; **end-user docs last**.
+
+> **Command-palette trigger is NOT hardcoded:** the widget opens via `open_signal()` (host binds
+> any key). Showcase uses `Ctrl+K` as a *demo* only; the real app binds **prefix+p**. Nav inside
+> (`Ctrl+J/K`, arrows) is also exposed as intents (`select_next/prev`, `run_selected`) for the
+> app's configurable keymap.
 
 #### Open polish / readability levers (user-flagged, not yet "right")
 
