@@ -252,16 +252,27 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 
 | Token | Type | Drives |
 |-------|------|--------|
+| `background` / `surface` | `Color` | Window/base background and raised panel/card fill. |
+| `foreground` / `muted` | `Color` | Primary text and dimmed/secondary text. |
+| `accent` | `Color` | Brand/selection hue — active states, focus ring, primary actions. |
+| `glow` | `Color` | Halo color for glowing strokes/fills (paired with `glow_size`). |
+| `danger` / `success` / `warning` | `Color` | Semantic state hues (errors, ok, caution). |
+| `border` | `Color` | Default border stroke color. |
 | `radius` | `f32` | Base corner radius. Boxes use it directly; small controls use `control_radius()` (= `radius × 0.5`); pills (Badge/Toggle/ProgressBar) round at `radius × 2` clamped to their capsule. `0` ⇒ square. |
 | `border_width` | `f32` | Border stroke width for every box/pill widget. `0` ⇒ no border. |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
-| `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
+| `font_family` | `String` | Font family the host registers + renders text with. |
+| `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)); per-widget `.font_scale(x)` multiplies it. |
+| `icon_secondary_alpha` | `f32` | Duotone [`Icon`](#icon) secondary-layer dim factor (default `0.45`). |
+| `show_focus_border` | `bool` | Whether keyboard focus draws the focus ring. |
 
-Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small controls).
+Helpers: **`theme.control_radius()`** → `radius × 0.5` (small-control corners). Presets:
+**`Theme::grid_tron()`** (default) and **`Theme::grid_ares()`**.
 
-> **Never hard-code font family/size, radius, border width or glow** — read them from the
-> theme so a global change scales every widget proportionally.
+> **Never hard-code font family/size, radius, border width, glow, or colors** — read them from
+> the theme so a global change (e.g. from `config.toml`) scales every widget proportionally.
+> `GlowLevel`/`Intensity` parse from strings (`.parse(&str)`) for config-driven setup.
 
 - **`GlowLevel{None, Thin, Medium, Large}`** — glow halo size. `.radius_scale()` (0 / 0.5 /
   1.0 / 2.0), `.parse(&str)` (for config.toml), `GlowLevel::ALL`, `.label()`. `None` ⇒ no glow.
@@ -314,6 +325,8 @@ pub struct Action { pub name: String, pub data: SignalData }
 | `Input` | `"input-change"` | `String` (full new text) |
 | `Tabs` | `"tab-change"` | `Usize` (selected index) |
 | `Select` | `"select-change"` | `Usize` (selected index) |
+| `ItemGroup` | `"group-toggle"` | `Bool` (expanded) |
+| `DockFrame` | `"dock-toggle"` | `Bool` (expanded) |
 
 ### `Scene` / `DrawCommand` / `PaintCx` (for building widgets)
 
