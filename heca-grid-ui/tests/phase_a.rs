@@ -2834,3 +2834,20 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
     let hit = stack.event(&Event::PointerPressed { pos: Point::new(700.0, 500.0) });
     assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
 }
+
+#[test]
+fn modal_swallows_scroll_but_toast_stack_lets_it_through() {
+    use heca_grid_ui::{Component, Modal, ToastSpec, ToastStack};
+
+    // An open modal blocks scroll (so the page can't scroll behind the scrim).
+    let mut m = Modal::new("T", "m").confirm("OK", || {}).open(true);
+    assert!(matches!(m.event(&Event::Scroll { delta: 1.0 }), Handled::Yes), "open modal eats scroll");
+    m.open_signal().set(false);
+    assert!(matches!(m.event(&Event::Scroll { delta: 1.0 }), Handled::No), "closed modal ignores scroll");
+
+    // A toast stack does NOT consume scroll → the host falls through to page scroll.
+    let items = signal(vec![ToastSpec::new(1, "Saved")]);
+    let mut stack = ToastStack::new(items);
+    stack.tick(0.0); // reconcile
+    assert!(matches!(stack.event(&Event::Scroll { delta: 1.0 }), Handled::No), "toast stack passes scroll through");
+}
