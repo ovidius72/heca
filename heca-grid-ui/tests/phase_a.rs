@@ -2576,3 +2576,53 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     t.event(&Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
 }
+
+// --- Button respects theme border_width + radius ----------------------------
+
+#[test]
+fn button_derives_border_width_and_radius_from_theme() {
+    use heca_grid_ui::{Button, Component};
+
+    // A theme with a distinctive radius + border width.
+    let mut theme = Theme::grid_tron();
+    theme.radius = 10.0;
+    theme.border_width = 2.0;
+    let expected_radius = theme.control_radius();
+
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+
+    // The button's background box uses the surface fill; it must round to the
+    // theme's control radius and stroke at the theme's border width — not the
+    // old hardcoded 0.0 / 1.5.
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button paints a surface-filled background box");
+    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.control_radius()");
+    assert_eq!(
+        bg.border.expect("primary button has a border").width,
+        theme.border_width,
+        "button border width follows theme.border_width",
+    );
+
+    // border_width == 0 → no border drawn (borders off, like every surface).
+    theme.border_width = 0.0;
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button still paints its background box");
+    assert!(bg.border.is_none(), "border_width == 0 means no button border");
+}

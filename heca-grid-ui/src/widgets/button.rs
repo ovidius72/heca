@@ -190,15 +190,17 @@ impl Button {
         self.base.bounds.contains(p)
     }
 
-    /// Border that eases from semi-opaque (rest) to solid (hover) by `p`.
-    fn animated_border(&self, c: Color, p: f32) -> Option<Border> {
-        if !self.show_border {
+    /// Border that eases from semi-opaque (rest) to solid (hover) by `p`. The
+    /// stroke `width` is the theme's `border_width` (so `border_width == 0` means
+    /// no border, like every other surface).
+    fn animated_border(&self, c: Color, p: f32, width: f32) -> Option<Border> {
+        if !self.show_border || width <= 0.0 {
             return None;
         }
         let a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p.clamp(0.0, 1.0);
         Some(Border {
             color: c.with_alpha(a.round() as u8),
-            width: 1.5,
+            width,
         })
     }
 
@@ -216,7 +218,7 @@ impl Button {
 
     /// A fill rising from the bottom by fraction `p`, with a glow (the
     /// bottom-to-top sweep).
-    fn paint_rising_fill(&self, cx: &mut PaintCx, fill: Color, glow: Color, p: f32) {
+    fn paint_rising_fill(&self, cx: &mut PaintCx, fill: Color, glow: Color, p: f32, radius: f32) {
         let b = self.base.bounds;
         let fh = b.size.h * p as f64;
         let rect = Rectangle::new(
@@ -228,7 +230,7 @@ impl Button {
             radius: GLOW_RADIUS,
             intensity: GLOW_INTENSITY,
         });
-        cx.rect(rect, fill, None, 0.0, g);
+        cx.rect(rect, fill, None, radius, g);
     }
 
     /// A thin underline beneath the centered label.
@@ -275,7 +277,7 @@ impl Component for Button {
             return;
         }
         // Snapshot theme colors so we can call &mut cx methods afterwards.
-        let (surface, accent, glow_c, danger, background, foreground, muted, border_c) = {
+        let (surface, accent, glow_c, danger, background, foreground, muted, border_c, border_width, radius) = {
             let t = cx.theme();
             (
                 t.surface,
@@ -286,6 +288,8 @@ impl Component for Button {
                 t.foreground,
                 t.muted,
                 t.border,
+                t.border_width,
+                t.control_radius(),
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -293,28 +297,28 @@ impl Component for Button {
 
         match self.variant {
             ButtonVariant::Primary => {
-                cx.rect(b, surface, self.animated_border(accent, p), 0.0, None);
+                cx.rect(b, surface, self.animated_border(accent, p, border_width), radius, None);
                 if p > 0.0 {
-                    self.paint_rising_fill(cx, accent, glow_c, p);
+                    self.paint_rising_fill(cx, accent, glow_c, p, radius);
                 }
                 self.paint_label(cx, accent.lerp(background, p));
             }
             ButtonVariant::Destructive => {
-                cx.rect(b, surface, self.animated_border(danger, p), 0.0, None);
+                cx.rect(b, surface, self.animated_border(danger, p, border_width), radius, None);
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
                         color: danger,
                         radius: GLOW_RADIUS,
                         intensity: GLOW_INTENSITY * p,
                     });
-                    cx.rect(b, danger.with_alpha(alpha(p)), None, 0.0, g);
+                    cx.rect(b, danger.with_alpha(alpha(p)), None, radius, g);
                 }
                 self.paint_label(cx, danger.lerp(background, p));
             }
             ButtonVariant::Secondary => {
                 // Border becomes more vivid on hover (brighter + solid).
                 let bc = border_c.lerp(foreground, 0.4 * p);
-                cx.rect(b, surface, self.animated_border(bc, p), 0.0, None);
+                cx.rect(b, surface, self.animated_border(bc, p, border_width), radius, None);
                 self.paint_label(cx, foreground);
             }
             ButtonVariant::Outline => {
@@ -328,22 +332,22 @@ impl Component for Button {
                 cx.rect(
                     b,
                     fill,
-                    self.animated_border(muted.lerp(accent, p), p),
-                    0.0,
+                    self.animated_border(muted.lerp(accent, p), p, border_width),
+                    radius,
                     g,
                 );
                 self.paint_label(cx, muted.lerp(accent, p));
             }
             ButtonVariant::Ghost => {
-                let border = if self.show_border && p > 0.0 {
+                let border = if self.show_border && p > 0.0 && border_width > 0.0 {
                     Some(Border {
                         color: border_c.with_alpha(alpha(p)),
-                        width: 1.5,
+                        width: border_width,
                     })
                 } else {
                     None
                 };
-                cx.rect(b, surface.with_alpha(alpha(p)), border, 0.0, None);
+                cx.rect(b, surface.with_alpha(alpha(p)), border, radius, None);
                 self.paint_label(cx, muted.lerp(foreground, p));
             }
             ButtonVariant::Link => {
@@ -363,12 +367,12 @@ impl Component for Button {
                 ButtonVariant::Primary | ButtonVariant::Destructive => 0.95,
                 _ => 0.6,
             };
-            cx.flash(b, self.flash.amount() * strength, 0.0);
+            cx.flash(b, self.flash.amount() * strength, radius);
         }
 
         // Dim the whole button when disabled.
         if self.base.disabled.get_untracked() {
-            cx.dim(b, 0.0);
+            cx.dim(b, radius);
         }
 
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
