@@ -21,7 +21,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Widgets](#widgets)
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
+  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
@@ -470,6 +470,24 @@ press flash. Focusable; Space/Enter activate like a click.
 Button::destructive("DEREZ")
     .size(ButtonSize::Large)
     .on_click(|| wm.derez_focused());
+```
+
+### IconButton
+
+The icon-only cousin of `Button` — a compact, clickable icon affordance for toolbars/headers.
+Ghost at rest (just the icon); an animated tone-tinted hover frame (+ optional glow) fades in,
+with a press flash and keyboard focus ring. Hugs its icon + padding by default; pin a square
+with `.size(px)`. Focusable once `.on_click(...)` is set.
+
+- **Construct**: `IconButton::new(Icon)`.
+- **Builders**: `.size(px)` (pin a square), `.tone(Color)` (hover/press hue, default accent),
+  `.glow(bool)`, `.on_click(impl Fn() + 'static)`.
+- **Accessor**: `.hovered() -> Signal<bool>`.
+
+```rust
+IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
+    .tone(theme.danger)
+    .on_click(|| close());
 ```
 
 ### Toggle

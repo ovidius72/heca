@@ -428,6 +428,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Icon::new(Glyph::Lightning).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0)),
         )
+        // IconButton: a toolbar of compact, clickable icon affordances — ghost at
+        // rest, tinted hover frame + press flash + focus ring. The danger one uses
+        // a `.tone()` override.
+        .child(
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(IconButton::new(Icon::new(Glyph::Search).color(theme.foreground).size(20.0))
+                    .on_click(|| println!("[showcase] search")))
+                .child(IconButton::new(Icon::new(Glyph::Gear).color(theme.foreground).size(20.0))
+                    .on_click(|| println!("[showcase] settings")))
+                .child(IconButton::new(Icon::new(Glyph::Plus).color(theme.foreground).size(20.0))
+                    .on_click(|| println!("[showcase] add")))
+                .child(IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
+                    .tone(theme.danger)
+                    .on_click(|| println!("[showcase] close"))),
+        )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
