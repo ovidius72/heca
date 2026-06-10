@@ -76,6 +76,8 @@ struct BuiltUi {
     rail_letters: Vec<char>,
     /// A pane's "needs attention" request; `n` sets it (flash + host beep).
     attention_req: Signal<bool>,
+    /// Command-palette open state; `Ctrl+K` opens it.
+    palette_open: Signal<bool>,
 }
 
 fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
@@ -90,6 +92,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Host-owned "needs attention" request for a pane (`n` fires it): the row
     // flashes and the host plays its own beep — grid-ui stays audio-free.
     let attention_req = signal(false);
+    // Command palette (Ctrl+K): a fuzzy launcher. Type to filter (smart-case),
+    // ↑/↓ or Ctrl+J/K to move, Enter to run, Esc to close. Commands just print.
+    let palette = CommandPalette::new()
+        .placeholder("Type a command…   (↑/↓ · Ctrl+J/K · Enter)")
+        .command(Command::new("Split pane right", || println!("[showcase] split right")).icon(Glyph::Sidebar).key("⌥⌘→"))
+        .command(Command::new("Close pane", || println!("[showcase] close pane")).icon(Glyph::Close).key("⌘W"))
+        .command(Command::new("Toggle sidebar", || println!("[showcase] toggle sidebar")).icon(Glyph::Sidebar).key("⌘B"))
+        .command(Command::new("New terminal", || println!("[showcase] new terminal")).icon(Glyph::Terminal))
+        .command(Command::new("Search files", || println!("[showcase] search files")).icon(Glyph::Search).key("⌘P"))
+        .command(Command::new("Git: commit", || println!("[showcase] git commit")).icon(Glyph::GitCommit))
+        .command(Command::new("Settings", || println!("[showcase] settings")).icon(Glyph::Gear).key("⌘,"));
+    let palette_open = palette.open_signal();
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -670,7 +684,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(rail_col)
                 .child(sidebar)
                 .child(panes_col)
-        });
+        })
+        // The command palette overlays everything when open (Ctrl+K).
+        .child(palette);
     BuiltUi {
         ui,
         sidebar_mode,
@@ -678,6 +694,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_states: rail_states.borrow().clone(),
         rail_letters,
         attention_req,
+        palette_open,
     }
 }
 
@@ -744,6 +761,10 @@ struct GpuState {
     rail_pick: bool,
     /// A pane's "needs attention" request; `n` fires the pulse + a host beep.
     attention_req: Signal<bool>,
+    /// Command-palette open state; `Ctrl+K` opens it.
+    palette_open: Signal<bool>,
+    /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
+    ctrl: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -817,7 +838,15 @@ impl GpuState {
             intensity: signal(theme.intensity),
         };
         let built = build_ui(&theme, ctl);
-        let BuiltUi { ui, sidebar_mode, rail_hints, rail_states, rail_letters, attention_req } =
+        let BuiltUi {
+            ui,
+            sidebar_mode,
+            rail_hints,
+            rail_states,
+            rail_letters,
+            attention_req,
+            palette_open,
+        } =
             built;
 
         Self {
@@ -837,6 +866,8 @@ impl GpuState {
             rail_letters,
             rail_pick: false,
             attention_req,
+            palette_open,
+            ctrl: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1047,7 +1078,9 @@ impl ApplicationHandler for App {
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
                 state.shift = s.shift_key();
-                // Broadcast to the tree so text widgets can do word-wise editing.
+                state.ctrl = s.control_key();
+                // Broadcast to the tree so text widgets can do word-wise editing
+                // (and the command palette can track Ctrl for Ctrl+J/K nav).
                 state.ui.event(&Event::ModifiersChanged(Modifiers {
                     ctrl: s.control_key(),
                     alt: s.alt_key(),
@@ -1064,6 +1097,10 @@ impl ApplicationHandler for App {
                             state
                                 .focus
                                 .deliver_to_overlay(&mut state.ui, &Event::Key { key: gk, pressed: true });
+                        }
+                        // Ctrl+K opens the command palette (a host-bound chord).
+                        GridKey::Char('k') if state.ctrl => {
+                            state.palette_open.set(true);
                         }
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),

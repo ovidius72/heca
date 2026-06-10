@@ -93,6 +93,14 @@ impl Glyph {
             Glyph::Minus => 0xe32a,
         }
     }
+
+    /// The **primary-layer** character (the full-strength glyph), for callers that
+    /// draw a single-layer icon manually via [`PaintCx::icon`](crate::component::PaintCx::icon)
+    /// (e.g. command-palette rows). Duotone rendering uses both layers; this is the
+    /// foreground one.
+    pub fn primary_char(self) -> Option<char> {
+        char::from_u32(self.secondary() + PRIMARY_OFFSET)
+    }
 }
 
 /// A duotone icon glyph. Sizes to a square of the resolved font size (or an

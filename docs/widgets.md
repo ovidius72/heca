@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -908,6 +908,31 @@ let open = modal.open_signal();
 
 > Host wiring: while `focus.overlay_active(root)`, route pointer **and keys** to the overlay
 > (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog.
+
+### CommandPalette
+
+A fuzzy **command launcher** overlay (same input-capturing contract as `Modal`): a query line
+over a scrollable list of commands. Typing filters with a **fuzzy subsequence** match,
+**smart-case** (case-insensitive unless the query has an uppercase letter), ranked, with matched
+characters highlighted in the accent. Selecting a command fires its callback and closes.
+
+- **Construct**: `CommandPalette::new()`; add commands with `.command(Command::new(label, on_run)
+  .icon(Glyph)?.key("⌘K")?)`; `.placeholder(text)`, `.open(bool)`.
+- **Accessor**: `.open_signal() -> Signal<bool>` — bind a chord (e.g. Ctrl+K) to open it.
+- **Nav (built-in)**: ↑/↓ and **Ctrl+J / Ctrl+K** move; **Enter** runs; **Esc** / scrim-click
+  close. Also exposed as intents — `select_next()`, `select_prev()`, `run_selected()` — so a host
+  can bind its own configurable keys.
+
+```rust
+let palette = CommandPalette::new()
+    .command(Command::new("Split pane", || wm.split()).icon(Glyph::Sidebar).key("⌥⌘S"))
+    .command(Command::new("Close pane", || wm.close()).key("⌘W"));
+let open = palette.open_signal();
+// host: on Ctrl+K → open.set(true); add `palette` to the tree
+```
+
+> Needs the same host wiring as `Modal` (route keys to the overlay). Because it tracks `Ctrl` for
+> Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
 
 ---
 
