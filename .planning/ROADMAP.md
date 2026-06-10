@@ -261,4 +261,4 @@ up architecture debt introduced during rapid prototyping.
 | 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, debug-assert dispatch, SAFETY comments |
 | 8 — Constants & Polish | ✅ Done | Centralize constants, renderer API doc, invariant docs (8.3 deferred) |
 | 9 — Focus Separation | ✅ Done | Interaction policy layer: FocusDomain, ActionPolicy, route_interaction, dispatch_action, focus-target helpers, 29 regression tests |
-| 10 — Final Verification | 🔄 In Progress | Automated validation pass; manual smoke tests pending |
+| 10 — Final Verification | ✅ Done | Automated validation, smoke tests passed, doc reconciliation |
