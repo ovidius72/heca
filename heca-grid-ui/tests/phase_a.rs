@@ -2834,3 +2834,38 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
     let hit = stack.event(&Event::PointerPressed { pos: Point::new(700.0, 500.0) });
     assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
 }
+
+// --- viewport culling -------------------------------------------------------
+
+#[test]
+fn paint_cx_culls_offscreen_content_but_not_headless() {
+    let theme = Theme::grid_tron();
+    let vp = Size::new(800.0, 600.0);
+    let off = Rectangle::new(Point::new(10.0, 5000.0), Size::new(100.0, 40.0)); // far below
+    let on = Rectangle::new(Point::new(10.0, 10.0), Size::new(100.0, 40.0));
+
+    // On-screen content is painted.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        cx.rect(on, theme.surface, None, 0.0, None);
+    }
+    assert_eq!(scene.len(), 1, "on-screen rect is painted");
+
+    // Content fully outside the viewport (rect + text) emits nothing.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        cx.rect(off, theme.surface, None, 0.0, None);
+        cx.text(off, "hidden", theme.foreground, 15.0, TextAlign::Start, false);
+    }
+    assert!(scene.is_empty(), "content far below the viewport is culled");
+
+    // With no viewport set (headless / tests) nothing is ever culled.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.rect(off, theme.surface, None, 0.0, None);
+    }
+    assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
+}
