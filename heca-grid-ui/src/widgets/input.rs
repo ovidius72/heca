@@ -285,6 +285,14 @@ impl Input {
             {
                 self.select_all();
             }
+            // Emacs/readline backspace bindings: Ctrl+H deletes one char back,
+            // Ctrl+U deletes from the caret to the start of the line.
+            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'h') => {
+                self.backspace(Granularity::Char)
+            }
+            GridKey::Char(c) if self.mods.ctrl && c.eq_ignore_ascii_case(&'u') => {
+                self.backspace(Granularity::Line)
+            }
             GridKey::Char(_) if self.mods.ctrl || self.mods.meta => return Handled::No,
             GridKey::Char(c) => self.insert(c),
             GridKey::Space => self.insert(' '),

@@ -2468,3 +2468,17 @@ fn command_palette_query_reuses_input_word_delete() {
     p.event(&Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
 }
+
+#[test]
+fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
+    use heca_grid_ui::{Input, Modifiers};
+    let mut inp = Input::new().value("hello world");
+
+    inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    // Ctrl+H = delete one char back.
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true });
+    assert_eq!(inp.value_str(), "hello worl", "Ctrl+H deletes one char back");
+    // Ctrl+U = delete from caret to line start.
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
+    assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+}
