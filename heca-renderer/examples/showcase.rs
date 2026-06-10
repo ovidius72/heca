@@ -1130,13 +1130,15 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
-                        // While an overlay (Select dropdown, Modal dialog) is open it
-                        // owns input: route every key to it (Esc/Enter dismiss/confirm).
-                        gk if state.focus.overlay_active(&mut state.ui) => {
-                            state
-                                .focus
-                                .deliver_to_overlay(&mut state.ui, &Event::Key { key: gk, pressed: true });
-                        }
+                        // An open overlay gets first dibs on keys, but only swallows
+                        // the ones it actually consumes: a Modal/palette eats every
+                        // key (Esc/Enter/typing), while the ToastStack eats none — so
+                        // global keys (`t`, `[`, …) still work while toasts show.
+                        gk if state.focus.overlay_active(&mut state.ui)
+                            && state.focus.deliver_to_overlay(
+                                &mut state.ui,
+                                &Event::Key { key: gk, pressed: true },
+                            ) == Handled::Yes => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
