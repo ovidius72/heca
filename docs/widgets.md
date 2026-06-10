@@ -326,6 +326,7 @@ stay DRY):
 | `.theme() -> &Theme` | Active theme tokens. |
 | `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
+| `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Modal` to lift off the scrim. |
 | `.corner_brackets(rect, color)` | L-shaped corner reticle (focus ring / decoration). |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |

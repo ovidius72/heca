@@ -25,6 +25,9 @@ struct VertexInput {
     @location(7) glow: vec4<f32>,
     @location(8) glow_radius: f32,
     @location(9) glow_intensity: f32,
+    @location(10) shadow: vec4<f32>,
+    @location(11) shadow_radius: f32,
+    @location(12) shadow_offset: vec2<f32>,
 };
 
 struct VertexOutput {
@@ -39,6 +42,9 @@ struct VertexOutput {
     @location(7) glow: vec4<f32>,
     @location(8) glow_radius: f32,
     @location(9) glow_intensity: f32,
+    @location(10) shadow: vec4<f32>,
+    @location(11) shadow_radius: f32,
+    @location(12) shadow_offset: vec2<f32>,
 };
 
 @vertex
@@ -57,6 +63,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.glow = in.glow;
     out.glow_radius = in.glow_radius;
     out.glow_intensity = in.glow_intensity;
+    out.shadow = in.shadow;
+    out.shadow_radius = in.shadow_radius;
+    out.shadow_offset = in.shadow_offset;
     return out;
 }
 
@@ -91,7 +100,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Premultiply for premultiplied-alpha blending (src = One, dst = 1-srcA).
     var out_rgb = rgb * a;
-    let out_a = a;
+    var out_a = a;
+
+    // Drop shadow: a soft, dark, OFFSET halo cast BEHIND the shape. Unlike the
+    // glow (additive light) it composites a dark color WITH alpha, so it darkens
+    // the background and reads on dark themes. Sampled from the shape's SDF
+    // shifted by `shadow_offset`, with a quadratic falloff over `shadow_radius`,
+    // then composited UNDER the shape ("shape over shadow") so the opaque shape
+    // hides the shadow's center and only its fringe shows.
+    if (in.shadow_radius > 0.0 && in.shadow.a > 0.0) {
+        let ds = sd_round_box(p - in.shadow_offset, in.half_size, in.radius);
+        let ts = clamp(1.0 - max(ds, 0.0) / in.shadow_radius, 0.0, 1.0);
+        let sa = ts * ts * in.shadow.a;
+        let inv = 1.0 - out_a;
+        out_rgb = out_rgb + in.shadow.rgb * (sa * inv);
+        out_a = out_a + sa * inv;
+    }
 
     // Glow: additive light with a smooth compact falloff (0 by `glow_radius`,
     // so it fully fades inside the expanded quad — no hard cutoff). It adds
