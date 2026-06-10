@@ -2742,3 +2742,32 @@ fn open_modal_casts_a_drop_shadow() {
     let has_shadow = scene.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
     assert!(has_shadow, "an open modal lifts off the scrim with a drop shadow");
 }
+
+#[test]
+fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
+    use heca_grid_ui::{Component, Toast};
+    let theme = Theme::grid_tron();
+
+    // Press the Retry action, then paint: the press flash must cover only the
+    // action button, not the whole card (no "whole widget clicked" feedback).
+    let mut t = Toast::info("File deleted").action("Retry", || {});
+    layout_toast(&mut t);
+    let card_w = t.base().bounds.size.w;
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        t.paint(&mut cx);
+    }
+    // The flash is a white overlay rect (see PaintCx::flash).
+    let flash = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) if r.fill.r == 255 && r.fill.g == 255 && r.fill.b == 255 && r.fill.a > 0 => Some(*r),
+        _ => None,
+    }).expect("an action press emits a press-flash rect");
+    assert!(
+        flash.rect.size.w < card_w - 1.0,
+        "action flash ({}) must be narrower than the whole card ({card_w})",
+        flash.rect.size.w,
+    );
+}
