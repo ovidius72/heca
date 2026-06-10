@@ -8,7 +8,7 @@
 
 use crate::color::Color;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, TextAlign, TextCmd};
+use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -318,6 +318,28 @@ impl<'a> PaintCx<'a> {
             border,
             radius,
             glow: self.scaled_glow(glow),
+            shadow: None,
+        }));
+    }
+
+    /// Queue a soft **drop shadow** for `rect` (corner `radius`): a dark, blurred,
+    /// offset halo drawn *behind* it that lifts the shape off the background. Call
+    /// this **before** painting the shape's fill, so the shape occludes the
+    /// shadow's center and only its fringe shows. Unlike [`glow`](PaintCx::rect),
+    /// the shadow darkens (composites a dark color with alpha), so it reads on
+    /// dark themes — and it's independent of the glow/border tokens, so it shows
+    /// even when both are off (e.g. a floating Modal at `border_width == 0`).
+    pub fn drop_shadow(&mut self, rect: Rectangle, radius: f32, shadow: Shadow) {
+        if shadow.color.a == 0 || shadow.radius <= 0.0 {
+            return;
+        }
+        self.scene.push(DrawCommand::Rect(RectCmd {
+            rect,
+            fill: Color::TRANSPARENT,
+            border: None,
+            radius,
+            glow: None,
+            shadow: Some(shadow),
         }));
     }
 

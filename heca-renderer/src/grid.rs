@@ -16,6 +16,9 @@ struct GridVertex {
     glow: [f32; 4],
     glow_radius: f32,
     glow_intensity: f32,
+    shadow: [f32; 4],
+    shadow_radius: f32,
+    shadow_offset: [f32; 2],
 }
 
 #[repr(C)]
@@ -39,6 +42,12 @@ pub struct GlowRect {
     pub glow: [f32; 4],
     pub glow_radius: f32,
     pub glow_intensity: f32,
+    /// Drop-shadow color (premultiply-friendly straight color + alpha).
+    pub shadow: [f32; 4],
+    /// Shadow blur/falloff radius (logical px); `0` = no shadow.
+    pub shadow_radius: f32,
+    /// Shadow offset (logical px): `[dx, dy]`, positive = right/down.
+    pub shadow_offset: [f32; 2],
 }
 
 /// Renders SDF rounded rects with glow. Mirrors `PrimitiveRenderer`'s buffer
@@ -110,6 +119,9 @@ impl GridRenderer {
             7 => Float32x4, // glow
             8 => Float32,   // glow_radius
             9 => Float32,   // glow_intensity
+            10 => Float32x4, // shadow
+            11 => Float32,   // shadow_radius
+            12 => Float32x2, // shadow_offset
         ];
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -183,7 +195,11 @@ impl GridRenderer {
     /// Queue one glowing rounded rect. The quad is expanded to contain the glow
     /// halo so the falloff isn't clipped.
     pub fn draw(&mut self, r: GlowRect) {
-        let margin = r.glow_radius.max(0.0) + 2.0;
+        // Expand the quad to contain whichever halo reaches furthest: the glow, or
+        // the (offset) drop shadow's blur — so neither falloff is clipped.
+        let shadow_reach = r.shadow_radius.max(0.0)
+            + r.shadow_offset[0].abs().max(r.shadow_offset[1].abs());
+        let margin = r.glow_radius.max(0.0).max(shadow_reach) + 2.0;
         let (x0, y0) = (r.x - margin, r.y - margin);
         let (x1, y1) = (r.x + r.w + margin, r.y + r.h + margin);
         let center = [r.x + r.w * 0.5, r.y + r.h * 0.5];
@@ -200,6 +216,9 @@ impl GridRenderer {
             glow: r.glow,
             glow_radius: r.glow_radius,
             glow_intensity: r.glow_intensity,
+            shadow: r.shadow,
+            shadow_radius: r.shadow_radius,
+            shadow_offset: r.shadow_offset,
         };
 
         let base = self.vertices.len() as u32;

@@ -130,6 +130,25 @@ pub struct RectCmd {
     /// Corner radius in logical pixels (0.0 = sharp).
     pub radius: f32,
     pub glow: Option<Glow>,
+    /// A soft drop shadow cast *behind* this rect (darkens the background).
+    /// Independent of [`glow`](RectCmd::glow) (which only adds light).
+    pub shadow: Option<Shadow>,
+}
+
+/// A soft drop shadow: a dark, blurred, offset halo drawn **behind** a shape to
+/// lift it off the background. Unlike [`Glow`] (additive light), it composites a
+/// dark color *with alpha* so it reads on dark themes where a glow can't. It is
+/// independent of the glow + border tokens, so it shows even when both are off.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Shadow {
+    /// Shadow color, including its alpha (the umbra strength).
+    pub color: Color,
+    /// Blur / falloff radius in logical pixels.
+    pub radius: f32,
+    /// Horizontal offset of the cast shadow (logical px; positive = right).
+    pub dx: f32,
+    /// Vertical offset of the cast shadow (logical px; positive = down).
+    pub dy: f32,
 }
 
 /// A rectangle outline.

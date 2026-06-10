@@ -2698,3 +2698,47 @@ fn non_container_widgets_drop_their_border_at_zero_border_width() {
         assert!(widths.is_empty(), "{name}: expected no border at border_width=0, got {widths:?}");
     }
 }
+
+// --- drop shadow ------------------------------------------------------------
+
+#[test]
+fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
+    use heca_grid_ui::scene::Shadow;
+    let theme = Theme::grid_tron();
+    let rect = Rectangle::new(Point::new(50.0, 50.0), Size::new(120.0, 80.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow, radius: 24.0, dx: 0.0, dy: 10.0 });
+    }
+    let sh = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) => r.shadow,
+        _ => None,
+    }).expect("drop_shadow emits a rect carrying a Shadow");
+    assert_eq!((sh.radius, sh.dy), (24.0, 10.0), "shadow blur + offset are threaded through");
+
+    // A fully-transparent shadow (alpha 0) or zero radius is a no-op.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow.with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
+    }
+    assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
+}
+
+#[test]
+fn open_modal_casts_a_drop_shadow() {
+    use heca_grid_ui::{Component, Modal};
+    let theme = Theme::grid_tron();
+    let mut m = Modal::new("Delete?", "Cannot undo").confirm("OK", || {}).open(true);
+    let vp = Size::new(400.0, 300.0);
+    LayoutEngine::new().compute(&mut m, vp);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        m.paint(&mut cx);
+    }
+    let has_shadow = scene.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
+    assert!(has_shadow, "an open modal lifts off the scrim with a drop shadow");
+}

@@ -11,6 +11,7 @@ use heca_grid_ui::{Rectangle, Scene};
 
 const NO_BORDER: [f32; 4] = [0.0; 4];
 const NO_GLOW: [f32; 4] = [0.0; 4];
+const NO_SHADOW: [f32; 4] = [0.0; 4];
 
 /// Translate a logical `Rectangle` to `(x, y, w, h)` f32 tuple.
 fn xywh(rect: &Rectangle) -> (f32, f32, f32, f32) {
@@ -36,6 +37,9 @@ fn solid(x: f32, y: f32, w: f32, h: f32, fill: [f32; 4]) -> GlowRect {
         glow: NO_GLOW,
         glow_radius: 0.0,
         glow_intensity: 0.0,
+        shadow: NO_SHADOW,
+        shadow_radius: 0.0,
+        shadow_offset: [0.0, 0.0],
     }
 }
 
@@ -53,6 +57,10 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     Some(g) => (g.color.to_f32x4(), g.radius, g.intensity),
                     None => (NO_GLOW, 0.0, 0.0),
                 };
+                let (shadow, shadow_radius, shadow_offset) = match r.shadow {
+                    Some(s) => (s.color.to_f32x4(), s.radius, [s.dx, s.dy]),
+                    None => (NO_SHADOW, 0.0, [0.0, 0.0]),
+                };
                 grid.draw(GlowRect {
                     x,
                     y,
@@ -65,6 +73,9 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     glow,
                     glow_radius,
                     glow_intensity,
+                    shadow,
+                    shadow_radius,
+                    shadow_offset,
                 });
             }
             DrawCommand::Brackets(b) => draw_brackets(grid, b),
@@ -113,6 +124,9 @@ fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd) {
         glow: gc,
         glow_radius: gr,
         glow_intensity: gi,
+        shadow: NO_SHADOW,
+        shadow_radius: 0.0,
+        shadow_offset: [0.0, 0.0],
     };
 
     // Top-left

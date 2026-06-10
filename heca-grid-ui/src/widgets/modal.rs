@@ -20,7 +20,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Glow, TextAlign};
+use crate::scene::{Glow, Shadow, TextAlign};
 use std::cell::Cell;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -38,6 +38,10 @@ const BTN_GAP: f64 = 10.0;
 /// Panel width bounds: a minimum, and a fraction of the viewport as the cap.
 const PANEL_MIN_W: f64 = 240.0;
 const PANEL_MAX_W_FRAC: f64 = 0.6;
+/// Soft drop-shadow blur radius + downward offset that lift the dialog off the
+/// scrim — so it stays identifiable regardless of the glow/border tokens.
+const SHADOW_BLUR: f32 = 30.0;
+const SHADOW_DROP: f32 = 12.0;
 
 /// Computed rects for one layout pass (in viewport space).
 struct Rects {
@@ -225,9 +229,9 @@ impl Component for Modal {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, surface, accent, danger, foreground, muted, ctrl_radius, radius) = {
+        let (background, surface, accent, danger, foreground, muted, shadow, ctrl_radius, radius) = {
             let t = cx.theme();
-            (t.background, t.surface, t.accent, t.danger, t.foreground, t.muted, t.control_radius(), t.radius)
+            (t.background, t.surface, t.accent, t.danger, t.foreground, t.muted, t.shadow, t.control_radius(), t.radius)
         };
         let r = self.rects();
         let confirm_tone = if self.danger { danger } else { accent };
@@ -241,6 +245,11 @@ impl Component for Modal {
                 r.panel
             };
             cx.rect(scrim, background.with_alpha(SCRIM_ALPHA), None, 0.0, None);
+
+            // Lift the dialog off the scrim with a soft drop shadow (drawn behind
+            // the panel). Independent of the glow/border tokens, so the modal stays
+            // identifiable even at border_width == 0.
+            cx.drop_shadow(r.panel, radius, Shadow { color: shadow, radius: SHADOW_BLUR, dx: 0.0, dy: SHADOW_DROP });
 
             // Panel: surface fill + the shared Pane/DockFrame corner-bracket
             // reticle frame (matches the linked GridCN modal — no plain border).
