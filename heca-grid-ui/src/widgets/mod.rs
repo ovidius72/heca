@@ -34,6 +34,7 @@ mod surface;
 mod tabs;
 mod tag;
 mod toggle;
+mod tooltip;
 
 pub use alert::{Alert, AlertVariant};
 pub use badge::{Badge, BadgeVariant};
@@ -64,3 +65,4 @@ pub use surface::Surface;
 pub use tabs::Tabs;
 pub use tag::Tag;
 pub use toggle::Toggle;
+pub use tooltip::{Tooltip, TooltipSide};
