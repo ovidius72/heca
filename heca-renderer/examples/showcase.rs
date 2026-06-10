@@ -10,7 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
@@ -19,7 +19,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
@@ -806,6 +806,8 @@ struct GpuState {
     scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
+    /// Whether the last frame was still animating (drives the capped redraw loop).
+    animating: bool,
     focus: FocusManager,
     shift: bool,
 }
@@ -911,6 +913,7 @@ impl GpuState {
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
+            animating: false,
             focus: FocusManager::new(),
             shift: false,
         }
@@ -1035,10 +1038,11 @@ impl GpuState {
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
-        // Keep redrawing while a hover animation is in flight.
-        if animating {
-            self.window.request_redraw();
-        }
+        // Record whether anything is still animating; the event loop schedules the
+        // next frame at a capped rate (see `RedrawRequested` + `new_events`) rather
+        // than redrawing immediately, so a perpetual animation (spinner) doesn't
+        // peg a core at the full refresh rate.
+        self.animating = animating;
     }
 }
 
@@ -1048,6 +1052,18 @@ struct App {
 }
 
 impl ApplicationHandler for App {
+    /// When the capped-frame timer (set via `WaitUntil`) fires, request the next
+    /// animation frame.
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        if let StartCause::ResumeTimeReached { .. } = cause {
+            if let Some(state) = &self.state {
+                if state.animating {
+                    state.window.request_redraw();
+                }
+            }
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             let state = pollster::block_on(GpuState::new(event_loop));
@@ -1203,7 +1219,17 @@ impl ApplicationHandler for App {
                     state.window.request_redraw();
                 }
             }
-            WindowEvent::RedrawRequested => state.render(),
+            WindowEvent::RedrawRequested => {
+                state.render();
+                // Cap animation to ~30fps: schedule the next frame instead of
+                // redrawing immediately. Idle (nothing animating) → wait for events.
+                if state.animating {
+                    let next = state.last_frame + Duration::from_millis(33);
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(next));
+                } else {
+                    event_loop.set_control_flow(ControlFlow::Wait);
+                }
+            }
             _ => {}
         }
     }
