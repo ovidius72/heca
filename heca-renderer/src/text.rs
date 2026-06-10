@@ -332,8 +332,15 @@ impl TextRenderer {
             let mut max_x = i32::MIN;
             let mut max_y = i32::MIN;
             let mut has_glyphs = false;
+            // Stable, glyph-independent line metrics (scaled px) for vertical
+            // centering: the typographic line box doesn't change with ascenders/
+            // descenders, so the baseline stays put instead of the ink box jumping.
+            let mut line_top = 0.0f32;
+            let mut line_height = 0.0f32;
 
             for run in buffer.layout_runs() {
+                line_top = run.line_top;
+                line_height = run.line_height;
                 for glyph in run.glyphs {
                     // Use cosmic-text's own formula: offset by (0, line_y) so physical.y already includes baseline
                     let physical = glyph.physical((0.0, run.line_y), 1.0);
@@ -468,9 +475,11 @@ impl TextRenderer {
                 ],
             });
 
-            // 5. Build quad. Box mode centers the measured glyph box within
-            // `(w, h)` (horizontally per `align`, vertically centered); point
-            // mode places it with its top-left at `(x, y)`.
+            // 5. Build quad. Box mode centers within `(w, h)`: horizontally per
+            // `align` on the ink width; vertically on the **stable line box** (not
+            // the ink box) so the baseline doesn't shift when glyphs gain
+            // ascenders/descenders (p, q, g, b, t). The ink box is then placed at
+            // its measured offset from the line top, so existing glyphs stay put.
             let screen_w = content_w as f32 / scale;
             let screen_h = content_h as f32 / scale;
             let (screen_x, screen_y) = if cmd.centered {
@@ -480,7 +489,9 @@ impl TextRenderer {
                         TextAlign::Center => (cmd.w - screen_w) * 0.5,
                         TextAlign::End => cmd.w - screen_w,
                     };
-                (x, cmd.y + (cmd.h - screen_h) * 0.5)
+                let line_box_top = cmd.y + (cmd.h - line_height / scale) * 0.5;
+                let ink_offset = (min_y as f32 - line_top) / scale;
+                (x, line_box_top + ink_offset)
             } else {
                 (cmd.x, cmd.y)
             };
