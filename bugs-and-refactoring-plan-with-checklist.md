@@ -399,6 +399,7 @@ Short description:
   - [x] 9.5 Add regression tests for domain routing
   - [x] 9.6 Fix `handle_close_pane` floating pane bug + remove FakeBackend recreation
   - [x] 9.7 Add arrow key bindings for navigation (prefix+ArrowLeft/Right/Up/Down)
+  - [x] 9.8 Wire InteractionIntent dispatch in dispatch_action
   - [ ] 9.V Validate floating vs tiled action targeting correctness (manual smoke test)
 
 ### Phase 10 — Final Whole-Program Verification

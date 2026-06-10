@@ -76,24 +76,35 @@ pub(crate) enum InteractionSource {
 /// information that a raw `WmAction` wouldn't capture (e.g., sidebar drag
 /// start has no `WmAction` equivalent).
 ///
-/// Intent variants for sidebar/mouse interactions.
-/// FocusPane, FocusWorkspace, EnterSidebarNav, StartSidebarDrag
-/// will be constructed when sidebar/mouse click routing goes through dispatch_action.
+/// Intent variants are dispatched in `dispatch_action()`:
+/// - `FocusPane` → `WmAction::FocusPane`
+/// - `FocusWorkspace` → `WmAction::FocusWorkspace`
+/// - `EnterSidebarNav` → `WmAction::SidebarFocus`
+/// - `StartSidebarDrag` → mouse-layer drag (no registry dispatch)
 #[derive(Debug, Clone)]
 pub(crate) enum InteractionIntent {
     /// A keyboard shortcut resolved to a WM action.
     ActivateAction(WmAction),
     /// Focus a specific pane (from sidebar click, content click, or RPC).
-    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
+    ///
+    /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
+    /// Not yet constructed from mouse/sidebar — those paths still use `WmAction` directly.
+    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     FocusPane { pane_id: u64 },
     /// Focus a specific workspace (from sidebar click).
-    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
+    ///
+    /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
+    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     FocusWorkspace { ws_idx: usize },
     /// Enter sidebar navigation mode (from keyboard shortcut or click).
-    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
+    ///
+    /// Dispatched to `WmAction::SidebarFocus` in `dispatch_action`.
+    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     EnterSidebarNav,
     /// Start dragging a sidebar item (no WmAction equivalent).
-    #[allow(dead_code)] // constructed in Phase B sidebar/mouse intent routing
+    ///
+    /// Policy-routed only — the drag itself is initiated in the mouse layer.
+    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     StartSidebarDrag { pane_id: u64 },
 }
 
@@ -479,14 +490,22 @@ pub(crate) fn dispatch_action(
         RouteDecision::Allow(InteractionIntent::ActivateAction(act)) => {
             registry.execute(&act, state);
         }
-        RouteDecision::Allow(other_intent) => {
-            // Non-action intents (FocusPane, EnterSidebarNav, etc.)
-            // are dispatched differently — for now, log and treat as no-op
-            // until Phase B wires them.
+        RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
+            registry.execute(&WmAction::FocusPane { pane_id }, state);
+        }
+        RouteDecision::Allow(InteractionIntent::FocusWorkspace { ws_idx }) => {
+            registry.execute(&WmAction::FocusWorkspace { ws_idx }, state);
+        }
+        RouteDecision::Allow(InteractionIntent::EnterSidebarNav) => {
+            registry.execute(&WmAction::SidebarFocus, state);
+        }
+        RouteDecision::Allow(InteractionIntent::StartSidebarDrag { pane_id: _ }) => {
+            // Sidebar drag start is mouse-only state, not a WM action.
+            // The drag is initiated directly in mouse.rs; this intent
+            // exists for policy routing only and doesn't need dispatch.
             #[cfg(debug_assertions)]
             eprintln!(
-                "[heca] interaction: allowed non-action intent {:?} (dispatch not yet wired)",
-                other_intent
+                "[heca] interaction: StartSidebarDrag intent allowed but not dispatched (drag initiated in mouse layer)"
             );
         }
         RouteDecision::Block => {
