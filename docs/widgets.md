@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -960,6 +960,32 @@ let open = palette.open_signal();
 
 > Needs the same host wiring as `Modal` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
+
+### ToastStack
+
+An overlay that arranges a **host-supplied** set of notifications into a corner stack. **Presentation
+only** — it owns no queue, lifetimes, auto-dismiss timers, or dedup; that's the app's job. The host
+owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [`Toast`](#toast)
+widgets by **id** (each keeps its hover/flash state), corner-anchors them on the overlay layer,
+slides new ones in, routes events to the toast under the cursor, and reports
+`on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
+overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+
+- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
+  `.gap(px)`, `.margin(px)`.
+- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id| …)` (inline action clicked).
+- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.dismissible(bool)` — plain data the host owns.
+
+```rust
+let toasts = signal(Vec::<ToastSpec>::new());            // the app's render list
+let stack = ToastStack::new(toasts)
+    .corner(ToastCorner::TopRight)
+    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)));
+// app pushes:  toasts.update(|v| v.push(ToastSpec::new(1, "Saved").severity(ToastSeverity::Success)));
+```
+
+> Same host wiring as `Modal` (route pointer to the overlay first). Auto-dismiss/timers live in the
+> app: run a timer, then remove the id from `items`.
 
 ---
 

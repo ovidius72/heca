@@ -2771,3 +2771,66 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
         flash.rect.size.w,
     );
 }
+
+// --- ToastStack -------------------------------------------------------------
+
+#[test]
+fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
+    use heca_grid_ui::{Component, ToastSpec, ToastStack};
+
+    let items = signal(Vec::<ToastSpec>::new());
+    let mut stack = ToastStack::new(items);
+    stack.tick(0.0); // reconcile (empty)
+    assert!(!stack.overlay_active(), "empty stack doesn't grab input");
+
+    items.set(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
+    stack.tick(0.0); // reconcile (now 2)
+    assert!(stack.overlay_active(), "a non-empty stack is overlay-active");
+}
+
+#[test]
+fn toast_stack_dismiss_reports_the_clicked_id() {
+    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let dismissed = Rc::new(Cell::new(0u64));
+    let d = dismissed.clone();
+    let items = signal(vec![ToastSpec::new(7, "Connection lost").body("Retrying")]);
+    let mut stack = ToastStack::new(items)
+        .corner(ToastCorner::TopLeft)
+        .on_dismiss(move |id| d.set(id));
+
+    // Settle the slide-in, then paint to cache the viewport + lay the toast out.
+    stack.tick(1.0);
+    let theme = Theme::grid_tron();
+    let vp = Size::new(800.0, 600.0);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        stack.paint(&mut cx);
+    }
+
+    // Top-left toast sits at (16,16), width 320; its × is in the top-right gutter.
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(310.0, 38.0) });
+    assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
+    assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
+}
+
+#[test]
+fn toast_stack_passes_through_clicks_that_miss_every_toast() {
+    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Hi")]);
+    let mut stack = ToastStack::new(items).corner(ToastCorner::TopLeft);
+    stack.tick(1.0);
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
+        stack.paint(&mut cx);
+    }
+    // Far from the top-left toast → not consumed, so the UI behind still gets it.
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(700.0, 500.0) });
+    assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
+}

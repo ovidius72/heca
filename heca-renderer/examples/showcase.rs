@@ -78,6 +78,8 @@ struct BuiltUi {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Host-owned toast render list; `t` pushes one, the stack reports dismiss.
+    toasts: Signal<Vec<ToastSpec>>,
 }
 
 fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
@@ -149,6 +151,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
 
     // 20-entry list so the dropdown caps its height and shows a scrollbar.
     let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
+
+    // ToastStack (G-overlay): the app owns the render list (`toasts`) and the
+    // lifecycle; the stack just corner-anchors + animates them and reports
+    // intents. `t` pushes one (see the keymap); clicking × removes it here.
+    let toasts = signal(vec![
+        ToastSpec::new(1, "Build succeeded").severity(ToastSeverity::Success).body("12 crates in 4.2s"),
+        ToastSpec::new(2, "Connection lost").severity(ToastSeverity::Danger).body("Reconnecting…").action("Retry"),
+    ]);
+    let toast_stack = ToastStack::new(toasts)
+        .corner(ToastCorner::TopRight)
+        .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
+        .on_action(|id| println!("[showcase] toast {id} action"));
 
     let ui = Flex::column()
         .padding(40.0)
@@ -704,7 +718,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(panes_col)
         })
         // The command palette overlays everything when open (Ctrl+K).
-        .child(palette);
+        .child(palette)
+        // The toast stack overlays a corner (presentation only; app owns the list).
+        .child(toast_stack);
     BuiltUi {
         ui,
         sidebar_mode,
@@ -713,6 +729,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_letters,
         attention_req,
         palette_open,
+        toasts,
     }
 }
 
@@ -781,6 +798,8 @@ struct GpuState {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Host-owned toast render list; `t` pushes one.
+    toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
     ctl: ThemeCtl,
@@ -864,6 +883,7 @@ impl GpuState {
             rail_letters,
             attention_req,
             palette_open,
+            toasts,
         } =
             built;
 
@@ -885,6 +905,7 @@ impl GpuState {
             rail_pick: false,
             attention_req,
             palette_open,
+            toasts,
             ctrl: false,
             ctl,
             scroll_y: 0.0,
@@ -1109,13 +1130,15 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
-                        // While an overlay (Select dropdown, Modal dialog) is open it
-                        // owns input: route every key to it (Esc/Enter dismiss/confirm).
-                        gk if state.focus.overlay_active(&mut state.ui) => {
-                            state
-                                .focus
-                                .deliver_to_overlay(&mut state.ui, &Event::Key { key: gk, pressed: true });
-                        }
+                        // An open overlay gets first dibs on keys, but only swallows
+                        // the ones it actually consumes: a Modal/palette eats every
+                        // key (Esc/Enter/typing), while the ToastStack eats none — so
+                        // global keys (`t`, `[`, …) still work while toasts show.
+                        gk if state.focus.overlay_active(&mut state.ui)
+                            && state.focus.deliver_to_overlay(
+                                &mut state.ui,
+                                &Event::Key { key: gk, pressed: true },
+                            ) == Handled::Yes => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
@@ -1153,6 +1176,20 @@ impl ApplicationHandler for App {
                             print!("\x07");
                             use std::io::Write;
                             let _ = std::io::stdout().flush();
+                        }
+                        // `t` pushes a new toast onto the host-owned list; the
+                        // ToastStack slides it in, and × dismisses (removes the id).
+                        GridKey::Char('t') if state.focus.focused().is_none() => {
+                            state.toasts.update(|v| {
+                                let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+                                v.push(
+                                    ToastSpec::new(id, format!("Event #{id}"))
+                                        .severity(ToastSeverity::Info)
+                                        .body("Pushed with the `t` key")
+                                        .action("View"),
+                                );
+                            });
+                            state.window.request_redraw();
                         }
                         // Space/Enter (and others) go to the focused widget.
                         other => {
