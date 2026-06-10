@@ -6,11 +6,12 @@
 
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
+use crate::app::focus::{focus_pane_by_id, sync_focus};
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
 use crate::{
-    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, focus_pane_by_id,
+    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location,
     move_pane_to_column, move_pane_to_workspace_column, pane_name, switch_workspace_tracked,
     update_session_viewport,
 };
@@ -562,35 +563,91 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
-    let current_ws = state.session.active_workspace_idx;
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let col_idx = ws.scrolling.active_column_idx;
-        if let Some(col) = ws.scrolling.active_column() {
-            let pane_idx = col.active_pane_idx;
-            if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                state.backends.remove_for_pane(removed.id.0);
+    let pane_id = match focused_pane_id(state) {
+        Some(id) => id,
+        None => return,
+    };
+    let is_flt = pane_is_floating(&state.session, pane_id);
+
+    if is_flt {
+        // Closing a floating pane: remove it, switch domain to Tiled
+        // if no floating panes remain, and focus the last visited tiled pane.
+        if let Some(ws) = state.session.active_workspace_mut() {
+            if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id.0 == pane_id) {
+                let removed = ws.floating_panes.remove(float_idx);
+                state.backends.remove_for_pane(removed.pane.id.0);
+            }
+            // Only switch back to tiled domain if no floating panes remain.
+            if ws.floating_panes.is_empty() {
+                ws.deactivate_floating_panes();
+                ws.focus_domain = FocusDomain::Tiled;
             }
         }
-    }
+        // Focus the last visited pane in the tiled area.
+        let last_tiled = state
+            .last_visited_pane_per_ws
+            .get(state.session.active_workspace_idx)
+            .copied()
+            .flatten();
+        if let Some(target_id) = last_tiled {
+            focus_pane_by_id(state, target_id);
+        } else {
+            // No last-visited pane recorded; sync focus from session state.
+            sync_focus(state);
+        }
 
-    let ws_is_empty = state
-        .session
-        .workspaces
-        .get(current_ws)
-        .map(|ws| ws.scrolling.columns.iter().all(|c| c.panes.is_empty()))
-        .unwrap_or(true);
+        // Check if workspace is now empty (no tiled or floating panes).
+        let current_ws = state.session.active_workspace_idx;
+        let ws_is_empty = state
+            .session
+            .workspaces
+            .get(current_ws)
+            .map(|ws| !ws.has_panes())
+            .unwrap_or(true);
+        if ws_is_empty && state.session.workspaces.len() > 1 {
+            destroy_empty_workspace(state, current_ws);
+            let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
+            state.session.switch_to_workspace(new_idx);
+        } else if ws_is_empty {
+            let next_id = state.session.next_id();
+            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
+            state.session.add_pane(pane, None, true);
+            state
+                .backends
+                .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
+        }
+    } else {
+        // Closing a tiled pane: existing behavior.
+        let current_ws = state.session.active_workspace_idx;
+        if let Some(ws) = state.session.active_workspace_mut() {
+            let col_idx = ws.scrolling.active_column_idx;
+            if let Some(col) = ws.scrolling.active_column() {
+                let pane_idx = col.active_pane_idx;
+                if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
+                    state.backends.remove_for_pane(removed.id.0);
+                }
+            }
+        }
 
-    if ws_is_empty && state.session.workspaces.len() > 1 {
-        destroy_empty_workspace(state, current_ws);
-        let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
-        state.session.switch_to_workspace(new_idx);
-    } else if ws_is_empty {
-        let next_id = state.session.next_id();
-        let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
-        state.session.add_pane(pane, None, true);
-        state
-            .backends
-            .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
+        let ws_is_empty = state
+            .session
+            .workspaces
+            .get(current_ws)
+            .map(|ws| !ws.has_panes())
+            .unwrap_or(true);
+
+        if ws_is_empty && state.session.workspaces.len() > 1 {
+            destroy_empty_workspace(state, current_ws);
+            let new_idx = current_ws.min(state.session.workspaces.len().saturating_sub(1));
+            state.session.switch_to_workspace(new_idx);
+        } else if ws_is_empty {
+            let next_id = state.session.next_id();
+            let pane = LayoutPane::new(PaneId(next_id), pane_name(next_id));
+            state.session.add_pane(pane, None, true);
+            state
+                .backends
+                .insert_for_pane(next_id, Box::new(FakeBackend::new(80, 24)));
+        }
     }
     after_layout_change(state);
 }
