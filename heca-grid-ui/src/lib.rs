@@ -49,7 +49,7 @@ pub use builders::{LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 pub use drag::{DragContext, DragItem, DragItemId, DragItemKind, DragLabel, DragSurfaceId, SurfaceDragPhase, SurfaceDragState};
-pub use effects::Flash;
+pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene};

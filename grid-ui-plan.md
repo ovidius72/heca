@@ -46,6 +46,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 - [ ] **G7 scroll/list primitive** — **gated on renderer `PushClip`/`PopClip`** (request it).
 - [x] **G2.5 `Row`** — focusable, clickable, single-selectable container for **arbitrary composed content** (`Item`'s interactive chrome — hover/active pill + `ActiveMarker` + press flash + focus ring + `on_activate`/Enter — generalized to wrap any children, e.g. a multi-line `Grid` of `Label`/`Icon`/`Badge`). Optional persistent background under the selection overlay. Unblocks clickable rich Dock rows. DONE — branch `grid-ui-row`.
 - [x] **G8 rich status-item recipe** + `Tag`/`Chip` + showcase rich rows. Added `Tag` (bordered metadata chip with an optional leading icon — git branch/path/filter; hue-configurable, neutral). The PANES dock is now the composed recipe (state-colored leading `Icon` + program name + git-branch `Tag` + status `Badge`, in a `Grid` inside a selectable `Row`). grid-ui stays domain-neutral; the demo maps state→style. DONE — branch `grid-ui-status-rows`.
+- [x] **Pane "needs attention" cue** (user-requested) — `effects::Attention` (N-pulse repeating flash) + `Row.attention(Signal<bool>)` / `.attention_color()`. Host sets the request signal → row flashes 4× + signal consumed; **sound stays host-side** (grid-ui audio-free; the app beeps when it sets the signal). Showcase `n` fires it + a terminal bell. DONE — branch `grid-ui-attention`.
 
 **Catalog gaps:**
 - [~] `IconButton` + **icon support** — **icon support DONE** (G2 `Icon`, embedded Phosphor font, `FontRole` text path). `IconButton` (a `Button` with an icon slot) still pending.
@@ -90,7 +91,7 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-10 (after the **enumerate rail `RailCell` + generic `KeyHint` pick overlay**)
+### 🤝 Handoff — last updated 2026-06-10 (after the **pane "needs attention" cue** — `Attention` effect + `Row.attention`)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
@@ -98,18 +99,29 @@ next, and how to start.
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
 - **Default branch:** `main` (in another worktree — `git fetch` + branch off `origin/main`).
-  **This branch:** `grid-ui-rail-panes` (enumerate rail + `KeyHint`, off fresh `origin/main`).
-- **Merged into `main`** before this task: …**#55** handoff rewrite, **#57** G5 icon-rail
-  (`DockFrame::rail`). So `main` has the full chrome vocabulary **G1–G5 (incl. fold rail), G2,
-  Row, G8**.
-- **This task (enumerate rail):** **`RailCell`** (focusable square icon cell — state tint +
-  same-hue border + glow + flash + focus ring + `on_activate`) and **`KeyHint`** (a generic,
-  reusable transparent wrapper overlaying a glowing keycap letter on any actionable child while
-  a host-owned `Signal<Option<String>>` is `Some`). Showcase: a workspaces rail of icon cells;
-  `p` opens a pick (letters appear over the icons), a letter selects the pane, Esc cancels.
-  +4 integration tests. **Why two flavors:** a *tool* dock folds to one icon (`DockFrame::rail`,
-  #57); a *list* dock (workspaces/panes) enumerates — one icon cell per pane — so every pane
-  stays visible + addressable, matching `heca`'s current collapsed sidebar.
+  **This branch:** `grid-ui-attention` (attention cue, off fresh `origin/main`).
+- **Merged into `main`** before this task: …**#57** G5 icon-rail (`DockFrame::rail`), **#60**
+  enumerate rail (`RailCell` + `KeyHint`). So `main` has the full chrome vocabulary **G1–G5 (both
+  rail flavors), G2, Row, G8, RailCell, KeyHint**.
+- **This task (attention cue, user-requested):** **`effects::Attention`** (an N-pulse repeating
+  sawtooth flash) + **`Row.attention(Signal<bool>)`** / `.attention_color()`. The host sets the
+  request signal → the row flashes `ATTENTION_PULSES` (4)× and the signal is consumed back to
+  `false`. **Sound stays the host's job** (grid-ui is audio-free): the app plays its beep when it
+  sets the signal — showcase `n` does both (sets the signal + terminal bell `\x07`). +2 tests.
+- **⚠️ G6 (dock DnD) is partly coordination-blocked — important.** `heca/src/mouse.rs:136` matches
+  `DragSurfaceId` **exhaustively** (no wildcard), and `heca` owns those dispatch sites. So adding
+  a region/dock `DragSurfaceId` variant (needed for cross-region dock move) **breaks `heca`'s
+  build** until that dev adds the match arms — can't be done unilaterally. A *reorder-within-one-
+  region* slice is still doable heca-safe (region-local state + `on_reorder` callback, reuse
+  `drag::DEFAULT_DRAG_THRESHOLD_SQ`, no closed-enum changes). Coordinate with the WM dev before
+  the cross-region/`SurfaceDragState` integration.
+- **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
+  push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
+  Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
+  **Rule:** after the user says "merged", `git fetch` and start the next task from
+  `origin/main`; don't keep pushing to the old branch.
+- Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
+  86 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 - **⚠️ Stranding gotcha (bit us 3×):** PRs here are merged by the user between turns. If you
   push commits to a branch **after** its PR is merged, they get stranded (not in `main`).
   Recovery: branch off fresh `origin/main`, `git cherry-pick` the stranded commits, new PR.
@@ -117,7 +129,7 @@ next, and how to start.
   **Rule:** after the user says "merged", `git fetch` and start the next task from
   `origin/main`; don't keep pushing to the old branch.
 - Build is green on `main` (+ this branch): `cargo test -p heca-grid-ui` = **10 unit +
-  84 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
+  86 integration + doctests**; clippy clean across `heca-grid-ui` + `heca-renderer`.
 
 #### Hard rules (do not violate)
 
@@ -205,6 +217,9 @@ next, and how to start.
 - **`Style.padding_x/padding_y`** (`Option<f32>`, fall back to uniform `padding`) +
   **`LayoutExt::padding_xy(x,y)`** — per-axis padding (Tag uses it).
 - **`Theme.icon_secondary_alpha`** — duotone dim factor, config-tunable.
+- **`effects::Attention`** + **`Row.attention(Signal<bool>)`** / `.attention_color()` — a host-
+  driven N-pulse "needs attention" flash (host sets the signal → row flashes 4× + consumes it;
+  the **host** plays any sound, grid-ui is audio-free). Reuse the effect for other widgets.
 
 #### What's next (in priority order)
 
@@ -220,10 +235,15 @@ next, and how to start.
    region drop targets onto the **already-shipped** `heca-grid-ui/src/drag/` framework
    (`DragSurfaceId`/`DragItem`/`SurfaceDragState`/`DragContext`). Extend **additively**; never
    fork. Region = a `DragSurfaceId`, a Dock = a `DragItem`. Every drop = a dispatched **action**.
-3. **Pane "needs attention" cue** (user-requested) — flash 3–4× + **sound**. Visual: reuse
-   `effects::Flash` on a `Row`/`Item` driven by an `attention` signal. **Sound is the host's
-   job** (grid-ui is audio-free) — expose a signal/action the app maps to a beep; don't bake
-   audio in.
+   **⚠️ Partly blocked:** `heca/src/mouse.rs:136` matches `DragSurfaceId` exhaustively, so a new
+   region/dock surface variant breaks `heca`'s build until that dev adds arms — **coordinate**.
+   The heca-safe slice you *can* do solo: **reorder within one region** (region-local drag state
+   + `on_reorder(from,to)` callback + drop-indicator paint; reuse `drag::DEFAULT_DRAG_THRESHOLD_SQ`;
+   no closed-enum changes). The grip is currently inside `DockFrame`'s toggle `Item` — making it a
+   non-toggling drag handle likely means splitting it into a dedicated header child.
+3. **`Pane`/`Item` adopt `Row.attention`** (optional) — the attention cue is built on `Row`
+   (`effects::Attention` + `Row.attention(signal)`); extend to `Pane`/`Item` if the app needs it
+   there. Sound stays host-side (the app beeps when it sets the signal).
 4. **Color/readability pass** (user keeps flagging) — see the memory note + the levers below.
 5. **G7 scroll** — **BLOCKED** on the renderer's `PushClip`/`PopClip` (no-op in
    `heca-renderer/src/scene.rs`, renderer dev's area). Only whole-page scroll works.
@@ -280,7 +300,7 @@ next, and how to start.
 
 ```bash
 cargo run -p heca-renderer --example showcase                 # live demo (needs a display)
-cargo test -p heca-grid-ui                                    # 10 unit + 84 integration + doctests
+cargo test -p heca-grid-ui                                    # 10 unit + 86 integration + doctests
 cargo clippy -p heca-grid-ui -p heca-renderer --all-targets   # must be clean (ignore the `block v0.1.6` transitive note)
 ```
 

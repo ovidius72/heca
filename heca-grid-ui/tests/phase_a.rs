@@ -2104,3 +2104,45 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     focus.deliver_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
     assert_eq!(clicks.get(), 1, "Enter activates the wrapped child");
 }
+
+#[test]
+fn attention_effect_plays_a_fixed_number_of_pulses() {
+    use heca_grid_ui::Attention;
+
+    let mut a = Attention::new();
+    assert!(!a.is_active(), "idle until triggered");
+    a.trigger(3);
+    assert!(a.is_active(), "active after trigger");
+    assert_eq!(a.amount(), 1.0, "starts at full strength");
+
+    // Each tick of (≥) the pulse duration completes one pulse. After 3, it stops.
+    assert!(a.tick(0.3), "pulse 1 done, pulse 2 begins");
+    assert!(a.tick(0.3), "pulse 2 done, pulse 3 begins");
+    assert!(!a.tick(0.3), "pulse 3 done — sequence ends");
+    assert!(!a.is_active(), "inactive after the fixed pulse count");
+}
+
+#[test]
+fn row_attention_request_pulses_then_settles() {
+    use heca_grid_ui::Row;
+
+    // Host-owned attention request: setting it true fires one pulse sequence and
+    // is consumed back to false (so each request = one sequence).
+    let req = signal(false);
+    let mut row = Row::new().attention(req).on_activate(|| {});
+    LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
+
+    req.set(true);
+    assert!(row.tick(0.0), "attention request triggers an animating pulse");
+    assert!(!req.get_untracked(), "the request signal is consumed");
+
+    // The sequence is finite — ticking it out eventually settles (no animation).
+    let mut settled = false;
+    for _ in 0..60 {
+        if !row.tick(0.05) {
+            settled = true;
+            break;
+        }
+    }
+    assert!(settled, "attention pulse sequence ends and the row stops animating");
+}

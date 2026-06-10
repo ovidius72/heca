@@ -15,7 +15,7 @@
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
-use crate::effects::Flash;
+use crate::effects::{Attention, Flash};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction};
@@ -40,6 +40,10 @@ const HOVER_TINT_ALPHA: u8 = 40;
 const ACTIVE_BORDER_ALPHA: u8 = 180;
 /// Width of the active pill's border (logical px).
 const ACTIVE_BORDER_W: f32 = 1.3;
+/// Number of flashes a `needs attention` pulse plays.
+const ATTENTION_PULSES: u32 = 4;
+/// Peak glow radius (logical px) of the attention pulse border.
+const ATTENTION_GLOW_RADIUS: f32 = 12.0;
 /// Width of the left accent bar shown when active.
 const BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
@@ -61,6 +65,11 @@ pub struct Row {
     /// Override for the hover/active highlight color. Defaults to the row's own
     /// background (a stronger tint of the same hue), else the theme accent.
     highlight: Option<Color>,
+    /// "Needs attention" pulse + the host-owned request signal that fires it.
+    attention: Attention,
+    attention_req: Option<Signal<bool>>,
+    /// Color of the attention pulse (default: theme warning).
+    attention_color: Option<Color>,
 }
 
 impl Row {
@@ -78,6 +87,9 @@ impl Row {
             flash: Flash::new(),
             on_activate: None,
             highlight: None,
+            attention: Attention::new(),
+            attention_req: None,
+            attention_color: None,
         }
     }
 
@@ -93,6 +105,21 @@ impl Row {
     /// Make the row clickable/keyboard-activatable (also makes it focusable).
     pub fn on_activate(mut self, f: impl Fn() + 'static) -> Self {
         self.on_activate = Some(Box::new(f));
+        self
+    }
+
+    /// Bind a **host-owned** "needs attention" request signal. When the host sets
+    /// it `true`, the row flashes [`ATTENTION_PULSES`] times (and the signal is
+    /// consumed back to `false`). The matching **sound** is the host's job — it
+    /// plays its beep when it sets this signal (grid-ui stays audio-free).
+    pub fn attention(mut self, req: Signal<bool>) -> Self {
+        self.attention_req = Some(req);
+        self
+    }
+
+    /// Color of the attention pulse (default: the theme `warning` hue).
+    pub fn attention_color(mut self, c: Color) -> Self {
+        self.attention_color = Some(c);
         self
     }
 
@@ -237,6 +264,22 @@ impl Component for Row {
         {
             cx.corner_brackets(b, accent);
         }
+
+        // "Needs attention" pulse — a glowing colored border over the row,
+        // intensity following the current pulse. Painted last so it reads over
+        // the content/selection.
+        let attn = self.attention.amount();
+        if attn > 0.0 {
+            let c = self.attention_color.unwrap_or_else(|| cx.theme().warning);
+            let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
+            cx.rect(
+                b,
+                c.with_alpha((40.0 * attn) as u8),
+                Some(Border { color: c.with_alpha((235.0 * attn) as u8), width: ACTIVE_BORDER_W }),
+                radius,
+                Some(Glow { color: c, radius: ATTENTION_GLOW_RADIUS, intensity: attn }),
+            );
+        }
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
@@ -264,7 +307,16 @@ impl Component for Row {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
+        // Consume a host attention request (rising edge): fire the pulse + reset
+        // the signal so each `true` triggers exactly one sequence.
+        if let Some(req) = self.attention_req
+            && req.get_untracked()
+        {
+            self.attention.trigger(ATTENTION_PULSES);
+            req.set(false);
+        }
         let mut animating = self.flash.tick(dt);
+        animating |= self.attention.tick(dt);
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
