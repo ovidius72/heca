@@ -220,7 +220,7 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
     let mut found = None;
     for (ci, col) in ws.scrolling.columns.iter().enumerate() {
         for (pi, pane) in col.panes.iter().enumerate() {
-            if pane.id.0 == target_id {
+            if pane.id == target_id {
                 found = Some((ci, pi));
                 break;
             }

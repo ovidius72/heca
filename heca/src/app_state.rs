@@ -2,7 +2,7 @@ use crate::app::backend_store::BackendStore;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
-use heca_core::layout::Session;
+use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -24,7 +24,7 @@ pub enum SidebarItemState {
 pub enum RenameTarget {
     Workspace(usize),
     Column { ws_idx: usize, col_idx: usize },
-    Pane(u64),
+    Pane(PaneId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -33,12 +33,12 @@ pub enum InputMode {
     Prefix,
     /// Quick-select: each visible pane is assigned a letter; next keypress selects it.
     PaneSelect {
-        candidates: Vec<(char, u64)>,
+        candidates: Vec<(char, PaneId)>,
     },
     /// Quick-swap: each visible pane is assigned a letter; next keypress swaps with it.
     /// `focus_after` determines whether focus follows the swapped pane.
     PaneSwap {
-        candidates: Vec<(char, u64)>,
+        candidates: Vec<(char, PaneId)>,
         focus_after: bool,
     },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
@@ -74,13 +74,13 @@ pub enum InputMode {
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.
     PaneTake {
-        candidates: Vec<(char, u64)>,
+        candidates: Vec<(char, PaneId)>,
         focus_after: bool,
     },
 }
 
 impl InputMode {
-    pub fn candidates(&self) -> Option<&[(char, u64)]> {
+    pub fn candidates(&self) -> Option<&[(char, PaneId)]> {
         match self {
             InputMode::PaneSelect { candidates }
             | InputMode::PaneSwap { candidates, .. }
@@ -108,7 +108,7 @@ pub struct SidebarState {
 pub enum InteractiveMovePhase {
     /// Phase 1: rubberband — pane still in layout, waiting for threshold.
     Starting {
-        pane_id: u64,
+        pane_id: PaneId,
         /// Workspace where the drag originated.
         original_ws: usize,
         start_mouse: (f32, f32),
@@ -119,7 +119,7 @@ pub enum InteractiveMovePhase {
     /// Phase 2: detached — pane follows pointer (move mode).
     /// In swap mode, the pane stays in layout and only the insert hint is shown.
     Moving {
-        pane_id: u64,
+        pane_id: PaneId,
         /// Workspace where the drag originated.
         _original_ws: usize,
         /// Mouse offset from pane top-left at grab time.
@@ -209,7 +209,7 @@ pub struct AppState {
     pub theme: Theme,
     pub scale_factor: f64,
     pub needs_redraw: bool,
-    pub focused_pane: Option<u64>,
+    pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
     pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
@@ -217,11 +217,11 @@ pub struct AppState {
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).
-    pub last_focused: Option<u64>,
+    pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
     pub last_visited_ws_idx: Option<usize>,
     /// Per-workspace last-visited pane IDs (for dim highlight and Prefix+i toggle).
-    pub last_visited_pane_per_ws: Vec<Option<u64>>,
+    pub last_visited_pane_per_ws: Vec<Option<PaneId>>,
     /// Whether mouse interactions are enabled.
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_input_mode_candidates_some() {
-        let cands = vec![('a', 1), ('b', 2)];
+        let cands = vec![('a', PaneId(1)), ('b', PaneId(2))];
         assert_eq!(
             InputMode::PaneSelect {
                 candidates: cands.clone()

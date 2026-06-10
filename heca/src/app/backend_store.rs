@@ -1,7 +1,8 @@
-//! Backend storage — wraps the raw `HashMap<u64, Box<dyn PaneBackend>>` with
+//! Backend storage — wraps the raw `HashMap<PaneId, Box<dyn PaneBackend>>` with
 //! a narrow, explicit API so lifecycle logic is not scattered across handlers.
 
 use heca_core::backend::PaneBackend;
+use heca_core::layout::PaneId;
 use std::collections::HashMap;
 
 /// Typed wrapper around the backend map.
@@ -9,7 +10,7 @@ use std::collections::HashMap;
 /// Exposes only the operations that the rest of the app needs, keeping
 /// pane/backend lifecycle ownership explicit.
 pub struct BackendStore {
-    map: HashMap<u64, Box<dyn PaneBackend>>,
+    map: HashMap<PaneId, Box<dyn PaneBackend>>,
 }
 
 impl BackendStore {
@@ -20,17 +21,17 @@ impl BackendStore {
     }
 
     /// Insert a backend for the given pane ID.
-    pub fn insert_for_pane(&mut self, pane_id: u64, backend: Box<dyn PaneBackend>) {
+    pub fn insert_for_pane(&mut self, pane_id: PaneId, backend: Box<dyn PaneBackend>) {
         self.map.insert(pane_id, backend);
     }
 
     /// Remove and return the backend for the given pane ID, if any.
-    pub fn remove_for_pane(&mut self, pane_id: u64) -> Option<Box<dyn PaneBackend>> {
+    pub fn remove_for_pane(&mut self, pane_id: PaneId) -> Option<Box<dyn PaneBackend>> {
         self.map.remove(&pane_id)
     }
 
     /// Get an immutable reference to a backend.
-    pub fn get(&self, pane_id: u64) -> Option<&dyn PaneBackend> {
+    pub fn get(&self, pane_id: PaneId) -> Option<&dyn PaneBackend> {
         match self.map.get(&pane_id) {
             Some(b) => Some(b.as_ref()),
             None => None,
@@ -38,7 +39,7 @@ impl BackendStore {
     }
 
     /// Get a mutable reference to a backend.
-    pub fn get_mut(&mut self, pane_id: u64) -> Option<&mut dyn PaneBackend> {
+    pub fn get_mut(&mut self, pane_id: PaneId) -> Option<&mut dyn PaneBackend> {
         match self.map.get_mut(&pane_id) {
             Some(b) => Some(b.as_mut()),
             None => None,
@@ -53,12 +54,9 @@ impl BackendStore {
     /// Remove backends for all pane IDs in the given iterator.
     ///
     /// Convenience helper for batch cleanup when deleting a column or workspace.
-    pub fn remove_all<'a>(&mut self, pane_ids: impl IntoIterator<Item = &'a u64>)
-    where
-        u64: 'a,
-    {
+    pub fn remove_all(&mut self, pane_ids: impl IntoIterator<Item = PaneId>) {
         for pid in pane_ids {
-            self.map.remove(pid);
+            self.map.remove(&pid);
         }
     }
 }

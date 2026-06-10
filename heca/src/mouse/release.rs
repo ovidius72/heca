@@ -6,6 +6,7 @@
 use crate::app::interaction::InteractionSource;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use crate::input::WmAction;
+use heca_core::layout::PaneId;
 use heca_grid_ui::drag::DragSurfaceId;
 
 /// Handle release during an active interactive move (content-area drag).
@@ -61,7 +62,7 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
 /// Handle release during an active sidebar drag.
 pub(super) fn handle_sidebar_drag_release(
     state: &mut AppState,
-    pane_id: u64,
+    pane_id: PaneId,
     original_ws: usize,
     swap: bool,
     pos: (f32, f32),
@@ -92,7 +93,7 @@ pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Opti
 /// Move a pane from its current position and re-insert at the given insert hint.
 fn handle_content_move(
     state: &mut AppState,
-    source_id: u64,
+    source_id: PaneId,
     hint: heca_core::layout::types::PaneInsertTarget,
 ) {
     if let Some((ws_idx, col_idx, pane_idx)) = crate::find_pane_location(&state.session, source_id)

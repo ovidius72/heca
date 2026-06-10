@@ -253,14 +253,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
-        let is_active = state.focused_pane == Some(pane_id.0);
+        let is_active = state.focused_pane == Some(*pane_id);
         let bcolor = if is_active {
             accent_color
         } else {
             [theme_border[0], theme_border[1], theme_border[2], 0.5]
         };
 
-        if let Some(backend) = state.backends.get(pane_id.0) {
+        if let Some(backend) = state.backends.get(*pane_id) {
             let data = backend.render_data();
             render_backend_data(
                 &data,
@@ -454,13 +454,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
-            let is_focused = state.focused_pane == Some(float.pane.id.0);
+            let is_focused = state.focused_pane == Some(float.pane.id);
             let fborder = if is_focused {
                 theme.float_focus.to_f32x4()
             } else {
                 theme.float_accent.to_f32x4()
             };
-            if let Some(backend) = state.backends.get(float.pane.id.0) {
+            if let Some(backend) = state.backends.get(float.pane.id) {
                 let data = backend.render_data();
                 render_backend_data(
                     &data,
@@ -520,7 +520,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             }
             let mut found = false;
             for (pane_id, rect) in &pane_positions {
-                if pane_id.0 == *target_id {
+                if *pane_id == *target_id {
                     let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
                     let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
                     let pw = rect.size.w as f32;
@@ -537,7 +537,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             }
             if !found && let Some(ws) = state.session.active_workspace() {
                 for float in &ws.floating_panes {
-                    if float.pane.id.0 == *target_id {
+                    if float.pane.id == *target_id {
                         let fx = float.position.x as f32 + pane_area.loc.x as f32;
                         let fy = float.position.y as f32 + pane_area.loc.y as f32;
                         let fw = float.size.w as f32;
@@ -597,12 +597,13 @@ mod tests {
     use super::status_mode_parts;
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;
+    use heca_core::layout::PaneId;
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {
         assert_eq!(
             status_mode_parts(&InputMode::Rename {
-                target: RenameTarget::Pane(7),
+                target: RenameTarget::Pane(PaneId(7)),
                 buffer: "term".to_string(),
             }),
             ("RENAME", ": term_".to_string())
@@ -610,7 +611,7 @@ mod tests {
 
         assert_eq!(
             status_mode_parts(&InputMode::PaneTake {
-                candidates: vec![("a".chars().next().expect("candidate label"), 1)],
+                candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
                 focus_after: true,
             }),
             ("TAKE+", " pick a pane → ".to_string())

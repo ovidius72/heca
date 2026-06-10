@@ -6,6 +6,7 @@
 use crate::actions::ActionRegistry;
 use crate::app::interaction::dispatch_action;
 use crate::app::interaction::InteractionSource;
+use heca_core::layout::PaneId;
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_terminal_input,
@@ -138,7 +139,7 @@ fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
             }
             RenameTarget::Pane(pane_id) => {
                 if let Some(ws) = state.session.active_workspace_mut()
-                    && let Some(pane) = ws.find_pane_mut(heca_core::layout::PaneId(*pane_id))
+                    && let Some(pane) = ws.find_pane_mut(*pane_id)
                 {
                     pane.title = if new_name.is_empty() {
                         format!("pane{}", pane_id)
@@ -323,7 +324,7 @@ fn handle_custom_mode(
 fn handle_pane_select_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, u64)],
+    candidates: &[(char, PaneId)],
     ctx: KeyInputContext<'_>,
 ) {
     let candidates = candidates.to_vec();
@@ -347,7 +348,7 @@ fn handle_pane_select_mode(
 fn handle_pane_swap_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, u64)],
+    candidates: &[(char, PaneId)],
     focus_after: bool,
     ctx: KeyInputContext<'_>,
 ) {
@@ -398,7 +399,7 @@ fn handle_pane_swap_mode(
 fn handle_pane_take_mode(
     registry: &ActionRegistry,
     state: &mut AppState,
-    candidates: &[(char, u64)],
+    candidates: &[(char, PaneId)],
     focus_after: bool,
     ctx: KeyInputContext<'_>,
 ) {
@@ -470,7 +471,7 @@ fn handle_sidebar_nav_mode(
 fn sidebar_item_focus_target(
     session: &heca_core::layout::Session,
     item: &crate::sidebar::SidebarItem,
-) -> Option<u64> {
+) -> Option<PaneId> {
     match item {
         crate::sidebar::SidebarItem::Pane { pane_id }
         | crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => Some(*pane_id),
@@ -479,7 +480,7 @@ fn sidebar_item_focus_target(
             .get(*ws_idx)
             .and_then(|ws| ws.scrolling.columns.get(*col_idx))
             .and_then(|col| col.active_pane().or_else(|| col.panes.first()))
-            .map(|pane| pane.id.0),
+            .map(|pane| pane.id),
         crate::sidebar::SidebarItem::Workspace { ws_idx } => session
             .workspaces
             .get(*ws_idx)
@@ -487,17 +488,17 @@ fn sidebar_item_focus_target(
     }
 }
 
-fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<u64> {
+fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<PaneId> {
     ws.active_pane()
-        .map(|pane| pane.id.0)
+        .map(|pane| pane.id)
         .or_else(|| {
             ws.scrolling
                 .columns
                 .iter()
                 .find_map(|col| col.active_pane().or_else(|| col.panes.first()))
-                .map(|pane| pane.id.0)
+                .map(|pane| pane.id)
         })
-        .or_else(|| ws.floating_panes.first().map(|float| float.pane.id.0))
+        .or_else(|| ws.floating_panes.first().map(|float| float.pane.id))
 }
 
 fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
@@ -541,7 +542,7 @@ mod tests {
     fn workspace_focus_target_prefers_active_pane() {
         let session = make_session();
         let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(3));
+        assert_eq!(target, Some(PaneId(3)));
     }
 
     #[test]
@@ -554,7 +555,7 @@ mod tests {
                 col_idx: 0,
             },
         );
-        assert_eq!(target, Some(2));
+        assert_eq!(target, Some(PaneId(2)));
     }
 
     #[test]
@@ -572,18 +573,18 @@ mod tests {
         ws.focus_domain = FocusDomain::Tiled;
 
         assert_eq!(
-            sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: 2 }),
-            Some(2)
+            sidebar_item_focus_target(&session, &SidebarItem::Pane { pane_id: PaneId(2) }),
+            Some(PaneId(2))
         );
         assert_eq!(
             sidebar_item_focus_target(
                 &session,
                 &SidebarItem::FloatingPane {
-                    pane_id: 99,
+                    pane_id: PaneId(99),
                     ws_idx: 0,
                 },
             ),
-            Some(99)
+            Some(PaneId(99))
         );
     }
 
@@ -607,6 +608,6 @@ mod tests {
         ws.update_working_area(Rectangle::new(Point::new(0.0, 0.0), Size::new(1280.0, 800.0)));
 
         let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
-        assert_eq!(target, Some(77));
+        assert_eq!(target, Some(PaneId(77)));
     }
 }

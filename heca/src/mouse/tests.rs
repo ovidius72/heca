@@ -45,7 +45,7 @@ fn test_find_pane_found() {
         ),
         false,
     );
-    assert_eq!(find_pane_in_workspace(&mut ws, 100), Some((0, 0)));
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(100)), Some((0, 0)));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn test_find_pane_not_found() {
         ),
         false,
     );
-    assert_eq!(find_pane_in_workspace(&mut ws, 999), None);
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(999)), None);
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn test_find_pane_empty() {
         2.0,
         LayoutOptions::default(),
     );
-    assert_eq!(find_pane_in_workspace(&mut ws, 1), None);
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(1)), None);
 }
 
 #[test]
@@ -108,10 +108,10 @@ fn test_find_pane_multi_column() {
     ws.scrolling
         .add_pane_to_column(0, Some(1), Pane::new(PaneId(3), "c"), false);
 
-    assert_eq!(find_pane_in_workspace(&mut ws, 1), Some((0, 0)));
-    assert_eq!(find_pane_in_workspace(&mut ws, 3), Some((0, 1)));
-    assert_eq!(find_pane_in_workspace(&mut ws, 2), Some((1, 0)));
-    assert_eq!(find_pane_in_workspace(&mut ws, 999), None);
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(1)), Some((0, 0)));
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(3)), Some((0, 1)));
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(2)), Some((1, 0)));
+    assert_eq!(find_pane_in_workspace(&mut ws, PaneId(999)), None);
 }
 
 #[test]

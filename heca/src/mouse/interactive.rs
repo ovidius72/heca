@@ -9,7 +9,7 @@
 //! following the cursor, and computes an insert hint — all content-area
 //! concepts that don't apply to sidebar/inspector surfaces.
 
-use heca_core::layout::Point;
+use heca_core::layout::{PaneId, Point};
 use heca_grid_ui::drag::SurfaceDragPhase;
 
 use crate::app_state::{AppState, InteractiveMovePhase};
@@ -18,7 +18,7 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 ///
 /// Enters the rubberband threshold phase. The pane stays in layout with
 /// a dampened offset until the cursor moves beyond the threshold.
-pub(super) fn start_interactive_move(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32)) {
+pub(super) fn start_interactive_move(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, f32)) {
     let swap = state.modifiers.shift_key();
     state.mouse.interactive_move = Some(InteractiveMovePhase::Starting {
         pane_id,
@@ -192,7 +192,7 @@ fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
 /// Transition from rubberband (`InteractiveMovePhase::Starting`) to active drag
 /// (`InteractiveMovePhase::Moving`). Both move and swap modes keep the pane
 /// in the layout and track it via `interactive_move_offset`.
-fn transition_to_moving(state: &mut AppState, pane_id: u64, mouse_pos: (f32, f32), swap: bool) {
+fn transition_to_moving(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, f32), swap: bool) {
     let (cx, cy) = super::content_area_origin(state);
     let original_ws = state.session.active_workspace_idx;
 
