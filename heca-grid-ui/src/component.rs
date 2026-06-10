@@ -240,6 +240,10 @@ pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].
 const DISABLED_SCRIM: f32 = 0.55;
 
+/// Logical-px slack around the viewport kept un-culled, so a shape's glow/shadow
+/// halo spilling in from just off-screen still draws. See [`PaintCx::culled`].
+const CULL_MARGIN: f64 = 96.0;
+
 /// Bright bracket length along each edge of a [`PaintCx::bracket_frame`],
 /// measured from the corner (in addition to the rounded arc). The straight
 /// midsection between the two brackets on an edge is dimmed back to a line.
@@ -290,6 +294,20 @@ impl<'a> PaintCx<'a> {
         self.viewport
     }
 
+    /// Whether `r` lies fully outside the viewport (plus a halo margin for
+    /// glow/shadow spill) and can be skipped. Off-screen content emits no draw
+    /// command, so scrolling a tall page or maximizing the window doesn't pay to
+    /// paint / shape / upload what isn't visible. The default viewport is
+    /// "infinite" (headless), where nothing is ever culled; overlays draw
+    /// on-screen, so they're never culled either.
+    fn culled(&self, r: Rectangle) -> bool {
+        let vp = self.viewport;
+        r.loc.y + r.size.h < -CULL_MARGIN
+            || r.loc.y > vp.h + CULL_MARGIN
+            || r.loc.x + r.size.w < -CULL_MARGIN
+            || r.loc.x > vp.w + CULL_MARGIN
+    }
+
     /// Run `f` with draws routed to the scene's **overlay layer** (painted on
     /// top of everything). Used by popovers/dropdowns for correct z-order.
     pub fn with_overlay(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
@@ -312,6 +330,9 @@ impl<'a> PaintCx<'a> {
         radius: f32,
         glow: Option<Glow>,
     ) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Rect(RectCmd {
             rect,
             fill,
@@ -406,6 +427,9 @@ impl<'a> PaintCx<'a> {
         align: TextAlign,
         bold: bool,
     ) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Text(TextCmd {
             rect,
             text: text.to_string(),
@@ -421,6 +445,9 @@ impl<'a> PaintCx<'a> {
     /// ([`FontRole::Icon`]). `glyph` is the codepoint as a string; the renderer
     /// selects the embedded icon family. Used by [`Icon`](crate::widgets::Icon).
     pub fn icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Text(TextCmd {
             rect,
             text: glyph.to_string(),
