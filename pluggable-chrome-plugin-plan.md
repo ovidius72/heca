@@ -2,8 +2,8 @@
 
 **Date:** 2026-06-05  
 **Status:** Future architecture plan  
-**Starts only after:** the current refactoring in `bugs-and-refactoring-plan.md` is completed to its planned stopping point  
-**Important note:** this document does **not** replace the current refactor immediately. It defines the next architecture program to start **after** the current cleanup/refactor roadmap is finished enough to provide clean seams. The existing `bugs-and-refactoring-plan.md` should continue to guide the in-flight structural cleanup, and that plan will be adapted to match these newer requirements.
+**Starts only after:** the current refactoring is complete (it is — all 10 phases done).
+**Important note:** this document defines the next architecture program. The structural cleanup is finished; the codebase now has clean seams for this work to begin.
 
 ---
 
@@ -451,7 +451,7 @@ This phase is not the new architecture itself. It exists to complete the structu
 
 **What this phase is for**
 
-- finish the structure-first refactor already documented in `bugs-and-refactoring-plan.md`
+- finish the structure-first refactor (completed — all 10 phases done, 279 tests passing)
 - complete the `sidebar.rs` split and associated cleanup to a stable stopping point
 - avoid switching architectural direction while large files are still only half-separated
 - get the codebase into a condition where the new chrome/plugin design can be introduced deliberately instead of on top of chaos
@@ -1055,7 +1055,7 @@ This architecture implies future changes to at least these areas:
 
 ## Precondition
 
-- [ ] Complete the current cleanup roadmap in `bugs-and-refactoring-plan.md` to its intended stopping point
+- [x] Complete the current cleanup roadmap (all 10 phases done)
 
 ## Architecture
 

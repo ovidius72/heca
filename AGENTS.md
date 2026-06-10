@@ -792,7 +792,9 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 
 ### Next start point
 
-The original refactoring plan resumes at **Phase 3.2 remainder** (refactor `handle_swap_param`). See `bugs-and-refactoring-plan-with-checklist.md` for full checklist.
+The refactoring track (Phases 0–10) is **complete**. All checklist items are done.
+See `.planning/interaction-policy-plan.md` for remaining intent-routing work (Phase B/C).
+See `pluggable-chrome-plugin-plan.md` for the future chrome/plugin architecture.
 
 ## Session Addendum — 2026-06-05
 
@@ -804,14 +806,12 @@ This addendum captures important project-specific rules and outcomes established
 - **Before each new phase or major sub-phase, use the `/grill-me` skill** to acquire as much missing behavioral/product detail as possible before implementing.
 - Before starting a new phase slice, explicitly read:
   - `AGENTS.md`
-  - `bugs-and-refactoring-plan.md`
-  - `bugs-and-refactoring-plan-with-checklist.md`
   - all directly affected code files
 - **Pull/rebase from `origin/main` before starting each new task or phase slice.**
 - Keep work in **small, behavior-preserving slices** with clean commits.
 - After each meaningful slice, update:
-  - `bugs-and-refactoring-plan-with-checklist.md`
   - `session-resume-handoff.md`
+  - `.planning/STATE.md`
 - when the user gives you hint or observation mark them in the agent-rules.md file (create if needed):
   - record what the user want you to do and what not to do
   - record important things to remember
@@ -853,10 +853,11 @@ These were clarified in detail with `/grill-me`; do not casually re-decide them:
 
 Planning / rules:
 
-- `bugs-and-refactoring-plan.md`
-- `bugs-and-refactoring-plan-with-checklist.md`
 - `pluggable-chrome-plugin-plan.md`
 - `session-resume-handoff.md`
+- `.planning/STATE.md`
+- `.planning/ROADMAP.md`
+- `.planning/interaction-policy-plan.md`
 
 Default keybinding reference:
 
@@ -916,8 +917,8 @@ Immediate remaining 1.5 work:
 
 After that:
 
-- proceed to **Phase 2** from `bugs-and-refactoring-plan.md`, unless the user redirects
-- future token-target/RPC extension work is planned in `pluggable-chrome-plugin-plan.md` section `8.1`
+- proceed to sidebar intent routing (Phase B/C in `.planning/interaction-policy-plan.md`)
+- future chrome/plugin architecture work is planned in `pluggable-chrome-plugin-plan.md`
 
 ## Workflow Rules for Future Phases
 

@@ -3,21 +3,21 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 10 of 10 (refactoring track)
-status: executing
-last_updated: "2026-06-10T12:00:00.000Z"
+status: complete
+last_updated: "2026-06-10T14:00:00.000Z"
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 1
-  completed_plans: 0
-  percent: 90
+  completed_plans: 1
+  percent: 100
 ---
 
 # State: heca
 
-**Current Phase:** 10 — Final Whole-Program Verification
-**Status:** Bug fix + refactoring complete; manual smoke tests pending
-**Last Action:** Fixed floating pane close bug, removed FakeBackend recreation, added arrow key bindings
+**Current Phase:** Refactoring track complete ✅
+**Status:** All 10 phases done, manual smoke tests passed
+**Last Action:** Cleaned up refactoring plan files, marked Phase 10 complete
 
 ## Refactoring Track Progress
 
@@ -33,7 +33,7 @@ progress:
 | 7 — Typed Errors | ✅ Done | ConfigError, PtyError, RpcError, SAFETY comments |
 | 8 — Constants & Polish | ✅ Done | Centralize constants, renderer API doc (8.3 deferred) |
 | 9 — Focus Separation | ✅ Done | Interaction policy, FocusDomain, close pane fix, arrow keys |
-| 10 — Final Verification | 🔄 In Progress | Full validation, smoke tests, doc reconciliation |
+| 10 — Final Verification | ✅ Done | Full validation, smoke tests, doc reconciliation |
 
 ## Product Phase Progress
 
@@ -48,7 +48,8 @@ progress:
 
 - `cargo check --workspace`: ✅ clean
 - `cargo clippy --workspace --all-targets --all-features`: ✅ 0 heca warnings
-- `cargo test --workspace`: ✅ 274 tests pass, 0 failures
+- `cargo test --workspace`: ✅ 279 tests pass, 0 failures
+- Manual smoke tests: ✅ passed (keybindings, sidebar, floating/tiled, config reload)
 
 ## Changes in this session (Phase 9.6 + 9.7)
 
@@ -86,15 +87,12 @@ progress:
 
 ## Remaining Phase 10 Items
 
-- 10.2: Manual smoke tests (requires running the app)
-- 10.3: Reconcile docs/checklists/roadmaps ✅ (done in this session)
-- 10.4: Confirm no phase-level regressions without explicit deferment ✅
+All done. Refactoring track complete.
 
 ## Open Deferments
 
 - 8.3: Terminal render-data cloning (terminal backend not fully wired)
-- 9.V: Manual smoke test of floating focus vs sidebar/content click
-- Interaction policy: sidebar intent routing, chrome sources, RPC source (future phases)
+- Interaction policy: sidebar intent routing (Phase B/C), chrome sources, RPC source (future phases)
 - Interaction policy R6: convert `focused_pane_id` return type to `Option<PaneId>` (future polish)
 
 ## Blockers
