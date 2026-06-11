@@ -197,14 +197,43 @@ pub trait Component {
     /// without per-widget wiring. Default: no-op.
     fn remeasure(&mut self) {}
 
-    /// Advance time-based animations by `dt` seconds. Returns `true` if still
-    /// animating, so the host can schedule another frame. Default: recurse.
+    /// Advance time-based animations by `dt` seconds. Returns `true` if a
+    /// **continuous** animation is still running (eases, slides, spinners), so the
+    /// host schedules another frame at its frame cap. Default: recurse.
+    ///
+    /// A widget whose visual changes only at sparse, known moments (e.g. a blinking
+    /// caret toggling ~twice a second) should return `false` here and instead report
+    /// the time to its next change via [`next_redraw`](Self::next_redraw), so the
+    /// host can sleep until then rather than redrawing every frame.
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;
         for child in self.base_mut().children.iter_mut() {
             animating |= child.tick(dt);
         }
         animating
+    }
+
+    /// Seconds until this subtree next needs a **timed** redraw (independent of the
+    /// continuous-animation signal from [`tick`](Self::tick)) — e.g. a focused
+    /// `Input`'s caret returns the time to its next blink toggle. The host wakes at
+    /// the soonest such time across the tree instead of redrawing continuously.
+    /// `None` = no timed redraw pending. Default: the soonest across children.
+    fn next_redraw(&self) -> Option<f32> {
+        let mut soonest = None;
+        for child in self.base().children.iter() {
+            soonest = soonest_redraw(soonest, child.next_redraw());
+        }
+        soonest
+    }
+}
+
+/// Combine two "seconds until next redraw" requests, keeping the sooner one
+/// (`None` means "no request").
+pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x.min(y)),
+        (x, None) => x,
+        (None, y) => y,
     }
 }
 

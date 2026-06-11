@@ -17,6 +17,7 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign};
 use crate::style::Length;
+use std::time::Instant;
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Default field width (logical px); override via [`LayoutExt::width`].
@@ -48,12 +49,12 @@ pub struct Input {
     /// The fixed end of an active selection. The selection spans `anchor..cursor`
     /// (ordered); `None` (or `anchor == cursor`) means no selection.
     anchor: Option<usize>,
-    /// Blink accumulator (seconds, wrapped to [`BLINK_PERIOD`]).
-    blink: f32,
-    /// Monotonic clock (seconds) advanced while focused, for click timing.
-    clock: f32,
-    /// Clock value at the last pointer press.
-    last_click: f32,
+    /// When the current caret-blink cycle started. The caret is driven by real
+    /// elapsed time (not the frame `dt`) so it blinks at a steady rate regardless of
+    /// how sparsely the host redraws — see [`next_redraw`](Input::next_redraw).
+    blink_origin: Instant,
+    /// Time of the last pointer press, for multi-click detection (`None` = never).
+    last_click: Option<Instant>,
     /// Consecutive-click counter driving the select cycle (word → all → clear).
     clicks: u8,
     /// Latest modifier state (tracked via [`Event::ModifiersChanged`]).
@@ -73,9 +74,8 @@ impl Input {
             placeholder: String::new(),
             cursor: 0,
             anchor: None,
-            blink: 0.0,
-            clock: 0.0,
-            last_click: f32::NEG_INFINITY,
+            blink_origin: Instant::now(),
+            last_click: None,
             clicks: 0,
             mods: Modifiers::default(),
             on_change: None,
@@ -158,7 +158,8 @@ impl Input {
     }
 
     fn caret_visible(&self) -> bool {
-        self.blink.rem_euclid(BLINK_PERIOD) < BLINK_PERIOD / 2.0
+        let phase = self.blink_origin.elapsed().as_secs_f32().rem_euclid(BLINK_PERIOD);
+        phase < BLINK_PERIOD / 2.0
     }
 
     fn chars_vec(&self) -> Vec<char> {
@@ -208,7 +209,7 @@ impl Input {
     /// emit `input-change`.
     fn commit(&mut self, text: String) {
         self.text.set(text.clone());
-        self.blink = 0.0;
+        self.blink_origin = Instant::now();
         self.clicks = 0;
         if let Some(f) = &self.on_change {
             f(Action::value("input-change", SignalData::String(text)));
@@ -312,7 +313,7 @@ impl Input {
         let n = self.char_count();
         self.anchor = (n > 0).then_some(0);
         self.cursor = n;
-        self.blink = 0.0;
+        self.blink_origin = Instant::now();
         self.clicks = 0;
     }
 
@@ -332,7 +333,7 @@ impl Input {
     /// **extends/shrinks** the selection (anchoring at the start position);
     /// without Shift it collapses any selection and moves the caret.
     fn move_caret(&mut self, left: bool, gran: Granularity) {
-        self.blink = 0.0;
+        self.blink_origin = Instant::now();
         self.clicks = 0;
 
         if self.mods.shift {
@@ -530,10 +531,12 @@ impl Component for Input {
         match ev {
             Event::PointerPressed { pos } if self.contains(*pos) => {
                 // Multi-click cycle: 1 = caret, 2 = word, 3 = all, 4 = clear.
-                let multi = (self.clock - self.last_click) <= MULTI_CLICK;
-                self.last_click = self.clock;
+                let multi = self
+                    .last_click
+                    .is_some_and(|t| t.elapsed().as_secs_f32() <= MULTI_CLICK);
+                self.last_click = Some(Instant::now());
                 self.clicks = if multi { self.clicks + 1 } else { 1 };
-                self.blink = 0.0;
+                self.blink_origin = Instant::now();
                 match self.clicks {
                     2 => {
                         let chars = self.chars_vec();
@@ -565,14 +568,18 @@ impl Component for Input {
         }
     }
 
-    fn tick(&mut self, dt: f32) -> bool {
-        if self.base.focused.get_untracked() {
-            self.clock += dt;
-            self.blink = (self.blink + dt).rem_euclid(BLINK_PERIOD);
-            true
-        } else {
-            false
+    // The caret is driven by real time (`blink_origin`), not the frame `dt`, so it
+    // needs no per-frame `tick` (the default — no continuous animation). It only asks
+    // the host to wake at its next toggle via `next_redraw`, so a focused idle field
+    // doesn't drive a full-rate redraw loop just to blink ~twice a second.
+    fn next_redraw(&self) -> Option<f32> {
+        if !self.base.focused.get_untracked() {
+            return None;
         }
+        // Time until the caret flips: the next half-`BLINK_PERIOD` boundary.
+        let phase = self.blink_origin.elapsed().as_secs_f32().rem_euclid(BLINK_PERIOD);
+        let half = BLINK_PERIOD / 2.0;
+        Some(if phase < half { half - phase } else { BLINK_PERIOD - phase })
     }
 }
 
