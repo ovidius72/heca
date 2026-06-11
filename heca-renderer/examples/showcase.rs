@@ -1159,13 +1159,17 @@ impl GpuState {
         // occludes an earlier one. Flushing every overlay in a single pass would draw
         // all overlay rects then all overlay text, letting a lower overlay's text bleed
         // over a higher overlay's panel (the overlapping-overlay text-bleed bug).
+        // Reset the renderers' per-frame buffer offsets so the base + overlay passes
+        // append to the persistent buffers (no per-frame staging allocation).
+        self.grid.begin_frame();
+        self.text.begin_frame();
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
-        self.grid.render(&self.device, scene_view, &mut encoder);
+        self.grid.render(&self.queue, scene_view, &mut encoder);
         self.text
             .render(&self.device, &self.queue, scene_view, &mut encoder);
         for overlay in scene.overlay_segments() {
             enqueue_scene(&mut self.grid, &mut self.text, &overlay);
-            self.grid.render(&self.device, scene_view, &mut encoder);
+            self.grid.render(&self.queue, scene_view, &mut encoder);
             self.text
                 .render(&self.device, &self.queue, scene_view, &mut encoder);
         }
@@ -1364,6 +1368,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                // Throttle to the ~30fps cap. A widget that invalidates itself (the
+                // spinner) requests a redraw immediately via `mark_needs_paint`, which
+                // would otherwise render at full vsync. Input/resize frames (force_full)
+                // still render at once for responsiveness.
+                let min = Duration::from_millis(33);
+                let elapsed = Instant::now().saturating_duration_since(state.last_frame);
+                if !state.force_full && elapsed < min {
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(state.last_frame + min));
+                    return;
+                }
                 state.render();
                 // Schedule the next frame: a continuous animation runs at the ~30fps
                 // cap, a timed wake (e.g. caret blink) sleeps until its next change,

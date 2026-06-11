@@ -123,6 +123,11 @@ pub struct TextRenderer {
     /// Frame-level damage region (logical px); each label is also scissored to it
     /// for damage-region redraw. `None` = full frame.
     damage: Option<[f32; 4]>,
+    /// Vertices/indices already written to the persistent buffers this frame. Each
+    /// pass appends at its own offset (via `queue.write_buffer`) rather than
+    /// allocating a staging buffer per frame. Reset by `begin_frame`.
+    frame_vtx: u32,
+    frame_idx: u32,
     commands: Vec<TextCommand>,
     _atlas_size: (u32, u32),
     font_family: String,
@@ -299,6 +304,8 @@ impl TextRenderer {
             target_size: [1, 1],
             current_clip: None,
             damage: None,
+            frame_vtx: 0,
+            frame_idx: 0,
             commands: Vec::new(),
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
@@ -329,6 +336,13 @@ impl TextRenderer {
     /// or `None` for a full-frame render. Set once per frame before `render`.
     pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
         self.damage = damage;
+    }
+
+    /// Reset the per-frame buffer write offsets. Call once at the start of each
+    /// frame, before any `render` passes.
+    pub fn begin_frame(&mut self) {
+        self.frame_vtx = 0;
+        self.frame_idx = 0;
     }
 
     /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequently
@@ -628,24 +642,14 @@ impl TextRenderer {
         let vertex_data = bytemuck::cast_slice(&vertices);
         let index_data = bytemuck::cast_slice(&indices);
 
-        // Stage + copy via the encoder (NOT queue.write_buffer): the showcase
-        // renders text in two passes (base, then overlay) into one buffer, and
-        // copies are encoder commands that interleave with the draws — so the base
-        // pass draws before the overlay pass overwrites the buffer. A queue write
-        // would land before *all* draws, corrupting the base-layer text whenever
-        // an overlay (e.g. toasts) adds a second pass.
-        let staging_v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_vertex_staging"),
-            contents: vertex_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        let staging_i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_index_staging"),
-            contents: index_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        encoder.copy_buffer_to_buffer(&staging_v, 0, &self.vertex_buffer, 0, vertex_data.len() as u64);
-        encoder.copy_buffer_to_buffer(&staging_i, 0, &self.index_buffer, 0, index_data.len() as u64);
+        // Append this pass's geometry to the persistent buffers at the running frame
+        // offset (no per-frame staging allocation). Distinct offsets per pass means a
+        // later pass (an overlay) doesn't clobber an earlier one (the base text) —
+        // the reason this previously staged + copied through the encoder.
+        let v_off = self.frame_vtx as u64 * std::mem::size_of::<TextVertex>() as u64;
+        let i_off = self.frame_idx as u64 * std::mem::size_of::<u16>() as u64;
+        queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
+        queue.write_buffer(&self.index_buffer, i_off, index_data);
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),
@@ -667,8 +671,13 @@ impl TextRenderer {
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
         // Draw each label with its cached bind group (looked up by key), scissored
-        // to its clip rect when one is set (e.g. a scrolled viewport).
+        // to its clip rect when one is set (e.g. a scrolled viewport). Indices/vertices
+        // live at this frame's running offset: `first_index` = idx_base + i*6,
+        // `base_vertex` = frame_vtx (the batch's per-label offsets are baked into the
+        // index values).
         let scale = self.scale_factor as f32;
+        let idx_base = self.frame_idx;
+        let base_vertex = self.frame_vtx as i32;
         for (i, (key, clip)) in keys.iter().enumerate() {
             let Some(cl) = self.label_cache.get(key) else { continue };
             match combine_clip(self.damage, *clip) {
@@ -682,10 +691,13 @@ impl TextRenderer {
                 }
             }
             rpass.set_bind_group(0, &cl.bind_group, &[]);
-            let start = i as u32 * 6;
-            rpass.draw_indexed(start..start + 6, 0, 0..1);
+            let start = idx_base + i as u32 * 6;
+            rpass.draw_indexed(start..start + 6, base_vertex, 0..1);
         }
+        drop(rpass);
 
+        self.frame_vtx += vertices.len() as u32;
+        self.frame_idx += indices.len() as u32;
         self.commands.clear();
     }
 }
