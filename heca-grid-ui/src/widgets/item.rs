@@ -397,6 +397,11 @@ impl Component for Item {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
+        // Damage our own rect (which contains our slots) so a press flash or an
+        // animating child doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }

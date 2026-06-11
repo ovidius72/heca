@@ -111,6 +111,8 @@ impl Component for ProgressBar {
         } else {
             (self.shown - step).max(target)
         };
+        // Damage just our own rect so the fill ease doesn't force a full redraw.
+        self.base.mark_needs_paint();
         true
     }
 }

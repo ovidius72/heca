@@ -436,7 +436,14 @@ impl Component for Toast {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
-        self.flash.tick(dt)
+        let animating = self.flash.tick(dt);
+        // When used inline (in-tree), damage just our own rect on a press flash. In a
+        // `ToastStack` the toast paints on the overlay layer and the stack owns the
+        // damage region, so this mark is simply unobserved there.
+        if animating {
+            self.base.mark_needs_paint();
+        }
+        animating
     }
 }
 

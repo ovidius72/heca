@@ -213,6 +213,11 @@ impl Component for IconButton {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
+        // Damage our own rect (which contains the icon) so the hover/press animation
+        // doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }
