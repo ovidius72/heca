@@ -47,7 +47,10 @@ pub use heca_core::layout::{Point, Rectangle, Size};
 pub use action::{Action, SignalData};
 pub use builders::{LayoutExt, Parent, StyleExt};
 pub use color::Color;
-pub use component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
+pub use component::{
+    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, install_frame_request,
+    request_frame,
+};
 pub use drag::{DragContext, DragItem, DragItemId, DragItemKind, DragLabel, DragSurfaceId, SurfaceDragPhase, SurfaceDragState};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;

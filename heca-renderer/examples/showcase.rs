@@ -886,6 +886,13 @@ impl GpuState {
             .with_title("heca-grid-ui showcase")
             .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
+        // Bridge widget self-invalidation to the event loop: a widget that marks
+        // itself needs-paint wakes the renderer through this (the retained-render
+        // foundation — repaint what changed instead of every frame).
+        {
+            let w = window.clone();
+            heca_grid_ui::install_frame_request(move || w.request_redraw());
+        }
         let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
