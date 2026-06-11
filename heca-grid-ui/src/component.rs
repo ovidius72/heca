@@ -316,6 +316,16 @@ impl<'a> PaintCx<'a> {
         self.scene.end_overlay();
     }
 
+    /// Run `f` with all its draws **clipped** to `rect` (logical px). Content that
+    /// falls outside is scissored away by the renderer — the primitive a scrolling
+    /// viewport uses so partial rows/glyphs are cut at the panel edge instead of
+    /// spilling out. Nested clips intersect with their parent.
+    pub fn with_clip(&mut self, rect: Rectangle, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.push(DrawCommand::PushClip(rect));
+        f(self);
+        self.scene.push(DrawCommand::PopClip);
+    }
+
     /// The active theme.
     pub fn theme(&self) -> &Theme {
         self.theme

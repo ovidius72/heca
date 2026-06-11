@@ -43,8 +43,20 @@ fn solid(x: f32, y: f32, w: f32, h: f32, fill: [f32; 4]) -> GlowRect {
     }
 }
 
+/// Intersection of two logical `[x, y, w, h]` clip rects (empty if disjoint).
+fn intersect_clip(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let x0 = a[0].max(b[0]);
+    let y0 = a[1].max(b[1]);
+    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
+    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+}
+
 /// Walk `scene` and enqueue its commands into the renderers.
 pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &Scene) {
+    // Active clip rects (each already intersected with its parent), so nested
+    // `PushClip`s clip to their intersection. Both renderers scissor to the top.
+    let mut clip_stack: Vec<[f32; 4]> = Vec::new();
     for cmd in scene.iter() {
         match cmd {
             DrawCommand::Rect(r) => {
@@ -95,9 +107,27 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     t.font == FontRole::Icon,
                 );
             }
-            // Clipping isn't supported by the renderers yet (planned).
-            DrawCommand::PushClip(_) | DrawCommand::PopClip => {}
+            DrawCommand::PushClip(r) => {
+                let (x, y, w, h) = xywh(r);
+                let rect = [x, y, w, h];
+                // Intersect with the enclosing clip so nested clips never exceed it.
+                let eff = clip_stack.last().map_or(rect, |&prev| intersect_clip(prev, rect));
+                clip_stack.push(eff);
+                grid.set_clip(Some(eff));
+                text.set_clip(Some(eff));
+            }
+            DrawCommand::PopClip => {
+                clip_stack.pop();
+                let eff = clip_stack.last().copied();
+                grid.set_clip(eff);
+                text.set_clip(eff);
+            }
         }
+    }
+    // Defensive: clear any unbalanced clip so it can't leak into the next pass.
+    if !clip_stack.is_empty() {
+        grid.set_clip(None);
+        text.set_clip(None);
     }
 }
 
@@ -159,5 +189,31 @@ fn draw_scanlines(grid: &mut GridRenderer, s: &ScanlineCmd) {
         grid.draw(solid(x, ly, w, 1.0, fill));
         ly += s.spacing;
         drawn += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::intersect_clip;
+
+    #[test]
+    fn intersect_clip_returns_the_overlapping_region() {
+        // Two overlapping rects → their intersection.
+        let a = [0.0, 0.0, 100.0, 100.0];
+        let b = [40.0, 30.0, 100.0, 100.0];
+        assert_eq!(
+            intersect_clip(a, b),
+            [40.0, 30.0, 60.0, 70.0],
+            "intersection should be the overlapping box"
+        );
+    }
+
+    #[test]
+    fn intersect_clip_is_empty_when_disjoint() {
+        // Disjoint rects → zero-area (clamped, never negative).
+        let a = [0.0, 0.0, 10.0, 10.0];
+        let b = [50.0, 50.0, 10.0, 10.0];
+        let r = intersect_clip(a, b);
+        assert_eq!((r[2], r[3]), (0.0, 0.0), "disjoint clips intersect to nothing");
     }
 }

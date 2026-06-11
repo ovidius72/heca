@@ -33,6 +33,27 @@ struct TextCommand {
     centered: bool,
     /// Shape with the embedded icon font instead of the text family.
     icon: bool,
+    /// Clip rect (logical px) this label is scissored to, if any.
+    clip: Option<[f32; 4]>,
+}
+
+/// A queued label's cache key plus the clip rect (logical px) it's scissored to.
+type LabelDraw = (LabelKey, Option<[f32; 4]>);
+
+/// Convert a logical clip rect to a physical scissor rect clamped to the
+/// framebuffer `target`: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
+fn scissor_px(c: [f32; 4], scale: f32, target: [u32; 2]) -> (u32, u32, u32, u32) {
+    let (fw, fh) = (target[0] as f32, target[1] as f32);
+    let x0 = (c[0] * scale).clamp(0.0, fw);
+    let y0 = (c[1] * scale).clamp(0.0, fh);
+    let x1 = ((c[0] + c[2]) * scale).clamp(0.0, fw);
+    let y1 = ((c[1] + c[3]) * scale).clamp(0.0, fh);
+    (
+        x0 as u32,
+        y0 as u32,
+        (x1 - x0).max(0.0) as u32,
+        (y1 - y0).max(0.0) as u32,
+    )
 }
 
 /// A GPU-ready text label: texture + quad.
@@ -77,6 +98,10 @@ pub struct TextRenderer {
     uniform_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
     scale_factor: f64,
+    /// Physical framebuffer size `[w, h]` for clamping scissor rects.
+    target_size: [u32; 2],
+    /// Clip rect (logical px) applied to subsequently queued text; `None` = unclipped.
+    current_clip: Option<[f32; 4]>,
     commands: Vec<TextCommand>,
     _atlas_size: (u32, u32),
     font_family: String,
@@ -250,6 +275,8 @@ impl TextRenderer {
             uniform_buffer,
             sampler,
             scale_factor: 1.0,
+            target_size: [1, 1],
+            current_clip: None,
             commands: Vec::new(),
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
@@ -271,6 +298,17 @@ impl TextRenderer {
         self.scale_factor = scale;
     }
 
+    /// Physical framebuffer size in pixels; scissor rects are clamped to it.
+    pub fn set_target_size(&mut self, width: u32, height: u32) {
+        self.target_size = [width.max(1), height.max(1)];
+    }
+
+    /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequently
+    /// queued text, or `None` to clear it.
+    pub fn set_clip(&mut self, clip: Option<[f32; 4]>) {
+        self.current_clip = clip;
+    }
+
     pub fn set_font_family(&mut self, family: &str) {
         self.font_family = family.to_string();
     }
@@ -290,6 +328,7 @@ impl TextRenderer {
             align: TextAlign::Start,
             centered: false,
             icon: false,
+            clip: self.current_clip,
         });
     }
 
@@ -322,6 +361,7 @@ impl TextRenderer {
             align,
             centered: true,
             icon,
+            clip: self.current_clip,
         });
     }
 
@@ -330,7 +370,7 @@ impl TextRenderer {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> (Vec<TextVertex>, Vec<u16>, Vec<LabelKey>) {
+    ) -> (Vec<TextVertex>, Vec<u16>, Vec<LabelDraw>) {
         let commands = std::mem::take(&mut self.commands);
         if commands.is_empty() {
             return (Vec::new(), Vec::new(), Vec::new());
@@ -340,7 +380,7 @@ impl TextRenderer {
         let scale = self.scale_factor as f32;
         let mut vertices = Vec::new();
         let mut indices = Vec::new();
-        let mut keys: Vec<LabelKey> = Vec::new();
+        let mut keys: Vec<LabelDraw> = Vec::new();
         let mut base = 0u16;
 
         for cmd in &commands {
@@ -528,7 +568,7 @@ impl TextRenderer {
             indices.push(base);
             indices.push(base + 2);
             indices.push(base + 3);
-            keys.push(key);
+            keys.push((key, cmd.clip));
             base += 4;
         }
 
@@ -598,9 +638,21 @@ impl TextRenderer {
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-        // Draw each label with its cached bind group (looked up by key).
-        for (i, key) in keys.iter().enumerate() {
+        // Draw each label with its cached bind group (looked up by key), scissored
+        // to its clip rect when one is set (e.g. a scrolled viewport).
+        let scale = self.scale_factor as f32;
+        for (i, (key, clip)) in keys.iter().enumerate() {
             let Some(cl) = self.label_cache.get(key) else { continue };
+            match clip {
+                None => rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]),
+                Some(c) => {
+                    let (x, y, w, h) = scissor_px(*c, scale, self.target_size);
+                    if w == 0 || h == 0 {
+                        continue; // fully clipped — nothing visible
+                    }
+                    rpass.set_scissor_rect(x, y, w, h);
+                }
+            }
             rpass.set_bind_group(0, &cl.bind_group, &[]);
             let start = i as u32 * 6;
             rpass.draw_indexed(start..start + 6, 0, 0..1);
