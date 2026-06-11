@@ -121,10 +121,16 @@ branches deleted). It consolidates the whole **perf investigation**:
    toasts) bleed text because the renderer draws **all rects then all text** per layer. Fix:
    scissor/clip per overlay (the `PushClip`/`PopClip` no-op in `scene.rs` is the hook), or
    interleave rect+text draw order. See memory `grid-ui-overlay-text-bleed`.
-2. **`FocusManager::dispatch(root, event) -> Handled`** — lift the overlay/focus event routing
-   (overlay-first dibs + consume-when-handled + focus) into grid-ui so the showcase AND the
-   `heca` app stop re-implementing it. This is the structural fix for the recurring toast bugs.
-   User's own architectural call.
+2. **`FocusManager::dispatch` — ✅ DONE (local commit `17ff434` on `grid-ui-perf`, not pushed).**
+   Lifted the overlay/focus event routing into grid-ui: `offer_to_overlay(root,ev)->Handled`
+   (the single overlay first-dibs + consume-when-handled gate) and `dispatch(root,ev)->Handled`
+   (full pointer/scroll routing: overlay dibs → focus-on-press → deliver to tree; returns Handled
+   so the host page-scrolls on No). **Keys stay host-routed by design** — the app keymap
+   (`config.toml`→action, `heca/src/keymap.rs`) claims keys upstream, so dispatch never owns key
+   meaning; the showcase key path only swapped its overlay double-call for `offer_to_overlay`, all
+   `focused().is_none()` guards/chords unchanged. Showcase's 3 copies of the gate collapsed to one
+   `dispatch` each. +2 tests (117 integ total), clippy clean, **verified live = no behavior change**.
+   `heca` doesn't use `FocusManager` yet — adopting `dispatch` there is the remaining follow-up.
 3. Polish: carets/animations should request redraw on state-change, not every tick (a focused
    `Input` caret drives 30fps redraw though it changes ~2×/sec).
 4. Older open threads: enumerate-rail → Workspaces wiring (app-side, coordinate); G6 reorder;
