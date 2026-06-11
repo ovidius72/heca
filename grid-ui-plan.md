@@ -91,10 +91,59 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-10 (after the **§11 catalog audit** + **Modal bracket-frame fix**; the catalog is essentially complete)
+### 🤝 Handoff — last updated 2026-06-11 (after **Toast PR1+PR2** and a deep **perf pass**)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
+
+#### ▶ RESUME 2026-06-11 — most recent first
+
+**Merged since the 06-10 handoff:** #81 Toast widget, #83 PaneId (other dev), #84
+theme-driven borders (`border_width=0` ⇒ no borders; containers keep a thin hairline),
+#85 soft drop-shadow primitive + Modal lift, #86 Toast press-flash localized, #87
+**ToastStack** overlay (Toast PR2 — host owns `Signal<Vec<ToastSpec>>`, stack is
+presentation-only). **§11 catalog is fully delivered.**
+
+**Open PR: #91 `grid-ui-perf`** (the ONLY open PR — earlier split #88/#89/#90 were closed,
+branches deleted). It consolidates the whole **perf investigation**:
+- **Text-label cache** (`heca-renderer/src/text.rs`) — *the* ~100% CPU fix: the renderer was
+  re-shaping + re-rasterizing + creating a new GPU texture/bind-group for **every label every
+  frame**. Now cached by `(text,size,weight,font)`; color tinted per-draw.
+- **Layout cache** + **viewport culling** + **~30fps animation cap** (showcase host loop).
+- **Overlay routing fixes** — overlays only consume the pointer/scroll/keys they actually
+  handle, so a non-grabbing overlay (`ToastStack`) lets clicks/scroll/hover pass through
+  (fixed toasts blocking scroll, the `t` key, button hover). Modal swallows scroll.
+- **Result:** idle ~0% (loop sleeps), ~5ms CPU/frame animating. 115 tests, clippy clean.
+- **How to verify:** `cargo run -p heca-renderer --example showcase`; press `t` for toasts.
+
+**Next tasks (in priority):**
+1. **Overlay text-bleed** (real renderer bug) — overlapping overlays (open `Select` dropdown +
+   toasts) bleed text because the renderer draws **all rects then all text** per layer. Fix:
+   scissor/clip per overlay (the `PushClip`/`PopClip` no-op in `scene.rs` is the hook), or
+   interleave rect+text draw order. See memory `grid-ui-overlay-text-bleed`.
+2. **`FocusManager::dispatch` — ✅ DONE (local commit `17ff434` on `grid-ui-perf`, not pushed).**
+   Lifted the overlay/focus event routing into grid-ui: `offer_to_overlay(root,ev)->Handled`
+   (the single overlay first-dibs + consume-when-handled gate) and `dispatch(root,ev)->Handled`
+   (full pointer/scroll routing: overlay dibs → focus-on-press → deliver to tree; returns Handled
+   so the host page-scrolls on No). **Keys stay host-routed by design** — the app keymap
+   (`config.toml`→action, `heca/src/keymap.rs`) claims keys upstream, so dispatch never owns key
+   meaning; the showcase key path only swapped its overlay double-call for `offer_to_overlay`, all
+   `focused().is_none()` guards/chords unchanged. Showcase's 3 copies of the gate collapsed to one
+   `dispatch` each. +2 tests (117 integ total), clippy clean, **verified live = no behavior change**.
+   `heca` doesn't use `FocusManager` yet — adopting `dispatch` there is the remaining follow-up.
+3. Polish: carets/animations should request redraw on state-change, not every tick (a focused
+   `Input` caret drives 30fps redraw though it changes ~2×/sec).
+4. Older open threads: enumerate-rail → Workspaces wiring (app-side, coordinate); G6 reorder;
+   readability pass.
+
+**⚠️ Workflow note (user, 06-11):** during live testing the user said **don't push / don't open
+PRs** until they're ready — make local edits + commits, let them build/test, then consolidate
+into **one** PR. They merge PRs between turns; always `git fetch` + rebase on `origin/main`
+right before pushing. (See memory `grid-ui-workflow`.)
+
+---
+*(Older 06-10 handoff below — §11 catalog mapping, chrome vocabulary, shared infra. Still valid
+for widget-level context.)*
 
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
