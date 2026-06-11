@@ -232,6 +232,10 @@ impl Component for Toggle {
         }
 
         animating |= self.flash.tick(dt);
+        // Damage just our own rect so the knob slide doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }

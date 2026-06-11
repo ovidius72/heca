@@ -36,6 +36,15 @@ const DEFAULT_MARGIN: f32 = 16.0;
 /// Seconds for a new toast to slide fully into place.
 const ENTER_DURATION: f32 = 0.16;
 
+/// Smallest rect containing both `a` and `b` (for the stack's damage region).
+fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+    let x0 = a.loc.x.min(b.loc.x);
+    let y0 = a.loc.y.min(b.loc.y);
+    let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+    let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+    Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+}
+
 /// Which viewport corner the stack anchors to (and the direction it grows).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ToastCorner {
@@ -355,6 +364,25 @@ impl Component for ToastStack {
                 animating = true;
             }
             animating |= e.toast.tick(dt);
+        }
+
+        // Report a tight damage region so the slide repaints only the toast corner —
+        // not the whole frame. Without this the host's safety net treats an animating-
+        // but-undamaged stack as a full-frame repaint, re-emitting the entire scene
+        // every frame (the slide lag). Lay the toasts out for *this* frame and union
+        // their bounds; `collect_damage`'s padding absorbs the per-frame slide delta
+        // (and the strip the toast vacates as it moves into place).
+        if animating {
+            self.layout();
+            let mut region: Option<Rectangle> = None;
+            for e in self.entries.borrow().iter() {
+                let b = e.toast.base().bounds;
+                region = Some(region.map_or(b, |r| union(r, b)));
+            }
+            if let Some(r) = region {
+                self.base.bounds = r;
+                self.base.mark_needs_paint();
+            }
         }
         animating
     }

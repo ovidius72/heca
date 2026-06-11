@@ -282,6 +282,8 @@ impl Component for Tabs {
         let t = (dt / ANIM_DURATION).min(1.0) as f64;
         self.ind_x += (tx - self.ind_x) * t;
         self.ind_w += (tw - self.ind_w) * t;
+        // Damage just our own rect so the underline slide doesn't force a full redraw.
+        self.base.mark_needs_paint();
         true
     }
 }

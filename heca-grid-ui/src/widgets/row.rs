@@ -320,6 +320,11 @@ impl Component for Row {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
+        // Damage our own rect (which contains our content) so a press flash, the
+        // attention pulse, or an animating child doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }

@@ -1,3 +1,4 @@
+pub mod atlas;
 pub mod composite;
 pub mod grid;
 pub mod primitive;

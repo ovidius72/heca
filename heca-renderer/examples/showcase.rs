@@ -1165,13 +1165,11 @@ impl GpuState {
         self.text.begin_frame();
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
         self.grid.render(&self.queue, scene_view, &mut encoder);
-        self.text
-            .render(&self.device, &self.queue, scene_view, &mut encoder);
+        self.text.render(&self.queue, scene_view, &mut encoder);
         for overlay in scene.overlay_segments() {
             enqueue_scene(&mut self.grid, &mut self.text, &overlay);
             self.grid.render(&self.queue, scene_view, &mut encoder);
-            self.text
-                .render(&self.device, &self.queue, scene_view, &mut encoder);
+            self.text.render(&self.queue, scene_view, &mut encoder);
         }
         // Blit the composited scene onto the swapchain.
         self.compositor.blit(&view, &mut encoder);

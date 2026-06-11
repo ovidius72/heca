@@ -301,6 +301,10 @@ impl Component for Checkbox {
         }
 
         animating |= self.flash.tick(dt);
+        // Damage just our own rect so the check pop-in doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }

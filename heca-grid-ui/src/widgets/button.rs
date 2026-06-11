@@ -439,6 +439,11 @@ impl Component for Button {
         // Press flash fades out.
         animating |= self.flash.tick(dt);
 
+        // Damage just our own rect each frame so the hover/press animation doesn't
+        // force a whole-scene redraw (host safety net). Mirrors `Spinner`.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }
