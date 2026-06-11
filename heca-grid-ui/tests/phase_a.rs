@@ -267,6 +267,81 @@ fn click_focuses_hit_widget_and_misses_clear() {
 }
 
 #[test]
+fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
+    use heca_grid_ui::FocusManager;
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    let b = ui.base().children[1].base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+
+    let mut focus = FocusManager::new();
+    // No overlay open → nothing to offer.
+    assert_eq!(
+        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta: 1.0 }),
+        Handled::No,
+        "no open overlay → nothing consumes the offer"
+    );
+
+    // A press dispatches with focus-on-press semantics: the clicked widget focuses.
+    focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
+    assert_eq!(focus.focused(), Some(1), "dispatch focuses the pressed widget");
+
+    // A press that misses every focusable clears focus.
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(9999.0, 9999.0),
+    });
+    assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
+
+    // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
+    assert_eq!(
+        focus.dispatch(&mut ui, &Event::Scroll { delta: 1.0 }),
+        Handled::No,
+        "unconsumed scroll falls through to the host"
+    );
+}
+
+#[test]
+fn dispatch_gives_an_open_overlay_first_dibs() {
+    use heca_grid_ui::FocusManager;
+
+    // A Select is overlay-capable: while open it grabs input outside its bounds.
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Select::new(["LOW", "MEDIUM", "HIGH"]));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 200.0));
+
+    let mut focus = FocusManager::new();
+    let sb = ui.base().children[1].base().bounds;
+
+    // Press on the Select trigger opens its dropdown (no overlay yet → normal route).
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
+    });
+    assert!(
+        focus.overlay_active(&mut ui),
+        "pressing the trigger opens the dropdown overlay"
+    );
+
+    // With the dropdown open, a press on a row (outside the trigger's layout bounds)
+    // is grabbed by the overlay first — it commits the selection and closes — rather
+    // than being treated as a fresh focus/click on the tree behind it.
+    // Row layout: trigger bottom + panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid(15).
+    let row2_y = sb.loc.y + sb.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 10.0, row2_y),
+    });
+    assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
+    assert!(
+        !focus.overlay_active(&mut ui),
+        "committing a row closes the dropdown"
+    );
+}
+
+#[test]
 fn glow_none_suppresses_glow() {
     use heca_grid_ui::GlowLevel;
     // Glow is owned solely by `glow_size` now (intensity controls only scanlines),

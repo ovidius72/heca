@@ -1105,16 +1105,14 @@ impl ApplicationHandler for App {
                 );
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
-                let moved = Event::PointerMoved { pos: state.cursor };
-                // An open overlay gets hover first, but only swallows it if it
-                // consumes it: an input-grabbing overlay (Modal/dropdown) returns
-                // Yes so items behind don't hover, while the ToastStack returns No
-                // — so buttons behind it still hover/animate while toasts show.
-                let consumed = state.focus.overlay_active(&mut state.ui)
-                    && state.focus.deliver_to_overlay(&mut state.ui, &moved) == Handled::Yes;
-                if !consumed {
-                    state.ui.event(&moved);
-                }
+                // Route hover through grid-ui: an open overlay gets first dibs but
+                // only swallows it if it consumes it (an input-grabbing Modal/dropdown
+                // returns Yes so items behind don't hover; the ToastStack returns No so
+                // buttons behind it still hover/animate while toasts show), otherwise
+                // it falls to the widget under the cursor.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerMoved { pos: state.cursor });
                 state.window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -1122,17 +1120,13 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                let pos = state.cursor;
-                let press = Event::PointerPressed { pos };
-                // An open overlay (e.g. a Select dropdown) gets first dibs so it
-                // can capture clicks on rows outside its layout bounds.
-                let consumed = state.focus.overlay_active(&mut state.ui)
-                    && state.focus.deliver_to_overlay(&mut state.ui, &press) == Handled::Yes;
-                if !consumed {
-                    // A click focuses the clicked widget (clears focus if it misses).
-                    state.focus.focus_at(&mut state.ui, pos);
-                    state.ui.event(&press);
-                }
+                // Route the click through grid-ui: an open overlay (e.g. a Select
+                // dropdown) gets first dibs so it can capture clicks on rows outside
+                // its layout bounds; otherwise dispatch focuses the clicked widget
+                // (clearing focus on a miss) and delivers the press.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerPressed { pos: state.cursor });
                 state.layout_dirty = true; // a click can change content/size
                 state.window.request_redraw();
             }
@@ -1142,15 +1136,12 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                // An open overlay (Select dropdown / Modal) gets scroll first, but
-                // only swallows it if it actually consumes it — a non-scrolling
-                // overlay like the ToastStack lets the page scroll through under it.
-                let consumed = state.focus.overlay_active(&mut state.ui)
-                    && state.focus.deliver_to_overlay(
-                        &mut state.ui,
-                        &Event::Scroll { delta: lines },
-                    ) == Handled::Yes;
-                if !consumed {
+                // Route scroll through grid-ui: an open overlay (Select dropdown /
+                // Modal) gets it first but only swallows it if it consumes it — a
+                // non-scrolling overlay like the ToastStack lets it fall through. When
+                // nothing in the tree consumes it, scroll the whole page.
+                if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines }) == Handled::No
+                {
                     // Scroll the whole page (clamped in render).
                     state.scroll_y += lines * 40.0;
                 }
@@ -1176,11 +1167,10 @@ impl ApplicationHandler for App {
                         // the ones it actually consumes: a Modal/palette eats every
                         // key (Esc/Enter/typing), while the ToastStack eats none — so
                         // global keys (`t`, `[`, …) still work while toasts show.
-                        gk if state.focus.overlay_active(&mut state.ui)
-                            && state.focus.deliver_to_overlay(
-                                &mut state.ui,
-                                &Event::Key { key: gk, pressed: true },
-                            ) == Handled::Yes => {}
+                        gk if state.focus.offer_to_overlay(
+                            &mut state.ui,
+                            &Event::Key { key: gk, pressed: true },
+                        ) == Handled::Yes => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
