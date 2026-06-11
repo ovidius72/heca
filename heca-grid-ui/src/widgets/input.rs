@@ -55,6 +55,9 @@ pub struct Input {
     blink_origin: Instant,
     /// Time of the last pointer press, for multi-click detection (`None` = never).
     last_click: Option<Instant>,
+    /// Caret visibility at the last paint, so `tick` damages the field only when the
+    /// caret actually toggles (not every frame).
+    last_caret: std::cell::Cell<bool>,
     /// Consecutive-click counter driving the select cycle (word → all → clear).
     clicks: u8,
     /// Latest modifier state (tracked via [`Event::ModifiersChanged`]).
@@ -76,6 +79,7 @@ impl Input {
             anchor: None,
             blink_origin: Instant::now(),
             last_click: None,
+            last_caret: std::cell::Cell::new(false),
             clicks: 0,
             mods: Modifiers::default(),
             on_change: None,
@@ -568,10 +572,21 @@ impl Component for Input {
         }
     }
 
-    // The caret is driven by real time (`blink_origin`), not the frame `dt`, so it
-    // needs no per-frame `tick` (the default — no continuous animation). It only asks
-    // the host to wake at its next toggle via `next_redraw`, so a focused idle field
-    // doesn't drive a full-rate redraw loop just to blink ~twice a second.
+    // The caret is driven by real time (`blink_origin`), not the frame `dt`. `tick`
+    // does no continuous animation; it only damages the field when the caret actually
+    // toggles, so a blink repaints just the input's rect (not the whole scene). The
+    // wake at the next toggle is scheduled via `next_redraw`.
+    fn tick(&mut self, _dt: f32) -> bool {
+        if self.base.focused.get_untracked() {
+            let vis = self.caret_visible();
+            if vis != self.last_caret.get() {
+                self.last_caret.set(vis);
+                self.base.mark_needs_paint();
+            }
+        }
+        false
+    }
+
     fn next_redraw(&self) -> Option<f32> {
         if !self.base.focused.get_untracked() {
             return None;

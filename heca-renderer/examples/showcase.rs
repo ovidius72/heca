@@ -749,6 +749,16 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
     {
         let mut cx =
             PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        // Background fill as the first scene command (not a clear pass): scissored to
+        // the damage region it clears only the changed area, so the rest of the
+        // persistent scene texture is preserved for damage-region redraw.
+        cx.rect(
+            Rectangle::from_size(Size::new(w as f64, h as f64)),
+            theme.background,
+            None,
+            0.0,
+            None,
+        );
         root.paint(&mut cx);
     }
     // Corner brackets on the cards (first row) only — not the small buttons.
@@ -844,6 +854,7 @@ struct GpuState {
     config: wgpu::SurfaceConfiguration,
     grid: GridRenderer,
     text: TextRenderer,
+    compositor: heca_renderer::composite::Compositor,
     scale_factor: f64,
     theme: Theme,
     ui: Flex,
@@ -871,6 +882,10 @@ struct GpuState {
     /// Seconds until the next scheduled frame: `Some(0.0)` ≈ continuous animation
     /// (capped to ~30fps), `Some(t)` a timed wake (e.g. caret blink), `None` idle.
     next_frame_in: Option<f32>,
+    /// When set, the next frame repaints in full (an input event / resize / layout
+    /// or scroll change can alter unknown regions). Cleared after the frame; pure
+    /// animation frames instead repaint just the widgets that flagged themselves.
+    force_full: bool,
     /// Layout is recomputed only when a layout input changed (resize/font/content
     /// event) — not on pure-animation frames.
     layout_dirty: bool,
@@ -886,6 +901,13 @@ impl GpuState {
             .with_title("heca-grid-ui showcase")
             .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
+        // Bridge widget self-invalidation to the event loop: a widget that marks
+        // itself needs-paint wakes the renderer through this (the retained-render
+        // foundation — repaint what changed instead of every frame).
+        {
+            let w = window.clone();
+            heca_grid_ui::install_frame_request(move || w.request_redraw());
+        }
         let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -933,6 +955,8 @@ impl GpuState {
         surface.configure(&device, &config);
 
         let theme = Theme::grid_tron();
+        let compositor =
+            heca_renderer::composite::Compositor::new(&device, format, config.width, config.height);
         let mut grid = GridRenderer::new(&device, format);
         let mut text = TextRenderer::new(&device, format);
         // Both renderers need the scale + physical framebuffer size to map logical
@@ -970,6 +994,7 @@ impl GpuState {
             config,
             grid,
             text,
+            compositor,
             scale_factor,
             theme,
             ui,
@@ -988,6 +1013,7 @@ impl GpuState {
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
             next_frame_in: None,
+            force_full: true, // first frame paints everything
             layout_dirty: true,
             content_h: 0.0,
             applied_scroll: 0.0,
@@ -1000,9 +1026,12 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
-        // Keep the renderers' scissor-clamp size in sync with the framebuffer.
+        // Keep the renderers' scissor-clamp size + the persistent scene texture in
+        // sync with the framebuffer.
         self.grid.set_target_size(self.config.width, self.config.height);
         self.text.set_target_size(self.config.width, self.config.height);
+        self.compositor
+            .resize(&self.device, self.config.width, self.config.height);
         self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
@@ -1063,6 +1092,7 @@ impl GpuState {
             self.content_h = self.ui.base().bounds.size.h as f32;
             self.applied_scroll = 0.0;
             self.layout_dirty = false;
+            self.force_full = true; // relayout moves everything → repaint in full
         }
         // Whole-page scroll: shift the cached tree by only the delta since the
         // offset already baked into its bounds (window edges clip).
@@ -1071,9 +1101,35 @@ impl GpuState {
         if scroll_delta != 0.0 {
             offset_tree(&mut self.ui, scroll_delta);
             self.applied_scroll = self.scroll_y;
+            self.force_full = true; // the whole page shifted
         }
 
         let scene = build_scene(&self.ui, &self.theme, w, h, self.clip_demo);
+
+        // Damage region for this frame: full on an input/layout/scroll change (it can
+        // alter unknown regions), otherwise just the widgets that flagged themselves
+        // needs-paint (a spinner, the caret) — so an animation repaints only its rect.
+        // `collect_damage` also clears the flags.
+        let dirty = heca_grid_ui::collect_damage(&self.ui);
+        let damage: Option<[f32; 4]> = if std::mem::take(&mut self.force_full) {
+            None // whole frame
+        } else {
+            match dirty {
+                Some(r) => Some([
+                    r.loc.x as f32,
+                    r.loc.y as f32,
+                    r.size.w as f32,
+                    r.size.h as f32,
+                ]),
+                // Animated but reported no damage (an un-wired continuous animation)
+                // → repaint in full for correctness; nothing dirty → empty rect
+                // (render nothing; the blit shows the preserved scene texture).
+                None if animating => None,
+                None => Some([0.0, 0.0, 0.0, 0.0]),
+            }
+        };
+        self.grid.set_damage(damage);
+        self.text.set_damage(damage);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -1091,28 +1147,11 @@ impl GpuState {
                 label: Some("showcase"),
             });
 
-        let bg = self.theme.background.to_f32x4();
-        {
-            let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: bg[0] as f64,
-                            g: bg[1] as f64,
-                            b: bg[2] as f64,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
+        // Render the UI into the compositor's persistent scene texture (not directly
+        // to the swapchain), then blit it to screen. The persistent texture is what
+        // makes damage-region redraw possible — unchanged pixels survive between
+        // frames, so a frame can re-render only the damaged region.
+        let scene_view = self.compositor.scene_view();
 
         // Each pass is a rects-then-text flush (the renderer draws all queued rects,
         // then all queued text). Base first, then each overlay as its *own* pass — so
@@ -1120,16 +1159,22 @@ impl GpuState {
         // occludes an earlier one. Flushing every overlay in a single pass would draw
         // all overlay rects then all overlay text, letting a lower overlay's text bleed
         // over a higher overlay's panel (the overlapping-overlay text-bleed bug).
+        // Reset the renderers' per-frame buffer offsets so the base + overlay passes
+        // append to the persistent buffers (no per-frame staging allocation).
+        self.grid.begin_frame();
+        self.text.begin_frame();
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
-        self.grid.render(&self.device, &view, &mut encoder);
+        self.grid.render(&self.queue, scene_view, &mut encoder);
         self.text
-            .render(&self.device, &self.queue, &view, &mut encoder);
+            .render(&self.device, &self.queue, scene_view, &mut encoder);
         for overlay in scene.overlay_segments() {
             enqueue_scene(&mut self.grid, &mut self.text, &overlay);
-            self.grid.render(&self.device, &view, &mut encoder);
+            self.grid.render(&self.queue, scene_view, &mut encoder);
             self.text
-                .render(&self.device, &self.queue, &view, &mut encoder);
+                .render(&self.device, &self.queue, scene_view, &mut encoder);
         }
+        // Blit the composited scene onto the swapchain.
+        self.compositor.blit(&view, &mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
@@ -1175,6 +1220,12 @@ impl ApplicationHandler for App {
         let Some(state) = self.state.as_mut() else {
             return;
         };
+        // Any non-redraw event (input, resize, …) can change unknown regions, so the
+        // frame it triggers repaints in full. Animation/timed frames arrive as a bare
+        // RedrawRequested and instead repaint only the widgets that flagged themselves.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            state.force_full = true;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
@@ -1317,6 +1368,16 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                // Throttle to the ~30fps cap. A widget that invalidates itself (the
+                // spinner) requests a redraw immediately via `mark_needs_paint`, which
+                // would otherwise render at full vsync. Input/resize frames (force_full)
+                // still render at once for responsiveness.
+                let min = Duration::from_millis(33);
+                let elapsed = Instant::now().saturating_duration_since(state.last_frame);
+                if !state.force_full && elapsed < min {
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(state.last_frame + min));
+                    return;
+                }
                 state.render();
                 // Schedule the next frame: a continuous animation runs at the ~30fps
                 // cap, a timed wake (e.g. caret blink) sleeps until its next change,

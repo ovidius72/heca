@@ -40,6 +40,24 @@ struct TextCommand {
 /// A queued label's cache key plus the clip rect (logical px) it's scissored to.
 type LabelDraw = (LabelKey, Option<[f32; 4]>);
 
+/// Intersection of two logical `[x, y, w, h]` rects (empty if disjoint).
+fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let x0 = a[0].max(b[0]);
+    let y0 = a[1].max(b[1]);
+    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
+    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+}
+
+/// Combine the frame damage with a per-label clip; `None` means "unbounded".
+fn combine_clip(damage: Option<[f32; 4]>, clip: Option<[f32; 4]>) -> Option<[f32; 4]> {
+    match (damage, clip) {
+        (None, None) => None,
+        (Some(r), None) | (None, Some(r)) => Some(r),
+        (Some(a), Some(b)) => Some(intersect(a, b)),
+    }
+}
+
 /// Convert a logical clip rect to a physical scissor rect clamped to the
 /// framebuffer `target`: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
 fn scissor_px(c: [f32; 4], scale: f32, target: [u32; 2]) -> (u32, u32, u32, u32) {
@@ -102,6 +120,14 @@ pub struct TextRenderer {
     target_size: [u32; 2],
     /// Clip rect (logical px) applied to subsequently queued text; `None` = unclipped.
     current_clip: Option<[f32; 4]>,
+    /// Frame-level damage region (logical px); each label is also scissored to it
+    /// for damage-region redraw. `None` = full frame.
+    damage: Option<[f32; 4]>,
+    /// Vertices/indices already written to the persistent buffers this frame. Each
+    /// pass appends at its own offset (via `queue.write_buffer`) rather than
+    /// allocating a staging buffer per frame. Reset by `begin_frame`.
+    frame_vtx: u32,
+    frame_idx: u32,
     commands: Vec<TextCommand>,
     _atlas_size: (u32, u32),
     font_family: String,
@@ -277,6 +303,9 @@ impl TextRenderer {
             scale_factor: 1.0,
             target_size: [1, 1],
             current_clip: None,
+            damage: None,
+            frame_vtx: 0,
+            frame_idx: 0,
             commands: Vec::new(),
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
@@ -301,6 +330,19 @@ impl TextRenderer {
     /// Physical framebuffer size in pixels; scissor rects are clamped to it.
     pub fn set_target_size(&mut self, width: u32, height: u32) {
         self.target_size = [width.max(1), height.max(1)];
+    }
+
+    /// Set the frame-level damage region (logical px) every label is scissored to,
+    /// or `None` for a full-frame render. Set once per frame before `render`.
+    pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
+        self.damage = damage;
+    }
+
+    /// Reset the per-frame buffer write offsets. Call once at the start of each
+    /// frame, before any `render` passes.
+    pub fn begin_frame(&mut self) {
+        self.frame_vtx = 0;
+        self.frame_idx = 0;
     }
 
     /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequently
@@ -600,24 +642,14 @@ impl TextRenderer {
         let vertex_data = bytemuck::cast_slice(&vertices);
         let index_data = bytemuck::cast_slice(&indices);
 
-        // Stage + copy via the encoder (NOT queue.write_buffer): the showcase
-        // renders text in two passes (base, then overlay) into one buffer, and
-        // copies are encoder commands that interleave with the draws — so the base
-        // pass draws before the overlay pass overwrites the buffer. A queue write
-        // would land before *all* draws, corrupting the base-layer text whenever
-        // an overlay (e.g. toasts) adds a second pass.
-        let staging_v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_vertex_staging"),
-            contents: vertex_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        let staging_i = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("text_index_staging"),
-            contents: index_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        encoder.copy_buffer_to_buffer(&staging_v, 0, &self.vertex_buffer, 0, vertex_data.len() as u64);
-        encoder.copy_buffer_to_buffer(&staging_i, 0, &self.index_buffer, 0, index_data.len() as u64);
+        // Append this pass's geometry to the persistent buffers at the running frame
+        // offset (no per-frame staging allocation). Distinct offsets per pass means a
+        // later pass (an overlay) doesn't clobber an earlier one (the base text) —
+        // the reason this previously staged + copied through the encoder.
+        let v_off = self.frame_vtx as u64 * std::mem::size_of::<TextVertex>() as u64;
+        let i_off = self.frame_idx as u64 * std::mem::size_of::<u16>() as u64;
+        queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
+        queue.write_buffer(&self.index_buffer, i_off, index_data);
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("text_render_pass"),
@@ -639,25 +671,33 @@ impl TextRenderer {
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
         // Draw each label with its cached bind group (looked up by key), scissored
-        // to its clip rect when one is set (e.g. a scrolled viewport).
+        // to its clip rect when one is set (e.g. a scrolled viewport). Indices/vertices
+        // live at this frame's running offset: `first_index` = idx_base + i*6,
+        // `base_vertex` = frame_vtx (the batch's per-label offsets are baked into the
+        // index values).
         let scale = self.scale_factor as f32;
+        let idx_base = self.frame_idx;
+        let base_vertex = self.frame_vtx as i32;
         for (i, (key, clip)) in keys.iter().enumerate() {
             let Some(cl) = self.label_cache.get(key) else { continue };
-            match clip {
+            match combine_clip(self.damage, *clip) {
                 None => rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]),
                 Some(c) => {
-                    let (x, y, w, h) = scissor_px(*c, scale, self.target_size);
+                    let (x, y, w, h) = scissor_px(c, scale, self.target_size);
                     if w == 0 || h == 0 {
-                        continue; // fully clipped — nothing visible
+                        continue; // fully outside the damage/clip — nothing visible
                     }
                     rpass.set_scissor_rect(x, y, w, h);
                 }
             }
             rpass.set_bind_group(0, &cl.bind_group, &[]);
-            let start = i as u32 * 6;
-            rpass.draw_indexed(start..start + 6, 0, 0..1);
+            let start = idx_base + i as u32 * 6;
+            rpass.draw_indexed(start..start + 6, base_vertex, 0..1);
         }
+        drop(rpass);
 
+        self.frame_vtx += vertices.len() as u32;
+        self.frame_idx += indices.len() as u32;
         self.commands.clear();
     }
 }

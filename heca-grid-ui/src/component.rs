@@ -12,6 +12,78 @@ use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Sce
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
+use std::cell::{Cell, RefCell};
+
+thread_local! {
+    /// Host-installed hook the widget tree calls to schedule the next frame. The
+    /// event loop wires it to its redraw request; widgets reach it via
+    /// [`request_frame`]. Thread-local because the UI runs single-threaded.
+    static FRAME_REQUEST: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Install the callback the widget tree uses to ask the host for the next frame.
+///
+/// The host (event loop) wires this to its "schedule a redraw" call once at
+/// startup. It is the bridge that lets a widget which invalidates itself (an
+/// animation step, a caret move, a reactive state change) wake the renderer —
+/// the foundation for repainting only what changed instead of every frame.
+pub fn install_frame_request(f: impl Fn() + 'static) {
+    FRAME_REQUEST.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+}
+
+/// Ask the host to schedule a frame. The host coalesces repeated requests into a
+/// single redraw. A no-op until [`install_frame_request`] is set (e.g. in
+/// headless tests), so widget code can always call it safely.
+pub fn request_frame() {
+    FRAME_REQUEST.with(|c| {
+        if let Some(f) = c.borrow().as_ref() {
+            f();
+        }
+    });
+}
+
+/// Logical-pixel margin added around each damaged widget so glow/shadow halos —
+/// which paint outside the widget's rect — are included in the redrawn region.
+const DAMAGE_PAD: f64 = 64.0;
+
+/// Walk the tree and union the bounds of every widget flagged
+/// [`needs_paint`](Base::needs_paint) (padded for glow/shadow reach), **clearing
+/// the flags**. Returns the damage rect to repaint, or `None` if nothing changed.
+///
+/// The host calls this each frame: on an animation/timed frame the result scissors
+/// the render to just the changed pixels; on an input frame the host repaints in
+/// full (an event can change unknown things) but still calls this to clear flags.
+/// Hidden subtrees are skipped — their bounds are stale.
+pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
+    fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+        let x0 = a.loc.x.min(b.loc.x);
+        let y0 = a.loc.y.min(b.loc.y);
+        let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+        let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+        Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+    }
+    fn walk(c: &dyn Component, acc: &mut Option<Rectangle>) {
+        let b = c.base();
+        if !b.visible.get_untracked() || b.style.hidden {
+            return;
+        }
+        if b.needs_paint() {
+            b.clear_needs_paint();
+            let r = b.bounds;
+            let padded = Rectangle::new(
+                Point::new(r.loc.x - DAMAGE_PAD, r.loc.y - DAMAGE_PAD),
+                Size::new(r.size.w + 2.0 * DAMAGE_PAD, r.size.h + 2.0 * DAMAGE_PAD),
+            );
+            *acc = Some(acc.map_or(padded, |a| union(a, padded)));
+        }
+        for ch in &b.children {
+            walk(ch.as_ref(), acc);
+        }
+    }
+    let mut acc = None;
+    walk(root, &mut acc);
+    acc
+}
 
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
@@ -41,6 +113,11 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// Repaint flag for the retained renderer: set when this widget's visuals
+    /// changed and cleared once it's repainted. Starts `true` (everything paints
+    /// on the first frame). The renderer repaints only widgets whose flag is set,
+    /// and unions their bounds into the frame's damage region.
+    needs_paint: Cell<bool>,
 }
 
 impl Base {
@@ -57,7 +134,27 @@ impl Base {
             tab_index: None,
             children: Vec::new(),
             font: 15.0,
+            needs_paint: Cell::new(true),
         }
+    }
+
+    /// Mark this widget as needing a repaint and ask the host for a frame. Call on
+    /// a visual change the host wouldn't otherwise know about — an animation step,
+    /// a caret move, an imperative state edit. (Reactive state changes route here
+    /// too, at their mutation site.)
+    pub fn mark_needs_paint(&self) {
+        self.needs_paint.set(true);
+        request_frame();
+    }
+
+    /// Whether this widget needs repainting.
+    pub fn needs_paint(&self) -> bool {
+        self.needs_paint.get()
+    }
+
+    /// Clear the repaint flag — the renderer calls this once the widget is painted.
+    pub fn clear_needs_paint(&self) {
+        self.needs_paint.set(false);
     }
 }
 
@@ -623,5 +720,27 @@ impl<'a> PaintCx<'a> {
             radius: g.radius * size,
             ..g
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn mark_needs_paint_sets_the_flag_and_requests_a_frame() {
+        let frames = Rc::new(Cell::new(0u32));
+        let f = frames.clone();
+        install_frame_request(move || f.set(f.get() + 1));
+
+        let base = Base::new();
+        assert!(base.needs_paint(), "a fresh widget needs its first paint");
+        base.clear_needs_paint();
+        assert!(!base.needs_paint(), "clearing drops the flag");
+
+        base.mark_needs_paint();
+        assert!(base.needs_paint(), "marking re-sets the repaint flag");
+        assert_eq!(frames.get(), 1, "marking asks the host for exactly one frame");
     }
 }
