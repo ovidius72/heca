@@ -265,28 +265,59 @@ mod tests {
     }
 
     #[test]
-    fn overlay_segments_split_one_per_begin_end_pair() {
+    fn overlay_segments_yields_one_per_nonempty_begin_end_pair() {
         let mut s = Scene::new();
-        s.push(clip(0.0)); // base layer
-
-        s.begin_overlay(); // overlay A (two commands)
+        s.begin_overlay(); // overlay A: two commands
         s.push(clip(1.0));
         s.push(clip(1.5));
         s.end_overlay();
-
-        s.begin_overlay(); // overlay B (one command)
+        s.begin_overlay(); // overlay B: one command
         s.push(clip(2.0));
         s.end_overlay();
 
-        s.begin_overlay(); // empty pair → records nothing
-        s.end_overlay();
-
         let segs: Vec<Scene> = s.overlay_segments().collect();
-        assert_eq!(segs.len(), 2, "two non-empty overlays → two segments");
-        // Each segment holds exactly its own commands, in paint (z) order A then B.
-        assert_eq!(segs[0].iter().cloned().collect::<Vec<_>>(), vec![clip(1.0), clip(1.5)]);
-        assert_eq!(segs[1].iter().cloned().collect::<Vec<_>>(), vec![clip(2.0)]);
-        // The base layer is untouched by overlay routing.
-        assert_eq!(s.base_layer().iter().cloned().collect::<Vec<_>>(), vec![clip(0.0)]);
+        assert_eq!(
+            segs.len(),
+            2,
+            "two non-empty overlays should yield two segments, got {}",
+            segs.len()
+        );
+        // Each segment holds exactly its own commands, in paint (z) order: A then B.
+        assert_eq!(
+            segs[0].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(1.0), clip(1.5)],
+            "first segment should hold overlay A's commands"
+        );
+        assert_eq!(
+            segs[1].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(2.0)],
+            "second segment should hold overlay B's command"
+        );
+    }
+
+    #[test]
+    fn empty_begin_end_pair_records_no_segment() {
+        let mut s = Scene::new();
+        s.begin_overlay();
+        s.end_overlay();
+        assert_eq!(
+            s.overlay_segments().count(),
+            0,
+            "a begin/end pair that pushed nothing should record no segment"
+        );
+    }
+
+    #[test]
+    fn base_layer_excludes_overlay_commands() {
+        let mut s = Scene::new();
+        s.push(clip(0.0)); // base
+        s.begin_overlay();
+        s.push(clip(1.0)); // overlay
+        s.end_overlay();
+        assert_eq!(
+            s.base_layer().iter().cloned().collect::<Vec<_>>(),
+            vec![clip(0.0)],
+            "base layer should hold only base commands, not overlay ones"
+        );
     }
 }
