@@ -69,7 +69,10 @@ pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
         }
         if b.needs_paint() {
             b.clear_needs_paint();
-            let r = b.bounds;
+            // Overlay widgets (tooltip bubble, command palette) paint outside their
+            // own `bounds`; `damage_bounds` lets them report the rect that actually
+            // changed. Default is `bounds`, so ordinary widgets are unaffected.
+            let r = c.damage_bounds();
             let padded = Rectangle::new(
                 Point::new(r.loc.x - DAMAGE_PAD, r.loc.y - DAMAGE_PAD),
                 Size::new(r.size.w + 2.0 * DAMAGE_PAD, r.size.h + 2.0 * DAMAGE_PAD),
@@ -321,6 +324,16 @@ pub trait Component {
             soonest = soonest_redraw(soonest, child.next_redraw());
         }
         soonest
+    }
+
+    /// The rect (logical px) to repaint when this widget is flagged
+    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of
+    /// `bounds`. Overlay widgets that paint **outside** their own bounds (a tooltip
+    /// bubble, a command-palette panel) override this to report where they actually
+    /// draw, so a redraw covers the popover rather than the (often unrelated) layout
+    /// box. Default: the widget's own `bounds`.
+    fn damage_bounds(&self) -> Rectangle {
+        self.base().bounds
     }
 }
 

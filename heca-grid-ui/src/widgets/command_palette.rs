@@ -127,6 +127,9 @@ pub struct CommandPalette {
     open: Signal<bool>,
     modifiers: Modifiers,
     viewport: Cell<Size>,
+    /// Panel rect cached at paint, so the caret blink can damage just the panel
+    /// (the palette paints on the overlay layer, away from its layout `bounds`).
+    panel: Cell<Rectangle>,
 }
 
 impl CommandPalette {
@@ -142,6 +145,7 @@ impl CommandPalette {
             open: signal(false),
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
+            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
         }
     }
 
@@ -314,6 +318,8 @@ impl Component for CommandPalette {
         let adv = (font * MONO_ADVANCE_RATIO) as f64;
         let results = self.results();
         let (panel, query, list_top, row_h, visible) = self.layout(results.len());
+        // Remember the panel so the idle caret blink can damage just this rect.
+        self.panel.set(panel);
 
         cx.with_overlay(|cx| {
             // Scrim + panel.
@@ -489,14 +495,41 @@ impl Component for CommandPalette {
 
     fn tick(&mut self, dt: f32) -> bool {
         let open = self.is_open();
-        {
-            // Keep the query field focused (caret) while open; advance its blink.
+        // Advance the query's caret (it marks *its own* base on a blink flip, but it
+        // lives off-tree so that mark is unobserved). Promote a flip to a palette
+        // repaint of just the panel — no full-frame, no pegging frames every tick.
+        let flipped = {
             let mut q = self.query.borrow_mut();
             q.base_mut().focused.set(open);
             q.tick(dt);
+            let f = q.base().needs_paint();
+            q.base().clear_needs_paint();
+            f
+        };
+        if open && flipped {
+            self.base.mark_needs_paint(); // collect_damage reads `damage_bounds` (the panel)
         }
-        // Keep frames coming while open so the caret blinks.
-        open
+        false
+    }
+
+    /// While open, wake the host for the query caret's next blink (instead of
+    /// redrawing every frame). Closed: nothing pending.
+    fn next_redraw(&self) -> Option<f32> {
+        if self.is_open() {
+            self.query.borrow().next_redraw()
+        } else {
+            None
+        }
+    }
+
+    /// The palette paints its panel on the overlay layer, not at its layout `bounds`,
+    /// so a caret-blink repaint must target the cached panel rect.
+    fn damage_bounds(&self) -> Rectangle {
+        if self.is_open() {
+            self.panel.get()
+        } else {
+            self.base.bounds
+        }
     }
 }
 

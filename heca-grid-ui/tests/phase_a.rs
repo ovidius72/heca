@@ -2270,7 +2270,9 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
 fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     use heca_grid_ui::Tooltip;
 
-    let mut tip = Tooltip::new(Item::new("X"), "HELP").delay(0.5);
+    // Reveal is wall-clock timed (like the Input caret), so the test sleeps past a
+    // short delay rather than feeding simulated `dt`.
+    let mut tip = Tooltip::new(Item::new("X"), "HELP").delay(0.05);
 
     // Render + report whether the bubble text was painted.
     let shows_help = |tip: &mut Tooltip| -> bool {
@@ -2292,11 +2294,10 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     tip.event(&Event::PointerMoved { pos: center });
-    tip.tick(0.3);
     assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
 
     // Past the delay: the bubble shows.
-    tip.tick(0.3);
+    std::thread::sleep(std::time::Duration::from_millis(120));
     assert!(shows_help(&mut tip), "bubble reveals after the hover delay");
 
     // Pointer leaves: hidden again immediately.

@@ -15,12 +15,25 @@
 //! the viewport so it never spills off-screen.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
+use crate::component::{
+    paint_child, route_event, soonest_redraw, Base, Component, Event, Handled, PaintCx,
+};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::SignalGet;
 use crate::scene::{Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
+use std::cell::Cell;
+use std::time::Instant;
+
+/// Smallest rect containing both `a` and `b` (child bounds ∪ bubble rect).
+fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+    let x0 = a.loc.x.min(b.loc.x);
+    let y0 = a.loc.y.min(b.loc.y);
+    let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+    let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+    Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+}
 
 /// Which side of the target the bubble appears on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -47,9 +60,15 @@ pub struct Tooltip {
     text: String,
     side: TooltipSide,
     delay: f32,
-    hovered: Signal<bool>,
-    /// Accumulated hover time; the bubble shows once it reaches `delay`.
-    elapsed: f32,
+    /// When the pointer entered the child (`None` = not hovering). The bubble shows
+    /// once this is `delay` seconds in the past. Wall-clock (like the `Input` caret)
+    /// so the host can sleep through the delay and wake once, rather than ticking
+    /// every frame — see [`next_redraw`](Component::next_redraw).
+    hover_since: Option<Instant>,
+    /// Viewport cached at paint so `tick`/`damage_bounds` can place the bubble.
+    viewport: Cell<Size>,
+    /// Last-painted bubble visibility, to detect show/hide transitions in `tick`.
+    last_shown: Cell<bool>,
 }
 
 impl Tooltip {
@@ -65,8 +84,9 @@ impl Tooltip {
             text: text.into(),
             side: TooltipSide::default(),
             delay: DEFAULT_DELAY,
-            hovered: signal(false),
-            elapsed: 0.0,
+            hover_since: None,
+            viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
+            last_shown: Cell::new(false),
         }
     }
 
@@ -83,7 +103,28 @@ impl Tooltip {
     }
 
     fn shown(&self) -> bool {
-        self.hovered.get_untracked() && self.elapsed >= self.delay
+        self.hover_since
+            .is_some_and(|since| since.elapsed().as_secs_f32() >= self.delay)
+    }
+
+    /// The bubble's text size (logical px) from the resolved font + label length.
+    fn bubble_size(&self) -> (f64, f64) {
+        let font = self.base.font;
+        let chars = self.text.chars().count() as f64;
+        let w = chars * (font * MONO_ADVANCE_RATIO) as f64 + 2.0 * PAD_X;
+        let h = (font * MONO_LINE_RATIO) as f64 + 2.0 * PAD_Y;
+        (w, h)
+    }
+
+    /// Where the bubble would draw for the cached viewport (`None` if no text).
+    /// Used to damage the right region on show/hide — the bubble sits off our own
+    /// bounds, on the overlay layer.
+    fn current_bubble_rect(&self) -> Option<Rectangle> {
+        if self.text.is_empty() {
+            return None;
+        }
+        let (w, h) = self.bubble_size();
+        Some(self.bubble_rect(self.base.bounds, w, h, self.viewport.get()))
     }
 
     /// Whether a `w×h` bubble fits on `side` of target `b` within viewport `vp`.
@@ -146,6 +187,8 @@ impl Component for Tooltip {
         if !self.base.visible.get_untracked() {
             return;
         }
+        // Cache the viewport so `tick`/`damage_bounds` place the bubble identically.
+        self.viewport.set(cx.viewport());
         // The wrapped child first (still fully interactive).
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
@@ -159,9 +202,7 @@ impl Component for Tooltip {
             (t.surface, t.accent, t.glow, t.foreground, t.control_radius())
         };
         let font = self.base.font;
-        let chars = self.text.chars().count() as f64;
-        let w = chars * (font * MONO_ADVANCE_RATIO) as f64 + 2.0 * PAD_X;
-        let h = (font * MONO_LINE_RATIO) as f64 + 2.0 * PAD_Y;
+        let (w, h) = self.bubble_size();
         let rect = self.bubble_rect(self.base.bounds, w, h, cx.viewport());
         let radius = ctrl_radius.min((h / 2.0) as f32);
 
@@ -183,32 +224,51 @@ impl Component for Tooltip {
         // Track hover, then route to the child (transparent — never consumes).
         if let Event::PointerMoved { pos } = ev {
             let inside = self.base.bounds.contains(*pos);
-            if self.hovered.get_untracked() != inside {
-                self.hovered.set(inside);
-                if !inside {
-                    self.elapsed = 0.0;
-                }
+            if inside != self.hover_since.is_some() {
+                // Enter starts the reveal clock; leave clears it (the next `tick`
+                // detects the show/hide transition and damages the bubble).
+                self.hover_since = inside.then(Instant::now);
             }
         }
         route_event(&mut self.base.children, ev)
     }
 
     fn tick(&mut self, dt: f32) -> bool {
-        let mut animating = false;
-        if self.hovered.get_untracked() {
-            // Count up to the reveal delay; the frame it crosses repaints the bubble.
-            if self.elapsed < self.delay {
-                self.elapsed = (self.elapsed + dt).min(self.delay);
-                animating = true;
-            }
-        } else if self.elapsed > 0.0 {
-            self.elapsed = 0.0;
-            animating = true; // repaint to hide
+        // The bubble's reveal is timed (wall-clock), not a continuous animation:
+        // repaint only when it crosses the show/hide boundary, and damage just the
+        // bubble (via `damage_bounds`) instead of forcing a full frame.
+        let now_shown = self.shown();
+        if now_shown != self.last_shown.get() {
+            self.last_shown.set(now_shown);
+            self.base.mark_needs_paint();
         }
+        // Children still animate normally (they mark their own rects).
+        let mut animating = false;
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
         animating
+    }
+
+    fn next_redraw(&self) -> Option<f32> {
+        // While hovering pre-reveal, wake the host exactly when the bubble appears.
+        let mut soonest = self.hover_since.and_then(|since| {
+            let e = since.elapsed().as_secs_f32();
+            (e < self.delay).then_some(self.delay - e)
+        });
+        for child in self.base.children.iter() {
+            soonest = soonest_redraw(soonest, child.next_redraw());
+        }
+        soonest
+    }
+
+    fn damage_bounds(&self) -> Rectangle {
+        // The bubble draws on the overlay layer, offset from our own bounds, so a
+        // show/hide repaint must cover it (plus our bounds, harmlessly).
+        match self.current_bubble_rect() {
+            Some(bubble) => union(self.base.bounds, bubble),
+            None => self.base.bounds,
+        }
     }
 }
 
