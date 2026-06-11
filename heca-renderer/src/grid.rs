@@ -60,6 +60,15 @@ pub struct GridRenderer {
     indices: Vec<u32>,
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
+    /// Logical→physical scale, for converting clip rects to scissor pixels.
+    scale_factor: f32,
+    /// Physical framebuffer size `[w, h]`, used to clamp scissor rects in-bounds.
+    target_size: [u32; 2],
+    /// Active clip changes: `(index offset at the change, clip rect or `None`)`.
+    /// `render` turns these into scissored draw spans. Logical-pixel rects.
+    clip_marks: Vec<(u32, Option<[f32; 4]>)>,
+    /// The clip currently in effect for new `draw` calls.
+    current_clip: Option<[f32; 4]>,
 }
 
 impl GridRenderer {
@@ -181,7 +190,47 @@ impl GridRenderer {
             indices: Vec::new(),
             bind_group,
             uniform_buffer,
+            scale_factor: 1.0,
+            target_size: [1, 1],
+            clip_marks: Vec::new(),
+            current_clip: None,
         }
+    }
+
+    /// Logical→physical scale factor (HiDPI). Used to map clip rects to scissor px.
+    pub fn set_scale_factor(&mut self, scale: f64) {
+        self.scale_factor = scale as f32;
+    }
+
+    /// Physical framebuffer size in pixels; scissor rects are clamped to it.
+    pub fn set_target_size(&mut self, width: u32, height: u32) {
+        self.target_size = [width.max(1), height.max(1)];
+    }
+
+    /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequent
+    /// [`draw`](Self::draw) calls, or `None` to clear it. A no-op if unchanged.
+    pub fn set_clip(&mut self, clip: Option<[f32; 4]>) {
+        if clip != self.current_clip {
+            self.clip_marks.push((self.indices.len() as u32, clip));
+            self.current_clip = clip;
+        }
+    }
+
+    /// Convert a logical clip rect to a physical scissor rect clamped to the
+    /// framebuffer: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
+    fn scissor_px(&self, c: [f32; 4]) -> (u32, u32, u32, u32) {
+        let s = self.scale_factor;
+        let (fw, fh) = (self.target_size[0] as f32, self.target_size[1] as f32);
+        let x0 = (c[0] * s).clamp(0.0, fw);
+        let y0 = (c[1] * s).clamp(0.0, fh);
+        let x1 = ((c[0] + c[2]) * s).clamp(0.0, fw);
+        let y1 = ((c[1] + c[3]) * s).clamp(0.0, fh);
+        (
+            x0 as u32,
+            y0 as u32,
+            (x1 - x0).max(0.0) as u32,
+            (y1 - y0).max(0.0) as u32,
+        )
     }
 
     pub fn set_screen_size(&mut self, queue: &wgpu::Queue, width: f32, height: f32) {
@@ -289,9 +338,32 @@ impl GridRenderer {
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        rpass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
+
+        // Draw in clip spans: the leading span (before the first clip mark) is
+        // unclipped, then each mark opens a new scissored span. With no clipping in
+        // use this is a single full-framebuffer span — one draw, as before.
+        let total = self.indices.len() as u32;
+        let tail: (u32, Option<[f32; 4]>) = (total, None);
+        let mut start = 0u32;
+        let mut clip: Option<[f32; 4]> = None;
+        for &(at, next_clip) in self.clip_marks.iter().chain(std::iter::once(&tail)) {
+            if at > start {
+                match clip {
+                    None => rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]),
+                    Some(c) => {
+                        let (x, y, w, h) = self.scissor_px(c);
+                        rpass.set_scissor_rect(x, y, w, h);
+                    }
+                }
+                rpass.draw_indexed(start..at, 0, 0..1);
+            }
+            start = at;
+            clip = next_clip;
+        }
 
         self.vertices.clear();
         self.indices.clear();
+        self.clip_marks.clear();
+        self.current_clip = None;
     }
 }

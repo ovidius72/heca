@@ -744,7 +744,7 @@ fn offset_tree(c: &mut dyn Component, dy: f64) {
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
 /// a full-window scanline overlay.
-fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
+fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_demo: bool) -> Scene {
     let mut scene = Scene::new();
     {
         let mut cx =
@@ -766,6 +766,66 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
                 }),
             }));
         }
+    }
+    // Clip-primitive demo (task B), toggled by `c`: a centered overlay viewport
+    // whose text content is taller than the box and offset by a fractional amount,
+    // wrapped in `with_clip`. The renderer scissors it, so the top and bottom lines
+    // are sliced cleanly at the panel edges instead of spilling out — the editor's
+    // pixel-scroll foundation. Painted into the overlay layer so it sits on top.
+    if show_clip_demo {
+        let mut cx =
+            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        let (pw, ph) = (240.0, 150.0);
+        let panel = Rectangle::new(
+            Point::new((w as f64 - pw) * 0.5, (h as f64 - ph) * 0.5),
+            Size::new(pw, ph),
+        );
+        cx.with_overlay(|cx| {
+            cx.rect(
+                panel,
+                theme.surface,
+                Some(heca_grid_ui::scene::Border {
+                    color: theme.accent,
+                    width: theme.border_width.max(1.0),
+                }),
+                theme.radius,
+                None,
+            );
+            // Title sits above the clipped region (not clipped).
+            cx.text(
+                Rectangle::new(
+                    Point::new(panel.loc.x + 12.0, panel.loc.y + 8.0),
+                    Size::new(panel.size.w - 24.0, 16.0),
+                ),
+                "CLIP VIEWPORT  (c)",
+                theme.accent,
+                11.0,
+                TextAlign::Start,
+                true,
+            );
+            let inner = Rectangle::new(
+                Point::new(panel.loc.x + 12.0, panel.loc.y + 30.0),
+                Size::new(panel.size.w - 24.0, panel.size.h - 42.0),
+            );
+            cx.with_clip(inner, |cx| {
+                // Start ~half a line above the top edge so line 00 is sliced; the 12
+                // lines overflow the bottom so the last line is sliced too.
+                for i in 0..12 {
+                    let y = inner.loc.y - 9.0 + i as f64 * 18.0;
+                    cx.text(
+                        Rectangle::new(
+                            Point::new(inner.loc.x, y),
+                            Size::new(inner.size.w, 16.0),
+                        ),
+                        &format!("clip line {i:02} — sliced at the edges"),
+                        theme.foreground,
+                        12.0,
+                        TextAlign::Start,
+                        false,
+                    );
+                }
+            });
+        });
     }
     scene.push(DrawCommand::Scanline(ScanlineCmd {
         rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
@@ -794,6 +854,8 @@ struct GpuState {
     rail_states: Vec<Signal<bool>>,
     rail_letters: Vec<char>,
     rail_pick: bool,
+    /// Toggles the centered clip-viewport demo (task B); `c` flips it.
+    clip_demo: bool,
     /// A pane's "needs attention" request; `n` fires the pulse + a host beep.
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
@@ -870,9 +932,14 @@ impl GpuState {
         surface.configure(&device, &config);
 
         let theme = Theme::grid_tron();
-        let grid = GridRenderer::new(&device, format);
+        let mut grid = GridRenderer::new(&device, format);
         let mut text = TextRenderer::new(&device, format);
+        // Both renderers need the scale + physical framebuffer size to map logical
+        // clip rects to scissor pixels (clamped in-bounds).
+        grid.set_scale_factor(scale_factor);
+        grid.set_target_size(config.width, config.height);
         text.set_scale_factor(scale_factor);
+        text.set_target_size(config.width, config.height);
         text.set_font_family(&theme.font_family);
         let ctl = ThemeCtl {
             glow: signal(theme.glow_size),
@@ -910,6 +977,7 @@ impl GpuState {
             rail_states,
             rail_letters,
             rail_pick: false,
+            clip_demo: false,
             attention_req,
             palette_open,
             toasts,
@@ -931,6 +999,9 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
+        // Keep the renderers' scissor-clamp size in sync with the framebuffer.
+        self.grid.set_target_size(self.config.width, self.config.height);
+        self.text.set_target_size(self.config.width, self.config.height);
         self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
@@ -1001,7 +1072,7 @@ impl GpuState {
             self.applied_scroll = self.scroll_y;
         }
 
-        let scene = build_scene(&self.ui, &self.theme, w, h);
+        let scene = build_scene(&self.ui, &self.theme, w, h, self.clip_demo);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -1203,6 +1274,10 @@ impl ApplicationHandler for App {
                         }
                         // While a pick is open, a letter selects its pane cell.
                         GridKey::Char(c) if state.rail_pick => state.rail_pick_select(c),
+                        // `c` toggles the centered clip-viewport demo (task B).
+                        GridKey::Char('c') if state.focus.focused().is_none() => {
+                            state.clip_demo = !state.clip_demo;
+                        }
                         // `n` fires a "needs attention" pulse on a pane. The widget
                         // flashes; the *host* plays the sound (grid-ui is audio-free)
                         // — here, the terminal bell.

@@ -2944,3 +2944,38 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     }
     assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
 }
+
+#[test]
+fn with_clip_wraps_body_draws_in_push_and_pop_clip() {
+    use heca_grid_ui::PaintCx;
+
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    let clip = Rectangle::new(Point::new(0.0, 0.0), Size::new(50.0, 50.0));
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(100.0, 100.0));
+        cx.with_clip(clip, |cx| {
+            cx.rect(
+                Rectangle::new(Point::new(5.0, 5.0), Size::new(10.0, 10.0)),
+                theme.surface,
+                None,
+                0.0,
+                None,
+            );
+        });
+    }
+
+    let cmds: Vec<&DrawCommand> = scene.iter().collect();
+    assert!(
+        matches!(cmds.first(), Some(DrawCommand::PushClip(r)) if *r == clip),
+        "the body is opened by a PushClip carrying the clip rect"
+    );
+    assert!(
+        matches!(cmds.last(), Some(DrawCommand::PopClip)),
+        "the clip is popped after the body"
+    );
+    assert!(
+        cmds.iter().any(|c| matches!(c, DrawCommand::Rect(_))),
+        "the clipped rect sits between the push and pop"
+    );
+}
