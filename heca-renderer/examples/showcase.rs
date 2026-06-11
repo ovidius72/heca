@@ -844,6 +844,7 @@ struct GpuState {
     config: wgpu::SurfaceConfiguration,
     grid: GridRenderer,
     text: TextRenderer,
+    compositor: heca_renderer::composite::Compositor,
     scale_factor: f64,
     theme: Theme,
     ui: Flex,
@@ -940,6 +941,8 @@ impl GpuState {
         surface.configure(&device, &config);
 
         let theme = Theme::grid_tron();
+        let compositor =
+            heca_renderer::composite::Compositor::new(&device, format, config.width, config.height);
         let mut grid = GridRenderer::new(&device, format);
         let mut text = TextRenderer::new(&device, format);
         // Both renderers need the scale + physical framebuffer size to map logical
@@ -977,6 +980,7 @@ impl GpuState {
             config,
             grid,
             text,
+            compositor,
             scale_factor,
             theme,
             ui,
@@ -1007,9 +1011,12 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
-        // Keep the renderers' scissor-clamp size in sync with the framebuffer.
+        // Keep the renderers' scissor-clamp size + the persistent scene texture in
+        // sync with the framebuffer.
         self.grid.set_target_size(self.config.width, self.config.height);
         self.text.set_target_size(self.config.width, self.config.height);
+        self.compositor
+            .resize(&self.device, self.config.width, self.config.height);
         self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
@@ -1098,12 +1105,17 @@ impl GpuState {
                 label: Some("showcase"),
             });
 
+        // Render the UI into the compositor's persistent scene texture (not directly
+        // to the swapchain), then blit it to screen. The persistent texture is what
+        // makes damage-region redraw possible — unchanged pixels survive between
+        // frames, so a frame can re-render only the damaged region.
+        let scene_view = self.compositor.scene_view();
         let bg = self.theme.background.to_f32x4();
         {
             let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("clear"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
+                    view: scene_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -1128,15 +1140,17 @@ impl GpuState {
         // all overlay rects then all overlay text, letting a lower overlay's text bleed
         // over a higher overlay's panel (the overlapping-overlay text-bleed bug).
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
-        self.grid.render(&self.device, &view, &mut encoder);
+        self.grid.render(&self.device, scene_view, &mut encoder);
         self.text
-            .render(&self.device, &self.queue, &view, &mut encoder);
+            .render(&self.device, &self.queue, scene_view, &mut encoder);
         for overlay in scene.overlay_segments() {
             enqueue_scene(&mut self.grid, &mut self.text, &overlay);
-            self.grid.render(&self.device, &view, &mut encoder);
+            self.grid.render(&self.device, scene_view, &mut encoder);
             self.text
-                .render(&self.device, &self.queue, &view, &mut encoder);
+                .render(&self.device, &self.queue, scene_view, &mut encoder);
         }
+        // Blit the composited scene onto the swapchain.
+        self.compositor.blit(&view, &mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
