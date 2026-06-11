@@ -868,8 +868,9 @@ struct GpuState {
     scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
-    /// Whether the last frame was still animating (drives the capped redraw loop).
-    animating: bool,
+    /// Seconds until the next scheduled frame: `Some(0.0)` ≈ continuous animation
+    /// (capped to ~30fps), `Some(t)` a timed wake (e.g. caret blink), `None` idle.
+    next_frame_in: Option<f32>,
     /// Layout is recomputed only when a layout input changed (resize/font/content
     /// event) — not on pure-animation frames.
     layout_dirty: bool,
@@ -986,7 +987,7 @@ impl GpuState {
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
-            animating: false,
+            next_frame_in: None,
             layout_dirty: true,
             content_h: 0.0,
             applied_scroll: 0.0,
@@ -1132,11 +1133,16 @@ impl GpuState {
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
-        // Record whether anything is still animating; the event loop schedules the
-        // next frame at a capped rate (see `RedrawRequested` + `new_events`) rather
-        // than redrawing immediately, so a perpetual animation (spinner) doesn't
-        // peg a core at the full refresh rate.
-        self.animating = animating;
+        // Decide when the next frame is needed: a continuous animation (spinner,
+        // slide) runs at the ~30fps cap; otherwise sleep until the soonest timed
+        // redraw a widget asks for (e.g. a focused caret's next blink) — or, if
+        // nothing is pending, wait for input. This keeps a focused idle Input from
+        // pegging a core at the full frame rate just to blink twice a second.
+        self.next_frame_in = if animating {
+            Some(0.0)
+        } else {
+            self.ui.next_redraw()
+        };
     }
 }
 
@@ -1151,7 +1157,7 @@ impl ApplicationHandler for App {
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
         if let StartCause::ResumeTimeReached { .. } = cause
             && let Some(state) = &self.state
-            && state.animating
+            && state.next_frame_in.is_some()
         {
             state.window.request_redraw();
         }
@@ -1312,13 +1318,16 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 state.render();
-                // Cap animation to ~30fps: schedule the next frame instead of
-                // redrawing immediately. Idle (nothing animating) → wait for events.
-                if state.animating {
-                    let next = state.last_frame + Duration::from_millis(33);
-                    event_loop.set_control_flow(ControlFlow::WaitUntil(next));
-                } else {
-                    event_loop.set_control_flow(ControlFlow::Wait);
+                // Schedule the next frame: a continuous animation runs at the ~30fps
+                // cap, a timed wake (e.g. caret blink) sleeps until its next change,
+                // and a fully idle UI waits for input.
+                match state.next_frame_in {
+                    Some(secs) => {
+                        let delay = Duration::from_secs_f32(secs.max(0.033));
+                        event_loop
+                            .set_control_flow(ControlFlow::WaitUntil(state.last_frame + delay));
+                    }
+                    None => event_loop.set_control_flow(ControlFlow::Wait),
                 }
             }
             _ => {}

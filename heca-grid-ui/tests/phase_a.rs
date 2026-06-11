@@ -2979,3 +2979,29 @@ fn with_clip_wraps_body_draws_in_push_and_pop_clip() {
         "the clipped rect sits between the push and pop"
     );
 }
+
+#[test]
+fn focused_input_requests_a_timed_caret_redraw_not_continuous() {
+    use heca_grid_ui::{Component, FocusManager, Input};
+
+    let mut input = Input::new().value("hi");
+    LayoutEngine::new().compute(&mut input, Size::new(200.0, 60.0));
+
+    // The caret is never a continuous animation: tick reports no animating frame.
+    assert!(!input.tick(0.016), "an input never drives the continuous redraw loop");
+    // Unfocused: nothing to redraw on a timer.
+    assert_eq!(input.next_redraw(), None, "an unfocused input asks for no timed redraw");
+
+    // Focused: it schedules a wake at its next caret toggle (within a half period),
+    // so the host sleeps until then instead of redrawing every frame.
+    let mut focus = FocusManager::new();
+    focus.advance(&mut input, true);
+    let nr = input
+        .next_redraw()
+        .expect("a focused input schedules a timed caret redraw");
+    assert!(
+        nr > 0.0 && nr <= BLINK_PERIOD_HALF + 1e-3,
+        "caret wake is within the half blink period, got {nr}"
+    );
+}
+const BLINK_PERIOD_HALF: f32 = 0.5;
