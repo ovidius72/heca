@@ -120,6 +120,51 @@ struct LabelLayout {
     last_used: u64,
 }
 
+/// Identity of an **emitted** label: the full set of command inputs that determine
+/// its final screen-space geometry — content + box + color + scale. Same key ⇒ byte-
+/// identical quads, so the placed vertices are cached across frames and a static
+/// label is re-appended (a `memcpy`) instead of re-placed glyph-by-glyph. This is the
+/// retained-geometry layer on top of [`LabelLayout`] (which caches only *shaping*):
+/// only labels whose inputs actually changed (moved/recolored/new text) get rebuilt.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+struct EmitKey {
+    text: String,
+    /// Scaled font size in `f32::to_bits()` form (exact, hashable).
+    size_bits: u32,
+    bold: bool,
+    icon: bool,
+    /// Baked vertex color (`f32::to_bits()` per channel).
+    color_bits: [u32; 4],
+    /// Command box `(x, y, w, h)` in `f32::to_bits()` form.
+    box_bits: [u32; 4],
+    /// `TextAlign` discriminant (0/1/2).
+    align: u8,
+    centered: bool,
+    /// Scale factor in `f32::to_bits()` form.
+    scale_bits: u32,
+}
+
+/// A label's fully-placed glyph quads in screen space, cached across frames. The
+/// vertices are absolute (logical px) with color already baked in, so emitting a
+/// cached label is just appending these (no per-glyph placement, no atlas lookups).
+struct Emitted {
+    /// Quad vertices, 4 per glyph; indices are regenerated on append (6 per quad).
+    verts: Vec<TextVertex>,
+    /// Screen-space ink bounds `[x, y, w, h]` (logical px) for damage/clip culling.
+    bbox: [f32; 4],
+    /// Last frame this emission was used, for eviction of stale (dynamic) text.
+    last_used: u64,
+}
+
+/// `TextAlign` → a stable discriminant for hashing into [`EmitKey`].
+fn align_bits(align: TextAlign) -> u8 {
+    match align {
+        TextAlign::Start => 0,
+        TextAlign::Center => 1,
+        TextAlign::End => 2,
+    }
+}
+
 pub struct TextRenderer {
     font_system: FontSystem,
     swash_cache: SwashCache,
@@ -150,13 +195,21 @@ pub struct TextRenderer {
     /// Shaped-label layout cache, keyed by [`LabelKey`]. Lets static text skip
     /// per-frame shaping; glyph bitmaps are cached separately in the atlas.
     label_cache: std::collections::HashMap<LabelKey, LabelLayout>,
-    /// Monotonic build counter driving cache eviction.
+    /// Retained emitted-geometry cache, keyed by [`EmitKey`]. Lets an *unchanged*
+    /// label skip per-frame glyph placement — its quads are re-appended verbatim.
+    emit_cache: std::collections::HashMap<EmitKey, Emitted>,
+    /// Monotonic frame counter (advanced by [`begin_frame`](Self::begin_frame), so it
+    /// counts visual frames, not render passes) driving cache eviction.
     frame: u64,
 }
 
-/// Drop labels unused for this many builds (~a few seconds) so dynamic text
-/// (counters, clocks) doesn't leak GPU textures.
+/// Drop shaped layouts unused for this many frames (~a few seconds) so dynamic text
+/// (counters, clocks) doesn't leak cache entries. Glyph bitmaps stay in the atlas.
 const LABEL_EVICT_AFTER: u64 = 240;
+/// Drop emitted geometry unused for this many frames. Position-keyed, so an animating
+/// (moving) label churns entries every frame — evict promptly to keep the cache to
+/// roughly the set of on-screen labels.
+const EMIT_EVICT_AFTER: u64 = 4;
 
 impl TextRenderer {
     pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
@@ -348,6 +401,7 @@ impl TextRenderer {
             atlas,
             atlas_bind_group,
             label_cache: std::collections::HashMap::new(),
+            emit_cache: std::collections::HashMap::new(),
             frame: 0,
         }
     }
@@ -375,11 +429,14 @@ impl TextRenderer {
         self.damage = damage;
     }
 
-    /// Reset the per-frame buffer write offsets. Call once at the start of each
-    /// frame, before any `render` passes.
+    /// Reset the per-frame buffer write offsets and advance the frame counter. Call
+    /// once at the start of each frame, before any `render` passes — the counter
+    /// drives cache eviction, so it must count visual frames, not the (multiple)
+    /// render passes within a frame.
     pub fn begin_frame(&mut self) {
         self.frame_vtx = 0;
         self.frame_idx = 0;
+        self.frame += 1;
     }
 
     /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequently
@@ -389,7 +446,13 @@ impl TextRenderer {
     }
 
     pub fn set_font_family(&mut self, family: &str) {
+        if self.font_family == family {
+            return;
+        }
         self.font_family = family.to_string();
+        // Caches key on text/size/weight, not family — a family swap invalidates both.
+        self.label_cache.clear();
+        self.emit_cache.clear();
     }
 
     /// Queue text with its top-left at `(x, y)` (logical px) — the simple
@@ -454,135 +517,58 @@ impl TextRenderer {
         if commands.is_empty() {
             return (Vec::new(), Vec::new(), Vec::new());
         }
-        self.frame += 1;
 
         let scale = self.scale_factor as f32;
         let mut vertices: Vec<TextVertex> = Vec::new();
         let mut indices: Vec<u32> = Vec::new();
         let mut draws: Vec<DrawRange> = Vec::new();
+        let frame = self.frame;
 
         for cmd in &commands {
             let scaled_size = cmd.font_size * scale;
-            let key = LabelKey {
+            let emit_key = EmitKey {
                 text: cmd.text.clone(),
                 size_bits: scaled_size.to_bits(),
                 bold: cmd.bold,
                 icon: cmd.icon,
+                color_bits: cmd.color.map(f32::to_bits),
+                box_bits: [cmd.x, cmd.y, cmd.w, cmd.h].map(f32::to_bits),
+                align: align_bits(cmd.align),
+                centered: cmd.centered,
+                scale_bits: scale.to_bits(),
             };
 
-            // Cache miss → shape, then place each glyph (rasterizing it into the atlas
-            // on its first sighting). A hit re-emits the cached quads below.
-            if !self.label_cache.contains_key(&key) {
-                let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
-                let mut buffer = Buffer::new(&mut self.font_system, metrics);
-                buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-                let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
-                let family = if cmd.icon { &self.icon_family } else { &self.font_family };
-                let attrs = Attrs::new().family(Family::Name(family)).weight(weight);
-                buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
-                buffer.shape_until_scroll(&mut self.font_system, false);
+            // Retained-geometry miss → place every glyph (shaping itself is cached in
+            // `label_cache`, glyph bitmaps in the atlas) and stash the final quads. A
+            // hit skips straight to the append below — no per-glyph work.
+            if !self.emit_cache.contains_key(&emit_key) {
+                let emitted = self.build_emission(queue, cmd, scaled_size, scale);
+                self.emit_cache.insert(emit_key.clone(), emitted);
+            }
 
-                // Stable, glyph-independent line metrics for vertical centering so the
-                // baseline doesn't jump with ascenders/descenders.
-                let mut min_x = i32::MAX;
-                let mut min_y = i32::MAX;
-                let mut max_x = i32::MIN;
-                let mut line_top = 0.0f32;
-                let mut line_height = 0.0f32;
-                // (glyph left, glyph top in physical px, atlas entry).
-                let mut placed: Vec<(i32, i32, crate::atlas::AtlasGlyph)> = Vec::new();
-                for run in buffer.layout_runs() {
-                    line_top = run.line_top;
-                    line_height = run.line_height;
-                    for glyph in run.glyphs {
-                        let physical = glyph.physical((0.0, run.line_y), 1.0);
-                        let Some(ag) = self.atlas.glyph(
-                            queue,
-                            &mut self.font_system,
-                            &mut self.swash_cache,
-                            physical.cache_key,
-                        ) else {
-                            continue; // whitespace / no bitmap
-                        };
-                        let left = physical.x + ag.left;
-                        let top = physical.y - ag.top;
-                        min_x = min_x.min(left);
-                        min_y = min_y.min(top);
-                        max_x = max_x.max(left + ag.width as i32);
-                        placed.push((left, top, ag));
-                    }
+            let emitted = self.emit_cache.get_mut(&emit_key).expect("just inserted");
+            emitted.last_used = frame;
+            if emitted.verts.is_empty() {
+                continue; // nothing to draw (whitespace/empty)
+            }
+
+            // Cull: a label entirely outside this frame's damage∩clip region needs no
+            // geometry at all (the per-draw scissor in `render` would clip it away
+            // anyway, but emitting + uploading it is wasted work — the whole point on a
+            // small-damage frame like a caret blink). Skip only when *provably* outside.
+            if let Some(c) = combine_clip(self.damage, cmd.clip) {
+                let i = intersect(c, emitted.bbox);
+                if i[2] <= 0.0 || i[3] <= 0.0 {
+                    continue;
                 }
-
-                let layout = if placed.is_empty() {
-                    // Empty/whitespace — cache an empty layout so we don't re-shape it.
-                    LabelLayout {
-                        glyphs: Vec::new(),
-                        content_w: 0,
-                        line_top,
-                        line_height,
-                        min_y: 0,
-                        last_used: self.frame,
-                    }
-                } else {
-                    let glyphs = placed
-                        .into_iter()
-                        .map(|(l, t, ag)| PlacedGlyph {
-                            rel_x: (l - min_x) as f32,
-                            rel_y: (t - min_y) as f32,
-                            w: ag.width as f32,
-                            h: ag.height as f32,
-                            uv: ag.uv,
-                        })
-                        .collect();
-                    LabelLayout {
-                        glyphs,
-                        content_w: (max_x - min_x) as u32,
-                        line_top,
-                        line_height,
-                        min_y,
-                        last_used: self.frame,
-                    }
-                };
-                self.label_cache.insert(key.clone(), layout);
             }
-
-            let layout = self.label_cache.get_mut(&key).expect("just inserted");
-            layout.last_used = self.frame;
-            if layout.glyphs.is_empty() {
-                continue; // nothing to draw
-            }
-
-            // Centering: place the label ink box's top-left — horizontally per `align`
-            // on the ink width, vertically on the stable line box — then offset each
-            // glyph by its (cached) position within the ink box.
-            let screen_w = layout.content_w as f32 / scale;
-            let (screen_x, screen_y) = if cmd.centered {
-                let x = cmd.x
-                    + match cmd.align {
-                        TextAlign::Start => 0.0,
-                        TextAlign::Center => (cmd.w - screen_w) * 0.5,
-                        TextAlign::End => cmd.w - screen_w,
-                    };
-                let line_box_top = cmd.y + (cmd.h - layout.line_height / scale) * 0.5;
-                let ink_offset = (layout.min_y as f32 - layout.line_top) / scale;
-                (x, line_box_top + ink_offset)
-            } else {
-                (cmd.x, cmd.y)
-            };
 
             let first_index = indices.len() as u32;
-            for g in &layout.glyphs {
-                let gx = screen_x + g.rel_x / scale;
-                let gy = screen_y + g.rel_y / scale;
-                let gw = g.w / scale;
-                let gh = g.h / scale;
-                let [u0, v0, u1, v1] = g.uv;
-                let base = vertices.len() as u32;
-                vertices.push(TextVertex { position: [gx, gy], texcoord: [u0, v0], color: cmd.color });
-                vertices.push(TextVertex { position: [gx + gw, gy], texcoord: [u1, v0], color: cmd.color });
-                vertices.push(TextVertex { position: [gx + gw, gy + gh], texcoord: [u1, v1], color: cmd.color });
-                vertices.push(TextVertex { position: [gx, gy + gh], texcoord: [u0, v1], color: cmd.color });
+            let mut base = vertices.len() as u32;
+            for quad in emitted.verts.chunks_exact(4) {
+                vertices.extend_from_slice(quad);
                 indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+                base += 4;
             }
             draws.push(DrawRange {
                 clip: cmd.clip,
@@ -591,13 +577,161 @@ impl TextRenderer {
             });
         }
 
-        // Evict label layouts unused for a while (dynamic text) so the cache doesn't
-        // grow unbounded. Atlas glyphs are kept (a bounded set).
-        let frame = self.frame;
+        // Evict cache entries unused for a while so dynamic/animating text doesn't grow
+        // either cache unbounded. Atlas glyphs are kept (a bounded set).
+        self.emit_cache
+            .retain(|_, e| frame.saturating_sub(e.last_used) <= EMIT_EVICT_AFTER);
         self.label_cache
             .retain(|_, l| frame.saturating_sub(l.last_used) <= LABEL_EVICT_AFTER);
 
         (vertices, indices, draws)
+    }
+
+    /// Place one label's glyphs into final screen-space quads (logical px, color
+    /// baked). Shaping is reused from `label_cache` on a hit; a miss shapes the text
+    /// and rasterizes any not-yet-seen glyphs into the atlas. Returns the [`Emitted`]
+    /// quads + their ink bbox for the retained-geometry cache.
+    fn build_emission(
+        &mut self,
+        queue: &wgpu::Queue,
+        cmd: &TextCommand,
+        scaled_size: f32,
+        scale: f32,
+    ) -> Emitted {
+        let key = LabelKey {
+            text: cmd.text.clone(),
+            size_bits: scaled_size.to_bits(),
+            bold: cmd.bold,
+            icon: cmd.icon,
+        };
+
+        // Shape on a `label_cache` miss; rasterize each glyph into the atlas on its
+        // first sighting.
+        if !self.label_cache.contains_key(&key) {
+            let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
+            let mut buffer = Buffer::new(&mut self.font_system, metrics);
+            buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
+            let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+            let family = if cmd.icon { &self.icon_family } else { &self.font_family };
+            let attrs = Attrs::new().family(Family::Name(family)).weight(weight);
+            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
+            buffer.shape_until_scroll(&mut self.font_system, false);
+
+            // Stable, glyph-independent line metrics for vertical centering so the
+            // baseline doesn't jump with ascenders/descenders.
+            let mut min_x = i32::MAX;
+            let mut min_y = i32::MAX;
+            let mut max_x = i32::MIN;
+            let mut line_top = 0.0f32;
+            let mut line_height = 0.0f32;
+            // (glyph left, glyph top in physical px, atlas entry).
+            let mut placed: Vec<(i32, i32, crate::atlas::AtlasGlyph)> = Vec::new();
+            for run in buffer.layout_runs() {
+                line_top = run.line_top;
+                line_height = run.line_height;
+                for glyph in run.glyphs {
+                    let physical = glyph.physical((0.0, run.line_y), 1.0);
+                    let Some(ag) = self.atlas.glyph(
+                        queue,
+                        &mut self.font_system,
+                        &mut self.swash_cache,
+                        physical.cache_key,
+                    ) else {
+                        continue; // whitespace / no bitmap
+                    };
+                    let left = physical.x + ag.left;
+                    let top = physical.y - ag.top;
+                    min_x = min_x.min(left);
+                    min_y = min_y.min(top);
+                    max_x = max_x.max(left + ag.width as i32);
+                    placed.push((left, top, ag));
+                }
+            }
+
+            let layout = if placed.is_empty() {
+                // Empty/whitespace — cache an empty layout so we don't re-shape it.
+                LabelLayout {
+                    glyphs: Vec::new(),
+                    content_w: 0,
+                    line_top,
+                    line_height,
+                    min_y: 0,
+                    last_used: self.frame,
+                }
+            } else {
+                let glyphs = placed
+                    .into_iter()
+                    .map(|(l, t, ag)| PlacedGlyph {
+                        rel_x: (l - min_x) as f32,
+                        rel_y: (t - min_y) as f32,
+                        w: ag.width as f32,
+                        h: ag.height as f32,
+                        uv: ag.uv,
+                    })
+                    .collect();
+                LabelLayout {
+                    glyphs,
+                    content_w: (max_x - min_x) as u32,
+                    line_top,
+                    line_height,
+                    min_y,
+                    last_used: self.frame,
+                }
+            };
+            self.label_cache.insert(key.clone(), layout);
+        }
+
+        let layout = self.label_cache.get_mut(&key).expect("just inserted");
+        layout.last_used = self.frame;
+        if layout.glyphs.is_empty() {
+            return Emitted {
+                verts: Vec::new(),
+                bbox: [0.0; 4],
+                last_used: self.frame,
+            };
+        }
+
+        // Centering: place the label ink box's top-left — horizontally per `align` on
+        // the ink width, vertically on the stable line box — then offset each glyph by
+        // its (cached) position within the ink box.
+        let screen_w = layout.content_w as f32 / scale;
+        let (screen_x, screen_y) = if cmd.centered {
+            let x = cmd.x
+                + match cmd.align {
+                    TextAlign::Start => 0.0,
+                    TextAlign::Center => (cmd.w - screen_w) * 0.5,
+                    TextAlign::End => cmd.w - screen_w,
+                };
+            let line_box_top = cmd.y + (cmd.h - layout.line_height / scale) * 0.5;
+            let ink_offset = (layout.min_y as f32 - layout.line_top) / scale;
+            (x, line_box_top + ink_offset)
+        } else {
+            (cmd.x, cmd.y)
+        };
+
+        let mut verts: Vec<TextVertex> = Vec::with_capacity(layout.glyphs.len() * 4);
+        let (mut bx0, mut by0) = (f32::MAX, f32::MAX);
+        let (mut bx1, mut by1) = (f32::MIN, f32::MIN);
+        for g in &layout.glyphs {
+            let gx = screen_x + g.rel_x / scale;
+            let gy = screen_y + g.rel_y / scale;
+            let gw = g.w / scale;
+            let gh = g.h / scale;
+            let [u0, v0, u1, v1] = g.uv;
+            verts.push(TextVertex { position: [gx, gy], texcoord: [u0, v0], color: cmd.color });
+            verts.push(TextVertex { position: [gx + gw, gy], texcoord: [u1, v0], color: cmd.color });
+            verts.push(TextVertex { position: [gx + gw, gy + gh], texcoord: [u1, v1], color: cmd.color });
+            verts.push(TextVertex { position: [gx, gy + gh], texcoord: [u0, v1], color: cmd.color });
+            bx0 = bx0.min(gx);
+            by0 = by0.min(gy);
+            bx1 = bx1.max(gx + gw);
+            by1 = by1.max(gy + gh);
+        }
+        Emitted {
+            verts,
+            bbox: [bx0, by0, bx1 - bx0, by1 - by0],
+            last_used: self.frame,
+        }
     }
 
     pub fn render(
@@ -674,5 +808,83 @@ impl TextRenderer {
         self.frame_vtx += vertices.len() as u32;
         self.frame_idx += indices.len() as u32;
         self.commands.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intersect_overlapping_and_disjoint() {
+        // Overlap → the shared box.
+        assert_eq!(
+            intersect([0.0, 0.0, 100.0, 100.0], [40.0, 30.0, 100.0, 100.0]),
+            [40.0, 30.0, 60.0, 70.0],
+        );
+        // Disjoint → zero area (clamped, never negative).
+        let r = intersect([0.0, 0.0, 10.0, 10.0], [50.0, 50.0, 10.0, 10.0]);
+        assert_eq!((r[2], r[3]), (0.0, 0.0), "disjoint rects cull to nothing");
+    }
+
+    #[test]
+    fn combine_clip_pairs() {
+        let a = [0.0, 0.0, 100.0, 100.0];
+        let b = [40.0, 30.0, 100.0, 100.0];
+        assert_eq!(combine_clip(None, None), None, "unbounded ∩ unbounded = unbounded");
+        assert_eq!(combine_clip(Some(a), None), Some(a), "one side unbounded passes through");
+        assert_eq!(combine_clip(None, Some(b)), Some(b), "one side unbounded passes through");
+        assert_eq!(combine_clip(Some(a), Some(b)), Some(intersect(a, b)), "both bounded ⇒ intersect");
+    }
+
+    #[test]
+    fn cull_skips_only_provably_outside_labels() {
+        // A label whose ink bbox misses the redraw region is culled; one that touches
+        // it (even at the edge) is kept. Mirrors the check in `build_labels`.
+        let region = [200.0, 200.0, 100.0, 100.0];
+        let outside = [0.0, 0.0, 50.0, 50.0];
+        let touching = [250.0, 250.0, 100.0, 100.0];
+        let i_out = intersect(region, outside);
+        let i_touch = intersect(region, touching);
+        assert!(i_out[2] <= 0.0 || i_out[3] <= 0.0, "outside label is culled");
+        assert!(i_touch[2] > 0.0 && i_touch[3] > 0.0, "overlapping label is kept");
+    }
+
+    #[test]
+    fn emit_key_distinguishes_color_and_position() {
+        let base = EmitKey {
+            text: "hi".into(),
+            size_bits: 14.0f32.to_bits(),
+            bold: false,
+            icon: false,
+            color_bits: [1.0, 1.0, 1.0, 1.0].map(f32::to_bits),
+            box_bits: [10.0, 20.0, 0.0, 0.0].map(f32::to_bits),
+            align: align_bits(TextAlign::Start),
+            centered: false,
+            scale_bits: 2.0f32.to_bits(),
+        };
+        assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");
+
+        // Color is baked into the vertices, so a recolor must miss (rebuild).
+        let mut recolored = base.clone();
+        recolored.color_bits = [1.0, 0.0, 0.0, 1.0].map(f32::to_bits);
+        assert_ne!(base, recolored, "a color change is a different emission");
+
+        // Position is baked into the vertices, so a move must miss (rebuild).
+        let mut moved = base.clone();
+        moved.box_bits = [11.0, 20.0, 0.0, 0.0].map(f32::to_bits);
+        assert_ne!(base, moved, "a move is a different emission");
+    }
+
+    #[test]
+    fn align_bits_are_distinct() {
+        let mut v = vec![
+            align_bits(TextAlign::Start),
+            align_bits(TextAlign::Center),
+            align_bits(TextAlign::End),
+        ];
+        v.sort_unstable();
+        v.dedup();
+        assert_eq!(v.len(), 3, "each alignment hashes to a distinct discriminant");
     }
 }
