@@ -25,8 +25,16 @@ use heca_core::layout::Rectangle;
 pub struct Scene {
     commands: Vec<DrawCommand>,
     overlay: Vec<DrawCommand>,
+    /// `(start, end)` ranges into `overlay`, one per [`begin_overlay`](Scene::begin_overlay)/
+    /// [`end_overlay`](Scene::end_overlay) pair that produced commands. Each is a
+    /// distinct overlay (a dropdown, a toast stack, …); [`overlay_segments`](Scene::overlay_segments)
+    /// hands them back so a host can flush each as its own rects→text pass and have
+    /// later overlays occlude earlier ones (no overlapping-overlay text bleed).
+    overlay_segs: Vec<(usize, usize)>,
     /// When set, [`push`](Scene::push) targets the overlay layer.
     to_overlay: bool,
+    /// Start index in `overlay` of the currently open segment.
+    seg_start: usize,
 }
 
 impl Scene {
@@ -45,13 +53,20 @@ impl Scene {
         }
     }
 
-    /// Route subsequent pushes to the overlay layer (drawn on top).
+    /// Route subsequent pushes to the overlay layer (drawn on top), starting a new
+    /// overlay segment. Each segment becomes a self-contained occluding unit (see
+    /// [`overlay_segments`](Scene::overlay_segments)).
     pub fn begin_overlay(&mut self) {
         self.to_overlay = true;
+        self.seg_start = self.overlay.len();
     }
 
-    /// Stop routing to the overlay layer.
+    /// Stop routing to the overlay layer, closing the current segment (recorded
+    /// only if it produced any commands).
     pub fn end_overlay(&mut self) {
+        if self.to_overlay && self.overlay.len() > self.seg_start {
+            self.overlay_segs.push((self.seg_start, self.overlay.len()));
+        }
         self.to_overlay = false;
     }
 
@@ -59,7 +74,9 @@ impl Scene {
     pub fn clear(&mut self) {
         self.commands.clear();
         self.overlay.clear();
+        self.overlay_segs.clear();
         self.to_overlay = false;
+        self.seg_start = 0;
     }
 
     /// Total number of queued commands (base + overlay).
@@ -88,18 +105,32 @@ impl Scene {
     pub fn base_layer(&self) -> Scene {
         Scene {
             commands: self.commands.clone(),
-            overlay: Vec::new(),
-            to_overlay: false,
+            ..Default::default()
         }
     }
 
-    /// A scene containing only the **overlay** layer's commands (drawn on top).
+    /// A scene containing only the **overlay** layer's commands (drawn on top), all
+    /// overlays flattened into one pass. Prefer [`overlay_segments`](Scene::overlay_segments)
+    /// when overlays can overlap — a single flattened pass draws all overlay rects
+    /// then all overlay text, so a lower overlay's text bleeds over a higher one's panel.
     pub fn overlay_layer(&self) -> Scene {
         Scene {
             commands: self.overlay.clone(),
-            overlay: Vec::new(),
-            to_overlay: false,
+            ..Default::default()
         }
+    }
+
+    /// One sub-scene per overlay, in paint (z) order, each holding that overlay's
+    /// commands in the base slot so a host renders it as a single rects→text pass.
+    /// Flushing them in order makes each overlay occlude the ones below it — a later
+    /// overlay's panel paints over an earlier overlay's text — which fixes the
+    /// overlapping-overlay text bleed a single flattened [`overlay_layer`](Scene::overlay_layer)
+    /// pass produces.
+    pub fn overlay_segments(&self) -> impl Iterator<Item = Scene> + '_ {
+        self.overlay_segs.iter().map(|&(start, end)| Scene {
+            commands: self.overlay[start..end].to_vec(),
+            ..Default::default()
+        })
     }
 }
 
@@ -222,4 +253,71 @@ pub struct ScanlineCmd {
     pub spacing: f32,
     /// Per-line opacity multiplier (0.0..=1.0).
     pub opacity: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heca_core::layout::{Point, Size};
+
+    fn clip(w: f64) -> DrawCommand {
+        DrawCommand::PushClip(Rectangle::new(Point::default(), Size::new(w, w)))
+    }
+
+    #[test]
+    fn overlay_segments_yields_one_per_nonempty_begin_end_pair() {
+        let mut s = Scene::new();
+        s.begin_overlay(); // overlay A: two commands
+        s.push(clip(1.0));
+        s.push(clip(1.5));
+        s.end_overlay();
+        s.begin_overlay(); // overlay B: one command
+        s.push(clip(2.0));
+        s.end_overlay();
+
+        let segs: Vec<Scene> = s.overlay_segments().collect();
+        assert_eq!(
+            segs.len(),
+            2,
+            "two non-empty overlays should yield two segments, got {}",
+            segs.len()
+        );
+        // Each segment holds exactly its own commands, in paint (z) order: A then B.
+        assert_eq!(
+            segs[0].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(1.0), clip(1.5)],
+            "first segment should hold overlay A's commands"
+        );
+        assert_eq!(
+            segs[1].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(2.0)],
+            "second segment should hold overlay B's command"
+        );
+    }
+
+    #[test]
+    fn empty_begin_end_pair_records_no_segment() {
+        let mut s = Scene::new();
+        s.begin_overlay();
+        s.end_overlay();
+        assert_eq!(
+            s.overlay_segments().count(),
+            0,
+            "a begin/end pair that pushed nothing should record no segment"
+        );
+    }
+
+    #[test]
+    fn base_layer_excludes_overlay_commands() {
+        let mut s = Scene::new();
+        s.push(clip(0.0)); // base
+        s.begin_overlay();
+        s.push(clip(1.0)); // overlay
+        s.end_overlay();
+        assert_eq!(
+            s.base_layer().iter().cloned().collect::<Vec<_>>(),
+            vec![clip(0.0)],
+            "base layer should hold only base commands, not overlay ones"
+        );
+    }
 }

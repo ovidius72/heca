@@ -1042,15 +1042,18 @@ impl GpuState {
             });
         }
 
-        // Two layers, each a rects-then-text pass: base first, then the overlay
-        // (dropdowns) on top — so overlay content occludes base *text* too, not
-        // just base rects (the renderer draws all rects then all text per pass).
+        // Each pass is a rects-then-text flush (the renderer draws all queued rects,
+        // then all queued text). Base first, then each overlay as its *own* pass — so
+        // overlay content occludes base text (not just base rects), AND a later overlay
+        // occludes an earlier one. Flushing every overlay in a single pass would draw
+        // all overlay rects then all overlay text, letting a lower overlay's text bleed
+        // over a higher overlay's panel (the overlapping-overlay text-bleed bug).
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
         self.grid.render(&self.device, &view, &mut encoder);
         self.text
             .render(&self.device, &self.queue, &view, &mut encoder);
-        if scene.has_overlay() {
-            enqueue_scene(&mut self.grid, &mut self.text, &scene.overlay_layer());
+        for overlay in scene.overlay_segments() {
+            enqueue_scene(&mut self.grid, &mut self.text, &overlay);
             self.grid.render(&self.device, &view, &mut encoder);
             self.text
                 .render(&self.device, &self.queue, &view, &mut encoder);
