@@ -11,6 +11,17 @@ use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 
+fn pane_content_rect(px: f32, py: f32, pw: f32, ph: f32, border_width: f32) -> Option<(f32, f32, f32, f32)> {
+    let inset = border_width.max(1.0);
+    let content_w = (pw - inset * 2.0).max(0.0);
+    let content_h = (ph - inset * 2.0).max(0.0);
+    if content_w <= 0.0 || content_h <= 0.0 {
+        return None;
+    }
+
+    Some((px + inset, py + inset, content_w, content_h))
+}
+
 /// Render a backend's content into a pane rectangle.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_backend_data(
@@ -35,13 +46,19 @@ pub(crate) fn render_backend_data(
 
     primitive_renderer.draw_rect(px, py, pw, ph, [0.0, 0.0, 0.0, 1.0]);
 
-    for (row, line) in lines.iter().enumerate() {
+    let max_rows = ((ph / cell_h).floor() as usize).min(lines.len());
+    let max_cols = (pw / cell_w).floor() as usize;
+    if max_rows == 0 || max_cols == 0 {
+        return;
+    }
+
+    for (row, line) in lines.iter().take(max_rows).enumerate() {
         let y = py + row as f32 * cell_h;
         let mut current_text = String::new();
         let mut current_fg = [1.0f32; 4];
         let mut start_col = 0usize;
 
-        for (col, cell) in line.cells.iter().enumerate() {
+        for (col, cell) in line.cells.iter().take(max_cols).enumerate() {
             if cell.c == ' ' || cell.c == '\0' {
                 if !current_text.is_empty() {
                     let x = px + start_col as f32 * cell_w;
@@ -71,9 +88,11 @@ pub(crate) fn render_backend_data(
         }
     }
 
-    let cursor_x = px + *cursor_col as f32 * cell_w;
-    let cursor_y = py + *cursor_row as f32 * cell_h;
-    primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+    if *cursor_row < max_rows && *cursor_col < max_cols {
+        let cursor_x = px + *cursor_col as f32 * cell_w;
+        let cursor_y = py + *cursor_row as f32 * cell_h;
+        primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, [1.0, 1.0, 1.0, 0.7]);
+    }
 }
 
 /// Human-readable status mode label and suffix for the status bar.
@@ -259,43 +278,28 @@ pub(crate) fn render_frame(state: &mut AppState) {
         } else {
             [theme_border[0], theme_border[1], theme_border[2], 0.5]
         };
+        let content_rect = pane_content_rect(px, py, pw, ph, border_width);
 
         if let Some(backend) = state.backends.get(*pane_id) {
-            let data = backend.render_data();
-            render_backend_data(
-                &data,
-                px,
-                py,
-                pw,
-                ph,
-                &mut state.text_renderer,
-                &mut state.primitive_renderer,
-                theme,
-            );
+            if let Some((cx, cy, cw, ch)) = content_rect {
+                let data = backend.render_data();
+                render_backend_data(
+                    &data,
+                    cx,
+                    cy,
+                    cw,
+                    ch,
+                    &mut state.text_renderer,
+                    &mut state.primitive_renderer,
+                    theme,
+                );
+            }
         } else {
+            let (cx, cy, cw, ch) = content_rect.unwrap_or((px, py, pw, ph));
             state
                 .primitive_renderer
-                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
+                .draw_rect(cx, cy, cw, ch, [0.118, 0.118, 0.180, 1.0]);
         }
-
-        let pane_name = state
-            .session
-            .active_workspace()
-            .and_then(|ws| ws.find_pane(*pane_id))
-            .map(|p| p.title.as_str())
-            .unwrap_or("?");
-        let name_size = (pw.min(ph) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
-        let name_color = if is_active {
-            [1.0, 1.0, 1.0, 0.9]
-        } else {
-            [1.0, 1.0, 1.0, 0.4]
-        };
-        let name_w = name_size * pane_name.len() as f32 * 0.6;
-        let name_x = px + (pw - name_w) / 2.0;
-        let name_y = py + (ph - name_size) / 2.0;
-        state
-            .text_renderer
-            .queue_text(pane_name, name_x, name_y, name_size, name_color);
 
         state
             .primitive_renderer
@@ -460,47 +464,34 @@ pub(crate) fn render_frame(state: &mut AppState) {
             } else {
                 theme.float_accent.to_f32x4()
             };
+            let content_rect = pane_content_rect(fx, fy, fw, fh, border_width * 2.0);
             if let Some(backend) = state.backends.get(float.pane.id) {
-                let data = backend.render_data();
-                render_backend_data(
-                    &data,
-                    fx,
-                    fy,
-                    fw,
-                    fh,
-                    &mut state.text_renderer,
-                    &mut state.primitive_renderer,
-                    theme,
-                );
+                if let Some((cx, cy, cw, ch)) = content_rect {
+                    let data = backend.render_data();
+                    render_backend_data(
+                        &data,
+                        cx,
+                        cy,
+                        cw,
+                        ch,
+                        &mut state.text_renderer,
+                        &mut state.primitive_renderer,
+                        theme,
+                    );
+                }
             } else {
+                let (cx, cy, cw, ch) = content_rect.unwrap_or((fx, fy, fw, fh));
                 state.primitive_renderer.draw_rect(
-                    fx,
-                    fy,
-                    fw,
-                    fh,
+                    cx,
+                    cy,
+                    cw,
+                    ch,
                     theme.float_background.to_f32x4(),
                 );
             }
             state
                 .primitive_renderer
                 .draw_border(fx, fy, fw, fh, fborder, border_width * 2.0);
-            let float_name = &float.pane.title;
-            let f_name_size = (fw.min(fh) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
-            let f_name_color = if is_focused {
-                [1.0, 1.0, 1.0, 0.9]
-            } else {
-                [1.0, 1.0, 1.0, 0.4]
-            };
-            let f_name_w = f_name_size * float_name.len() as f32 * 0.6;
-            let f_name_x = fx + (fw - f_name_w) / 2.0;
-            let f_name_y = fy + (fh - f_name_size) / 2.0;
-            state.text_renderer.queue_text(
-                float_name,
-                f_name_x,
-                f_name_y,
-                f_name_size,
-                f_name_color,
-            );
         }
     }
 

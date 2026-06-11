@@ -1,6 +1,9 @@
 //! Terminal backend using vte for VT parsing and libc PTY on Unix.
 
-use super::{BackendRenderData, PaneBackend, PaneType, TerminalCell, TerminalLine};
+use super::{
+    BackendRenderData, PaneBackend, PaneType, TerminalCell, TerminalCursor, TerminalDamage,
+    TerminalLine, TerminalSnapshot,
+};
 use std::io::{Read, Write};
 use std::sync::mpsc::{self, Receiver};
 
@@ -711,7 +714,7 @@ impl PaneBackend for TerminalBackend {
         had_data
     }
 
-    fn render_data(&self) -> BackendRenderData {
+    fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         let mut lines = Vec::with_capacity(self.rows);
         for row in 0..self.rows {
             let mut cells = Vec::with_capacity(self.cols);
@@ -728,12 +731,31 @@ impl PaneBackend for TerminalBackend {
         }
 
         let (cell_w, cell_h) = self.cell_size();
-        BackendRenderData::Terminal {
-            lines,
-            cursor_col: self.grid.cursor_col,
-            cursor_row: self.grid.cursor_row,
+        Some(TerminalSnapshot {
+            cols: self.cols,
+            rows: self.rows,
             cell_w,
             cell_h,
+            cursor: TerminalCursor {
+                col: self.grid.cursor_col,
+                row: self.grid.cursor_row,
+                visible: true,
+            },
+            damage: TerminalDamage::Full,
+            lines,
+        })
+    }
+
+    fn render_data(&self) -> BackendRenderData {
+        let snapshot = self
+            .terminal_snapshot()
+            .expect("terminal backend should always produce a terminal snapshot");
+        BackendRenderData::Terminal {
+            lines: snapshot.lines,
+            cursor_col: snapshot.cursor.col,
+            cursor_row: snapshot.cursor.row,
+            cell_w: snapshot.cell_w,
+            cell_h: snapshot.cell_h,
         }
     }
 

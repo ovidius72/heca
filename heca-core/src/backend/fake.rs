@@ -1,6 +1,9 @@
 //! Fake backend for testing layout performance without PTY overhead.
 
-use super::{BackendRenderData, PaneBackend, PaneType, TerminalCell, TerminalLine};
+use super::{
+    BackendRenderData, PaneBackend, PaneType, TerminalCell, TerminalCursor, TerminalDamage,
+    TerminalLine, TerminalSnapshot,
+};
 
 /// A fake backend that renders a static test pattern without any I/O.
 pub struct FakeBackend {
@@ -41,9 +44,55 @@ impl PaneBackend for FakeBackend {
         false // never has "new" data since it's static
     }
 
+    fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
+        let blank_row = || {
+            let mut cells = Vec::with_capacity(self.cols);
+            for _ in 0..self.cols {
+                cells.push(TerminalCell {
+                    c: ' ',
+                    fg: [0.9, 0.9, 0.9, 1.0],
+                    bg: [0.05, 0.05, 0.08, 1.0],
+                    bold: false,
+                });
+            }
+            TerminalLine { cells }
+        };
+
+        let mut lines = Vec::with_capacity(self.rows.max(2));
+        lines.push(blank_row());
+
+        let mut label_row = blank_row();
+        if self.cols >= 8 {
+            let label = "FakePane";
+            for (i, c) in label.chars().enumerate() {
+                label_row.cells[i].c = c;
+            }
+        }
+        lines.push(label_row);
+
+        while lines.len() < self.rows {
+            lines.push(blank_row());
+        }
+
+        let (cell_w, cell_h) = self.cell_size();
+        Some(TerminalSnapshot {
+            cols: self.cols,
+            rows: self.rows,
+            cell_w,
+            cell_h,
+            cursor: TerminalCursor {
+                col: 0,
+                row: 0,
+                visible: true,
+            },
+            damage: TerminalDamage::Full,
+            lines,
+        })
+    }
+
     fn render_data(&self) -> BackendRenderData {
-        // Minimal: just 2 lines of text to avoid cosmic-text overhead.
-        // Full grid rendering is too slow for layout testing.
+        // Minimal: just 2 lines of text to avoid excessive generic text work in
+        // layout/perf-focused scenarios that still use the legacy renderer.
         let mut lines = Vec::with_capacity(2);
         let mut cells = Vec::with_capacity(self.cols);
         for _ in 0..self.cols {
@@ -57,7 +106,7 @@ impl PaneBackend for FakeBackend {
         lines.push(TerminalLine {
             cells: cells.clone(),
         });
-        // Second line has a short label so queue_text only gets called once
+
         if self.cols >= 8 {
             let label = "FakePane";
             for (i, c) in label.chars().enumerate() {
@@ -65,7 +114,6 @@ impl PaneBackend for FakeBackend {
             }
         }
         lines.push(TerminalLine { cells });
-
         let (cell_w, cell_h) = self.cell_size();
         BackendRenderData::Terminal {
             lines,
@@ -78,5 +126,27 @@ impl PaneBackend for FakeBackend {
 
     fn should_close(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fake_backend_exposes_terminal_snapshot() {
+        let backend = FakeBackend::new(16, 8);
+        let snapshot = backend
+            .terminal_snapshot()
+            .expect("fake backend should expose terminal snapshots");
+
+        assert_eq!(snapshot.cols, 16, "snapshot cols should match backend");
+        assert_eq!(snapshot.rows, 8, "snapshot rows should match backend");
+        assert_eq!(snapshot.cursor.col, 0, "fake cursor col should stay at origin");
+        assert_eq!(snapshot.cursor.row, 0, "fake cursor row should stay at origin");
+        assert!(
+            matches!(snapshot.damage, TerminalDamage::Full),
+            "fake backend should fully invalidate its static snapshot"
+        );
     }
 }

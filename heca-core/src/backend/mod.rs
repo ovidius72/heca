@@ -4,9 +4,11 @@
 //! planned future backends and should be added here when implemented.
 
 pub mod fake;
+pub mod snapshot;
 pub mod terminal;
 
 pub use fake::FakeBackend;
+pub use snapshot::{TerminalCursor, TerminalDamage, TerminalRowRange, TerminalSnapshot};
 pub use terminal::PtyError;
 
 /// Type of pane backend.
@@ -70,7 +72,22 @@ pub trait PaneBackend: Send {
     /// Returns true if new data was received and a redraw is needed.
     fn update(&mut self) -> bool;
 
+    /// Get a terminal-specific snapshot of the currently visible state.
+    ///
+    /// This is the incremental migration path away from the legacy
+    /// `render_data()` full-copy transport. Terminal backends should return
+    /// `Some(snapshot)` and non-terminal backends can use the default `None`.
+    ///
+    /// The snapshot intentionally stays renderer-agnostic: it carries logical
+    /// cell state, cursor state, and damage metadata, but no GPU resources.
+    fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
+        None
+    }
+
     /// Get the current renderable content.
+    ///
+    /// Legacy renderer contract. New terminal work should prefer
+    /// `terminal_snapshot()` and dedicated terminal rendering paths.
     fn render_data(&self) -> BackendRenderData;
 
     /// Whether the backend has exited and the pane should be closed.
