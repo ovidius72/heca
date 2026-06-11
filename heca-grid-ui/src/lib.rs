@@ -48,8 +48,8 @@ pub use action::{Action, SignalData};
 pub use builders::{LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
-    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, install_frame_request,
-    request_frame,
+    Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, collect_damage,
+    install_frame_request, request_frame,
 };
 pub use drag::{DragContext, DragItem, DragItemId, DragItemKind, DragLabel, DragSurfaceId, SurfaceDragPhase, SurfaceDragState};
 pub use effects::{Attention, Flash};

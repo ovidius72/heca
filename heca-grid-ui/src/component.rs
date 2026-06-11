@@ -42,6 +42,49 @@ pub fn request_frame() {
     });
 }
 
+/// Logical-pixel margin added around each damaged widget so glow/shadow halos —
+/// which paint outside the widget's rect — are included in the redrawn region.
+const DAMAGE_PAD: f64 = 64.0;
+
+/// Walk the tree and union the bounds of every widget flagged
+/// [`needs_paint`](Base::needs_paint) (padded for glow/shadow reach), **clearing
+/// the flags**. Returns the damage rect to repaint, or `None` if nothing changed.
+///
+/// The host calls this each frame: on an animation/timed frame the result scissors
+/// the render to just the changed pixels; on an input frame the host repaints in
+/// full (an event can change unknown things) but still calls this to clear flags.
+/// Hidden subtrees are skipped — their bounds are stale.
+pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
+    fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+        let x0 = a.loc.x.min(b.loc.x);
+        let y0 = a.loc.y.min(b.loc.y);
+        let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+        let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+        Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+    }
+    fn walk(c: &dyn Component, acc: &mut Option<Rectangle>) {
+        let b = c.base();
+        if !b.visible.get_untracked() || b.style.hidden {
+            return;
+        }
+        if b.needs_paint() {
+            b.clear_needs_paint();
+            let r = b.bounds;
+            let padded = Rectangle::new(
+                Point::new(r.loc.x - DAMAGE_PAD, r.loc.y - DAMAGE_PAD),
+                Size::new(r.size.w + 2.0 * DAMAGE_PAD, r.size.h + 2.0 * DAMAGE_PAD),
+            );
+            *acc = Some(acc.map_or(padded, |a| union(a, padded)));
+        }
+        for ch in &b.children {
+            walk(ch.as_ref(), acc);
+        }
+    }
+    let mut acc = None;
+    walk(root, &mut acc);
+    acc
+}
+
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
     /// Layout + visual style.

@@ -40,6 +40,24 @@ struct TextCommand {
 /// A queued label's cache key plus the clip rect (logical px) it's scissored to.
 type LabelDraw = (LabelKey, Option<[f32; 4]>);
 
+/// Intersection of two logical `[x, y, w, h]` rects (empty if disjoint).
+fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let x0 = a[0].max(b[0]);
+    let y0 = a[1].max(b[1]);
+    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
+    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+}
+
+/// Combine the frame damage with a per-label clip; `None` means "unbounded".
+fn combine_clip(damage: Option<[f32; 4]>, clip: Option<[f32; 4]>) -> Option<[f32; 4]> {
+    match (damage, clip) {
+        (None, None) => None,
+        (Some(r), None) | (None, Some(r)) => Some(r),
+        (Some(a), Some(b)) => Some(intersect(a, b)),
+    }
+}
+
 /// Convert a logical clip rect to a physical scissor rect clamped to the
 /// framebuffer `target`: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
 fn scissor_px(c: [f32; 4], scale: f32, target: [u32; 2]) -> (u32, u32, u32, u32) {
@@ -102,6 +120,9 @@ pub struct TextRenderer {
     target_size: [u32; 2],
     /// Clip rect (logical px) applied to subsequently queued text; `None` = unclipped.
     current_clip: Option<[f32; 4]>,
+    /// Frame-level damage region (logical px); each label is also scissored to it
+    /// for damage-region redraw. `None` = full frame.
+    damage: Option<[f32; 4]>,
     commands: Vec<TextCommand>,
     _atlas_size: (u32, u32),
     font_family: String,
@@ -277,6 +298,7 @@ impl TextRenderer {
             scale_factor: 1.0,
             target_size: [1, 1],
             current_clip: None,
+            damage: None,
             commands: Vec::new(),
             _atlas_size: (0, 0),
             font_family: heca_grid_ui::font::DEFAULT_MONO_FAMILY.to_string(),
@@ -301,6 +323,12 @@ impl TextRenderer {
     /// Physical framebuffer size in pixels; scissor rects are clamped to it.
     pub fn set_target_size(&mut self, width: u32, height: u32) {
         self.target_size = [width.max(1), height.max(1)];
+    }
+
+    /// Set the frame-level damage region (logical px) every label is scissored to,
+    /// or `None` for a full-frame render. Set once per frame before `render`.
+    pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
+        self.damage = damage;
     }
 
     /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequently
@@ -643,12 +671,12 @@ impl TextRenderer {
         let scale = self.scale_factor as f32;
         for (i, (key, clip)) in keys.iter().enumerate() {
             let Some(cl) = self.label_cache.get(key) else { continue };
-            match clip {
+            match combine_clip(self.damage, *clip) {
                 None => rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]),
                 Some(c) => {
-                    let (x, y, w, h) = scissor_px(*c, scale, self.target_size);
+                    let (x, y, w, h) = scissor_px(c, scale, self.target_size);
                     if w == 0 || h == 0 {
-                        continue; // fully clipped — nothing visible
+                        continue; // fully outside the damage/clip — nothing visible
                     }
                     rpass.set_scissor_rect(x, y, w, h);
                 }

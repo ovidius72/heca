@@ -3005,3 +3005,29 @@ fn focused_input_requests_a_timed_caret_redraw_not_continuous() {
     );
 }
 const BLINK_PERIOD_HALF: f32 = 0.5;
+
+#[test]
+fn collect_damage_unions_dirty_widgets_then_clears_flags() {
+    use heca_grid_ui::{Component, collect_damage};
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    // A fresh tree needs its first paint; collecting reports damage and clears flags.
+    assert!(collect_damage(&ui).is_some(), "a fresh tree needs its first paint");
+    assert!(
+        collect_damage(&ui).is_none(),
+        "flags cleared → no damage on the next collect"
+    );
+
+    // Marking one widget dirty → damage covers (at least) that widget's bounds.
+    let b = ui.base().children[1].base().bounds;
+    ui.base().children[1].base().mark_needs_paint();
+    let d = collect_damage(&ui).expect("a marked widget reports damage");
+    assert!(
+        d.loc.x <= b.loc.x && d.loc.x + d.size.w >= b.loc.x + b.size.w,
+        "damage horizontally covers the marked widget"
+    );
+}

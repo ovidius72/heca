@@ -749,6 +749,16 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
     {
         let mut cx =
             PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        // Background fill as the first scene command (not a clear pass): scissored to
+        // the damage region it clears only the changed area, so the rest of the
+        // persistent scene texture is preserved for damage-region redraw.
+        cx.rect(
+            Rectangle::from_size(Size::new(w as f64, h as f64)),
+            theme.background,
+            None,
+            0.0,
+            None,
+        );
         root.paint(&mut cx);
     }
     // Corner brackets on the cards (first row) only — not the small buttons.
@@ -872,6 +882,10 @@ struct GpuState {
     /// Seconds until the next scheduled frame: `Some(0.0)` ≈ continuous animation
     /// (capped to ~30fps), `Some(t)` a timed wake (e.g. caret blink), `None` idle.
     next_frame_in: Option<f32>,
+    /// When set, the next frame repaints in full (an input event / resize / layout
+    /// or scroll change can alter unknown regions). Cleared after the frame; pure
+    /// animation frames instead repaint just the widgets that flagged themselves.
+    force_full: bool,
     /// Layout is recomputed only when a layout input changed (resize/font/content
     /// event) — not on pure-animation frames.
     layout_dirty: bool,
@@ -999,6 +1013,7 @@ impl GpuState {
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
             next_frame_in: None,
+            force_full: true, // first frame paints everything
             layout_dirty: true,
             content_h: 0.0,
             applied_scroll: 0.0,
@@ -1077,6 +1092,7 @@ impl GpuState {
             self.content_h = self.ui.base().bounds.size.h as f32;
             self.applied_scroll = 0.0;
             self.layout_dirty = false;
+            self.force_full = true; // relayout moves everything → repaint in full
         }
         // Whole-page scroll: shift the cached tree by only the delta since the
         // offset already baked into its bounds (window edges clip).
@@ -1085,9 +1101,35 @@ impl GpuState {
         if scroll_delta != 0.0 {
             offset_tree(&mut self.ui, scroll_delta);
             self.applied_scroll = self.scroll_y;
+            self.force_full = true; // the whole page shifted
         }
 
         let scene = build_scene(&self.ui, &self.theme, w, h, self.clip_demo);
+
+        // Damage region for this frame: full on an input/layout/scroll change (it can
+        // alter unknown regions), otherwise just the widgets that flagged themselves
+        // needs-paint (a spinner, the caret) — so an animation repaints only its rect.
+        // `collect_damage` also clears the flags.
+        let dirty = heca_grid_ui::collect_damage(&self.ui);
+        let damage: Option<[f32; 4]> = if std::mem::take(&mut self.force_full) {
+            None // whole frame
+        } else {
+            match dirty {
+                Some(r) => Some([
+                    r.loc.x as f32,
+                    r.loc.y as f32,
+                    r.size.w as f32,
+                    r.size.h as f32,
+                ]),
+                // Animated but reported no damage (an un-wired continuous animation)
+                // → repaint in full for correctness; nothing dirty → empty rect
+                // (render nothing; the blit shows the preserved scene texture).
+                None if animating => None,
+                None => Some([0.0, 0.0, 0.0, 0.0]),
+            }
+        };
+        self.grid.set_damage(damage);
+        self.text.set_damage(damage);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -1110,28 +1152,6 @@ impl GpuState {
         // makes damage-region redraw possible — unchanged pixels survive between
         // frames, so a frame can re-render only the damaged region.
         let scene_view = self.compositor.scene_view();
-        let bg = self.theme.background.to_f32x4();
-        {
-            let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: scene_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: bg[0] as f64,
-                            g: bg[1] as f64,
-                            b: bg[2] as f64,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
 
         // Each pass is a rects-then-text flush (the renderer draws all queued rects,
         // then all queued text). Base first, then each overlay as its *own* pass — so
@@ -1196,6 +1216,12 @@ impl ApplicationHandler for App {
         let Some(state) = self.state.as_mut() else {
             return;
         };
+        // Any non-redraw event (input, resize, …) can change unknown regions, so the
+        // frame it triggers repaints in full. Animation/timed frames arrive as a bare
+        // RedrawRequested and instead repaint only the widgets that flagged themselves.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            state.force_full = true;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
