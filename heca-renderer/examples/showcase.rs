@@ -70,6 +70,8 @@ const ZOOM_MAX: f32 = 5.0;
 /// Level change per keypress / wheel notch.
 const ZOOM_STEP: f32 = 0.25;
 
+const APP_TITLE: &str = "heca-grid-ui showcase";
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -938,8 +940,12 @@ struct GpuState {
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
-    /// Whether the Cmd/Super (meta) key is held — the zoom accelerator on macOS.
+    /// Whether the Cmd/Super (meta) key is held.
     meta: bool,
+    /// tmux-style prefix is armed (the next key is a heca command, not the app's).
+    prefix_pending: bool,
+    /// In the dedicated zoom mode (entered via `prefix +`); `j`/`k` zoom, Esc exits.
+    zoom_mode: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -967,7 +973,7 @@ struct GpuState {
 impl GpuState {
     async fn new(event_loop: &ActiveEventLoop) -> Self {
         let attrs = Window::default_attributes()
-            .with_title("heca-grid-ui showcase")
+            .with_title(APP_TITLE)
             .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         // Bridge widget self-invalidation to the event loop: a widget that marks
@@ -1080,6 +1086,8 @@ impl GpuState {
             toasts,
             ctrl: false,
             meta: false,
+            prefix_pending: false,
+            zoom_mode: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1155,10 +1163,44 @@ impl GpuState {
         self.window.request_redraw();
     }
 
-    /// Reset zoom to the neutral level (`Ctrl+0`).
+    /// Reset zoom to the neutral level.
     fn reset_zoom(&self) {
         self.ctl.zoom.set(ZOOM_DEFAULT);
         self.window.request_redraw();
+    }
+
+    fn enter_zoom_mode(&mut self) {
+        self.zoom_mode = true;
+        self.window
+            .set_title(&format!("{APP_TITLE} — ZOOM  (k/+ in · j/- out · 0 reset · Esc exit)"));
+        self.window.request_redraw();
+    }
+
+    fn exit_zoom_mode(&mut self) {
+        self.zoom_mode = false;
+        self.window.set_title(APP_TITLE);
+        self.window.request_redraw();
+    }
+
+    /// A key pressed while in zoom mode. The mode stays active (so you can keep
+    /// pressing j/k) until Esc/Enter/q.
+    fn zoom_mode_key(&mut self, gk: GridKey) {
+        match gk {
+            GridKey::Char('k' | '+' | '=') => self.nudge_zoom(ZOOM_STEP),
+            GridKey::Char('j' | '-' | '_') => self.nudge_zoom(-ZOOM_STEP),
+            GridKey::Char('0') => self.reset_zoom(),
+            GridKey::Escape | GridKey::Enter | GridKey::Char('q') => self.exit_zoom_mode(),
+            _ => {} // swallow other keys while the mode is held
+        }
+    }
+
+    /// The key after the tmux-style prefix: a heca command (the showcase only wires
+    /// the zoom mode; the real app dispatches its full keymap here).
+    fn prefix_command(&mut self, gk: GridKey) {
+        self.prefix_pending = false;
+        if matches!(gk, GridKey::Char('+' | '=')) {
+            self.enter_zoom_mode();
+        }
     }
 
     fn render(&mut self) {
@@ -1390,8 +1432,9 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                if state.accel() {
-                    // Accelerator + wheel zooms the whole UI (scroll up = zoom in).
+                if state.zoom_mode || state.accel() {
+                    // Wheel zooms the whole UI while in zoom mode, or with the
+                    // accelerator held (scroll up = zoom in).
                     state.nudge_zoom(-lines * ZOOM_STEP);
                 } else {
                     // Route scroll through grid-ui: an open overlay (Select dropdown /
@@ -1423,6 +1466,13 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
+                        // ── tmux-style prefix + modes (checked FIRST) ──
+                        // heca hosts other apps, so our chords go through a prefix
+                        // (default Ctrl+B); bare keys fall through to the hosted app.
+                        // Zoom mode owns j/k/+/-/0 until Esc — see `prefix +`.
+                        _ if state.zoom_mode => state.zoom_mode_key(gk),
+                        _ if state.prefix_pending => state.prefix_command(gk),
+                        GridKey::Char('b') if state.ctrl => state.prefix_pending = true,
                         // An open overlay gets first dibs on keys, but only swallows
                         // the ones it actually consumes: a Modal/palette eats every
                         // key (Esc/Enter/typing), while the ToastStack eats none — so
@@ -1435,10 +1485,6 @@ impl ApplicationHandler for App {
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
                         }
-                        // Accelerator +/-/0 zoom the whole UI (⌘ on macOS, Ctrl else).
-                        GridKey::Char('=' | '+') if state.accel() => state.nudge_zoom(ZOOM_STEP),
-                        GridKey::Char('-' | '_') if state.accel() => state.nudge_zoom(-ZOOM_STEP),
-                        GridKey::Char('0') if state.accel() => state.reset_zoom(),
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
                         // Escape clears focus and cancels an open rail pick.
