@@ -37,6 +37,30 @@ pub struct Theme {
     pub accent: Color,
     pub font_family: String,
     pub font_size: f32,
+    #[serde(default = "crate::defaults::default_terminal_font_family")]
+    pub terminal_font_family: String,
+    #[serde(default)]
+    pub terminal_foreground: Option<Color>,
+    #[serde(default)]
+    pub terminal_background: Option<Color>,
+    #[serde(default)]
+    pub terminal_cursor_foreground: Option<Color>,
+    #[serde(default)]
+    pub terminal_cursor_background: Option<Color>,
+    #[serde(default)]
+    pub terminal_cursor_border: Option<Color>,
+    #[serde(default)]
+    pub terminal_selection_foreground: Option<Color>,
+    #[serde(default)]
+    pub terminal_selection_background: Option<Color>,
+    #[serde(default)]
+    pub terminal_ansi: Option<[Color; 8]>,
+    #[serde(default)]
+    pub terminal_brights: Option<[Color; 8]>,
+    #[serde(default = "crate::defaults::default_terminal_italic_font_family")]
+    pub terminal_italic_font_family: String,
+    #[serde(default = "crate::defaults::default_terminal_font_size")]
+    pub terminal_font_size: f32,
     pub border_radius: f32,
     pub border_width: f32,
     pub shadow: Shadow,
@@ -78,6 +102,18 @@ impl Theme {
             accent: Color::new(137, 180, 250, 255),
             font_family: "JetBrainsMono Nerd Font".to_string(),
             font_size: 32.0,
+            terminal_font_family: crate::defaults::default_terminal_font_family(),
+            terminal_foreground: None,
+            terminal_background: None,
+            terminal_cursor_foreground: None,
+            terminal_cursor_background: None,
+            terminal_cursor_border: None,
+            terminal_selection_foreground: None,
+            terminal_selection_background: None,
+            terminal_ansi: None,
+            terminal_brights: None,
+            terminal_italic_font_family: crate::defaults::default_terminal_italic_font_family(),
+            terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow::default(),
@@ -102,6 +138,18 @@ impl Theme {
             accent: Color::new(30, 102, 245, 255),
             font_family: "JetBrainsMono Nerd Font".to_string(),
             font_size: 32.0,
+            terminal_font_family: crate::defaults::default_terminal_font_family(),
+            terminal_foreground: None,
+            terminal_background: None,
+            terminal_cursor_foreground: None,
+            terminal_cursor_background: None,
+            terminal_cursor_border: None,
+            terminal_selection_foreground: None,
+            terminal_selection_background: None,
+            terminal_ansi: None,
+            terminal_brights: None,
+            terminal_italic_font_family: crate::defaults::default_terminal_italic_font_family(),
+            terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,
             border_width: 1.0,
             shadow: Shadow {
@@ -123,6 +171,27 @@ impl Theme {
 
     pub fn load(name: &str) -> Self {
         crate::loader::load_theme(name)
+    }
+
+    /// Approximate terminal cell metrics for the current terminal font size.
+    ///
+    /// The terminal renderer still shares generic text layout internals, so
+    /// these ratios intentionally bias toward the real visual advance/line box
+    /// of Maple Mono NF in live terminal workloads rather than theoretical font
+    /// metrics. They are tuned to reduce:
+    /// - accumulated cursor drift at the end of typed lines
+    /// - right-edge slack/gaps in full-screen TUIs such as Telescope
+    /// - bottom slack where the PTY grid does not visually fill the pane
+    ///
+    /// These remain transitional constants until the dedicated terminal glyph
+    /// path measures and owns terminal font metrics directly.
+    pub fn terminal_cell_size(&self) -> (f32, f32) {
+        const TERMINAL_CELL_WIDTH_RATIO: f32 = 0.58;
+        const TERMINAL_CELL_HEIGHT_RATIO: f32 = 1.28;
+        (
+            self.terminal_font_size * TERMINAL_CELL_WIDTH_RATIO,
+            self.terminal_font_size * TERMINAL_CELL_HEIGHT_RATIO,
+        )
     }
 }
 

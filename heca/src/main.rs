@@ -10,8 +10,9 @@ mod rpc;
 mod sidebar;
 
 use app::events::handle_window_event;
+use app::events::AppEvent;
 pub(crate) use app::focus::switch_workspace_tracked;
-use app::lifecycle::handle_about_to_wait;
+use app::lifecycle::{handle_about_to_wait, poll_backends};
 use heca_core::layout::PaneId;
 pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
@@ -27,7 +28,7 @@ use input::WmAction;
 use std::collections::HashMap;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 
 use winit::window::WindowId;
 
@@ -47,6 +48,7 @@ pub(crate) fn pane_name(id: PaneId) -> String {
 struct HecaApp {
     state: Option<Box<AppState>>,
     app_config: AppConfig,
+    event_proxy: EventLoopProxy<AppEvent>,
     registry: actions::ActionRegistry,
     keymap: keymap::KeymapRegistry,
     /// Per-mode keymaps (e.g. "resize" mode bindings).
@@ -68,7 +70,7 @@ impl HecaApp {
         Ok(action)
     }
 
-    fn new() -> Self {
+    fn new(event_proxy: EventLoopProxy<AppEvent>) -> Self {
         let app_config = AppConfig::load();
         let registry = build_registry();
         let keymap = build_keymap(&app_config.config);
@@ -77,6 +79,7 @@ impl HecaApp {
         Self {
             state: None,
             app_config,
+            event_proxy,
             registry,
             keymap,
             mode_keymaps,
@@ -93,6 +96,13 @@ impl HecaApp {
             self.mode_keymaps = new_mode_keymaps;
             self.mode_triggers = new_mode_triggers;
             state.theme = self.app_config.theme.clone();
+            state
+                .text_renderer
+                .set_font_family(&self.app_config.theme.font_family);
+            let (cell_w, cell_h) = self.app_config.theme.terminal_cell_size();
+            for backend in state.backends.values_mut() {
+                backend.set_cell_size(cell_w, cell_h);
+            }
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
@@ -103,11 +113,11 @@ impl HecaApp {
     }
 
     async fn init_state(&mut self, event_loop: &ActiveEventLoop) -> Box<AppState> {
-        build_initial_state(&self.app_config, event_loop).await
+        build_initial_state(&self.app_config, event_loop, self.event_proxy.clone()).await
     }
 }
 
-impl ApplicationHandler for HecaApp {
+impl ApplicationHandler<AppEvent> for HecaApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             let state = pollster::block_on(self.init_state(event_loop));
@@ -155,14 +165,33 @@ impl ApplicationHandler for HecaApp {
             handle_about_to_wait(event_loop, state);
         }
     }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: AppEvent) {
+        let Some(state) = self.state.as_mut() else {
+            return;
+        };
+
+        match event {
+            AppEvent::BackendWake => {
+                let backend_poll = poll_backends(state);
+                if backend_poll.has_data || backend_poll.closed_any {
+                    state.needs_redraw = true;
+                    state.window.request_redraw();
+                }
+            }
+        }
+    }
 }
 
 /// Edge scroll: auto-scroll the layout when the pointer is near the left/right
 /// edge of the content area. Returns true if scrolling is active.
 fn main() {
-    let event_loop = EventLoop::new().expect("Failed to create event loop");
+    let event_loop = EventLoop::<AppEvent>::with_user_event()
+        .build()
+        .expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Wait);
-    let mut app = HecaApp::new();
+    let event_proxy = event_loop.create_proxy();
+    let mut app = HecaApp::new(event_proxy);
     event_loop
         .run_app(&mut app)
         .expect("Failed to run event loop");

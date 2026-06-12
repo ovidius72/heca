@@ -362,6 +362,24 @@ Examples:
 
 A future `SidebarContainerFrame` widget may be useful as a visual wrapper around mounted containers, but it should not be confused with the provider/container logic itself.
 
+Important convergence note with terminal work:
+
+- the real terminal implementation should eventually mount here as a hosted
+  content provider inside a pane shell / ChromeHost-managed container boundary
+- the terminal backend/renderer must not become a separate competing pane
+  architecture
+- the pane shell / ChromeHost layer should own:
+  - outer chrome
+  - region placement
+  - content rect and clipping
+  - process/global metadata presentation
+- the terminal host should own:
+  - PTY/backend/runtime state
+  - terminal snapshots
+  - terminal content rendering
+  - terminal input routing
+- this convergence is tracked in `terminal-implementation.md` Phase 8
+
 ---
 
 ## 3.3 Shared UI / chrome state
@@ -792,6 +810,72 @@ This is where the UI vocabulary catches up to the architecture.
 
 ---
 
+## Phase 7.5 — Shell Compositing Effects (Transparency / Blur)
+
+**Purpose**
+
+Introduce compositor-owned visual effects for pane shells and chrome regions
+without coupling them to terminal rendering internals or to any single pane
+implementation.
+
+**What this phase is for**
+
+This phase defines and implements the rendering/compositing layer needed for:
+
+- translucent chrome surfaces
+- translucent pane shells
+- blur behind floating panes
+- blur/translucency for the broader app shell where appropriate
+- clip-aware composition so effects respect pane/container/overlay bounds
+
+Important scope rule:
+
+- transparency/blur is a **host/compositor concern**
+- terminal, WorkspacesContainer, and future providers should not each invent
+  their own blur logic
+- mounted content should render into host-provided bounds; the shell/compositor
+  decides whether to apply opacity, backdrop capture, or blur
+
+Important future terminal convergence rule:
+
+- floating terminal panes should gain transparency/blur by being mounted inside
+  pane shells that support those effects
+- the terminal host itself should not become responsible for backdrop blur
+
+Likely implementation areas:
+
+- renderer support for offscreen surfaces or captured backdrop textures
+- host-managed blur passes in `heca-renderer`
+- effect policies on pane shells / region shells
+- clipping/scissor integration with ChromeHost and overlay hosts
+- theme/config tokens for shell opacity, blur radius, and effect enablement
+
+**Where it sits in the process**
+
+After ChromeHost and pane/container hosting boundaries are established enough
+that shell-level effects can be applied once in the right place.
+
+**Dependencies**
+
+- Phase 3 ChromeHost + region hosts
+- Phase 4 built-in provider/container model
+- Phase 7 `heca-grid-ui` chrome widget expansion
+- ideally terminal/pane hosting convergence is already structurally in place
+
+**Why this phase matters**
+
+If implemented too early, blur/transparency would likely be tied to the
+current pane host and need to be reworked during the pane-shell migration. At
+this stage, the effect system can be attached to the long-term shell boundary
+and reused by:
+
+- floating panes
+- region shells
+- overlays/modals/dropdowns
+- the broader application shell
+
+---
+
 ## Phase 8 — Overlay / Modal / Dropdown Host APIs
 
 **Purpose**
@@ -1039,6 +1123,8 @@ This architecture implies future changes to at least these areas:
 - letting plugins mutate app state directly
 - making the system sidebar-specific instead of chrome-wide
 - starting WASM runtime before built-in providers prove the model
+- implementing transparency/blur before pane shells and ChromeHost own the
+  right compositing boundary
 
 ## Guardrails
 
@@ -1048,6 +1134,8 @@ This architecture implies future changes to at least these areas:
 - keep plugins dispatch-only for mutations
 - keep overlays host-owned
 - keep `heca-grid-ui` presentation-focused
+- keep blur/transparency host-owned at the shell/compositor layer, not
+  provider-owned
 
 ---
 
@@ -1087,6 +1175,14 @@ This architecture implies future changes to at least these areas:
 - [ ] Add or generalize region/top/bottom/right-side widgets
 - [ ] Add list/scroll primitives if needed
 
+## Compositing effects
+
+- [ ] Define shell-level transparency/blur effect contracts
+- [ ] Add renderer support for backdrop capture / offscreen compositing where needed
+- [ ] Add blur/translucency support for floating pane shells
+- [ ] Add blur/translucency support for the broader app shell/chrome where appropriate
+- [ ] Ensure effects remain clip-aware and host-owned rather than terminal/provider-owned
+
 ## Overlays
 
 - [ ] Add host-owned modal API
@@ -1123,6 +1219,7 @@ The main shift is:
 The first migration target should be:
 
 - turning the current workspace tree/sidebar logic into a built-in `WorkspacesContainerProvider`
+- converging the real terminal host with the future pane shell / ChromeHost boundary so terminals become mounted content inside the same pluggable chrome architecture
 
 The long-term goal should be:
 
@@ -1130,3 +1227,4 @@ The long-term goal should be:
 - host-owned overlays
 - dynamic action registration
 - code-based WASM plugins using a controlled host SDK
+- pane shells that can surface shared process/global metadata such as idle/running/error state, git branch/status, and AI-agent activity without coupling that UI to terminal rendering internals

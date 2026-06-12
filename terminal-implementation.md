@@ -2,7 +2,7 @@
 
 This file is the source of truth for the terminal implementation. The `HANDOFF` section at the end of this file **must** be updated every time a phase is completed, whenever scope or architecture changes, whenever a blocker or regression is found, and on demand when another agent or session needs current context.
 
-After any task is completed, the completed Rust code must be reviewed against the Rust skill rules before the task is considered done. If issues are found, they must be fixed and reviewed again until no issues remain. Do not use `#[allow(dead_code)]`, `#[expect(dead_code)]`, or similar suppression just to force code through review. When the task passes review, create a commit and ask the user to review it. If the user accepts, pull `origin/main`, sync, open a PR, and then start the next task.
+At the end of each completed implementation phase, the Rust code for that phase must be reviewed against the Rust skill rules before the phase is considered done. Do not run the Rust-skill subagent review after every individual task. If issues are found at phase review time, they must be fixed and reviewed again until no issues remain. Do not use `#[allow(dead_code)]`, `#[expect(dead_code)]`, or similar suppression just to force code through review. When the phase passes review, create a commit and ask the user to review it. If the user accepts, pull `origin/main`, sync, open a PR, and then start the next task or phase.
 
 ---
 
@@ -730,12 +730,16 @@ Goal:
 
 Details:
 
-- encode normal keys, modifiers, arrows, function keys, and control sequences through the terminal engine/input layer
+- encode normal keys, modifiers, arrows, and function keys through the terminal engine/input layer
+- prefer structured backend key events over ad hoc raw-byte escape guesses
+- keep raw-byte forwarding only as a fallback path for events not yet represented structurally
 
 Files:
 
-- `heca-core/src/backend/terminal/input.rs`
-- app input plumbing
+- `heca-core/src/backend/mod.rs`
+- `heca-core/src/backend/terminal/engine.rs`
+- `heca/src/app/keyboard.rs`
+- `heca/src/app/input.rs`
 
 Done when:
 
@@ -747,12 +751,15 @@ Details:
 
 - use terminal engine aware mouse encoding
 - support press/release/move/scroll as terminal modes require
+- route pointer forwarding through the terminal host adapter, not through pane-render-specific code
+- keep pane-shell chrome interactions separate from content-area terminal forwarding
 
 Files:
 
-- `heca-core/src/backend/terminal/input.rs`
-- `heca/src/mouse.rs`
-- `heca/src/main.rs`
+- `heca-core/src/backend/mod.rs`
+- `heca-core/src/backend/terminal/engine.rs`
+- `heca/src/app/terminal_host.rs`
+- `heca/src/app/events.rs`
 
 Done when:
 
@@ -921,6 +928,135 @@ Done when:
 
 - dead architecture is not left behind to confuse future work
 
+## Phase 8 — Grid UI Pane Hosting and Process-Aware Shell
+
+Goal:
+
+- host the terminal inside the future `heca-grid-ui` pane shell without
+  coupling terminal semantics to a specific pane implementation
+
+Integration note:
+
+- this phase is the convergence point with `pluggable-chrome-plugin-plan.md`
+- the terminal host should become a mounted content provider/consumer of the
+  future pane shell or ChromeHost contract, not a parallel pane architecture
+- future pane shells and ChromeHost-owned regions should treat the terminal as
+  inner content rendered into a host-provided content rect and clip rect
+- process/global metadata surfaced by the pane shell must be derived from
+  backend/runtime state through shared host state, not from terminal rendering
+
+### Task 8.1 — Define pane-shell hosting contract
+
+Details:
+
+- treat the terminal as content rendered inside a pane shell/container
+- keep the pane shell responsible for:
+  - outer layout
+  - borders/title/focus treatment
+  - content rect computation
+  - clipping/scissor ownership
+- keep the terminal host responsible only for:
+  - snapshot consumption
+  - terminal content rendering
+  - input/backend process integration
+
+Files:
+
+- `terminal-implementation.md`
+- future `heca-grid-ui` pane widget integration surface
+- app/render integration points
+
+Done when:
+
+- the terminal can be mounted into a pane shell via an explicit content-slot style contract
+
+### Task 8.2 — Adapt terminal host to `heca-grid-ui` pane shell
+
+Details:
+
+- make the existing terminal host render inside a new `heca-grid-ui` pane widget
+- do not let the legacy pane host retain ownership of:
+  - outer pane chrome
+  - title rendering
+  - focus visuals
+  - shell layout
+- use this as a migration bridge, not as permanent double-pane ownership
+
+Files:
+
+- future `heca-grid-ui` pane widget integration
+- `heca/src/app/render.rs` or its eventual successor
+
+Done when:
+
+- the terminal renders correctly inside the new pane shell while the shell owns chrome/layout
+
+### Task 8.3 — Add process-aware pane state model
+
+Details:
+
+- make the pane host aware of terminal process lifecycle and current status
+- define at least:
+  - `idle`
+  - `running`
+  - `error`
+- ensure status is not inferred from chrome alone; it must come from runtime/backend state
+
+Files:
+
+- backend adapter state model
+- app-level pane/view-model state
+- future pane-shell presentation layer
+
+Done when:
+
+- the pane shell can reflect process state without peeking into terminal rendering internals
+
+### Task 8.4 — Define future global process metadata channel
+
+Details:
+
+- prepare a shared/global state path for process-derived metadata such as:
+  - process status
+  - git branch
+  - git dirty/changes state
+  - AI agents running status
+  - future backend-specific activity summaries
+- this phase does not require full implementation of every metadata source
+- it must define ownership and flow so pane widgets can subscribe to stable state instead of querying ad hoc
+
+Files:
+
+- future global state/store design
+- pane host integration contract
+- planning docs / follow-up implementation tasks
+
+Done when:
+
+- there is a defined path from runtime process state to pane shell/global UI state
+
+### Task 8.5 — Keep terminal host pane-agnostic
+
+Details:
+
+- verify terminal backend/renderer do not become tightly coupled to a specific pane widget implementation
+- require the terminal host to depend only on:
+  - content rect
+  - clip rect
+  - focus/state inputs
+  - terminal style inputs
+- prevent `heca-grid-ui` shell migration from forcing PTY/engine redesign
+
+Files:
+
+- terminal renderer interface
+- pane-shell adapter layer
+- planning/verification notes
+
+Done when:
+
+- pane-shell replacement can happen without redesigning PTY, terminal engine, or terminal snapshot contracts
+
 ---
 
 ## Progress Checklist
@@ -938,37 +1074,37 @@ Done when:
 
 ## Phase 2
 
-- [ ] 2.1 Add PTY wrapper
-- [ ] 2.2 Add terminal engine wrapper
-- [ ] 2.3 Implement backend adapter
-- [ ] 2.4 Add unit tests for backend lifecycle
+- [x] 2.1 Add PTY wrapper
+- [x] 2.2 Add terminal engine wrapper
+- [x] 2.3 Implement backend adapter
+- [x] 2.4 Add unit tests for backend lifecycle
 
 ## Phase 3
 
-- [ ] 3.1 Create terminal renderer module
-- [ ] 3.2 Render cell backgrounds and cursor
-- [ ] 3.3 Add glyph rendering path using `cosmic-text`
-- [ ] 3.4 Add clipping/scissor support
+- [x] 3.1 Create terminal renderer module
+- [x] 3.2 Render cell backgrounds and cursor
+- [x] 3.3 Add glyph rendering path using `cosmic-text`
+- [x] 3.4 Add clipping/scissor support
 - [ ] 3.5 Add dirty-region rendering strategy
 
 ## Phase 4
 
 - [x] 4.1 Compute pane content rect
 - [x] 4.2 Remove center title overlay from terminal content
-- [ ] 4.3 Replace fake startup backend path
-- [ ] 4.4 Replace pane creation sites
-- [ ] 4.5 Wire redraw scheduling
+- [x] 4.3 Replace fake startup backend path
+- [x] 4.4 Replace pane creation sites
+- [x] 4.5 Wire redraw scheduling
 
 ## Phase 5
 
-- [ ] 5.1 Keyboard input mapping
-- [ ] 5.2 Mouse protocol forwarding
-- [ ] 5.3 Resize propagation
+- [x] 5.1 Keyboard input mapping
+- [x] 5.2 Mouse protocol forwarding
+- [x] 5.3 Resize propagation
 
 ## Phase 6
 
-- [ ] 6.1 Add terminal font config surface
-- [ ] 6.2 Add fallback font support
+- [x] 6.1 Add terminal font config surface
+- [x] 6.2 Add fallback font support
 - [ ] 6.3 Define ligature behavior
 - [ ] 6.4 Add hooks for richer protocols
 
@@ -977,20 +1113,60 @@ Done when:
 - [ ] 7.1 Add backend tests
 - [ ] 7.2 Add renderer tests where feasible
 - [ ] 7.3 Manual validation matrix
-- [ ] 7.4 Remove obsolete custom-grid code
+- [x] 7.4 Remove obsolete custom-grid code
+
+## Phase 8
+
+- [ ] 8.1 Define pane-shell hosting contract
+- [ ] 8.2 Adapt terminal host to `heca-grid-ui` pane shell
+- [ ] 8.3 Add process-aware pane state model
+- [ ] 8.4 Define future global process metadata channel
+- [ ] 8.5 Keep terminal host pane-agnostic
+
+## Review Backlog
+
+These issues are not guaranteed to be solved automatically by the next renderer
+and integration tasks. They must be tracked explicitly and closed before Phase 3
+and the terminal migration are considered complete.
+
+- [x] RB1 Replace `PtyError` string payloads with richer typed/source errors in `heca-core/src/backend/terminal/pty.rs`
+- [x] RB2 Add text-label cache tests in `heca-renderer/src/text.rs`
+  - hit/miss behavior
+  - pruning behavior
+  - invalidation on scale/font changes
+- [x] RB3 Add config-loader precedence tests for terminal font overrides in `heca-config/src/loader.rs`
+- [x] RB4 Add terminal backend regression coverage for child reaping / exit lifecycle invariants in `heca-core/src/backend/terminal.rs`
+- [x] RB5 Remove the legacy `render_data()` terminal fallback after all pane backends use snapshots
+
+Recommended ownership:
+
+- RB1 and RB4 should be closed during backend hardening
+- RB2 should be closed alongside the dedicated terminal renderer work
+- RB3 should be closed during config/verification cleanup
+- RB5 should be closed at the end of Phase 3 / Phase 4 integration
 
 ## Overall Acceptance
 
 - [ ] Real shell renders in panes
+- [x] Real shell renders in panes
 - [ ] No pane-border text overlap
+- [x] No pane-border text overlap
 - [ ] No center title overlay inside terminal content
+- [x] No center title overlay inside terminal content
 - [ ] No per-frame full-grid reconstruction as the default path
+- [x] No per-frame full-grid reconstruction as the default path
 - [ ] Redraws are prompt and bounded
+- [x] Redraws are prompt and bounded
 - [ ] Terminal font loads from `config.toml`
+- [x] Terminal font loads from `config.toml`
 - [ ] Truecolor output works
+- [x] Truecolor output works
 - [ ] Unicode fallback works
 - [ ] Mouse-aware TUIs work
+- [x] Mouse-aware TUIs work
 - [ ] Architecture is documented and handoff is current
+- [ ] Terminal host can mount cleanly inside future `heca-grid-ui` pane shell
+- [ ] Pane shell can reflect process/global-state metadata without coupling to terminal rendering internals
 
 ---
 
@@ -1008,9 +1184,13 @@ This section must be updated:
 ### Current Status
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
-- Execution state: groundwork and render-geometry cleanup started
-- Active implementation phase: Phase 1 complete, Phase 4.1/4.2 complete out of order, Phase 2 pending
-- Last completed phase: Phase 1
+- Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, and color-space fixes are all landed
+- Active implementation phase: Phase 3 remains open for terminal visual correctness hardening and richer terminal protocol work
+- Last materially advanced areas:
+  - terminal color fidelity and cursor behavior
+  - box-drawing geometry rendering for border-heavy TUIs
+  - backend/config hardening backlog (`RB1`, `RB3`, `RB4`)
+- Last completed phase: Phase 2
 
 ### Latest Decisions
 
@@ -1024,52 +1204,176 @@ This section must be updated:
 - damage semantics are now modeled explicitly as `None | Full | Rows(...)`
 - tiled and floating pane content now render inside an inset content rect instead of the full pane rect
 - centered pane-title overlays were removed from live pane content rendering
+- transitional terminal cells now carry grapheme text plus cell width instead of a single `char`
+- `portable-pty` now owns child lifecycle, reader thread, writer, and resize behavior
+- `wezterm-term` now owns terminal parsing, visible screen state, title state, and palette resolution inside `heca-core`
+- `TerminalBackend` now composes PTY + engine wrappers instead of maintaining a custom `vte` grid
+- app lifecycle now closes panes whose backends report `should_close()`
+- the app render loop now prefers `terminal_snapshot()` and only falls back to legacy `render_data()` when a backend does not expose snapshots
+- terminal pane content now flushes through renderer scissor rectangles on a per-pane basis
+- app pane creation now uses `TerminalBackend` by default with `FakeBackend` retained only as a startup fallback
+- the generic text renderer now caches shaped/rasterized labels across frames to reduce terminal redraw stalls while the dedicated terminal renderer is still pending
+- terminal pane drawing now enters `heca-renderer` through a dedicated `terminal` module instead of keeping terminal cell rendering logic inside `heca/src/app/render.rs`
+- terminal cell backgrounds and cursor drawing are now owned by the dedicated renderer module
+- terminal glyph runs now use a terminal-specific line-box placement path instead of the generic UI centered-box path
+- app-side terminal mounting now goes through a dedicated host adapter using `Rectangle` content geometry so future pane shells can mount terminals without depending on the current pane render loop shape
+- current live behavior is "fast but visually off": typing latency is now acceptable again, but terminal text placement is still slightly misaligned/off and not yet at final visual quality
+- future pane migration should treat the current terminal host as inner content inside a `heca-grid-ui` pane shell, not as the permanent outer pane implementation
+- future pane shells must be able to surface process/global metadata such as idle/running/error state, git status/branch/changes, and AI-agent activity
+- terminal font settings are now separated from the UI theme font, with an embedded Maple Mono Normal NF fallback for terminal text
+- `config.toml` can now override terminal font family and terminal font size on top of the selected theme
+- both `terminal_font_family` / `terminal_font_size` and `terminal-font-family` / `terminal-font-size` are accepted from `config.toml`
+- pane render now resizes terminal backends to match the live pane content rect before taking terminal snapshots
+- PTY reader threads now wake the winit event loop through a user-event proxy so terminal output can trigger redraws without waiting for user input
+- active-pane highlighting during rendering now derives focus from the session active pane, not only from `AppState.focused_pane`
+- sidebar/chrome rendering now happens after floating panes so float/zoom states do not visually erase the sidebars
+- pane backends now expose structured keyboard and mouse event hooks in addition to raw byte input
+- `TerminalBackend` now encodes structured key and mouse events through `wezterm-term` instead of relying only on app-side raw byte guesses
+- app keyboard forwarding now prefers structured terminal key events and only falls back to raw bytes when needed
+- terminal pointer forwarding now routes through `heca/src/app/terminal_host.rs`, which converts content-area pointer events into terminal cell coordinates without depending on the current pane widget implementation
+- pane focus changes and window focus changes now notify the focused terminal backend so terminal focus-tracking sequences can work
+- terminal cells now carry italic/underline style flags in addition to `fg/bg/bold`
+- terminal snapshots now carry resolved terminal default foreground/background colors from `wezterm-term`
+- terminal rendering now respects reverse-video cell colors, italic text, underline decoration, and uses the terminal's resolved default background instead of inferring pane fill from visible cells or using a hardcoded black backdrop
+- terminal style config now includes a separate `terminal_italic_font_family` path so italic rendering can use a different family than regular terminal text when needed
+- bold ANSI foreground colors now follow wezterm-style brightening semantics for palette indices `0..7`
+- when italic text does not have a separate terminal italic family, terminal rendering now keeps the same family and applies a faux-italic slant instead of falling back to an unrelated generic italic face
+- terminal engine now supports explicit terminal default foreground/background overrides without tying terminal defaults to the outer app chrome theme
+- terminal snapshot generation now seeds per-column blank cells from the full wezterm line state before overlaying visible grapheme anchors, so TUIs like `nvim` can preserve background-colored blank space instead of collapsing back to the terminal default background
+- terminal palette configuration now supports explicit terminal defaults plus ANSI/brights/cursor/selection colors through config/theme plumbing
+- `PtyError` now preserves operation context and typed/source error chains instead of flattening PTY failures into strings
+- config loader now has explicit precedence coverage proving `config.toml` terminal font/color overrides beat bundled theme terminal defaults without clobbering unspecified theme values
+- terminal exit-state handling now has focused regression coverage for:
+  - reader disconnect before child reap
+  - close-on-reap after disconnect
+  - conservative close behavior on `try_wait()` error
+- shader color handling now converts UI/theme colors consistently into linear space, which materially improved live nvim colorscheme fidelity
+- right-edge border artifacts in Telescope/FzfLua/lazygit were reduced by grid fitting and then fixed by rendering common box-drawing characters as deterministic GUI geometry instead of relying on font glyph joins
 
 ### Current Known Risks
 
-- old render path still treats terminal content like generic UI text
-- current backend contract is too full-copy oriented for the target design
-- content inset now exists, but there is still no dedicated GPU scissor/clipping path
-- the legacy renderer still ignores per-cell backgrounds and other richer terminal attributes
-- live pane creation still uses `FakeBackend` in startup, handlers, and mutations
+- terminal rendering now has a dedicated renderer module, but glyph shaping still routes through shared `TextRenderer` internals rather than a fully independent terminal atlas/path
+- background rendering and text shaping are still transitional and may still lag under dense terminal workloads even with renderer-side label caching
+- terminal text is still visually misaligned/off because glyph placement is adapted from a generic text path rather than a cell-native terminal renderer
+- terminal default-family naming is tied to the embedded font metadata (`Maple Mono Normal NF`), not the shorter marketing name
+- terminal drawing now uses box-based placement for better vertical centering, but final cell-native alignment still needs validation in the live app
+- `nvim`/alt-screen redraw behavior still needs live verification after PTY wakeup wiring
+- sidebar visibility after zoom/float and multi-pane focus highlighting still need live verification after the latest render ordering/session-focus fixes
+- structured keyboard forwarding is landed, but live verification is still needed for modifier-heavy terminal apps and function-key behavior
+- terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
+- terminal style fidelity is improved, but live verification is still needed for colorscheme parity with other terminals, especially palette/default-color semantics and italic-heavy themes
+- terminal background/default-color fidelity is still wrong in practice because the backend still relies on wezterm's stock terminal palette unless explicit terminal colors are configured; full terminal palette/theme support is not implemented yet
+- italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `terminal_italic_font_family`, italic runs may fall back to a different family
+- underline is implemented as a straight underline; undercurl is not implemented yet
+- the legacy `render_data()` fallback still exists and should be removed once all pane backends expose snapshots
+- `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
+- future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
+- current app integration still lives in `heca/src/app/render.rs`, but terminal sizing/snapshot acquisition now sits behind a dedicated terminal-host adapter rather than being inlined into pane drawing loops
+- Yazi currently exposes new terminal-fit issues:
+  - row spacing/line height is still off
+  - item columns are too narrow
+  - some right-edge geometry still looks slightly off in complex TUI layouts
+- Yazi image preview is not supported yet; selecting an image currently triggers an infinite loading spinner because richer graphics/image protocol handling is still unimplemented
+
+### User-Verified TODOs
+
+- Yazi:
+  - fix line-height / row-spacing mismatch
+  - widen effective item-cell geometry so filenames/icons do not look squeezed
+  - inspect remaining right-edge visual drift in complex split layouts
+  - treat image preview support as a separate richer-protocol task; current behavior is an infinite spinner
+- Font sensitivity follow-up:
+  - test 2-3 terminal Nerd Fonts inside heca, not just Maple Mono NF
+  - compare Yazi alignment across fonts to separate font-specific behavior from renderer-metric bugs
+  - if one font materially improves Yazi immediately, record it as a temporary recommended terminal font while the metric path is corrected
+- Continue broader colorscheme parity testing across multiple live nvim themes
+- Validate whether any remaining TUIs expose grid-fit issues outside the now-fixed box-drawing border path
 
 ### Migration Boundary Inventory
 
 - `heca-core/src/backend/mod.rs`
   - legacy `BackendRenderData::Terminal { lines: Vec<TerminalLine>, ... }`
   - new `terminal_snapshot()` hook added for migration
+  - terminal cells now carry grapheme text and cell width
 - `heca-core/src/backend/fake.rs`
   - now exposes `TerminalSnapshot`
   - still adapts snapshots back into legacy `BackendRenderData`
 - `heca-core/src/backend/terminal.rs`
-  - still custom `vte` grid backend
-  - now exposes `TerminalSnapshot`
+  - now composes PTY + `wezterm-term` wrappers
   - still adapts snapshots back into legacy `BackendRenderData`
+- `heca-core/src/backend/terminal/pty.rs`
+  - owns `portable-pty` process setup, reader thread, writer sharing, resize, and exit polling
+- `heca-core/src/backend/terminal/engine.rs`
+  - owns `wezterm-term` initialization, viewport resize, title access, palette resolution, and snapshot conversion
 - `heca/src/app/render.rs`
-  - still consumes legacy `BackendRenderData`
+  - now prefers `terminal_snapshot()` in the live pane render loop
+  - still has a legacy `BackendRenderData` fallback path
   - now paints terminal content in an inset content rect
+  - now paints per-cell backgrounds and styled grapheme text in the transitional path
+  - now flushes pane content through scissor-clipped primitive/text passes
   - no longer paints the pane name centered over content
+- `heca/src/app/lifecycle.rs`
+  - now removes panes whose backends report `should_close()`
+- `heca/src/app/backend_factory.rs`
+  - creates `TerminalBackend` by default and falls back to `FakeBackend` only when PTY startup fails
 - `heca-renderer/src/text.rs`
   - still generic UI text pipeline
-  - not yet a dedicated terminal renderer
+  - now supports clipped per-pane flushes
+  - now caches shaped/rasterized labels across frames instead of rebuilding identical runs every redraw
+  - now supports per-run font-family overrides so terminal text can use a dedicated font separate from UI/chrome
+- `heca-renderer/src/font.rs`
+  - embeds Maple Mono Normal NF regular/bold as terminal fallback assets
+- `heca-renderer/src/primitive.rs`
+  - now supports clipped per-pane flushes
 - `heca/src/app/startup.rs`
-  - startup pane still uses `FakeBackend`
+  - startup pane now uses `create_terminal_backend(...)`
 - `heca/src/handlers.rs`
-  - split/new-pane paths still use `FakeBackend`
+  - split/new-pane paths now use `create_terminal_backend(...)`
 - `heca/src/app/mutations.rs`
-  - placeholder pane creation still uses `FakeBackend`
+  - placeholder pane creation now uses `create_terminal_backend(...)`
 
 ### Next Recommended Task
 
-- Start Phase 2.1 and 2.2:
-  - introduce a PTY wrapper boundary
-  - introduce a `wezterm-term` engine wrapper
-  - keep the new snapshot contract as the public terminal renderer boundary
+- Validate font sensitivity first, then fix terminal metrics for file-manager style TUIs:
+  - test multiple terminal Nerd Fonts in heca and compare Yazi behavior
+  - determine whether the current misalignment is mostly Maple-specific or remains across fonts
+  - then derive or tune row height/advance more accurately for the actual loaded font metrics
+  - remove squeezed/narrow item layout in Yazi
+  - verify that the fix does not regress the now-correct shell/nvim cursor spacing
+- After cell-metric correction, decide whether Phase 3 still needs a more direct terminal-native font-metric path instead of the remaining shared `TextRenderer` internals
+- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate metric fix, but track Yazi image preview as the next protocol-facing TODO
+  - cursor/selection colors if needed
+  - clear separation between outer app chrome theme and terminal-internal color theme
+- then continue terminal visual/cell-fidelity refinement where runtime gaps remain
+- after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
 
 ### In-Flight Work
 
 - Snapshot contract groundwork landed in `heca-core`
+- PTY + `wezterm-term` backend composition landed in `heca-core`
 - Pane content-rect separation landed in `heca/src/app/render.rs`
+- Review-driven fixes landed for grapheme preservation, terminal exit handling, resize consistency, and transitional cell styling
+- App pane creation now defaults to real terminal backends and pane content is clipped per pane in the render loop
+- Dedicated terminal renderer module now exists and owns terminal background/cursor drawing plus app-facing terminal render entrypoints
+- Generic text rendering still supplies the shared rasterization/cache internals underneath the dedicated module
+- The live app render loop now consumes only `terminal_snapshot()` for terminal panes and no longer falls back to `render_data()`
+- `heca/src/app/terminal_host.rs` now provides a `Rectangle`-based terminal mount preparation step that future `heca-grid-ui` pane shells can reuse
+- `heca/src/app/terminal_host.rs` now also owns terminal content-area mouse routing and focus notifications, making terminal interaction less dependent on the current pane implementation
+- Terminal panes now use dedicated terminal font settings and fallback assets instead of inheriting only the UI theme font
+- A future pane-shell phase is now planned to host this terminal inside `heca-grid-ui` while adding process/global-state awareness at the shell layer
+
+### Runtime Notes
+
+- Normal app runtime now uses `TerminalBackend`, not `FakeBackend`
+- `FakeBackend` remains only as:
+  - backend-factory fallback when PTY startup fails
+  - testing/dev placeholder backend
+- The original "typing a character takes seconds" lag is no longer the primary issue after the `heca-renderer/src/text.rs` cache change
+- The current user-verified runtime state is:
+  - terminal appears
+  - typing is fast again
+  - text rendering is still misaligned/off
+- This means the current bottleneck has moved from gross per-frame shaping/upload cost to visual correctness of terminal cell placement
 
 ### Blockers
 
@@ -1077,9 +1381,22 @@ This section must be updated:
 
 ### Verification State
 
-- `cargo test -p heca-core` passes after the snapshot contract changes
-- `cargo check -p heca` passes after the pane content-rect cleanup
-- `cargo clippy --workspace --all-targets --all-features` passes after the Rust review loop
+- `cargo check -p heca-core` passes with `portable-pty` + `wezterm-term`
+- `cargo test -p heca-core` passes with backend lifecycle tests
+- `cargo check -p heca` passes with the composed terminal backend
+- `cargo check -p heca-renderer` passes after renderer label-cache changes
+- `cargo test -p heca-renderer` passes with text-label cache hit/miss/prune/invalidation tests
+- `cargo clippy -p heca-renderer --all-targets` passes after renderer label-cache changes
+- `cargo clippy --workspace --all-targets --all-features` passes after the renderer label-cache changes
+- User smoke test after the renderer cache change:
+  - terminal is interactive again
+  - text is still visually misaligned/off
+- After terminal-font/fallback work:
+  - `cargo check -p heca` passes
+  - `cargo check -p heca-renderer` passes
+  - `cargo clippy -p heca --all-targets` passes
+  - `cargo clippy -p heca-renderer --all-targets` passes
+  - floating-pane terminal panic from row-width mismatch is fixed
 
 ### Update Template
 

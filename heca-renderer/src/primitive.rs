@@ -191,6 +191,19 @@ impl PrimitiveRenderer {
         self.draw_rect(x + w - width, y + width, width, h - 2.0 * width, color);
     }
 
+    /// Queue an outline that sits outside the given rectangle and does not
+    /// consume any of its interior space.
+    pub fn draw_outline(&mut self, x: f32, y: f32, w: f32, h: f32, color: [f32; 4], width: f32) {
+        self.draw_border(
+            x - width,
+            y - width,
+            w + width * 2.0,
+            h + width * 2.0,
+            color,
+            width,
+        );
+    }
+
     /// Queue a filled rectangle with a border.
     #[allow(clippy::too_many_arguments)]
     /// Draw a filled rectangle with a border.
@@ -219,6 +232,17 @@ impl PrimitiveRenderer {
         device: &wgpu::Device,
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
+    ) {
+        self.render_clipped(device, view, encoder, None);
+    }
+
+    /// Submit all queued primitives to the GPU with an optional scissor clip.
+    pub fn render_clipped(
+        &mut self,
+        device: &wgpu::Device,
+        view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        clip_rect: Option<(u32, u32, u32, u32)>,
     ) {
         if self.vertices.is_empty() {
             return;
@@ -273,6 +297,9 @@ impl PrimitiveRenderer {
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        if let Some((x, y, w, h)) = clip_rect {
+            rpass.set_scissor_rect(x, y, w, h);
+        }
         rpass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
 
         self.vertices.clear();

@@ -32,6 +32,24 @@ impl Color {
             self.a as f32 / 255.0,
         ]
     }
+
+    pub fn to_linear_f32x4(&self) -> [f32; 4] {
+        fn srgb_channel_to_linear(value: u8) -> f32 {
+            let srgb = value as f32 / 255.0;
+            if srgb <= 0.04045 {
+                srgb / 12.92
+            } else {
+                ((srgb + 0.055) / 1.055).powf(2.4)
+            }
+        }
+
+        [
+            srgb_channel_to_linear(self.r),
+            srgb_channel_to_linear(self.g),
+            srgb_channel_to_linear(self.b),
+            self.a as f32 / 255.0,
+        ]
+    }
 }
 
 impl FromStr for Color {

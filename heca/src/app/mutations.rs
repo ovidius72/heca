@@ -4,11 +4,11 @@
 //! session layout state, focus bookkeeping, backend lifecycle, and the shared
 //! post-mutation hooks introduced in Phase 2.
 
+use crate::app::backend_factory::create_terminal_backend;
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
-use heca_core::backend::FakeBackend;
 use crate::chrome;
-use heca_core::layout::{Column, ColumnId, Pane, PaneId};
+use heca_core::layout::{Column, ColumnId, FocusDomain, Pane, PaneId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MutationKind {
@@ -44,6 +44,48 @@ pub fn after_metadata_change(state: &mut AppState) {
 
 pub fn after_mutation_change(state: &mut AppState, kind: MutationKind) {
     after_mutation_change_inner(state, kind);
+}
+
+pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -> bool {
+    let mut removed_ws_idx = None;
+
+    for (ws_idx, ws) in state.session.workspaces.iter_mut().enumerate() {
+        if let Some(removed) = crate::app::pane_ops::remove_pane_by_id(ws, pane_id) {
+            state.backends.remove_for_pane(removed.pane.id);
+            removed_ws_idx = Some(ws_idx);
+            break;
+        }
+
+        if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
+            let removed = ws.floating_panes.remove(float_idx);
+            state.backends.remove_for_pane(removed.pane.id);
+            if ws.focus_domain == FocusDomain::Floating && ws.floating_panes.is_empty() {
+                ws.deactivate_floating_panes();
+                ws.focus_domain = FocusDomain::Tiled;
+            }
+            removed_ws_idx = Some(ws_idx);
+            break;
+        }
+    }
+
+    let Some(ws_idx) = removed_ws_idx else {
+        return false;
+    };
+
+    let should_destroy = state
+        .session
+        .workspaces
+        .get(ws_idx)
+        .map(|ws| !ws.has_panes())
+        .unwrap_or(false)
+        && state.session.workspaces.len() > 1;
+
+    if should_destroy {
+        destroy_empty_workspace(state, ws_idx);
+    }
+
+    after_layout_change(state);
+    true
 }
 
 /// Move a pane from one workspace into a new/existing column position in another workspace.
@@ -251,7 +293,10 @@ pub(crate) fn move_column_to_workspace(
         }
         state
             .backends
-            .insert_for_pane(PaneId(next_id), Box::new(FakeBackend::new(80, 24)));
+            .insert_for_pane(
+                PaneId(next_id),
+                create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+            );
     }
 
     state.session.switch_to_workspace(target_ws);

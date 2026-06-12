@@ -4,6 +4,7 @@
 //! logic out of `main.rs`.
 
 use crate::keymap::KeyCombo;
+use heca_core::backend::{BackendKeyCode, BackendKeyEvent, BackendModifiers};
 use winit::keyboard::{Key, ModifiersState, NamedKey, PhysicalKey};
 
 /// Build a normalized key combo from the current key event and modifiers.
@@ -248,11 +249,71 @@ pub(crate) fn winit_key_to_terminal_input(key: &Key, text: &str, ctrl: bool) -> 
     }
 }
 
+/// Convert a winit key event into a structured backend key event.
+pub(crate) fn winit_key_to_backend_event(
+    key: &Key,
+    modifiers: ModifiersState,
+) -> Option<BackendKeyEvent> {
+    let code = match key {
+        Key::Character(text) => text.chars().next().map(BackendKeyCode::Char)?,
+        Key::Named(NamedKey::Enter) => BackendKeyCode::Enter,
+        Key::Named(NamedKey::Backspace) => BackendKeyCode::Backspace,
+        Key::Named(NamedKey::Tab) => BackendKeyCode::Tab,
+        Key::Named(NamedKey::Escape) => BackendKeyCode::Escape,
+        Key::Named(NamedKey::ArrowLeft) => BackendKeyCode::LeftArrow,
+        Key::Named(NamedKey::ArrowRight) => BackendKeyCode::RightArrow,
+        Key::Named(NamedKey::ArrowUp) => BackendKeyCode::UpArrow,
+        Key::Named(NamedKey::ArrowDown) => BackendKeyCode::DownArrow,
+        Key::Named(NamedKey::Home) => BackendKeyCode::Home,
+        Key::Named(NamedKey::End) => BackendKeyCode::End,
+        Key::Named(NamedKey::PageUp) => BackendKeyCode::PageUp,
+        Key::Named(NamedKey::PageDown) => BackendKeyCode::PageDown,
+        Key::Named(NamedKey::Insert) => BackendKeyCode::Insert,
+        Key::Named(NamedKey::Delete) => BackendKeyCode::Delete,
+        Key::Named(NamedKey::F1) => BackendKeyCode::Function(1),
+        Key::Named(NamedKey::F2) => BackendKeyCode::Function(2),
+        Key::Named(NamedKey::F3) => BackendKeyCode::Function(3),
+        Key::Named(NamedKey::F4) => BackendKeyCode::Function(4),
+        Key::Named(NamedKey::F5) => BackendKeyCode::Function(5),
+        Key::Named(NamedKey::F6) => BackendKeyCode::Function(6),
+        Key::Named(NamedKey::F7) => BackendKeyCode::Function(7),
+        Key::Named(NamedKey::F8) => BackendKeyCode::Function(8),
+        Key::Named(NamedKey::F9) => BackendKeyCode::Function(9),
+        Key::Named(NamedKey::F10) => BackendKeyCode::Function(10),
+        Key::Named(NamedKey::F11) => BackendKeyCode::Function(11),
+        Key::Named(NamedKey::F12) => BackendKeyCode::Function(12),
+        Key::Named(NamedKey::F13) => BackendKeyCode::Function(13),
+        Key::Named(NamedKey::F14) => BackendKeyCode::Function(14),
+        Key::Named(NamedKey::F15) => BackendKeyCode::Function(15),
+        Key::Named(NamedKey::F16) => BackendKeyCode::Function(16),
+        Key::Named(NamedKey::F17) => BackendKeyCode::Function(17),
+        Key::Named(NamedKey::F18) => BackendKeyCode::Function(18),
+        Key::Named(NamedKey::F19) => BackendKeyCode::Function(19),
+        Key::Named(NamedKey::F20) => BackendKeyCode::Function(20),
+        Key::Named(NamedKey::F21) => BackendKeyCode::Function(21),
+        Key::Named(NamedKey::F22) => BackendKeyCode::Function(22),
+        Key::Named(NamedKey::F23) => BackendKeyCode::Function(23),
+        Key::Named(NamedKey::F24) => BackendKeyCode::Function(24),
+        _ => return None,
+    };
+
+    Some(BackendKeyEvent {
+        code,
+        modifiers: BackendModifiers {
+            ctrl: modifiers.control_key(),
+            shift: modifiers.shift_key(),
+            alt: modifiers.alt_key(),
+            super_: modifiers.super_key(),
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{prefix_combo_to_literal_input, typed_candidate_char};
+    use super::{prefix_combo_to_literal_input, typed_candidate_char, winit_key_to_backend_event};
     use crate::keymap::KeyCombo;
-    use winit::keyboard::{KeyCode, PhysicalKey};
+    use heca_core::backend::BackendKeyCode;
+    use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 
     #[test]
     fn typed_candidate_char_prefers_key_text() {
@@ -280,5 +341,22 @@ mod tests {
             prefix_combo_to_literal_input(&KeyCombo::parse("Ctrl+[")),
             vec![0x1b]
         );
+    }
+
+    #[test]
+    fn backend_key_event_maps_named_and_character_keys() {
+        let char_event = winit_key_to_backend_event(
+            &winit::keyboard::Key::Character("x".into()),
+            ModifiersState::empty(),
+        )
+        .expect("character key should map");
+        assert_eq!(char_event.code, BackendKeyCode::Char('x'));
+
+        let enter_event = winit_key_to_backend_event(
+            &winit::keyboard::Key::Named(winit::keyboard::NamedKey::Enter),
+            ModifiersState::empty(),
+        )
+        .expect("enter key should map");
+        assert_eq!(enter_event.code, BackendKeyCode::Enter);
     }
 }

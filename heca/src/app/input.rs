@@ -9,7 +9,7 @@ use crate::app::interaction::InteractionSource;
 use heca_core::layout::PaneId;
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
-    winit_key_to_terminal_input,
+    winit_key_to_backend_event, winit_key_to_terminal_input,
 };
 use crate::app::mutations::after_metadata_change;
 use crate::app::selection::find_pane_location;
@@ -65,9 +65,11 @@ pub(crate) fn handle_keyboard_input(
             if let Some(pane_id) = state.focused_pane
                 && let Some(backend) = state.backends.get_mut(pane_id)
             {
+                let handled = winit_key_to_backend_event(ctx.logical_key, state.modifiers)
+                    .is_some_and(|event| backend.process_key_event(&event));
                 let input_bytes =
                     winit_key_to_terminal_input(ctx.logical_key, ctx.key_text, ctx.is_ctrl);
-                if !input_bytes.is_empty() {
+                if !handled && !input_bytes.is_empty() {
                     backend.process_input(&input_bytes);
                 }
             }

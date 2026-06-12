@@ -39,3 +39,15 @@ pub(crate) fn default_sidebar_label_font_size() -> f32 {
 pub(crate) fn default_sidebar_button_font_size() -> f32 {
     11.0
 }
+
+pub(crate) fn default_terminal_font_family() -> String {
+    "Maple Mono Normal NF".to_string()
+}
+
+pub(crate) fn default_terminal_italic_font_family() -> String {
+    default_terminal_font_family()
+}
+
+pub(crate) fn default_terminal_font_size() -> f32 {
+    14.0
+}

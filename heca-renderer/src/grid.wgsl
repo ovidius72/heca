@@ -41,6 +41,21 @@ struct VertexOutput {
     @location(9) glow_intensity: f32,
 };
 
+fn srgb_to_linear_channel(v: f32) -> f32 {
+    if (v <= 0.04045) {
+        return v / 12.92;
+    }
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+fn srgb_to_linear(rgb: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        srgb_to_linear_channel(rgb.r),
+        srgb_to_linear_channel(rgb.g),
+        srgb_to_linear_channel(rgb.b),
+    );
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
@@ -77,7 +92,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Straight (non-premultiplied) surface color + coverage alpha.
     let inside = clamp(0.5 - d / fw, 0.0, 1.0);
-    var rgb = in.fill.rgb;
+    var rgb = srgb_to_linear(in.fill.rgb);
     var a = in.fill.a * inside;
 
     // Border: a band of width `border_width` just inside the edge.
@@ -85,7 +100,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let outer = clamp(0.5 - d / fw, 0.0, 1.0);
         let inner = clamp(0.5 - (d + in.border_width) / fw, 0.0, 1.0);
         let band = clamp(outer - inner, 0.0, 1.0);
-        rgb = mix(rgb, in.border.rgb, band);
+        rgb = mix(rgb, srgb_to_linear(in.border.rgb), band);
         a = max(a, in.border.a * band);
     }
 
@@ -100,7 +115,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     if (in.glow_radius > 0.0 && in.glow_intensity > 0.0 && d > 0.0) {
         let t = clamp(1.0 - d / in.glow_radius, 0.0, 1.0);
         let g = t * t * in.glow_intensity * in.glow.a;
-        out_rgb = out_rgb + in.glow.rgb * g;
+        out_rgb = out_rgb + srgb_to_linear(in.glow.rgb) * g;
     }
 
     return vec4<f32>(out_rgb, out_a);

@@ -8,8 +8,24 @@ pub mod snapshot;
 pub mod terminal;
 
 pub use fake::FakeBackend;
-pub use snapshot::{TerminalCursor, TerminalDamage, TerminalRowRange, TerminalSnapshot};
-pub use terminal::PtyError;
+pub use snapshot::{
+    TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalRowRange, TerminalSnapshot,
+};
+pub use terminal::{PtyError, TerminalBackend};
+
+/// Theme-derived default colors for terminal emulation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TerminalPaletteDefaults {
+    pub foreground: Option<[u8; 4]>,
+    pub background: Option<[u8; 4]>,
+    pub cursor_fg: Option<[u8; 4]>,
+    pub cursor_bg: Option<[u8; 4]>,
+    pub cursor_border: Option<[u8; 4]>,
+    pub selection_fg: Option<[u8; 4]>,
+    pub selection_bg: Option<[u8; 4]>,
+    pub ansi: Option<[[u8; 4]; 8]>,
+    pub brights: Option<[[u8; 4]; 8]>,
+}
 
 /// Type of pane backend.
 ///
@@ -20,13 +36,88 @@ pub enum PaneType {
     Terminal,
 }
 
+/// Backend-agnostic keyboard modifiers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BackendModifiers {
+    pub ctrl: bool,
+    pub shift: bool,
+    pub alt: bool,
+    pub super_: bool,
+}
+
+/// Backend-agnostic key identifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendKeyCode {
+    Char(char),
+    Enter,
+    Backspace,
+    Tab,
+    Escape,
+    LeftArrow,
+    RightArrow,
+    UpArrow,
+    DownArrow,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Insert,
+    Delete,
+    Function(u8),
+}
+
+/// Structured keyboard event routed to a pane backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackendKeyEvent {
+    pub code: BackendKeyCode,
+    pub modifiers: BackendModifiers,
+}
+
+/// Backend-agnostic mouse buttons and wheel steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendMouseButton {
+    Left,
+    Middle,
+    Right,
+    WheelUp(usize),
+    WheelDown(usize),
+    WheelLeft(usize),
+    WheelRight(usize),
+    None,
+}
+
+/// Structured mouse event kind routed to a pane backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendMouseEventKind {
+    Press,
+    Release,
+    Move,
+}
+
+/// Structured mouse event routed to a pane backend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BackendMouseEvent {
+    pub kind: BackendMouseEventKind,
+    pub col: usize,
+    pub row: usize,
+    pub x_pixel_offset: isize,
+    pub y_pixel_offset: isize,
+    pub button: BackendMouseButton,
+    pub modifiers: BackendModifiers,
+}
+
 /// A single cell in a terminal grid.
 #[derive(Debug, Clone)]
 pub struct TerminalCell {
-    pub c: char,
+    /// Full grapheme/text content for the visible cell anchor.
+    pub text: String,
     pub fg: [f32; 4],
     pub bg: [f32; 4],
     pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    /// Display width in terminal cells for this grapheme cluster.
+    pub width: usize,
 }
 
 /// A line of terminal cells.
@@ -67,6 +158,30 @@ pub trait PaneBackend: Send {
     /// Send input bytes to the backend (keyboard, mouse, etc.).
     fn process_input(&mut self, data: &[u8]);
 
+    /// Send a structured key event to the backend.
+    ///
+    /// Returns `true` when the backend handled the event directly. Callers may
+    /// fall back to raw byte forwarding when this returns `false`.
+    fn process_key_event(&mut self, _event: &BackendKeyEvent) -> bool {
+        false
+    }
+
+    /// Send a structured mouse event to the backend.
+    ///
+    /// Returns `true` when the backend handled the event directly.
+    fn process_mouse_event(&mut self, _event: &BackendMouseEvent) -> bool {
+        false
+    }
+
+    /// Notify the backend that pane focus changed.
+    fn focus_changed(&mut self, _focused: bool) {}
+
+    /// Update logical terminal cell metrics used by snapshot rendering.
+    ///
+    /// This does not necessarily change the PTY grid size by itself; it updates
+    /// how the backend reports cell geometry to the renderer.
+    fn set_cell_size(&mut self, _cell_w: f32, _cell_h: f32) {}
+
     /// Poll for updates (read PTY output, process events, etc.).
     /// Call this every frame before rendering.
     /// Returns true if new data was received and a redraw is needed.
@@ -79,9 +194,24 @@ pub trait PaneBackend: Send {
     /// `Some(snapshot)` and non-terminal backends can use the default `None`.
     ///
     /// The snapshot intentionally stays renderer-agnostic: it carries logical
-    /// cell state, cursor state, and damage metadata, but no GPU resources.
+    /// cell state and cursor state, but no GPU resources.
     fn terminal_snapshot(&self) -> Option<TerminalSnapshot> {
         None
+    }
+
+    /// Acknowledge terminal damage after a consumer has finished using the
+    /// current terminal state for rendering.
+    ///
+    /// Unlike `terminal_snapshot()`, this method is explicitly stateful. It is
+    /// the only API that should clear pending terminal damage. Backends that
+    /// expose `terminal_snapshot()` but do not yet implement incremental damage
+    /// reporting should conservatively return `TerminalDamage::Full`.
+    fn take_terminal_damage(&mut self) -> TerminalDamage {
+        if self.terminal_snapshot().is_some() {
+            TerminalDamage::Full
+        } else {
+            TerminalDamage::None
+        }
     }
 
     /// Get the current renderable content.

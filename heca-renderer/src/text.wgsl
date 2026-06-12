@@ -22,6 +22,21 @@ struct VertexOutput {
     @location(1) color: vec4<f32>,
 };
 
+fn srgb_to_linear_channel(v: f32) -> f32 {
+    if (v <= 0.04045) {
+        return v / 12.92;
+    }
+    return pow((v + 0.055) / 1.055, 2.4);
+}
+
+fn srgb_to_linear(rgb: vec3<f32>) -> vec3<f32> {
+    return vec3<f32>(
+        srgb_to_linear_channel(rgb.r),
+        srgb_to_linear_channel(rgb.g),
+        srgb_to_linear_channel(rgb.b),
+    );
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
@@ -36,5 +51,5 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let alpha = textureSample(text_texture, text_sampler, in.texcoord).r;
-    return vec4<f32>(in.color.rgb, in.color.a * alpha);
+    return vec4<f32>(srgb_to_linear(in.color.rgb), in.color.a * alpha);
 }
