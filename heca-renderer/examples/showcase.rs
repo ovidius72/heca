@@ -56,11 +56,19 @@ const INTENSITY_OPTS: [Intensity; 4] =
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
 const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
 
-/// UI zoom factors for levels `0..=5`, centered on level 2 (`1.0×`). Multiplies the
-/// logical→physical scale, so the WHOLE UI scales uniformly (a global zoom, distinct
-/// from the per-widget `WidgetSize`). Level is a personal preference dial.
-const ZOOM_LEVELS: [f32; 6] = [0.75, 0.875, 1.0, 1.15, 1.3, 1.5];
-const ZOOM_DEFAULT: usize = 2;
+/// UI zoom as a **continuous** level in `[ZOOM_MIN, ZOOM_MAX]` (the 0–5 dial). The
+/// factor is geometric — `ZOOM_RATIO^(level - ZOOM_DEFAULT)` — so level 2 == `1.0×`
+/// and fractional levels (2.5, 3.2 …) interpolate smoothly. Multiplies the
+/// logical→physical scale, scaling the WHOLE UI uniformly (a global zoom, distinct
+/// from the per-widget `WidgetSize`). Driven by the SIZE-row select, `Ctrl +`/`-`/`0`,
+/// and `Ctrl` + mouse-wheel.
+const ZOOM_RATIO: f32 = 1.15;
+/// Neutral (`1.0×`) level — the dial is centered here.
+const ZOOM_DEFAULT: f32 = 2.0;
+const ZOOM_MIN: f32 = 0.0;
+const ZOOM_MAX: f32 = 5.0;
+/// Level change per keypress / wheel notch.
+const ZOOM_STEP: f32 = 0.25;
 
 #[derive(Clone, Copy)]
 struct ThemeCtl {
@@ -71,8 +79,8 @@ struct ThemeCtl {
     intensity: Signal<Intensity>,
     /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
     size: Signal<WidgetSize>,
-    /// Global UI zoom level `0..=5` (indexes [`ZOOM_LEVELS`]).
-    zoom: Signal<usize>,
+    /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
+    zoom: Signal<f32>,
 }
 
 /// Recursively set the size variant on every widget, so a global control reflects
@@ -151,7 +159,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.size.get_untracked())
         .unwrap_or(0);
-    let zoom_idx = ctl.zoom.get_untracked().min(ZOOM_LEVELS.len() - 1);
+    let zoom_idx = (ctl.zoom.get_untracked().round() as usize).min(ZOOM_MAX as usize);
 
     let card = |title: &str, value: &str| {
         Card::new(title)
@@ -461,7 +469,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     Select::new(["0", "1", "2", "3", "4", "5"]).selected(zoom_idx).on_change(
                         move |a| {
                             if let SignalData::Usize(i) = a.data {
-                                ctl.zoom.set(i.min(ZOOM_LEVELS.len() - 1));
+                                ctl.zoom.set((i as f32).min(ZOOM_MAX));
                             }
                         },
                     ),
@@ -947,7 +955,7 @@ struct GpuState {
     /// The size variant last applied to the whole tree (the global SIZE control).
     applied_size: WidgetSize,
     /// The zoom level last applied (relayout when it changes).
-    applied_zoom: usize,
+    applied_zoom: f32,
     content_h: f32,
     applied_scroll: f32,
     focus: FocusManager,
@@ -1123,7 +1131,21 @@ impl GpuState {
     /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
     /// cursor mapping) goes through this, so changing zoom scales the whole UI.
     fn effective_scale(&self) -> f64 {
-        self.scale_factor * ZOOM_LEVELS[self.ctl.zoom.get_untracked().min(5)] as f64
+        let level = self.ctl.zoom.get_untracked();
+        self.scale_factor * ZOOM_RATIO.powf(level - ZOOM_DEFAULT) as f64
+    }
+
+    /// Nudge the zoom level (keys / Ctrl+wheel), clamped to the dial range.
+    fn nudge_zoom(&self, delta: f32) {
+        let level = (self.ctl.zoom.get_untracked() + delta).clamp(ZOOM_MIN, ZOOM_MAX);
+        self.ctl.zoom.set(level);
+        self.window.request_redraw();
+    }
+
+    /// Reset zoom to the neutral level (`Ctrl+0`).
+    fn reset_zoom(&self) {
+        self.ctl.zoom.set(ZOOM_DEFAULT);
+        self.window.request_redraw();
     }
 
     fn render(&mut self) {
@@ -1165,7 +1187,7 @@ impl GpuState {
         // Global ZOOM control: the effective scale changed the logical viewport, so
         // relayout against the new (w, h).
         let zoom = self.ctl.zoom.get_untracked();
-        if zoom != self.applied_zoom {
+        if (zoom - self.applied_zoom).abs() > f32::EPSILON {
             self.applied_zoom = zoom;
             self.layout_dirty = true;
         }
@@ -1355,16 +1377,21 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                // Route scroll through grid-ui: an open overlay (Select dropdown /
-                // Modal) gets it first but only swallows it if it consumes it — a
-                // non-scrolling overlay like the ToastStack lets it fall through. When
-                // nothing in the tree consumes it, scroll the whole page.
-                if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines }) == Handled::No
-                {
-                    // Scroll the whole page (clamped in render).
-                    state.scroll_y += lines * 40.0;
+                if state.ctrl {
+                    // Ctrl + wheel zooms the whole UI (scroll up = zoom in).
+                    state.nudge_zoom(-lines * ZOOM_STEP);
+                } else {
+                    // Route scroll through grid-ui: an open overlay (Select dropdown /
+                    // Modal) gets it first but only swallows it if it consumes it — a
+                    // non-scrolling overlay like the ToastStack lets it fall through.
+                    // When nothing in the tree consumes it, scroll the whole page.
+                    if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines })
+                        == Handled::No
+                    {
+                        state.scroll_y += lines * 40.0;
+                    }
+                    state.window.request_redraw();
                 }
-                state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
@@ -1394,6 +1421,10 @@ impl ApplicationHandler for App {
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
                         }
+                        // Ctrl +/-/0 zoom the whole UI (in / out / reset).
+                        GridKey::Char('=' | '+') if state.ctrl => state.nudge_zoom(ZOOM_STEP),
+                        GridKey::Char('-' | '_') if state.ctrl => state.nudge_zoom(-ZOOM_STEP),
+                        GridKey::Char('0') if state.ctrl => state.reset_zoom(),
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
                         // Escape clears focus and cancels an open rail pick.
