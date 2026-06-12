@@ -41,7 +41,7 @@ pub enum Align {
 /// intrinsic padding / fixed dimensions together, so the whole control grows or
 /// shrinks proportionally. The font part is applied centrally during layout (see
 /// [`LayoutEngine`](crate::layout::LayoutEngine)); each widget scales its own
-/// padding by [`scale`](WidgetSize::scale) in `remeasure`.
+/// padding by [`pad_scale`](WidgetSize::pad_scale) in `remeasure`.
 ///
 /// `Large` matches the historical (un-sized) look; the default is `Normal`, a more
 /// compact baseline. Set per widget via [`LayoutExt::size`](crate::builders::LayoutExt::size).
@@ -57,11 +57,23 @@ pub enum WidgetSize {
 }
 
 impl WidgetSize {
-    /// Density multiplier applied to the inherited font and to a widget's intrinsic
-    /// padding / fixed dimensions, so the whole control scales as a unit.
-    pub fn scale(self) -> f32 {
+    /// Multiplier for the inherited **font** size.
+    pub fn font_scale(self) -> f32 {
         match self {
             WidgetSize::Small => 0.8,
+            WidgetSize::Normal => 0.9,
+            WidgetSize::Large => 1.0,
+        }
+    }
+
+    /// Multiplier for a widget's intrinsic **padding / fixed dimensions** (track,
+    /// box, chevron…). Tighter than the font at `Small` so compact controls aren't
+    /// dominated by their padding — the height of a `Small` button is mostly
+    /// padding, so this is what actually makes it sidebar-compact. `Normal`/`Large`
+    /// match the font scale (no change to them).
+    pub fn pad_scale(self) -> f32 {
+        match self {
+            WidgetSize::Small => 0.5,
             WidgetSize::Normal => 0.9,
             WidgetSize::Large => 1.0,
         }

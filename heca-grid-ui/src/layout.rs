@@ -66,7 +66,7 @@ impl LayoutEngine {
                 // The size variant scales the inherited font too, so text adapts for
                 // every widget without per-widget wiring (controls scale their own
                 // padding in `remeasure`).
-                self.base_font * s.font_scale * s.size.scale()
+                self.base_font * s.font_scale * s.size.font_scale()
             }
         };
         c.base_mut().font = resolved;

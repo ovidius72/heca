@@ -52,8 +52,8 @@ pub enum ButtonVariant {
 }
 
 /// Reference padding (logical px) at [`WidgetSize::Large`]; smaller sizes scale it
-/// down by [`WidgetSize::scale`]. The font scales centrally, so the box stays
-/// balanced at every size.
+/// down by [`WidgetSize::pad_scale`] (tighter than the font at `Small`). The font
+/// scales centrally, so the box stays balanced at every size.
 const BASE_PAD: f32 = 10.0;
 
 fn alpha(p: f32) -> u8 {

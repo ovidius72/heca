@@ -160,12 +160,13 @@ impl Base {
         self.needs_paint.set(false);
     }
 
-    /// The widget's size-variant density factor (font + padding multiplier). The
-    /// font is already scaled by this in [`Base::font`]; widgets multiply their own
-    /// intrinsic padding / fixed dimensions by it in `remeasure` so the whole
-    /// control scales as a unit. See [`WidgetSize`](crate::style::WidgetSize).
+    /// The widget's size-variant **padding/dimension** multiplier — what widgets
+    /// multiply their intrinsic padding / fixed dims by in `remeasure`. (The font is
+    /// scaled separately, by [`WidgetSize::font_scale`], during layout.) At `Small`
+    /// this is tighter than the font so controls get compact, not just smaller. See
+    /// [`WidgetSize`](crate::style::WidgetSize).
     pub fn size_scale(&self) -> f32 {
-        self.style.size.scale()
+        self.style.size.pad_scale()
     }
 }
 

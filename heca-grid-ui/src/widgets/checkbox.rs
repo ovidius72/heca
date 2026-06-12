@@ -130,7 +130,8 @@ impl Checkbox {
         LABEL_GAP * self.base.size_scale() as f64
     }
     fn label_fs(&self) -> f32 {
-        LABEL_FS * self.base.size_scale()
+        // Label is text → font scale (not the tighter padding scale).
+        LABEL_FS * self.base.style.size.font_scale()
     }
 
     fn remeasure(&mut self) {

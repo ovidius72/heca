@@ -126,7 +126,7 @@ impl Component for IconButton {
         if let Some(icon) = self.base.children.first_mut() {
             icon.base_mut().style.size = size;
         }
-        self.base.style.padding = DEFAULT_PAD * size.scale();
+        self.base.style.padding = DEFAULT_PAD * size.pad_scale();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
         self.base.style.width = len;
         self.base.style.height = len;
