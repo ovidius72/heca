@@ -938,6 +938,8 @@ struct GpuState {
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
+    /// Whether the Cmd/Super (meta) key is held — the zoom accelerator on macOS.
+    meta: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -1077,6 +1079,7 @@ impl GpuState {
             palette_open,
             toasts,
             ctrl: false,
+            meta: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1135,7 +1138,17 @@ impl GpuState {
         self.scale_factor * ZOOM_RATIO.powf(level - ZOOM_DEFAULT) as f64
     }
 
-    /// Nudge the zoom level (keys / Ctrl+wheel), clamped to the dial range.
+    /// The platform "accelerator" modifier: Cmd (⌘) on macOS, Ctrl elsewhere — so
+    /// zoom uses the native chord (⌘ +/-/0 on macOS, Ctrl +/-/0 on Windows/Linux).
+    fn accel(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.meta
+        } else {
+            self.ctrl
+        }
+    }
+
+    /// Nudge the zoom level (keys / accel+wheel), clamped to the dial range.
     fn nudge_zoom(&self, delta: f32) {
         let level = (self.ctl.zoom.get_untracked() + delta).clamp(ZOOM_MIN, ZOOM_MAX);
         self.ctl.zoom.set(level);
@@ -1377,8 +1390,8 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                if state.ctrl {
-                    // Ctrl + wheel zooms the whole UI (scroll up = zoom in).
+                if state.accel() {
+                    // Accelerator + wheel zooms the whole UI (scroll up = zoom in).
                     state.nudge_zoom(-lines * ZOOM_STEP);
                 } else {
                     // Route scroll through grid-ui: an open overlay (Select dropdown /
@@ -1397,6 +1410,7 @@ impl ApplicationHandler for App {
                 let s = m.state();
                 state.shift = s.shift_key();
                 state.ctrl = s.control_key();
+                state.meta = s.super_key();
                 // Broadcast to the tree so text widgets can do word-wise editing
                 // (and the command palette can track Ctrl for Ctrl+J/K nav).
                 state.ui.event(&Event::ModifiersChanged(Modifiers {
@@ -1421,10 +1435,10 @@ impl ApplicationHandler for App {
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
                         }
-                        // Ctrl +/-/0 zoom the whole UI (in / out / reset).
-                        GridKey::Char('=' | '+') if state.ctrl => state.nudge_zoom(ZOOM_STEP),
-                        GridKey::Char('-' | '_') if state.ctrl => state.nudge_zoom(-ZOOM_STEP),
-                        GridKey::Char('0') if state.ctrl => state.reset_zoom(),
+                        // Accelerator +/-/0 zoom the whole UI (⌘ on macOS, Ctrl else).
+                        GridKey::Char('=' | '+') if state.accel() => state.nudge_zoom(ZOOM_STEP),
+                        GridKey::Char('-' | '_') if state.accel() => state.nudge_zoom(-ZOOM_STEP),
+                        GridKey::Char('0') if state.accel() => state.reset_zoom(),
                         // Tab / Shift+Tab move keyboard focus across buttons.
                         GridKey::Tab => state.focus.advance(&mut state.ui, !state.shift),
                         // Escape clears focus and cancels an open rail pick.
