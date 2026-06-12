@@ -69,7 +69,9 @@ impl IconButton {
     }
 
     /// Pin a square button of `px` (icon centered); otherwise it hugs the icon.
-    pub fn size(mut self, px: f32) -> Self {
+    /// Named `cell` (not `size`) so the shared [`LayoutExt::size`] size-variant
+    /// builder stays available on `IconButton`.
+    pub fn cell(mut self, px: f32) -> Self {
         self.cell = Some(px);
         self.remeasure();
         self

@@ -159,7 +159,13 @@ impl Icon {
     }
 
     fn glyph_size(&self) -> f32 {
-        self.size.unwrap_or(self.base.font)
+        match self.size {
+            // An explicit px still tracks the size variant (Small/Normal/Large) by
+            // its font scale — otherwise icon-only buttons wouldn't resize. The
+            // font-driven path already includes the variant via `base.font`.
+            Some(px) => px * self.base.style.size.font_scale(),
+            None => self.base.font,
+        }
     }
 }
 
