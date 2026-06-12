@@ -56,6 +56,12 @@ const INTENSITY_OPTS: [Intensity; 4] =
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
 const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
 
+/// UI zoom factors for levels `0..=5`, centered on level 2 (`1.0×`). Multiplies the
+/// logical→physical scale, so the WHOLE UI scales uniformly (a global zoom, distinct
+/// from the per-widget `WidgetSize`). Level is a personal preference dial.
+const ZOOM_LEVELS: [f32; 6] = [0.75, 0.875, 1.0, 1.15, 1.3, 1.5];
+const ZOOM_DEFAULT: usize = 2;
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -65,6 +71,8 @@ struct ThemeCtl {
     intensity: Signal<Intensity>,
     /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
     size: Signal<WidgetSize>,
+    /// Global UI zoom level `0..=5` (indexes [`ZOOM_LEVELS`]).
+    zoom: Signal<usize>,
 }
 
 /// Recursively set the size variant on every widget, so a global control reflects
@@ -143,6 +151,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.size.get_untracked())
         .unwrap_or(0);
+    let zoom_idx = ctl.zoom.get_untracked().min(ZOOM_LEVELS.len() - 1);
 
     let card = |title: &str, value: &str| {
         Card::new(title)
@@ -431,7 +440,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Label::new("Aa").color(theme.foreground)),
         )
         // Widget size variant — applied to the WHOLE tree so the showcase reflects
-        // Small / Normal / Large globally (font + padding scale together).
+        // Small / Normal / Large globally (font + padding scale together) — and a
+        // global ZOOM (0–5, centered on 2) that scales the entire UI uniformly.
         .child(
             Flex::row()
                 .gap(16.0)
@@ -442,6 +452,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.size.set(SIZE_OPTS[i.min(SIZE_OPTS.len() - 1)]);
+                            }
+                        },
+                    ),
+                )
+                .child(Label::new("ZOOM").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["0", "1", "2", "3", "4", "5"]).selected(zoom_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.zoom.set(i.min(ZOOM_LEVELS.len() - 1));
                             }
                         },
                     ),
@@ -926,6 +946,8 @@ struct GpuState {
     layout_dirty: bool,
     /// The size variant last applied to the whole tree (the global SIZE control).
     applied_size: WidgetSize,
+    /// The zoom level last applied (relayout when it changes).
+    applied_zoom: usize,
     content_h: f32,
     applied_scroll: f32,
     focus: FocusManager,
@@ -1010,6 +1032,7 @@ impl GpuState {
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
             size: signal(WidgetSize::Normal),
+            zoom: signal(ZOOM_DEFAULT),
         };
         let built = build_ui(&theme, ctl);
         let BuiltUi {
@@ -1054,6 +1077,7 @@ impl GpuState {
             force_full: true, // first frame paints everything
             layout_dirty: true,
             applied_size: WidgetSize::Normal,
+            applied_zoom: ZOOM_DEFAULT,
             content_h: 0.0,
             applied_scroll: 0.0,
             focus: FocusManager::new(),
@@ -1095,14 +1119,27 @@ impl GpuState {
         }
     }
 
+    /// The logical→physical scale actually used: the window's HiDPI factor times the
+    /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
+    /// cursor mapping) goes through this, so changing zoom scales the whole UI.
+    fn effective_scale(&self) -> f64 {
+        self.scale_factor * ZOOM_LEVELS[self.ctl.zoom.get_untracked().min(5)] as f64
+    }
+
     fn render(&mut self) {
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.05);
         self.last_frame = now;
         let animating = self.ui.tick(dt);
 
+        // Zoom-aware scale: a bigger effective scale shrinks the logical viewport, so
+        // the same widgets render larger (a global zoom). Feed it to both renderers
+        // for crisp rasterization at the zoomed size.
         let phys = self.window.inner_size();
-        let scale = self.scale_factor as f32;
+        let eff = self.effective_scale();
+        self.grid.set_scale_factor(eff);
+        self.text.set_scale_factor(eff);
+        let scale = eff as f32;
         let (w, h) = (phys.width as f32 / scale, phys.height as f32 / scale);
 
         self.grid.set_screen_size(&self.queue, w, h);
@@ -1123,6 +1160,13 @@ impl GpuState {
         if size != self.applied_size {
             apply_size(&mut self.ui, size);
             self.applied_size = size;
+            self.layout_dirty = true;
+        }
+        // Global ZOOM control: the effective scale changed the logical viewport, so
+        // relayout against the new (w, h).
+        let zoom = self.ctl.zoom.get_untracked();
+        if zoom != self.applied_zoom {
+            self.applied_zoom = zoom;
             self.layout_dirty = true;
         }
 
@@ -1274,10 +1318,10 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
-                state.cursor = Point::new(
-                    position.x / state.scale_factor,
-                    position.y / state.scale_factor,
-                );
+                // Map through the zoom-aware scale so hit-testing matches the zoomed
+                // layout (else clicks land on the wrong widgets when zoomed).
+                let eff = state.effective_scale();
+                state.cursor = Point::new(position.x / eff, position.y / eff);
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
                 // Route hover through grid-ui: an open overlay gets first dibs but
