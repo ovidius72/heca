@@ -56,10 +56,10 @@ pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
 pub use scene::{DrawCommand, FontRole, Scene};
-pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track};
+pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track, WidgetSize};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
-    container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
+    container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button,
     ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
     LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
@@ -76,10 +76,10 @@ pub mod prelude {
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;
-    pub use crate::style::{Align, Direction, GridCell, Justify, Length, Track};
+    pub use crate::style::{Align, Direction, GridCell, Justify, Length, Track, WidgetSize};
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
-        container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonSize,
+        container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button,
         ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
         LabelSide, Modal, Orientation, Pane, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,

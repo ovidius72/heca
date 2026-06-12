@@ -159,6 +159,14 @@ impl Base {
     pub fn clear_needs_paint(&self) {
         self.needs_paint.set(false);
     }
+
+    /// The widget's size-variant density factor (font + padding multiplier). The
+    /// font is already scaled by this in [`Base::font`]; widgets multiply their own
+    /// intrinsic padding / fixed dimensions by it in `remeasure` so the whole
+    /// control scales as a unit. See [`WidgetSize`](crate::style::WidgetSize).
+    pub fn size_scale(&self) -> f32 {
+        self.style.size.scale()
+    }
 }
 
 impl Default for Base {

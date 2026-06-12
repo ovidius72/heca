@@ -37,6 +37,37 @@ pub enum Align {
     Stretch,
 }
 
+/// Overall **size variant** of a widget. Scales the widget's font **and** its
+/// intrinsic padding / fixed dimensions together, so the whole control grows or
+/// shrinks proportionally. The font part is applied centrally during layout (see
+/// [`LayoutEngine`](crate::layout::LayoutEngine)); each widget scales its own
+/// padding by [`scale`](WidgetSize::scale) in `remeasure`.
+///
+/// `Large` matches the historical (un-sized) look; the default is `Normal`, a more
+/// compact baseline. Set per widget via [`LayoutExt::size`](crate::builders::LayoutExt::size).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WidgetSize {
+    /// Compact controls (`0.8×`).
+    Small,
+    /// The default — tighter than the raw base font (`0.9×`).
+    #[default]
+    Normal,
+    /// Roomy controls at the full base font + padding (`1.0×`).
+    Large,
+}
+
+impl WidgetSize {
+    /// Density multiplier applied to the inherited font and to a widget's intrinsic
+    /// padding / fixed dimensions, so the whole control scales as a unit.
+    pub fn scale(self) -> f32 {
+        match self {
+            WidgetSize::Small => 0.8,
+            WidgetSize::Normal => 0.9,
+            WidgetSize::Large => 1.0,
+        }
+    }
+}
+
 /// A size along one axis.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
@@ -159,6 +190,9 @@ pub struct Style {
     /// Semantic multiplier applied to the inherited base font (header ≈ 2.0,
     /// caption ≈ 0.8, body = 1.0). Ignored when `font_size` is set explicitly.
     pub font_scale: f32,
+    /// Overall size variant — scales font + intrinsic padding together. Composes
+    /// with [`font_scale`](Self::font_scale) (both multiply the base font).
+    pub size: WidgetSize,
     /// When true the node is removed from layout entirely (`display: none`) — it
     /// takes no space and paints nothing. Used by collapsible containers
     /// (e.g. [`ItemGroup`](crate::widgets::ItemGroup)) to fold rows away.
@@ -191,6 +225,7 @@ impl Default for Style {
             // (x > 0) overrides it. Resolved centrally during layout.
             font_size: 0.0,
             font_scale: 1.0,
+            size: WidgetSize::Normal,
             hidden: false,
             grid_cell: None,
         }

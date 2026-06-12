@@ -42,7 +42,7 @@ mod tooltip;
 
 pub use alert::{Alert, AlertVariant};
 pub use badge::{Badge, BadgeVariant};
-pub use button::{Button, ButtonSize, ButtonVariant};
+pub use button::{Button, ButtonVariant};
 pub use card::Card;
 pub use checkbox::{Checkbox, LabelSide};
 pub use chrome_region::{ChromeRegion, RegionMode};

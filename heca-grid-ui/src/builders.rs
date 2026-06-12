@@ -13,10 +13,17 @@ use crate::color::Color;
 use crate::component::Component;
 use crate::reactive::SignalUpdate;
 use crate::scene::{Border, Glow};
-use crate::style::{Align, Direction, Justify, Length};
+use crate::style::{Align, Direction, Justify, Length, WidgetSize};
 
 /// Arrangement builders: how a container lays out itself and its children.
 pub trait LayoutExt: Component + Sized {
+    /// Size variant — scales the widget's font and intrinsic padding together
+    /// (`Small`/`Normal`/`Big`). Available on every widget; controls honor it in
+    /// their `remeasure`, and text simply inherits the scaled font.
+    fn size(mut self, size: WidgetSize) -> Self {
+        self.base_mut().style.size = size;
+        self
+    }
     /// Main-axis direction.
     fn direction(mut self, d: Direction) -> Self {
         self.base_mut().style.direction = d;

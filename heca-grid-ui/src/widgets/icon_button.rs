@@ -118,8 +118,15 @@ impl Component for IconButton {
         self.on_click.is_some() && !self.base.disabled.get_untracked()
     }
 
-    /// A pinned square, or auto (hug the icon + padding) when unset.
+    /// A pinned square, or auto (hug the icon + padding) when unset. The size
+    /// variant scales the padding and cascades to the icon child so the whole
+    /// affordance grows/shrinks together.
     fn remeasure(&mut self) {
+        let size = self.base.style.size;
+        if let Some(icon) = self.base.children.first_mut() {
+            icon.base_mut().style.size = size;
+        }
+        self.base.style.padding = DEFAULT_PAD * size.scale();
         let len = self.cell.map(Length::Px).unwrap_or(Length::Auto);
         self.base.style.width = len;
         self.base.style.height = len;

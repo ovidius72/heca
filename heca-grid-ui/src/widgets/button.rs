@@ -1,6 +1,6 @@
 //! [`Button`] — an interactive surface whose look is driven by a [`ButtonVariant`]
-//! and [`ButtonSize`] (GridCN/shadcn model), with an **animated** hover that
-//! differs per variant:
+//! and the shared [`WidgetSize`](crate::style::WidgetSize) (GridCN/shadcn model),
+//! with an **animated** hover that differs per variant:
 //!
 //! | Variant | Hover behavior |
 //! |---------|----------------|
@@ -51,32 +51,10 @@ pub enum ButtonVariant {
     Link,
 }
 
-/// Size of a [`Button`] — controls font size and padding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ButtonSize {
-    Small,
-    #[default]
-    Medium,
-    Large,
-}
-
-impl ButtonSize {
-    /// Semantic font multiplier relative to the inherited base font.
-    fn font_scale(self) -> f32 {
-        match self {
-            ButtonSize::Small => 0.85,
-            ButtonSize::Medium => 1.0,
-            ButtonSize::Large => 1.15,
-        }
-    }
-    fn padding(self) -> f32 {
-        match self {
-            ButtonSize::Small => 7.0,
-            ButtonSize::Medium => 10.0,
-            ButtonSize::Large => 13.0,
-        }
-    }
-}
+/// Reference padding (logical px) at [`WidgetSize::Large`]; smaller sizes scale it
+/// down by [`WidgetSize::scale`]. The font scales centrally, so the box stays
+/// balanced at every size.
+const BASE_PAD: f32 = 10.0;
 
 fn alpha(p: f32) -> u8 {
     (p.clamp(0.0, 1.0) * 255.0).round() as u8
@@ -87,7 +65,6 @@ pub struct Button {
     base: Base,
     label: Signal<String>,
     variant: ButtonVariant,
-    size: ButtonSize,
     show_glow: bool,
     show_border: bool,
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
@@ -101,14 +78,13 @@ pub struct Button {
 impl Button {
     /// A primary button showing `label`.
     pub fn new(label: impl Into<String>) -> Self {
-        let mut base = Base::new();
-        base.style.font_scale = ButtonSize::Medium.font_scale();
-        base.style.padding = ButtonSize::Medium.padding();
+        let base = Base::new();
+        // Padding + font derive from the size variant (default `Normal`) in
+        // `remeasure`; the size is set via `LayoutExt::size`.
         let mut button = Self {
             base,
             label: signal(label.into()),
             variant: ButtonVariant::Primary,
-            size: ButtonSize::Medium,
             show_glow: true,
             show_border: true,
             progress: 0.0,
@@ -143,15 +119,6 @@ impl Button {
     /// Set the variant.
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
         self.variant = variant;
-        self
-    }
-
-    /// Set the size (a semantic font multiplier + padding), tracking the base font.
-    pub fn size(mut self, size: ButtonSize) -> Self {
-        self.size = size;
-        self.base.style.font_scale = size.font_scale();
-        self.base.style.padding = size.padding();
-        self.remeasure();
         self
     }
 
@@ -263,13 +230,15 @@ impl Component for Button {
         !self.base.disabled.get_untracked()
     }
 
-    /// Width + height track the resolved font (base font × the size scale).
+    /// Width + height track the resolved font (which already includes the size
+    /// scale) plus size-scaled padding, so the whole button grows/shrinks together.
     fn remeasure(&mut self) {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.font;
-        let pad = self.base.style.padding * 2.0;
-        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad);
+        let pad = BASE_PAD * self.base.size_scale();
+        self.base.style.padding = pad;
+        self.base.style.width = Length::Px((chars + 2.0) * fs * MONO_ADVANCE_RATIO + pad * 2.0);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + pad * 2.0);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

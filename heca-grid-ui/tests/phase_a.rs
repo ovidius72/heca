@@ -163,6 +163,47 @@ fn button_click_fires_within_bounds() {
 }
 
 #[test]
+fn widget_size_scales_font_and_box_proportionally() {
+    // Big is the reference look; Normal (the default) and Small scale down — font
+    // and the whole box shrink together so the control stays balanced.
+    let measure = |size: WidgetSize| -> (f32, Rectangle) {
+        let mut b = Button::new("RUN").size(size);
+        LayoutEngine::new().compute(&mut b, Size::new(400.0, 100.0));
+        (b.base().font, b.base().bounds)
+    };
+    let (small_f, small_b) = measure(WidgetSize::Small);
+    let (normal_f, normal_b) = measure(WidgetSize::Normal);
+    let (big_f, big_b) = measure(WidgetSize::Large);
+
+    assert!(small_f < normal_f && normal_f < big_f, "font grows Small < Normal < Big");
+    assert!(
+        small_b.size.h < normal_b.size.h && normal_b.size.h < big_b.size.h,
+        "box height grows with the size variant"
+    );
+    assert!(small_b.size.w < big_b.size.w, "box width grows with the size variant");
+
+    // The default is Normal.
+    let mut default_btn = Button::new("RUN");
+    LayoutEngine::new().compute(&mut default_btn, Size::new(400.0, 100.0));
+    assert_eq!(default_btn.base().font, normal_f, "default size is Normal");
+}
+
+#[test]
+fn widget_size_scales_text_only_widgets_via_font() {
+    // A Label has no padding, so the size variant shows purely as a smaller font.
+    let font = |size: WidgetSize| {
+        let mut l = Label::new("status").size(size);
+        LayoutEngine::new().compute(&mut l, Size::new(200.0, 50.0));
+        l.base().font
+    };
+    assert!(
+        font(WidgetSize::Small) < font(WidgetSize::Normal)
+            && font(WidgetSize::Normal) < font(WidgetSize::Large),
+        "text widgets inherit the size variant through the resolved font"
+    );
+}
+
+#[test]
 fn button_hover_tracks_pointer() {
     let mut button = Button::new("HOVER");
     LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));

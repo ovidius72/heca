@@ -53,6 +53,9 @@ use winit::window::{Window, WindowId};
 const INTENSITY_OPTS: [Intensity; 4] =
     [Intensity::Off, Intensity::Low, Intensity::Medium, Intensity::Heavy];
 
+/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
+const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -60,6 +63,17 @@ struct ThemeCtl {
     border: Signal<f32>,
     font: Signal<f32>,
     intensity: Signal<Intensity>,
+    /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
+    size: Signal<WidgetSize>,
+}
+
+/// Recursively set the size variant on every widget, so a global control reflects
+/// across the whole showcase (in a real app you'd size widgets individually).
+fn apply_size(c: &mut dyn Component, size: WidgetSize) {
+    c.base_mut().style.size = size;
+    for child in c.base_mut().children.iter_mut() {
+        apply_size(child.as_mut(), size);
+    }
 }
 
 /// Handles the host keeps after building the UI, to drive chrome interactions
@@ -125,6 +139,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.intensity.get_untracked())
         .unwrap_or(2);
+    let size_idx = SIZE_OPTS
+        .iter()
+        .position(|x| *x == ctl.size.get_untracked())
+        .unwrap_or(0);
 
     let card = |title: &str, value: &str| {
         Card::new(title)
@@ -411,6 +429,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Input::new().value("SIZED"))
                 .child(Select::new(["ALPHA", "BETA", "GAMMA"]))
                 .child(Label::new("Aa").color(theme.foreground)),
+        )
+        // Widget size variant — applied to the WHOLE tree so the showcase reflects
+        // Small / Normal / Large globally (font + padding scale together).
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("SIZE").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["NORMAL", "SMALL", "LARGE"]).selected(size_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.size.set(SIZE_OPTS[i.min(SIZE_OPTS.len() - 1)]);
+                            }
+                        },
+                    ),
+                ),
         )
         // Item rows: a single-select menu panel. Clicking a row highlights it and
         // clears the others. Immediate-mode (no reactive effects): each row's
@@ -889,6 +924,8 @@ struct GpuState {
     /// Layout is recomputed only when a layout input changed (resize/font/content
     /// event) — not on pure-animation frames.
     layout_dirty: bool,
+    /// The size variant last applied to the whole tree (the global SIZE control).
+    applied_size: WidgetSize,
     content_h: f32,
     applied_scroll: f32,
     focus: FocusManager,
@@ -972,6 +1009,7 @@ impl GpuState {
             border: signal(theme.border_width),
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
+            size: signal(WidgetSize::Normal),
         };
         let built = build_ui(&theme, ctl);
         let BuiltUi {
@@ -1015,6 +1053,7 @@ impl GpuState {
             next_frame_in: None,
             force_full: true, // first frame paints everything
             layout_dirty: true,
+            applied_size: WidgetSize::Normal,
             content_h: 0.0,
             applied_scroll: 0.0,
             focus: FocusManager::new(),
@@ -1077,6 +1116,13 @@ impl GpuState {
         let font = self.ctl.font.get_untracked();
         if (font - self.theme.font_size).abs() > f32::EPSILON {
             self.theme.font_size = font;
+            self.layout_dirty = true;
+        }
+        // Global SIZE control: push the chosen variant onto every widget + reflow.
+        let size = self.ctl.size.get_untracked();
+        if size != self.applied_size {
+            apply_size(&mut self.ui, size);
+            self.applied_size = size;
             self.layout_dirty = true;
         }
 
