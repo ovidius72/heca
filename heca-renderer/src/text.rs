@@ -415,7 +415,17 @@ impl TextRenderer {
     }
 
     pub fn set_scale_factor(&mut self, scale: f64) {
+        if (scale - self.scale_factor).abs() <= f64::EPSILON {
+            return;
+        }
         self.scale_factor = scale;
+        // Cached glyphs/layouts were rasterized for the old scale and are now wrong;
+        // clear them. Clearing the atlas also keeps it from filling up as you zoom
+        // through many scales (each scale is a distinct glyph set) — which otherwise
+        // latched the atlas "full" and made all new text disappear.
+        self.atlas.clear();
+        self.label_cache.clear();
+        self.emit_cache.clear();
     }
 
     /// Physical framebuffer size in pixels; scissor rects are clamped to it.
