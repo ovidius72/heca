@@ -163,6 +163,47 @@ fn button_click_fires_within_bounds() {
 }
 
 #[test]
+fn widget_size_scales_font_and_box_proportionally() {
+    // Big is the reference look; Normal (the default) and Small scale down — font
+    // and the whole box shrink together so the control stays balanced.
+    let measure = |size: WidgetSize| -> (f32, Rectangle) {
+        let mut b = Button::new("RUN").size(size);
+        LayoutEngine::new().compute(&mut b, Size::new(400.0, 100.0));
+        (b.base().font, b.base().bounds)
+    };
+    let (small_f, small_b) = measure(WidgetSize::Small);
+    let (normal_f, normal_b) = measure(WidgetSize::Normal);
+    let (big_f, big_b) = measure(WidgetSize::Large);
+
+    assert!(small_f < normal_f && normal_f < big_f, "font grows Small < Normal < Big");
+    assert!(
+        small_b.size.h < normal_b.size.h && normal_b.size.h < big_b.size.h,
+        "box height grows with the size variant"
+    );
+    assert!(small_b.size.w < big_b.size.w, "box width grows with the size variant");
+
+    // The default is Normal.
+    let mut default_btn = Button::new("RUN");
+    LayoutEngine::new().compute(&mut default_btn, Size::new(400.0, 100.0));
+    assert_eq!(default_btn.base().font, normal_f, "default size is Normal");
+}
+
+#[test]
+fn widget_size_scales_text_only_widgets_via_font() {
+    // A Label has no padding, so the size variant shows purely as a smaller font.
+    let font = |size: WidgetSize| {
+        let mut l = Label::new("status").size(size);
+        LayoutEngine::new().compute(&mut l, Size::new(200.0, 50.0));
+        l.base().font
+    };
+    assert!(
+        font(WidgetSize::Small) < font(WidgetSize::Normal)
+            && font(WidgetSize::Normal) < font(WidgetSize::Large),
+        "text widgets inherit the size variant through the resolved font"
+    );
+}
+
+#[test]
 fn button_hover_tracks_pointer() {
     let mut button = Button::new("HOVER");
     LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
@@ -1905,10 +1946,19 @@ fn collapsed_dock_body_is_not_painted() {
 fn icon_lays_out_as_a_square() {
     use heca_grid_ui::{Glyph, Icon};
     let mut icon = Icon::new(Glyph::GitBranch).size(24.0);
+    // Large == the reference (un-scaled) size; the explicit px is taken verbatim.
+    icon.base_mut().style.size = WidgetSize::Large;
     LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
     let b = icon.base().bounds;
     assert_eq!(b.size.w, 24.0, "icon width = glyph size");
     assert_eq!(b.size.h, 24.0, "icon is square");
+
+    // The size variant scales an explicit glyph size too (so icon-only buttons
+    // resize): Small renders the same icon smaller.
+    let mut small = Icon::new(Glyph::GitBranch).size(24.0);
+    small.base_mut().style.size = WidgetSize::Small;
+    LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
+    assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
 }
 
 #[test]
@@ -2234,7 +2284,7 @@ fn icon_button_hugs_icon_by_default_and_pins_an_explicit_size() {
     assert!((b.size.w - b.size.h).abs() < 2.0, "roughly square");
 
     // Pinned: an exact square.
-    let mut pinned = IconButton::new(Icon::new(Glyph::Gear).size(18.0)).size(40.0);
+    let mut pinned = IconButton::new(Icon::new(Glyph::Gear).size(18.0)).cell(40.0);
     LayoutEngine::new().compute(&mut pinned, Size::new(200.0, 200.0));
     let pb = pinned.base().bounds;
     assert_eq!(pb.size.w, 40.0, "pinned width");

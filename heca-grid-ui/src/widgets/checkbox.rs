@@ -121,17 +121,32 @@ impl Checkbox {
         self.checked.get_untracked()
     }
 
+    /// Box size, label gap and label font scaled by the size variant, so the whole
+    /// control (and its hit boxes) grow/shrink together.
+    fn box_size(&self) -> f64 {
+        BOX_SIZE * self.base.size_scale() as f64
+    }
+    fn label_gap(&self) -> f64 {
+        LABEL_GAP * self.base.size_scale() as f64
+    }
+    fn label_fs(&self) -> f32 {
+        // Label is text → font scale (not the tighter padding scale).
+        LABEL_FS * self.base.style.size.font_scale()
+    }
+
     fn remeasure(&mut self) {
+        let box_size = self.box_size() as f32;
         match &self.label {
             Some(label) => {
-                let text_w = label.chars().count() as f32 * LABEL_FS * MONO_ADVANCE_RATIO;
-                let line = LABEL_FS * MONO_LINE_RATIO;
-                self.base.style.width = Length::Px(BOX_SIZE as f32 + LABEL_GAP as f32 + text_w);
-                self.base.style.height = Length::Px((BOX_SIZE as f32).max(line));
+                let fs = self.label_fs();
+                let text_w = label.chars().count() as f32 * fs * MONO_ADVANCE_RATIO;
+                let line = fs * MONO_LINE_RATIO;
+                self.base.style.width = Length::Px(box_size + self.label_gap() as f32 + text_w);
+                self.base.style.height = Length::Px(box_size.max(line));
             }
             None => {
-                self.base.style.width = Length::Px(BOX_SIZE as f32);
-                self.base.style.height = Length::Px(BOX_SIZE as f32);
+                self.base.style.width = Length::Px(box_size);
+                self.base.style.height = Length::Px(box_size);
             }
         }
     }
@@ -139,13 +154,14 @@ impl Checkbox {
     /// The box rect (vertically centered), positioned per the label side.
     fn box_rect(&self) -> Rectangle {
         let b = self.base.bounds;
-        let y = b.loc.y + (b.size.h - BOX_SIZE) / 2.0;
+        let box_size = self.box_size();
+        let y = b.loc.y + (b.size.h - box_size) / 2.0;
         let x = if self.label.is_some() && self.label_side == LabelSide::Left {
-            b.loc.x + b.size.w - BOX_SIZE
+            b.loc.x + b.size.w - box_size
         } else {
             b.loc.x
         };
-        Rectangle::new(Point::new(x, y), Size::new(BOX_SIZE, BOX_SIZE))
+        Rectangle::new(Point::new(x, y), Size::new(box_size, box_size))
     }
 
     /// The label text rect (renderer centers vertically).
@@ -153,9 +169,9 @@ impl Checkbox {
         let b = self.base.bounds;
         let x = match self.label_side {
             LabelSide::Left => b.loc.x,
-            LabelSide::Right => b.loc.x + BOX_SIZE + LABEL_GAP,
+            LabelSide::Right => b.loc.x + self.box_size() + self.label_gap(),
         };
-        let w = (b.size.w - BOX_SIZE - LABEL_GAP).max(0.0);
+        let w = (b.size.w - self.box_size() - self.label_gap()).max(0.0);
         Rectangle::new(Point::new(x, b.loc.y), Size::new(w, b.size.h))
     }
 
@@ -209,11 +225,11 @@ impl Component for Checkbox {
 
         // Checked indicator: an accent square that pops in from the box center.
         if p > 0.0 {
-            let inner = BOX_SIZE * INNER_FRAC * p as f64;
+            let inner = bx.size.w * INNER_FRAC * p as f64;
             let indicator = Rectangle::new(
                 Point::new(
-                    bx.loc.x + (BOX_SIZE - inner) / 2.0,
-                    bx.loc.y + (BOX_SIZE - inner) / 2.0,
+                    bx.loc.x + (bx.size.w - inner) / 2.0,
+                    bx.loc.y + (bx.size.h - inner) / 2.0,
                 ),
                 Size::new(inner, inner),
             );
@@ -231,7 +247,7 @@ impl Component for Checkbox {
                 self.label_rect(),
                 label,
                 foreground,
-                LABEL_FS,
+                self.label_fs(),
                 TextAlign::Start,
                 false,
             );

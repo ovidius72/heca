@@ -1,5 +1,6 @@
 //! [`Label`] — a single run of text bound to a reactive signal.
 
+use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
@@ -96,3 +97,7 @@ impl Component for Label {
         );
     }
 }
+
+// Gives `Label` the shared builders — notably `size` (the size variant) and
+// width/height — even though it has no children.
+impl LayoutExt for Label {}

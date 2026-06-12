@@ -75,6 +75,19 @@ impl Atlas {
         &self.view
     }
 
+    /// Drop every cached glyph and rewind the shelf packer (the texture itself is
+    /// left as-is — stale pixels are never referenced once the UV map is cleared).
+    /// Used when the render scale changes (zoom / HiDPI): old-scale glyphs would
+    /// never be reused and, left to accumulate, would fill the atlas and make text
+    /// vanish. The caller must also drop any caches holding [`AtlasGlyph`] UVs.
+    pub fn clear(&mut self) {
+        self.pen_x = PAD;
+        self.pen_y = PAD;
+        self.shelf_h = 0;
+        self.glyphs.clear();
+        self.full = false;
+    }
+
     /// The atlas entry for `key`, rasterizing + inserting it on a miss. `None` for a
     /// glyph with no bitmap (whitespace) or if the atlas is full.
     pub fn glyph(

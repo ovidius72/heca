@@ -60,7 +60,14 @@ impl LayoutEngine {
         // and let the widget re-measure from it before we read its taffy style.
         let resolved = {
             let s = &c.base().style;
-            if s.font_size > 0.0 { s.font_size } else { self.base_font * s.font_scale }
+            if s.font_size > 0.0 {
+                s.font_size
+            } else {
+                // The size variant scales the inherited font too, so text adapts for
+                // every widget without per-widget wiring (controls scale their own
+                // padding in `remeasure`).
+                self.base_font * s.font_scale * s.size.font_scale()
+            }
         };
         c.base_mut().font = resolved;
         c.remeasure();

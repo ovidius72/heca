@@ -53,6 +53,25 @@ use winit::window::{Window, WindowId};
 const INTENSITY_OPTS: [Intensity; 4] =
     [Intensity::Off, Intensity::Low, Intensity::Medium, Intensity::Heavy];
 
+/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
+const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
+
+/// UI zoom as a **continuous** level in `[ZOOM_MIN, ZOOM_MAX]` (the 0–5 dial). The
+/// factor is geometric — `ZOOM_RATIO^(level - ZOOM_DEFAULT)` — so level 2 == `1.0×`
+/// and fractional levels (2.5, 3.2 …) interpolate smoothly. Multiplies the
+/// logical→physical scale, scaling the WHOLE UI uniformly (a global zoom, distinct
+/// from the per-widget `WidgetSize`). Driven by the SIZE-row select, `Ctrl +`/`-`/`0`,
+/// and `Ctrl` + mouse-wheel.
+const ZOOM_RATIO: f32 = 1.15;
+/// Neutral (`1.0×`) level — the dial is centered here.
+const ZOOM_DEFAULT: f32 = 2.0;
+const ZOOM_MIN: f32 = 0.0;
+const ZOOM_MAX: f32 = 5.0;
+/// Level change per keypress / wheel notch.
+const ZOOM_STEP: f32 = 0.25;
+
+const APP_TITLE: &str = "heca-grid-ui showcase";
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -60,6 +79,19 @@ struct ThemeCtl {
     border: Signal<f32>,
     font: Signal<f32>,
     intensity: Signal<Intensity>,
+    /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
+    size: Signal<WidgetSize>,
+    /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
+    zoom: Signal<f32>,
+}
+
+/// Recursively set the size variant on every widget, so a global control reflects
+/// across the whole showcase (in a real app you'd size widgets individually).
+fn apply_size(c: &mut dyn Component, size: WidgetSize) {
+    c.base_mut().style.size = size;
+    for child in c.base_mut().children.iter_mut() {
+        apply_size(child.as_mut(), size);
+    }
 }
 
 /// Handles the host keeps after building the UI, to drive chrome interactions
@@ -125,6 +157,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.intensity.get_untracked())
         .unwrap_or(2);
+    let size_idx = SIZE_OPTS
+        .iter()
+        .position(|x| *x == ctl.size.get_untracked())
+        .unwrap_or(0);
+    let zoom_idx = (ctl.zoom.get_untracked().round() as usize).min(ZOOM_MAX as usize);
 
     let card = |title: &str, value: &str| {
         Card::new(title)
@@ -411,6 +448,34 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Input::new().value("SIZED"))
                 .child(Select::new(["ALPHA", "BETA", "GAMMA"]))
                 .child(Label::new("Aa").color(theme.foreground)),
+        )
+        // Widget size variant — applied to the WHOLE tree so the showcase reflects
+        // Small / Normal / Large globally (font + padding scale together) — and a
+        // global ZOOM (0–5, centered on 2) that scales the entire UI uniformly.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("SIZE").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["NORMAL", "SMALL", "LARGE"]).selected(size_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.size.set(SIZE_OPTS[i.min(SIZE_OPTS.len() - 1)]);
+                            }
+                        },
+                    ),
+                )
+                .child(Label::new("ZOOM").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["0", "1", "2", "3", "4", "5"]).selected(zoom_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.zoom.set((i as f32).min(ZOOM_MAX));
+                            }
+                        },
+                    ),
+                ),
         )
         // Item rows: a single-select menu panel. Clicking a row highlights it and
         // clears the others. Immediate-mode (no reactive effects): each row's
@@ -875,6 +940,12 @@ struct GpuState {
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
+    /// Whether the Cmd/Super (meta) key is held.
+    meta: bool,
+    /// tmux-style prefix is armed (the next key is a heca command, not the app's).
+    prefix_pending: bool,
+    /// In the dedicated zoom mode (entered via `prefix +`); `j`/`k` zoom, Esc exits.
+    zoom_mode: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -889,6 +960,10 @@ struct GpuState {
     /// Layout is recomputed only when a layout input changed (resize/font/content
     /// event) — not on pure-animation frames.
     layout_dirty: bool,
+    /// The size variant last applied to the whole tree (the global SIZE control).
+    applied_size: WidgetSize,
+    /// The zoom level last applied (relayout when it changes).
+    applied_zoom: f32,
     content_h: f32,
     applied_scroll: f32,
     focus: FocusManager,
@@ -898,7 +973,7 @@ struct GpuState {
 impl GpuState {
     async fn new(event_loop: &ActiveEventLoop) -> Self {
         let attrs = Window::default_attributes()
-            .with_title("heca-grid-ui showcase")
+            .with_title(APP_TITLE)
             .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
         // Bridge widget self-invalidation to the event loop: a widget that marks
@@ -972,6 +1047,8 @@ impl GpuState {
             border: signal(theme.border_width),
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
+            size: signal(WidgetSize::Normal),
+            zoom: signal(ZOOM_DEFAULT),
         };
         let built = build_ui(&theme, ctl);
         let BuiltUi {
@@ -1008,6 +1085,9 @@ impl GpuState {
             palette_open,
             toasts,
             ctrl: false,
+            meta: false,
+            prefix_pending: false,
+            zoom_mode: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1015,6 +1095,8 @@ impl GpuState {
             next_frame_in: None,
             force_full: true, // first frame paints everything
             layout_dirty: true,
+            applied_size: WidgetSize::Normal,
+            applied_zoom: ZOOM_DEFAULT,
             content_h: 0.0,
             applied_scroll: 0.0,
             focus: FocusManager::new(),
@@ -1056,14 +1138,85 @@ impl GpuState {
         }
     }
 
+    /// The logical→physical scale actually used: the window's HiDPI factor times the
+    /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
+    /// cursor mapping) goes through this, so changing zoom scales the whole UI.
+    fn effective_scale(&self) -> f64 {
+        let level = self.ctl.zoom.get_untracked();
+        self.scale_factor * ZOOM_RATIO.powf(level - ZOOM_DEFAULT) as f64
+    }
+
+    /// The platform "accelerator" modifier: Cmd (⌘) on macOS, Ctrl elsewhere — so
+    /// zoom uses the native chord (⌘ +/-/0 on macOS, Ctrl +/-/0 on Windows/Linux).
+    fn accel(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.meta
+        } else {
+            self.ctrl
+        }
+    }
+
+    /// Nudge the zoom level (keys / accel+wheel), clamped to the dial range.
+    fn nudge_zoom(&self, delta: f32) {
+        let level = (self.ctl.zoom.get_untracked() + delta).clamp(ZOOM_MIN, ZOOM_MAX);
+        self.ctl.zoom.set(level);
+        self.window.request_redraw();
+    }
+
+    /// Reset zoom to the neutral level.
+    fn reset_zoom(&self) {
+        self.ctl.zoom.set(ZOOM_DEFAULT);
+        self.window.request_redraw();
+    }
+
+    fn enter_zoom_mode(&mut self) {
+        self.zoom_mode = true;
+        self.window
+            .set_title(&format!("{APP_TITLE} — ZOOM  (k/+ in · j/- out · 0 reset · Esc exit)"));
+        self.window.request_redraw();
+    }
+
+    fn exit_zoom_mode(&mut self) {
+        self.zoom_mode = false;
+        self.window.set_title(APP_TITLE);
+        self.window.request_redraw();
+    }
+
+    /// A key pressed while in zoom mode. The mode stays active (so you can keep
+    /// pressing j/k) until Esc/Enter/q.
+    fn zoom_mode_key(&mut self, gk: GridKey) {
+        match gk {
+            GridKey::Char('k' | '+' | '=') => self.nudge_zoom(ZOOM_STEP),
+            GridKey::Char('j' | '-' | '_') => self.nudge_zoom(-ZOOM_STEP),
+            GridKey::Char('0') => self.reset_zoom(),
+            GridKey::Escape | GridKey::Enter | GridKey::Char('q') => self.exit_zoom_mode(),
+            _ => {} // swallow other keys while the mode is held
+        }
+    }
+
+    /// The key after the tmux-style prefix: a heca command (the showcase only wires
+    /// the zoom mode; the real app dispatches its full keymap here).
+    fn prefix_command(&mut self, gk: GridKey) {
+        self.prefix_pending = false;
+        if matches!(gk, GridKey::Char('+' | '=')) {
+            self.enter_zoom_mode();
+        }
+    }
+
     fn render(&mut self) {
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.05);
         self.last_frame = now;
         let animating = self.ui.tick(dt);
 
+        // Zoom-aware scale: a bigger effective scale shrinks the logical viewport, so
+        // the same widgets render larger (a global zoom). Feed it to both renderers
+        // for crisp rasterization at the zoomed size.
         let phys = self.window.inner_size();
-        let scale = self.scale_factor as f32;
+        let eff = self.effective_scale();
+        self.grid.set_scale_factor(eff);
+        self.text.set_scale_factor(eff);
+        let scale = eff as f32;
         let (w, h) = (phys.width as f32 / scale, phys.height as f32 / scale);
 
         self.grid.set_screen_size(&self.queue, w, h);
@@ -1077,6 +1230,20 @@ impl GpuState {
         let font = self.ctl.font.get_untracked();
         if (font - self.theme.font_size).abs() > f32::EPSILON {
             self.theme.font_size = font;
+            self.layout_dirty = true;
+        }
+        // Global SIZE control: push the chosen variant onto every widget + reflow.
+        let size = self.ctl.size.get_untracked();
+        if size != self.applied_size {
+            apply_size(&mut self.ui, size);
+            self.applied_size = size;
+            self.layout_dirty = true;
+        }
+        // Global ZOOM control: the effective scale changed the logical viewport, so
+        // relayout against the new (w, h).
+        let zoom = self.ctl.zoom.get_untracked();
+        if (zoom - self.applied_zoom).abs() > f32::EPSILON {
+            self.applied_zoom = zoom;
             self.layout_dirty = true;
         }
 
@@ -1228,10 +1395,10 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
-                state.cursor = Point::new(
-                    position.x / state.scale_factor,
-                    position.y / state.scale_factor,
-                );
+                // Map through the zoom-aware scale so hit-testing matches the zoomed
+                // layout (else clicks land on the wrong widgets when zoomed).
+                let eff = state.effective_scale();
+                state.cursor = Point::new(position.x / eff, position.y / eff);
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
                 // Route hover through grid-ui: an open overlay gets first dibs but
@@ -1265,21 +1432,28 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                // Route scroll through grid-ui: an open overlay (Select dropdown /
-                // Modal) gets it first but only swallows it if it consumes it — a
-                // non-scrolling overlay like the ToastStack lets it fall through. When
-                // nothing in the tree consumes it, scroll the whole page.
-                if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines }) == Handled::No
-                {
-                    // Scroll the whole page (clamped in render).
-                    state.scroll_y += lines * 40.0;
+                if state.zoom_mode || state.accel() {
+                    // Wheel zooms the whole UI while in zoom mode, or with the
+                    // accelerator held (scroll up = zoom in).
+                    state.nudge_zoom(-lines * ZOOM_STEP);
+                } else {
+                    // Route scroll through grid-ui: an open overlay (Select dropdown /
+                    // Modal) gets it first but only swallows it if it consumes it — a
+                    // non-scrolling overlay like the ToastStack lets it fall through.
+                    // When nothing in the tree consumes it, scroll the whole page.
+                    if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines })
+                        == Handled::No
+                    {
+                        state.scroll_y += lines * 40.0;
+                    }
+                    state.window.request_redraw();
                 }
-                state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
                 state.shift = s.shift_key();
                 state.ctrl = s.control_key();
+                state.meta = s.super_key();
                 // Broadcast to the tree so text widgets can do word-wise editing
                 // (and the command palette can track Ctrl for Ctrl+J/K nav).
                 state.ui.event(&Event::ModifiersChanged(Modifiers {
@@ -1292,6 +1466,13 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
+                        // ── tmux-style prefix + modes (checked FIRST) ──
+                        // heca hosts other apps, so our chords go through a prefix
+                        // (default Ctrl+B); bare keys fall through to the hosted app.
+                        // Zoom mode owns j/k/+/-/0 until Esc — see `prefix +`.
+                        _ if state.zoom_mode => state.zoom_mode_key(gk),
+                        _ if state.prefix_pending => state.prefix_command(gk),
+                        GridKey::Char('b') if state.ctrl => state.prefix_pending = true,
                         // An open overlay gets first dibs on keys, but only swallows
                         // the ones it actually consumes: a Modal/palette eats every
                         // key (Esc/Enter/typing), while the ToastStack eats none — so

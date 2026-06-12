@@ -170,10 +170,15 @@ impl Input {
         self.text.get_untracked().chars().collect()
     }
 
+    /// Inner padding scaled by the size variant (matches `remeasure` + paint).
+    fn pad(&self) -> f64 {
+        PAD * self.base.size_scale() as f64
+    }
+
     /// Char index nearest pointer x (rounded, for caret placement).
     fn caret_index_at_x(&self, x: f64) -> usize {
         let advance = (self.base.font * MONO_ADVANCE_RATIO) as f64;
-        let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
+        let rel = (x - (self.base.bounds.loc.x + self.pad())).max(0.0);
         let idx = if advance > 0.0 {
             (rel / advance).round() as usize
         } else {
@@ -185,7 +190,7 @@ impl Input {
     /// Char index under pointer x (floored, for word hit-testing).
     fn char_index_at_x(&self, x: f64, len: usize) -> usize {
         let advance = (self.base.font * MONO_ADVANCE_RATIO) as f64;
-        let rel = (x - (self.base.bounds.loc.x + PAD)).max(0.0);
+        let rel = (x - (self.base.bounds.loc.x + self.pad())).max(0.0);
         let idx = if advance > 0.0 {
             (rel / advance).floor() as usize
         } else {
@@ -437,9 +442,10 @@ impl Component for Input {
         !self.base.disabled.get_untracked()
     }
 
-    /// Field height tracks the resolved font.
+    /// Field height tracks the resolved font + size-scaled padding.
     fn remeasure(&mut self) {
-        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * PAD as f32);
+        let pad = self.pad() as f32;
+        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * pad);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -467,10 +473,11 @@ impl Component for Input {
 
         // Text (left-aligned within the padded inner rect); placeholder when
         // empty and unfocused.
-        let text_left = b.loc.x + PAD;
+        let pad = self.pad();
+        let text_left = b.loc.x + pad;
         let text_rect = Rectangle::new(
             Point::new(text_left, b.loc.y),
-            Size::new((b.size.w - 2.0 * PAD).max(0.0), b.size.h),
+            Size::new((b.size.w - 2.0 * pad).max(0.0), b.size.h),
         );
         let advance = (fs * MONO_ADVANCE_RATIO) as f64;
 

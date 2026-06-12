@@ -103,8 +103,9 @@ impl Component for Badge {
     fn remeasure(&mut self) {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.font;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V);
+        let s = self.base.size_scale();
+        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {

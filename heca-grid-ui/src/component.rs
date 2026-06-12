@@ -159,6 +159,15 @@ impl Base {
     pub fn clear_needs_paint(&self) {
         self.needs_paint.set(false);
     }
+
+    /// The widget's size-variant **padding/dimension** multiplier — what widgets
+    /// multiply their intrinsic padding / fixed dims by in `remeasure`. (The font is
+    /// scaled separately, by [`WidgetSize::font_scale`], during layout.) At `Small`
+    /// this is tighter than the font so controls get compact, not just smaller. See
+    /// [`WidgetSize`](crate::style::WidgetSize).
+    pub fn size_scale(&self) -> f32 {
+        self.style.size.pad_scale()
+    }
 }
 
 impl Default for Base {
