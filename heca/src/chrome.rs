@@ -78,6 +78,116 @@ impl ChromeConfig {
     }
 }
 
+// ── Grid-UI chrome scene builder ──────────────────────────────────────────────
+
+use heca_grid_ui::{Color, Component, LayoutEngine, PaintCx, Scene};
+use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
+use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::theme::Theme as GuiTheme;
+use heca_grid_ui::widgets::{Flex, Label, Surface};
+
+/// Build a chrome [`Scene`] containing just the status bar, positioned at its real
+/// screen rect. Pure: takes plain values so it can be unit-tested without wgpu/AppState.
+fn status_bar_scene(
+    w: f32,
+    h: f32,
+    status_bar_height: f32,
+    status: &str,
+    side_bg: Color,
+    fg: Color,
+) -> Scene {
+    let mut theme = GuiTheme::grid_tron();
+    theme.foreground = fg;
+    theme.surface = side_bg;
+    theme.border = side_bg;
+
+    let mut root = Flex::column()
+        .width(Length::Px(w))
+        .height(Length::Px(h))
+        .child(
+            // Transparent spacer that pushes the status row to the bottom.
+            Flex::column()
+                .width(Length::Px(w))
+                .height(Length::Px(h - status_bar_height)),
+        )
+        .child(
+            Surface::row()
+                .width(Length::Px(w))
+                .height(Length::Px(status_bar_height))
+                .background(side_bg)
+                .align(Align::Center)
+                .padding_xy(8.0, 0.0)
+                .child(Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg)),
+        );
+
+    let mut scene = Scene::new();
+    LayoutEngine::new()
+        .base_font(theme.font_size)
+        .compute(&mut root, Size::new(w as f64, h as f64));
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme)
+            .with_viewport(Size::new(w as f64, h as f64));
+        root.paint(&mut cx);
+    }
+    scene
+}
+
+/// Read app state and produce a chrome [`Scene`] containing the status bar.
+/// Pure projection: reads `state`, returns a `Scene`, mutates nothing.
+pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState) -> Scene {
+    let phys = state.window.inner_size();
+    let scale = state.scale_factor as f32;
+    let w = phys.width as f32 / scale;
+    let h = phys.height as f32 / scale;
+
+    // Mirror the special-case from render.rs exactly.
+    let side_bg = if state.theme.name == "Catppuccin Mocha" {
+        Color::new(
+            (0.067_f32 * 255.0).round() as u8,
+            (0.067_f32 * 255.0).round() as u8,
+            (0.106_f32 * 255.0).round() as u8,
+            255,
+        )
+    } else {
+        Color::new(
+            (0.953_f32 * 255.0).round() as u8,
+            (0.957_f32 * 255.0).round() as u8,
+            (0.973_f32 * 255.0).round() as u8,
+            255,
+        )
+    };
+
+    let pane_count = state
+        .session
+        .active_workspace()
+        .map(|ws| {
+            ws.scrolling
+                .columns
+                .iter()
+                .map(|c| c.panes.len())
+                .sum::<usize>()
+        })
+        .unwrap_or(0);
+    let focus_title = state
+        .session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|p| p.title.as_str())
+        .unwrap_or("—");
+    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
+    let status = format!(
+        "{} panes | {} | {}{}",
+        pane_count, focus_title, mode_str, rename_hint
+    );
+
+    let fg = {
+        let c = state.theme.foreground;
+        Color::new(c.r, c.g, c.b, c.a)
+    };
+
+    status_bar_scene(w, h, DEFAULT_STATUS_BAR_HEIGHT, &status, side_bg, fg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,5 +244,23 @@ mod tests {
         assert_eq!(r.loc.y, 32.0);
         assert_eq!(r.size.w, 1024.0);
         assert_eq!(r.size.h, 712.0);
+    }
+
+    #[test]
+    fn status_bar_scene_emits_text() {
+        use heca_grid_ui::{Color, DrawCommand};
+        let scene = super::status_bar_scene(
+            800.0,
+            600.0,
+            24.0,
+            "2 panes | foo | NORMAL",
+            Color::new(17, 17, 27, 255),
+            Color::new(200, 200, 200, 255),
+        );
+        assert!(!scene.is_empty(), "scene should not be empty");
+        assert!(
+            scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(..))),
+            "scene should contain at least one Text draw command",
+        );
     }
 }
