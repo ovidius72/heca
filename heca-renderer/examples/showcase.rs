@@ -10,7 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use heca_grid_ui::prelude::*;
 use heca_grid_ui::scene::{BracketCmd, DrawCommand, Glow, ScanlineCmd};
@@ -19,7 +19,7 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::scene::enqueue_scene;
 use heca_renderer::text::TextRenderer;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
@@ -53,6 +53,25 @@ use winit::window::{Window, WindowId};
 const INTENSITY_OPTS: [Intensity; 4] =
     [Intensity::Off, Intensity::Low, Intensity::Medium, Intensity::Heavy];
 
+/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
+const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
+
+/// UI zoom as a **continuous** level in `[ZOOM_MIN, ZOOM_MAX]` (the 0–5 dial). The
+/// factor is geometric — `ZOOM_RATIO^(level - ZOOM_DEFAULT)` — so level 2 == `1.0×`
+/// and fractional levels (2.5, 3.2 …) interpolate smoothly. Multiplies the
+/// logical→physical scale, scaling the WHOLE UI uniformly (a global zoom, distinct
+/// from the per-widget `WidgetSize`). Driven by the SIZE-row select, `Ctrl +`/`-`/`0`,
+/// and `Ctrl` + mouse-wheel.
+const ZOOM_RATIO: f32 = 1.15;
+/// Neutral (`1.0×`) level — the dial is centered here.
+const ZOOM_DEFAULT: f32 = 2.0;
+const ZOOM_MIN: f32 = 0.0;
+const ZOOM_MAX: f32 = 5.0;
+/// Level change per keypress / wheel notch.
+const ZOOM_STEP: f32 = 0.25;
+
+const APP_TITLE: &str = "heca-grid-ui showcase";
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -60,6 +79,19 @@ struct ThemeCtl {
     border: Signal<f32>,
     font: Signal<f32>,
     intensity: Signal<Intensity>,
+    /// Global widget size variant, applied to the whole tree (demo of `WidgetSize`).
+    size: Signal<WidgetSize>,
+    /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
+    zoom: Signal<f32>,
+}
+
+/// Recursively set the size variant on every widget, so a global control reflects
+/// across the whole showcase (in a real app you'd size widgets individually).
+fn apply_size(c: &mut dyn Component, size: WidgetSize) {
+    c.base_mut().style.size = size;
+    for child in c.base_mut().children.iter_mut() {
+        apply_size(child.as_mut(), size);
+    }
 }
 
 /// Handles the host keeps after building the UI, to drive chrome interactions
@@ -78,6 +110,8 @@ struct BuiltUi {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Host-owned toast render list; `t` pushes one, the stack reports dismiss.
+    toasts: Signal<Vec<ToastSpec>>,
 }
 
 fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
@@ -123,6 +157,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .iter()
         .position(|x| *x == ctl.intensity.get_untracked())
         .unwrap_or(2);
+    let size_idx = SIZE_OPTS
+        .iter()
+        .position(|x| *x == ctl.size.get_untracked())
+        .unwrap_or(0);
+    let zoom_idx = (ctl.zoom.get_untracked().round() as usize).min(ZOOM_MAX as usize);
 
     let card = |title: &str, value: &str| {
         Card::new(title)
@@ -149,6 +188,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
 
     // 20-entry list so the dropdown caps its height and shows a scrollbar.
     let workspaces: Vec<String> = (1..=20).map(|n| format!("WORKSPACE {n:02}")).collect();
+
+    // ToastStack (G-overlay): the app owns the render list (`toasts`) and the
+    // lifecycle; the stack just corner-anchors + animates them and reports
+    // intents. `t` pushes one (see the keymap); clicking × removes it here.
+    // Start empty — press `t` to push toasts (keeps them out of the dropdown's
+    // corner by default; the overlapping-overlays text-bleed is a separate
+    // renderer limitation to fix later).
+    let toasts = signal(Vec::<ToastSpec>::new());
+    let toast_stack = ToastStack::new(toasts)
+        .corner(ToastCorner::TopRight)
+        .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)))
+        .on_action(|id| println!("[showcase] toast {id} action"));
 
     let ui = Flex::column()
         .padding(40.0)
@@ -301,6 +352,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Spinner::new())
                 .child(Alert::warning("LINK UNSTABLE").body("retrying handshake...")),
         )
+        // Toasts: bracket-framed notification cards. Severity-toned, with a body
+        // line, an optional inline action, and a × dismiss. Presentation only —
+        // here the example plays the "host" (its callbacks just print); a real app
+        // owns the queue + lifecycle. Stacked like a notification list (also the
+        // shape they take inline in a sidebar).
+        .child(
+            Flex::column()
+                .gap(10.0)
+                .child(Toast::success("Build succeeded").body("12 crates compiled in 4.2s"))
+                .child(
+                    Toast::danger("Connection lost")
+                        .body("Reconnecting to the grid…")
+                        .action("Retry", click("toast-retry"))
+                        .on_dismiss(click("toast-dismiss")),
+                )
+                // A clickable card with no body — the inline "notification row" case.
+                .child(Toast::info("New message from GRID-7").on_click(click("toast-open"))),
+        )
         // Value displays: progress bar + energy gauge.
         .child(
             Flex::row()
@@ -379,6 +448,34 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Input::new().value("SIZED"))
                 .child(Select::new(["ALPHA", "BETA", "GAMMA"]))
                 .child(Label::new("Aa").color(theme.foreground)),
+        )
+        // Widget size variant — applied to the WHOLE tree so the showcase reflects
+        // Small / Normal / Large globally (font + padding scale together) — and a
+        // global ZOOM (0–5, centered on 2) that scales the entire UI uniformly.
+        .child(
+            Flex::row()
+                .gap(16.0)
+                .align(Align::Center)
+                .child(Label::new("SIZE").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["NORMAL", "SMALL", "LARGE"]).selected(size_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.size.set(SIZE_OPTS[i.min(SIZE_OPTS.len() - 1)]);
+                            }
+                        },
+                    ),
+                )
+                .child(Label::new("ZOOM").color(theme.muted).font_scale(0.85))
+                .child(
+                    Select::new(["0", "1", "2", "3", "4", "5"]).selected(zoom_idx).on_change(
+                        move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.zoom.set((i as f32).min(ZOOM_MAX));
+                            }
+                        },
+                    ),
+                ),
         )
         // Item rows: a single-select menu panel. Clicking a row highlights it and
         // clears the others. Immediate-mode (no reactive effects): each row's
@@ -686,7 +783,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(panes_col)
         })
         // The command palette overlays everything when open (Ctrl+K).
-        .child(palette);
+        .child(palette)
+        // The toast stack overlays a corner (presentation only; app owns the list).
+        .child(toast_stack);
     BuiltUi {
         ui,
         sidebar_mode,
@@ -695,6 +794,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_letters,
         attention_req,
         palette_open,
+        toasts,
     }
 }
 
@@ -709,11 +809,21 @@ fn offset_tree(c: &mut dyn Component, dy: f64) {
 
 /// Paint the tree, then decorate bordered surfaces with corner brackets and add
 /// a full-window scanline overlay.
-fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
+fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_demo: bool) -> Scene {
     let mut scene = Scene::new();
     {
         let mut cx =
             PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        // Background fill as the first scene command (not a clear pass): scissored to
+        // the damage region it clears only the changed area, so the rest of the
+        // persistent scene texture is preserved for damage-region redraw.
+        cx.rect(
+            Rectangle::from_size(Size::new(w as f64, h as f64)),
+            theme.background,
+            None,
+            0.0,
+            None,
+        );
         root.paint(&mut cx);
     }
     // Corner brackets on the cards (first row) only — not the small buttons.
@@ -732,6 +842,66 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32) -> Scene {
             }));
         }
     }
+    // Clip-primitive demo (task B), toggled by `c`: a centered overlay viewport
+    // whose text content is taller than the box and offset by a fractional amount,
+    // wrapped in `with_clip`. The renderer scissors it, so the top and bottom lines
+    // are sliced cleanly at the panel edges instead of spilling out — the editor's
+    // pixel-scroll foundation. Painted into the overlay layer so it sits on top.
+    if show_clip_demo {
+        let mut cx =
+            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        let (pw, ph) = (240.0, 150.0);
+        let panel = Rectangle::new(
+            Point::new((w as f64 - pw) * 0.5, (h as f64 - ph) * 0.5),
+            Size::new(pw, ph),
+        );
+        cx.with_overlay(|cx| {
+            cx.rect(
+                panel,
+                theme.surface,
+                Some(heca_grid_ui::scene::Border {
+                    color: theme.accent,
+                    width: theme.border_width.max(1.0),
+                }),
+                theme.radius,
+                None,
+            );
+            // Title sits above the clipped region (not clipped).
+            cx.text(
+                Rectangle::new(
+                    Point::new(panel.loc.x + 12.0, panel.loc.y + 8.0),
+                    Size::new(panel.size.w - 24.0, 16.0),
+                ),
+                "CLIP VIEWPORT  (c)",
+                theme.accent,
+                11.0,
+                TextAlign::Start,
+                true,
+            );
+            let inner = Rectangle::new(
+                Point::new(panel.loc.x + 12.0, panel.loc.y + 30.0),
+                Size::new(panel.size.w - 24.0, panel.size.h - 42.0),
+            );
+            cx.with_clip(inner, |cx| {
+                // Start ~half a line above the top edge so line 00 is sliced; the 12
+                // lines overflow the bottom so the last line is sliced too.
+                for i in 0..12 {
+                    let y = inner.loc.y - 9.0 + i as f64 * 18.0;
+                    cx.text(
+                        Rectangle::new(
+                            Point::new(inner.loc.x, y),
+                            Size::new(inner.size.w, 16.0),
+                        ),
+                        &format!("clip line {i:02} — sliced at the edges"),
+                        theme.foreground,
+                        12.0,
+                        TextAlign::Start,
+                        false,
+                    );
+                }
+            });
+        });
+    }
     scene.push(DrawCommand::Scanline(ScanlineCmd {
         rect: Rectangle::from_size(Size::new(w as f64, h as f64)),
         color: theme.accent,
@@ -749,6 +919,7 @@ struct GpuState {
     config: wgpu::SurfaceConfiguration,
     grid: GridRenderer,
     text: TextRenderer,
+    compositor: heca_renderer::composite::Compositor,
     scale_factor: f64,
     theme: Theme,
     ui: Flex,
@@ -759,16 +930,42 @@ struct GpuState {
     rail_states: Vec<Signal<bool>>,
     rail_letters: Vec<char>,
     rail_pick: bool,
+    /// Toggles the centered clip-viewport demo (task B); `c` flips it.
+    clip_demo: bool,
     /// A pane's "needs attention" request; `n` fires the pulse + a host beep.
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Host-owned toast render list; `t` pushes one.
+    toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
     ctrl: bool,
+    /// Whether the Cmd/Super (meta) key is held.
+    meta: bool,
+    /// tmux-style prefix is armed (the next key is a heca command, not the app's).
+    prefix_pending: bool,
+    /// In the dedicated zoom mode (entered via `prefix +`); `j`/`k` zoom, Esc exits.
+    zoom_mode: bool,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
     last_frame: Instant,
+    /// Seconds until the next scheduled frame: `Some(0.0)` ≈ continuous animation
+    /// (capped to ~30fps), `Some(t)` a timed wake (e.g. caret blink), `None` idle.
+    next_frame_in: Option<f32>,
+    /// When set, the next frame repaints in full (an input event / resize / layout
+    /// or scroll change can alter unknown regions). Cleared after the frame; pure
+    /// animation frames instead repaint just the widgets that flagged themselves.
+    force_full: bool,
+    /// Layout is recomputed only when a layout input changed (resize/font/content
+    /// event) — not on pure-animation frames.
+    layout_dirty: bool,
+    /// The size variant last applied to the whole tree (the global SIZE control).
+    applied_size: WidgetSize,
+    /// The zoom level last applied (relayout when it changes).
+    applied_zoom: f32,
+    content_h: f32,
+    applied_scroll: f32,
     focus: FocusManager,
     shift: bool,
 }
@@ -776,9 +973,16 @@ struct GpuState {
 impl GpuState {
     async fn new(event_loop: &ActiveEventLoop) -> Self {
         let attrs = Window::default_attributes()
-            .with_title("heca-grid-ui showcase")
+            .with_title(APP_TITLE)
             .with_inner_size(winit::dpi::LogicalSize::new(900.0, 420.0));
         let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
+        // Bridge widget self-invalidation to the event loop: a widget that marks
+        // itself needs-paint wakes the renderer through this (the retained-render
+        // foundation — repaint what changed instead of every frame).
+        {
+            let w = window.clone();
+            heca_grid_ui::install_frame_request(move || w.request_redraw());
+        }
         let scale_factor = window.scale_factor();
 
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -826,9 +1030,16 @@ impl GpuState {
         surface.configure(&device, &config);
 
         let theme = Theme::grid_tron();
-        let grid = GridRenderer::new(&device, format);
+        let compositor =
+            heca_renderer::composite::Compositor::new(&device, format, config.width, config.height);
+        let mut grid = GridRenderer::new(&device, format);
         let mut text = TextRenderer::new(&device, format);
+        // Both renderers need the scale + physical framebuffer size to map logical
+        // clip rects to scissor pixels (clamped in-bounds).
+        grid.set_scale_factor(scale_factor);
+        grid.set_target_size(config.width, config.height);
         text.set_scale_factor(scale_factor);
+        text.set_target_size(config.width, config.height);
         text.set_font_family(&theme.font_family);
         let ctl = ThemeCtl {
             glow: signal(theme.glow_size),
@@ -836,6 +1047,8 @@ impl GpuState {
             border: signal(theme.border_width),
             font: signal(theme.font_size),
             intensity: signal(theme.intensity),
+            size: signal(WidgetSize::Normal),
+            zoom: signal(ZOOM_DEFAULT),
         };
         let built = build_ui(&theme, ctl);
         let BuiltUi {
@@ -846,6 +1059,7 @@ impl GpuState {
             rail_letters,
             attention_req,
             palette_open,
+            toasts,
         } =
             built;
 
@@ -857,6 +1071,7 @@ impl GpuState {
             config,
             grid,
             text,
+            compositor,
             scale_factor,
             theme,
             ui,
@@ -865,13 +1080,25 @@ impl GpuState {
             rail_states,
             rail_letters,
             rail_pick: false,
+            clip_demo: false,
             attention_req,
             palette_open,
+            toasts,
             ctrl: false,
+            meta: false,
+            prefix_pending: false,
+            zoom_mode: false,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
             last_frame: Instant::now(),
+            next_frame_in: None,
+            force_full: true, // first frame paints everything
+            layout_dirty: true,
+            applied_size: WidgetSize::Normal,
+            applied_zoom: ZOOM_DEFAULT,
+            content_h: 0.0,
+            applied_scroll: 0.0,
             focus: FocusManager::new(),
             shift: false,
         }
@@ -881,6 +1108,13 @@ impl GpuState {
         self.config.width = width.max(1);
         self.config.height = height.max(1);
         self.surface.configure(&self.device, &self.config);
+        // Keep the renderers' scissor-clamp size + the persistent scene texture in
+        // sync with the framebuffer.
+        self.grid.set_target_size(self.config.width, self.config.height);
+        self.text.set_target_size(self.config.width, self.config.height);
+        self.compositor
+            .resize(&self.device, self.config.width, self.config.height);
+        self.layout_dirty = true; // window size feeds layout
         self.window.request_redraw();
     }
 
@@ -904,42 +1138,165 @@ impl GpuState {
         }
     }
 
+    /// The logical→physical scale actually used: the window's HiDPI factor times the
+    /// global UI zoom. Everything (layout viewport, glyph rasterization, scissor +
+    /// cursor mapping) goes through this, so changing zoom scales the whole UI.
+    fn effective_scale(&self) -> f64 {
+        let level = self.ctl.zoom.get_untracked();
+        self.scale_factor * ZOOM_RATIO.powf(level - ZOOM_DEFAULT) as f64
+    }
+
+    /// The platform "accelerator" modifier: Cmd (⌘) on macOS, Ctrl elsewhere — so
+    /// zoom uses the native chord (⌘ +/-/0 on macOS, Ctrl +/-/0 on Windows/Linux).
+    fn accel(&self) -> bool {
+        if cfg!(target_os = "macos") {
+            self.meta
+        } else {
+            self.ctrl
+        }
+    }
+
+    /// Nudge the zoom level (keys / accel+wheel), clamped to the dial range.
+    fn nudge_zoom(&self, delta: f32) {
+        let level = (self.ctl.zoom.get_untracked() + delta).clamp(ZOOM_MIN, ZOOM_MAX);
+        self.ctl.zoom.set(level);
+        self.window.request_redraw();
+    }
+
+    /// Reset zoom to the neutral level.
+    fn reset_zoom(&self) {
+        self.ctl.zoom.set(ZOOM_DEFAULT);
+        self.window.request_redraw();
+    }
+
+    fn enter_zoom_mode(&mut self) {
+        self.zoom_mode = true;
+        self.window
+            .set_title(&format!("{APP_TITLE} — ZOOM  (k/+ in · j/- out · 0 reset · Esc exit)"));
+        self.window.request_redraw();
+    }
+
+    fn exit_zoom_mode(&mut self) {
+        self.zoom_mode = false;
+        self.window.set_title(APP_TITLE);
+        self.window.request_redraw();
+    }
+
+    /// A key pressed while in zoom mode. The mode stays active (so you can keep
+    /// pressing j/k) until Esc/Enter/q.
+    fn zoom_mode_key(&mut self, gk: GridKey) {
+        match gk {
+            GridKey::Char('k' | '+' | '=') => self.nudge_zoom(ZOOM_STEP),
+            GridKey::Char('j' | '-' | '_') => self.nudge_zoom(-ZOOM_STEP),
+            GridKey::Char('0') => self.reset_zoom(),
+            GridKey::Escape | GridKey::Enter | GridKey::Char('q') => self.exit_zoom_mode(),
+            _ => {} // swallow other keys while the mode is held
+        }
+    }
+
+    /// The key after the tmux-style prefix: a heca command (the showcase only wires
+    /// the zoom mode; the real app dispatches its full keymap here).
+    fn prefix_command(&mut self, gk: GridKey) {
+        self.prefix_pending = false;
+        if matches!(gk, GridKey::Char('+' | '=')) {
+            self.enter_zoom_mode();
+        }
+    }
+
     fn render(&mut self) {
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.05);
         self.last_frame = now;
         let animating = self.ui.tick(dt);
 
+        // Zoom-aware scale: a bigger effective scale shrinks the logical viewport, so
+        // the same widgets render larger (a global zoom). Feed it to both renderers
+        // for crisp rasterization at the zoomed size.
         let phys = self.window.inner_size();
-        let scale = self.scale_factor as f32;
+        let eff = self.effective_scale();
+        self.grid.set_scale_factor(eff);
+        self.text.set_scale_factor(eff);
+        let scale = eff as f32;
         let (w, h) = (phys.width as f32 / scale, phys.height as f32 / scale);
 
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
 
-        // Fold live theme controls in before painting.
+        // Fold live theme controls in (paint-only except font, which reflows layout).
         self.theme.glow_size = self.ctl.glow.get_untracked();
         self.theme.radius = self.ctl.radius.get_untracked();
         self.theme.border_width = self.ctl.border.get_untracked();
         self.theme.intensity = self.ctl.intensity.get_untracked();
-        self.theme.font_size = self.ctl.font.get_untracked();
+        let font = self.ctl.font.get_untracked();
+        if (font - self.theme.font_size).abs() > f32::EPSILON {
+            self.theme.font_size = font;
+            self.layout_dirty = true;
+        }
+        // Global SIZE control: push the chosen variant onto every widget + reflow.
+        let size = self.ctl.size.get_untracked();
+        if size != self.applied_size {
+            apply_size(&mut self.ui, size);
+            self.applied_size = size;
+            self.layout_dirty = true;
+        }
+        // Global ZOOM control: the effective scale changed the logical viewport, so
+        // relayout against the new (w, h).
+        let zoom = self.ctl.zoom.get_untracked();
+        if (zoom - self.applied_zoom).abs() > f32::EPSILON {
+            self.applied_zoom = zoom;
+            self.layout_dirty = true;
+        }
 
-        // Lay the tree out at its natural (content) height — which may exceed the
-        // window — then translate it up by the scroll offset. The window edges do
-        // the clipping (the renderer has no scissor yet), so this is a whole-page
-        // scroll, not an embedded scroll region. The engine resolves every widget's
-        // font from `base_font` (= theme.font_size), so a font change reflows the
-        // whole tree live — no per-widget wiring, no rebuild.
-        self.ui.base_mut().style.width = Length::Px(w);
-        self.ui.base_mut().style.height = Length::Auto;
-        LayoutEngine::new()
-            .base_font(self.theme.font_size)
-            .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
-        let content_h = self.ui.base().bounds.size.h as f32;
-        self.scroll_y = self.scroll_y.clamp(0.0, (content_h - h).max(0.0));
-        offset_tree(&mut self.ui, -(self.scroll_y as f64));
+        // Recompute layout ONLY when an input changed it (resize / font / content
+        // event) — never on pure-animation frames. The full per-frame taffy
+        // relayout was the bulk of the render() CPU.
+        if self.layout_dirty {
+            self.ui.base_mut().style.width = Length::Px(w);
+            self.ui.base_mut().style.height = Length::Auto;
+            LayoutEngine::new()
+                .base_font(self.theme.font_size)
+                .compute(&mut self.ui, Size::new(w as f64, 100_000.0));
+            self.content_h = self.ui.base().bounds.size.h as f32;
+            self.applied_scroll = 0.0;
+            self.layout_dirty = false;
+            self.force_full = true; // relayout moves everything → repaint in full
+        }
+        // Whole-page scroll: shift the cached tree by only the delta since the
+        // offset already baked into its bounds (window edges clip).
+        self.scroll_y = self.scroll_y.clamp(0.0, (self.content_h - h).max(0.0));
+        let scroll_delta = (self.applied_scroll - self.scroll_y) as f64;
+        if scroll_delta != 0.0 {
+            offset_tree(&mut self.ui, scroll_delta);
+            self.applied_scroll = self.scroll_y;
+            self.force_full = true; // the whole page shifted
+        }
 
-        let scene = build_scene(&self.ui, &self.theme, w, h);
+        let scene = build_scene(&self.ui, &self.theme, w, h, self.clip_demo);
+
+        // Damage region for this frame: full on an input/layout/scroll change (it can
+        // alter unknown regions), otherwise just the widgets that flagged themselves
+        // needs-paint (a spinner, the caret) — so an animation repaints only its rect.
+        // `collect_damage` also clears the flags.
+        let dirty = heca_grid_ui::collect_damage(&self.ui);
+        let damage: Option<[f32; 4]> = if std::mem::take(&mut self.force_full) {
+            None // whole frame
+        } else {
+            match dirty {
+                Some(r) => Some([
+                    r.loc.x as f32,
+                    r.loc.y as f32,
+                    r.size.w as f32,
+                    r.size.h as f32,
+                ]),
+                // Animated but reported no damage (an un-wired continuous animation)
+                // → repaint in full for correctness; nothing dirty → empty rect
+                // (render nothing; the blit shows the preserved scene texture).
+                None if animating => None,
+                None => Some([0.0, 0.0, 0.0, 0.0]),
+            }
+        };
+        self.grid.set_damage(damage);
+        self.text.set_damage(damage);
 
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
@@ -957,49 +1314,45 @@ impl GpuState {
                 label: Some("showcase"),
             });
 
-        let bg = self.theme.background.to_f32x4();
-        {
-            let _clear = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: bg[0] as f64,
-                            g: bg[1] as f64,
-                            b: bg[2] as f64,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-        }
+        // Render the UI into the compositor's persistent scene texture (not directly
+        // to the swapchain), then blit it to screen. The persistent texture is what
+        // makes damage-region redraw possible — unchanged pixels survive between
+        // frames, so a frame can re-render only the damaged region.
+        let scene_view = self.compositor.scene_view();
 
-        // Two layers, each a rects-then-text pass: base first, then the overlay
-        // (dropdowns) on top — so overlay content occludes base *text* too, not
-        // just base rects (the renderer draws all rects then all text per pass).
+        // Each pass is a rects-then-text flush (the renderer draws all queued rects,
+        // then all queued text). Base first, then each overlay as its *own* pass — so
+        // overlay content occludes base text (not just base rects), AND a later overlay
+        // occludes an earlier one. Flushing every overlay in a single pass would draw
+        // all overlay rects then all overlay text, letting a lower overlay's text bleed
+        // over a higher overlay's panel (the overlapping-overlay text-bleed bug).
+        // Reset the renderers' per-frame buffer offsets so the base + overlay passes
+        // append to the persistent buffers (no per-frame staging allocation).
+        self.grid.begin_frame();
+        self.text.begin_frame();
         enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
-        self.grid.render(&self.device, &view, &mut encoder);
-        self.text
-            .render(&self.device, &self.queue, &view, &mut encoder);
-        if scene.has_overlay() {
-            enqueue_scene(&mut self.grid, &mut self.text, &scene.overlay_layer());
-            self.grid.render(&self.device, &view, &mut encoder);
-            self.text
-                .render(&self.device, &self.queue, &view, &mut encoder);
+        self.grid.render(&self.queue, scene_view, &mut encoder);
+        self.text.render(&self.queue, scene_view, &mut encoder);
+        for overlay in scene.overlay_segments() {
+            enqueue_scene(&mut self.grid, &mut self.text, &overlay);
+            self.grid.render(&self.queue, scene_view, &mut encoder);
+            self.text.render(&self.queue, scene_view, &mut encoder);
         }
+        // Blit the composited scene onto the swapchain.
+        self.compositor.blit(&view, &mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
         frame.present();
 
-        // Keep redrawing while a hover animation is in flight.
-        if animating {
-            self.window.request_redraw();
-        }
+        // Decide when the next frame is needed: a continuous animation (spinner,
+        // slide) runs at the ~30fps cap; otherwise sleep until the soonest timed
+        // redraw a widget asks for (e.g. a focused caret's next blink) — or, if
+        // nothing is pending, wait for input. This keeps a focused idle Input from
+        // pegging a core at the full frame rate just to blink twice a second.
+        self.next_frame_in = if animating {
+            Some(0.0)
+        } else {
+            self.ui.next_redraw()
+        };
     }
 }
 
@@ -1009,6 +1362,17 @@ struct App {
 }
 
 impl ApplicationHandler for App {
+    /// When the capped-frame timer (set via `WaitUntil`) fires, request the next
+    /// animation frame.
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        if let StartCause::ResumeTimeReached { .. } = cause
+            && let Some(state) = &self.state
+            && state.next_frame_in.is_some()
+        {
+            state.window.request_redraw();
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_none() {
             let state = pollster::block_on(GpuState::new(event_loop));
@@ -1021,24 +1385,30 @@ impl ApplicationHandler for App {
         let Some(state) = self.state.as_mut() else {
             return;
         };
+        // Any non-redraw event (input, resize, …) can change unknown regions, so the
+        // frame it triggers repaints in full. Animation/timed frames arrive as a bare
+        // RedrawRequested and instead repaint only the widgets that flagged themselves.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            state.force_full = true;
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
-                state.cursor = Point::new(
-                    position.x / state.scale_factor,
-                    position.y / state.scale_factor,
-                );
+                // Map through the zoom-aware scale so hit-testing matches the zoomed
+                // layout (else clicks land on the wrong widgets when zoomed).
+                let eff = state.effective_scale();
+                state.cursor = Point::new(position.x / eff, position.y / eff);
                 // The OS manages the cursor (arrow in content, resize at the
                 // decorated window's edges) — don't override it.
-                let moved = Event::PointerMoved { pos: state.cursor };
-                // When an overlay is open, route hover only to it — items behind
-                // the panel must not receive hover events.
-                if state.focus.overlay_active(&mut state.ui) {
-                    state.focus.deliver_to_overlay(&mut state.ui, &moved);
-                } else {
-                    state.ui.event(&moved);
-                }
+                // Route hover through grid-ui: an open overlay gets first dibs but
+                // only swallows it if it consumes it (an input-grabbing Modal/dropdown
+                // returns Yes so items behind don't hover; the ToastStack returns No so
+                // buttons behind it still hover/animate while toasts show), otherwise
+                // it falls to the widget under the cursor.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerMoved { pos: state.cursor });
                 state.window.request_redraw();
             }
             WindowEvent::MouseInput {
@@ -1046,17 +1416,14 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                let pos = state.cursor;
-                let press = Event::PointerPressed { pos };
-                // An open overlay (e.g. a Select dropdown) gets first dibs so it
-                // can capture clicks on rows outside its layout bounds.
-                let consumed = state.focus.overlay_active(&mut state.ui)
-                    && state.focus.deliver_to_overlay(&mut state.ui, &press) == Handled::Yes;
-                if !consumed {
-                    // A click focuses the clicked widget (clears focus if it misses).
-                    state.focus.focus_at(&mut state.ui, pos);
-                    state.ui.event(&press);
-                }
+                // Route the click through grid-ui: an open overlay (e.g. a Select
+                // dropdown) gets first dibs so it can capture clicks on rows outside
+                // its layout bounds; otherwise dispatch focuses the clicked widget
+                // (clearing focus on a miss) and delivers the press.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerPressed { pos: state.cursor });
+                state.layout_dirty = true; // a click can change content/size
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
@@ -1065,20 +1432,28 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::LineDelta(_, y) => -y,
                     MouseScrollDelta::PixelDelta(p) => -(p.y as f32) / 20.0,
                 };
-                if state.focus.overlay_active(&mut state.ui) {
-                    state
-                        .focus
-                        .deliver_to_overlay(&mut state.ui, &Event::Scroll { delta: lines });
+                if state.zoom_mode || state.accel() {
+                    // Wheel zooms the whole UI while in zoom mode, or with the
+                    // accelerator held (scroll up = zoom in).
+                    state.nudge_zoom(-lines * ZOOM_STEP);
                 } else {
-                    // No overlay open → scroll the whole page (clamped in render).
-                    state.scroll_y += lines * 40.0;
+                    // Route scroll through grid-ui: an open overlay (Select dropdown /
+                    // Modal) gets it first but only swallows it if it consumes it — a
+                    // non-scrolling overlay like the ToastStack lets it fall through.
+                    // When nothing in the tree consumes it, scroll the whole page.
+                    if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines })
+                        == Handled::No
+                    {
+                        state.scroll_y += lines * 40.0;
+                    }
+                    state.window.request_redraw();
                 }
-                state.window.request_redraw();
             }
             WindowEvent::ModifiersChanged(m) => {
                 let s = m.state();
                 state.shift = s.shift_key();
                 state.ctrl = s.control_key();
+                state.meta = s.super_key();
                 // Broadcast to the tree so text widgets can do word-wise editing
                 // (and the command palette can track Ctrl for Ctrl+J/K nav).
                 state.ui.event(&Event::ModifiersChanged(Modifiers {
@@ -1091,13 +1466,21 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let Some(gk) = to_grid_key(&event.logical_key) {
                     match gk {
-                        // While an overlay (Select dropdown, Modal dialog) is open it
-                        // owns input: route every key to it (Esc/Enter dismiss/confirm).
-                        gk if state.focus.overlay_active(&mut state.ui) => {
-                            state
-                                .focus
-                                .deliver_to_overlay(&mut state.ui, &Event::Key { key: gk, pressed: true });
-                        }
+                        // ── tmux-style prefix + modes (checked FIRST) ──
+                        // heca hosts other apps, so our chords go through a prefix
+                        // (default Ctrl+B); bare keys fall through to the hosted app.
+                        // Zoom mode owns j/k/+/-/0 until Esc — see `prefix +`.
+                        _ if state.zoom_mode => state.zoom_mode_key(gk),
+                        _ if state.prefix_pending => state.prefix_command(gk),
+                        GridKey::Char('b') if state.ctrl => state.prefix_pending = true,
+                        // An open overlay gets first dibs on keys, but only swallows
+                        // the ones it actually consumes: a Modal/palette eats every
+                        // key (Esc/Enter/typing), while the ToastStack eats none — so
+                        // global keys (`t`, `[`, …) still work while toasts show.
+                        gk if state.focus.offer_to_overlay(
+                            &mut state.ui,
+                            &Event::Key { key: gk, pressed: true },
+                        ) == Handled::Yes => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {
                             state.palette_open.set(true);
@@ -1127,6 +1510,10 @@ impl ApplicationHandler for App {
                         }
                         // While a pick is open, a letter selects its pane cell.
                         GridKey::Char(c) if state.rail_pick => state.rail_pick_select(c),
+                        // `c` toggles the centered clip-viewport demo (task B).
+                        GridKey::Char('c') if state.focus.focused().is_none() => {
+                            state.clip_demo = !state.clip_demo;
+                        }
                         // `n` fires a "needs attention" pulse on a pane. The widget
                         // flashes; the *host* plays the sound (grid-ui is audio-free)
                         // — here, the terminal bell.
@@ -1136,15 +1523,53 @@ impl ApplicationHandler for App {
                             use std::io::Write;
                             let _ = std::io::stdout().flush();
                         }
+                        // `t` pushes a new toast onto the host-owned list; the
+                        // ToastStack slides it in, and × dismisses (removes the id).
+                        GridKey::Char('t') if state.focus.focused().is_none() => {
+                            state.toasts.update(|v| {
+                                let id = v.iter().map(|s| s.id).max().unwrap_or(0) + 1;
+                                v.push(
+                                    ToastSpec::new(id, format!("Event #{id}"))
+                                        .severity(ToastSeverity::Info)
+                                        .body("Pushed with the `t` key")
+                                        .action("View"),
+                                );
+                            });
+                            state.window.request_redraw();
+                        }
                         // Space/Enter (and others) go to the focused widget.
                         other => {
                             state.focus.deliver_key(&mut state.ui, other);
                         }
                     }
+                    state.layout_dirty = true; // a key can change content/size
                     state.window.request_redraw();
                 }
             }
-            WindowEvent::RedrawRequested => state.render(),
+            WindowEvent::RedrawRequested => {
+                // Throttle to the ~30fps cap. A widget that invalidates itself (the
+                // spinner) requests a redraw immediately via `mark_needs_paint`, which
+                // would otherwise render at full vsync. Input/resize frames (force_full)
+                // still render at once for responsiveness.
+                let min = Duration::from_millis(33);
+                let elapsed = Instant::now().saturating_duration_since(state.last_frame);
+                if !state.force_full && elapsed < min {
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(state.last_frame + min));
+                    return;
+                }
+                state.render();
+                // Schedule the next frame: a continuous animation runs at the ~30fps
+                // cap, a timed wake (e.g. caret blink) sleeps until its next change,
+                // and a fully idle UI waits for input.
+                match state.next_frame_in {
+                    Some(secs) => {
+                        let delay = Duration::from_secs_f32(secs.max(0.033));
+                        event_loop
+                            .set_control_flow(ControlFlow::WaitUntil(state.last_frame + delay));
+                    }
+                    None => event_loop.set_control_flow(ControlFlow::Wait),
+                }
+            }
             _ => {}
         }
     }

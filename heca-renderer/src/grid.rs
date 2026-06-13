@@ -16,6 +16,9 @@ struct GridVertex {
     glow: [f32; 4],
     glow_radius: f32,
     glow_intensity: f32,
+    shadow: [f32; 4],
+    shadow_radius: f32,
+    shadow_offset: [f32; 2],
 }
 
 #[repr(C)]
@@ -39,6 +42,12 @@ pub struct GlowRect {
     pub glow: [f32; 4],
     pub glow_radius: f32,
     pub glow_intensity: f32,
+    /// Drop-shadow color (premultiply-friendly straight color + alpha).
+    pub shadow: [f32; 4],
+    /// Shadow blur/falloff radius (logical px); `0` = no shadow.
+    pub shadow_radius: f32,
+    /// Shadow offset (logical px): `[dx, dy]`, positive = right/down.
+    pub shadow_offset: [f32; 2],
 }
 
 /// Renders SDF rounded rects with glow. Mirrors `PrimitiveRenderer`'s buffer
@@ -51,6 +60,43 @@ pub struct GridRenderer {
     indices: Vec<u32>,
     bind_group: wgpu::BindGroup,
     uniform_buffer: wgpu::Buffer,
+    /// Logical→physical scale, for converting clip rects to scissor pixels.
+    scale_factor: f32,
+    /// Physical framebuffer size `[w, h]`, used to clamp scissor rects in-bounds.
+    target_size: [u32; 2],
+    /// Active clip changes: `(index offset at the change, clip rect or `None`)`.
+    /// `render` turns these into scissored draw spans. Logical-pixel rects.
+    clip_marks: Vec<(u32, Option<[f32; 4]>)>,
+    /// The clip currently in effect for new `draw` calls.
+    current_clip: Option<[f32; 4]>,
+    /// Frame-level damage region (logical px): when set, the whole pass is also
+    /// scissored to this, so a damage-region redraw only touches changed pixels.
+    /// `None` = no damage limit (full frame).
+    damage: Option<[f32; 4]>,
+    /// Vertices/indices already written to the persistent buffers this frame. Each
+    /// render pass appends at its own offset (via `queue.write_buffer`) instead of
+    /// allocating a fresh staging buffer — the per-frame allocation that caused
+    /// frame-time spikes. Reset by [`begin_frame`](GridRenderer::begin_frame).
+    frame_vtx: u32,
+    frame_idx: u32,
+}
+
+/// Intersection of two logical `[x, y, w, h]` rects (empty if disjoint).
+fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
+    let x0 = a[0].max(b[0]);
+    let y0 = a[1].max(b[1]);
+    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
+    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
+    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
+}
+
+/// Combine the frame damage with a per-draw clip; `None` means "unbounded".
+fn combine_clip(damage: Option<[f32; 4]>, clip: Option<[f32; 4]>) -> Option<[f32; 4]> {
+    match (damage, clip) {
+        (None, None) => None,
+        (Some(r), None) | (None, Some(r)) => Some(r),
+        (Some(a), Some(b)) => Some(intersect(a, b)),
+    }
 }
 
 impl GridRenderer {
@@ -110,6 +156,9 @@ impl GridRenderer {
             7 => Float32x4, // glow
             8 => Float32,   // glow_radius
             9 => Float32,   // glow_intensity
+            10 => Float32x4, // shadow
+            11 => Float32,   // shadow_radius
+            12 => Float32x2, // shadow_offset
         ];
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -169,7 +218,64 @@ impl GridRenderer {
             indices: Vec::new(),
             bind_group,
             uniform_buffer,
+            scale_factor: 1.0,
+            target_size: [1, 1],
+            clip_marks: Vec::new(),
+            current_clip: None,
+            damage: None,
+            frame_vtx: 0,
+            frame_idx: 0,
         }
+    }
+
+    /// Reset the per-frame buffer write offsets. Call once at the start of each
+    /// frame, before any `render` passes, so the frame's passes append to the
+    /// persistent buffers instead of overwriting one another.
+    pub fn begin_frame(&mut self) {
+        self.frame_vtx = 0;
+        self.frame_idx = 0;
+    }
+
+    /// Set the frame-level damage region (logical px) the whole pass is scissored
+    /// to, or `None` for a full-frame render. Set once per frame before `render`.
+    pub fn set_damage(&mut self, damage: Option<[f32; 4]>) {
+        self.damage = damage;
+    }
+
+    /// Logical→physical scale factor (HiDPI). Used to map clip rects to scissor px.
+    pub fn set_scale_factor(&mut self, scale: f64) {
+        self.scale_factor = scale as f32;
+    }
+
+    /// Physical framebuffer size in pixels; scissor rects are clamped to it.
+    pub fn set_target_size(&mut self, width: u32, height: u32) {
+        self.target_size = [width.max(1), height.max(1)];
+    }
+
+    /// Set the clip rect (logical px, `[x, y, w, h]`) applied to subsequent
+    /// [`draw`](Self::draw) calls, or `None` to clear it. A no-op if unchanged.
+    pub fn set_clip(&mut self, clip: Option<[f32; 4]>) {
+        if clip != self.current_clip {
+            self.clip_marks.push((self.indices.len() as u32, clip));
+            self.current_clip = clip;
+        }
+    }
+
+    /// Convert a logical clip rect to a physical scissor rect clamped to the
+    /// framebuffer: `(x, y, w, h)`. A zero `w`/`h` means "fully clipped".
+    fn scissor_px(&self, c: [f32; 4]) -> (u32, u32, u32, u32) {
+        let s = self.scale_factor;
+        let (fw, fh) = (self.target_size[0] as f32, self.target_size[1] as f32);
+        let x0 = (c[0] * s).clamp(0.0, fw);
+        let y0 = (c[1] * s).clamp(0.0, fh);
+        let x1 = ((c[0] + c[2]) * s).clamp(0.0, fw);
+        let y1 = ((c[1] + c[3]) * s).clamp(0.0, fh);
+        (
+            x0 as u32,
+            y0 as u32,
+            (x1 - x0).max(0.0) as u32,
+            (y1 - y0).max(0.0) as u32,
+        )
     }
 
     pub fn set_screen_size(&mut self, queue: &wgpu::Queue, width: f32, height: f32) {
@@ -183,7 +289,11 @@ impl GridRenderer {
     /// Queue one glowing rounded rect. The quad is expanded to contain the glow
     /// halo so the falloff isn't clipped.
     pub fn draw(&mut self, r: GlowRect) {
-        let margin = r.glow_radius.max(0.0) + 2.0;
+        // Expand the quad to contain whichever halo reaches furthest: the glow, or
+        // the (offset) drop shadow's blur — so neither falloff is clipped.
+        let shadow_reach = r.shadow_radius.max(0.0)
+            + r.shadow_offset[0].abs().max(r.shadow_offset[1].abs());
+        let margin = r.glow_radius.max(0.0).max(shadow_reach) + 2.0;
         let (x0, y0) = (r.x - margin, r.y - margin);
         let (x1, y1) = (r.x + r.w + margin, r.y + r.h + margin);
         let center = [r.x + r.w * 0.5, r.y + r.h * 0.5];
@@ -200,6 +310,9 @@ impl GridRenderer {
             glow: r.glow,
             glow_radius: r.glow_radius,
             glow_intensity: r.glow_intensity,
+            shadow: r.shadow,
+            shadow_radius: r.shadow_radius,
+            shadow_offset: r.shadow_offset,
         };
 
         let base = self.vertices.len() as u32;
@@ -211,10 +324,12 @@ impl GridRenderer {
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
     }
 
-    /// Submit all queued primitives.
+    /// Submit all queued primitives. Appends this pass's geometry to the persistent
+    /// vertex/index buffers at the running frame offset (no per-frame staging
+    /// allocation); call [`begin_frame`](GridRenderer::begin_frame) once per frame.
     pub fn render(
         &mut self,
-        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
     ) {
@@ -222,34 +337,14 @@ impl GridRenderer {
             return;
         }
 
-        let vertex_data = bytemuck::cast_slice(&self.vertices);
-        let index_data = bytemuck::cast_slice(&self.indices);
-
-        let staging_vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("grid_vertex_staging"),
-            contents: vertex_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-        let staging_index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("grid_index_staging"),
-            contents: index_data,
-            usage: wgpu::BufferUsages::COPY_SRC,
-        });
-
-        encoder.copy_buffer_to_buffer(
-            &staging_vertex,
-            0,
-            &self.vertex_buffer,
-            0,
-            vertex_data.len() as u64,
-        );
-        encoder.copy_buffer_to_buffer(
-            &staging_index,
-            0,
-            &self.index_buffer,
-            0,
-            index_data.len() as u64,
-        );
+        let vertex_data: &[u8] = bytemuck::cast_slice(&self.vertices);
+        let index_data: &[u8] = bytemuck::cast_slice(&self.indices);
+        let v_off = self.frame_vtx as u64 * std::mem::size_of::<GridVertex>() as u64;
+        let i_off = self.frame_idx as u64 * std::mem::size_of::<u32>() as u64;
+        // Append to the persistent buffers via the queue's reusable staging belt —
+        // distinct offsets per pass so a later pass doesn't clobber an earlier one.
+        queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
+        queue.write_buffer(&self.index_buffer, i_off, index_data);
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("grid_render_pass"),
@@ -270,9 +365,48 @@ impl GridRenderer {
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        rpass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
 
+        // Draw in clip spans: the leading span (before the first clip mark) is
+        // unclipped, then each mark opens a new scissored span. With no clipping in
+        // use this is a single full-framebuffer span — one draw, as before. Indices
+        // and vertices live at this frame's running offset, so draws reference them
+        // via `first_index` (idx_base + span) and `base_vertex`.
+        let total = self.indices.len() as u32;
+        let idx_base = self.frame_idx;
+        let base_vertex = self.frame_vtx as i32;
+        let tail: (u32, Option<[f32; 4]>) = (total, None);
+        let mut start = 0u32;
+        let mut clip: Option<[f32; 4]> = None;
+        for &(at, next_clip) in self.clip_marks.iter().chain(std::iter::once(&tail)) {
+            if at > start {
+                let draw = match combine_clip(self.damage, clip) {
+                    None => {
+                        rpass.set_scissor_rect(0, 0, self.target_size[0], self.target_size[1]);
+                        true
+                    }
+                    Some(c) => {
+                        let (x, y, w, h) = self.scissor_px(c);
+                        if w == 0 || h == 0 {
+                            false // span fully outside the damage/clip — skip it
+                        } else {
+                            rpass.set_scissor_rect(x, y, w, h);
+                            true
+                        }
+                    }
+                };
+                if draw {
+                    rpass.draw_indexed((idx_base + start)..(idx_base + at), base_vertex, 0..1);
+                }
+            }
+            start = at;
+            clip = next_clip;
+        }
+
+        self.frame_vtx += self.vertices.len() as u32;
+        self.frame_idx += self.indices.len() as u32;
         self.vertices.clear();
         self.indices.clear();
+        self.clip_marks.clear();
+        self.current_clip = None;
     }
 }

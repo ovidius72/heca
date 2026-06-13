@@ -8,7 +8,7 @@ use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Glow, TextAlign};
 use crate::style::Length;
 
 /// Horizontal padding inside the pill.
@@ -103,8 +103,9 @@ impl Component for Badge {
     fn remeasure(&mut self) {
         let chars = self.label.get_untracked().chars().count() as f32;
         let fs = self.base.font;
-        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H);
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V);
+        let s = self.base.size_scale();
+        self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V * s);
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -140,16 +141,8 @@ impl Component for Badge {
             (c.with_alpha(FILL_ALPHA), c, c.lerp(white, 0.25), glow)
         };
 
-        cx.rect(
-            pill,
-            fill,
-            Some(Border {
-                color: border_c,
-                width: 1.0,
-            }),
-            radius,
-            glow,
-        );
+        let border = cx.border(border_c);
+        cx.rect(pill, fill, border, radius, glow);
         cx.text(
             pill,
             &self.label.get_untracked(),

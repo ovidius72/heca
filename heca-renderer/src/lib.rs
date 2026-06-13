@@ -1,4 +1,6 @@
 pub mod font;
+pub mod atlas;
+pub mod composite;
 pub mod grid;
 pub mod primitive;
 pub mod scene;

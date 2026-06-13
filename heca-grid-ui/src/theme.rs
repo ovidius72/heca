@@ -117,6 +117,11 @@ pub struct Theme {
     pub border: Color,
     pub accent: Color,
     pub glow: Color,
+    /// Drop-shadow umbra color (including its alpha) for elevated/floating
+    /// surfaces (e.g. [`Modal`](crate::widgets::Modal)). Independent of `glow` and
+    /// `border_width` — a shadow shows even when both are off. Set alpha 0 to
+    /// disable shadows globally.
+    pub shadow: Color,
     pub danger: Color,
     pub success: Color,
     pub warning: Color,
@@ -170,6 +175,7 @@ impl Theme {
             border: Color::rgb(20, 60, 76),
             accent: Color::rgb(64, 224, 255),
             glow: Color::rgb(64, 224, 255),
+            shadow: Color::new(0, 0, 0, 130),
             danger: Color::rgb(255, 70, 84),
             success: Color::rgb(80, 255, 170),
             warning: Color::rgb(255, 190, 70),
@@ -195,6 +201,7 @@ impl Theme {
             border: Color::rgb(82, 22, 28),
             accent: Color::rgb(255, 56, 72),
             glow: Color::rgb(255, 56, 72),
+            shadow: Color::new(0, 0, 0, 130),
             danger: Color::rgb(255, 70, 84),
             success: Color::rgb(80, 255, 170),
             warning: Color::rgb(255, 190, 70),

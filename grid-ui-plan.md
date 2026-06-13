@@ -91,10 +91,59 @@ The authoritative checklist of what's left, by phase. (Supersedes the old flat t
 
 ## ▶ Resume Here
 
-### 🤝 Handoff — last updated 2026-06-10 (after the **§11 catalog audit** + **Modal bracket-frame fix**; the catalog is essentially complete)
+### 🤝 Handoff — last updated 2026-06-11 (after **Toast PR1+PR2** and a deep **perf pass**)
 
 **Read this first to resume.** It's the single place that says where we are, what's
 next, and how to start.
+
+#### ▶ RESUME 2026-06-11 — most recent first
+
+**Merged since the 06-10 handoff:** #81 Toast widget, #83 PaneId (other dev), #84
+theme-driven borders (`border_width=0` ⇒ no borders; containers keep a thin hairline),
+#85 soft drop-shadow primitive + Modal lift, #86 Toast press-flash localized, #87
+**ToastStack** overlay (Toast PR2 — host owns `Signal<Vec<ToastSpec>>`, stack is
+presentation-only). **§11 catalog is fully delivered.**
+
+**Open PR: #91 `grid-ui-perf`** (the ONLY open PR — earlier split #88/#89/#90 were closed,
+branches deleted). It consolidates the whole **perf investigation**:
+- **Text-label cache** (`heca-renderer/src/text.rs`) — *the* ~100% CPU fix: the renderer was
+  re-shaping + re-rasterizing + creating a new GPU texture/bind-group for **every label every
+  frame**. Now cached by `(text,size,weight,font)`; color tinted per-draw.
+- **Layout cache** + **viewport culling** + **~30fps animation cap** (showcase host loop).
+- **Overlay routing fixes** — overlays only consume the pointer/scroll/keys they actually
+  handle, so a non-grabbing overlay (`ToastStack`) lets clicks/scroll/hover pass through
+  (fixed toasts blocking scroll, the `t` key, button hover). Modal swallows scroll.
+- **Result:** idle ~0% (loop sleeps), ~5ms CPU/frame animating. 115 tests, clippy clean.
+- **How to verify:** `cargo run -p heca-renderer --example showcase`; press `t` for toasts.
+
+**Next tasks (in priority):**
+1. **Overlay text-bleed** (real renderer bug) — overlapping overlays (open `Select` dropdown +
+   toasts) bleed text because the renderer draws **all rects then all text** per layer. Fix:
+   scissor/clip per overlay (the `PushClip`/`PopClip` no-op in `scene.rs` is the hook), or
+   interleave rect+text draw order. See memory `grid-ui-overlay-text-bleed`.
+2. **`FocusManager::dispatch` — ✅ DONE (local commit `17ff434` on `grid-ui-perf`, not pushed).**
+   Lifted the overlay/focus event routing into grid-ui: `offer_to_overlay(root,ev)->Handled`
+   (the single overlay first-dibs + consume-when-handled gate) and `dispatch(root,ev)->Handled`
+   (full pointer/scroll routing: overlay dibs → focus-on-press → deliver to tree; returns Handled
+   so the host page-scrolls on No). **Keys stay host-routed by design** — the app keymap
+   (`config.toml`→action, `heca/src/keymap.rs`) claims keys upstream, so dispatch never owns key
+   meaning; the showcase key path only swapped its overlay double-call for `offer_to_overlay`, all
+   `focused().is_none()` guards/chords unchanged. Showcase's 3 copies of the gate collapsed to one
+   `dispatch` each. +2 tests (117 integ total), clippy clean, **verified live = no behavior change**.
+   `heca` doesn't use `FocusManager` yet — adopting `dispatch` there is the remaining follow-up.
+3. Polish: carets/animations should request redraw on state-change, not every tick (a focused
+   `Input` caret drives 30fps redraw though it changes ~2×/sec).
+4. Older open threads: enumerate-rail → Workspaces wiring (app-side, coordinate); G6 reorder;
+   readability pass.
+
+**⚠️ Workflow note (user, 06-11):** during live testing the user said **don't push / don't open
+PRs** until they're ready — make local edits + commits, let them build/test, then consolidate
+into **one** PR. They merge PRs between turns; always `git fetch` + rebase on `origin/main`
+right before pushing. (See memory `grid-ui-workflow`.)
+
+---
+*(Older 06-10 handoff below — §11 catalog mapping, chrome vocabulary, shared infra. Still valid
+for widget-level context.)*
 
 #### Git / PR state (verify before you start with `gh pr list` + `git fetch`)
 
@@ -225,15 +274,31 @@ next, and how to start.
 | HUD Frame | ✅ `Pane` / `DockFrame` (corner-bracket frame, titled, collapsible) |
 | Metric Row / SidebarItem 1–4 | ✅ `Item` / `Row` + `Badge`/`Tag` (recipes) |
 | Status Dots | ✅ `StatusDot` · Tags | ✅ `Tag` · Modal | ✅ `Modal` (now bracket-framed) |
-| **Toast** / Notification | ⬜ **the one genuinely-new widget left** |
+| **Toast** / Notification | ✅ **PR1 `Toast` content widget + PR2 `ToastStack` overlay DONE** (merged / branch `grid-ui-toast-stack`). App-side notification store still a follow-up. |
 
 #### What's next (in priority order)
 
-1. **`Toast`** (the only genuinely-new §11 widget) — a **transient, auto-dismissing** notification
-   (doubles as "Notification"; "usable as a sidebar item" per the user). Overlay-drawn like
-   `Tooltip`/`Modal` (`PaintCx::with_overlay`); auto-dismiss via a `tick(dt)` timer; host-owned
-   queue/signal; optional action + icon. Use the **corner-bracket frame** (`cx.bracket_frame`) for
-   GridCN fidelity — see the Modal fix (#79).
+1. **`Toast`** (the last genuinely-new §11 widget) — split into two PRs.
+   **Boundary (user-confirmed):** grid-ui ships *presentation only*; the **notification system**
+   (queue, ids, lifetime/auto-dismiss policy, dedup, click dispatch, sound) is the **app's** job.
+   - **PR1 — `Toast` content widget: ✅ DONE** (branch `grid-ui-toast-widget`, `widgets/toast.rs`).
+     Bracket-framed card (`cx.bracket_frame`, GridCN fidelity — see #79); severity-toned leading
+     `Icon` + strong title + small `.body()` + optional inline `.action(label,f)` + `×`
+     (`.dismissible`/`.on_dismiss`); whole-card `.on_click` (focusable, Enter/Space). **No timer,
+     no queue** — emits intents via callbacks; the host removes it. In-tree (not overlay) so it's
+     reusable **inline** (sidebar notification row). Exported both lists in `lib.rs`; 5 tests in
+     `tests/phase_a.rs` (105 total); demoed as a stacked list in `examples/showcase.rs`;
+     `docs/widgets.md` entry added. Build + clippy green.
+   - **PR2 — `ToastStack` overlay helper: ✅ DONE** (branch `grid-ui-toast-stack`,
+     `widgets/toast_stack.rs`). Reads a host-owned `Signal<Vec<ToastSpec>>`, reconciles cached
+     `Toast` widgets by id, corner-anchors them on the overlay layer (`ToastCorner`), slides new
+     ones in (`tick`), routes events to the toast under the cursor, reports
+     `on_dismiss(id)`/`on_action(id)`, and **passes through** clicks that miss every toast
+     (`overlay_active` only while non-empty). No queue/timer/policy. Demoed in `showcase.rs`
+     (pre-populated list + `t` pushes one + × removes). 3 tests; `docs/widgets.md` entry added.
+     *Note: enter slide + reflow-on-remove only; explicit exit-fade animation deferred.*
+   - **Later (app-side, coordinate):** the real notification store/manager in `heca` — queue,
+     lifetime, dedup, click dispatch, sound — feeding `ToastStack`. Like the rail→Workspaces wiring.
 2. **§11 plan cleanup** (partly done in the handoff PR) — finish making **§11 the source of truth**
    (mark the ✅ mappings above), **retire the stale "Catalog gaps" / "PLANNED enhancements"**
    sections, and **remove `EnergyMeter`/`SignalIndicator`** (lines ~54/517/563) + the speculative

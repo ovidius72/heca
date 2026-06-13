@@ -93,6 +93,9 @@ impl Component for Spinner {
             return false;
         }
         self.phase = (self.phase + dt / PERIOD).rem_euclid(1.0);
+        // Damage just the spinner's own rect each frame, so its animation doesn't
+        // force a whole-scene redraw.
+        self.base.mark_needs_paint();
         true
     }
 }

@@ -1,7 +1,7 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Scene, Size, Theme};
+use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -163,6 +163,47 @@ fn button_click_fires_within_bounds() {
 }
 
 #[test]
+fn widget_size_scales_font_and_box_proportionally() {
+    // Big is the reference look; Normal (the default) and Small scale down — font
+    // and the whole box shrink together so the control stays balanced.
+    let measure = |size: WidgetSize| -> (f32, Rectangle) {
+        let mut b = Button::new("RUN").size(size);
+        LayoutEngine::new().compute(&mut b, Size::new(400.0, 100.0));
+        (b.base().font, b.base().bounds)
+    };
+    let (small_f, small_b) = measure(WidgetSize::Small);
+    let (normal_f, normal_b) = measure(WidgetSize::Normal);
+    let (big_f, big_b) = measure(WidgetSize::Large);
+
+    assert!(small_f < normal_f && normal_f < big_f, "font grows Small < Normal < Big");
+    assert!(
+        small_b.size.h < normal_b.size.h && normal_b.size.h < big_b.size.h,
+        "box height grows with the size variant"
+    );
+    assert!(small_b.size.w < big_b.size.w, "box width grows with the size variant");
+
+    // The default is Normal.
+    let mut default_btn = Button::new("RUN");
+    LayoutEngine::new().compute(&mut default_btn, Size::new(400.0, 100.0));
+    assert_eq!(default_btn.base().font, normal_f, "default size is Normal");
+}
+
+#[test]
+fn widget_size_scales_text_only_widgets_via_font() {
+    // A Label has no padding, so the size variant shows purely as a smaller font.
+    let font = |size: WidgetSize| {
+        let mut l = Label::new("status").size(size);
+        LayoutEngine::new().compute(&mut l, Size::new(200.0, 50.0));
+        l.base().font
+    };
+    assert!(
+        font(WidgetSize::Small) < font(WidgetSize::Normal)
+            && font(WidgetSize::Normal) < font(WidgetSize::Large),
+        "text widgets inherit the size variant through the resolved font"
+    );
+}
+
+#[test]
 fn button_hover_tracks_pointer() {
     let mut button = Button::new("HOVER");
     LayoutEngine::new().compute(&mut button, Size::new(200.0, 80.0));
@@ -264,6 +305,81 @@ fn click_focuses_hit_widget_and_misses_clear() {
     // A click that misses every focusable clears focus.
     focus.focus_at(&mut ui, Point::new(9999.0, 9999.0));
     assert_eq!(focus.focused(), None, "missed click clears focus");
+}
+
+#[test]
+fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
+    use heca_grid_ui::FocusManager;
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    let b = ui.base().children[1].base().bounds;
+    let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
+
+    let mut focus = FocusManager::new();
+    // No overlay open → nothing to offer.
+    assert_eq!(
+        focus.offer_to_overlay(&mut ui, &Event::Scroll { delta: 1.0 }),
+        Handled::No,
+        "no open overlay → nothing consumes the offer"
+    );
+
+    // A press dispatches with focus-on-press semantics: the clicked widget focuses.
+    focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
+    assert_eq!(focus.focused(), Some(1), "dispatch focuses the pressed widget");
+
+    // A press that misses every focusable clears focus.
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(9999.0, 9999.0),
+    });
+    assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
+
+    // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
+    assert_eq!(
+        focus.dispatch(&mut ui, &Event::Scroll { delta: 1.0 }),
+        Handled::No,
+        "unconsumed scroll falls through to the host"
+    );
+}
+
+#[test]
+fn dispatch_gives_an_open_overlay_first_dibs() {
+    use heca_grid_ui::FocusManager;
+
+    // A Select is overlay-capable: while open it grabs input outside its bounds.
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Select::new(["LOW", "MEDIUM", "HIGH"]));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 200.0));
+
+    let mut focus = FocusManager::new();
+    let sb = ui.base().children[1].base().bounds;
+
+    // Press on the Select trigger opens its dropdown (no overlay yet → normal route).
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
+    });
+    assert!(
+        focus.overlay_active(&mut ui),
+        "pressing the trigger opens the dropdown overlay"
+    );
+
+    // With the dropdown open, a press on a row (outside the trigger's layout bounds)
+    // is grabbed by the overlay first — it commits the selection and closes — rather
+    // than being treated as a fresh focus/click on the tree behind it.
+    // Row layout: trigger bottom + panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid(15).
+    let row2_y = sb.loc.y + sb.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
+    let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 10.0, row2_y),
+    });
+    assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
+    assert!(
+        !focus.overlay_active(&mut ui),
+        "committing a row closes the dropdown"
+    );
 }
 
 #[test]
@@ -1830,10 +1946,19 @@ fn collapsed_dock_body_is_not_painted() {
 fn icon_lays_out_as_a_square() {
     use heca_grid_ui::{Glyph, Icon};
     let mut icon = Icon::new(Glyph::GitBranch).size(24.0);
+    // Large == the reference (un-scaled) size; the explicit px is taken verbatim.
+    icon.base_mut().style.size = WidgetSize::Large;
     LayoutEngine::new().compute(&mut icon, Size::new(200.0, 200.0));
     let b = icon.base().bounds;
     assert_eq!(b.size.w, 24.0, "icon width = glyph size");
     assert_eq!(b.size.h, 24.0, "icon is square");
+
+    // The size variant scales an explicit glyph size too (so icon-only buttons
+    // resize): Small renders the same icon smaller.
+    let mut small = Icon::new(Glyph::GitBranch).size(24.0);
+    small.base_mut().style.size = WidgetSize::Small;
+    LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
+    assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
 }
 
 #[test]
@@ -2159,7 +2284,7 @@ fn icon_button_hugs_icon_by_default_and_pins_an_explicit_size() {
     assert!((b.size.w - b.size.h).abs() < 2.0, "roughly square");
 
     // Pinned: an exact square.
-    let mut pinned = IconButton::new(Icon::new(Glyph::Gear).size(18.0)).size(40.0);
+    let mut pinned = IconButton::new(Icon::new(Glyph::Gear).size(18.0)).cell(40.0);
     LayoutEngine::new().compute(&mut pinned, Size::new(200.0, 200.0));
     let pb = pinned.base().bounds;
     assert_eq!(pb.size.w, 40.0, "pinned width");
@@ -2195,7 +2320,9 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
 fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     use heca_grid_ui::Tooltip;
 
-    let mut tip = Tooltip::new(Item::new("X"), "HELP").delay(0.5);
+    // Reveal is wall-clock timed (like the Input caret), so the test sleeps past a
+    // short delay rather than feeding simulated `dt`.
+    let mut tip = Tooltip::new(Item::new("X"), "HELP").delay(0.05);
 
     // Render + report whether the bubble text was painted.
     let shows_help = |tip: &mut Tooltip| -> bool {
@@ -2217,11 +2344,10 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     tip.event(&Event::PointerMoved { pos: center });
-    tip.tick(0.3);
     assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
 
     // Past the delay: the bubble shows.
-    tip.tick(0.3);
+    std::thread::sleep(std::time::Duration::from_millis(120));
     assert!(shows_help(&mut tip), "bubble reveals after the hover delay");
 
     // Pointer leaves: hidden again immediately.
@@ -2481,4 +2607,478 @@ fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
     // Ctrl+U = delete from caret to line start.
     inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
     assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
+}
+
+// --- Toast ------------------------------------------------------------------
+
+/// Lay a toast out as the root at its fixed width so `bounds` are set for
+/// hit-testing, returning its resolved height.
+fn layout_toast(t: &mut heca_grid_ui::Toast) -> f64 {
+    LayoutEngine::new().compute(t, Size::new(400.0, 300.0));
+    t.base().bounds.size.h
+}
+
+#[test]
+fn toast_height_grows_with_body_then_action() {
+    use heca_grid_ui::Toast;
+    let bare = layout_toast(&mut Toast::info("Saved"));
+    let with_body = layout_toast(&mut Toast::info("Saved").body("All files written"));
+    let with_action =
+        layout_toast(&mut Toast::info("Saved").body("All files written").action("Undo", || {}));
+    assert!(with_body > bare, "a body line adds height");
+    assert!(with_action > with_body, "an action row adds further height");
+}
+
+#[test]
+fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let dismissed = Rc::new(Cell::new(0u32));
+    let d = dismissed.clone();
+    let mut t = Toast::warning("Disk almost full").on_dismiss(move || d.set(d.get() + 1));
+    layout_toast(&mut t);
+
+    // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(296.0, 23.0) });
+    assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
+    assert!(matches!(hit, Handled::Yes), "the × consumes the click");
+}
+
+#[test]
+fn toast_action_button_fires_on_action() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let acted = Rc::new(Cell::new(0u32));
+    let a = acted.clone();
+    let mut t = Toast::info("File deleted").action("Undo", move || a.set(a.get() + 1));
+    layout_toast(&mut t);
+
+    // Action row sits below the title, left-aligned in the text column.
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+    assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
+}
+
+#[test]
+fn toast_body_click_fires_on_click_only_when_set() {
+    use heca_grid_ui::{Component, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    // Without on_click, a body click is not consumed (it can fall through).
+    let mut inert = Toast::info("Build finished").dismissible(false);
+    layout_toast(&mut inert);
+    let hit = inert.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
+
+    // With on_click, the same click activates + consumes.
+    let clicked = Rc::new(Cell::new(0u32));
+    let c = clicked.clone();
+    let mut t = Toast::info("Build finished")
+        .dismissible(false)
+        .on_click(move || c.set(c.get() + 1));
+    layout_toast(&mut t);
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    assert_eq!(clicked.get(), 1, "body click fires on_click");
+    assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
+}
+
+#[test]
+fn toast_focusable_only_when_clickable_and_enter_activates() {
+    use heca_grid_ui::{Component, GridKey, Toast};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let plain = Toast::info("Just an FYI");
+    assert!(!plain.focusable(), "a non-clickable toast is not focusable");
+
+    let clicked = Rc::new(Cell::new(0u32));
+    let c = clicked.clone();
+    let mut t = Toast::info("Open log?").on_click(move || c.set(c.get() + 1));
+    assert!(t.focusable(), "a clickable toast is focusable");
+    t.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
+}
+
+// --- Button respects theme border_width + radius ----------------------------
+
+#[test]
+fn button_derives_border_width_and_radius_from_theme() {
+    use heca_grid_ui::{Button, Component};
+
+    // A theme with a distinctive radius + border width.
+    let mut theme = Theme::grid_tron();
+    theme.radius = 10.0;
+    theme.border_width = 2.0;
+    let expected_radius = theme.control_radius();
+
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+
+    // The button's background box uses the surface fill; it must round to the
+    // theme's control radius and stroke at the theme's border width — not the
+    // old hardcoded 0.0 / 1.5.
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button paints a surface-filled background box");
+    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.control_radius()");
+    assert_eq!(
+        bg.border.expect("primary button has a border").width,
+        theme.border_width,
+        "button border width follows theme.border_width",
+    );
+
+    // border_width == 0 → no border drawn (borders off, like every surface).
+    theme.border_width = 0.0;
+    let mut btn = Button::primary("OK");
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        btn.paint(&mut cx);
+    }
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button still paints its background box");
+    assert!(bg.border.is_none(), "border_width == 0 means no button border");
+}
+
+// --- border_width == 0 ⇒ no borders (containers keep a thin uniform hairline) -
+
+#[test]
+fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
+    // Containers stay defined at border_width == 0, but via a single thin SOLID
+    // uniform border — NOT the reticle (whose bright corners collapsed to nothing,
+    // leaving empty corners + lingering dim straight edges).
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0;
+    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    let rects: Vec<_> = scene.iter().filter_map(|c| match c {
+        DrawCommand::Rect(r) => Some(*r),
+        _ => None,
+    }).collect();
+    assert_eq!(rects.len(), 1, "border=0 frame is one uniform hairline (no dim-edge overlays)");
+    assert!(rects[0].border.is_some_and(|b| b.width > 0.0), "the hairline is solid + visible");
+
+    // With a real border the bright accent reticle (+ dim midsection overlays) returns.
+    theme.border_width = 2.0;
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame(rect, Some(theme.surface));
+    }
+    let bright = scene.iter().any(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    ));
+    let n_rects = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
+    assert!(bright, "border>0 draws the bright accent reticle border");
+    assert!(n_rects > 1, "border>0 also dims the straight midsections (overlay rects)");
+}
+
+/// Paint `w` under `border_width == 0` and return every visible (width>0) Rect
+/// border stroke it emitted.
+fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f32> {
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0;
+    let vp = Size::new(400.0, 200.0);
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut w, vp);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        w.paint(&mut cx);
+    }
+    scene.iter().filter_map(|c| match c {
+        DrawCommand::Rect(r) => r.border.map(|b| b.width),
+        _ => None,
+    }).filter(|w| *w > 0.0).collect()
+}
+
+#[test]
+fn non_container_widgets_drop_their_border_at_zero_border_width() {
+    use heca_grid_ui::{Alert, Badge, Button, ProgressBar, Toggle};
+    // Guard against the recurring regression: a widget that hardcodes a border
+    // stroke instead of routing it through the theme (cx.border / border_width).
+    for (name, widths) in [
+        ("button", visible_border_widths_at_zero(Button::primary("OK"))),
+        ("badge", visible_border_widths_at_zero(Badge::success("ON"))),
+        ("alert", visible_border_widths_at_zero(Alert::warning("W").body("b"))),
+        ("progress", visible_border_widths_at_zero(ProgressBar::new().value(0.5))),
+        ("toggle", visible_border_widths_at_zero(Toggle::new().on(true))),
+    ] {
+        assert!(widths.is_empty(), "{name}: expected no border at border_width=0, got {widths:?}");
+    }
+}
+
+// --- drop shadow ------------------------------------------------------------
+
+#[test]
+fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
+    use heca_grid_ui::scene::Shadow;
+    let theme = Theme::grid_tron();
+    let rect = Rectangle::new(Point::new(50.0, 50.0), Size::new(120.0, 80.0));
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow, radius: 24.0, dx: 0.0, dy: 10.0 });
+    }
+    let sh = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) => r.shadow,
+        _ => None,
+    }).expect("drop_shadow emits a rect carrying a Shadow");
+    assert_eq!((sh.radius, sh.dy), (24.0, 10.0), "shadow blur + offset are threaded through");
+
+    // A fully-transparent shadow (alpha 0) or zero radius is a no-op.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow.with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
+    }
+    assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
+}
+
+#[test]
+fn open_modal_casts_a_drop_shadow() {
+    use heca_grid_ui::{Component, Modal};
+    let theme = Theme::grid_tron();
+    let mut m = Modal::new("Delete?", "Cannot undo").confirm("OK", || {}).open(true);
+    let vp = Size::new(400.0, 300.0);
+    LayoutEngine::new().compute(&mut m, vp);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        m.paint(&mut cx);
+    }
+    let has_shadow = scene.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
+    assert!(has_shadow, "an open modal lifts off the scrim with a drop shadow");
+}
+
+#[test]
+fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
+    use heca_grid_ui::{Component, Toast};
+    let theme = Theme::grid_tron();
+
+    // Press the Retry action, then paint: the press flash must cover only the
+    // action button, not the whole card (no "whole widget clicked" feedback).
+    let mut t = Toast::info("File deleted").action("Retry", || {});
+    layout_toast(&mut t);
+    let card_w = t.base().bounds.size.w;
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
+
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        t.paint(&mut cx);
+    }
+    // The flash is a white overlay rect (see PaintCx::flash).
+    let flash = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) if r.fill.r == 255 && r.fill.g == 255 && r.fill.b == 255 && r.fill.a > 0 => Some(*r),
+        _ => None,
+    }).expect("an action press emits a press-flash rect");
+    assert!(
+        flash.rect.size.w < card_w - 1.0,
+        "action flash ({}) must be narrower than the whole card ({card_w})",
+        flash.rect.size.w,
+    );
+}
+
+// --- ToastStack -------------------------------------------------------------
+
+#[test]
+fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
+    use heca_grid_ui::{Component, ToastSpec, ToastStack};
+
+    let items = signal(Vec::<ToastSpec>::new());
+    let mut stack = ToastStack::new(items);
+    stack.tick(0.0); // reconcile (empty)
+    assert!(!stack.overlay_active(), "empty stack doesn't grab input");
+
+    items.set(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
+    stack.tick(0.0); // reconcile (now 2)
+    assert!(stack.overlay_active(), "a non-empty stack is overlay-active");
+}
+
+#[test]
+fn toast_stack_dismiss_reports_the_clicked_id() {
+    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let dismissed = Rc::new(Cell::new(0u64));
+    let d = dismissed.clone();
+    let items = signal(vec![ToastSpec::new(7, "Connection lost").body("Retrying")]);
+    let mut stack = ToastStack::new(items)
+        .corner(ToastCorner::TopLeft)
+        .on_dismiss(move |id| d.set(id));
+
+    // Settle the slide-in, then paint to cache the viewport + lay the toast out.
+    stack.tick(1.0);
+    let theme = Theme::grid_tron();
+    let vp = Size::new(800.0, 600.0);
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        stack.paint(&mut cx);
+    }
+
+    // Top-left toast sits at (16,16), width 320; its × is in the top-right gutter.
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(310.0, 38.0) });
+    assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
+    assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
+}
+
+#[test]
+fn toast_stack_passes_through_clicks_that_miss_every_toast() {
+    use heca_grid_ui::{Component, ToastCorner, ToastSpec, ToastStack};
+
+    let items = signal(vec![ToastSpec::new(1, "Hi")]);
+    let mut stack = ToastStack::new(items).corner(ToastCorner::TopLeft);
+    stack.tick(1.0);
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
+        stack.paint(&mut cx);
+    }
+    // Far from the top-left toast → not consumed, so the UI behind still gets it.
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(700.0, 500.0) });
+    assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
+}
+
+// --- viewport culling -------------------------------------------------------
+
+#[test]
+fn paint_cx_culls_offscreen_content_but_not_headless() {
+    let theme = Theme::grid_tron();
+    let vp = Size::new(800.0, 600.0);
+    let off = Rectangle::new(Point::new(10.0, 5000.0), Size::new(100.0, 40.0)); // far below
+    let on = Rectangle::new(Point::new(10.0, 10.0), Size::new(100.0, 40.0));
+
+    // On-screen content is painted.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        cx.rect(on, theme.surface, None, 0.0, None);
+    }
+    assert_eq!(scene.len(), 1, "on-screen rect is painted");
+
+    // Content fully outside the viewport (rect + text) emits nothing.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
+        cx.rect(off, theme.surface, None, 0.0, None);
+        cx.text(off, "hidden", theme.foreground, 15.0, TextAlign::Start, false);
+    }
+    assert!(scene.is_empty(), "content far below the viewport is culled");
+
+    // With no viewport set (headless / tests) nothing is ever culled.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.rect(off, theme.surface, None, 0.0, None);
+    }
+    assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
+}
+
+#[test]
+fn with_clip_wraps_body_draws_in_push_and_pop_clip() {
+    use heca_grid_ui::PaintCx;
+
+    let theme = Theme::grid_tron();
+    let mut scene = Scene::new();
+    let clip = Rectangle::new(Point::new(0.0, 0.0), Size::new(50.0, 50.0));
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(100.0, 100.0));
+        cx.with_clip(clip, |cx| {
+            cx.rect(
+                Rectangle::new(Point::new(5.0, 5.0), Size::new(10.0, 10.0)),
+                theme.surface,
+                None,
+                0.0,
+                None,
+            );
+        });
+    }
+
+    let cmds: Vec<&DrawCommand> = scene.iter().collect();
+    assert!(
+        matches!(cmds.first(), Some(DrawCommand::PushClip(r)) if *r == clip),
+        "the body is opened by a PushClip carrying the clip rect"
+    );
+    assert!(
+        matches!(cmds.last(), Some(DrawCommand::PopClip)),
+        "the clip is popped after the body"
+    );
+    assert!(
+        cmds.iter().any(|c| matches!(c, DrawCommand::Rect(_))),
+        "the clipped rect sits between the push and pop"
+    );
+}
+
+#[test]
+fn focused_input_requests_a_timed_caret_redraw_not_continuous() {
+    use heca_grid_ui::{Component, FocusManager, Input};
+
+    let mut input = Input::new().value("hi");
+    LayoutEngine::new().compute(&mut input, Size::new(200.0, 60.0));
+
+    // The caret is never a continuous animation: tick reports no animating frame.
+    assert!(!input.tick(0.016), "an input never drives the continuous redraw loop");
+    // Unfocused: nothing to redraw on a timer.
+    assert_eq!(input.next_redraw(), None, "an unfocused input asks for no timed redraw");
+
+    // Focused: it schedules a wake at its next caret toggle (within a half period),
+    // so the host sleeps until then instead of redrawing every frame.
+    let mut focus = FocusManager::new();
+    focus.advance(&mut input, true);
+    let nr = input
+        .next_redraw()
+        .expect("a focused input schedules a timed caret redraw");
+    assert!(
+        nr > 0.0 && nr <= BLINK_PERIOD_HALF + 1e-3,
+        "caret wake is within the half blink period, got {nr}"
+    );
+}
+const BLINK_PERIOD_HALF: f32 = 0.5;
+
+#[test]
+fn collect_damage_unions_dirty_widgets_then_clears_flags() {
+    use heca_grid_ui::{Component, collect_damage};
+
+    let mut ui = Flex::row()
+        .child(Button::primary("A"))
+        .child(Button::secondary("B"));
+    LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
+
+    // A fresh tree needs its first paint; collecting reports damage and clears flags.
+    assert!(collect_damage(&ui).is_some(), "a fresh tree needs its first paint");
+    assert!(
+        collect_damage(&ui).is_none(),
+        "flags cleared → no damage on the next collect"
+    );
+
+    // Marking one widget dirty → damage covers (at least) that widget's bounds.
+    let b = ui.base().children[1].base().bounds;
+    ui.base().children[1].base().mark_needs_paint();
+    let d = collect_damage(&ui).expect("a marked widget reports damage");
+    assert!(
+        d.loc.x <= b.loc.x && d.loc.x + d.size.w >= b.loc.x + b.size.w,
+        "damage horizontally covers the marked widget"
+    );
 }

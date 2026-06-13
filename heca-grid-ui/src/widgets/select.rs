@@ -135,6 +135,19 @@ impl Select {
         self.base.font as f64 * ROW_H_RATIO
     }
 
+    /// Padding / chevron width scaled by the size variant (the font already is), so
+    /// the control and its panel grow/shrink as a unit. Used by both measure + paint
+    /// + hit-test so they stay in agreement.
+    fn pad_h(&self) -> f64 {
+        PAD_H * self.base.size_scale() as f64
+    }
+    fn pad_v(&self) -> f64 {
+        PAD_V * self.base.size_scale() as f64
+    }
+    fn chevron_w(&self) -> f64 {
+        CHEVRON_W * self.base.size_scale() as f64
+    }
+
     /// Panel height for the current visible-row count.
     fn panel_h(&self) -> f64 {
         2.0 * PANEL_PAD + self.vis_rows as f64 * self.row_h()
@@ -259,10 +272,10 @@ impl Component for Select {
     /// a fixed block, and text never overflows.
     fn remeasure(&mut self) {
         let fs = self.base.font;
-        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * PAD_V as f32);
+        self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * self.pad_v() as f32);
         let longest = self.options.iter().map(|s| s.chars().count()).max().unwrap_or(0) as f32;
         let text_w = longest * fs * MONO_ADVANCE_RATIO;
-        let chrome = (2.0 * PAD_H + CHEVRON_W + SCROLLBAR_W) as f32;
+        let chrome = (2.0 * self.pad_h() + self.chevron_w() + SCROLLBAR_W) as f32;
         self.base.style.width = Length::Px(text_w + chrome);
     }
 
@@ -292,9 +305,10 @@ impl Component for Select {
         cx.rect(b, surface, Some(border), radius, None);
 
         // Selected label (left), inset by padding.
+        let pad_h = self.pad_h();
         let text_rect = Rectangle::new(
-            Point::new(b.loc.x + PAD_H, b.loc.y),
-            Size::new((b.size.w - 2.0 * PAD_H - 12.0).max(0.0), b.size.h),
+            Point::new(b.loc.x + pad_h, b.loc.y),
+            Size::new((b.size.w - 2.0 * pad_h - 12.0).max(0.0), b.size.h),
         );
         cx.text(
             text_rect,
@@ -308,7 +322,7 @@ impl Component for Select {
         // Down-chevron on the right, built from stacked rects (a small triangle).
         let chev_color = muted.lerp(accent, p);
         let cw = 9.0_f64;
-        let cx0 = b.loc.x + b.size.w - PAD_H - cw;
+        let cx0 = b.loc.x + b.size.w - self.pad_h() - cw;
         let cy0 = b.loc.y + b.size.h / 2.0 - 2.0;
         for k in 0..3 {
             let inset = k as f64 * (cw / 2.0) / 3.0;
@@ -351,14 +365,11 @@ impl Component for Select {
                         cx.rect(row, accent.with_alpha(HILITE_ALPHA), None, 2.0, None);
                     }
                     // Leave room for the scrollbar on the right when present.
-                    let right_pad = if scrollbar {
-                        PAD_H + SCROLLBAR_W
-                    } else {
-                        PAD_H
-                    };
+                    let pad_h = self.pad_h();
+                    let right_pad = if scrollbar { pad_h + SCROLLBAR_W } else { pad_h };
                     let row_text = Rectangle::new(
-                        Point::new(row.loc.x + PAD_H, row.loc.y),
-                        Size::new((row.size.w - PAD_H - right_pad).max(0.0), row.size.h),
+                        Point::new(row.loc.x + pad_h, row.loc.y),
+                        Size::new((row.size.w - pad_h - right_pad).max(0.0), row.size.h),
                     );
                     let color = if i == selected { accent } else { foreground };
                     cx.text(

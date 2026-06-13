@@ -131,6 +131,22 @@ impl FocusManager {
         Self::overlay_index(root).is_some()
     }
 
+    /// Offer an event to an open overlay first. Returns `Handled::Yes` only if an
+    /// overlay is open **and** it actually consumed the event.
+    ///
+    /// This is the single "overlay first-dibs + consume-when-handled" gate every
+    /// event type shares: a grabbing overlay (Modal/dropdown) swallows the input,
+    /// while a non-grabbing one (e.g. a [`ToastStack`](crate::widgets::ToastStack))
+    /// returns `Handled::No` so the event falls through to the content behind it.
+    /// Route input through here before any default/host handling.
+    pub fn offer_to_overlay(&self, root: &mut dyn Component, ev: &Event) -> Handled {
+        if self.overlay_active(root) {
+            self.deliver_to_overlay(root, ev)
+        } else {
+            Handled::No
+        }
+    }
+
     /// Deliver an event to the overlay-active focusable (if any) so it can
     /// capture input outside its layout bounds (e.g. clicks on dropdown rows).
     /// Returns `Handled::Yes` if consumed.
@@ -164,6 +180,34 @@ impl FocusManager {
             }
         });
         self.apply(root, hit, false); // mouse focus → no ring (focus-visible)
+    }
+
+    /// Route a **pointer/scroll** event through the tree with overlay-first dibs
+    /// and the manager's standard focus semantics, returning whether it was
+    /// consumed so the host can fall back (e.g. page-scroll on an unconsumed
+    /// [`Event::Scroll`](crate::component::Event::Scroll)).
+    ///
+    /// - An open overlay gets first dibs (see [`offer_to_overlay`](Self::offer_to_overlay));
+    ///   if it consumes, routing stops and returns `Handled::Yes`.
+    /// - [`Event::PointerPressed`](crate::component::Event::PointerPressed) focuses
+    ///   the clicked widget (clearing focus on a miss), then delivers the press.
+    /// - Any other event (pointer move, scroll, …) is delivered to the tree as-is.
+    ///
+    /// Key events are intentionally **not** routed here: the host owns key meaning
+    /// (in the app, `config.toml` → keymap → action runs first), so it resolves its
+    /// own bindings and uses [`offer_to_overlay`](Self::offer_to_overlay) +
+    /// [`deliver_key`](Self::deliver_key) for the leftovers.
+    pub fn dispatch(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
+        if self.offer_to_overlay(root, ev) == Handled::Yes {
+            return Handled::Yes;
+        }
+        match ev {
+            Event::PointerPressed { pos } => {
+                self.focus_at(root, *pos);
+                root.event(ev)
+            }
+            _ => root.event(ev),
+        }
     }
 
     /// Apply a target focus index across the tree. Fires `on_blur`/`on_focus`

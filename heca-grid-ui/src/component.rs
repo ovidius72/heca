@@ -8,10 +8,85 @@
 
 use crate::color::Color;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, TextAlign, TextCmd};
+use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
+use std::cell::{Cell, RefCell};
+
+thread_local! {
+    /// Host-installed hook the widget tree calls to schedule the next frame. The
+    /// event loop wires it to its redraw request; widgets reach it via
+    /// [`request_frame`]. Thread-local because the UI runs single-threaded.
+    static FRAME_REQUEST: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+}
+
+/// Install the callback the widget tree uses to ask the host for the next frame.
+///
+/// The host (event loop) wires this to its "schedule a redraw" call once at
+/// startup. It is the bridge that lets a widget which invalidates itself (an
+/// animation step, a caret move, a reactive state change) wake the renderer —
+/// the foundation for repainting only what changed instead of every frame.
+pub fn install_frame_request(f: impl Fn() + 'static) {
+    FRAME_REQUEST.with(|c| *c.borrow_mut() = Some(Box::new(f)));
+}
+
+/// Ask the host to schedule a frame. The host coalesces repeated requests into a
+/// single redraw. A no-op until [`install_frame_request`] is set (e.g. in
+/// headless tests), so widget code can always call it safely.
+pub fn request_frame() {
+    FRAME_REQUEST.with(|c| {
+        if let Some(f) = c.borrow().as_ref() {
+            f();
+        }
+    });
+}
+
+/// Logical-pixel margin added around each damaged widget so glow/shadow halos —
+/// which paint outside the widget's rect — are included in the redrawn region.
+const DAMAGE_PAD: f64 = 64.0;
+
+/// Walk the tree and union the bounds of every widget flagged
+/// [`needs_paint`](Base::needs_paint) (padded for glow/shadow reach), **clearing
+/// the flags**. Returns the damage rect to repaint, or `None` if nothing changed.
+///
+/// The host calls this each frame: on an animation/timed frame the result scissors
+/// the render to just the changed pixels; on an input frame the host repaints in
+/// full (an event can change unknown things) but still calls this to clear flags.
+/// Hidden subtrees are skipped — their bounds are stale.
+pub fn collect_damage(root: &dyn Component) -> Option<Rectangle> {
+    fn union(a: Rectangle, b: Rectangle) -> Rectangle {
+        let x0 = a.loc.x.min(b.loc.x);
+        let y0 = a.loc.y.min(b.loc.y);
+        let x1 = (a.loc.x + a.size.w).max(b.loc.x + b.size.w);
+        let y1 = (a.loc.y + a.size.h).max(b.loc.y + b.size.h);
+        Rectangle::new(Point::new(x0, y0), Size::new(x1 - x0, y1 - y0))
+    }
+    fn walk(c: &dyn Component, acc: &mut Option<Rectangle>) {
+        let b = c.base();
+        if !b.visible.get_untracked() || b.style.hidden {
+            return;
+        }
+        if b.needs_paint() {
+            b.clear_needs_paint();
+            // Overlay widgets (tooltip bubble, command palette) paint outside their
+            // own `bounds`; `damage_bounds` lets them report the rect that actually
+            // changed. Default is `bounds`, so ordinary widgets are unaffected.
+            let r = c.damage_bounds();
+            let padded = Rectangle::new(
+                Point::new(r.loc.x - DAMAGE_PAD, r.loc.y - DAMAGE_PAD),
+                Size::new(r.size.w + 2.0 * DAMAGE_PAD, r.size.h + 2.0 * DAMAGE_PAD),
+            );
+            *acc = Some(acc.map_or(padded, |a| union(a, padded)));
+        }
+        for ch in &b.children {
+            walk(ch.as_ref(), acc);
+        }
+    }
+    let mut acc = None;
+    walk(root, &mut acc);
+    acc
+}
 
 /// State shared by every component. Concrete widgets embed this.
 pub struct Base {
@@ -41,6 +116,11 @@ pub struct Base {
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
     pub font: f32,
+    /// Repaint flag for the retained renderer: set when this widget's visuals
+    /// changed and cleared once it's repainted. Starts `true` (everything paints
+    /// on the first frame). The renderer repaints only widgets whose flag is set,
+    /// and unions their bounds into the frame's damage region.
+    needs_paint: Cell<bool>,
 }
 
 impl Base {
@@ -57,7 +137,36 @@ impl Base {
             tab_index: None,
             children: Vec::new(),
             font: 15.0,
+            needs_paint: Cell::new(true),
         }
+    }
+
+    /// Mark this widget as needing a repaint and ask the host for a frame. Call on
+    /// a visual change the host wouldn't otherwise know about — an animation step,
+    /// a caret move, an imperative state edit. (Reactive state changes route here
+    /// too, at their mutation site.)
+    pub fn mark_needs_paint(&self) {
+        self.needs_paint.set(true);
+        request_frame();
+    }
+
+    /// Whether this widget needs repainting.
+    pub fn needs_paint(&self) -> bool {
+        self.needs_paint.get()
+    }
+
+    /// Clear the repaint flag — the renderer calls this once the widget is painted.
+    pub fn clear_needs_paint(&self) {
+        self.needs_paint.set(false);
+    }
+
+    /// The widget's size-variant **padding/dimension** multiplier — what widgets
+    /// multiply their intrinsic padding / fixed dims by in `remeasure`. (The font is
+    /// scaled separately, by [`WidgetSize::font_scale`], during layout.) At `Small`
+    /// this is tighter than the font so controls get compact, not just smaller. See
+    /// [`WidgetSize`](crate::style::WidgetSize).
+    pub fn size_scale(&self) -> f32 {
+        self.style.size.pad_scale()
     }
 }
 
@@ -197,14 +306,53 @@ pub trait Component {
     /// without per-widget wiring. Default: no-op.
     fn remeasure(&mut self) {}
 
-    /// Advance time-based animations by `dt` seconds. Returns `true` if still
-    /// animating, so the host can schedule another frame. Default: recurse.
+    /// Advance time-based animations by `dt` seconds. Returns `true` if a
+    /// **continuous** animation is still running (eases, slides, spinners), so the
+    /// host schedules another frame at its frame cap. Default: recurse.
+    ///
+    /// A widget whose visual changes only at sparse, known moments (e.g. a blinking
+    /// caret toggling ~twice a second) should return `false` here and instead report
+    /// the time to its next change via [`next_redraw`](Self::next_redraw), so the
+    /// host can sleep until then rather than redrawing every frame.
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;
         for child in self.base_mut().children.iter_mut() {
             animating |= child.tick(dt);
         }
         animating
+    }
+
+    /// Seconds until this subtree next needs a **timed** redraw (independent of the
+    /// continuous-animation signal from [`tick`](Self::tick)) — e.g. a focused
+    /// `Input`'s caret returns the time to its next blink toggle. The host wakes at
+    /// the soonest such time across the tree instead of redrawing continuously.
+    /// `None` = no timed redraw pending. Default: the soonest across children.
+    fn next_redraw(&self) -> Option<f32> {
+        let mut soonest = None;
+        for child in self.base().children.iter() {
+            soonest = soonest_redraw(soonest, child.next_redraw());
+        }
+        soonest
+    }
+
+    /// The rect (logical px) to repaint when this widget is flagged
+    /// [`needs_paint`](Base::needs_paint) — used by [`collect_damage`] in place of
+    /// `bounds`. Overlay widgets that paint **outside** their own bounds (a tooltip
+    /// bubble, a command-palette panel) override this to report where they actually
+    /// draw, so a redraw covers the popover rather than the (often unrelated) layout
+    /// box. Default: the widget's own `bounds`.
+    fn damage_bounds(&self) -> Rectangle {
+        self.base().bounds
+    }
+}
+
+/// Combine two "seconds until next redraw" requests, keeping the sooner one
+/// (`None` means "no request").
+pub fn soonest_redraw(a: Option<f32>, b: Option<f32>) -> Option<f32> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x.min(y)),
+        (x, None) => x,
+        (None, y) => y,
     }
 }
 
@@ -240,6 +388,10 @@ pub(crate) fn paint_child(c: &dyn Component, cx: &mut PaintCx) {
 /// Scrim alpha used to dim a disabled widget — applied by [`PaintCx::dim`].
 const DISABLED_SCRIM: f32 = 0.55;
 
+/// Logical-px slack around the viewport kept un-culled, so a shape's glow/shadow
+/// halo spilling in from just off-screen still draws. See [`PaintCx::culled`].
+const CULL_MARGIN: f64 = 96.0;
+
 /// Bright bracket length along each edge of a [`PaintCx::bracket_frame`],
 /// measured from the corner (in addition to the rounded arc). The straight
 /// midsection between the two brackets on an edge is dimmed back to a line.
@@ -250,6 +402,13 @@ const BRACKET_WIDTH_MUL: f32 = 2.0;
 /// ~0.7 over the bright accent border leaves a ~30% accent line — matching the
 /// subtle continuous border, while the corners stay fully bright.
 const BRACKET_STRAIGHT_DIM: u8 = 178;
+/// With box borders off (`border_width == 0`) a container still needs definition,
+/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline
+/// (these are its width + alpha) instead of the reticle — whose corners vanish
+/// when the bright stroke collapses. The alpha matches the ~30% the straight
+/// midsections dim to at `border_width > 0`, so the two cases read consistently.
+const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
+const BRACKET_HAIRLINE_ALPHA: u8 = 80;
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
@@ -283,12 +442,36 @@ impl<'a> PaintCx<'a> {
         self.viewport
     }
 
+    /// Whether `r` lies fully outside the viewport (plus a halo margin for
+    /// glow/shadow spill) and can be skipped. Off-screen content emits no draw
+    /// command, so scrolling a tall page or maximizing the window doesn't pay to
+    /// paint / shape / upload what isn't visible. The default viewport is
+    /// "infinite" (headless), where nothing is ever culled; overlays draw
+    /// on-screen, so they're never culled either.
+    fn culled(&self, r: Rectangle) -> bool {
+        let vp = self.viewport;
+        r.loc.y + r.size.h < -CULL_MARGIN
+            || r.loc.y > vp.h + CULL_MARGIN
+            || r.loc.x + r.size.w < -CULL_MARGIN
+            || r.loc.x > vp.w + CULL_MARGIN
+    }
+
     /// Run `f` with draws routed to the scene's **overlay layer** (painted on
     /// top of everything). Used by popovers/dropdowns for correct z-order.
     pub fn with_overlay(&mut self, f: impl FnOnce(&mut PaintCx<'a>)) {
         self.scene.begin_overlay();
         f(self);
         self.scene.end_overlay();
+    }
+
+    /// Run `f` with all its draws **clipped** to `rect` (logical px). Content that
+    /// falls outside is scissored away by the renderer — the primitive a scrolling
+    /// viewport uses so partial rows/glyphs are cut at the panel edge instead of
+    /// spilling out. Nested clips intersect with their parent.
+    pub fn with_clip(&mut self, rect: Rectangle, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.push(DrawCommand::PushClip(rect));
+        f(self);
+        self.scene.push(DrawCommand::PopClip);
     }
 
     /// The active theme.
@@ -305,13 +488,48 @@ impl<'a> PaintCx<'a> {
         radius: f32,
         glow: Option<Glow>,
     ) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Rect(RectCmd {
             rect,
             fill,
             border,
             radius,
             glow: self.scaled_glow(glow),
+            shadow: None,
         }));
+    }
+
+    /// Queue a soft **drop shadow** for `rect` (corner `radius`): a dark, blurred,
+    /// offset halo drawn *behind* it that lifts the shape off the background. Call
+    /// this **before** painting the shape's fill, so the shape occludes the
+    /// shadow's center and only its fringe shows. Unlike [`glow`](PaintCx::rect),
+    /// the shadow darkens (composites a dark color with alpha), so it reads on
+    /// dark themes — and it's independent of the glow/border tokens, so it shows
+    /// even when both are off (e.g. a floating Modal at `border_width == 0`).
+    pub fn drop_shadow(&mut self, rect: Rectangle, radius: f32, shadow: Shadow) {
+        if shadow.color.a == 0 || shadow.radius <= 0.0 {
+            return;
+        }
+        self.scene.push(DrawCommand::Rect(RectCmd {
+            rect,
+            fill: Color::TRANSPARENT,
+            border: None,
+            radius,
+            glow: None,
+            shadow: Some(shadow),
+        }));
+    }
+
+    /// Build a box border in `color` at the **theme's** [`border_width`](crate::theme::Theme::border_width),
+    /// or `None` when borders are off (`border_width == 0`). Widgets should build
+    /// their box border with this instead of hardcoding a stroke, so they all
+    /// honor the token (and disappear together at width 0). The single chokepoint
+    /// that keeps border width theme-driven across the widget set.
+    pub fn border(&self, color: Color) -> Option<Border> {
+        let w = self.theme.border_width;
+        (w > 0.0).then_some(Border { color, width: w })
     }
 
     /// Queue **flat** L-shaped corner brackets framing `rect` — prominent angles
@@ -367,6 +585,9 @@ impl<'a> PaintCx<'a> {
         align: TextAlign,
         bold: bool,
     ) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Text(TextCmd {
             rect,
             text: text.to_string(),
@@ -382,6 +603,9 @@ impl<'a> PaintCx<'a> {
     /// ([`FontRole::Icon`]). `glyph` is the codepoint as a string; the renderer
     /// selects the embedded icon family. Used by [`Icon`](crate::widgets::Icon).
     pub fn icon(&mut self, rect: Rectangle, glyph: &str, color: Color, size: f32) {
+        if self.culled(rect) {
+            return;
+        }
         self.scene.push(DrawCommand::Text(TextCmd {
             rect,
             text: glyph.to_string(),
@@ -441,6 +665,25 @@ impl<'a> PaintCx<'a> {
         };
         let b = rect;
 
+        // Box borders off: a container still reads as framed, but via a thin SOLID
+        // uniform hairline around the whole perimeter — not the bracket reticle,
+        // whose bright corners collapse to nothing at width 0 (leaving the old
+        // "empty corners + lingering straight edges" look). Scales back up to the
+        // reticle as soon as `border_width > 0`.
+        if border_width <= 0.0 {
+            self.rect(
+                b,
+                Color::TRANSPARENT,
+                Some(Border {
+                    color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
+                    width: BRACKET_HAIRLINE_WIDTH,
+                }),
+                radius,
+                None,
+            );
+            return;
+        }
+
         // Bright accent border tracing the full rounded perimeter. The renderer's
         // bracket primitive only draws square 90° corners, so instead of brackets
         // we draw a full rounded border (which has the radius) and then dim its
@@ -499,5 +742,27 @@ impl<'a> PaintCx<'a> {
             radius: g.radius * size,
             ..g
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn mark_needs_paint_sets_the_flag_and_requests_a_frame() {
+        let frames = Rc::new(Cell::new(0u32));
+        let f = frames.clone();
+        install_frame_request(move || f.set(f.get() + 1));
+
+        let base = Base::new();
+        assert!(base.needs_paint(), "a fresh widget needs its first paint");
+        base.clear_needs_paint();
+        assert!(!base.needs_paint(), "clearing drops the flag");
+
+        base.mark_needs_paint();
+        assert!(base.needs_paint(), "marking re-sets the repaint flag");
+        assert_eq!(frames.get(), 1, "marking asks the host for exactly one frame");
     }
 }

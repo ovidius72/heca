@@ -22,9 +22,9 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
-  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
+  - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -326,6 +326,7 @@ stay DRY):
 | `.theme() -> &Theme` | Active theme tokens. |
 | `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
+| `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Modal` to lift off the scrim. |
 | `.corner_brackets(rect, color)` | L-shaped corner reticle (focus ring / decoration). |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
@@ -705,6 +706,30 @@ Callout surface: colored left bar + title + optional body, themed by variant (di
 Alert::warning("LINK UNSTABLE").body("retrying handshake…");
 ```
 
+### Toast
+
+A compact **notification card**: a bracket-framed surface (the shared Pane/Modal reticle frame)
+with a severity-toned leading `Icon`, a strong title, optional small body, an optional inline
+**action** button, and an optional **×** dismiss. **Presentation only** — it holds no queue,
+timer, or global state; the host app owns lifecycle (when it appears, how long it lives,
+auto-dismiss policy, sound) and reacts to the reported interactions. An ordinary in-tree
+component (not overlay-drawn), so it is equally usable **inline** — e.g. a notification row in a
+sidebar. Severity maps to theme tokens, never literals.
+
+- **Construct**: `Toast::new(title)` (= info) or `Toast::{info,success,warning,danger}(title)`.
+- **Builders**: `.severity(ToastSeverity)`, `.icon(Glyph)` / `.no_icon()`, `.body(text)`,
+  `.action(label, on_click)`, `.dismissible(bool)` (default `true`).
+- **Callbacks** (the host removes the toast / runs the effect): `.on_dismiss(f)` (×),
+  `.on_action(f)` (via `.action(..)`), `.on_click(f)` (whole card — also makes it focusable;
+  Enter/Space activates).
+
+```rust
+Toast::danger("Connection lost")
+    .body("Reconnecting to the grid…")
+    .action("Retry", || retry())
+    .on_dismiss(|| dismiss(id));
+```
+
 ### ProgressBar
 
 Determinate progress track whose accent fill eases toward a value via `tick`.
@@ -935,6 +960,32 @@ let open = palette.open_signal();
 
 > Needs the same host wiring as `Modal` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
+
+### ToastStack
+
+An overlay that arranges a **host-supplied** set of notifications into a corner stack. **Presentation
+only** — it owns no queue, lifetimes, auto-dismiss timers, or dedup; that's the app's job. The host
+owns a `Signal<Vec<ToastSpec>>` (its render list); the stack reconciles cached [`Toast`](#toast)
+widgets by **id** (each keeps its hover/flash state), corner-anchors them on the overlay layer,
+slides new ones in, routes events to the toast under the cursor, and reports
+`on_dismiss(id)`/`on_action(id)` back — the host then removes the id (which reflows the rest). It is
+overlay-active only while it has toasts, and **passes through** clicks that miss every toast.
+
+- **Construct**: `ToastStack::new(items: Signal<Vec<ToastSpec>>)`; `.corner(ToastCorner)`,
+  `.gap(px)`, `.margin(px)`.
+- **Intents**: `.on_dismiss(|id| …)` (× clicked), `.on_action(|id| …)` (inline action clicked).
+- **`ToastSpec`**: `ToastSpec::new(id, title).severity(..).icon(..)?.body(..)?.action(label)?.dismissible(bool)` — plain data the host owns.
+
+```rust
+let toasts = signal(Vec::<ToastSpec>::new());            // the app's render list
+let stack = ToastStack::new(toasts)
+    .corner(ToastCorner::TopRight)
+    .on_dismiss(move |id| toasts.update(|v| v.retain(|s| s.id != id)));
+// app pushes:  toasts.update(|v| v.push(ToastSpec::new(1, "Saved").severity(ToastSeverity::Success)));
+```
+
+> Same host wiring as `Modal` (route pointer to the overlay first). Auto-dismiss/timers live in the
+> app: run a timer, then remove the id from `items`.
 
 ---
 

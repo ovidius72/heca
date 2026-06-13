@@ -20,7 +20,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Border, Glow, TextAlign};
+use crate::scene::{Glow, TextAlign};
 use crate::widgets::{Glyph, Input};
 use std::cell::{Cell, RefCell};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -127,6 +127,9 @@ pub struct CommandPalette {
     open: Signal<bool>,
     modifiers: Modifiers,
     viewport: Cell<Size>,
+    /// Panel rect cached at paint, so the caret blink can damage just the panel
+    /// (the palette paints on the overlay layer, away from its layout `bounds`).
+    panel: Cell<Rectangle>,
 }
 
 impl CommandPalette {
@@ -142,6 +145,7 @@ impl CommandPalette {
             open: signal(false),
             modifiers: Modifiers::default(),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
+            panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
         }
     }
 
@@ -314,16 +318,19 @@ impl Component for CommandPalette {
         let adv = (font * MONO_ADVANCE_RATIO) as f64;
         let results = self.results();
         let (panel, query, list_top, row_h, visible) = self.layout(results.len());
+        // Remember the panel so the idle caret blink can damage just this rect.
+        self.panel.set(panel);
 
         cx.with_overlay(|cx| {
             // Scrim + panel.
             let vp = self.viewport.get();
             let scrim = if vp.w.is_finite() { Rectangle::new(Point::new(0.0, 0.0), vp) } else { panel };
             cx.rect(scrim, background.with_alpha(140), None, 0.0, None);
+            let panel_border = cx.border(accent.with_alpha(200));
             cx.rect(
                 panel,
                 surface,
-                Some(Border { color: accent.with_alpha(200), width: 1.5 }),
+                panel_border,
                 radius,
                 Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
             );
@@ -354,7 +361,8 @@ impl Component for CommandPalette {
                 let row = self.row_rect(panel, list_top, row_h, vi);
                 let is_sel = ri == self.selected;
                 if is_sel {
-                    cx.rect(row, accent.with_alpha(30), Some(Border { color: accent.with_alpha(150), width: 1.0 }), ctrl_radius, None);
+                    let row_border = cx.border(accent.with_alpha(150));
+                    cx.rect(row, accent.with_alpha(30), row_border, ctrl_radius, None);
                     // Left accent bar.
                     cx.rect(
                         Rectangle::new(Point::new(row.loc.x, row.loc.y + row.size.h * 0.2), Size::new(2.5, row.size.h * 0.6)),
@@ -487,14 +495,41 @@ impl Component for CommandPalette {
 
     fn tick(&mut self, dt: f32) -> bool {
         let open = self.is_open();
-        {
-            // Keep the query field focused (caret) while open; advance its blink.
+        // Advance the query's caret (it marks *its own* base on a blink flip, but it
+        // lives off-tree so that mark is unobserved). Promote a flip to a palette
+        // repaint of just the panel — no full-frame, no pegging frames every tick.
+        let flipped = {
             let mut q = self.query.borrow_mut();
             q.base_mut().focused.set(open);
             q.tick(dt);
+            let f = q.base().needs_paint();
+            q.base().clear_needs_paint();
+            f
+        };
+        if open && flipped {
+            self.base.mark_needs_paint(); // collect_damage reads `damage_bounds` (the panel)
         }
-        // Keep frames coming while open so the caret blinks.
-        open
+        false
+    }
+
+    /// While open, wake the host for the query caret's next blink (instead of
+    /// redrawing every frame). Closed: nothing pending.
+    fn next_redraw(&self) -> Option<f32> {
+        if self.is_open() {
+            self.query.borrow().next_redraw()
+        } else {
+            None
+        }
+    }
+
+    /// The palette paints its panel on the overlay layer, not at its layout `bounds`,
+    /// so a caret-blink repaint must target the cached panel rect.
+    fn damage_bounds(&self) -> Rectangle {
+        if self.is_open() {
+            self.panel.get()
+        } else {
+            self.base.bounds
+        }
     }
 }
 

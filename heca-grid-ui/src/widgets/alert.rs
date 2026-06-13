@@ -6,7 +6,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::font::MONO_LINE_RATIO;
 use crate::reactive::{Signal, SignalGet, signal};
-use crate::scene::{Border, TextAlign};
+use crate::scene::{TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -126,11 +126,13 @@ impl Component for Alert {
         };
         let b = self.base.bounds;
 
-        // Surface: dark fill tinted by the variant, bordered.
+        // Surface: dark fill tinted by the variant, bordered (theme-width; gone
+        // when borders are off).
+        let border = cx.border(color);
         cx.rect(
             b,
             color.with_alpha(FILL_ALPHA),
-            Some(Border { color, width: 1.0 }),
+            border,
             radius,
             None,
         );

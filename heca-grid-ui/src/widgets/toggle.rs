@@ -14,7 +14,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, Glow};
+use crate::scene::{Glow};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
@@ -120,6 +120,13 @@ impl Component for Toggle {
         !self.base.disabled.get_untracked()
     }
 
+    /// The switch is fixed-size (no text); scale the track by the size variant.
+    fn remeasure(&mut self) {
+        let s = self.base.size_scale();
+        self.base.style.width = Length::Px(TRACK_W as f32 * s);
+        self.base.style.height = Length::Px(TRACK_H as f32 * s);
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
@@ -136,10 +143,7 @@ impl Component for Toggle {
         // muted → solid accent (active border stays 100% opaque, unlike the
         // fill); a glow rises as it turns on.
         let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
-        let border = Border {
-            color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
-            width: 1.5,
-        };
+        let border = cx.border(muted.lerp(accent, p).with_alpha(border_a.round() as u8));
         let track_glow = (!disabled && p > 0.0).then_some(Glow {
             color: glow_c,
             radius: GLOW_RADIUS,
@@ -147,18 +151,20 @@ impl Component for Toggle {
         });
         // Track radius follows the theme but rounds harder (pill widget), clamped
         // to the pill max — so at a moderate theme radius it reads as a capsule.
-        let radius = (theme_radius * PILL_RADIUS_MUL).min((TRACK_H / 2.0) as f32);
+        let radius = (theme_radius * PILL_RADIUS_MUL).min((track.size.h / 2.0) as f32);
         let fill = surface.lerp(accent.with_alpha(ON_FILL_ALPHA), p);
-        cx.rect(track, fill, Some(border), radius, track_glow);
+        cx.rect(track, fill, border, radius, track_glow);
 
         // Knob: muted gray (off) → light (on) so it reads against the accent
-        // fill; slides across the track and glows on.
-        let knob_d = TRACK_H - 2.0 * KNOB_PAD;
-        let travel = TRACK_W - 2.0 * KNOB_PAD - knob_d;
+        // fill; slides across the track and glows on. Derived from the *actual*
+        // (size-scaled) track rect so it tracks the size variant.
+        let knob_pad = KNOB_PAD * self.base.size_scale() as f64;
+        let knob_d = track.size.h - 2.0 * knob_pad;
+        let travel = track.size.w - 2.0 * knob_pad - knob_d;
         let knob = Rectangle::new(
             Point::new(
-                track.loc.x + KNOB_PAD + travel * p as f64,
-                track.loc.y + KNOB_PAD,
+                track.loc.x + knob_pad + travel * p as f64,
+                track.loc.y + knob_pad,
             ),
             Size::new(knob_d, knob_d),
         );
@@ -235,6 +241,10 @@ impl Component for Toggle {
         }
 
         animating |= self.flash.tick(dt);
+        // Damage just our own rect so the knob slide doesn't force a full redraw.
+        if animating {
+            self.base.mark_needs_paint();
+        }
         animating
     }
 }

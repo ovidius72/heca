@@ -108,6 +108,14 @@ impl Tabs {
         (self.base.font * MONO_ADVANCE_RATIO) as f64
     }
 
+    /// Per-tab horizontal padding + inter-tab gap, scaled by the size variant.
+    fn tab_pad_h(&self) -> f64 {
+        TAB_PAD_H * self.base.size_scale() as f64
+    }
+    fn tab_gap(&self) -> f64 {
+        TAB_GAP * self.base.size_scale() as f64
+    }
+
     /// `(start_x, width)` of tab `i` relative to the bounds origin.
     fn segment(&self, i: usize) -> Option<(f64, f64)> {
         if i >= self.labels.len() {
@@ -115,11 +123,11 @@ impl Tabs {
         }
         let mut x = 0.0;
         for (j, label) in self.labels.iter().enumerate() {
-            let w = label.chars().count() as f64 * self.advance() + 2.0 * TAB_PAD_H;
+            let w = label.chars().count() as f64 * self.advance() + 2.0 * self.tab_pad_h();
             if j == i {
                 return Some((x, w));
             }
-            x += w + TAB_GAP;
+            x += w + self.tab_gap();
         }
         None
     }
@@ -127,10 +135,10 @@ impl Tabs {
     fn total_width(&self) -> f64 {
         let mut x = 0.0;
         for label in &self.labels {
-            let w = label.chars().count() as f64 * self.advance() + 2.0 * TAB_PAD_H;
-            x += w + TAB_GAP;
+            let w = label.chars().count() as f64 * self.advance() + 2.0 * self.tab_pad_h();
+            x += w + self.tab_gap();
         }
-        (x - TAB_GAP).max(0.0)
+        (x - self.tab_gap()).max(0.0)
     }
 
     /// Index of the tab under relative x, if any.
@@ -172,7 +180,8 @@ impl Component for Tabs {
     /// Strip width + height track the resolved font.
     fn remeasure(&mut self) {
         self.base.style.width = Length::Px(self.total_width() as f32);
-        self.base.style.height = Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * V_PAD);
+        self.base.style.height =
+            Length::Px(self.base.font * MONO_LINE_RATIO + 2.0 * V_PAD * self.base.size_scale());
     }
 
     fn paint(&self, cx: &mut PaintCx) {
@@ -282,6 +291,8 @@ impl Component for Tabs {
         let t = (dt / ANIM_DURATION).min(1.0) as f64;
         self.ind_x += (tx - self.ind_x) * t;
         self.ind_w += (tw - self.ind_w) * t;
+        // Damage just our own rect so the underline slide doesn't force a full redraw.
+        self.base.mark_needs_paint();
         true
     }
 }
