@@ -44,6 +44,9 @@ pub(crate) fn handle_window_event(
             let log_w = phys.width as f32 / state.scale_factor as f32;
             let log_h = phys.height as f32 / state.scale_factor as f32;
             state
+                .text_renderer
+                .set_target_size(phys.width, phys.height);
+            state
                 .primitive_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             state

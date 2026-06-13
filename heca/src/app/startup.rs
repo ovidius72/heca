@@ -96,6 +96,7 @@ pub(crate) async fn init_state(
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
     let mut text_renderer = TextRenderer::new(&device, surface_format);
     text_renderer.set_scale_factor(scale_factor);
+    text_renderer.set_target_size(physical.width, physical.height);
     text_renderer.set_font_family(&app_config.theme.font_family);
     text_renderer.set_screen_size(
         &queue,

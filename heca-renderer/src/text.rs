@@ -27,6 +27,7 @@ pub struct TextStyle<'a> {
     pub font_family: Option<&'a str>,
 }
 
+#[derive(Clone, Copy)]
 pub struct TextBox {
     pub x: f32,
     pub y: f32,

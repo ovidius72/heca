@@ -57,13 +57,26 @@ impl<'a> TerminalRenderer<'a> {
         );
     }
 
+    pub fn render_cursor_overlay(&mut self, snapshot: &TerminalSnapshot, rect: TextBox) {
+        queue_cursor_overlay(
+            self.primitive_renderer,
+            snapshot.cursor,
+            snapshot.lines.as_slice(),
+            snapshot.cols,
+            snapshot.rows,
+            snapshot.cell_w,
+            snapshot.cell_h,
+            rect,
+        );
+    }
+
 }
 
 fn render_terminal_lines(
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
     lines: &[TerminalLine],
-    cursor: heca_core::backend::TerminalCursor,
+    _cursor: heca_core::backend::TerminalCursor,
     default_bg: [f32; 4],
     layout: TerminalRenderLayout<'_>,
 ) {
@@ -123,150 +136,13 @@ fn render_terminal_lines(
             }
         }
 
-        let mut run_text = String::new();
-        let mut run_col = 0usize;
-        let mut run_cells = 0usize;
-        let mut run_fg = [0.0; 4];
-        let mut run_bold = false;
-        let mut run_italic = false;
-        let mut run_underline = false;
-
-        let flush_run = |text_renderer: &mut TextRenderer,
-                         primitive_renderer: &mut PrimitiveRenderer,
-                         run_text: &mut String,
-                         run_col: usize,
-                         run_cells: &mut usize,
-                         run_fg: [f32; 4],
-                         run_bold: bool,
-                         run_italic: bool,
-                         run_underline: bool| {
-            if run_text.is_empty() {
-                return;
-            }
-            let x = px + run_col as f32 * cell_w;
-            text_renderer.queue_text_in_line_box_with_style(
-                run_text,
-                TextBox {
-                    x,
-                    y,
-                    w: (*run_cells as f32) * cell_w,
-                    h: cell_h,
-                },
-                style.font_size,
-                TextStyle {
-                    color: run_fg,
-                    bold: run_bold,
-                    italic: run_italic && style.italic_font_family != style.font_family,
-                    faux_italic: run_italic && style.italic_font_family == style.font_family,
-                    font_family: Some(if run_italic { style.italic_font_family } else { style.font_family }),
-                },
-                TextAlign::Start,
-                false,
-            );
-            if run_underline {
-                let underline_h = (cell_h * 0.08).max(1.0);
-                let underline_y = y + cell_h - underline_h - (cell_h * 0.08).max(1.0);
-                primitive_renderer.draw_rect(
-                    x,
-                    underline_y,
-                    (*run_cells as f32) * cell_w,
-                    underline_h,
-                    run_fg,
-                );
-            }
-            run_text.clear();
-            *run_cells = 0;
-        };
-
         for (col, cell) in line.cells.iter().take(visible_cols).enumerate() {
             let is_blank = cell.text.trim().is_empty();
-            let single_width = cell.width == 1;
             let x = px + col as f32 * cell_w;
+            let width = (cell.width.max(1) as f32) * cell_w;
 
-            if is_blank || !single_width {
-                flush_run(
-                    text_renderer,
-                    primitive_renderer,
-                    &mut run_text,
-                    run_col,
-                    &mut run_cells,
-                    run_fg,
-                    run_bold,
-                    run_italic,
-                    run_underline,
-                );
-                if !is_blank {
-                    if !draw_box_drawing_cell(
-                        primitive_renderer,
-                        &cell.text,
-                        x,
-                        y,
-                        (cell.width.max(1) as f32) * cell_w,
-                        cell_h,
-                        cell.fg,
-                    ) {
-                        text_renderer.queue_text_in_line_box_with_style(
-                            &cell.text,
-                            TextBox {
-                                x,
-                                y,
-                                w: (cell.width.max(1) as f32) * cell_w,
-                                h: cell_h,
-                            },
-                            style.font_size,
-                            TextStyle {
-                                color: cell.fg,
-                                bold: cell.bold,
-                                italic: cell.italic && style.italic_font_family != style.font_family,
-                                faux_italic: cell.italic && style.italic_font_family == style.font_family,
-                                font_family: Some(if cell.italic { style.italic_font_family } else { style.font_family }),
-                            },
-                            TextAlign::Start,
-                            false,
-                        );
-                    }
-                    if cell.underline {
-                        let underline_h = (cell_h * 0.08).max(1.0);
-                        let underline_y = y + cell_h - underline_h - (cell_h * 0.08).max(1.0);
-                        primitive_renderer.draw_rect(
-                            x,
-                            underline_y,
-                            (cell.width.max(1) as f32) * cell_w,
-                            underline_h,
-                            cell.fg,
-                        );
-                    }
-                }
+            if is_blank {
                 continue;
-            }
-
-            if run_text.is_empty() {
-                run_col = col;
-                run_fg = cell.fg;
-                run_bold = cell.bold;
-                run_italic = cell.italic;
-                run_underline = cell.underline;
-            } else if cell.fg != run_fg
-                || cell.bold != run_bold
-                || cell.italic != run_italic
-                || cell.underline != run_underline
-            {
-                flush_run(
-                    text_renderer,
-                    primitive_renderer,
-                    &mut run_text,
-                    run_col,
-                    &mut run_cells,
-                    run_fg,
-                    run_bold,
-                    run_italic,
-                    run_underline,
-                );
-                run_col = col;
-                run_fg = cell.fg;
-                run_bold = cell.bold;
-                run_italic = cell.italic;
-                run_underline = cell.underline;
             }
 
             if draw_box_drawing_cell(
@@ -274,70 +150,97 @@ fn render_terminal_lines(
                 &cell.text,
                 x,
                 y,
-                cell_w,
+                width,
                 cell_h,
                 cell.fg,
             ) {
-                flush_run(
-                    text_renderer,
-                    primitive_renderer,
-                    &mut run_text,
-                    run_col,
-                    &mut run_cells,
-                    run_fg,
-                    run_bold,
-                    run_italic,
-                    run_underline,
-                );
                 continue;
             }
 
-            run_text.push_str(&cell.text);
-            run_cells += cell.width.max(1);
+            text_renderer.queue_text_in_line_box_with_style(
+                &cell.text,
+                TextBox {
+                    x,
+                    y,
+                    w: width,
+                    h: cell_h,
+                },
+                style.font_size,
+                TextStyle {
+                    color: cell.fg,
+                    bold: cell.bold,
+                    italic: cell.italic && style.italic_font_family != style.font_family,
+                    faux_italic: cell.italic && style.italic_font_family == style.font_family,
+                    font_family: Some(if cell.italic {
+                        style.italic_font_family
+                    } else {
+                        style.font_family
+                    }),
+                },
+                TextAlign::Start,
+                false,
+            );
+            if cell.underline {
+                let underline_h = (cell_h * 0.08).max(1.0);
+                let underline_y = y + cell_h - underline_h - (cell_h * 0.08).max(1.0);
+                primitive_renderer.draw_rect(x, underline_y, width, underline_h, cell.fg);
+            }
         }
-
-        flush_run(
-            text_renderer,
-            primitive_renderer,
-            &mut run_text,
-            run_col,
-            &mut run_cells,
-            run_fg,
-            run_bold,
-            run_italic,
-            run_underline,
-        );
     }
+}
 
-    if cursor.visible
-        && cursor.row < max_rows
-        && cursor.col
-            < lines
+fn queue_cursor_overlay(
+    primitive_renderer: &mut PrimitiveRenderer,
+    cursor: heca_core::backend::TerminalCursor,
+    lines: &[TerminalLine],
+    cols: usize,
+    rows: usize,
+    cell_w: f32,
+    cell_h: f32,
+    rect: TextBox,
+) {
+    let TextBox {
+        x: px,
+        y: py,
+        w: pw,
+        h: ph,
+    } = rect;
+    let fitted_rows = ((ph / cell_h).round() as usize).max(1);
+    let fitted_cols = ((pw / cell_w).round() as usize).max(1);
+    let max_rows = fitted_rows.min(rows).min(lines.len());
+    let max_cols = fitted_cols.min(cols);
+
+    if !cursor.visible
+        || cursor.row >= max_rows
+        || cursor.col
+            >= lines
                 .get(cursor.row)
                 .map(|line| max_cols.min(line.cells.len()))
                 .unwrap_or(0)
     {
-        let cursor_x = px + cursor.col as f32 * cell_w;
-        let cursor_y = py + cursor.row as f32 * cell_h;
-        let cursor_color = [1.0, 1.0, 1.0, 0.85];
-        match cursor.shape {
-            TerminalCursorShape::Block => {
-                primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, cursor_color);
-            }
-            TerminalCursorShape::Underline => {
-                let underline_h = (cell_h * 0.12).max(2.0);
-                primitive_renderer.draw_rect(
-                    cursor_x,
-                    cursor_y + cell_h - underline_h,
-                    cell_w,
-                    underline_h,
-                    cursor_color,
-                );
-            }
-            TerminalCursorShape::Default | TerminalCursorShape::Bar => {
-                let bar_w = (cell_w * 0.12).max(2.0);
-                primitive_renderer.draw_rect(cursor_x, cursor_y, bar_w, cell_h, cursor_color);
-            }
+        return;
+    }
+
+    let cursor_x = px + cursor.col as f32 * cell_w;
+    let cursor_y = py + cursor.row as f32 * cell_h;
+    let cursor_color = [1.0, 1.0, 1.0, 0.85];
+    match cursor.shape {
+        TerminalCursorShape::Block => {
+            primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, cursor_color);
+        }
+        TerminalCursorShape::Underline => {
+            let underline_h = (cell_h * 0.12).max(2.0);
+            primitive_renderer.draw_rect(
+                cursor_x,
+                cursor_y + cell_h - underline_h,
+                cell_w,
+                underline_h,
+                cursor_color,
+            );
+        }
+        TerminalCursorShape::Default | TerminalCursorShape::Bar => {
+            let bar_w = (cell_w * 0.08).max(1.0);
+            primitive_renderer.draw_rect(cursor_x, cursor_y, bar_w, cell_h, cursor_color);
         }
     }
 }

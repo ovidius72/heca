@@ -121,14 +121,16 @@ fn render_terminal_mount(
     let content_box = rect_to_text_box(mount.content_rect);
     let (clip_x, clip_y, clip_w, clip_h) =
         (content_box.x, content_box.y, content_box.w, content_box.h);
-    text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
-    let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-    terminal_renderer.render_snapshot(
-        &mount.snapshot,
-        content_box,
-        terminal_style,
-    );
-    text_renderer.set_clip(None);
+    {
+        text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
+        let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
+        terminal_renderer.render_snapshot(
+            &mount.snapshot,
+            content_box,
+            terminal_style,
+        );
+        text_renderer.set_clip(None);
+    }
 
     let clip_rect = pane_scissor_rect(
         clip_x,
@@ -140,6 +142,11 @@ fn render_terminal_mount(
     );
     primitive_renderer.render_clipped(device, view, encoder, clip_rect);
     text_renderer.render(queue, view, encoder);
+    {
+        let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
+        terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
+    }
+    primitive_renderer.render_clipped(device, view, encoder, clip_rect);
 }
 
 /// Human-readable status mode label and suffix for the status bar.
