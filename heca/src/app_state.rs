@@ -5,6 +5,7 @@ use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
@@ -206,6 +207,8 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
+    #[allow(dead_code)] // used by render_chrome (WS-A A2)
+    pub grid_renderer: GridRenderer,
     pub session: Session,
     /// Content backends for panes that have one.
     pub backends: BackendStore,

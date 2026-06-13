@@ -13,6 +13,7 @@ use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
@@ -110,6 +111,14 @@ pub(crate) async fn init_state(
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
+    let mut grid_renderer = GridRenderer::new(&device, surface_format);
+    grid_renderer.set_scale_factor(scale_factor);
+    grid_renderer.set_target_size(physical.width, physical.height);
+    grid_renderer.set_screen_size(
+        &queue,
+        physical.width as f32 / scale_factor as f32,
+        physical.height as f32 / scale_factor as f32,
+    );
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -165,6 +174,7 @@ pub(crate) async fn init_state(
         surface_config: config,
         primitive_renderer,
         text_renderer,
+        grid_renderer,
         session,
         backends,
         theme: app_config.theme.clone(),

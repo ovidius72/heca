@@ -48,10 +48,16 @@ pub(crate) fn handle_window_event(
                 .text_renderer
                 .set_target_size(phys.width, phys.height);
             state
+                .grid_renderer
+                .set_target_size(phys.width, phys.height);
+            state
                 .primitive_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             state
                 .text_renderer
+                .set_screen_size(&state.queue, log_w, log_h);
+            state
+                .grid_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
@@ -63,6 +69,7 @@ pub(crate) fn handle_window_event(
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;
             state.text_renderer.set_scale_factor(scale_factor);
+            state.grid_renderer.set_scale_factor(scale_factor);
             refresh_terminal_cell_size(state);
             state.needs_redraw = true;
         }
