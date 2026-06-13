@@ -1,4 +1,5 @@
 use crate::app::backend_store::BackendStore;
+use crate::app::events::AppEvent;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
@@ -7,6 +8,7 @@ use heca_grid_ui::drag::DragContext;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
+use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
 use winit::window::Window;
 
@@ -197,6 +199,7 @@ impl MouseState {
 ///   or focus change that affects the sidebar projection.
 pub struct AppState {
     pub window: Arc<Window>,
+    pub event_proxy: EventLoopProxy<AppEvent>,
     pub surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -207,6 +210,7 @@ pub struct AppState {
     /// Content backends for panes that have one.
     pub backends: BackendStore,
     pub theme: Theme,
+    pub terminal_cell_size: (f32, f32),
     pub scale_factor: f64,
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,

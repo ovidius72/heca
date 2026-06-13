@@ -1,6 +1,8 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, Weight};
+use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight};
 use heca_grid_ui::scene::TextAlign;
 use wgpu::util::DeviceExt;
+
+use crate::font;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -17,6 +19,22 @@ struct Uniforms {
     _pad: [f32; 2],
 }
 
+pub struct TextStyle<'a> {
+    pub color: [f32; 4],
+    pub bold: bool,
+    pub italic: bool,
+    pub faux_italic: bool,
+    pub font_family: Option<&'a str>,
+}
+
+#[derive(Clone, Copy)]
+pub struct TextBox {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
 struct TextCommand {
     text: String,
     /// Position: top-left `(x, y)` when `centered` is false, otherwise the box
@@ -28,11 +46,17 @@ struct TextCommand {
     font_size: f32,
     color: [f32; 4],
     bold: bool,
+    italic: bool,
+    faux_italic: bool,
     align: TextAlign,
     /// Center within `(w, h)` (grid scene), or place at `(x, y)` (app labels).
     centered: bool,
+    /// Align within a stable line box without using the generic UI centered-box path.
+    line_box: bool,
     /// Shape with the embedded icon font instead of the text family.
     icon: bool,
+    /// Override font family for this run when needed.
+    font_family: Option<String>,
     /// Clip rect (logical px) this label is scissored to, if any.
     clip: Option<[f32; 4]>,
 }
@@ -89,6 +113,8 @@ struct LabelKey {
     size_bits: u32,
     bold: bool,
     icon: bool,
+    italic: bool,
+    font_family: Option<String>,
 }
 
 /// One placed glyph within a label: its quad (relative to the label's ink-box
@@ -133,6 +159,8 @@ struct EmitKey {
     size_bits: u32,
     bold: bool,
     icon: bool,
+    italic: bool,
+    faux_italic: bool,
     /// Baked vertex color (`f32::to_bits()` per channel).
     color_bits: [u32; 4],
     /// Command box `(x, y, w, h)` in `f32::to_bits()` form.
@@ -140,6 +168,8 @@ struct EmitKey {
     /// `TextAlign` discriminant (0/1/2).
     align: u8,
     centered: bool,
+    line_box: bool,
+    font_family: Option<String>,
     /// Scale factor in `f32::to_bits()` form.
     scale_bits: u32,
 }
@@ -381,6 +411,12 @@ impl TextRenderer {
         font_system
             .db_mut()
             .load_font_data(heca_grid_ui::font::ICON_FONT_BYTES.to_vec());
+        font_system
+            .db_mut()
+            .load_font_data(font::DEFAULT_TERMINAL_BYTES.to_vec());
+        font_system
+            .db_mut()
+            .load_font_data(font::DEFAULT_TERMINAL_BOLD_BYTES.to_vec());
 
         Self {
             font_system,
@@ -465,6 +501,68 @@ impl TextRenderer {
         self.emit_cache.clear();
     }
 
+    /// Measure one logical terminal cell for the given monospace family/size.
+    ///
+    /// This uses the same shaping stack as runtime terminal text instead of
+    /// theme heuristics, so PTY grid sizing can track the real loaded font.
+    pub fn measure_monospace_cell(
+        &mut self,
+        font_size: f32,
+        font_family: &str,
+    ) -> Option<(f32, f32)> {
+        if !font_size.is_finite() || font_size <= 0.0 {
+            return None;
+        }
+
+        let scale = self.scale_factor as f32;
+        if !scale.is_finite() || scale <= 0.0 {
+            return None;
+        }
+
+        let scaled_size = font_size * scale;
+        let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        buffer.set_size(
+            &mut self.font_system,
+            Some(scaled_size * 4.0),
+            Some(metrics.line_height * 2.0),
+        );
+        let attrs = Attrs::new()
+            .family(Family::Name(font_family))
+            .weight(Weight::NORMAL)
+            .style(Style::Normal);
+        buffer.set_text(&mut self.font_system, "M", &attrs, Shaping::Advanced);
+        buffer.shape_until_scroll(&mut self.font_system, false);
+
+        let mut line_width = None;
+        let mut line_height = metrics.line_height;
+        let mut font_id = None;
+        if let Some(run) = buffer.layout_runs().next() {
+            line_width = Some(run.line_w.max(0.0));
+            line_height = run.line_height.max(metrics.line_height);
+            font_id = run.glyphs.first().map(|glyph| glyph.font_id);
+        }
+
+        if let Some(font_id) = font_id
+            && let Some(font) = self.font_system.get_font(font_id)
+        {
+            if let Some(monospace_em_width) = font.monospace_em_width() {
+                line_width = Some(monospace_em_width * scaled_size);
+            }
+
+            let font_metrics = font.as_swash().metrics(&[]).scale(scaled_size);
+            let font_line_height =
+                (font_metrics.ascent + font_metrics.descent + font_metrics.leading).max(0.0);
+            if font_line_height > 0.0 {
+                line_height = font_line_height;
+            }
+        }
+
+        let width = line_width.unwrap_or(scaled_size * 0.6) / scale;
+        let height = line_height.max(scaled_size) / scale;
+        Some((width.max(1.0), height.max(1.0)))
+    }
+
     /// Queue text with its top-left at `(x, y)` (logical px) — the simple
     /// point-positioned form used throughout the app (sidebar, chrome, …).
     pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
@@ -477,9 +575,13 @@ impl TextRenderer {
             font_size,
             color,
             bold: false,
+            italic: false,
+            faux_italic: false,
             align: TextAlign::Start,
             centered: false,
+            line_box: false,
             icon: false,
+            font_family: None,
             clip: self.current_clip,
         });
     }
@@ -510,9 +612,42 @@ impl TextRenderer {
             font_size,
             color,
             bold,
+            italic: false,
+            faux_italic: false,
             align,
             centered: true,
+            line_box: false,
             icon,
+            font_family: None,
+            clip: self.current_clip,
+        });
+    }
+
+    pub fn queue_text_in_line_box_with_style(
+        &mut self,
+        text: &str,
+        rect: TextBox,
+        font_size: f32,
+        style: TextStyle<'_>,
+        align: TextAlign,
+        icon: bool,
+    ) {
+        self.commands.push(TextCommand {
+            text: text.to_string(),
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: rect.h,
+            font_size,
+            color: style.color,
+            bold: style.bold,
+            italic: style.italic,
+            faux_italic: style.faux_italic,
+            align,
+            centered: false,
+            line_box: true,
+            icon,
+            font_family: style.font_family.map(str::to_string),
             clip: self.current_clip,
         });
     }
@@ -541,10 +676,14 @@ impl TextRenderer {
                 size_bits: scaled_size.to_bits(),
                 bold: cmd.bold,
                 icon: cmd.icon,
+                italic: cmd.italic,
+                faux_italic: cmd.faux_italic,
                 color_bits: cmd.color.map(f32::to_bits),
                 box_bits: [cmd.x, cmd.y, cmd.w, cmd.h].map(f32::to_bits),
                 align: align_bits(cmd.align),
                 centered: cmd.centered,
+                line_box: cmd.line_box,
+                font_family: cmd.font_family.clone(),
                 scale_bits: scale.to_bits(),
             };
 
@@ -575,7 +714,12 @@ impl TextRenderer {
 
             let first_index = indices.len() as u32;
             let mut base = vertices.len() as u32;
-            for quad in emitted.verts.chunks_exact(4) {
+            let quads = emitted.verts.chunks_exact(4);
+            debug_assert!(
+                quads.remainder().is_empty(),
+                "emitted terminal/text geometry must contain 4 vertices per glyph quad"
+            );
+            for quad in quads {
                 vertices.extend_from_slice(quad);
                 indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
                 base += 4;
@@ -613,6 +757,8 @@ impl TextRenderer {
             size_bits: scaled_size.to_bits(),
             bold: cmd.bold,
             icon: cmd.icon,
+            italic: cmd.italic,
+            font_family: cmd.font_family.clone(),
         };
 
         // Shape on a `label_cache` miss; rasterize each glyph into the atlas on its
@@ -622,8 +768,15 @@ impl TextRenderer {
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
             buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
             let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
-            let family = if cmd.icon { &self.icon_family } else { &self.font_family };
-            let attrs = Attrs::new().family(Family::Name(family)).weight(weight);
+            let family = if cmd.icon {
+                self.icon_family.as_str()
+            } else {
+                cmd.font_family.as_deref().unwrap_or(&self.font_family)
+            };
+            let attrs = Attrs::new()
+                .family(Family::Name(family))
+                .weight(weight)
+                .style(if cmd.italic { Style::Italic } else { Style::Normal });
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -705,7 +858,7 @@ impl TextRenderer {
         // the ink width, vertically on the stable line box — then offset each glyph by
         // its (cached) position within the ink box.
         let screen_w = layout.content_w as f32 / scale;
-        let (screen_x, screen_y) = if cmd.centered {
+        let (screen_x, screen_y) = if cmd.centered || cmd.line_box {
             let x = cmd.x
                 + match cmd.align {
                     TextAlign::Start => 0.0,
@@ -719,6 +872,11 @@ impl TextRenderer {
             (cmd.x, cmd.y)
         };
 
+        let faux_italic_skew = if cmd.faux_italic {
+            (layout.line_height / scale * 0.14).max(1.0)
+        } else {
+            0.0
+        };
         let mut verts: Vec<TextVertex> = Vec::with_capacity(layout.glyphs.len() * 4);
         let (mut bx0, mut by0) = (f32::MAX, f32::MAX);
         let (mut bx1, mut by1) = (f32::MIN, f32::MIN);
@@ -728,13 +886,15 @@ impl TextRenderer {
             let gw = g.w / scale;
             let gh = g.h / scale;
             let [u0, v0, u1, v1] = g.uv;
-            verts.push(TextVertex { position: [gx, gy], texcoord: [u0, v0], color: cmd.color });
-            verts.push(TextVertex { position: [gx + gw, gy], texcoord: [u1, v0], color: cmd.color });
-            verts.push(TextVertex { position: [gx + gw, gy + gh], texcoord: [u1, v1], color: cmd.color });
-            verts.push(TextVertex { position: [gx, gy + gh], texcoord: [u0, v1], color: cmd.color });
-            bx0 = bx0.min(gx);
+            let top_x = gx + faux_italic_skew * 0.5;
+            let bottom_x = gx - faux_italic_skew * 0.5;
+            verts.push(TextVertex { position: [top_x, gy], texcoord: [u0, v0], color: cmd.color });
+            verts.push(TextVertex { position: [top_x + gw, gy], texcoord: [u1, v0], color: cmd.color });
+            verts.push(TextVertex { position: [bottom_x + gw, gy + gh], texcoord: [u1, v1], color: cmd.color });
+            verts.push(TextVertex { position: [bottom_x, gy + gh], texcoord: [u0, v1], color: cmd.color });
+            bx0 = bx0.min(bottom_x);
             by0 = by0.min(gy);
-            bx1 = bx1.max(gx + gw);
+            bx1 = bx1.max(top_x + gw);
             by1 = by1.max(gy + gh);
         }
         Emitted {
@@ -867,10 +1027,14 @@ mod tests {
             size_bits: 14.0f32.to_bits(),
             bold: false,
             icon: false,
+            italic: false,
+            faux_italic: false,
             color_bits: [1.0, 1.0, 1.0, 1.0].map(f32::to_bits),
             box_bits: [10.0, 20.0, 0.0, 0.0].map(f32::to_bits),
             align: align_bits(TextAlign::Start),
             centered: false,
+            line_box: false,
+            font_family: None,
             scale_bits: 2.0f32.to_bits(),
         };
         assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");

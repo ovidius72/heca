@@ -30,14 +30,6 @@ impl BackendStore {
         self.map.remove(&pane_id)
     }
 
-    /// Get an immutable reference to a backend.
-    pub fn get(&self, pane_id: PaneId) -> Option<&dyn PaneBackend> {
-        match self.map.get(&pane_id) {
-            Some(b) => Some(b.as_ref()),
-            None => None,
-        }
-    }
-
     /// Get a mutable reference to a backend.
     pub fn get_mut(&mut self, pane_id: PaneId) -> Option<&mut dyn PaneBackend> {
         match self.map.get_mut(&pane_id) {
@@ -46,9 +38,25 @@ impl BackendStore {
         }
     }
 
+    /// Get an immutable reference to a backend.
+    pub fn get(&self, pane_id: PaneId) -> Option<&dyn PaneBackend> {
+        match self.map.get(&pane_id) {
+            Some(b) => Some(b.as_ref()),
+            None => None,
+        }
+    }
+
     /// Iterate over all backends mutably (e.g. for per-frame polling).
     pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn PaneBackend>> {
         self.map.values_mut()
+    }
+
+    /// Collect pane IDs whose backends have exited and should be closed.
+    pub fn pane_ids_to_close(&self) -> Vec<PaneId> {
+        self.map
+            .iter()
+            .filter_map(|(pane_id, backend)| backend.should_close().then_some(*pane_id))
+            .collect()
     }
 
     /// Remove backends for all pane IDs in the given iterator.

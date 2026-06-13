@@ -75,7 +75,8 @@ impl AppConfig {
             eprintln!("[heca] config load: {e}, using defaults");
             Config::default()
         });
-        let theme = Theme::load(&config.settings.theme);
+        let mut theme = Theme::load(&config.settings.theme);
+        apply_terminal_overrides(&mut theme, &config.settings);
         Self { config, theme }
     }
 
@@ -109,6 +110,45 @@ impl AppConfig {
             }
         }
         Err(ConfigError::NotFound)
+    }
+}
+
+fn apply_terminal_overrides(theme: &mut Theme, settings: &SettingsConfig) {
+    if let Some(family) = &settings.terminal_font_family {
+        theme.terminal_font_family = family.clone();
+    }
+    if let Some(color) = settings.terminal_foreground {
+        theme.terminal_foreground = Some(color);
+    }
+    if let Some(color) = settings.terminal_background {
+        theme.terminal_background = Some(color);
+    }
+    if let Some(color) = settings.terminal_cursor_foreground {
+        theme.terminal_cursor_foreground = Some(color);
+    }
+    if let Some(color) = settings.terminal_cursor_background {
+        theme.terminal_cursor_background = Some(color);
+    }
+    if let Some(color) = settings.terminal_cursor_border {
+        theme.terminal_cursor_border = Some(color);
+    }
+    if let Some(color) = settings.terminal_selection_foreground {
+        theme.terminal_selection_foreground = Some(color);
+    }
+    if let Some(color) = settings.terminal_selection_background {
+        theme.terminal_selection_background = Some(color);
+    }
+    if let Some(colors) = settings.terminal_ansi {
+        theme.terminal_ansi = Some(colors);
+    }
+    if let Some(colors) = settings.terminal_brights {
+        theme.terminal_brights = Some(colors);
+    }
+    if let Some(family) = &settings.terminal_italic_font_family {
+        theme.terminal_italic_font_family = family.clone();
+    }
+    if let Some(size) = settings.terminal_font_size {
+        theme.terminal_font_size = size;
     }
 }
 
@@ -154,6 +194,7 @@ fn load_bundled_theme(name: &str) -> Option<Theme> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::color::Color;
 
     #[test]
     fn test_fallback_when_config_missing() {
@@ -216,5 +257,42 @@ keys = "="
         assert_eq!(cfg.keys.mode.len(), 1);
         assert_eq!(cfg.keys.mode[0].name, "resize");
         assert_eq!(cfg.keys.mode[0].bindings.len(), 1);
+    }
+
+    #[test]
+    fn terminal_theme_values_survive_when_settings_do_not_override_them() {
+        let mut theme = Theme::load("mocha");
+        let original_family = theme.terminal_font_family.clone();
+        let original_italic_family = theme.terminal_italic_font_family.clone();
+        let original_size = theme.terminal_font_size;
+
+        apply_terminal_overrides(&mut theme, &SettingsConfig::default());
+
+        assert_eq!(theme.terminal_font_family, original_family);
+        assert_eq!(theme.terminal_italic_font_family, original_italic_family);
+        assert_eq!(theme.terminal_font_size, original_size);
+    }
+
+    #[test]
+    fn settings_override_bundled_terminal_theme_values() {
+        let mut theme = Theme::load("mocha");
+        let settings: SettingsConfig = toml::from_str(
+            r##"
+terminal-font-family = "Iosevka Term"
+terminal-italic-font-family = "Iosevka Term Italic"
+terminal-font-size = 16.0
+terminal-background = "#112233"
+terminal-foreground = "#ddeeff"
+"##,
+        )
+        .expect("settings should parse");
+
+        apply_terminal_overrides(&mut theme, &settings);
+
+        assert_eq!(theme.terminal_font_family, "Iosevka Term");
+        assert_eq!(theme.terminal_italic_font_family, "Iosevka Term Italic");
+        assert_eq!(theme.terminal_font_size, 16.0);
+        assert_eq!(theme.terminal_background, Some(Color::new(17, 34, 51, 255)));
+        assert_eq!(theme.terminal_foreground, Some(Color::new(221, 238, 255, 255)));
     }
 }

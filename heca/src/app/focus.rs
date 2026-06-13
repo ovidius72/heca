@@ -4,6 +4,7 @@
 //! such as `focused_pane`, focus history, and sidebar projection rebuilds.
 
 use crate::app_state::AppState;
+use crate::app::terminal_host::notify_focus_changed;
 use heca_core::layout::{FocusDomain, PaneId, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
@@ -88,6 +89,7 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
+    notify_focus_changed(state, prev_focused, state.focused_pane);
 
     let focus_changed = prev_focused != state.focused_pane;
     let current_ws = state.session.active_workspace_idx;

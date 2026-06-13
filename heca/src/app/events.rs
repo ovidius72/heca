@@ -9,12 +9,21 @@ use crate::app::interaction::{dispatch_action, InteractionSource};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{after_mutation_change, MutationKind};
 use crate::app::render::{render_frame, update_session_viewport};
+use crate::app::terminal_host::{
+    forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
+};
+use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use std::collections::HashMap;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
+
+#[derive(Clone, Debug)]
+pub enum AppEvent {
+    BackendWake,
+}
 
 pub(crate) fn handle_window_event(
     event_loop: &ActiveEventLoop,
@@ -36,6 +45,9 @@ pub(crate) fn handle_window_event(
             let log_w = phys.width as f32 / state.scale_factor as f32;
             let log_h = phys.height as f32 / state.scale_factor as f32;
             state
+                .text_renderer
+                .set_target_size(phys.width, phys.height);
+            state
                 .primitive_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             state
@@ -51,6 +63,11 @@ pub(crate) fn handle_window_event(
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;
             state.text_renderer.set_scale_factor(scale_factor);
+            refresh_terminal_cell_size(state);
+            state.needs_redraw = true;
+        }
+        WindowEvent::Focused(focused) => {
+            notify_window_focus_changed(state, focused);
             state.needs_redraw = true;
         }
         WindowEvent::KeyboardInput { event, .. } => {
@@ -102,6 +119,7 @@ pub(crate) fn handle_window_event(
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
                 dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
+            forward_mouse_move(state, pos);
             state.needs_redraw = true;
         }
         WindowEvent::MouseInput {
@@ -109,9 +127,18 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
+            let interactive_before = state.mouse.interactive_move.is_some();
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
             }
+            let started_interactive_move = !interactive_before && state.mouse.interactive_move.is_some();
+            if !started_interactive_move {
+                forward_mouse_button(state, state.mouse.pos, button, button_state);
+            }
+            state.needs_redraw = true;
+        }
+        WindowEvent::MouseWheel { delta, .. } => {
+            forward_mouse_wheel(state, state.mouse.pos, delta);
             state.needs_redraw = true;
         }
         _ => {}

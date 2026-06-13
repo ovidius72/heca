@@ -4,10 +4,33 @@
 //! `main.rs`.
 
 use crate::app::mutations::after_config_change;
+use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::{AppState, InputMode};
 use crate::mouse;
 use std::time::Instant;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BackendPollResult {
+    pub has_data: bool,
+    pub closed_any: bool,
+}
+
+pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
+    let mut result = BackendPollResult::default();
+    for backend in state.backends.values_mut() {
+        if backend.update() {
+            result.has_data = true;
+        }
+    }
+    let closing_panes = state.backends.pane_ids_to_close();
+    result.closed_any = !closing_panes.is_empty();
+    for pane_id in closing_panes {
+        close_pane_by_id_anywhere(state, pane_id);
+    }
+
+    result
+}
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
     let should_timeout = matches!(
@@ -33,15 +56,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     state.session.advance_animations();
 
-    let mut backend_has_data = false;
-    for backend in state.backends.values_mut() {
-        if backend.update() {
-            backend_has_data = true;
-        }
-    }
+    let backend_poll = poll_backends(state);
 
     let needs_frame =
-        state.needs_redraw || backend_has_data || state.session.are_animations_ongoing();
+        state.needs_redraw
+            || backend_poll.has_data
+            || backend_poll.closed_any
+            || state.session.are_animations_ongoing();
     if needs_frame {
         state.window.request_redraw();
     }

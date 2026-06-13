@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-vte = "0.15"
-libc = "0.2"
-crossbeam-channel = "0.5"
+anyhow = "1"
+portable-pty = "0.9.0"
+wezterm-term = { git = "https://github.com/wezterm/wezterm", package = "wezterm-term", rev = "891bed31b75f7a71b78e8f42ad07ae89bf99a7de" }
+wezterm-surface = { git = "https://github.com/wezterm/wezterm", package = "wezterm-surface", rev = "891bed31b75f7a71b78e8f42ad07ae89bf99a7de" }

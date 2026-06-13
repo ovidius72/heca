@@ -3,24 +3,33 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
+use crate::app::backend_factory::{create_terminal_backend, estimate_terminal_grid};
 use crate::app::backend_store::BackendStore;
+use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode, SidebarState};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
-use heca_core::backend::FakeBackend;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::Window;
+
+fn add_initial_pane(session: &mut Session) -> PaneId {
+    let pane_id = PaneId(session.next_id());
+    let pane = LayoutPane::new(pane_id, pane_name(pane_id));
+    session.add_pane(pane, None, true);
+    pane_id
+}
 
 pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
+    event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
 ) -> Box<AppState> {
     let window_attrs = Window::default_attributes()
         .with_title("heca")
@@ -88,12 +97,14 @@ pub(crate) async fn init_state(
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
     let mut text_renderer = TextRenderer::new(&device, surface_format);
     text_renderer.set_scale_factor(scale_factor);
+    text_renderer.set_target_size(physical.width, physical.height);
     text_renderer.set_font_family(&app_config.theme.font_family);
     text_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
+    let terminal_cell_size = resolve_terminal_cell_size(&mut text_renderer, &app_config.theme);
     primitive_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
@@ -122,12 +133,24 @@ pub(crate) async fn init_state(
         layout_options,
     );
 
-    let fake_pane = LayoutPane::new(PaneId(1), pane_name(PaneId(1)));
-    let pane_id = fake_pane.id;
-    session.add_pane(fake_pane, None, true);
+    let pane_id = add_initial_pane(&mut session);
 
     let mut backends = BackendStore::new();
-    backends.insert_for_pane(pane_id, Box::new(FakeBackend::new(80, 24)));
+    let (initial_cols, initial_rows) = estimate_terminal_grid(
+        pane_area.size.w,
+        pane_area.size.h,
+        terminal_cell_size,
+    );
+    backends.insert_for_pane(
+        pane_id,
+        create_terminal_backend(
+            initial_cols,
+            initial_rows,
+            &app_config.theme,
+            terminal_cell_size,
+            Some(&event_proxy),
+        ),
+    );
 
     let ws_count = session.workspaces.len();
     let mut sidebar_tree = SidebarTree::new();
@@ -135,6 +158,7 @@ pub(crate) async fn init_state(
 
     Box::new(AppState {
         window,
+        event_proxy,
         surface,
         device,
         queue,
@@ -144,6 +168,7 @@ pub(crate) async fn init_state(
         session,
         backends,
         theme: app_config.theme.clone(),
+        terminal_cell_size,
         scale_factor,
         needs_redraw: true,
         focused_pane: Some(pane_id),
@@ -167,4 +192,28 @@ pub(crate) async fn init_state(
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         pending_reload: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::add_initial_pane;
+    use heca_core::layout::{
+        Session,
+        types::{LayoutOptions, SessionId, Size},
+    };
+
+    #[test]
+    fn initial_pane_consumes_session_id_counter() {
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+
+        let first = add_initial_pane(&mut session);
+        let second = session.next_id();
+
+        assert_eq!(second, first.0 + 1);
+    }
 }

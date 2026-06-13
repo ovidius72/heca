@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserializer};
+use crate::color::Color;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ModifierKey
@@ -48,6 +50,19 @@ fn default_always_center_single_column() -> bool {
     false
 }
 
+fn deserialize_terminal_font_size<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let size = Option::<f32>::deserialize(deserializer)?;
+    match size {
+        Some(value) if !value.is_finite() || value <= 0.0 => {
+            Err(de::Error::custom("terminal_font_size must be a finite positive number"))
+        }
+        other => Ok(other),
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -63,6 +78,46 @@ pub struct SettingsConfig {
     pub window_width: u32,
     #[serde(default = "default_window_height")]
     pub window_height: u32,
+    /// Optional terminal font family override from `config.toml`.
+    #[serde(default, alias = "terminal-font-family")]
+    pub terminal_font_family: Option<String>,
+    /// Optional terminal default foreground override from `config.toml`.
+    #[serde(default, alias = "terminal-foreground")]
+    pub terminal_foreground: Option<Color>,
+    /// Optional terminal default background override from `config.toml`.
+    #[serde(default, alias = "terminal-background")]
+    pub terminal_background: Option<Color>,
+    /// Optional terminal cursor foreground override from `config.toml`.
+    #[serde(default, alias = "terminal-cursor-foreground")]
+    pub terminal_cursor_foreground: Option<Color>,
+    /// Optional terminal cursor background override from `config.toml`.
+    #[serde(default, alias = "terminal-cursor-background")]
+    pub terminal_cursor_background: Option<Color>,
+    /// Optional terminal cursor border override from `config.toml`.
+    #[serde(default, alias = "terminal-cursor-border")]
+    pub terminal_cursor_border: Option<Color>,
+    /// Optional terminal selection foreground override from `config.toml`.
+    #[serde(default, alias = "terminal-selection-foreground")]
+    pub terminal_selection_foreground: Option<Color>,
+    /// Optional terminal selection background override from `config.toml`.
+    #[serde(default, alias = "terminal-selection-background")]
+    pub terminal_selection_background: Option<Color>,
+    /// Optional terminal ANSI `0..7` palette override from `config.toml`.
+    #[serde(default, alias = "terminal-ansi")]
+    pub terminal_ansi: Option<[Color; 8]>,
+    /// Optional terminal bright ANSI `8..15` palette override from `config.toml`.
+    #[serde(default, alias = "terminal-brights")]
+    pub terminal_brights: Option<[Color; 8]>,
+    /// Optional terminal italic font family override from `config.toml`.
+    #[serde(default, alias = "terminal-italic-font-family")]
+    pub terminal_italic_font_family: Option<String>,
+    /// Optional terminal font size override from `config.toml`.
+    #[serde(
+        default,
+        alias = "terminal-font-size",
+        deserialize_with = "deserialize_terminal_font_size"
+    )]
+    pub terminal_font_size: Option<f32>,
     /// Automatically scroll the workspace view when the pointer hovers near the left/right edge.
     #[serde(default = "default_auto_scroll_edge")]
     pub auto_scroll_edge: bool,
@@ -81,6 +136,18 @@ impl Default for SettingsConfig {
             mouse: default_mouse(),
             window_width: default_window_width(),
             window_height: default_window_height(),
+            terminal_font_family: None,
+            terminal_foreground: None,
+            terminal_background: None,
+            terminal_cursor_foreground: None,
+            terminal_cursor_background: None,
+            terminal_cursor_border: None,
+            terminal_selection_foreground: None,
+            terminal_selection_background: None,
+            terminal_ansi: None,
+            terminal_brights: None,
+            terminal_italic_font_family: None,
+            terminal_font_size: None,
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
@@ -99,6 +166,18 @@ mod tests {
         assert!(s.mouse);
         assert_eq!(s.window_width, 1280);
         assert_eq!(s.window_height, 800);
+        assert_eq!(s.terminal_font_family, None);
+        assert_eq!(s.terminal_foreground, None);
+        assert_eq!(s.terminal_background, None);
+        assert_eq!(s.terminal_cursor_foreground, None);
+        assert_eq!(s.terminal_cursor_background, None);
+        assert_eq!(s.terminal_cursor_border, None);
+        assert_eq!(s.terminal_selection_foreground, None);
+        assert_eq!(s.terminal_selection_background, None);
+        assert_eq!(s.terminal_ansi, None);
+        assert_eq!(s.terminal_brights, None);
+        assert_eq!(s.terminal_italic_font_family, None);
+        assert_eq!(s.terminal_font_size, None);
         assert!(s.auto_scroll_edge);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
         assert!(!s.always_center_single_column);
@@ -117,5 +196,27 @@ mod tests {
 
         let pascal: Wrap = toml::from_str(r#"m = "Ctrl""#).unwrap();
         assert_eq!(pascal.m, ModifierKey::Ctrl);
+    }
+
+    #[test]
+    fn test_terminal_font_size_accepts_positive_finite_values() {
+        #[derive(Deserialize)]
+        struct Wrap {
+            #[serde(
+                default,
+                alias = "terminal-font-size",
+                deserialize_with = "deserialize_terminal_font_size"
+            )]
+            terminal_font_size: Option<f32>,
+        }
+
+        let wrap: Wrap = toml::from_str("terminal-font-size = 14.0").unwrap();
+        assert_eq!(wrap.terminal_font_size, Some(14.0));
+    }
+
+    #[test]
+    fn test_terminal_font_size_rejects_invalid_values() {
+        assert!(toml::from_str::<SettingsConfig>("terminal-font-size = 0.0").is_err());
+        assert!(toml::from_str::<SettingsConfig>("terminal-font-size = -1.0").is_err());
     }
 }

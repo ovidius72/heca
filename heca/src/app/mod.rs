@@ -3,6 +3,7 @@
 //! These modules keep runtime wiring concerns out of `main.rs` while preserving
 //! the current behavior and ownership boundaries.
 
+pub mod backend_factory;
 pub mod backend_store;
 pub mod events;
 pub mod focus;
@@ -16,4 +17,5 @@ pub mod registry;
 pub mod render;
 pub mod selection;
 pub mod startup;
-
+pub mod terminal_host;
+pub mod terminal_metrics;

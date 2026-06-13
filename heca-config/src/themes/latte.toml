@@ -8,6 +8,8 @@ float_accent = "#1e66f5"
 float_focus = "#e67e22"
 font_family = "JetBrainsMono Nerd Font"
 font_size = 32.0
+terminal_font_family = "Maple Mono Normal NF"
+terminal_font_size = 14.0
 border_radius = 6.0
 border_width = 1.0
 shadow = { color = "#000000", alpha = 0.15, blur = 8.0 }
