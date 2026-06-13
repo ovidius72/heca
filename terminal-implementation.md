@@ -1185,7 +1185,7 @@ This section must be updated:
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: Phase 3 remains open for final terminal visual correctness hardening and richer terminal protocol work
+- Active implementation phase: Phase 3 remains open only for the final validation/review loop before merge
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
   - cursor/text regressions after the sync
@@ -1217,7 +1217,7 @@ This section must be updated:
 - terminal cell backgrounds and cursor drawing are now owned by the dedicated renderer module
 - terminal glyph runs now use a terminal-specific line-box placement path instead of the generic UI centered-box path
 - app-side terminal mounting now goes through a dedicated host adapter using `Rectangle` content geometry so future pane shells can mount terminals without depending on the current pane render loop shape
-- current live behavior is "fast but visually off": typing latency is now acceptable again, but terminal text placement is still slightly misaligned/off and not yet at final visual quality
+- current live behavior is "fast and visually close": typing latency is acceptable again and the most obvious text-placement/cursor issues have been resolved
 - future pane migration should treat the current terminal host as inner content inside a `heca-grid-ui` pane shell, not as the permanent outer pane implementation
 - future pane shells must be able to surface process/global metadata such as idle/running/error state, git status/branch/changes, and AI-agent activity
 - terminal font settings are now separated from the UI theme font, with an embedded Maple Mono Normal NF fallback for terminal text
@@ -1289,10 +1289,6 @@ This section must be updated:
 - `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
 - future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
 - current app integration still lives in `heca/src/app/render.rs`, but terminal sizing/snapshot acquisition now sits behind a dedicated terminal-host adapter rather than being inlined into pane drawing loops
-- Yazi currently exposes new terminal-fit issues:
-  - row spacing/line height is still off
-  - item columns are too narrow
-  - some right-edge geometry still looks slightly off in complex TUI layouts
 - Yazi image preview is not supported yet; selecting an image currently triggers an infinite loading spinner because richer graphics/image protocol handling is still unimplemented
 
 ### User-Verified TODOs
@@ -1374,6 +1370,19 @@ This section must be updated:
   - clear separation between outer app chrome theme and terminal-internal color theme
 - then continue terminal visual/cell-fidelity refinement where runtime gaps remain
 - after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
+
+### Planned but Explicitly Post-Merge
+
+These items are intentionally **not** blockers for merging the current Phase 3
+terminal-core PR into `main`. They are tracked here so they do not get lost.
+
+- terminal selection and clipboard
+- bracketed paste and OSC 52
+- scrollback search
+- hyperlink/open-link behavior
+- bell handling
+- richer image/graphics protocols
+- Phase 8 pane-shell integration with `heca-grid-ui`
 
 ### Full Terminal Capability Backlog
 
