@@ -115,6 +115,7 @@ fn status_bar_scene(
                 .width(Length::Px(w))
                 .height(Length::Px(status_bar_height))
                 .background(side_bg)
+                .radius(0.0)
                 .align(Align::Center)
                 .padding_xy(8.0, 0.0)
                 .child(Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg)),

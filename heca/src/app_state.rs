@@ -207,7 +207,6 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
-    #[allow(dead_code)] // used by render_chrome (WS-A A2)
     pub grid_renderer: GridRenderer,
     pub session: Session,
     /// Content backends for panes that have one.

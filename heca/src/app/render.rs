@@ -11,6 +11,7 @@ use heca_core::layout::{Point, Rectangle, Size};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{TerminalRenderer, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::{TextBox, TextRenderer};
 
 fn pane_content_rect(px: f32, py: f32, pw: f32, ph: f32, border_width: f32) -> Option<(f32, f32, f32, f32)> {
@@ -177,6 +178,34 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
     }
 }
 
+/// Factored chrome render pass: feeds a grid-ui `Scene` through `GridRenderer`
+/// and `TextRenderer`. Base layer first, then each overlay segment as its own
+/// rects-then-text pass (matching the showcase ordering that avoids overlay
+/// text-bleed).
+///
+/// Takes the renderer fields individually (not `&mut AppState`) because
+/// `render_frame` holds `let theme = &state.theme;` across its body.
+fn render_chrome(
+    grid: &mut GridRenderer,
+    text: &mut TextRenderer,
+    queue: &wgpu::Queue,
+    scene: &heca_grid_ui::Scene,
+    view: &wgpu::TextureView,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    grid.begin_frame();
+    grid.set_damage(None);
+    grid.set_clip(None);
+    heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer());
+    grid.render(queue, view, encoder);
+    text.render(queue, view, encoder);
+    for overlay in scene.overlay_segments() {
+        heca_renderer::scene::enqueue_scene(grid, text, &overlay);
+        grid.render(queue, view, encoder);
+        text.render(queue, view, encoder);
+    }
+}
+
 /// Render the full frame for the current app state.
 pub(crate) fn render_frame(state: &mut AppState) {
     if !state.needs_redraw {
@@ -266,46 +295,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
-    let sb_y = h - tb.status_bar_height;
-    state
-        .primitive_renderer
-        .draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
-    let pane_count = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.scrolling
-                .columns
-                .iter()
-                .map(|c| c.panes.len())
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
     let active_pane_id = state
         .session
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|pane| pane.id)
         .or(state.focused_pane);
-    let focus_title = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|p| p.title.as_str())
-        .unwrap_or("—");
-    let (mode_str, rename_hint) = status_mode_parts(&state.input_mode);
-    let status = format!(
-        "{} panes | {} | {}{}",
-        pane_count, focus_title, mode_str, rename_hint
-    );
-    let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
-    state.text_renderer.queue_text(
-        &status,
-        8.0,
-        status_text_y,
-        chrome_text,
-        theme.foreground.to_f32x4(),
-    );
 
     state
         .primitive_renderer
@@ -313,6 +308,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .text_renderer
         .render(&state.queue, &view, &mut encoder);
+
+    // Chrome status bar via grid-ui (replaces the hand-drawn bar above).
+    let chrome_scene = crate::chrome::build_chrome_scene(state);
+    render_chrome(
+        &mut state.grid_renderer,
+        &mut state.text_renderer,
+        &state.queue,
+        &chrome_scene,
+        &view,
+        &mut encoder,
+    );
 
     let theme_border = theme.border.to_f32x4();
     let border_width = theme.border_width;
