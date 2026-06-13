@@ -12,6 +12,7 @@ use crate::app::render::{render_frame, update_session_viewport};
 use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
 };
+use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
@@ -62,6 +63,7 @@ pub(crate) fn handle_window_event(
         WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
             state.scale_factor = scale_factor;
             state.text_renderer.set_scale_factor(scale_factor);
+            refresh_terminal_cell_size(state);
             state.needs_redraw = true;
         }
         WindowEvent::Focused(focused) => {

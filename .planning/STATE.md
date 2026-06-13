@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 3 of 4 (The Content)
 status: in_progress
-last_updated: "2026-06-12T16:45:00.000Z"
+last_updated: "2026-06-13T16:05:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 2
@@ -17,7 +17,7 @@ progress:
 
 **Current Phase:** Phase 3 — The Content
 **Status:** In progress
-**Last Action:** Fixed terminal default-color rendering and added separate italic terminal font-family routing
+**Last Action:** Closed the current renderer/core review blockers, including u32 primitive indices, safe terminal grid fitting, deterministic spawn sizing, and deterministic PTY test shells
 
 ## Product Phase Progress
 
@@ -76,9 +76,9 @@ progress:
 
 - Terminal pane appears correctly as a live PTY-backed pane
 - Typing is fast again and no longer stalls for seconds
-- Terminal text rendering is still visually misaligned/off inside the pane
+- Terminal text rendering is broadly correct again after the main sync, including shell autosuggestion cursor placement
 - Floating a pane no longer panics on row/column mismatch during terminal background rendering
-- Terminal text now uses box-based placement for stable vertical centering, but live alignment still needs verification
+- Terminal text now uses per-cell placement plus measured font-derived cell sizing, and Yazi/nvim are looking materially better after the powerline/symbol follow-up
 - `nvim` redraw behavior should improve because PTY output can now wake the app directly, but live verification is still pending
 - Sidebar visibility during zoom/float should improve because chrome now renders after floats, but live verification is still pending
 - User-reported focus-border issues on newly created panes should improve because render highlighting now follows session focus, but live verification is still pending
@@ -86,13 +86,17 @@ progress:
 - Terminal style fidelity is improved, but live verification still shows colorscheme mismatch with other terminals
 - The plain shell background is still wrong in practice; it is currently falling back to stock terminal palette behavior because full terminal palette/theme support is not implemented yet
 - Italic styling works, but italic runs may still resolve to the wrong family unless an italic face is installed or `terminal_italic_font_family` is configured
-- Straight underline works; undercurl is not implemented yet
+- Terminal underline styles now render explicitly, including undercurl, dotted, dashed, and double underline
+- Review-driven renderer/core hardening is now landed and the affected checks/tests are green again
 
 ### Remaining For Phase 3
 
-- Implement proper terminal palette/theme support so terminal default colors and ANSI colors can be configured independently from outer app chrome
-- Decide whether undercurl belongs in Phase 3 or is explicitly deferred
-- Finish the dedicated terminal renderer by replacing the remaining transitional generic text glyph path
+- Continue validating terminal palette/theme fidelity so live `nvim` colorschemes match other terminals across more themes
+- Validate the measured terminal-metric path in Yazi and other file-manager style TUIs across more fonts
+- Continue the shared terminal symbol/decorations renderer as an app-agnostic subsystem:
+  - keep box-drawing on deterministic geometry
+  - keep powerline separators on deterministic geometry
+  - keep underline/undercurl styles GUI-native and font-independent
 - Validate terminal mouse, focus tracking, and remaining style fidelity in live TUIs
 - Start Neovim pane implementation after terminal rendering/input path is solid
 
@@ -111,7 +115,8 @@ progress:
 ## Known Risks
 
 - Terminal drawing now enters through a dedicated renderer module, but glyph shaping still relies on generic `TextRenderer` internals
-- Terminal text placement is visually incorrect even though interactivity is much better
+- Yazi image preview still spins forever because richer graphics/image protocol support is not implemented yet
+- Terminal palette/theme fidelity still needs broader live validation across more themes and TUIs before this branch is merge-ready
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
 - Mouse-aware TUIs now have a structured forwarding path, but live behavior still needs verification
 - Review backlog still open for richer `PtyError` typing and config-loader precedence coverage
@@ -122,15 +127,31 @@ If resuming from a fresh session, do this first:
 
 1. Read `terminal-implementation.md`
 2. Continue Phase 3, not Phase 4
-3. First validate the structured terminal input path live:
+3. First validate the new measured terminal-metric path live:
+- inspect `heca/src/app/terminal_metrics.rs`
 - inspect `heca/src/app/terminal_host.rs`
-- inspect `heca/src/app/events.rs`
-- inspect `heca-core/src/backend/terminal/engine.rs`
-- verify `nvim` mouse mode, wheel behavior, focus tracking, and modifier-heavy key combinations
-4. Then continue terminal visual correctness:
-- inspect `heca-renderer/src/terminal.rs`
 - inspect `heca-renderer/src/text.rs`
-- validate and refine the new line-box glyph placement before touching Neovim work
+- retest Yazi with the current default terminal font and then 1-2 alternative Nerd Fonts
+4. Then continue Phase 3 terminal runtime validation:
+- inspect `heca-renderer/src/terminal.rs` for the shared symbol-rendering path
+- keep powerline-separator and underline/undercurl rendering app-agnostic
+- verify `nvim` colorschemes across multiple themes
+- verify `nvim` mouse mode, wheel behavior, focus tracking, and modifier-heavy key combinations
+- keep Yazi image preview explicitly tracked as a separate protocol-support task, not a merge blocker for the current terminal-core PR
+
+## Full Terminal Backlog (Post-Merge)
+
+- terminal selection state/rendering
+- copy selected terminal text to the system clipboard
+- paste system clipboard text into the focused terminal backend
+- bracketed paste
+- OSC 52 clipboard integration
+- hyperlink/open-link behavior
+- bell handling
+- alternate-screen and focus-reporting validation
+- richer mouse protocol coverage and selection-vs-terminal-mouse policy
+- scrollback search / terminal UX actions
+- richer image/graphics protocol support
 
 ## Verification
 

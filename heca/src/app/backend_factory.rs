@@ -9,14 +9,52 @@ use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 
 use crate::app::events::AppEvent;
+use crate::app_state::AppState;
+
+pub(crate) const FALLBACK_TERMINAL_GRID: (usize, usize) = (80, 24);
+const MAX_TERMINAL_UNITS: f64 = 16_384.0;
+
+pub(crate) fn estimate_terminal_grid(
+    width: f64,
+    height: f64,
+    cell_size: (f32, f32),
+) -> (usize, usize) {
+    let cols = estimate_terminal_units(width, cell_size.0 as f64, FALLBACK_TERMINAL_GRID.0);
+    let rows = estimate_terminal_units(height, cell_size.1 as f64, FALLBACK_TERMINAL_GRID.1);
+    (cols, rows)
+}
+
+fn estimate_terminal_units(extent: f64, approx_cell: f64, fallback: usize) -> usize {
+    if !extent.is_finite() || !approx_cell.is_finite() || extent <= 0.0 || approx_cell <= 0.0 {
+        return fallback;
+    }
+
+    (extent / approx_cell).ceil().clamp(1.0, MAX_TERMINAL_UNITS) as usize
+}
+
+pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {
+    state
+        .session
+        .workspaces
+        .get(ws_idx)
+        .map(|ws| {
+            estimate_terminal_grid(
+                ws.scrolling.working_area.size.w,
+                ws.scrolling.working_area.size.h,
+                state.terminal_cell_size,
+            )
+        })
+        .unwrap_or(FALLBACK_TERMINAL_GRID)
+}
 
 pub(crate) fn create_terminal_backend(
     cols: usize,
     rows: usize,
     theme: &Theme,
+    cell_size: (f32, f32),
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
 ) -> Box<dyn PaneBackend> {
-    let (cell_w, cell_h) = theme.terminal_cell_size();
+    let (cell_w, cell_h) = cell_size;
     let wake_on_output = event_proxy.map(|proxy| {
         let proxy = proxy.clone();
         Arc::new(move || {

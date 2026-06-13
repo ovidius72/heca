@@ -1184,12 +1184,12 @@ This section must be updated:
 ### Current Status
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
-- Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, and color-space fixes are all landed
-- Active implementation phase: Phase 3 remains open for terminal visual correctness hardening and richer terminal protocol work
+- Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
+- Active implementation phase: Phase 3 remains open for final terminal visual correctness hardening and richer terminal protocol work
 - Last materially advanced areas:
-  - terminal color fidelity and cursor behavior
-  - box-drawing geometry rendering for border-heavy TUIs
-  - backend/config hardening backlog (`RB1`, `RB3`, `RB4`)
+  - renderer sync onto `main`'s atlas-based text path
+  - cursor/text regressions after the sync
+  - measured terminal metrics replacing theme-ratio bootstrapping for PTY grid sizing
 - Last completed phase: Phase 2
 
 ### Latest Decisions
@@ -1241,6 +1241,25 @@ This section must be updated:
 - terminal engine now supports explicit terminal default foreground/background overrides without tying terminal defaults to the outer app chrome theme
 - terminal snapshot generation now seeds per-column blank cells from the full wezterm line state before overlaying visible grapheme anchors, so TUIs like `nvim` can preserve background-colored blank space instead of collapsing back to the terminal default background
 - terminal palette configuration now supports explicit terminal defaults plus ANSI/brights/cursor/selection colors through config/theme plumbing
+- after syncing `origin/main`, terminal-specific text behavior now rides on top of the atlas/retained `TextRenderer` instead of the old per-label texture path
+- terminal text visibility after the sync now depends on explicit `TextRenderer::set_target_size(...)` wiring during startup and resize
+- terminal cursor now renders in a separate topmost overlay pass so shell autosuggestion text does not occlude it
+- terminal text now renders per visible cell instead of batched shaped runs, which keeps cursor position and glyph placement aligned for shell autosuggestions and similar inline-terminal UX
+- terminal cell sizing for PTY creation, pane mount fitting, and mouse hit-testing is now derived from the actual loaded terminal font through `TextRenderer::measure_monospace_cell(...)` and stored in app state instead of bootstrapping from `Theme::terminal_cell_size()` heuristics alone
+- terminal symbol correctness must be handled by a general renderer policy, not by app-specific hacks:
+  - known terminal-UI symbol families should render as deterministic GUI geometry
+  - ordinary text and private-use icons without stable geometry semantics should remain on the font pipeline
+  - this policy must stay app-agnostic so Yazi, `nvim`, Telescope, lazygit, tmux-like prompts, and future TUIs all benefit automatically
+- the shared terminal symbol renderer has now started with:
+  - box-drawing geometry
+  - powerline-family geometry for ``, ``, ``, ``, ``, ``
+- terminal underline rendering is now GUI-native and style-aware:
+  - `Single`
+  - `Double`
+  - `Curly` (undercurl)
+  - `Dotted`
+  - `Dashed`
+  - terminal snapshots now preserve the concrete underline style instead of collapsing it to a boolean
 - `PtyError` now preserves operation context and typed/source error chains instead of flattening PTY failures into strings
 - config loader now has explicit precedence coverage proving `config.toml` terminal font/color overrides beat bundled theme terminal defaults without clobbering unspecified theme values
 - terminal exit-state handling now has focused regression coverage for:
@@ -1249,22 +1268,23 @@ This section must be updated:
   - conservative close behavior on `try_wait()` error
 - shader color handling now converts UI/theme colors consistently into linear space, which materially improved live nvim colorscheme fidelity
 - right-edge border artifacts in Telescope/FzfLua/lazygit were reduced by grid fitting and then fixed by rendering common box-drawing characters as deterministic GUI geometry instead of relying on font glyph joins
+- the current renderer/core review blockers are now addressed:
+  - primitive renderer indices now use `u32`
+  - terminal grid fitting now guards non-finite/invalid cell metrics before integer conversion
+  - half-ellipse powerline rendering no longer overlaps bands
+  - terminal spawn backends now use estimated live workspace grid size instead of hardcoded `80x24` on the active app path
+  - PTY/backend tests now use a deterministic test shell so the test suite does not depend on local interactive shell startup
 
 ### Current Known Risks
 
 - terminal rendering now has a dedicated renderer module, but glyph shaping still routes through shared `TextRenderer` internals rather than a fully independent terminal atlas/path
 - background rendering and text shaping are still transitional and may still lag under dense terminal workloads even with renderer-side label caching
-- terminal text is still visually misaligned/off because glyph placement is adapted from a generic text path rather than a cell-native terminal renderer
 - terminal default-family naming is tied to the embedded font metadata (`Maple Mono Normal NF`), not the shorter marketing name
-- terminal drawing now uses box-based placement for better vertical centering, but final cell-native alignment still needs validation in the live app
-- `nvim`/alt-screen redraw behavior still needs live verification after PTY wakeup wiring
-- sidebar visibility after zoom/float and multi-pane focus highlighting still need live verification after the latest render ordering/session-focus fixes
+- measured terminal-cell sizing plus the shared terminal symbol/decorations renderer materially improved Yazi and `nvim`, but broader live validation is still needed across more TUIs and fonts before Phase 3 can close
 - structured keyboard forwarding is landed, but live verification is still needed for modifier-heavy terminal apps and function-key behavior
 - terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
-- terminal style fidelity is improved, but live verification is still needed for colorscheme parity with other terminals, especially palette/default-color semantics and italic-heavy themes
-- terminal background/default-color fidelity is still wrong in practice because the backend still relies on wezterm's stock terminal palette unless explicit terminal colors are configured; full terminal palette/theme support is not implemented yet
+- terminal style fidelity is much improved, but live verification is still needed for broad colorscheme parity across more themes and TUIs
 - italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `terminal_italic_font_family`, italic runs may fall back to a different family
-- underline is implemented as a straight underline; undercurl is not implemented yet
 - the legacy `render_data()` fallback still exists and should be removed once all pane backends expose snapshots
 - `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
 - future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
@@ -1278,16 +1298,17 @@ This section must be updated:
 ### User-Verified TODOs
 
 - Yazi:
-  - fix line-height / row-spacing mismatch
-  - widen effective item-cell geometry so filenames/icons do not look squeezed
-  - inspect remaining right-edge visual drift in complex split layouts
   - treat image preview support as a separate richer-protocol task; current behavior is an infinite spinner
+- Merge-readiness hardening:
+  - keep the renderer on `u32` primitive indices to avoid large-scene overflow
+  - keep terminal grid fitting guarded against invalid cell metrics
+  - keep style-preservation fixes for underline variants and wide-cell filler behavior
 - Font sensitivity follow-up:
   - test 2-3 terminal Nerd Fonts inside heca, not just Maple Mono NF
-  - compare Yazi alignment across fonts to separate font-specific behavior from renderer-metric bugs
-  - if one font materially improves Yazi immediately, record it as a temporary recommended terminal font while the metric path is corrected
+  - compare Yazi and other terminal-UI alignment across fonts after the measured-metric and symbol-renderer changes to separate remaining font-specific behavior from renderer bugs
+  - if one font materially improves terminal-UI fidelity further, record it as a temporary recommended terminal font while the metric path is refined
 - Continue broader colorscheme parity testing across multiple live nvim themes
-- Validate whether any remaining TUIs expose grid-fit issues outside the now-fixed box-drawing border path
+- Validate whether any remaining TUIs expose grid-fit or symbol-family issues outside the now-fixed box-drawing and powerline paths
 
 ### Migration Boundary Inventory
 
@@ -1334,18 +1355,55 @@ This section must be updated:
 
 ### Next Recommended Task
 
-- Validate font sensitivity first, then fix terminal metrics for file-manager style TUIs:
-  - test multiple terminal Nerd Fonts in heca and compare Yazi behavior
-  - determine whether the current misalignment is mostly Maple-specific or remains across fonts
-  - then derive or tune row height/advance more accurately for the actual loaded font metrics
-  - remove squeezed/narrow item layout in Yazi
-  - verify that the fix does not regress the now-correct shell/nvim cursor spacing
-- After cell-metric correction, decide whether Phase 3 still needs a more direct terminal-native font-metric path instead of the remaining shared `TextRenderer` internals
+- Validate the now-landed measured-metric and symbol-renderer path across more live TUIs:
+  - retest Yazi after the measured metric, powerline, and per-cell text changes
+  - test multiple terminal Nerd Fonts in heca and compare terminal-UI behavior
+  - determine whether any remaining misalignment is mostly font-specific or still renderer-specific
+  - verify that the measured-metric path did not regress the now-correct shell/nvim cursor spacing
+- Expand the shared terminal symbol/decorations subsystem only where live TUIs justify it:
+  - keep box-drawing geometry
+  - keep powerline separator geometry (``, ``, ``, ``, ``, ``)
+  - keep underline/undercurl rendering GUI-native and app-agnostic
+  - defer rarer symbol families until a real TUI exposes them
+- Keep merge-readiness hardening in place:
+  - primitive rendering must stay `u32`-indexed
+  - terminal grid fitting must reject invalid cell dimensions before integer conversion
+  - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
 - Keep richer graphics/image protocol support explicitly out-of-scope for the immediate metric fix, but track Yazi image preview as the next protocol-facing TODO
   - cursor/selection colors if needed
   - clear separation between outer app chrome theme and terminal-internal color theme
 - then continue terminal visual/cell-fidelity refinement where runtime gaps remain
 - after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
+
+### Full Terminal Capability Backlog
+
+These items are planned for a fuller terminal experience, but they are **not**
+all blockers for merging the current Phase 3 terminal-core PR into `main`.
+
+- Clipboard and selection:
+  - pointer-driven terminal text selection
+  - future keyboard selection expansion
+  - copy selected terminal text to the system clipboard
+  - paste system clipboard text into the focused terminal backend
+  - expose clipboard operations through mouse/UI, keyboard/action dispatch, and RPC where meaningful
+- Paste/clipboard protocol behavior:
+  - bracketed paste
+  - OSC 52 clipboard integration
+- Terminal UX/runtime features:
+  - scrollback search
+  - open-link action for OSC 8 hyperlinks
+  - bell handling
+  - copy-on-select policy if desired
+- Richer protocol/features:
+  - inline graphics/image protocol support
+  - Yazi image preview
+  - future hyperlink hover/activation affordances
+- Full terminal fidelity/integration:
+  - OSC 8 hyperlinks
+  - bell handling
+  - alternate-screen and focus-reporting validation
+  - richer mouse protocol coverage and selection-vs-terminal-mouse policy
+  - scrollback search and terminal UX actions
 
 ### In-Flight Work
 

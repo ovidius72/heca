@@ -57,7 +57,30 @@ impl TerminalBackend {
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     ) -> Result<Self, PtyError> {
-        let pty = PtyHandle::new(cols, rows, wake_on_output)?;
+        Self::with_test_shell(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            palette_defaults,
+            wake_on_output,
+            None,
+        )
+    }
+
+    fn with_test_shell(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+        palette_defaults: Option<TerminalPaletteDefaults>,
+        wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
+        shell_override: Option<&str>,
+    ) -> Result<Self, PtyError> {
+        let pty = match shell_override {
+            Some(shell) => PtyHandle::new_with_shell(cols, rows, wake_on_output, Some(shell))?,
+            None => PtyHandle::new(cols, rows, wake_on_output)?,
+        };
         let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults)?;
 
         Ok(Self {
@@ -72,6 +95,19 @@ impl TerminalBackend {
             reaped: false,
             dirty: true,
         })
+    }
+
+    #[cfg(test)]
+    fn new_for_test_with_shell(cols: usize, rows: usize, shell: &str) -> Result<Self, PtyError> {
+        Self::with_test_shell(
+            cols,
+            rows,
+            8.4,
+            14.0,
+            None,
+            None,
+            Some(shell),
+        )
     }
 }
 
@@ -227,9 +263,15 @@ mod tests {
     const TEST_TIMEOUT: Duration = Duration::from_secs(3);
     const TEST_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
+    #[cfg(not(windows))]
+    const TEST_SHELL: &str = "/bin/sh";
+    #[cfg(windows)]
+    const TEST_SHELL: &str = "cmd.exe";
+
     #[test]
     fn terminal_backend_initial_snapshot_matches_requested_size() {
-        let backend = TerminalBackend::new(12, 5).expect("terminal backend should initialize");
+        let backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
+            .expect("terminal backend should initialize");
 
         let snapshot = backend
             .terminal_snapshot()
@@ -242,7 +284,8 @@ mod tests {
 
     #[test]
     fn terminal_backend_resize_updates_snapshot_dimensions() {
-        let mut backend = TerminalBackend::new(12, 5).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
+            .expect("terminal backend should initialize");
 
         backend.set_size(20, 8);
 
@@ -257,7 +300,8 @@ mod tests {
 
     #[test]
     fn terminal_backend_process_input_reaches_shell() {
-        let mut backend = TerminalBackend::new(80, 24).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
         let marker = "HECA_INPUT_OK";
 
         warm_shell(&mut backend);
@@ -272,7 +316,8 @@ mod tests {
 
     #[test]
     fn terminal_backend_preserves_grapheme_output() {
-        let mut backend = TerminalBackend::new(80, 24).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
         let marker = "e\u{301}🙂";
 
         warm_shell(&mut backend);
@@ -290,7 +335,8 @@ mod tests {
 
     #[test]
     fn terminal_backend_exit_sets_should_close() {
-        let mut backend = TerminalBackend::new(80, 24).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
 
         warm_shell(&mut backend);
         backend.process_input(shell_exit_command().as_bytes());
@@ -302,7 +348,8 @@ mod tests {
 
     #[test]
     fn terminal_backend_update_is_stable_after_exit() {
-        let mut backend = TerminalBackend::new(80, 24).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
 
         warm_shell(&mut backend);
         backend.process_input(shell_exit_command().as_bytes());
@@ -361,7 +408,8 @@ mod tests {
             return;
         }
 
-        let mut backend = TerminalBackend::new(80, 24).expect("terminal backend should initialize");
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
         warm_shell(&mut backend);
         backend.process_input(b"nvim --clean +'set termguicolors' +'colorscheme blue'\n");
 
@@ -425,7 +473,7 @@ mod tests {
 
     fn command_exists(name: &str) -> bool {
         std::process::Command::new("sh")
-            .arg("-lc")
+            .arg("-c")
             .arg(format!("command -v {name} >/dev/null 2>&1"))
             .status()
             .map(|status| status.success())

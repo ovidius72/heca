@@ -3,6 +3,7 @@
 use super::{
     BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType, TerminalCell,
     TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalLine, TerminalSnapshot,
+    TerminalUnderlineStyle,
 };
 
 /// A fake backend that renders a static test pattern without any I/O.
@@ -82,7 +83,7 @@ impl PaneBackend for FakeBackend {
                     bg: [0.05, 0.05, 0.08, 1.0],
                     bold: false,
                     italic: false,
-                    underline: false,
+                    underline: TerminalUnderlineStyle::None,
                     width: 1,
                 });
             }
@@ -152,7 +153,7 @@ impl PaneBackend for FakeBackend {
                 bg: [0.05, 0.05, 0.08, 1.0],
                 bold: false,
                 italic: false,
-                underline: false,
+                underline: TerminalUnderlineStyle::None,
                 width: 1,
             });
         }

@@ -349,7 +349,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let content_rect = stable_tiled_content_rect(px, py, pw, ph, border_width);
 
         let pane_mount = if let Some(content_rect) = content_rect {
-            prepare_terminal_mount(&mut state.backends, *pane_id, content_rect)
+            prepare_terminal_mount(
+                &mut state.backends,
+                *pane_id,
+                content_rect,
+                state.terminal_cell_size,
+            )
         } else {
             None
         };
@@ -429,7 +434,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let float_outline_width = (border_width * 2.0).max(3.0);
             let content_rect = stable_floating_content_rect(fx, fy, fw, fh, border_width);
             let pane_mount = if let Some(content_rect) = content_rect {
-                prepare_terminal_mount(&mut state.backends, float.pane.id, content_rect)
+                prepare_terminal_mount(
+                    &mut state.backends,
+                    float.pane.id,
+                    content_rect,
+                    state.terminal_cell_size,
+                )
             } else {
                 None
             };
@@ -684,12 +694,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         state
                             .text_renderer
                             .queue_text(&label, lx, ly, letter_size, label_color);
-                        found = true;
                         break;
                     }
                 }
             }
-            let _ = found;
         }
     }
 

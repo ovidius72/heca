@@ -66,7 +66,7 @@ impl std::fmt::Display for PtyError {
 
 impl std::error::Error for PtyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.source()
+        Some(self.source.as_ref())
     }
 }
 
@@ -84,13 +84,22 @@ impl PtyHandle {
         rows: usize,
         wake_on_output: Option<WakeCallback>,
     ) -> Result<Self, PtyError> {
+        Self::new_with_shell(cols, rows, wake_on_output, None)
+    }
+
+    pub(super) fn new_with_shell(
+        cols: usize,
+        rows: usize,
+        wake_on_output: Option<WakeCallback>,
+        shell_override: Option<&str>,
+    ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows);
         let pair = pty_system
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = default_shell();
+        let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
         let mut cmd = CommandBuilder::new(shell);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");

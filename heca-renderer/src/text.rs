@@ -501,6 +501,68 @@ impl TextRenderer {
         self.emit_cache.clear();
     }
 
+    /// Measure one logical terminal cell for the given monospace family/size.
+    ///
+    /// This uses the same shaping stack as runtime terminal text instead of
+    /// theme heuristics, so PTY grid sizing can track the real loaded font.
+    pub fn measure_monospace_cell(
+        &mut self,
+        font_size: f32,
+        font_family: &str,
+    ) -> Option<(f32, f32)> {
+        if !font_size.is_finite() || font_size <= 0.0 {
+            return None;
+        }
+
+        let scale = self.scale_factor as f32;
+        if !scale.is_finite() || scale <= 0.0 {
+            return None;
+        }
+
+        let scaled_size = font_size * scale;
+        let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        buffer.set_size(
+            &mut self.font_system,
+            Some(scaled_size * 4.0),
+            Some(metrics.line_height * 2.0),
+        );
+        let attrs = Attrs::new()
+            .family(Family::Name(font_family))
+            .weight(Weight::NORMAL)
+            .style(Style::Normal);
+        buffer.set_text(&mut self.font_system, "M", &attrs, Shaping::Advanced);
+        buffer.shape_until_scroll(&mut self.font_system, false);
+
+        let mut line_width = None;
+        let mut line_height = metrics.line_height;
+        let mut font_id = None;
+        if let Some(run) = buffer.layout_runs().next() {
+            line_width = Some(run.line_w.max(0.0));
+            line_height = run.line_height.max(metrics.line_height);
+            font_id = run.glyphs.first().map(|glyph| glyph.font_id);
+        }
+
+        if let Some(font_id) = font_id
+            && let Some(font) = self.font_system.get_font(font_id)
+        {
+            if let Some(monospace_em_width) = font.monospace_em_width() {
+                line_width = Some(monospace_em_width * scaled_size);
+            }
+
+            let font_metrics = font.as_swash().metrics(&[]).scale(scaled_size);
+            let font_line_height =
+                (font_metrics.ascent + font_metrics.descent + font_metrics.leading).max(0.0);
+            if font_line_height > 0.0 {
+                line_height = font_line_height;
+            }
+        }
+
+        let width = line_width.unwrap_or(scaled_size * 0.6) / scale;
+        let height = line_height.max(scaled_size) / scale;
+        Some((width.max(1.0), height.max(1.0)))
+    }
+
     /// Queue text with its top-left at `(x, y)` (logical px) — the simple
     /// point-positioned form used throughout the app (sidebar, chrome, …).
     pub fn queue_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
@@ -652,7 +714,12 @@ impl TextRenderer {
 
             let first_index = indices.len() as u32;
             let mut base = vertices.len() as u32;
-            for quad in emitted.verts.chunks_exact(4) {
+            let quads = emitted.verts.chunks_exact(4);
+            debug_assert!(
+                quads.remainder().is_empty(),
+                "emitted terminal/text geometry must contain 4 vertices per glyph quad"
+            );
+            for quad in quads {
                 vertices.extend_from_slice(quad);
                 indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
                 base += 4;
@@ -960,10 +1027,14 @@ mod tests {
             size_bits: 14.0f32.to_bits(),
             bold: false,
             icon: false,
+            italic: false,
+            faux_italic: false,
             color_bits: [1.0, 1.0, 1.0, 1.0].map(f32::to_bits),
             box_bits: [10.0, 20.0, 0.0, 0.0].map(f32::to_bits),
             align: align_bits(TextAlign::Start),
             centered: false,
+            line_box: false,
+            font_family: None,
             scale_bits: 2.0f32.to_bits(),
         };
         assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");

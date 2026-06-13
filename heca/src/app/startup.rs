@@ -3,8 +3,9 @@
 //! This module owns first-launch wiring so `main.rs` can focus on lifecycle
 //! control flow rather than GPU/window/session bootstrapping details.
 
-use crate::app::backend_factory::create_terminal_backend;
+use crate::app::backend_factory::{create_terminal_backend, estimate_terminal_grid};
 use crate::app::backend_store::BackendStore;
+use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode, SidebarState};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::keymap;
@@ -103,6 +104,7 @@ pub(crate) async fn init_state(
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
+    let terminal_cell_size = resolve_terminal_cell_size(&mut text_renderer, &app_config.theme);
     primitive_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
@@ -134,9 +136,20 @@ pub(crate) async fn init_state(
     let pane_id = add_initial_pane(&mut session);
 
     let mut backends = BackendStore::new();
+    let (initial_cols, initial_rows) = estimate_terminal_grid(
+        pane_area.size.w,
+        pane_area.size.h,
+        terminal_cell_size,
+    );
     backends.insert_for_pane(
         pane_id,
-        create_terminal_backend(80, 24, &app_config.theme, Some(&event_proxy)),
+        create_terminal_backend(
+            initial_cols,
+            initial_rows,
+            &app_config.theme,
+            terminal_cell_size,
+            Some(&event_proxy),
+        ),
     );
 
     let ws_count = session.workspaces.len();
@@ -155,6 +168,7 @@ pub(crate) async fn init_state(
         session,
         backends,
         theme: app_config.theme.clone(),
+        terminal_cell_size,
         scale_factor,
         needs_redraw: true,
         focused_pane: Some(pane_id),

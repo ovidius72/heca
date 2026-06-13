@@ -4,7 +4,7 @@
 //! action.  Parameterized variants destructure their fields from the enum;
 //! unit variants ignore the `_action` parameter.
 
-use crate::app::backend_factory::create_terminal_backend;
+use crate::app::backend_factory::{create_terminal_backend, terminal_grid_for_workspace};
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
 use crate::app::focus::{focus_pane_by_id, sync_focus};
@@ -121,6 +121,8 @@ pub fn handle_focus_workspace(state: &mut AppState, action: &WmAction) {
 // ── Layout ──
 
 pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
+    let active_ws = state.session.active_workspace_idx;
+    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     let backend_id = PaneId(next_id);
@@ -129,12 +131,20 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
         .backends
         .insert_for_pane(
             backend_id,
-            create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+            create_terminal_backend(
+                cols,
+                rows,
+                &state.theme,
+                state.terminal_cell_size,
+                Some(&state.event_proxy),
+            ),
         );
     after_layout_change(state);
 }
 
 pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
+    let active_ws = state.session.active_workspace_idx;
+    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     let backend_id = PaneId(next_id);
@@ -150,7 +160,13 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
         .backends
         .insert_for_pane(
             backend_id,
-            create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+            create_terminal_backend(
+                cols,
+                rows,
+                &state.theme,
+                state.terminal_cell_size,
+                Some(&state.event_proxy),
+            ),
         );
     after_layout_change(state);
 }
@@ -853,11 +869,18 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
         ws.scrolling
             .add_pane_to_column(capped_col, None, pane, true);
     }
+    let (cols, rows) = terminal_grid_for_workspace(state, target_ws);
     state
         .backends
         .insert_for_pane(
             backend_id,
-            create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+            create_terminal_backend(
+                cols,
+                rows,
+                &state.theme,
+                state.terminal_cell_size,
+                Some(&state.event_proxy),
+            ),
         );
     after_layout_change(state);
 }
@@ -1088,6 +1111,7 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     state.session.add_workspace(working_area);
     let new_idx = state.session.workspaces.len() - 1;
     switch_workspace_tracked(state, new_idx);
+    let (cols, rows) = terminal_grid_for_workspace(state, new_idx);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     state.session.add_pane(pane, None, true);
@@ -1095,7 +1119,13 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
             .backends
             .insert_for_pane(
                 PaneId(next_id),
-                create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+                create_terminal_backend(
+                    cols,
+                    rows,
+                    &state.theme,
+                    state.terminal_cell_size,
+                    Some(&state.event_proxy),
+                ),
             );
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
@@ -1421,6 +1451,8 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     };
     // Create a new pane with the command as its title.
     // In the future this will spawn a real PTY via portable-pty.
+    let active_ws = state.session.active_workspace_idx;
+    let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), command.clone());
     state.session.add_pane(pane, None, true);
@@ -1428,7 +1460,13 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
         .backends
         .insert_for_pane(
             PaneId(next_id),
-            create_terminal_backend(80, 24, &state.theme, Some(&state.event_proxy)),
+            create_terminal_backend(
+                cols,
+                rows,
+                &state.theme,
+                state.terminal_cell_size,
+                Some(&state.event_proxy),
+            ),
         );
     after_layout_change(state);
 }

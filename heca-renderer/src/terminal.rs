@@ -1,6 +1,8 @@
 use crate::primitive::PrimitiveRenderer;
 use crate::text::{TextBox, TextRenderer, TextStyle};
-use heca_core::backend::{TerminalCursorShape, TerminalLine, TerminalSnapshot};
+use heca_core::backend::{
+    TerminalCursorShape, TerminalLine, TerminalSnapshot, TerminalUnderlineStyle,
+};
 use heca_grid_ui::scene::TextAlign;
 
 pub struct TerminalStyle<'a> {
@@ -44,7 +46,6 @@ impl<'a> TerminalRenderer<'a> {
             self.text_renderer,
             self.primitive_renderer,
             &snapshot.lines,
-            snapshot.cursor,
             snapshot.default_bg,
             TerminalRenderLayout {
                 cell_w: snapshot.cell_w,
@@ -58,16 +59,7 @@ impl<'a> TerminalRenderer<'a> {
     }
 
     pub fn render_cursor_overlay(&mut self, snapshot: &TerminalSnapshot, rect: TextBox) {
-        queue_cursor_overlay(
-            self.primitive_renderer,
-            snapshot.cursor,
-            snapshot.lines.as_slice(),
-            snapshot.cols,
-            snapshot.rows,
-            snapshot.cell_w,
-            snapshot.cell_h,
-            rect,
-        );
+        queue_cursor_overlay(self.primitive_renderer, snapshot, rect);
     }
 
 }
@@ -76,7 +68,6 @@ fn render_terminal_lines(
     text_renderer: &mut TextRenderer,
     primitive_renderer: &mut PrimitiveRenderer,
     lines: &[TerminalLine],
-    _cursor: heca_core::backend::TerminalCursor,
     default_bg: [f32; 4],
     layout: TerminalRenderLayout<'_>,
 ) {
@@ -94,10 +85,12 @@ fn render_terminal_lines(
         w: pw,
         h: ph,
     } = rect;
+    let (fitted_rows, fitted_cols) = fitted_grid(rect, cell_w, cell_h);
+    if fitted_rows == 0 || fitted_cols == 0 {
+        return;
+    }
     primitive_renderer.draw_rect(px, py, pw, ph, default_bg);
 
-    let fitted_rows = ((ph / cell_h).round() as usize).max(1);
-    let fitted_cols = ((pw / cell_w).round() as usize).max(1);
     let max_rows = fitted_rows.min(rows).min(lines.len());
     let max_cols = fitted_cols.min(cols);
     if max_rows == 0 || max_cols == 0 {
@@ -111,29 +104,18 @@ fn render_terminal_lines(
             continue;
         }
         let mut bg_start = 0usize;
-        let mut bg_color = line
-            .cells
-            .first()
-            .map(|cell| cell.bg)
-            .unwrap_or([0.0, 0.0, 0.0, 0.0]);
-
-        for col in 0..visible_cols {
-            let next_bg = if col + 1 < visible_cols {
-                line.cells.get(col + 1).map(|next| next.bg)
-            } else {
-                None
-            };
-            if next_bg != Some(bg_color) {
-                if bg_color[3] > 0.0 {
-                    let x = px + bg_start as f32 * cell_w;
-                    let w = (col + 1 - bg_start) as f32 * cell_w;
-                    primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
-                }
-                bg_start = col + 1;
-                if let Some(color) = next_bg {
-                    bg_color = color;
-                }
+        while bg_start < visible_cols {
+            let bg_color = line.cells[bg_start].bg;
+            let mut bg_end = bg_start + 1;
+            while bg_end < visible_cols && line.cells[bg_end].bg == bg_color {
+                bg_end += 1;
             }
+            if bg_color[3] > 0.0 {
+                let x = px + bg_start as f32 * cell_w;
+                let w = (bg_end - bg_start) as f32 * cell_w;
+                primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
+            }
+            bg_start = bg_end;
         }
 
         for (col, cell) in line.cells.iter().take(visible_cols).enumerate() {
@@ -145,7 +127,7 @@ fn render_terminal_lines(
                 continue;
             }
 
-            if draw_box_drawing_cell(
+            if draw_terminal_symbol_cell(
                 primitive_renderer,
                 &cell.text,
                 x,
@@ -180,33 +162,35 @@ fn render_terminal_lines(
                 TextAlign::Start,
                 false,
             );
-            if cell.underline {
-                let underline_h = (cell_h * 0.08).max(1.0);
-                let underline_y = y + cell_h - underline_h - (cell_h * 0.08).max(1.0);
-                primitive_renderer.draw_rect(x, underline_y, width, underline_h, cell.fg);
-            }
+            draw_underline_style(
+                primitive_renderer,
+                cell.underline,
+                x,
+                y,
+                width,
+                cell_h,
+                cell.fg,
+            );
         }
     }
 }
 
 fn queue_cursor_overlay(
     primitive_renderer: &mut PrimitiveRenderer,
-    cursor: heca_core::backend::TerminalCursor,
-    lines: &[TerminalLine],
-    cols: usize,
-    rows: usize,
-    cell_w: f32,
-    cell_h: f32,
+    snapshot: &TerminalSnapshot,
     rect: TextBox,
 ) {
-    let TextBox {
-        x: px,
-        y: py,
-        w: pw,
-        h: ph,
-    } = rect;
-    let fitted_rows = ((ph / cell_h).round() as usize).max(1);
-    let fitted_cols = ((pw / cell_w).round() as usize).max(1);
+    let cursor = snapshot.cursor;
+    let lines = snapshot.lines.as_slice();
+    let cols = snapshot.cols;
+    let rows = snapshot.rows;
+    let cell_w = snapshot.cell_w;
+    let cell_h = snapshot.cell_h;
+    let TextBox { x: px, y: py, .. } = rect;
+    let (fitted_rows, fitted_cols) = fitted_grid(rect, cell_w, cell_h);
+    if fitted_rows == 0 || fitted_cols == 0 {
+        return;
+    }
     let max_rows = fitted_rows.min(rows).min(lines.len());
     let max_cols = fitted_cols.min(cols);
 
@@ -245,7 +229,105 @@ fn queue_cursor_overlay(
     }
 }
 
-fn draw_box_drawing_cell(
+fn draw_underline_style(
+    primitive_renderer: &mut PrimitiveRenderer,
+    style: TerminalUnderlineStyle,
+    x: f32,
+    y: f32,
+    width: f32,
+    cell_h: f32,
+    color: [f32; 4],
+) {
+    if !style.is_visible() {
+        return;
+    }
+
+    let stroke = (cell_h * 0.08).max(1.0);
+    let baseline_gap = (cell_h * 0.08).max(1.0);
+    let baseline_y = y + cell_h - stroke - baseline_gap;
+
+    match style {
+        TerminalUnderlineStyle::None => {}
+        TerminalUnderlineStyle::Single => {
+            primitive_renderer.draw_rect(x, baseline_y, width, stroke, color);
+        }
+        TerminalUnderlineStyle::Double => {
+            let separation = (stroke * 1.6).max(2.0);
+            primitive_renderer.draw_rect(x, baseline_y, width, stroke, color);
+            primitive_renderer.draw_rect(
+                x,
+                (baseline_y - separation).max(y),
+                width,
+                stroke,
+                color,
+            );
+        }
+        TerminalUnderlineStyle::Dotted => {
+            let dot = stroke.max(1.0);
+            let gap = dot.max(1.0);
+            let mut cursor = x;
+            while cursor < x + width {
+                let span = dot.min(x + width - cursor);
+                primitive_renderer.draw_rect(cursor, baseline_y, span, stroke, color);
+                cursor += dot + gap;
+            }
+        }
+        TerminalUnderlineStyle::Dashed => {
+            let dash = (cell_h * 0.35).max(stroke * 2.0);
+            let gap = (dash * 0.45).max(1.0);
+            let mut cursor = x;
+            while cursor < x + width {
+                let span = dash.min(x + width - cursor);
+                primitive_renderer.draw_rect(cursor, baseline_y, span, stroke, color);
+                cursor += dash + gap;
+            }
+        }
+        TerminalUnderlineStyle::Curly => {
+            draw_curly_underline(
+                primitive_renderer,
+                TextBox {
+                    x,
+                    y,
+                    w: width,
+                    h: cell_h,
+                },
+                baseline_y,
+                stroke,
+                color,
+            );
+        }
+    }
+}
+
+fn draw_curly_underline(
+    primitive_renderer: &mut PrimitiveRenderer,
+    rect: TextBox,
+    y: f32,
+    stroke: f32,
+    color: [f32; 4],
+) {
+    let period = (stroke * 4.0).max(6.0);
+    let amp = ((stroke * 1.4).max(1.5))
+        .min((y - rect.y).max(0.0))
+        .min((rect.y + rect.h - stroke - y).max(0.0));
+    if amp <= 0.0 {
+        primitive_renderer.draw_rect(rect.x, y, rect.w, stroke, color);
+        return;
+    }
+    let step = (stroke * 0.9).max(1.0);
+    let mut cursor = rect.x;
+
+    while cursor < rect.x + rect.w {
+        let next = (cursor + step).min(rect.x + rect.w);
+        let mid = (cursor + next) * 0.5;
+        let phase = ((mid - rect.x) / period) * std::f32::consts::TAU;
+        let center_y = y + phase.sin() * amp;
+        primitive_renderer.draw_rect(cursor, center_y, (next - cursor).max(1.0), stroke, color);
+        cursor = next;
+    }
+}
+
+fn draw_terminal_symbol_cell(
     primitive_renderer: &mut PrimitiveRenderer,
     text: &str,
     x: f32,
@@ -259,6 +341,10 @@ fn draw_box_drawing_cell(
     };
     if text.chars().nth(1).is_some() {
         return false;
+    }
+
+    if draw_powerline_cell(primitive_renderer, ch, x, y, w, h, color) {
+        return true;
     }
 
     let stroke = (w.min(h) * 0.08).max(1.5);
@@ -312,4 +398,148 @@ fn draw_box_drawing_cell(
     }
 
     true
+}
+
+fn draw_powerline_cell(
+    primitive_renderer: &mut PrimitiveRenderer,
+    ch: char,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: [f32; 4],
+) -> bool {
+    let stroke = (w.min(h) * 0.08).max(1.0);
+
+    match ch {
+        '' => {
+            primitive_renderer.draw_triangle([x, y], [x, y + h], [x + w, y + h * 0.5], color);
+        }
+        '' => {
+            primitive_renderer.draw_triangle(
+                [x + w, y],
+                [x + w, y + h],
+                [x, y + h * 0.5],
+                color,
+            );
+        }
+        '' => {
+            draw_segmented_line(
+                primitive_renderer,
+                [x, y],
+                [x + w, y + h * 0.5],
+                stroke,
+                color,
+            );
+            draw_segmented_line(
+                primitive_renderer,
+                [x + w, y + h * 0.5],
+                [x, y + h],
+                stroke,
+                color,
+            );
+        }
+        '' => {
+            draw_segmented_line(
+                primitive_renderer,
+                [x + w, y],
+                [x, y + h * 0.5],
+                stroke,
+                color,
+            );
+            draw_segmented_line(
+                primitive_renderer,
+                [x, y + h * 0.5],
+                [x + w, y + h],
+                stroke,
+                color,
+            );
+        }
+        '' => {
+            draw_half_ellipse(primitive_renderer, x, y, w, h, true, color);
+        }
+        '' => {
+            draw_half_ellipse(primitive_renderer, x, y, w, h, false, color);
+        }
+        _ => return false,
+    }
+
+    true
+}
+
+fn draw_segmented_line(
+    primitive_renderer: &mut PrimitiveRenderer,
+    start: [f32; 2],
+    end: [f32; 2],
+    stroke: f32,
+    color: [f32; 4],
+) {
+    let dx = end[0] - start[0];
+    let dy = end[1] - start[1];
+    let length = dx.abs().max(dy.abs());
+    let steps = ((length / stroke.max(1.0)).ceil() as usize).max(1);
+    let dot = stroke.max(1.0);
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let px = start[0] + dx * t - dot * 0.5;
+        let py = start[1] + dy * t - dot * 0.5;
+        primitive_renderer.draw_rect(px, py, dot, dot, color);
+    }
+}
+
+fn draw_half_ellipse(
+    primitive_renderer: &mut PrimitiveRenderer,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    bulge_right: bool,
+    color: [f32; 4],
+) {
+    let bands = h.ceil().clamp(8.0, 32.0) as usize;
+    let band_h = h / bands as f32;
+    for i in 0..bands {
+        let band_y = y + band_h * i as f32;
+        let next_band_y = y + band_h * (i + 1) as f32;
+        let draw_h = (next_band_y - band_y).max(0.0);
+        let t = ((i as f32 + 0.5) / bands as f32) * 2.0 - 1.0;
+        let radius = (1.0 - t * t).max(0.0).sqrt();
+        let inset = w * (1.0 - radius);
+        if bulge_right {
+            primitive_renderer.draw_rect(x, band_y, (w - inset).max(0.0), draw_h, color);
+        } else {
+            primitive_renderer.draw_rect(
+                x + inset,
+                band_y,
+                (w - inset).max(0.0),
+                draw_h,
+                color,
+            );
+        }
+    }
+}
+
+fn fitted_grid(rect: TextBox, cell_w: f32, cell_h: f32) -> (usize, usize) {
+    if !rect.w.is_finite()
+        || !rect.h.is_finite()
+        || !cell_w.is_finite()
+        || !cell_h.is_finite()
+        || rect.w <= 0.0
+        || rect.h <= 0.0
+        || cell_w <= 0.0
+        || cell_h <= 0.0
+    {
+        return (0, 0);
+    }
+
+    let rows = (rect.h / cell_h).round();
+    let cols = (rect.w / cell_w).round();
+    if !rows.is_finite() || !cols.is_finite() || rows <= 0.0 || cols <= 0.0 {
+        return (0, 0);
+    }
+
+    (
+        rows.min(usize::MAX as f32) as usize,
+        cols.min(usize::MAX as f32) as usize,
+    )
 }

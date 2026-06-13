@@ -210,6 +210,7 @@ pub struct AppState {
     /// Content backends for panes that have one.
     pub backends: BackendStore,
     pub theme: Theme,
+    pub terminal_cell_size: (f32, f32),
     pub scale_factor: f64,
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,

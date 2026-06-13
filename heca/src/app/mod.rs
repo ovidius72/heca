@@ -18,3 +18,4 @@ pub mod render;
 pub mod selection;
 pub mod startup;
 pub mod terminal_host;
+pub mod terminal_metrics;

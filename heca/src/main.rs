@@ -13,6 +13,7 @@ use app::events::handle_window_event;
 use app::events::AppEvent;
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::lifecycle::{handle_about_to_wait, poll_backends};
+use app::terminal_metrics::refresh_terminal_cell_size;
 use heca_core::layout::PaneId;
 pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
@@ -99,10 +100,7 @@ impl HecaApp {
             state
                 .text_renderer
                 .set_font_family(&self.app_config.theme.font_family);
-            let (cell_w, cell_h) = self.app_config.theme.terminal_cell_size();
-            for backend in state.backends.values_mut() {
-                backend.set_cell_size(cell_w, cell_h);
-            }
+            refresh_terminal_cell_size(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;

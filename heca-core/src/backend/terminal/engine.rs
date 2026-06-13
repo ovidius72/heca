@@ -1,6 +1,7 @@
 use super::super::{
     BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton, BackendMouseEvent,
     BackendMouseEventKind, TerminalCell, TerminalLine, TerminalPaletteDefaults, TerminalSnapshot,
+    TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use std::io::{Result as IoResult, Write};
@@ -337,7 +338,7 @@ fn blank_cell(palette: &ColorPalette) -> TerminalCell {
         bg: to_rgba(palette.resolve_bg(ColorAttribute::Default)),
         bold: false,
         italic: false,
-        underline: false,
+        underline: TerminalUnderlineStyle::None,
         width: 1,
     }
 }
@@ -349,7 +350,7 @@ fn blank_with_attrs(cell: &TerminalCell) -> TerminalCell {
         bg: cell.bg,
         bold: cell.bold,
         italic: cell.italic,
-        underline: cell.underline,
+        underline: TerminalUnderlineStyle::None,
         width: 1,
     }
 }
@@ -383,8 +384,19 @@ fn terminal_cell(
         bg,
         bold: attrs.intensity() == Intensity::Bold,
         italic: attrs.italic(),
-        underline: !matches!(attrs.underline(), wezterm_term::Underline::None),
+        underline: map_underline_style(attrs.underline()),
         width: width.max(1),
+    }
+}
+
+fn map_underline_style(underline: wezterm_term::Underline) -> TerminalUnderlineStyle {
+    match underline {
+        wezterm_term::Underline::None => TerminalUnderlineStyle::None,
+        wezterm_term::Underline::Single => TerminalUnderlineStyle::Single,
+        wezterm_term::Underline::Double => TerminalUnderlineStyle::Double,
+        wezterm_term::Underline::Curly => TerminalUnderlineStyle::Curly,
+        wezterm_term::Underline::Dotted => TerminalUnderlineStyle::Dotted,
+        wezterm_term::Underline::Dashed => TerminalUnderlineStyle::Dashed,
     }
 }
 
@@ -422,6 +434,7 @@ fn map_cursor_shape(shape: wezterm_surface::CursorShape) -> TerminalCursorShape 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::TerminalUnderlineStyle;
 
     struct SinkWriter;
 
@@ -455,6 +468,34 @@ mod tests {
                         && (cell.bg[3] - expected_bg[3]).abs() < 0.001)
             }),
             "clear-screen background should be preserved across blank cells"
+        );
+    }
+
+    #[test]
+    fn map_underline_style_preserves_all_wezterm_variants() {
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::None),
+            TerminalUnderlineStyle::None
+        );
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::Single),
+            TerminalUnderlineStyle::Single
+        );
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::Double),
+            TerminalUnderlineStyle::Double
+        );
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::Curly),
+            TerminalUnderlineStyle::Curly
+        );
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::Dotted),
+            TerminalUnderlineStyle::Dotted
+        );
+        assert_eq!(
+            map_underline_style(wezterm_term::Underline::Dashed),
+            TerminalUnderlineStyle::Dashed
         );
     }
 }

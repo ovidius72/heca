@@ -106,6 +106,23 @@ pub struct BackendMouseEvent {
     pub modifiers: BackendModifiers,
 }
 
+/// Underline decoration style for a terminal cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerminalUnderlineStyle {
+    None,
+    Single,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
+}
+
+impl TerminalUnderlineStyle {
+    pub fn is_visible(self) -> bool {
+        self != Self::None
+    }
+}
+
 /// A single cell in a terminal grid.
 #[derive(Debug, Clone)]
 pub struct TerminalCell {
@@ -115,7 +132,7 @@ pub struct TerminalCell {
     pub bg: [f32; 4],
     pub bold: bool,
     pub italic: bool,
-    pub underline: bool,
+    pub underline: TerminalUnderlineStyle,
     /// Display width in terminal cells for this grapheme cluster.
     pub width: usize,
 }

@@ -28,9 +28,10 @@ pub(crate) fn prepare_terminal_mount(
     backends: &mut BackendStore,
     pane_id: PaneId,
     content_rect: Rectangle,
+    base_cell_size: (f32, f32),
 ) -> Option<TerminalMount> {
     let backend = backends.get_mut(pane_id)?;
-    sync_terminal_backend_size(backend, content_rect);
+    sync_terminal_backend_size(backend, content_rect, base_cell_size);
     let snapshot = backend.terminal_snapshot()?;
     let _ = backend.take_terminal_damage();
 
@@ -43,8 +44,9 @@ pub(crate) fn prepare_terminal_mount(
 fn sync_terminal_backend_size(
     backend: &mut dyn PaneBackend,
     content_rect: Rectangle,
+    base_cell_size: (f32, f32),
 ) {
-    let (approx_cell_w, approx_cell_h) = backend.cell_size();
+    let (approx_cell_w, approx_cell_h) = base_cell_size;
     if approx_cell_w <= 0.0 || approx_cell_h <= 0.0 {
         return;
     }
@@ -63,7 +65,11 @@ fn fitted_grid_units(extent: f32, approx_cell: f32) -> usize {
         return 1;
     }
 
-    (extent / approx_cell).ceil().max(1.0) as usize
+    if !extent.is_finite() || !approx_cell.is_finite() {
+        return 1;
+    }
+
+    (extent / approx_cell).ceil().clamp(1.0, 16_384.0) as usize
 }
 
 pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
@@ -186,7 +192,7 @@ fn build_mouse_event(
         .backends
         .get(target.pane_id)
         .map(|backend| backend.cell_size())
-        .unwrap_or_else(|| state.theme.terminal_cell_size());
+        .unwrap_or(state.terminal_cell_size);
     if cell_w <= 0.0 || cell_h <= 0.0 {
         return None;
     }
