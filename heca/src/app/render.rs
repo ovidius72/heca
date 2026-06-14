@@ -265,6 +265,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state.text_renderer.set_clip(None);
 
     let bg = theme.background.to_linear_f32x4();
+    // Translucent app background when enabled: clear the scene texture with
+    // premultiplied alpha = opacity (matches the PreMultiplied surface alpha mode),
+    // so the desktop/vibrancy shows through where no opaque content is drawn.
+    // transparent == false reproduces today's opaque clear exactly.
+    let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.transparent {
+        let a = state.appearance.opacity.clamp(0.0, 1.0) as f64;
+        (bg[0] as f64 * a, bg[1] as f64 * a, bg[2] as f64 * a, a)
+    } else {
+        (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
+    };
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("clear"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -272,10 +282,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: bg[0] as f64,
-                    g: bg[1] as f64,
-                    b: bg[2] as f64,
-                    a: bg[3] as f64,
+                    r: clear_r,
+                    g: clear_g,
+                    b: clear_b,
+                    a: clear_a,
                 }),
                 store: wgpu::StoreOp::Store,
             },

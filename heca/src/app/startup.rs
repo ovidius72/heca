@@ -28,17 +28,39 @@ fn add_initial_pane(session: &mut Session) -> PaneId {
     pane_id
 }
 
+/// Pick a surface composite-alpha mode. When transparency is requested, prefer a
+/// transparency-capable mode (premultiplied, matching the renderers' premultiplied
+/// blending, then postmultiplied). Otherwise keep today's opaque behavior.
+fn choose_alpha_mode(
+    modes: &[wgpu::CompositeAlphaMode],
+    transparent: bool,
+) -> wgpu::CompositeAlphaMode {
+    use wgpu::CompositeAlphaMode::*;
+    if transparent {
+        for pref in [PreMultiplied, PostMultiplied] {
+            if modes.contains(&pref) {
+                return pref;
+            }
+        }
+    } else if modes.contains(&Opaque) {
+        return Opaque;
+    }
+    modes.first().copied().unwrap_or(Auto)
+}
+
 pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
     event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
 ) -> Box<AppState> {
+    let appearance = app_config.config.appearance;
     let window_attrs = Window::default_attributes()
         .with_title("heca")
         .with_inner_size(winit::dpi::LogicalSize::new(
             app_config.config.settings.window_width as f64,
             app_config.config.settings.window_height as f64,
-        ));
+        ))
+        .with_transparent(appearance.transparent);
     let window = Arc::new(
         event_loop
             .create_window(window_attrs)
@@ -91,7 +113,7 @@ pub(crate) async fn init_state(
         height: physical.height.max(1),
         present_mode: wgpu::PresentMode::AutoVsync,
         desired_maximum_frame_latency: 2,
-        alpha_mode: surface_caps.alpha_modes[0],
+        alpha_mode: choose_alpha_mode(&surface_caps.alpha_modes, appearance.transparent),
         view_formats: vec![],
     };
     surface.configure(&device, &config);
@@ -181,6 +203,7 @@ pub(crate) async fn init_state(
         session,
         backends,
         theme: app_config.theme.clone(),
+        appearance,
         terminal_cell_size,
         scale_factor,
         needs_redraw: true,
