@@ -1185,7 +1185,7 @@ This section must be updated:
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: Phase 3 remains open only for the final validation/review loop before merge
+- Active implementation phase: Phase 3 terminal-core work is complete and merged; remaining terminal tasks are post-merge backlog items
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
   - cursor/text regressions after the sync
@@ -1349,23 +1349,14 @@ This section must be updated:
 
 ### Next Recommended Task
 
-- Validate the now-landed measured-metric and symbol-renderer path across more live TUIs:
-  - retest Yazi after the measured metric, powerline, and per-cell text changes
-  - test multiple terminal Nerd Fonts in heca and compare terminal-UI behavior
-  - determine whether any remaining misalignment is mostly font-specific or still renderer-specific
-  - verify that the measured-metric path did not regress the now-correct shell/nvim cursor spacing
-- Expand the shared terminal symbol/decorations subsystem only where live TUIs justify it:
-  - keep box-drawing geometry
-  - keep powerline separator geometry (``, ``, ``, ``, ``, ``)
-  - keep underline/undercurl rendering GUI-native and app-agnostic
-  - defer rarer symbol families until a real TUI exposes them
-- Keep merge-readiness hardening in place:
-  - primitive rendering must stay `u32`-indexed
-  - terminal grid fitting must reject invalid cell dimensions before integer conversion
-  - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
-- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate merge path, but track Yazi image preview as the next protocol-facing TODO
-- then continue terminal visual/cell-fidelity refinement where runtime gaps remain
-- after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
+- Start the explicitly deferred terminal backlog from the merged Phase 3 baseline:
+  - selection / clipboard
+  - bracketed paste / `OSC 52`
+  - scrollback search
+  - hyperlink / open-link behavior
+  - bell handling
+  - richer image / graphics protocol support
+- After those terminal UX/protocol items, continue Phase 8 pane-shell integration with `heca-grid-ui`
 
 ### Planned but Explicitly Post-Merge
 

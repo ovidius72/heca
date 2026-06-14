@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: Phase 3 of 4 (The Content)
-status: in_progress
-last_updated: "2026-06-14T00:00:00.000Z"
+current_phase: Phase 4 of 4 (The Platform)
+status: pending
+last_updated: "2026-06-14T11:35:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 1
   completed_plans: 0
-  percent: 62
+  percent: 75
 ---
 
 # State: heca
 
-**Current Phase:** Phase 3 — The Content
-**Status:** In progress
-**Last Action:** Closed the renderer/core review blockers and follow-up cleanup, including u32 primitive indices, safe terminal grid fitting, deterministic spawn sizing, underline/undercurl safety, and shared terminal-grid helpers
+**Current Phase:** Phase 4 — The Platform
+**Status:** Pending
+**Last Action:** PR `#100` merged to `main`; Phase 3 terminal-core integration is complete
 
 ## Product Phase Progress
 
@@ -25,7 +25,7 @@ progress:
 |-------|--------|-------|
 | 1 — The Shell | ✅ Done | GPU windowing, theme/config, core renderer foundation landed |
 | 2 — The Workspace | ✅ Done | NIRI-style layout, chrome, actions, and refactoring track landed |
-| 3 — The Content | 🔄 In Progress | Real terminal backend live; typing lag improved; structured input path landed; final validation/review loop remains before merge |
+| 3 — The Content | ✅ Done | Real terminal backend, renderer integration, input path, review hardening, and merge to `main` landed |
 | 4 — The Platform | ⬜ Pending | Session, RPC, plugins, damage tracking polish |
 
 ## Phase 3 Status
@@ -89,16 +89,11 @@ progress:
 - Underline and undercurl decoration now render explicitly and are live-tested
 - Review-driven renderer/core hardening is landed and the affected checks/tests are green again
 
-### Remaining For Phase 3
+### Phase 3 Closeout
 
-- Finish the final live validation pass across a few more terminal fonts and a few more `nvim` colorschemes
-- Re-run the phase-end Rust review now that the terminal renderer/core hardening pass is landed
-- Fix anything the final Rust review finds, then rerun until clean
-- Keep the shared terminal symbol/decorations renderer app-agnostic:
-  - box drawing stays deterministic geometry
-  - powerline separators stay deterministic geometry
-  - underline/undercurl stay GUI-native and font-independent
-- Start the Neovim pane implementation after the terminal rendering/input path is fully settled
+- PR `#100` is merged: `Finalize terminal renderer integration and phase 3 hardening`
+- Phase 3 terminal-core work is complete
+- Remaining terminal work is intentionally deferred to the post-merge backlog below
 
 ## Backend Status
 
@@ -126,18 +121,18 @@ progress:
 If resuming from a fresh session, do this first:
 
 1. Read `terminal-implementation.md`
-2. Continue Phase 3, not Phase 4
-3. Inspect the current live metrics/render path:
-- `heca/src/app/terminal_metrics.rs`
+2. Continue with Phase 4 or the explicit post-merge terminal backlog, not Phase 3 terminal-core work
+3. Use the merged terminal work as the baseline:
 - `heca/src/app/terminal_host.rs`
-- `heca-renderer/src/text.rs`
+- `heca/src/app/backend_factory.rs`
 - `heca-renderer/src/terminal.rs`
-4. Re-run the last user-validated runtime checks before making new changes:
-- `nvim` colorscheme switching
-- Yazi layout and right-edge symbol rendering
-- shell autosuggestion cursor placement
-- font-sensitive file-manager layout using at least one alternative Nerd Font if needed
-5. Then run the phase-end Rust review and fix anything it finds before merging
+- `heca-renderer/src/text.rs`
+4. Treat the remaining terminal items as future tasks:
+- selection / clipboard
+- bracketed paste / `OSC 52`
+- scrollback search
+- hyperlink / bell / richer graphics
+- Phase 8 pane-shell integration with `heca-grid-ui`
 
 ## Full Terminal Backlog (Post-Merge)
 
@@ -172,4 +167,4 @@ All passing at the current pause point.
 
 - Do not run the Rust-skill review on each task.
 - Run the Rust-skill review only at the end of a full implementation phase, then fix/review until clean.
-- Current phase is not complete yet, so no phase-end Rust-skill review has been run for this latest renderer work.
+- Phase 3 terminal-core work is complete and merged. The next work starts from that baseline.
