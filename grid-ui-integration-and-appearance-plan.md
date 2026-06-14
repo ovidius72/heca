@@ -71,10 +71,22 @@ explicitly-flagged shared seam, which is serialized via the #99 stack.
 **Progress (branch `grid-ui-chrome-integration`, local commits):**
 - ✅ **A0** — `GridRenderer` on `AppState` + init/resize wiring (`15e1638`).
 - ✅ **A1** — `crate::chrome::build_chrome_scene` status-bar projection + unit test (`4e73329`).
-- ✅ **A2** — factored `render_chrome` pass; hand-drawn status bar replaced by the grid-ui scene (`4118266`). Pipe proven end-to-end. **Needs a visual check by the user.**
-- ⏳ **A3** (sidebar → `ChromeRegion`) and **A4** (input routing) pending.
+- ✅ **A2** — factored `render_chrome` pass; status bar through the grid-ui scene (`4118266`). *Still renders to the swapchain — must move onto the `Compositor` in F2.*
+- ⏪ **A3a/A3b reverted 2026-06-14** (reset to `a62d35a`). They rendered the sidebar **as the workspace tree** — the wrong framing. The sidebar is a **SHELL** (see §2.1 of `pluggable-chrome-plugin-plan.md`); rebuild it styled + content-agnostic *after* the foundation.
 
-*Note: #99 did **not** factor `render_frame` into content/chrome passes — it's still one function. WS-A added `render_chrome` alongside the existing content drawing; full split deferred. `render_chrome` takes renderer fields individually (not `&mut AppState`) because `render_frame` holds `let theme = &state.theme;` across its body.*
+### ⚠️ Reorganized 2026-06-14 — FOUNDATION-FIRST (decided with the user)
+
+The original WS-A "chrome render first" order was wrong: visible chrome was built before the
+transparency/compositor + shared-state foundation it must sit on (`build-future-proof`, and the
+plan's own §7/§10 sequencing). New order:
+
+- **F1 — Appearance config contract (WS-D).** `[appearance]` in `heca-config`. *(in progress)*
+- **F2 — Main scene → `Compositor` + transparency (WS-B).** App renders offscreen → blit; transparent window + OS vibrancy. *This is "adapt the main scene first." A2's `render_chrome` moves onto this path.*
+- **F3 — In-app blur primitive (WS-C).** Separable Gaussian for frosted chrome/overlays.
+- **F4 — Shared chrome/UI state (Ph 2 / E3).** `heca/src/chrome/state.rs` — region visibility, collapse/mode, selection, scroll. Replaces the immediate-mode rebuild hack.
+- **F5 — Sidebar SHELL styled like GRIDCN sidebar-nav.** Bracket frame, header, collapse toggle, `position:fixed` left, frosted; content-agnostic. *Then* mount a WorkspacesContainer inside.
+
+*Note: #99 did **not** factor `render_frame` into content/chrome passes. `render_chrome` takes renderer fields individually (not `&mut AppState`) because `render_frame` holds `let theme = &state.theme;` across its body.*
 
 ---
 
