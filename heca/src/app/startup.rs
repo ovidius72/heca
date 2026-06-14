@@ -48,6 +48,38 @@ fn choose_alpha_mode(
     modes.first().copied().unwrap_or(Auto)
 }
 
+/// Apply OS backdrop blur / vibrancy once after window creation, when enabled.
+/// macOS = `NSVisualEffectView`; Windows = acrylic; Linux/other = no-op (the
+/// effect is not portably available). Needs a transparent window (F2b) to show.
+fn apply_window_vibrancy(window: &Window, appearance: &heca_config::appearance::AppearanceConfig) {
+    if !appearance.blur {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use heca_config::appearance::Vibrancy;
+        use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
+        let material = match appearance.vibrancy {
+            Vibrancy::Sidebar => NSVisualEffectMaterial::Sidebar,
+            Vibrancy::HudWindow => NSVisualEffectMaterial::HudWindow,
+            Vibrancy::UnderWindowBackground => NSVisualEffectMaterial::UnderWindowBackground,
+            Vibrancy::Popover => NSVisualEffectMaterial::Popover,
+            Vibrancy::Menu => NSVisualEffectMaterial::Menu,
+            Vibrancy::FullScreenUi => NSVisualEffectMaterial::FullScreenUI,
+            Vibrancy::WindowBackground => NSVisualEffectMaterial::WindowBackground,
+        };
+        let _ = apply_vibrancy(window, material, Some(NSVisualEffectState::Active), None);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125)));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = window; // no portable backdrop blur on Linux/other
+    }
+}
+
 pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
@@ -66,6 +98,7 @@ pub(crate) async fn init_state(
             .create_window(window_attrs)
             .expect("Failed to create window"),
     );
+    apply_window_vibrancy(window.as_ref(), &appearance);
     let scale_factor = window.scale_factor();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {

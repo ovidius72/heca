@@ -12,3 +12,11 @@ heca-grid-ui = { path = "../heca-grid-ui" }
 winit.workspace = true
 wgpu = { workspace = true }
 pollster = { workspace = true }
+
+# OS backdrop blur / vibrancy (applied once after window creation, gated by
+# [appearance] blur + vibrancy). macOS NSVisualEffectView / Windows acrylic.
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+window-vibrancy = "0.5"
