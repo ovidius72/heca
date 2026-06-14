@@ -157,6 +157,13 @@ pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState) -> Scene {
             255,
         )
     };
+    // Frosted chrome: translucent status-bar background when the window is
+    // transparent (mirrors render.rs's chrome_alpha for the hand-drawn chrome).
+    let side_bg = if state.appearance.is_transparent() {
+        side_bg.with_alpha((state.appearance.opacity() * 255.0).round() as u8)
+    } else {
+        side_bg
+    };
 
     let pane_count = state
         .session

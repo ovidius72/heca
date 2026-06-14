@@ -265,13 +265,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state.text_renderer.set_clip(None);
 
     let bg = theme.background.to_linear_f32x4();
-    // Translucent app background when enabled: clear the scene texture with
-    // premultiplied alpha = opacity (matches the PreMultiplied surface alpha mode),
-    // so the desktop/vibrancy shows through where no opaque content is drawn.
-    // transparent == false reproduces today's opaque clear exactly.
+    // Transparent window: clear to fully transparent (premultiplied 0) so undrawn
+    // areas and the space *behind* translucent chrome show the OS vibrancy /
+    // desktop. Chrome backgrounds carry their own alpha (frosted); panes and text
+    // stay opaque (crisp). transparent == false reproduces today's opaque clear.
     let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.is_transparent() {
-        let a = state.appearance.opacity() as f64;
-        (bg[0] as f64 * a, bg[1] as f64 * a, bg[2] as f64 * a, a)
+        (0.0, 0.0, 0.0, 0.0)
     } else {
         (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
     };
@@ -302,6 +301,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
     } else {
         [0.953, 0.957, 0.973, 1.0]
     };
+    // Frosted chrome: when transparent, draw chrome backgrounds (tab bar,
+    // sidebars, status bar) translucent so the vibrancy shows through. Panes and
+    // text stay opaque. (Per-pane translucency comes later, driven by a protocol.)
+    let chrome_alpha = if state.appearance.is_transparent() {
+        state.appearance.opacity()
+    } else {
+        1.0
+    };
+    let side_bg = [side_bg[0], side_bg[1], side_bg[2], chrome_alpha];
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
