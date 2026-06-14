@@ -98,11 +98,11 @@ impl HecaApp {
             self.mode_triggers = new_mode_triggers;
             state.theme = self.app_config.theme.clone();
             // Appearance: opacity re-reads every frame, so updating the snapshot
-            // makes `transparency` live-reload. Re-apply the OS vibrancy material
-            // too. (Toggling transparency on↔off still needs a restart — winit's
-            // with_transparent / the surface alpha mode are creation-time only.)
+            // makes `transparency` (the amount) live-reload. The OS vibrancy
+            // material is applied once at startup and NOT re-applied here — doing
+            // so would stack another container/effect view each reload. Changing
+            // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance;
-            crate::app::startup::apply_window_vibrancy(state.window.as_ref(), &state.appearance);
             state
                 .text_renderer
                 .set_font_family(&self.app_config.theme.font_family);

@@ -14,9 +14,14 @@ wgpu = { workspace = true }
 pollster = { workspace = true }
 
 # OS backdrop blur / vibrancy (applied once after window creation, gated by
-# [appearance] blur + vibrancy). macOS NSVisualEffectView / Windows acrylic.
+# [appearance] vibrancy). On macOS we hand-roll the NSVisualEffectView so it
+# sits BEHIND wgpu's metal layer (window-vibrancy adds it as a subview, which
+# draws over the metal content). Windows uses window-vibrancy's acrylic.
 [target.'cfg(target_os = "macos")'.dependencies]
-window-vibrancy = "0.5"
+raw-window-handle = "0.6"
+objc2 = "0.5.2"
+objc2-foundation = { version = "0.2.2", default-features = false, features = ["std", "NSGeometry", "NSThread"] }
+objc2-app-kit = { version = "0.2.2", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSGraphics", "NSVisualEffectView"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 window-vibrancy = "0.5"

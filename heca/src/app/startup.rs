@@ -55,32 +55,92 @@ pub(crate) fn apply_window_vibrancy(
     window: &Window,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) {
-    if appearance.os_vibrancy().is_none() {
+    let Some(vibrancy) = appearance.os_vibrancy() else {
         return;
-    }
+    };
     #[cfg(target_os = "macos")]
-    {
-        use heca_config::appearance::Vibrancy;
-        use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
-        let material = match appearance.vibrancy {
-            Vibrancy::None => return,
-            Vibrancy::Sidebar => NSVisualEffectMaterial::Sidebar,
-            Vibrancy::HudWindow => NSVisualEffectMaterial::HudWindow,
-            Vibrancy::UnderWindowBackground => NSVisualEffectMaterial::UnderWindowBackground,
-            Vibrancy::Popover => NSVisualEffectMaterial::Popover,
-            Vibrancy::Menu => NSVisualEffectMaterial::Menu,
-            Vibrancy::FullScreenUi => NSVisualEffectMaterial::FullScreenUI,
-            Vibrancy::WindowBackground => NSVisualEffectMaterial::WindowBackground,
-        };
-        let _ = apply_vibrancy(window, material, Some(NSVisualEffectState::Active), None);
-    }
+    apply_macos_vibrancy(window, vibrancy);
     #[cfg(target_os = "windows")]
     {
-        let _ = window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125)));
+        let _ = (vibrancy, window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125))));
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        let _ = window; // no portable backdrop blur on Linux/other
+        let _ = (window, vibrancy); // no portable backdrop blur on Linux/other
+    }
+}
+
+/// macOS backdrop blur done right: window-vibrancy adds the `NSVisualEffectView`
+/// as a subview, which draws *over* wgpu's metal backing layer (washing out the
+/// content). Instead we reparent — a container view becomes the window's
+/// contentView and holds the metal view in FRONT of the effect view BEHIND it,
+/// so opaque content occludes the blur and translucent regions reveal it.
+#[cfg(target_os = "macos")]
+fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibrancy) {
+    use heca_config::appearance::Vibrancy;
+    use objc2_app_kit::{
+        NSAutoresizingMaskOptions, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+        NSVisualEffectState, NSVisualEffectView, NSWindowOrderingMode,
+    };
+    use objc2::rc::Retained;
+    use objc2_foundation::MainThreadMarker;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let material = match vibrancy {
+        Vibrancy::None => return,
+        Vibrancy::Sidebar => NSVisualEffectMaterial::Sidebar,
+        Vibrancy::HudWindow => NSVisualEffectMaterial::HUDWindow,
+        Vibrancy::UnderWindowBackground => NSVisualEffectMaterial::UnderWindowBackground,
+        Vibrancy::Popover => NSVisualEffectMaterial::Popover,
+        Vibrancy::Menu => NSVisualEffectMaterial::Menu,
+        Vibrancy::FullScreenUi => NSVisualEffectMaterial::FullScreenUI,
+        Vibrancy::WindowBackground => NSVisualEffectMaterial::WindowBackground,
+    };
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
+        return;
+    };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let fill = NSAutoresizingMaskOptions::NSViewWidthSizable
+        | NSAutoresizingMaskOptions::NSViewHeightSizable;
+
+    // SAFETY: `h.ns_view` points to the live NSView backing this window (winit
+    // owns it). We run on the main thread (init/event loop). We retain the metal
+    // view before reparenting so it survives `setContentView` replacing it.
+    unsafe {
+        let Some(metal_view) = Retained::retain(h.ns_view.cast::<NSView>().as_ptr()) else {
+            return;
+        };
+        let metal_view: Retained<NSView> = metal_view;
+        let Some(ns_window) = metal_view.window() else {
+            return;
+        };
+        let bounds = metal_view.bounds();
+
+        let container = NSView::initWithFrame(mtm.alloc(), bounds);
+        container.setAutoresizingMask(fill);
+        // Container replaces the metal view as contentView; re-add metal on top.
+        ns_window.setContentView(Some(&container));
+        metal_view.setFrame(bounds);
+        metal_view.setAutoresizingMask(fill);
+        container.addSubview(&metal_view);
+
+        // Effect view, positioned BELOW the metal view inside the container.
+        let effect = NSVisualEffectView::initWithFrame(mtm.alloc(), bounds);
+        effect.setMaterial(material);
+        effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+        effect.setState(NSVisualEffectState::Active);
+        effect.setAutoresizingMask(fill);
+        container.addSubview_positioned_relativeTo(
+            &effect,
+            NSWindowOrderingMode::NSWindowBelow,
+            Some(&metal_view),
+        );
     }
 }
 
