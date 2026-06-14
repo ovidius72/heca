@@ -84,7 +84,7 @@ use heca_grid_ui::{Color, Component, LayoutEngine, PaintCx, Scene};
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
-use heca_grid_ui::widgets::{Flex, Label, Surface};
+use heca_grid_ui::widgets::{ActiveMarker, Flex, Glyph, Icon, IconButton, Item, Label, Pane, Surface};
 
 /// Build a chrome [`Scene`] containing just the status bar, positioned at its real
 /// screen rect. Pure: takes plain values so it can be unit-tested without wgpu/AppState.
@@ -192,6 +192,84 @@ pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState) -> Scene {
     status_bar_scene(w, h, DEFAULT_STATUS_BAR_HEIGHT, &status, side_bg, fg)
 }
 
+/// Build the GRIDCN sidebar-nav SHELL: a bracket-framed panel with a header
+/// (logo + title + collapse chevron) over a list of nav rows. Content-agnostic
+/// placeholder nav for now (real containers mount later). Pure builder.
+#[allow(dead_code)] // wired in F5b
+pub(crate) fn build_sidebar_shell(theme: &GuiTheme) -> Pane {
+    // ── Header ──────────────────────────────────────────────────────────────
+    // Lightning logo + "GRIDCN" wordmark + grow spacer + collapse chevron.
+    let header = Flex::row()
+        .align(Align::Center)
+        .gap(6.0)
+        .padding_xy(4.0, 6.0)
+        .child(
+            Icon::new(Glyph::Lightning)
+                .size(16.0)
+                .color(theme.accent),
+        )
+        .child(
+            Label::new("GRIDCN")
+                .color(theme.accent)
+                .font_scale(1.1),
+        )
+        // Grow spacer pushes the chevron to the right.
+        .child(Flex::row().grow(1.0))
+        .child(
+            IconButton::new(
+                Icon::new(Glyph::CaretRight)
+                    .size(14.0)
+                    .color(theme.muted),
+            )
+            .on_click(|| {}),
+        );
+
+    // ── Nav list ─────────────────────────────────────────────────────────────
+    // Six placeholder rows; first is active (accent bar + accent text).
+    let nav = Flex::column()
+        .gap(3.0)
+        .child(
+            Item::new("Dashboard")
+                .leading(Icon::new(Glyph::List).color(theme.accent))
+                .marker(ActiveMarker::Bar)
+                .active(true),
+        )
+        .child(
+            Item::new("Analytics")
+                .leading(Icon::new(Glyph::GitBranch).color(theme.muted))
+                .marker(ActiveMarker::Bar),
+        )
+        .child(
+            Item::new("Network")
+                .leading(Icon::new(Glyph::List).color(theme.muted))
+                .marker(ActiveMarker::Bar),
+        )
+        .child(
+            Item::new("Systems")
+                .leading(Icon::new(Glyph::Terminal).color(theme.muted))
+                .marker(ActiveMarker::Bar),
+        )
+        .child(
+            Item::new("Users")
+                .leading(Icon::new(Glyph::Circle).color(theme.muted))
+                .marker(ActiveMarker::Bar),
+        )
+        .child(
+            Item::new("Settings")
+                .leading(Icon::new(Glyph::Gear).color(theme.muted))
+                .marker(ActiveMarker::Bar),
+        );
+
+    // ── Outer shell ──────────────────────────────────────────────────────────
+    // A Pane (corner-bracket frame) wrapping header + nav list.
+    Pane::new()
+        .padding(12.0)
+        .gap(8.0)
+        .background(theme.surface)
+        .child(header)
+        .child(nav)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,6 +343,17 @@ mod tests {
         assert!(
             scene.iter().any(|cmd| matches!(cmd, DrawCommand::Text(..))),
             "scene should contain at least one Text draw command",
+        );
+    }
+
+    #[test]
+    fn sidebar_shell_has_children() {
+        use heca_grid_ui::Component;
+        let theme = GuiTheme::grid_tron();
+        let shell = super::build_sidebar_shell(&theme);
+        assert!(
+            !shell.base().children.is_empty(),
+            "sidebar shell must have at least one child (header + nav)",
         );
     }
 }
