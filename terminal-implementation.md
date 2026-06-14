@@ -1185,7 +1185,7 @@ This section must be updated:
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: Phase 3 remains open for final terminal visual correctness hardening and richer terminal protocol work
+- Active implementation phase: Phase 3 remains open only for the final validation/review loop before merge
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
   - cursor/text regressions after the sync
@@ -1217,7 +1217,7 @@ This section must be updated:
 - terminal cell backgrounds and cursor drawing are now owned by the dedicated renderer module
 - terminal glyph runs now use a terminal-specific line-box placement path instead of the generic UI centered-box path
 - app-side terminal mounting now goes through a dedicated host adapter using `Rectangle` content geometry so future pane shells can mount terminals without depending on the current pane render loop shape
-- current live behavior is "fast but visually off": typing latency is now acceptable again, but terminal text placement is still slightly misaligned/off and not yet at final visual quality
+- current live behavior is "fast and visually close": typing latency is acceptable again and the most obvious text-placement/cursor issues have been resolved
 - future pane migration should treat the current terminal host as inner content inside a `heca-grid-ui` pane shell, not as the permanent outer pane implementation
 - future pane shells must be able to surface process/global metadata such as idle/running/error state, git status/branch/changes, and AI-agent activity
 - terminal font settings are now separated from the UI theme font, with an embedded Maple Mono Normal NF fallback for terminal text
@@ -1285,14 +1285,9 @@ This section must be updated:
 - terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
 - terminal style fidelity is much improved, but live verification is still needed for broad colorscheme parity across more themes and TUIs
 - italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `terminal_italic_font_family`, italic runs may fall back to a different family
-- the legacy `render_data()` fallback still exists and should be removed once all pane backends expose snapshots
 - `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
 - future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
 - current app integration still lives in `heca/src/app/render.rs`, but terminal sizing/snapshot acquisition now sits behind a dedicated terminal-host adapter rather than being inlined into pane drawing loops
-- Yazi currently exposes new terminal-fit issues:
-  - row spacing/line height is still off
-  - item columns are too narrow
-  - some right-edge geometry still looks slightly off in complex TUI layouts
 - Yazi image preview is not supported yet; selecting an image currently triggers an infinite loading spinner because richer graphics/image protocol handling is still unimplemented
 
 ### User-Verified TODOs
@@ -1328,7 +1323,6 @@ This section must be updated:
   - owns `wezterm-term` initialization, viewport resize, title access, palette resolution, and snapshot conversion
 - `heca/src/app/render.rs`
   - now prefers `terminal_snapshot()` in the live pane render loop
-  - still has a legacy `BackendRenderData` fallback path
   - now paints terminal content in an inset content rect
   - now paints per-cell backgrounds and styled grapheme text in the transitional path
   - now flushes pane content through scissor-clipped primitive/text passes
@@ -1369,11 +1363,19 @@ This section must be updated:
   - primitive rendering must stay `u32`-indexed
   - terminal grid fitting must reject invalid cell dimensions before integer conversion
   - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
-- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate metric fix, but track Yazi image preview as the next protocol-facing TODO
-  - cursor/selection colors if needed
-  - clear separation between outer app chrome theme and terminal-internal color theme
+- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate merge path, but track Yazi image preview as the next protocol-facing TODO
 - then continue terminal visual/cell-fidelity refinement where runtime gaps remain
 - after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
+
+### Planned but Explicitly Post-Merge
+
+These items are intentionally **not** blockers for merging the current Phase 3
+terminal-core PR into `main`. They are tracked here so they do not get lost.
+
+- clipboard and selection work is post-merge; details live in the capability backlog below
+- bracketed paste, `OSC 52`, scrollback search, hyperlink/open-link behavior, and bell handling are post-merge; details live in the capability backlog below
+- richer image/graphics protocols are post-merge; details live in the capability backlog below
+- Phase 8 pane-shell integration with `heca-grid-ui` is post-merge
 
 ### Full Terminal Capability Backlog
 
@@ -1430,8 +1432,8 @@ all blockers for merging the current Phase 3 terminal-core PR into `main`.
 - The current user-verified runtime state is:
   - terminal appears
   - typing is fast again
-  - text rendering is still misaligned/off
-- This means the current bottleneck has moved from gross per-frame shaping/upload cost to visual correctness of terminal cell placement
+  - text rendering is now much closer to correct, with the most obvious placement and cursor issues resolved
+- This means the current bottleneck has moved from gross per-frame shaping/upload cost to final validation and small residual terminal-fidelity checks
 
 ### Blockers
 
@@ -1442,13 +1444,13 @@ all blockers for merging the current Phase 3 terminal-core PR into `main`.
 - `cargo check -p heca-core` passes with `portable-pty` + `wezterm-term`
 - `cargo test -p heca-core` passes with backend lifecycle tests
 - `cargo check -p heca` passes with the composed terminal backend
-- `cargo check -p heca-renderer` passes after renderer label-cache changes
+- `cargo check -p heca-renderer` passes after renderer label-cache changes and the renderer/core hardening pass
 - `cargo test -p heca-renderer` passes with text-label cache hit/miss/prune/invalidation tests
 - `cargo clippy -p heca-renderer --all-targets` passes after renderer label-cache changes
 - `cargo clippy --workspace --all-targets --all-features` passes after the renderer label-cache changes
 - User smoke test after the renderer cache change:
   - terminal is interactive again
-  - text is still visually misaligned/off
+  - text placement issues are now much improved after the latest sizing/cursor fixes
 - After terminal-font/fallback work:
   - `cargo check -p heca` passes
   - `cargo check -p heca-renderer` passes

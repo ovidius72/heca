@@ -136,49 +136,13 @@ impl TerminalEngine {
         let (cell_w, cell_h) = cell_size;
         let palette = self.terminal.palette();
         let blank = blank_cell(&palette);
-        let screen = self.terminal.screen();
         let size = self.terminal.get_size();
         let cols = size.cols.max(1);
         let rows = size.rows.max(1);
-        let visible_count = rows.min(screen.physical_rows.max(1));
-        let visible_end = screen.scrollback_rows().max(visible_count);
-        let visible_start = visible_end.saturating_sub(visible_count);
-        let mut lines = Vec::with_capacity(rows);
         let blank_line = TerminalLine {
             cells: vec![blank.clone(); cols],
         };
-        for mut line in screen
-            .lines_in_phys_range(visible_start..visible_end)
-            .into_iter()
-            .take(rows)
-        {
-            let mut cells = blank_line.cells.clone();
-            for (idx, cell) in line.cells_mut().iter().enumerate().take(cols) {
-                let blank = terminal_cell(" ", 1, cell.attrs(), &palette);
-                cells[idx] = blank;
-            }
-            for cell in line.visible_cells() {
-                if cell.cell_index() >= cols {
-                    continue;
-                }
-
-                let rendered = terminal_cell(cell.str(), cell.width(), cell.attrs(), &palette);
-                let span_end = (cell.cell_index() + rendered.width).min(cols);
-                for slot in cells
-                    .iter_mut()
-                    .take(span_end)
-                    .skip(cell.cell_index())
-                {
-                    *slot = blank_with_attrs(&rendered);
-                }
-                cells[cell.cell_index()] = rendered;
-            }
-            lines.push(TerminalLine { cells });
-        }
-
-        while lines.len() < rows {
-            lines.push(blank_line.clone());
-        }
+        let lines = self.visible_lines(cols, rows, &palette, &blank_line);
 
         let cursor = self.terminal.cursor_pos();
         let snapshot = TerminalSnapshot {
@@ -199,6 +163,64 @@ impl TerminalEngine {
         snapshot.debug_assert_valid();
         snapshot
     }
+
+    fn visible_lines(
+        &self,
+        cols: usize,
+        rows: usize,
+        palette: &ColorPalette,
+        blank_line: &TerminalLine,
+    ) -> Vec<TerminalLine> {
+        let screen = self.terminal.screen();
+        let visible_count = rows.min(screen.physical_rows.max(1));
+        let visible_end = screen.scrollback_rows().max(visible_count);
+        let visible_start = visible_end.saturating_sub(visible_count);
+        let mut lines = Vec::with_capacity(rows);
+
+        for mut line in screen
+            .lines_in_phys_range(visible_start..visible_end)
+            .into_iter()
+            .take(rows)
+        {
+            lines.push(snapshot_line(&mut line, cols, palette, blank_line));
+        }
+
+        while lines.len() < rows {
+            lines.push(blank_line.clone());
+        }
+
+        lines
+    }
+}
+
+fn snapshot_line(
+    line: &mut wezterm_term::Line,
+    cols: usize,
+    palette: &ColorPalette,
+    blank_line: &TerminalLine,
+) -> TerminalLine {
+    let mut cells = blank_line.cells.clone();
+    for (idx, cell) in line.cells_mut().iter().enumerate().take(cols) {
+        cells[idx] = terminal_cell(" ", 1, cell.attrs(), palette);
+    }
+    for cell in line.visible_cells() {
+        if cell.cell_index() >= cols {
+            continue;
+        }
+
+        let rendered = terminal_cell(cell.str(), cell.width(), cell.attrs(), palette);
+        let span_end = (cell.cell_index() + rendered.width).min(cols);
+        for slot in cells
+            .iter_mut()
+            .take(span_end)
+            .skip(cell.cell_index())
+        {
+            *slot = blank_with_attrs(&rendered);
+        }
+        cells[cell.cell_index()] = rendered;
+    }
+
+    TerminalLine { cells }
 }
 
 fn terminal_config(palette_defaults: Option<TerminalPaletteDefaults>) -> Arc<HecaTerminalConfig> {
