@@ -265,14 +265,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state.text_renderer.set_clip(None);
 
     let bg = theme.background.to_linear_f32x4();
-    // Transparent window: clear the app background to `opacity` (premultiplied, to
-    // match PreMultiplied surface + premultiplied renderers), the SAME alpha the
-    // chrome uses, so the whole window frosts uniformly at the `transparency`
-    // amount. Opaque panes/text/borders draw on top and stay crisp. transparent
+    // Transparent window: clear fully transparent so empty/background areas show
+    // the frosted vibrancy at full strength. Chrome panels draw translucent
+    // (chrome_alpha) on top; opaque panes/text/borders stay crisp. transparent
     // == false reproduces today's opaque clear exactly.
     let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.is_transparent() {
-        let a = state.appearance.opacity() as f64;
-        (bg[0] as f64 * a, bg[1] as f64 * a, bg[2] as f64 * a, a)
+        (0.0, 0.0, 0.0, 0.0)
     } else {
         (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
     };
