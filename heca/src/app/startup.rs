@@ -70,11 +70,13 @@ pub(crate) fn apply_window_vibrancy(
     }
 }
 
-/// macOS backdrop blur done right: window-vibrancy adds the `NSVisualEffectView`
-/// as a subview, which draws *over* wgpu's metal backing layer (washing out the
-/// content). Instead we reparent — a container view becomes the window's
-/// contentView and holds the metal view in FRONT of the effect view BEHIND it,
-/// so opaque content occludes the blur and translucent regions reveal it.
+/// macOS backdrop blur done right. window-vibrancy adds the `NSVisualEffectView`
+/// as a subview of winit's content view, which draws *over* wgpu's metal layer
+/// and washes out the content. Reparenting the content view panics winit (it
+/// owns its content view). So instead we insert the effect view as a **sibling
+/// BEHIND** winit's content view, in the window's frame view (`superview`):
+/// winit's view is left untouched, and where the transparent metal surface shows
+/// through, the frosted effect view behind it is revealed.
 #[cfg(target_os = "macos")]
 fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibrancy) {
     use heca_config::appearance::Vibrancy;
@@ -82,7 +84,6 @@ fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibr
         NSAutoresizingMaskOptions, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
         NSVisualEffectState, NSVisualEffectView, NSWindowOrderingMode,
     };
-    use objc2::rc::Retained;
     use objc2_foundation::MainThreadMarker;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -109,37 +110,25 @@ fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibr
     let fill = NSAutoresizingMaskOptions::NSViewWidthSizable
         | NSAutoresizingMaskOptions::NSViewHeightSizable;
 
-    // SAFETY: `h.ns_view` points to the live NSView backing this window (winit
-    // owns it). We run on the main thread (init/event loop). We retain the metal
-    // view before reparenting so it survives `setContentView` replacing it.
+    // SAFETY: `h.ns_view` is winit's live content NSView. We only READ it
+    // (superview/frame) and add a sibling behind it — we never reparent or mutate
+    // winit's view, so winit's ownership is intact. Main thread (init/event loop).
     unsafe {
-        let Some(metal_view) = Retained::retain(h.ns_view.cast::<NSView>().as_ptr()) else {
+        let content_view: &NSView = h.ns_view.cast().as_ref();
+        let Some(frame_view) = content_view.superview() else {
             return;
         };
-        let metal_view: Retained<NSView> = metal_view;
-        let Some(ns_window) = metal_view.window() else {
-            return;
-        };
-        let bounds = metal_view.bounds();
+        let frame = content_view.frame();
 
-        let container = NSView::initWithFrame(mtm.alloc(), bounds);
-        container.setAutoresizingMask(fill);
-        // Container replaces the metal view as contentView; re-add metal on top.
-        ns_window.setContentView(Some(&container));
-        metal_view.setFrame(bounds);
-        metal_view.setAutoresizingMask(fill);
-        container.addSubview(&metal_view);
-
-        // Effect view, positioned BELOW the metal view inside the container.
-        let effect = NSVisualEffectView::initWithFrame(mtm.alloc(), bounds);
+        let effect = NSVisualEffectView::initWithFrame(mtm.alloc(), frame);
         effect.setMaterial(material);
         effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
         effect.setState(NSVisualEffectState::Active);
         effect.setAutoresizingMask(fill);
-        container.addSubview_positioned_relativeTo(
+        frame_view.addSubview_positioned_relativeTo(
             &effect,
             NSWindowOrderingMode::NSWindowBelow,
-            Some(&metal_view),
+            Some(content_view),
         );
     }
 }
