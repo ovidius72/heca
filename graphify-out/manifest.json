@@ -99,11 +99,6 @@
     "ast_hash": "07ac6e2de98f6619c7331ef4330d4d6b",
     "semantic_hash": "07ac6e2de98f6619c7331ef4330d4d6b"
   },
-  "/Users/antonio/projects/heca/heca-core/src/types.rs": {
-    "mtime": 1780491498.8803272,
-    "ast_hash": "15be97167606ae0537c4a3fca07acdf1",
-    "semantic_hash": "15be97167606ae0537c4a3fca07acdf1"
-  },
   "/Users/antonio/projects/heca/heca-grid-ui/src/action.rs": {
     "mtime": 1780568274.7724051,
     "ast_hash": "0ab5e181157952d5f4b8964e0a7db948",
@@ -409,11 +404,6 @@
     "ast_hash": "3f6e97c1587bb8393fcd3fc192055088",
     "semantic_hash": "3f6e97c1587bb8393fcd3fc192055088"
   },
-  "/Users/antonio/projects/heca/heca/src/mouse/drop.rs": {
-    "mtime": 1780612634.7166312,
-    "ast_hash": "eb19413a50a27649522cd20afa3820cf",
-    "semantic_hash": "eb19413a50a27649522cd20afa3820cf"
-  },
   "/Users/antonio/projects/heca/heca/src/mouse/hit_test.rs": {
     "mtime": 1780697066.1282125,
     "ast_hash": "f25fce57a1d98fa5064122e7facfef82",
@@ -423,16 +413,6 @@
     "mtime": 1780604855.9890056,
     "ast_hash": "734ba4459d8f8a478d761211c9a633cc",
     "semantic_hash": "734ba4459d8f8a478d761211c9a633cc"
-  },
-  "/Users/antonio/projects/heca/heca/src/mouse/sidebar.rs": {
-    "mtime": 1780697066.128445,
-    "ast_hash": "5f42678c138f57c0fe35a18c6244507d",
-    "semantic_hash": "5f42678c138f57c0fe35a18c6244507d"
-  },
-  "/Users/antonio/projects/heca/heca/src/mouse/sidebar_drop.rs": {
-    "mtime": 1780612763.8001666,
-    "ast_hash": "24a54180b4f645dedd321b6e3a0e9750",
-    "semantic_hash": "24a54180b4f645dedd321b6e3a0e9750"
   },
   "/Users/antonio/projects/heca/heca/src/mouse/tests.rs": {
     "mtime": 1780612809.297928,
@@ -583,21 +563,6 @@
     "mtime": 1780662135.0325236,
     "ast_hash": "a46a9eb2917d35fabf7bef415af21f6a",
     "semantic_hash": "a46a9eb2917d35fabf7bef415af21f6a"
-  },
-  "/Users/antonio/projects/heca/bugs-and-refactoring-plan-with-checklist.md": {
-    "mtime": 1780697066.1275032,
-    "ast_hash": "0cfdb854fc283dc63211e5eb7a8d16a3",
-    "semantic_hash": "0cfdb854fc283dc63211e5eb7a8d16a3"
-  },
-  "/Users/antonio/projects/heca/bugs-and-refactoring-plan.md": {
-    "mtime": 1780663058.125443,
-    "ast_hash": "36139e6654d459dc4dab90a565c15491",
-    "semantic_hash": "36139e6654d459dc4dab90a565c15491"
-  },
-  "/Users/antonio/projects/heca/bugs-and-refactoring.md": {
-    "mtime": 1780653255.3924685,
-    "ast_hash": "58f92edee23c270374b1d48073c292f4",
-    "semantic_hash": "58f92edee23c270374b1d48073c292f4"
   },
   "/Users/antonio/projects/heca/docs/niri-wiki/01-getting-started/important-software.md": {
     "mtime": 1780491498.875693,
@@ -864,11 +829,6 @@
     "ast_hash": "f36a8ed40a5c098650193d9ae812d2a2",
     "semantic_hash": "f36a8ed40a5c098650193d9ae812d2a2"
   },
-  "/Users/antonio/projects/heca/session-resume-handoff.md": {
-    "mtime": 1780697293.6638908,
-    "ast_hash": "bac2fd1271cf81391524e0960ed491d0",
-    "semantic_hash": "bac2fd1271cf81391524e0960ed491d0"
-  },
   "/Users/antonio/projects/heca/sidebar-gap.md": {
     "mtime": 1780654825.930342,
     "ast_hash": "1ff87ce5bc834ed992e5f771b366d40d",
@@ -916,6 +876,1046 @@
   },
   "/Users/antonio/projects/heca/src/modes.md": {
     "mtime": 1780491498.8840413,
+    "ast_hash": "a289e6b9c1909d905c0dbfb41dd28eca",
+    "semantic_hash": "a289e6b9c1909d905c0dbfb41dd28eca"
+  },
+  "/Users/antonio/projects/myvim/.planning/config.json": {
+    "mtime": 1780080511.0595043,
+    "ast_hash": "88d9771de654a3329bec29d6cf19c93c",
+    "semantic_hash": "88d9771de654a3329bec29d6cf19c93c"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/color.rs": {
+    "mtime": 1780928648.6581805,
+    "ast_hash": "ae63f1a2c07192c8d3616465e354f051",
+    "semantic_hash": "ae63f1a2c07192c8d3616465e354f051"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/defaults.rs": {
+    "mtime": 1780928648.6582406,
+    "ast_hash": "bf816c67c82f927998c62cdf689f9ec7",
+    "semantic_hash": "bf816c67c82f927998c62cdf689f9ec7"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/keys.rs": {
+    "mtime": 1781079085.559591,
+    "ast_hash": "7eb49b9e36ce11d96c634be48d518f6c",
+    "semantic_hash": "7eb49b9e36ce11d96c634be48d518f6c"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/lib.rs": {
+    "mtime": 1780928648.6595132,
+    "ast_hash": "2fef3163632b236e4b5309c7f0ba77b0",
+    "semantic_hash": "2fef3163632b236e4b5309c7f0ba77b0"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/loader.rs": {
+    "mtime": 1781012788.673563,
+    "ast_hash": "f3b7a8c95be87bd51cb59970398176da",
+    "semantic_hash": "f3b7a8c95be87bd51cb59970398176da"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/settings.rs": {
+    "mtime": 1780928648.659734,
+    "ast_hash": "cbaeee36aeb863eb4aaf8b352ac0d5b2",
+    "semantic_hash": "cbaeee36aeb863eb4aaf8b352ac0d5b2"
+  },
+  "/Users/antonio/projects/myvim/heca-config/src/theme.rs": {
+    "mtime": 1780928648.6601567,
+    "ast_hash": "83227a4fe679f1b595337735a8876df2",
+    "semantic_hash": "83227a4fe679f1b595337735a8876df2"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/backend/fake.rs": {
+    "mtime": 1780565944.042648,
+    "ast_hash": "d1f05e8d3c9b9b3517fb61d98d02d6c6",
+    "semantic_hash": "d1f05e8d3c9b9b3517fb61d98d02d6c6"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/backend/mod.rs": {
+    "mtime": 1781012788.6737907,
+    "ast_hash": "5d352233f706a486d5a3b518f181f131",
+    "semantic_hash": "5d352233f706a486d5a3b518f181f131"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/backend/terminal.rs": {
+    "mtime": 1781012788.6742365,
+    "ast_hash": "26946e193c4159b0db071abe74e1b56e",
+    "semantic_hash": "26946e193c4159b0db071abe74e1b56e"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout.rs": {
+    "mtime": 1781033505.6135244,
+    "ast_hash": "7658c59ce723c1d820d99668377b4a6a",
+    "semantic_hash": "7658c59ce723c1d820d99668377b4a6a"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/animation.rs": {
+    "mtime": 1780565944.043309,
+    "ast_hash": "09adbfaec6d46be14822ef02482642c3",
+    "semantic_hash": "09adbfaec6d46be14822ef02482642c3"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/column.rs": {
+    "mtime": 1780928648.6604998,
+    "ast_hash": "e81f323c20132bfab516314082fa01e4",
+    "semantic_hash": "e81f323c20132bfab516314082fa01e4"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/scrolling.rs": {
+    "mtime": 1780993793.355677,
+    "ast_hash": "bba193d785893690f23ffbd1f91cd619",
+    "semantic_hash": "bba193d785893690f23ffbd1f91cd619"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/session.rs": {
+    "mtime": 1780565944.044493,
+    "ast_hash": "8480e1fb8f4bf2655b50ebfaa02a552a",
+    "semantic_hash": "8480e1fb8f4bf2655b50ebfaa02a552a"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/types.rs": {
+    "mtime": 1781104533.8704324,
+    "ast_hash": "5215f10ccd769a3bb90970203053fce8",
+    "semantic_hash": "5215f10ccd769a3bb90970203053fce8"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/view_offset.rs": {
+    "mtime": 1780565944.045072,
+    "ast_hash": "844ab82649cc831a59efaba13b84c496",
+    "semantic_hash": "844ab82649cc831a59efaba13b84c496"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/layout/workspace.rs": {
+    "mtime": 1781079085.5602708,
+    "ast_hash": "e3ae249ef61a041f0f6456b5328eaca6",
+    "semantic_hash": "e3ae249ef61a041f0f6456b5328eaca6"
+  },
+  "/Users/antonio/projects/myvim/heca-core/src/lib.rs": {
+    "mtime": 1781012626.9861684,
+    "ast_hash": "8434ed99590f9ec69ed140be4eb66f79",
+    "semantic_hash": "8434ed99590f9ec69ed140be4eb66f79"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/action.rs": {
+    "mtime": 1780515062.0910661,
+    "ast_hash": "0ab5e181157952d5f4b8964e0a7db948",
+    "semantic_hash": "0ab5e181157952d5f4b8964e0a7db948"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/builders.rs": {
+    "mtime": 1781254300.1075547,
+    "ast_hash": "266abf18e4c6e9df92dc986cdc402962",
+    "semantic_hash": "266abf18e4c6e9df92dc986cdc402962"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/color.rs": {
+    "mtime": 1780486159.665551,
+    "ast_hash": "a3ee5b737e412c3d4b132bf653ee4878",
+    "semantic_hash": "a3ee5b737e412c3d4b132bf653ee4878"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/component.rs": {
+    "mtime": 1781254300.117194,
+    "ast_hash": "1863815034534729b5a39c3e9a44b04f",
+    "semantic_hash": "1863815034534729b5a39c3e9a44b04f"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/drag/context.rs": {
+    "mtime": 1781001324.0897603,
+    "ast_hash": "60b0e2c874c64cb5858c88175a67200b",
+    "semantic_hash": "60b0e2c874c64cb5858c88175a67200b"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/drag/item.rs": {
+    "mtime": 1781001324.089837,
+    "ast_hash": "1ee037d776751daf4745229fc06a7be3",
+    "semantic_hash": "1ee037d776751daf4745229fc06a7be3"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/drag/math.rs": {
+    "mtime": 1781001324.0899,
+    "ast_hash": "8487cd8cdd92fc5463eac1d1be0ebea7",
+    "semantic_hash": "8487cd8cdd92fc5463eac1d1be0ebea7"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/drag/mod.rs": {
+    "mtime": 1781001324.0899594,
+    "ast_hash": "6c863539ece6432d652e49180814122a",
+    "semantic_hash": "6c863539ece6432d652e49180814122a"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/drag/state.rs": {
+    "mtime": 1781001324.0900595,
+    "ast_hash": "309e90be0804d7bceac2ffaf1ae3ee7d",
+    "semantic_hash": "309e90be0804d7bceac2ffaf1ae3ee7d"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/effects.rs": {
+    "mtime": 1781045938.9964314,
+    "ast_hash": "b1bde8441214d7a95f38e10a520fe7df",
+    "semantic_hash": "b1bde8441214d7a95f38e10a520fe7df"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/focus.rs": {
+    "mtime": 1781169322.9026394,
+    "ast_hash": "227fe68486fbce139926e42f87708814",
+    "semantic_hash": "227fe68486fbce139926e42f87708814"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/font.rs": {
+    "mtime": 1781030669.3111327,
+    "ast_hash": "43a01453f02a56406f9e8117d132aac8",
+    "semantic_hash": "43a01453f02a56406f9e8117d132aac8"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/layout.rs": {
+    "mtime": 1781254300.1174169,
+    "ast_hash": "484893d5199bea1924e8155f5449a9f7",
+    "semantic_hash": "484893d5199bea1924e8155f5449a9f7"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/lib.rs": {
+    "mtime": 1781254300.1086888,
+    "ast_hash": "512f4f2160de52cd2bd1f90ddc4dd7be",
+    "semantic_hash": "512f4f2160de52cd2bd1f90ddc4dd7be"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/reactive.rs": {
+    "mtime": 1780928648.661986,
+    "ast_hash": "ebed6c32af03d9d2790a353ad87deb0d",
+    "semantic_hash": "ebed6c32af03d9d2790a353ad87deb0d"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/scene.rs": {
+    "mtime": 1781169517.6186676,
+    "ast_hash": "916071190e0ee10b4da6eec047051c38",
+    "semantic_hash": "916071190e0ee10b4da6eec047051c38"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/style.rs": {
+    "mtime": 1781254300.117584,
+    "ast_hash": "ca54563bcbbc1d2fa024d89f0ee6032e",
+    "semantic_hash": "ca54563bcbbc1d2fa024d89f0ee6032e"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/theme.rs": {
+    "mtime": 1781114479.4931314,
+    "ast_hash": "53ca64e3839c1e8dcae6c70c9ced4118",
+    "semantic_hash": "53ca64e3839c1e8dcae6c70c9ced4118"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/alert.rs": {
+    "mtime": 1781109512.6839235,
+    "ast_hash": "fa029c9364e17215bc76cc42cdc61461",
+    "semantic_hash": "fa029c9364e17215bc76cc42cdc61461"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/badge.rs": {
+    "mtime": 1781254300.1092138,
+    "ast_hash": "be87cc19c3a7e391a95164e407062d98",
+    "semantic_hash": "be87cc19c3a7e391a95164e407062d98"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/button.rs": {
+    "mtime": 1781254300.1177785,
+    "ast_hash": "bb8798f04e8f115b028c80fefc070f8a",
+    "semantic_hash": "bb8798f04e8f115b028c80fefc070f8a"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/card.rs": {
+    "mtime": 1780928870.5048082,
+    "ast_hash": "4f115d2cf91144f698099671bc870d30",
+    "semantic_hash": "4f115d2cf91144f698099671bc870d30"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/checkbox.rs": {
+    "mtime": 1781254300.1179385,
+    "ast_hash": "60cb1491bce726e6834359c25b1b62af",
+    "semantic_hash": "60cb1491bce726e6834359c25b1b62af"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/chrome_region.rs": {
+    "mtime": 1781041604.8568757,
+    "ast_hash": "9d9bf295e988f355b85c407bb5a8392f",
+    "semantic_hash": "9d9bf295e988f355b85c407bb5a8392f"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/command_palette.rs": {
+    "mtime": 1781206815.519164,
+    "ast_hash": "3c3dacef7a52606160e2fe198262a324",
+    "semantic_hash": "3c3dacef7a52606160e2fe198262a324"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/dock_frame.rs": {
+    "mtime": 1781041768.8801322,
+    "ast_hash": "4c56d1ca55ca42a914de9eff730ac588",
+    "semantic_hash": "4c56d1ca55ca42a914de9eff730ac588"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/flex.rs": {
+    "mtime": 1781017657.0816214,
+    "ast_hash": "c1ec48d3dff48219809ea998a2869926",
+    "semantic_hash": "c1ec48d3dff48219809ea998a2869926"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/gauge.rs": {
+    "mtime": 1780928648.663118,
+    "ast_hash": "a951a63828f5e657089a70dbb5f8f81a",
+    "semantic_hash": "a951a63828f5e657089a70dbb5f8f81a"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/grid.rs": {
+    "mtime": 1781011885.1389196,
+    "ast_hash": "f778e793252d39d9292ba2efcff85d46",
+    "semantic_hash": "f778e793252d39d9292ba2efcff85d46"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/icon.rs": {
+    "mtime": 1781254300.1242595,
+    "ast_hash": "824a4a345623f45b14877d136df896f4",
+    "semantic_hash": "824a4a345623f45b14877d136df896f4"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/icon_button.rs": {
+    "mtime": 1781254300.124472,
+    "ast_hash": "20ec52aadc53be3cdac12581e3c5f06b",
+    "semantic_hash": "20ec52aadc53be3cdac12581e3c5f06b"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/input.rs": {
+    "mtime": 1781254300.1104894,
+    "ast_hash": "b008aace402d4a72e6805b0365a3a73a",
+    "semantic_hash": "b008aace402d4a72e6805b0365a3a73a"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/item.rs": {
+    "mtime": 1781205435.295245,
+    "ast_hash": "61b35888c756cd63de55c639c43d6508",
+    "semantic_hash": "61b35888c756cd63de55c639c43d6508"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/item_group.rs": {
+    "mtime": 1781017657.0820343,
+    "ast_hash": "78f363708426d719aa263449703a7381",
+    "semantic_hash": "78f363708426d719aa263449703a7381"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/key_hint.rs": {
+    "mtime": 1781045296.6046915,
+    "ast_hash": "3d4edc51649620f45b105dc8f0dac301",
+    "semantic_hash": "3d4edc51649620f45b105dc8f0dac301"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/label.rs": {
+    "mtime": 1781254300.1106603,
+    "ast_hash": "e62f17f757e0d2796db806ba1a8e71aa",
+    "semantic_hash": "e62f17f757e0d2796db806ba1a8e71aa"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/mod.rs": {
+    "mtime": 1781254300.110794,
+    "ast_hash": "f0d707c0c810725c9a1c2d829ccf7653",
+    "semantic_hash": "f0d707c0c810725c9a1c2d829ccf7653"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/modal.rs": {
+    "mtime": 1781129285.0150793,
+    "ast_hash": "5d2b9beb63fcd8ade273cfe4876bb030",
+    "semantic_hash": "5d2b9beb63fcd8ade273cfe4876bb030"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/pane.rs": {
+    "mtime": 1781017657.108705,
+    "ast_hash": "fee4bc4c9d770a51f640cd7acb7cd41b",
+    "semantic_hash": "fee4bc4c9d770a51f640cd7acb7cd41b"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/progress.rs": {
+    "mtime": 1781205435.2953806,
+    "ast_hash": "78cda55756a94b42953244ac250ee4b4",
+    "semantic_hash": "78cda55756a94b42953244ac250ee4b4"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/rail_cell.rs": {
+    "mtime": 1781205435.2955606,
+    "ast_hash": "a880fe85f3bb7424e5ec874f4e2f410a",
+    "semantic_hash": "a880fe85f3bb7424e5ec874f4e2f410a"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/row.rs": {
+    "mtime": 1781205435.295779,
+    "ast_hash": "59375e9c362273d17f36b31cf8877a1e",
+    "semantic_hash": "59375e9c362273d17f36b31cf8877a1e"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/select.rs": {
+    "mtime": 1781254300.1109555,
+    "ast_hash": "349a7d6dbb48842ecb92c43c4748873d",
+    "semantic_hash": "349a7d6dbb48842ecb92c43c4748873d"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/separator.rs": {
+    "mtime": 1780554286.2517552,
+    "ast_hash": "491bd7cf782a2f895699bd2ef8691985",
+    "semantic_hash": "491bd7cf782a2f895699bd2ef8691985"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/spinner.rs": {
+    "mtime": 1781185031.0481195,
+    "ast_hash": "f4dfa640a16e1c2b9b5292fc52768610",
+    "semantic_hash": "f4dfa640a16e1c2b9b5292fc52768610"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/status_dot.rs": {
+    "mtime": 1780554260.5157351,
+    "ast_hash": "af9d10b528f1ded1c2fa1321863d7bfc",
+    "semantic_hash": "af9d10b528f1ded1c2fa1321863d7bfc"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/surface.rs": {
+    "mtime": 1780495539.5741854,
+    "ast_hash": "49d6a7a397c57da0d27e662b78cf87c7",
+    "semantic_hash": "49d6a7a397c57da0d27e662b78cf87c7"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/tabs.rs": {
+    "mtime": 1781254300.1111574,
+    "ast_hash": "efbbd80ecea929ad742dfd65a84662f0",
+    "semantic_hash": "efbbd80ecea929ad742dfd65a84662f0"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/tag.rs": {
+    "mtime": 1781038056.6194336,
+    "ast_hash": "a1eb3c6308199fd39e095926270a751f",
+    "semantic_hash": "a1eb3c6308199fd39e095926270a751f"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/toast.rs": {
+    "mtime": 1781205435.296121,
+    "ast_hash": "fcf409cb6444b5ec5d8597568e412270",
+    "semantic_hash": "fcf409cb6444b5ec5d8597568e412270"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/toast_stack.rs": {
+    "mtime": 1781205435.2882802,
+    "ast_hash": "21406aebc8228a4c3d8c9fc9d37306f3",
+    "semantic_hash": "21406aebc8228a4c3d8c9fc9d37306f3"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/toggle.rs": {
+    "mtime": 1781254300.111341,
+    "ast_hash": "b44785671204f162cd2cffb6b54a2427",
+    "semantic_hash": "b44785671204f162cd2cffb6b54a2427"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/src/widgets/tooltip.rs": {
+    "mtime": 1781206948.166379,
+    "ast_hash": "d4635da4cd01bafc8b00a345e1996cbc",
+    "semantic_hash": "d4635da4cd01bafc8b00a345e1996cbc"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/tests/phase_a.rs": {
+    "mtime": 1781254300.1247747,
+    "ast_hash": "0692c55cdb9c7bb3d271beb3f28213e6",
+    "semantic_hash": "0692c55cdb9c7bb3d271beb3f28213e6"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/examples/showcase.rs": {
+    "mtime": 1781254300.1557386,
+    "ast_hash": "2bfcceca11160b0372854795e1f8d294",
+    "semantic_hash": "2bfcceca11160b0372854795e1f8d294"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/atlas.rs": {
+    "mtime": 1781254300.1428432,
+    "ast_hash": "0c572140d0d18183266da0ba77d319b1",
+    "semantic_hash": "0c572140d0d18183266da0ba77d319b1"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/composite.rs": {
+    "mtime": 1781183533.456356,
+    "ast_hash": "c0a823e893009a68f3bc0455478e7cda",
+    "semantic_hash": "c0a823e893009a68f3bc0455478e7cda"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/grid.rs": {
+    "mtime": 1781189619.3873506,
+    "ast_hash": "d906d567b966f67962087bcf3e174008",
+    "semantic_hash": "d906d567b966f67962087bcf3e174008"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/lib.rs": {
+    "mtime": 1781205435.2752833,
+    "ast_hash": "e22aa0f2e15aa99736a308fd7a93bc3b",
+    "semantic_hash": "e22aa0f2e15aa99736a308fd7a93bc3b"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/primitive.rs": {
+    "mtime": 1781014490.9335315,
+    "ast_hash": "38699bc70d2eaf29ed8b5e8ec73aa37f",
+    "semantic_hash": "38699bc70d2eaf29ed8b5e8ec73aa37f"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/scene.rs": {
+    "mtime": 1781170309.4775324,
+    "ast_hash": "dce89766c6487daeb9b61e35ed5154f8",
+    "semantic_hash": "dce89766c6487daeb9b61e35ed5154f8"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/src/text.rs": {
+    "mtime": 1781254300.1430502,
+    "ast_hash": "1fd76e6396bcad85d67e1874e0b0a8ce",
+    "semantic_hash": "1fd76e6396bcad85d67e1874e0b0a8ce"
+  },
+  "/Users/antonio/projects/myvim/heca-renderer/tests/shader_valid.rs": {
+    "mtime": 1780487144.7490892,
+    "ast_hash": "9beb910adfd66d6b404581379f031ec2",
+    "semantic_hash": "9beb910adfd66d6b404581379f031ec2"
+  },
+  "/Users/antonio/projects/myvim/heca/src/actions.rs": {
+    "mtime": 1781014490.9340432,
+    "ast_hash": "10b7aac0f452e55ce8631920b2c2406d",
+    "semantic_hash": "10b7aac0f452e55ce8631920b2c2406d"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/backend_store.rs": {
+    "mtime": 1781104533.8721972,
+    "ast_hash": "ffab73bc6e4ecf4654e807423993ac59",
+    "semantic_hash": "ffab73bc6e4ecf4654e807423993ac59"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/events.rs": {
+    "mtime": 1781044101.146161,
+    "ast_hash": "c50af0e904e1f0e9445dfa3f1633d7ab",
+    "semantic_hash": "c50af0e904e1f0e9445dfa3f1633d7ab"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/focus.rs": {
+    "mtime": 1781104533.8725598,
+    "ast_hash": "d3b043cfdb527502d438df43dff66346",
+    "semantic_hash": "d3b043cfdb527502d438df43dff66346"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/input.rs": {
+    "mtime": 1781104533.8727274,
+    "ast_hash": "e4911a14059bcd2455dceca078d4a12f",
+    "semantic_hash": "e4911a14059bcd2455dceca078d4a12f"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/interaction.rs": {
+    "mtime": 1781104533.8731353,
+    "ast_hash": "e6d8c73b5c63f59656c63d2039066971",
+    "semantic_hash": "e6d8c73b5c63f59656c63d2039066971"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/keyboard.rs": {
+    "mtime": 1780928648.667265,
+    "ast_hash": "21d8020f9d38fb4460a9dcf6a674ac49",
+    "semantic_hash": "21d8020f9d38fb4460a9dcf6a674ac49"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/lifecycle.rs": {
+    "mtime": 1781014490.9343073,
+    "ast_hash": "b33042bd2b5e86cd761e43fa285293bf",
+    "semantic_hash": "b33042bd2b5e86cd761e43fa285293bf"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/mod.rs": {
+    "mtime": 1781033505.6160777,
+    "ast_hash": "e61da16935aae394b8278f34377bfb4a",
+    "semantic_hash": "e61da16935aae394b8278f34377bfb4a"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/mutations.rs": {
+    "mtime": 1781104533.873623,
+    "ast_hash": "4c8570a4645671997e6307052721c6e3",
+    "semantic_hash": "4c8570a4645671997e6307052721c6e3"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/pane_ops.rs": {
+    "mtime": 1781104533.8739188,
+    "ast_hash": "6d089ac24a7f77b2fbd1599bf0be729d",
+    "semantic_hash": "6d089ac24a7f77b2fbd1599bf0be729d"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/registry.rs": {
+    "mtime": 1781104533.8741853,
+    "ast_hash": "5b5553c032d5ff607ded40f42baddcb6",
+    "semantic_hash": "5b5553c032d5ff607ded40f42baddcb6"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/render.rs": {
+    "mtime": 1781104533.874438,
+    "ast_hash": "4da928d5f04b8cfac73af9a29790c4ee",
+    "semantic_hash": "4da928d5f04b8cfac73af9a29790c4ee"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/selection.rs": {
+    "mtime": 1781104533.8747075,
+    "ast_hash": "0760747e528bb8fabc8087371698fa7b",
+    "semantic_hash": "0760747e528bb8fabc8087371698fa7b"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app/startup.rs": {
+    "mtime": 1781104533.8752406,
+    "ast_hash": "3a1180a849a93d08361d270def625933",
+    "semantic_hash": "3a1180a849a93d08361d270def625933"
+  },
+  "/Users/antonio/projects/myvim/heca/src/app_state.rs": {
+    "mtime": 1781104533.8754683,
+    "ast_hash": "7d34ef44c3e25374452464c282682e27",
+    "semantic_hash": "7d34ef44c3e25374452464c282682e27"
+  },
+  "/Users/antonio/projects/myvim/heca/src/chrome.rs": {
+    "mtime": 1781014490.936051,
+    "ast_hash": "bd70b68087b146904bbe05f71b0d998e",
+    "semantic_hash": "bd70b68087b146904bbe05f71b0d998e"
+  },
+  "/Users/antonio/projects/myvim/heca/src/handlers.rs": {
+    "mtime": 1781104533.875781,
+    "ast_hash": "c259a9a1ec114d19aa4be854c70d9a5b",
+    "semantic_hash": "c259a9a1ec114d19aa4be854c70d9a5b"
+  },
+  "/Users/antonio/projects/myvim/heca/src/input.rs": {
+    "mtime": 1781104533.8760645,
+    "ast_hash": "c4915f5b727aac806f910e731eb0884d",
+    "semantic_hash": "c4915f5b727aac806f910e731eb0884d"
+  },
+  "/Users/antonio/projects/myvim/heca/src/keymap.rs": {
+    "mtime": 1780565944.0484319,
+    "ast_hash": "e97ebcc4ad84ebde4ce244e6b6c6df1e",
+    "semantic_hash": "e97ebcc4ad84ebde4ce244e6b6c6df1e"
+  },
+  "/Users/antonio/projects/myvim/heca/src/main.rs": {
+    "mtime": 1781104533.8764439,
+    "ast_hash": "8e21758ab94125922a5d636a45a274d0",
+    "semantic_hash": "8e21758ab94125922a5d636a45a274d0"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse.rs": {
+    "mtime": 1781104533.8769112,
+    "ast_hash": "f8ba2ff62499dc82ed504d084ef32cc1",
+    "semantic_hash": "f8ba2ff62499dc82ed504d084ef32cc1"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/drag.rs": {
+    "mtime": 1781104533.8773603,
+    "ast_hash": "4a5ac10ca90c4c66708186da64a8e8df",
+    "semantic_hash": "4a5ac10ca90c4c66708186da64a8e8df"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/hit_test.rs": {
+    "mtime": 1781104533.8777165,
+    "ast_hash": "dc5c0076b4758161bb45e8faa959e650",
+    "semantic_hash": "dc5c0076b4758161bb45e8faa959e650"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/interactive.rs": {
+    "mtime": 1781104533.8779964,
+    "ast_hash": "59b891b75ed1f455ac6226316ec450c8",
+    "semantic_hash": "59b891b75ed1f455ac6226316ec450c8"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/release.rs": {
+    "mtime": 1781104533.8782954,
+    "ast_hash": "67ea47a88a62494903718c7379acc071",
+    "semantic_hash": "67ea47a88a62494903718c7379acc071"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/render.rs": {
+    "mtime": 1781104533.8784869,
+    "ast_hash": "77642d7823324931cf2a2e4a48bd2860",
+    "semantic_hash": "77642d7823324931cf2a2e4a48bd2860"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/surface_left.rs": {
+    "mtime": 1781104533.878759,
+    "ast_hash": "ca1498505e4faefcc6e75783c01e1374",
+    "semantic_hash": "ca1498505e4faefcc6e75783c01e1374"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/target.rs": {
+    "mtime": 1781104533.8790216,
+    "ast_hash": "539a2ee47b797b01cc8dc5e486042729",
+    "semantic_hash": "539a2ee47b797b01cc8dc5e486042729"
+  },
+  "/Users/antonio/projects/myvim/heca/src/mouse/tests.rs": {
+    "mtime": 1781104533.8792906,
+    "ast_hash": "17ccbe79d074ff9b1952192f61e04dbf",
+    "semantic_hash": "17ccbe79d074ff9b1952192f61e04dbf"
+  },
+  "/Users/antonio/projects/myvim/heca/src/rpc.rs": {
+    "mtime": 1781104533.879717,
+    "ast_hash": "9a25f4ac565e29c855b086136e49ea05",
+    "semantic_hash": "9a25f4ac565e29c855b086136e49ea05"
+  },
+  "/Users/antonio/projects/myvim/heca/src/sidebar.rs": {
+    "mtime": 1781012626.9884703,
+    "ast_hash": "bcd5a25535a63cbacac80440fb7a0b56",
+    "semantic_hash": "bcd5a25535a63cbacac80440fb7a0b56"
+  },
+  "/Users/antonio/projects/myvim/heca/src/sidebar/hit_test.rs": {
+    "mtime": 1780928648.6706536,
+    "ast_hash": "52a11d043f4fae149b562d433c3fa70b",
+    "semantic_hash": "52a11d043f4fae149b562d433c3fa70b"
+  },
+  "/Users/antonio/projects/myvim/heca/src/sidebar/model.rs": {
+    "mtime": 1781104533.8800063,
+    "ast_hash": "44c1e40b09a8ddefc73664d063e1cd1e",
+    "semantic_hash": "44c1e40b09a8ddefc73664d063e1cd1e"
+  },
+  "/Users/antonio/projects/myvim/heca/src/sidebar/render.rs": {
+    "mtime": 1781104533.8802547,
+    "ast_hash": "01f1c48baee39088752693df57db5398",
+    "semantic_hash": "01f1c48baee39088752693df57db5398"
+  },
+  "/Users/antonio/projects/myvim/heca/src/sidebar/tests.rs": {
+    "mtime": 1781104533.880431,
+    "ast_hash": "87d0dcfd559e1bf6616eef758941e3a1",
+    "semantic_hash": "87d0dcfd559e1bf6616eef758941e3a1"
+  },
+  "/Users/antonio/projects/myvim/.planning/PROJECT.md": {
+    "mtime": 1780080395.241767,
+    "ast_hash": "a71c094c0a6f2659e34e3de39ba4a3f5",
+    "semantic_hash": "a71c094c0a6f2659e34e3de39ba4a3f5"
+  },
+  "/Users/antonio/projects/myvim/.planning/REQUIREMENTS.md": {
+    "mtime": 1780225095.174112,
+    "ast_hash": "8caf93c92195e00cb596354dcf69d539",
+    "semantic_hash": "8caf93c92195e00cb596354dcf69d539"
+  },
+  "/Users/antonio/projects/myvim/.planning/ROADMAP.md": {
+    "mtime": 1781091554.1246934,
+    "ast_hash": "2d00cccf1d9f670df4bcaa5beae2e137",
+    "semantic_hash": "2d00cccf1d9f670df4bcaa5beae2e137"
+  },
+  "/Users/antonio/projects/myvim/.planning/STATE.md": {
+    "mtime": 1781254305.6648495,
+    "ast_hash": "9a2498dd73ff89111460812b37893c32",
+    "semantic_hash": "9a2498dd73ff89111460812b37893c32"
+  },
+  "/Users/antonio/projects/myvim/.planning/interaction-policy-plan.md": {
+    "mtime": 1781104533.8698664,
+    "ast_hash": "f2b3a57e5db8a648e455227263c04f15",
+    "semantic_hash": "f2b3a57e5db8a648e455227263c04f15"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/01-the-shell/01-CONTEXT.md": {
+    "mtime": 1780081501.332915,
+    "ast_hash": "1842054b4798c885fc4418e58ac007cf",
+    "semantic_hash": "1842054b4798c885fc4418e58ac007cf"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/01-the-shell/01-DISCUSSION-LOG.md": {
+    "mtime": 1780081533.4636643,
+    "ast_hash": "c0dc6aa5502bd0c4bb2ddecb1d878d6b",
+    "semantic_hash": "c0dc6aa5502bd0c4bb2ddecb1d878d6b"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/01-the-shell/01-PLAN.md": {
+    "mtime": 1780081911.565115,
+    "ast_hash": "8753f84bbeb0a88245fc647011b7c3b6",
+    "semantic_hash": "8753f84bbeb0a88245fc647011b7c3b6"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/02-the-workspace/02-CONTEXT.md": {
+    "mtime": 1780089465.2402744,
+    "ast_hash": "d4f261d42d944d6f3402fa109b48fa01",
+    "semantic_hash": "d4f261d42d944d6f3402fa109b48fa01"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/02-the-workspace/02-DISCUSSION-LOG.md": {
+    "mtime": 1780089476.0506332,
+    "ast_hash": "93c09e63e5695884efc4a472cdf5d744",
+    "semantic_hash": "93c09e63e5695884efc4a472cdf5d744"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/02-the-workspace/02-PLAN.md": {
+    "mtime": 1780089771.1982493,
+    "ast_hash": "7c01e81d60215b050f13ab7893627e07",
+    "semantic_hash": "7c01e81d60215b050f13ab7893627e07"
+  },
+  "/Users/antonio/projects/myvim/.planning/phases/03-the-content/03-CONTEXT.md": {
+    "mtime": 1780325925.1106534,
+    "ast_hash": "207082d2b1096fee2fc6a16c0a2d16f5",
+    "semantic_hash": "207082d2b1096fee2fc6a16c0a2d16f5"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/ARCHITECTURE.md": {
+    "mtime": 1780225081.4381373,
+    "ast_hash": "2e54f9ac9f2628a9ee8b1142cff9e9aa",
+    "semantic_hash": "2e54f9ac9f2628a9ee8b1142cff9e9aa"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/FEATURES.md": {
+    "mtime": 1780080678.6139882,
+    "ast_hash": "799b126084ccd4479b2ce9a2ad761c06",
+    "semantic_hash": "799b126084ccd4479b2ce9a2ad761c06"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/MOUSE_INTERACTIVE_MOVE_PLAN.md": {
+    "mtime": 1780325898.9870605,
+    "ast_hash": "bed0650c2819a9d432ef3b345852c726",
+    "semantic_hash": "bed0650c2819a9d432ef3b345852c726"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/NIRI_ANALYSIS_AND_PLAN.md": {
+    "mtime": 1780171001.5522738,
+    "ast_hash": "e8cd26ec93516df0d863a79daa414ca0",
+    "semantic_hash": "e8cd26ec93516df0d863a79daa414ca0"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/NIRI_RESIZE_AND_FLOAT.md": {
+    "mtime": 1780217792.8315442,
+    "ast_hash": "abda31a93a97033487abf3643ae59f72",
+    "semantic_hash": "abda31a93a97033487abf3643ae59f72"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/PITFALLS.md": {
+    "mtime": 1780080740.7797775,
+    "ast_hash": "32f19f74a07ee7f54f9efa6344eb6a96",
+    "semantic_hash": "32f19f74a07ee7f54f9efa6344eb6a96"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/STACK.md": {
+    "mtime": 1780080652.8527825,
+    "ast_hash": "dfa4660214dd9440748037ca11a27df9",
+    "semantic_hash": "dfa4660214dd9440748037ca11a27df9"
+  },
+  "/Users/antonio/projects/myvim/.planning/research/SUMMARY.md": {
+    "mtime": 1780225086.5742443,
+    "ast_hash": "d2f501824a3c6a14ecc3b8607eeaed2c",
+    "semantic_hash": "d2f501824a3c6a14ecc3b8607eeaed2c"
+  },
+  "/Users/antonio/projects/myvim/AGENTS.md": {
+    "mtime": 1781091554.1258092,
+    "ast_hash": "9c1db02168d10307621b3bb6dd18ab02",
+    "semantic_hash": "9c1db02168d10307621b3bb6dd18ab02"
+  },
+  "/Users/antonio/projects/myvim/CLAUDE.md": {
+    "mtime": 1780080972.5410366,
+    "ast_hash": "06bb4c04b815f3ae2afeb535fdc33c9f",
+    "semantic_hash": "06bb4c04b815f3ae2afeb535fdc33c9f"
+  },
+  "/Users/antonio/projects/myvim/PLAN.md": {
+    "mtime": 1780397783.4542596,
+    "ast_hash": "5d4c945af1f93b42363295103460ec6e",
+    "semantic_hash": "5d4c945af1f93b42363295103460ec6e"
+  },
+  "/Users/antonio/projects/myvim/README.md": {
+    "mtime": 1781079085.5582259,
+    "ast_hash": "f440df3d4a2c6c8b53db36d65ea9c218",
+    "semantic_hash": "f440df3d4a2c6c8b53db36d65ea9c218"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/01-getting-started/important-software.md": {
+    "mtime": 1780222324.3493676,
+    "ast_hash": "b81d2ceb922d3c9fa20dfc9e7f27a270",
+    "semantic_hash": "b81d2ceb922d3c9fa20dfc9e7f27a270"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/01-getting-started/overview.md": {
+    "mtime": 1780222298.5876682,
+    "ast_hash": "9f0a65b60c8588c8daac7a9ad28d4de1",
+    "semantic_hash": "9f0a65b60c8588c8daac7a9ad28d4de1"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/animations.md": {
+    "mtime": 1780222324.3508496,
+    "ast_hash": "0af6ad15d3c60d654b293d52f04c0b73",
+    "semantic_hash": "0af6ad15d3c60d654b293d52f04c0b73"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/debug.md": {
+    "mtime": 1780222361.5745165,
+    "ast_hash": "c100917399a7e7b461754dcd20507263",
+    "semantic_hash": "c100917399a7e7b461754dcd20507263"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/gestures.md": {
+    "mtime": 1780222361.5647795,
+    "ast_hash": "5d384b871a96e08b501c002b09274c90",
+    "semantic_hash": "5d384b871a96e08b501c002b09274c90"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/include.md": {
+    "mtime": 1780222361.5747159,
+    "ast_hash": "ee26c59d26f2c6c30fa22e850473f08c",
+    "semantic_hash": "ee26c59d26f2c6c30fa22e850473f08c"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/input.md": {
+    "mtime": 1780222348.5120506,
+    "ast_hash": "b275ef81074e81a3d2c14e206586a609",
+    "semantic_hash": "b275ef81074e81a3d2c14e206586a609"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/introduction.md": {
+    "mtime": 1780222324.34942,
+    "ast_hash": "0022b5a268cabed947e667e0a93b27bb",
+    "semantic_hash": "0022b5a268cabed947e667e0a93b27bb"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/key-bindings.md": {
+    "mtime": 1780222324.350901,
+    "ast_hash": "9fbf2056bafff9f61f7ea85ee894938b",
+    "semantic_hash": "9fbf2056bafff9f61f7ea85ee894938b"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/layer-rules.md": {
+    "mtime": 1780222348.513596,
+    "ast_hash": "ecbec7e63cb223e86383f59945e689ce",
+    "semantic_hash": "ecbec7e63cb223e86383f59945e689ce"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/layout.md": {
+    "mtime": 1780222324.349555,
+    "ast_hash": "02bd1c2f2749dd765201b6d8362d30f5",
+    "semantic_hash": "02bd1c2f2749dd765201b6d8362d30f5"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/miscellaneous.md": {
+    "mtime": 1780222348.5121934,
+    "ast_hash": "fa0d90183d206f873515e5c14570d766",
+    "semantic_hash": "fa0d90183d206f873515e5c14570d766"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/named-workspaces.md": {
+    "mtime": 1780222361.5648172,
+    "ast_hash": "549b5f2baa8be6aa8157e53a00500aee",
+    "semantic_hash": "549b5f2baa8be6aa8157e53a00500aee"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/outputs.md": {
+    "mtime": 1780222348.512055,
+    "ast_hash": "7cd7357f17b9cb6cd1562a73f6d79906",
+    "semantic_hash": "7cd7357f17b9cb6cd1562a73f6d79906"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/recent-windows.md": {
+    "mtime": 1780222361.5648072,
+    "ast_hash": "5633bac3e6acc121901305df07d86474",
+    "semantic_hash": "5633bac3e6acc121901305df07d86474"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/switch-events.md": {
+    "mtime": 1780222361.5741959,
+    "ast_hash": "f5e55078e362bb5614613a9ffbeab3ea",
+    "semantic_hash": "f5e55078e362bb5614613a9ffbeab3ea"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/02-configuration/window-rules.md": {
+    "mtime": 1780222348.5120623,
+    "ast_hash": "d975d2787f7650528551342404548b6c",
+    "semantic_hash": "d975d2787f7650528551342404548b6c"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/accessibility.md": {
+    "mtime": 1780222393.8642325,
+    "ast_hash": "c7e3e80ccc2727a9f8a1b56ac0184d88",
+    "semantic_hash": "c7e3e80ccc2727a9f8a1b56ac0184d88"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/application-issues.md": {
+    "mtime": 1780222393.865506,
+    "ast_hash": "730f931bcd0ea1523e6aa0e66b8d5ae9",
+    "semantic_hash": "730f931bcd0ea1523e6aa0e66b8d5ae9"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/floating-windows.md": {
+    "mtime": 1780222378.4603455,
+    "ast_hash": "515de8f3656ad074c28c2d7cd8ba7de9",
+    "semantic_hash": "515de8f3656ad074c28c2d7cd8ba7de9"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/fullscreen-and-maximize.md": {
+    "mtime": 1780222378.4614363,
+    "ast_hash": "074c944021f9a8443cee0d12f643c5d8",
+    "semantic_hash": "074c944021f9a8443cee0d12f643c5d8"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/gestures.md": {
+    "mtime": 1780222378.4614363,
+    "ast_hash": "1c2de5b32cee3c93410a6395782b10ef",
+    "semantic_hash": "1c2de5b32cee3c93410a6395782b10ef"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/ipc.md": {
+    "mtime": 1780222378.461726,
+    "ast_hash": "21e868414f03261391d9a35c5025442b",
+    "semantic_hash": "21e868414f03261391d9a35c5025442b"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/overview.md": {
+    "mtime": 1780222412.0529518,
+    "ast_hash": "4d17d26b4c9754109431032d3a4a0503",
+    "semantic_hash": "4d17d26b4c9754109431032d3a4a0503"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/screencasting.md": {
+    "mtime": 1780222393.8642237,
+    "ast_hash": "f78b2bd71b0e174bf7280c4253cb44a1",
+    "semantic_hash": "f78b2bd71b0e174bf7280c4253cb44a1"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/security-model.md": {
+    "mtime": 1780222393.865194,
+    "ast_hash": "ca59687b228935dace27c766a3b58919",
+    "semantic_hash": "ca59687b228935dace27c766a3b58919"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/tabs.md": {
+    "mtime": 1780222378.4604301,
+    "ast_hash": "9c12c940c213d0ed5281eca379eb0ce6",
+    "semantic_hash": "9c12c940c213d0ed5281eca379eb0ce6"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/window-effects.md": {
+    "mtime": 1780222393.864225,
+    "ast_hash": "f64bf75ea8748618122a5de42a954021",
+    "semantic_hash": "f64bf75ea8748618122a5de42a954021"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/03-usage/workspaces.md": {
+    "mtime": 1780222378.4574623,
+    "ast_hash": "6ab6686c194ee25f035450de2dbc407d",
+    "semantic_hash": "6ab6686c194ee25f035450de2dbc407d"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/animation-timing.md": {
+    "mtime": 1780222412.0646636,
+    "ast_hash": "8340a2ccd6a3a21e3a886df9d9291f0c",
+    "semantic_hash": "8340a2ccd6a3a21e3a886df9d9291f0c"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/design-principles.md": {
+    "mtime": 1780222412.0530033,
+    "ast_hash": "26388182bad212cbb1f4fab559827735",
+    "semantic_hash": "26388182bad212cbb1f4fab559827735"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/developing.md": {
+    "mtime": 1780222412.0653522,
+    "ast_hash": "176c0dd7b2f7ce13bb258282a8007ff3",
+    "semantic_hash": "176c0dd7b2f7ce13bb258282a8007ff3"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/fractional-layout.md": {
+    "mtime": 1780222412.0530376,
+    "ast_hash": "4da369c4d0ff0a888f0ee788c2ac48c3",
+    "semantic_hash": "4da369c4d0ff0a888f0ee788c2ac48c3"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/redraw-loop.md": {
+    "mtime": 1780222412.0647085,
+    "ast_hash": "3c6276b9c9bd0e8ce75b1730406c4371",
+    "semantic_hash": "3c6276b9c9bd0e8ce75b1730406c4371"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/04-development/releasing.md": {
+    "mtime": 1780222412.0658479,
+    "ast_hash": "1d0a58a8c4a342c6753b47abd05322bd",
+    "semantic_hash": "1d0a58a8c4a342c6753b47abd05322bd"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/README.md": {
+    "mtime": 1780222269.8068683,
+    "ast_hash": "ade230a697d3577115cd4bb0b8a841e7",
+    "semantic_hash": "ade230a697d3577115cd4bb0b8a841e7"
+  },
+  "/Users/antonio/projects/myvim/docs/niri-wiki/architecture.md": {
+    "mtime": 1780222291.553013,
+    "ast_hash": "9ad17ac1b1dd45b914cf8252acc68542",
+    "semantic_hash": "9ad17ac1b1dd45b914cf8252acc68542"
+  },
+  "/Users/antonio/projects/myvim/docs/overlay-design.md": {
+    "mtime": 1780570835.3852675,
+    "ast_hash": "38166355dcdf9b53e8f7b582b2e3406c",
+    "semantic_hash": "38166355dcdf9b53e8f7b582b2e3406c"
+  },
+  "/Users/antonio/projects/myvim/docs/stack-references.md": {
+    "mtime": 1780226477.974819,
+    "ast_hash": "46f344c477dc6168b78c0f6f16ad8ab8",
+    "semantic_hash": "46f344c477dc6168b78c0f6f16ad8ab8"
+  },
+  "/Users/antonio/projects/myvim/docs/the-grid-ui.md": {
+    "mtime": 1781077603.399815,
+    "ast_hash": "e0a964f2dfe09603782e8e5ce1de83e6",
+    "semantic_hash": "e0a964f2dfe09603782e8e5ce1de83e6"
+  },
+  "/Users/antonio/projects/myvim/docs/widgets.md": {
+    "mtime": 1781115193.4481435,
+    "ast_hash": "febbd061223bc55c8204ece1b4b7c02e",
+    "semantic_hash": "febbd061223bc55c8204ece1b4b7c02e"
+  },
+  "/Users/antonio/projects/myvim/grid-ui-chrome-plan.md": {
+    "mtime": 1781044783.9902809,
+    "ast_hash": "f1f113c71c92604c6a740b86556762b0",
+    "semantic_hash": "f1f113c71c92604c6a740b86556762b0"
+  },
+  "/Users/antonio/projects/myvim/grid-ui-plan.md": {
+    "mtime": 1781169322.9023783,
+    "ast_hash": "99f231c4ad6ec4171e67ead9f93c1980",
+    "semantic_hash": "99f231c4ad6ec4171e67ead9f93c1980"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/assets/OFL.txt": {
+    "mtime": 1780486801.2652042,
+    "ast_hash": "731469c71e2aba286b1ea15a0a9b3451",
+    "semantic_hash": "731469c71e2aba286b1ea15a0a9b3451"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/assets/PHOSPHOR-LICENSE.txt": {
+    "mtime": 1781030601.1840262,
+    "ast_hash": "32a41a9e44954f682aed130c6b1d399d",
+    "semantic_hash": "32a41a9e44954f682aed130c6b1d399d"
+  },
+  "/Users/antonio/projects/myvim/heca-grid-ui/assets/README.md": {
+    "mtime": 1781030928.0891945,
+    "ast_hash": "94da7919aa622acf626f182b68c186c2",
+    "semantic_hash": "94da7919aa622acf626f182b68c186c2"
+  },
+  "/Users/antonio/projects/myvim/keybinding-modes.md": {
+    "mtime": 1780230666.7116947,
+    "ast_hash": "47632d011d24875162e6ca1a845530ad",
+    "semantic_hash": "47632d011d24875162e6ca1a845530ad"
+  },
+  "/Users/antonio/projects/myvim/niri-compatibility-review.md": {
+    "mtime": 1780224453.13394,
+    "ast_hash": "e46c7fe0b191a974c02a78affaed379e",
+    "semantic_hash": "e46c7fe0b191a974c02a78affaed379e"
+  },
+  "/Users/antonio/projects/myvim/plans/01-sidebar-and-actions.md": {
+    "mtime": 1780257727.6128771,
+    "ast_hash": "5e40aaf6074945e0957a96a1486f640a",
+    "semantic_hash": "5e40aaf6074945e0957a96a1486f640a"
+  },
+  "/Users/antonio/projects/myvim/plans/02-action-registry-and-rpc-foundation.md": {
+    "mtime": 1780268755.37078,
+    "ast_hash": "b0e6c15a445ddcca0adfbc325dc505a5",
+    "semantic_hash": "b0e6c15a445ddcca0adfbc325dc505a5"
+  },
+  "/Users/antonio/projects/myvim/plans/03-prefix-global-chords-commands.md": {
+    "mtime": 1780357073.3979673,
+    "ast_hash": "a69a469f996c79ae6cd20221ea7a6952",
+    "semantic_hash": "a69a469f996c79ae6cd20221ea7a6952"
+  },
+  "/Users/antonio/projects/myvim/pluggable-chrome-plugin-plan.md": {
+    "mtime": 1781091554.1266453,
+    "ast_hash": "5b1091857de8e3bad08b6c6c910e5958",
+    "semantic_hash": "5b1091857de8e3bad08b6c6c910e5958"
+  },
+  "/Users/antonio/projects/myvim/redo-mouse.md": {
+    "mtime": 1780397783.477387,
+    "ast_hash": "b037853e99d8d61f9952b1882bbb6938",
+    "semantic_hash": "b037853e99d8d61f9952b1882bbb6938"
+  },
+  "/Users/antonio/projects/myvim/review.md": {
+    "mtime": 1780221459.1287847,
+    "ast_hash": "47dffbb0617f7797c4fe6d011615b610",
+    "semantic_hash": "47dffbb0617f7797c4fe6d011615b610"
+  },
+  "/Users/antonio/projects/myvim/rust-skills-review-round2.md": {
+    "mtime": 1780267155.840908,
+    "ast_hash": "f36a8ed40a5c098650193d9ae812d2a2",
+    "semantic_hash": "f36a8ed40a5c098650193d9ae812d2a2"
+  },
+  "/Users/antonio/projects/myvim/sidebar-gap.md": {
+    "mtime": 1780928648.6717777,
+    "ast_hash": "1ff87ce5bc834ed992e5f771b366d40d",
+    "semantic_hash": "1ff87ce5bc834ed992e5f771b366d40d"
+  },
+  "/Users/antonio/projects/myvim/spawn-pane-zoom-handoff.md": {
+    "mtime": 1780928648.6718924,
+    "ast_hash": "030272cd808d7a48503c3bc381ac0f9e",
+    "semantic_hash": "030272cd808d7a48503c3bc381ac0f9e"
+  },
+  "/Users/antonio/projects/myvim/src/SUMMARY.md": {
+    "mtime": 1780397783.4778848,
+    "ast_hash": "3b12de1645f8afcd137486151a11db87",
+    "semantic_hash": "3b12de1645f8afcd137486151a11db87"
+  },
+  "/Users/antonio/projects/myvim/src/actions.md": {
+    "mtime": 1780397783.4781256,
+    "ast_hash": "a4d803cd88f238af13a440d9e62458f3",
+    "semantic_hash": "a4d803cd88f238af13a440d9e62458f3"
+  },
+  "/Users/antonio/projects/myvim/src/chapter1.md": {
+    "mtime": 1780397783.4783237,
+    "ast_hash": "f49dd8bf0ccbc81067f368041546736f",
+    "semantic_hash": "f49dd8bf0ccbc81067f368041546736f"
+  },
+  "/Users/antonio/projects/myvim/src/configuration.md": {
+    "mtime": 1780397783.4786413,
+    "ast_hash": "f82de5771cf1a48cceb9a3158b798f4e",
+    "semantic_hash": "f82de5771cf1a48cceb9a3158b798f4e"
+  },
+  "/Users/antonio/projects/myvim/src/developer.md": {
+    "mtime": 1780397783.4789026,
+    "ast_hash": "89fb9bdc728927534207ce061a1bde4d",
+    "semantic_hash": "89fb9bdc728927534207ce061a1bde4d"
+  },
+  "/Users/antonio/projects/myvim/src/introduction.md": {
+    "mtime": 1780397783.4791362,
+    "ast_hash": "87f9985651f462b1654ab41b92cd82fb",
+    "semantic_hash": "87f9985651f462b1654ab41b92cd82fb"
+  },
+  "/Users/antonio/projects/myvim/src/keybindings.md": {
+    "mtime": 1780397783.479325,
+    "ast_hash": "5e9ad277c98680b74c60dbd2dca963c9",
+    "semantic_hash": "5e9ad277c98680b74c60dbd2dca963c9"
+  },
+  "/Users/antonio/projects/myvim/src/modes.md": {
+    "mtime": 1780397783.4794776,
     "ast_hash": "a289e6b9c1909d905c0dbfb41dd28eca",
     "semantic_hash": "a289e6b9c1909d905c0dbfb41dd28eca"
   }
