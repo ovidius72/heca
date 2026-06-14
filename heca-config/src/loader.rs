@@ -55,6 +55,8 @@ pub struct Config {
     #[serde(default)]
     pub settings: SettingsConfig,
     #[serde(default)]
+    pub appearance: crate::appearance::AppearanceConfig,
+    #[serde(default)]
     pub keys: KeysConfig,
 }
 
