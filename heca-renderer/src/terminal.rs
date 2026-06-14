@@ -347,6 +347,18 @@ fn draw_terminal_symbol_cell(
         return true;
     }
 
+    draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
+}
+
+fn draw_box_drawing_cell(
+    primitive_renderer: &mut PrimitiveRenderer,
+    ch: char,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    color: [f32; 4],
+) -> bool {
     let stroke = (w.min(h) * 0.08).max(1.5);
     let mid_x = x + w * 0.5 - stroke * 0.5;
     let mid_y = y + h * 0.5 - stroke * 0.5;

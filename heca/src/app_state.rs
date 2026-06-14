@@ -55,7 +55,7 @@ pub enum InputMode {
     /// 
     /// Partially wired: render and input handling exist, but no command path
     /// constructs this variant yet. See handle_chord_mode() in app/input.rs.
-    #[allow(dead_code)] // Reserved for multi-key chord UX; will be constructed when chord entry is implemented.
+    #[expect(dead_code, reason = "Reserved for multi-key chord UX; will be constructed when chord entry is implemented.")]
     Chord {
         sequence: Vec<String>,
     },

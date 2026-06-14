@@ -205,12 +205,12 @@ impl PrimitiveRenderer {
     }
 
     /// Queue a filled rectangle with a border.
-    #[allow(clippy::too_many_arguments)]
     /// Draw a filled rectangle with a border.
     ///
     /// Note: `radius` is currently ignored. True rounded corners (SDF or
     /// geometry-based) are planned for a future phase. The function name is
     /// kept for API stability but the output is currently sharp-cornered.
+    #[expect(clippy::too_many_arguments, reason = "Renderer primitive API keeps rectangle geometry and fill/border styling explicit at call sites.")]
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
