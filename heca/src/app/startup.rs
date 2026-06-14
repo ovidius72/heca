@@ -51,8 +51,11 @@ fn choose_alpha_mode(
 /// Apply OS backdrop blur / vibrancy once after window creation, when enabled.
 /// macOS = `NSVisualEffectView`; Windows = acrylic; Linux/other = no-op (the
 /// effect is not portably available). Needs a transparent window (F2b) to show.
-fn apply_window_vibrancy(window: &Window, appearance: &heca_config::appearance::AppearanceConfig) {
-    if !appearance.blur {
+pub(crate) fn apply_window_vibrancy(
+    window: &Window,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) {
+    if appearance.os_vibrancy().is_none() {
         return;
     }
     #[cfg(target_os = "macos")]
@@ -60,6 +63,7 @@ fn apply_window_vibrancy(window: &Window, appearance: &heca_config::appearance::
         use heca_config::appearance::Vibrancy;
         use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
         let material = match appearance.vibrancy {
+            Vibrancy::None => return,
             Vibrancy::Sidebar => NSVisualEffectMaterial::Sidebar,
             Vibrancy::HudWindow => NSVisualEffectMaterial::HudWindow,
             Vibrancy::UnderWindowBackground => NSVisualEffectMaterial::UnderWindowBackground,
@@ -92,7 +96,7 @@ pub(crate) async fn init_state(
             app_config.config.settings.window_width as f64,
             app_config.config.settings.window_height as f64,
         ))
-        .with_transparent(appearance.transparent);
+        .with_transparent(appearance.is_transparent());
     let window = Arc::new(
         event_loop
             .create_window(window_attrs)
@@ -146,7 +150,7 @@ pub(crate) async fn init_state(
         height: physical.height.max(1),
         present_mode: wgpu::PresentMode::AutoVsync,
         desired_maximum_frame_latency: 2,
-        alpha_mode: choose_alpha_mode(&surface_caps.alpha_modes, appearance.transparent),
+        alpha_mode: choose_alpha_mode(&surface_caps.alpha_modes, appearance.is_transparent()),
         view_formats: vec![],
     };
     surface.configure(&device, &config);

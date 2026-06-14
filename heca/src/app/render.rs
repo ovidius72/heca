@@ -269,8 +269,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // premultiplied alpha = opacity (matches the PreMultiplied surface alpha mode),
     // so the desktop/vibrancy shows through where no opaque content is drawn.
     // transparent == false reproduces today's opaque clear exactly.
-    let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.transparent {
-        let a = state.appearance.opacity.clamp(0.0, 1.0) as f64;
+    let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.is_transparent() {
+        let a = state.appearance.opacity() as f64;
         (bg[0] as f64 * a, bg[1] as f64 * a, bg[2] as f64 * a, a)
     } else {
         (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)

@@ -4,16 +4,21 @@ use serde::{Deserialize, Serialize};
 //  Vibrancy
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// macOS `NSVisualEffectMaterial` variants (and a best-effort mapping for
-/// Windows Acrylic / Mica). On Linux this is a no-op.
+/// OS backdrop-blur material (the *desktop-behind-the-window* frost).
 ///
-/// Consumed by the window/surface layer in F2 when `blur = true`. Each variant
-/// name is serialised as `snake_case` in TOML (e.g. `vibrancy = "hud_window"`).
+/// This is **not portable and not numeric**: macOS maps each variant to an
+/// `NSVisualEffectMaterial`; Windows uses Acrylic/Mica (best-effort); Linux is a
+/// no-op. The window/surface layer applies it once after window creation when it
+/// is not [`Vibrancy::None`]. For a *portable, numeric* blur, use the in-app blur
+/// amount instead (`AppearanceConfig::blur`). Serialised `snake_case` in TOML
+/// (e.g. `vibrancy = "hud_window"`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Vibrancy {
-    /// `NSVisualEffectMaterialSidebar` — sidebar/panel tint (default).
+    /// No OS backdrop material (default) — disables vibrancy entirely.
     #[default]
+    None,
+    /// `NSVisualEffectMaterialSidebar` — sidebar/panel tint.
     Sidebar,
     /// `NSVisualEffectMaterialHUDWindow` — dark floating HUD panel.
     HudWindow,
@@ -33,98 +38,83 @@ pub enum Vibrancy {
 //  Default-value helpers (used by serde attributes on AppearanceConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-fn default_transparent() -> bool {
-    false
+fn default_transparency() -> u8 {
+    0
 }
 
-fn default_opacity() -> f32 {
-    0.95
-}
-
-fn default_pane_opacity() -> f32 {
-    1.0
-}
-
-fn default_chrome_opacity() -> f32 {
-    0.92
-}
-
-fn default_blur() -> bool {
-    false
+fn default_blur() -> u8 {
+    0
 }
 
 fn default_vibrancy() -> Vibrancy {
-    Vibrancy::default()
+    Vibrancy::None
 }
 
-fn default_blur_amount() -> f32 {
-    12.0
-}
+/// Maximum in-app blur radius in logical px, at `blur = 100`.
+const MAX_BLUR_PX: f32 = 24.0;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  AppearanceConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Read-only appearance contract shared by all rendering layers.
+/// Read-only appearance contract shared by all rendering layers — none owns it.
 ///
-/// Every consumer reads this struct — none owns it:
-/// - Window/surface layer reads `transparent`, `blur`, and `vibrancy` (F2).
-/// - In-app blur pass reads `blur_amount` (F3).
-/// - Chrome (sidebar/status) reads `chrome_opacity`.
-/// - Terminal pane reads `pane_opacity`.
-/// - The global opacity (`opacity`) is applied to the whole app background.
+/// Three intuitive, cross-platform controls (all amounts are `0..=100`):
+/// - `transparency` — how see-through the app is (`0` opaque, `100` fully
+///   transparent). Portable (window/surface alpha).
+/// - `blur` — the **in-app** frosted-glass blur amount behind translucent panels
+///   (palette/sidebar). Portable (our own GPU pass, F3). `0` = off.
+/// - `vibrancy` — the **OS backdrop** material (blurs the desktop *behind* the
+///   window). Not numeric, not portable: macOS materials, Windows acrylic, Linux
+///   no-op. [`Vibrancy::None`] = off.
 ///
-/// All fields are `Copy` (primitives + `Vibrancy` enum) so the struct is cheap
-/// to pass by value across the render tree. Missing `[appearance]` sections in
-/// the TOML config are filled with these defaults.
+/// All fields are `Copy`. Missing `[appearance]` sections fall back to these
+/// defaults (everything off → identical to an opaque app).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceConfig {
-    /// Master switch: enable transparent surface and alpha-channel clears.
-    /// When `false` all other transparency fields are effectively ignored by
-    /// the compositor.
-    #[serde(default = "default_transparent")]
-    pub transparent: bool,
+    /// Window/app transparency amount, `0..=100` (`0` opaque, `100` see-through).
+    #[serde(default = "default_transparency")]
+    pub transparency: u8,
 
-    /// Global app/background opacity in the range `0.0..=1.0`.
-    #[serde(default = "default_opacity")]
-    pub opacity: f32,
-
-    /// Pane content background opacity in the range `0.0..=1.0`.
-    /// The terminal renderer reads this to tint its background quads.
-    #[serde(default = "default_pane_opacity")]
-    pub pane_opacity: f32,
-
-    /// Sidebar/status-bar (chrome) background opacity in the range `0.0..=1.0`.
-    #[serde(default = "default_chrome_opacity")]
-    pub chrome_opacity: f32,
-
-    /// Enable OS-level backdrop blur (macOS Vibrancy / Windows Acrylic).
-    /// Requires `transparent = true` to have a visible effect.
+    /// In-app frosted blur amount, `0..=100` (`0` = off). Portable GPU pass (F3);
+    /// distinct from the OS `vibrancy` backdrop.
     #[serde(default = "default_blur")]
-    pub blur: bool,
+    pub blur: u8,
 
-    /// macOS NSVisualEffectMaterial variant (or Windows Acrylic flavour) used
-    /// when `blur = true`. Linux ignores this field.
+    /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
+}
 
-    /// In-app (shader/software) blur radius in logical pixels (F3).
-    /// This is separate from OS backdrop blur and works on all platforms.
-    /// Ignored when the in-app blur pass is disabled.
-    #[serde(default = "default_blur_amount")]
-    pub blur_amount: f32,
+impl AppearanceConfig {
+    /// Background opacity in `0.0..=1.0` (`transparency = 0` → `1.0` opaque).
+    pub fn opacity(&self) -> f32 {
+        1.0 - (self.transparency.min(100) as f32) / 100.0
+    }
+
+    /// Whether the window/surface should be created transparent.
+    pub fn is_transparent(&self) -> bool {
+        self.transparency > 0
+    }
+
+    /// In-app blur radius in logical px (`0.0` = off). Scales `blur` 0..100 to
+    /// `0..=MAX_BLUR_PX`. Read by the in-app blur pass (F3).
+    pub fn blur_radius(&self) -> f32 {
+        (self.blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
+    }
+
+    /// The OS backdrop material to apply, or `None` when disabled.
+    pub fn os_vibrancy(&self) -> Option<Vibrancy> {
+        (self.vibrancy != Vibrancy::None).then_some(self.vibrancy)
+    }
 }
 
 impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
-            transparent: default_transparent(),
-            opacity: default_opacity(),
-            pane_opacity: default_pane_opacity(),
-            chrome_opacity: default_chrome_opacity(),
+            transparency: default_transparency(),
             blur: default_blur(),
             vibrancy: default_vibrancy(),
-            blur_amount: default_blur_amount(),
         }
     }
 }
@@ -138,35 +128,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_schema() {
+    fn defaults_are_all_off() {
         let cfg = AppearanceConfig::default();
-        assert!(!cfg.transparent);
-        assert!((cfg.opacity - 0.95).abs() < f32::EPSILON);
-        assert!((cfg.pane_opacity - 1.0).abs() < f32::EPSILON);
-        assert!((cfg.chrome_opacity - 0.92).abs() < f32::EPSILON);
-        assert!(!cfg.blur);
-        assert_eq!(cfg.vibrancy, Vibrancy::Sidebar);
-        assert!((cfg.blur_amount - 12.0).abs() < f32::EPSILON);
+        assert_eq!(cfg.transparency, 0);
+        assert_eq!(cfg.blur, 0);
+        assert_eq!(cfg.vibrancy, Vibrancy::None);
+        assert!(!cfg.is_transparent());
+        assert!((cfg.opacity() - 1.0).abs() < f32::EPSILON);
+        assert!((cfg.blur_radius()).abs() < f32::EPSILON);
+        assert_eq!(cfg.os_vibrancy(), None);
+    }
+
+    #[test]
+    fn amounts_map_to_derived_values() {
+        let cfg = AppearanceConfig {
+            transparency: 25,
+            blur: 50,
+            vibrancy: Vibrancy::Sidebar,
+        };
+        assert!((cfg.opacity() - 0.75).abs() < 1e-6);
+        assert!(cfg.is_transparent());
+        assert!((cfg.blur_radius() - 12.0).abs() < 1e-6); // 50% of 24px
+        assert_eq!(cfg.os_vibrancy(), Some(Vibrancy::Sidebar));
     }
 
     #[test]
     fn partial_toml_fills_defaults() {
-        let cfg: AppearanceConfig = toml::from_str(
-            r#"
-transparent = true
-opacity = 0.5
-"#,
-        )
-        .expect("partial appearance toml should parse");
-
-        assert!(cfg.transparent);
-        assert!((cfg.opacity - 0.5).abs() < f32::EPSILON);
-        // All other fields should fall back to defaults.
-        assert!((cfg.pane_opacity - 1.0).abs() < f32::EPSILON);
-        assert!((cfg.chrome_opacity - 0.92).abs() < f32::EPSILON);
-        assert!(!cfg.blur);
-        assert_eq!(cfg.vibrancy, Vibrancy::Sidebar);
-        assert!((cfg.blur_amount - 12.0).abs() < f32::EPSILON);
+        let cfg: AppearanceConfig = toml::from_str("transparency = 30\n")
+            .expect("partial appearance toml should parse");
+        assert_eq!(cfg.transparency, 30);
+        assert_eq!(cfg.blur, 0);
+        assert_eq!(cfg.vibrancy, Vibrancy::None);
     }
 
     #[test]
@@ -179,13 +171,15 @@ opacity = 0.5
         let w: Wrapper = toml::from_str(r#"vibrancy = "hud_window""#)
             .expect("hud_window should parse to Vibrancy::HudWindow");
         assert_eq!(w.vibrancy, Vibrancy::HudWindow);
+        let n: Wrapper =
+            toml::from_str(r#"vibrancy = "none""#).expect("none should parse to Vibrancy::None");
+        assert_eq!(n.vibrancy, Vibrancy::None);
     }
 
     #[test]
     fn config_without_appearance_section_uses_defaults() {
         use crate::loader::Config;
 
-        // Minimal valid config — no [appearance] table at all.
         let cfg: Config = toml::from_str(
             r#"
 [settings]
