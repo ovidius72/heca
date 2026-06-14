@@ -1,16 +1,19 @@
 use super::super::{
-    BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton, BackendMouseEvent,
-    BackendMouseEventKind, TerminalCell, TerminalLine, TerminalPaletteDefaults, TerminalSnapshot,
-    TerminalUnderlineStyle,
+    BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
+    BackendMouseEvent, BackendMouseEventKind, TerminalCell, TerminalLine, TerminalPaletteDefaults,
+    TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use std::io::{Result as IoResult, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use wezterm_term::color::{ColorAttribute, ColorPalette};
 use wezterm_term::input::{
     KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use wezterm_term::{CellAttributes, Intensity, Terminal, TerminalConfiguration, TerminalSize};
+use wezterm_term::{
+    Alert, AlertHandler, CellAttributes, Intensity, Terminal, TerminalConfiguration, TerminalSize,
+};
 use wezterm_surface::CursorVisibility;
 
 /// Small wrapper around a shared PTY writer so `wezterm-term` can encode
@@ -56,6 +59,19 @@ impl Write for SharedWriter {
 }
 
 #[derive(Debug)]
+struct BellHandler {
+    pending_bell: Arc<AtomicBool>,
+}
+
+impl AlertHandler for BellHandler {
+    fn alert(&mut self, alert: Alert) {
+        if matches!(alert, Alert::Bell) {
+            self.pending_bell.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+#[derive(Debug)]
 struct HecaTerminalConfig {
     palette: ColorPalette,
 }
@@ -70,6 +86,7 @@ pub(super) struct TerminalEngine {
     terminal: Terminal,
     cols: usize,
     rows: usize,
+    pending_bell: Arc<AtomicBool>,
 }
 
 impl TerminalEngine {
@@ -79,18 +96,23 @@ impl TerminalEngine {
         writer: SharedWriter,
         palette_defaults: Option<TerminalPaletteDefaults>,
     ) -> Result<Self, super::PtyError> {
-        let terminal = Terminal::new(
+        let mut terminal = Terminal::new(
             terminal_size(cols, rows),
             terminal_config(palette_defaults),
             "heca",
             env!("CARGO_PKG_VERSION"),
             Box::new(writer),
         );
+        let pending_bell = Arc::new(AtomicBool::new(false));
+        terminal.set_notification_handler(Box::new(BellHandler {
+            pending_bell: Arc::clone(&pending_bell),
+        }));
 
         Ok(Self {
             terminal,
             cols,
             rows,
+            pending_bell,
         })
     }
 
@@ -106,6 +128,14 @@ impl TerminalEngine {
 
     pub(super) fn advance_bytes(&mut self, bytes: &[u8]) {
         self.terminal.advance_bytes(bytes);
+    }
+
+    pub(super) fn take_alerts(&self) -> Vec<BackendAlert> {
+        if self.pending_bell.swap(false, Ordering::SeqCst) {
+            vec![BackendAlert::Bell]
+        } else {
+            Vec::new()
+        }
     }
 
     pub(super) fn process_key_event(&mut self, event: &BackendKeyEvent) -> bool {
@@ -491,6 +521,17 @@ mod tests {
             }),
             "clear-screen background should be preserved across blank cells"
         );
+    }
+
+    #[test]
+    fn bell_alert_is_captured_once() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine =
+            TerminalEngine::new(80, 24, writer, None).expect("terminal engine should initialize");
+
+        engine.advance_bytes(b"\x07");
+        assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
+        assert!(engine.take_alerts().is_empty());
     }
 
     #[test]

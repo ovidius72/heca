@@ -5,8 +5,8 @@ mod engine;
 mod pty;
 
 use super::{
-    BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType, TerminalDamage,
-    TerminalPaletteDefaults, TerminalSnapshot,
+    BackendAlert, BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType,
+    TerminalDamage, TerminalPaletteDefaults, TerminalSnapshot,
 };
 use engine::TerminalEngine;
 pub use pty::PtyError;
@@ -153,6 +153,10 @@ impl PaneBackend for TerminalBackend {
 
     fn focus_changed(&mut self, focused: bool) {
         self.engine.focus_changed(focused);
+    }
+
+    fn take_alerts(&mut self) -> Vec<BackendAlert> {
+        self.engine.take_alerts()
     }
 
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
