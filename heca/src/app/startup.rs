@@ -13,6 +13,7 @@ use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -119,6 +120,7 @@ pub(crate) async fn init_state(
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
+    let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -175,6 +177,7 @@ pub(crate) async fn init_state(
         primitive_renderer,
         text_renderer,
         grid_renderer,
+        compositor,
         session,
         backends,
         theme: app_config.theme.clone(),

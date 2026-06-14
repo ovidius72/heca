@@ -230,6 +230,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
+    let scene_view = state.compositor.scene_view();
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -267,7 +268,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("clear"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
+            view: scene_view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -304,10 +305,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render(&state.device, scene_view, &mut encoder);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
     // Chrome status bar via grid-ui (replaces the hand-drawn bar above).
     let chrome_scene = crate::chrome::build_chrome_scene(state);
@@ -316,7 +317,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &mut state.text_renderer,
         &state.queue,
         &chrome_scene,
-        &view,
+        scene_view,
         &mut encoder,
     );
 
@@ -373,7 +374,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         primitive_renderer: &mut state.primitive_renderer,
                         device: &state.device,
                         queue: &state.queue,
-                        view: &view,
+                        view: scene_view,
                         encoder: &mut encoder,
                         scale_factor: state.scale_factor,
                         surface_physical_size,
@@ -415,10 +416,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render(&state.device, scene_view, &mut encoder);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = h - chrome.status_bar_height;
@@ -457,7 +458,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             primitive_renderer: &mut state.primitive_renderer,
                             device: &state.device,
                             queue: &state.queue,
-                            view: &view,
+                            view: scene_view,
                             encoder: &mut encoder,
                             scale_factor: state.scale_factor,
                             surface_physical_size,
@@ -663,6 +664,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
 
+    // Reborrow compositor scene texture for the final flush (the previous
+    // `scene_view` borrow ended at its last use before the mouse:: calls above).
+    let scene_view = state.compositor.scene_view();
+
     if let Some(candidates) = state.input_mode.candidates() {
         let letter_size = 48.0f32;
         let label_color = [1.0, 0.9, 0.3, 0.9];
@@ -709,11 +714,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render(&state.device, scene_view, &mut encoder);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
+    state.compositor.blit(&view, &mut encoder);
     state.queue.submit(std::iter::once(encoder.finish()));
     surface_texture.present();
 }

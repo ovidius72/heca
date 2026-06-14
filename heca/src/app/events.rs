@@ -59,6 +59,7 @@ pub(crate) fn handle_window_event(
             state
                 .grid_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
+            state.compositor.resize(&state.device, phys.width, phys.height);
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
         }

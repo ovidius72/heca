@@ -5,6 +5,7 @@ use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
+use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -208,6 +209,7 @@ pub struct AppState {
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
     pub grid_renderer: GridRenderer,
+    pub compositor: Compositor,
     pub session: Session,
     /// Content backends for panes that have one.
     pub backends: BackendStore,
