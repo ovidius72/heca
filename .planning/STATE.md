@@ -152,6 +152,7 @@ If resuming from a fresh session, do this first:
 - richer mouse protocol coverage and selection-vs-terminal-mouse policy
 - scrollback search / terminal UX actions
 - richer image/graphics protocol support
+- Phase 8 pane-shell integration with `heca-grid-ui`
 
 ## Verification
 
