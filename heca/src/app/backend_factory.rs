@@ -110,10 +110,10 @@ pub(crate) fn create_terminal_backend(
         wake_on_output,
     ) {
         Ok(backend) => Box::new(backend),
-        Err(err) => {
+        Err(_err) => {
             #[cfg(debug_assertions)]
             eprintln!(
-                "[heca] warning: failed to create TerminalBackend ({err}); falling back to FakeBackend"
+                "[heca] warning: failed to create TerminalBackend ({_err}); falling back to FakeBackend"
             );
             Box::new(FakeBackend::with_cell_size(cols, rows, cell_w, cell_h))
         }
