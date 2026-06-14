@@ -304,11 +304,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Frosted chrome: when transparent, draw chrome backgrounds (tab bar,
     // sidebars, status bar) translucent so the vibrancy shows through. Panes and
     // text stay opaque. (Per-pane translucency comes later, driven by a protocol.)
-    let chrome_alpha = if state.appearance.is_transparent() {
-        state.appearance.opacity()
-    } else {
-        1.0
-    };
+    let chrome_alpha = state.appearance.chrome_opacity();
     let side_bg = [side_bg[0], side_bg[1], side_bg[2], chrome_alpha];
     state
         .primitive_renderer

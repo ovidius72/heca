@@ -97,6 +97,18 @@ impl AppearanceConfig {
         self.transparency > 0
     }
 
+    /// Chrome panel (sidebar/status/tab) background opacity. A bit more
+    /// see-through than the global `opacity()` so panels read as *frosted*
+    /// (vibrancy showing through) rather than a flat dark tint. `1.0` (opaque)
+    /// when the window isn't transparent.
+    pub fn chrome_opacity(&self) -> f32 {
+        if self.is_transparent() {
+            (self.opacity() * 0.7).clamp(0.0, 1.0)
+        } else {
+            1.0
+        }
+    }
+
     /// In-app blur radius in logical px (`0.0` = off). Scales `blur` 0..100 to
     /// `0..=MAX_BLUR_PX`. Read by the in-app blur pass (F3).
     pub fn blur_radius(&self) -> f32 {
