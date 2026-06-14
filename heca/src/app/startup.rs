@@ -191,6 +191,7 @@ pub(crate) async fn init_state(
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         pending_reload: false,
+        window_focused: true,
     })
 }
 

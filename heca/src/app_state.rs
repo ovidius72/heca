@@ -239,6 +239,8 @@ pub struct AppState {
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,
+    /// Whether the application window is currently focused.
+    pub window_focused: bool,
 }
 
 #[cfg(test)]
