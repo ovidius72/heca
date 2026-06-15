@@ -589,7 +589,7 @@ impl TextRenderer {
     /// Queue text centered within the box `(x, y, w, h)` (logical px):
     /// horizontally per `align`, always centered vertically. Used by the grid
     /// scene renderer ([`crate::scene`]).
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "Public text-box API keeps geometry, styling, and alignment explicit for renderer call sites.")]
     pub fn queue_text_in_box(
         &mut self,
         text: &str,

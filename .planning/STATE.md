@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: Phase 3 of 4 (The Content)
-status: in_progress
-last_updated: "2026-06-13T16:05:00.000Z"
+current_phase: Phase 4 of 4 (The Platform)
+status: pending
+last_updated: "2026-06-14T11:35:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 1
   completed_plans: 0
-  percent: 62
+  percent: 75
 ---
 
 # State: heca
 
-**Current Phase:** Phase 3 — The Content
-**Status:** In progress
-**Last Action:** Closed the current renderer/core review blockers, including u32 primitive indices, safe terminal grid fitting, deterministic spawn sizing, and deterministic PTY test shells
+**Current Phase:** Phase 4 — The Platform
+**Status:** Pending
+**Last Action:** PR `#100` merged to `main`; Phase 3 terminal-core integration is complete
 
 ## Product Phase Progress
 
@@ -25,7 +25,7 @@ progress:
 |-------|--------|-------|
 | 1 — The Shell | ✅ Done | GPU windowing, theme/config, core renderer foundation landed |
 | 2 — The Workspace | ✅ Done | NIRI-style layout, chrome, actions, and refactoring track landed |
-| 3 — The Content | 🔄 In Progress | Real terminal backend live; typing lag improved; structured input path landed; visual refinement and Neovim still pending |
+| 3 — The Content | ✅ Done | Real terminal backend, renderer integration, input path, review hardening, and merge to `main` landed |
 | 4 — The Platform | ⬜ Pending | Session, RPC, plugins, damage tracking polish |
 
 ## Phase 3 Status
@@ -76,29 +76,24 @@ progress:
 
 - Terminal pane appears correctly as a live PTY-backed pane
 - Typing is fast again and no longer stalls for seconds
-- Terminal text rendering is broadly correct again after the main sync, including shell autosuggestion cursor placement
+- Terminal text rendering is broadly correct again after the main sync, including shell autosuggestion cursor placement and cursor shape behavior
 - Floating a pane no longer panics on row/column mismatch during terminal background rendering
 - Terminal text now uses per-cell placement plus measured font-derived cell sizing, and Yazi/nvim are looking materially better after the powerline/symbol follow-up
-- `nvim` redraw behavior should improve because PTY output can now wake the app directly, but live verification is still pending
-- Sidebar visibility during zoom/float should improve because chrome now renders after floats, but live verification is still pending
-- User-reported focus-border issues on newly created panes should improve because render highlighting now follows session focus, but live verification is still pending
-- Structured terminal keyboard/mouse forwarding is now implemented, but live verification is still pending for `nvim` mouse mode, wheel behavior, and modifier-heavy key combinations
-- Terminal style fidelity is improved, but live verification still shows colorscheme mismatch with other terminals
-- The plain shell background is still wrong in practice; it is currently falling back to stock terminal palette behavior because full terminal palette/theme support is not implemented yet
-- Italic styling works, but italic runs may still resolve to the wrong family unless an italic face is installed or `terminal_italic_font_family` is configured
-- Terminal underline styles now render explicitly, including undercurl, dotted, dashed, and double underline
-- Review-driven renderer/core hardening is now landed and the affected checks/tests are green again
+- `nvim` redraw behavior is now healthy because PTY output wakes the app directly
+- Sidebar visibility during zoom/float is now correct because chrome renders after floats
+- Focus-border issues on newly created panes are now resolved by render highlighting following session focus
+- Structured terminal keyboard/mouse forwarding is landed and has been live-tested in `nvim`
+- Terminal style fidelity is improved; live validation now reports color themes as much closer to the source terminals
+- Yazi now renders correctly, including the previously broken powerline/status separator cases
+- `nvim` now renders correctly, including the previously broken powerline/status separator cases
+- Underline and undercurl decoration now render explicitly and are live-tested
+- Review-driven renderer/core hardening is landed and the affected checks/tests are green again
 
-### Remaining For Phase 3
+### Phase 3 Closeout
 
-- Continue validating terminal palette/theme fidelity so live `nvim` colorschemes match other terminals across more themes
-- Validate the measured terminal-metric path in Yazi and other file-manager style TUIs across more fonts
-- Continue the shared terminal symbol/decorations renderer as an app-agnostic subsystem:
-  - keep box-drawing on deterministic geometry
-  - keep powerline separators on deterministic geometry
-  - keep underline/undercurl styles GUI-native and font-independent
-- Validate terminal mouse, focus tracking, and remaining style fidelity in live TUIs
-- Start Neovim pane implementation after terminal rendering/input path is solid
+- PR `#100` is merged: `Finalize terminal renderer integration and phase 3 hardening`
+- Phase 3 terminal-core work is complete
+- Remaining terminal work is intentionally deferred to the post-merge backlog below
 
 ## Backend Status
 
@@ -116,28 +111,28 @@ progress:
 
 - Terminal drawing now enters through a dedicated renderer module, but glyph shaping still relies on generic `TextRenderer` internals
 - Yazi image preview still spins forever because richer graphics/image protocol support is not implemented yet
-- Terminal palette/theme fidelity still needs broader live validation across more themes and TUIs before this branch is merge-ready
+- Terminal palette/theme fidelity still benefits from a few more live checks across additional themes and fonts before merge
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
-- Mouse-aware TUIs now have a structured forwarding path, but live behavior still needs verification
-- Review backlog still open for richer `PtyError` typing and config-loader precedence coverage
+- Mouse-aware TUIs now have a structured forwarding path, but live behavior still needs one more verification pass after the latest renderer sync
+- The full clipboard/selection/backscroll/post-merge backlog is intentionally deferred and should not block this PR
 
 ## Resume Point
 
 If resuming from a fresh session, do this first:
 
 1. Read `terminal-implementation.md`
-2. Continue Phase 3, not Phase 4
-3. First validate the new measured terminal-metric path live:
-- inspect `heca/src/app/terminal_metrics.rs`
-- inspect `heca/src/app/terminal_host.rs`
-- inspect `heca-renderer/src/text.rs`
-- retest Yazi with the current default terminal font and then 1-2 alternative Nerd Fonts
-4. Then continue Phase 3 terminal runtime validation:
-- inspect `heca-renderer/src/terminal.rs` for the shared symbol-rendering path
-- keep powerline-separator and underline/undercurl rendering app-agnostic
-- verify `nvim` colorschemes across multiple themes
-- verify `nvim` mouse mode, wheel behavior, focus tracking, and modifier-heavy key combinations
-- keep Yazi image preview explicitly tracked as a separate protocol-support task, not a merge blocker for the current terminal-core PR
+2. Continue with Phase 4 or the explicit post-merge terminal backlog, not Phase 3 terminal-core work
+3. Use the merged terminal work as the baseline:
+- `heca/src/app/terminal_host.rs`
+- `heca/src/app/backend_factory.rs`
+- `heca-renderer/src/terminal.rs`
+- `heca-renderer/src/text.rs`
+4. Treat the remaining terminal items as future tasks:
+- selection / clipboard
+- bracketed paste / `OSC 52`
+- scrollback search
+- hyperlink / bell / richer graphics
+- Phase 8 pane-shell integration with `heca-grid-ui`
 
 ## Full Terminal Backlog (Post-Merge)
 
@@ -152,6 +147,7 @@ If resuming from a fresh session, do this first:
 - richer mouse protocol coverage and selection-vs-terminal-mouse policy
 - scrollback search / terminal UX actions
 - richer image/graphics protocol support
+- Phase 8 pane-shell integration with `heca-grid-ui`
 
 ## Verification
 
@@ -171,4 +167,4 @@ All passing at the current pause point.
 
 - Do not run the Rust-skill review on each task.
 - Run the Rust-skill review only at the end of a full implementation phase, then fix/review until clean.
-- Current phase is not complete yet, so no phase-end Rust-skill review has been run for this latest renderer work.
+- Phase 3 terminal-core work is complete and merged. The next work starts from that baseline.

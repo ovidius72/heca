@@ -63,7 +63,7 @@ impl HecaApp {
     /// Parse and execute an RPC command string.
     /// Returns the parsed action on success, or an error on failure.
     // Transitional: will be used by the RPC server / socket listener in Phase 5.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Reserved for the Phase 5 RPC server path.")]
     pub fn execute_rpc_command(&mut self, cmd: &str) -> Result<WmAction, rpc::RpcError> {
         let state = self.state.as_mut().ok_or(rpc::RpcError::NotInitialized)?;
         let action = rpc::parse_rpc_command(cmd)?;
