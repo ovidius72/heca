@@ -45,7 +45,20 @@ Key design docs: **`F4-chrome-state-design.md`** (the retained-tree + shared-sta
 
 ## 3. NEXT — in order (all need FRESH context; each is real work)
 
-### F4.4 — generic marker/rail group widget + targeting  ← **start here**
+> **Reordered 2026-06-15 by the generic-DnD-framework decision.** Design doc:
+> **`dnd-framework-refactor-plan.md`** (commit it — currently untracked). Memory:
+> `dnd-framework-generic-refactor`. New order: **DnD-Phase1 → DnD-Phase2 → F4.4 → F4.5(≡DnD-Phase3)**.
+> ⚠️ **This is also tracked as `grid-ui-plan.md` G6** — and the refactor BREAKS G6's locked rule
+> ("extend additively, never fork; never remove drag types") + touches WM-dev-owned `heca/src/mouse/*`.
+> **Get sign-off on both before executing.** Do NOT double-track: **F4.5 and DnD-Phase3 are one task.**
+
+### DnD-Phase1 — generic `DragContext<P>` state layer + generic theme tokens  ← **start here (pending sign-off)**
+- Make `heca-grid-ui/src/drag/` generic over an app-owned payload `P`; delete `DragItemKind`/`DragItem`; rename `SurfaceDragPhase`→`DragPhase`; add app-side `AppDragPayload`. Rename `sidebar_drag_*` theme tokens → generic (+ serde aliases). Pure refactor; DnD stays disabled; build+test `-p heca` green.
+
+### DnD-Phase2 — widget integration + tree-driven resolution + rendering
+- `Draggable`/`DropTarget` builders; `drag::resolve_at`/`drag::dispatch` over the retained tree (kills `sidebar_hit_test` for DnD); `PaintCx::drag_ghost`/`drop_indicator`; showcase recipe + `docs/widgets.md` + AGENTS.md catalog.
+
+### F4.4 — generic marker/rail group widget + targeting (built drag-aware against the new API)
 - **Build a GENERIC widget in `heca-grid-ui`** (e.g. `MarkerGroup`/`RailGroup`): a group of child rows + a left **marker/rail bar** + a `KeyHint` target slot + a drag-handle seam. Theme-driven (bar active/inactive color, width, radius from `Theme` tokens — add tokens if missing). Embed `Base`, impl `Component` + builder traits. Export in `widgets/mod.rs`, add to AGENTS.md catalog + `docs/widgets.md` + unit tests. Model it on existing widgets + the showcase.
 - **Migrate** `chrome.rs`'s inline `column_view` (and the hardcoded `pane_card` alphas/padding, and the `ba8049b` active-ws wash) onto theme-driven widgets. After this, `chrome.rs` only *composes* widgets + projects `SidebarTree` state.
 - Wire **move/swap/take targeting**: pick mode lights up `KeyHint` letters on panes/columns; app feeds candidates from `collect_all_pane_candidates`.
@@ -53,7 +66,7 @@ Key design docs: **`F4-chrome-state-design.md`** (the retained-tree + shared-sta
 ### Pane numbering feature (agreed, spec'd — memory `heca-pane-numbering-spec`)
 - **`prefix+<ws 1-9>+<pane 1-9>`** → focus that pane (deterministic, cross-ws, mode chord; bare `prefix+<digit>` is free — ws-switch is `prefix+w`+digit). Show **per-workspace pane numbers** on cards (visual order). `prefix+q` peek stays as the universal "reach any pane" path. Touches: card display (`chrome.rs`), new `WmAction` (input.rs/actions.rs), default keybindings, handler (ws+index→pane_id). Follow AGENTS.md "Adding New Actions" 11-step checklist.
 
-### F4.5 — re-enable DnD on tree geometry
+### F4.5 ≡ DnD-Phase3 — re-enable DnD on the new framework (ONE task, not two)
 - Migrate drag source/hover/drop off `sidebar_hit_test` onto the retained-tree geometry; the **generic marker bar (F4.4) becomes the drop target / drag handle**. Restore the drag-start block disabled in `45143b5`.
 
 ### Also pending (lower priority)
