@@ -15,6 +15,7 @@ mod surface_left;
 mod target;
 
 use crate::app::interaction::InteractionSource;
+use crate::app::terminal_host::should_intercept_selection_gesture;
 use crate::app_state::{AppState, InteractiveMovePhase};
 use heca_core::layout::PaneId;
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
@@ -58,7 +59,8 @@ pub fn on_mouse_input(
     match (button, button_state) {
         (MouseButton::Left, ElementState::Pressed) => {
             // Meta+click on content pane → start drag from content.
-            if interactive_move_modifier_held(state)
+            if !should_intercept_selection_gesture(state, pos, button, button_state)
+                && interactive_move_modifier_held(state)
                 && let Some(pane_id) = hit_test_pane(state, pos)
             {
                 interactive::start_interactive_move(state, pane_id, pos);

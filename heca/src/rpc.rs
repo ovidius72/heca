@@ -255,6 +255,10 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         // real `copy-selection` and `paste-clipboard` behavior; today they
         // are routed placeholders that set `needs_redraw`.
         "enter-selection-mode" => Ok(WmAction::EnterSelectionMode),
+        "selection-left" => Ok(WmAction::SelectionLeft),
+        "selection-right" => Ok(WmAction::SelectionRight),
+        "selection-up" => Ok(WmAction::SelectionUp),
+        "selection-down" => Ok(WmAction::SelectionDown),
         "clear-selection" => Ok(WmAction::ClearSelection),
         "copy-selection" => Ok(WmAction::CopySelection),
         "paste-clipboard" => Ok(WmAction::PasteClipboard),
@@ -483,6 +487,22 @@ use heca_core::layout::PaneId;
         assert_eq!(
             parse_rpc_command("enter-selection-mode"),
             Ok(WmAction::EnterSelectionMode)
+        );
+        assert_eq!(
+            parse_rpc_command("selection-left"),
+            Ok(WmAction::SelectionLeft)
+        );
+        assert_eq!(
+            parse_rpc_command("selection-right"),
+            Ok(WmAction::SelectionRight)
+        );
+        assert_eq!(
+            parse_rpc_command("selection-up"),
+            Ok(WmAction::SelectionUp)
+        );
+        assert_eq!(
+            parse_rpc_command("selection-down"),
+            Ok(WmAction::SelectionDown)
         );
         assert_eq!(
             parse_rpc_command("clear-selection"),

@@ -225,6 +225,10 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::EnterSelectionMode
+        | WmAction::SelectionLeft
+        | WmAction::SelectionRight
+        | WmAction::SelectionUp
+        | WmAction::SelectionDown
         | WmAction::ClearSelection
         | WmAction::CopySelection
         | WmAction::PasteClipboard => ActionPolicy::FocusedPaneLocal,
@@ -582,6 +586,10 @@ mod tests {
             WmAction::RenamePane,
             // Selection (host capability, Task 02).
             WmAction::EnterSelectionMode,
+            WmAction::SelectionLeft,
+            WmAction::SelectionRight,
+            WmAction::SelectionUp,
+            WmAction::SelectionDown,
             WmAction::ClearSelection,
             WmAction::CopySelection,
             WmAction::PasteClipboard,
@@ -715,6 +723,8 @@ mod tests {
             WmAction::CommandPalette, WmAction::ReloadConfig,
             // Selection (host capability, Task 02).
             WmAction::EnterSelectionMode, WmAction::ClearSelection,
+            WmAction::SelectionLeft, WmAction::SelectionRight,
+            WmAction::SelectionUp, WmAction::SelectionDown,
             WmAction::CopySelection, WmAction::PasteClipboard,
         ];
         for action in &unit_actions {
@@ -1074,6 +1084,10 @@ mod tests {
             WmAction::RenamePane,
             // Selection (host capability, Task 02) — allowed in both domains.
             WmAction::EnterSelectionMode,
+            WmAction::SelectionLeft,
+            WmAction::SelectionRight,
+            WmAction::SelectionUp,
+            WmAction::SelectionDown,
             WmAction::ClearSelection,
             WmAction::CopySelection,
             WmAction::PasteClipboard,
@@ -1109,6 +1123,10 @@ mod tests {
             WmAction::ClosePane,
             // Selection (host capability, Task 02) — allowed from all sources.
             WmAction::EnterSelectionMode,
+            WmAction::SelectionLeft,
+            WmAction::SelectionRight,
+            WmAction::SelectionUp,
+            WmAction::SelectionDown,
             WmAction::ClearSelection,
             WmAction::CopySelection,
             WmAction::PasteClipboard,

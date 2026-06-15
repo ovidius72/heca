@@ -8,6 +8,7 @@ use crate::app::backend_factory::{create_terminal_backend, terminal_grid_for_wor
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
 use crate::app::focus::{focus_pane_by_id, sync_focus};
+use crate::app::terminal_host::{enter_selection_mode_for_focused_terminal, move_focused_terminal_selection};
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
 use crate::sidebar;
@@ -1491,10 +1492,10 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
 
 /// Enter the host-owned selection input mode.
 ///
-/// This action transitions the input mode only. It does **not** start a
-/// selection gesture by itself; the actual `SelectionState::begin(...)`
-/// call is driven by the surface adapter (mouse drag, keyboard cursor in
-/// selection mode, RPC) in later tasks.
+/// For terminal panes, this action starts or resumes a host-grid selection at
+/// the focused terminal cursor so keyboard selection works immediately.
+/// For panes that do not yet expose a selection adapter, it still falls back
+/// to a pure input-mode transition.
 ///
 /// The action only transitions the input mode so that:
 /// - status bar shows `SELECTION`
@@ -1503,15 +1504,31 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
 ///
 /// Pre-existing selections are allowed: a user who confirmed a selection
 /// with `Enter` (leaving it in the `Selected` phase) can re-enter selection
-/// mode to reposition it, and the surface adapter is responsible for
-/// calling `state.selection.begin(...)` to refresh the gesture. The handler
-/// therefore does not assert on the active state — it only transitions the
-/// input mode. Mode-internal keyboard behavior (`Esc` clears, `Enter`
-/// confirms, `prefix` returns to Prefix) is owned by
+/// mode to reposition it. Mode-internal keyboard behavior (`Esc` clears,
+/// `Enter` confirms, `prefix` returns to Prefix, movement keys update the
+/// focus cell) is owned by
 /// `app::input::handle_selection_mode`.
 pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) {
-    state.input_mode = InputMode::Selection;
-    state.needs_redraw = true;
+    if !enter_selection_mode_for_focused_terminal(state) {
+        state.input_mode = InputMode::Selection;
+        state.needs_redraw = true;
+    }
+}
+
+pub fn handle_selection_left(state: &mut AppState, _action: &WmAction) {
+    let _ = move_focused_terminal_selection(state, 0, -1);
+}
+
+pub fn handle_selection_right(state: &mut AppState, _action: &WmAction) {
+    let _ = move_focused_terminal_selection(state, 0, 1);
+}
+
+pub fn handle_selection_up(state: &mut AppState, _action: &WmAction) {
+    let _ = move_focused_terminal_selection(state, -1, 0);
+}
+
+pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) {
+    let _ = move_focused_terminal_selection(state, 1, 0);
 }
 
 /// Clear the active selection and exit selection input mode.

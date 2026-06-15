@@ -634,6 +634,18 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 - `action_priority()`: **do NOT use `_ =>` catch-all** — explicitly match every variant.
 - `resolve()`: case-insensitive key matching, modifier-exact. Physical key fallback for macOS.
 - **All WM state changes go through `registry.execute()`** — no direct `focus_pane_by_id()` calls outside handlers.
+- **No hardcoded feature keys in input handlers.** Any user-triggerable keyboard behavior must go through:
+  - `WmAction`
+  - `ActionRegistry`
+  - `KeymapRegistry`
+  - config-driven bindings (`[keys]` or `[[keys.mode.bindings]]`)
+- This includes mode-local behavior such as selection, resize, sidebar navigation, pane manipulation, and future browser / Neovim GUI interactions.
+- The only acceptable hardcoded keys in mode handlers are universal control keys:
+  - `Esc`
+  - `Enter`
+  - the configured prefix key
+  - raw text-entry primitives for explicit text-input modes
+- Do not match raw feature keys like `h/j/k/l`, arrows, `y`, `p`, etc. inside mode handlers unless they are resolved through the mode keymap and action system.
 - Important app-wide rule: design actions so they are reachable through mouse/UI, keyboard/action dispatch, and RPC whenever that capability makes sense on those surfaces.
 - Default keybindings in `heca-config/src/theme.rs`: add new bindings here.
 

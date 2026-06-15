@@ -5,7 +5,8 @@
 //! through the same contract.
 
 use crate::app::backend_store::BackendStore;
-use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
+use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
     TerminalSnapshot,
@@ -77,6 +78,31 @@ pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
         return;
     }
 
+    // ── Host selection drag: update focus ──
+    //
+    // If a host-owned selection is in progress (Selecting phase) and the
+    // pointer is over the owning pane, update the selection focus to the
+    // current cell coordinates. This makes Shift+drag feel like a
+    // continuous selection gesture.
+    //
+    // We look up coordinates via `owner_id` (the pane the selection started
+    // on), NOT the pane under the cursor. If the mouse drifts outside the
+    // owning pane, `cell_coords_at_position` returns `None` for that pane's
+    // content rect and the focus freezes — this is the correct UX: releasing
+    // outside the pane still confirms the selection up to the last in-bounds
+    // cell.
+    if state.selection.is_selecting()
+        && state.selection.source() == Some(SelectionSource::MouseDrag)
+    {
+        if let Some(SelectionOwner::Pane(owner_id)) = state.selection.owner()
+            && let Some((row, col)) = cell_coords_at_position(state, owner_id, pos)
+        {
+            state.selection.update_focus(row, col);
+            state.needs_redraw = true;
+        }
+        return;
+    }
+
     let Some(target) = terminal_target_at_position(state, pos) else {
         return;
     };
@@ -98,7 +124,71 @@ pub(crate) fn forward_mouse_button(
     button: MouseButton,
     button_state: ElementState,
 ) {
+    if button == MouseButton::Left
+        && button_state == ElementState::Pressed
+        && !state.modifiers.shift_key()
+        && state.selection.is_active()
+    {
+        state.selection.clear();
+        if matches!(state.input_mode, InputMode::Selection) {
+            state.input_mode = InputMode::Normal;
+        }
+        state.needs_redraw = true;
+    }
+
     if started_interactive_move(state, button, button_state) || state.mouse.drag_ctx.is_dragging() {
+        return;
+    }
+
+    // ── Host selection entry path: Shift + left-drag ──
+    //
+    // When the user holds Shift and presses/releases the left button over a
+    // terminal pane, the event is routed to the shared host selection model
+    // instead of being forwarded to the terminal backend. This preserves TUI
+    // mouse behavior (plain left-click still goes to the terminal) while
+    // giving the host an explicit entry gesture for selection.
+    if button == MouseButton::Left && state.modifiers.shift_key() {
+        // Handle release first — this must work even when the pointer
+        // has left the owning pane (e.g. dragged outside and released).
+        // Only mouse-drag selections are ended by mouse release;
+        // keyboard- or RPC-started selections are unaffected.
+        if button_state == ElementState::Released {
+            if state.selection.is_selecting()
+                && state.selection.source() == Some(SelectionSource::MouseDrag)
+            {
+                state.selection.end();
+                state.input_mode = InputMode::Selection;
+                state.needs_redraw = true;
+            }
+            return;
+        }
+
+        // Pressed path: need a valid target to begin selection.
+        let Some(target) = terminal_target_at_position(state, pos) else {
+            return;
+        };
+        // Guard: only begin a HostGrid selection on panes whose backend
+        // actually supports terminal snapshots (i.e. has a cell grid).
+        // Future non-terminal panes (browser, Neovim GUI) will use
+        // `BackendNative` selection or a different entry path.
+        let has_terminal_grid = state
+            .backends
+            .get(target.pane_id)
+            .and_then(|backend| backend.terminal_snapshot())
+            .is_some();
+        if !has_terminal_grid {
+            return;
+        }
+
+        if let Some((row, col)) = cell_coords_at_position(state, target.pane_id, pos) {
+            begin_terminal_selection_at(
+                state,
+                target.pane_id,
+                row,
+                col,
+                SelectionSource::MouseDrag,
+            );
+        }
         return;
     }
 
@@ -171,6 +261,132 @@ pub(crate) fn notify_window_focus_changed(state: &mut AppState, focused: bool) {
     }
 }
 
+pub(crate) fn should_intercept_selection_gesture(
+    state: &AppState,
+    pos: (f32, f32),
+    button: MouseButton,
+    button_state: ElementState,
+) -> bool {
+    if button != MouseButton::Left || button_state != ElementState::Pressed || !state.modifiers.shift_key() {
+        return false;
+    }
+    let move_modifier_held = match state.interactive_move_modifier {
+        heca_config::theme::ModifierKey::Super => state.modifiers.super_key(),
+        heca_config::theme::ModifierKey::Alt => state.modifiers.alt_key(),
+        heca_config::theme::ModifierKey::Ctrl => state.modifiers.control_key(),
+        heca_config::theme::ModifierKey::Shift => state.modifiers.shift_key(),
+    };
+    if move_modifier_held {
+        return false;
+    }
+    let Some(target) = terminal_target_at_position(state, pos) else {
+        return false;
+    };
+    state
+        .backends
+        .get(target.pane_id)
+        .and_then(|backend| backend.terminal_snapshot())
+        .is_some()
+}
+
+pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) -> bool {
+    let Some(pane_id) = state.focused_pane else {
+        return false;
+    };
+    let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())
+    else {
+        return false;
+    };
+
+    let region = match state.selection.active() {
+        Some(active)
+            if active.owner == SelectionOwner::Pane(pane_id)
+                && matches!(active.region, SelectionRegion::HostGrid { .. }) =>
+        {
+            active.region
+        }
+        _ => SelectionRegion::HostGrid {
+            anchor_row: snapshot.cursor.row,
+            anchor_col: snapshot.cursor.col,
+            focus_row: snapshot.cursor.row,
+            focus_col: snapshot.cursor.col,
+        },
+    };
+
+    state.selection.begin(
+        SelectionOwner::Pane(pane_id),
+        SelectionSource::KeyboardMode,
+        region,
+    );
+    state.input_mode = InputMode::Selection;
+    state.needs_redraw = true;
+    true
+}
+
+pub(crate) fn move_focused_terminal_selection(
+    state: &mut AppState,
+    row_delta: isize,
+    col_delta: isize,
+) -> bool {
+    let Some(pane_id) = state.focused_pane else {
+        return false;
+    };
+    let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())
+    else {
+        return false;
+    };
+
+    let (anchor_row, anchor_col, focus_row, focus_col) = match state.selection.active() {
+        Some(active)
+            if active.owner == SelectionOwner::Pane(pane_id) =>
+        {
+            match active.region {
+                SelectionRegion::HostGrid {
+                    anchor_row,
+                    anchor_col,
+                    focus_row,
+                    focus_col,
+                } => (anchor_row, anchor_col, focus_row, focus_col),
+                SelectionRegion::BackendNative => {
+                    return false;
+                }
+            }
+        }
+        _ => (
+            snapshot.cursor.row,
+            snapshot.cursor.col,
+            snapshot.cursor.row,
+            snapshot.cursor.col,
+        ),
+    };
+
+    let max_row = snapshot.rows.saturating_sub(1);
+    let max_col = snapshot.cols.saturating_sub(1);
+    let next_row = focus_row.saturating_add_signed(row_delta).min(max_row);
+    let next_col = focus_col.saturating_add_signed(col_delta).min(max_col);
+
+    state.selection.begin(
+        SelectionOwner::Pane(pane_id),
+        SelectionSource::KeyboardMode,
+        SelectionRegion::HostGrid {
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+        },
+    );
+    state.selection.update_focus(next_row, next_col);
+    state.input_mode = InputMode::Selection;
+    state.needs_redraw = true;
+    true
+}
+
 fn build_mouse_event(
     state: &AppState,
     target: TerminalInputTarget,
@@ -178,27 +394,20 @@ fn build_mouse_event(
     kind: BackendMouseEventKind,
     button: BackendMouseButton,
 ) -> Option<BackendMouseEvent> {
-    let local_x = pos.0 as f64 - target.content_rect.loc.x;
-    let local_y = pos.1 as f64 - target.content_rect.loc.y;
-    if local_x < 0.0
-        || local_y < 0.0
-        || local_x >= target.content_rect.size.w
-        || local_y >= target.content_rect.size.h
-    {
-        return None;
-    }
-
     let (cell_w, cell_h) = state
         .backends
         .get(target.pane_id)
         .map(|backend| backend.cell_size())
         .unwrap_or(state.terminal_cell_size);
-    if cell_w <= 0.0 || cell_h <= 0.0 {
-        return None;
-    }
+    let (row, col) = cell_coords_in_rect(
+        pos,
+        target.content_rect,
+        cell_w as f64,
+        cell_h as f64,
+    )?;
 
-    let col = (local_x / cell_w as f64).floor().max(0.0) as usize;
-    let row = (local_y / cell_h as f64).floor().max(0.0) as usize;
+    let local_x = pos.0 as f64 - target.content_rect.loc.x;
+    let local_y = pos.1 as f64 - target.content_rect.loc.y;
     let x_pixel_offset = (local_x - (col as f64 * cell_w as f64)).round() as isize;
     let y_pixel_offset = (local_y - (row as f64 * cell_h as f64)).round() as isize;
 
@@ -218,6 +427,27 @@ fn build_mouse_event(
     })
 }
 
+fn begin_terminal_selection_at(
+    state: &mut AppState,
+    pane_id: PaneId,
+    row: usize,
+    col: usize,
+    source: SelectionSource,
+) {
+    state.selection.begin(
+        SelectionOwner::Pane(pane_id),
+        source,
+        SelectionRegion::HostGrid {
+            anchor_row: row,
+            anchor_col: col,
+            focus_row: row,
+            focus_col: col,
+        },
+    );
+    state.input_mode = InputMode::Selection;
+    state.needs_redraw = true;
+}
+
 fn started_interactive_move(
     state: &AppState,
     button: MouseButton,
@@ -231,6 +461,51 @@ fn started_interactive_move(
             Some(InteractiveMovePhase::Starting { .. } | InteractiveMovePhase::Moving { .. })
         )
     )
+}
+
+/// Convert a pointer position to terminal cell coordinates within a content
+/// rect, given cell dimensions.
+///
+/// Returns `None` if the position is outside the rect or if cell metrics are
+/// invalid. This is the single geometry path shared by `build_mouse_event`
+/// (terminal forwarding) and `cell_coords_at_position` (host selection) so
+/// both paths use one coordinate model.
+fn cell_coords_in_rect(
+    pos: (f32, f32),
+    content_rect: Rectangle,
+    cell_w: f64,
+    cell_h: f64,
+) -> Option<(usize, usize)> {
+    let local_x = pos.0 as f64 - content_rect.loc.x;
+    let local_y = pos.1 as f64 - content_rect.loc.y;
+    if local_x < 0.0
+        || local_y < 0.0
+        || local_x >= content_rect.size.w
+        || local_y >= content_rect.size.h
+    {
+        return None;
+    }
+    if cell_w <= 0.0 || cell_h <= 0.0 {
+        return None;
+    }
+    let col = (local_x / cell_w).floor().max(0.0) as usize;
+    let row = (local_y / cell_h).floor().max(0.0) as usize;
+    Some((row, col))
+}
+
+/// Convert a pointer position to terminal cell coordinates for a given pane.
+///
+/// Resolves the pane's content rect and cell metrics, then delegates to
+/// `cell_coords_in_rect` — the single geometry path shared with
+/// `build_mouse_event`.
+fn cell_coords_at_position(state: &AppState, pane_id: PaneId, pos: (f32, f32)) -> Option<(usize, usize)> {
+    let content_rect = content_rect_for_pane(state, pane_id)?;
+    let (cell_w, cell_h) = state
+        .backends
+        .get(pane_id)
+        .map(|backend| backend.cell_size())
+        .unwrap_or(state.terminal_cell_size);
+    cell_coords_in_rect(pos, content_rect, cell_w as f64, cell_h as f64)
 }
 
 fn map_mouse_button(button: MouseButton) -> Option<BackendMouseButton> {

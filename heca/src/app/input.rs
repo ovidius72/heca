@@ -102,7 +102,7 @@ pub(crate) fn handle_keyboard_input(
             handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
         InputMode::Selection => {
-            handle_selection_mode(registry, state, ctx);
+            handle_selection_mode(registry, mode_keymaps, state, ctx);
         }
         _ => {}
     }
@@ -508,6 +508,7 @@ fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<PaneId> {
 
 fn handle_selection_mode(
     registry: &ActionRegistry,
+    mode_keymaps: &HashMap<String, KeymapRegistry>,
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) {
@@ -527,11 +528,10 @@ fn handle_selection_mode(
     //             it never sets it. Without arming the timestamp here, the
     //             app would be stuck in Prefix mode until the user types
     //             something that triggers `handle_prefix_mode` to clear it.
+    //   mode bindings → resolve through the `selection` mode keymap and
+    //                   dispatch real actions via the registry.
     //   other keys → ignored; do not forward to the focused backend.
     //
-    // The actual selection-data lifecycle (begin/update_focus/end) is driven
-    // by surface adapters in later tasks; this mode only owns the input-mode
-    // semantics for selection.
     let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
     let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
 
@@ -559,6 +559,13 @@ fn handle_selection_mode(
         state.input_mode = InputMode::Prefix;
         state.prefix_entered_at = Some(std::time::Instant::now());
         state.needs_redraw = true;
+    } else {
+        let combo = mode_combo(ctx);
+        if let Some(mode_map) = mode_keymaps.get("selection")
+            && let Some(action) = mode_map.resolve("selection", &combo).cloned()
+        {
+            dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+        }
     }
 }
 
