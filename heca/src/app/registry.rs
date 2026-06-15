@@ -460,6 +460,10 @@ pub fn build_registry() -> ActionRegistry {
 
     // ── Selection (host capability) ──
     registry.register(&WmAction::EnterSelectionMode, handle_enter_selection_mode);
+    registry.register(&WmAction::SelectionLeft, handle_selection_left);
+    registry.register(&WmAction::SelectionRight, handle_selection_right);
+    registry.register(&WmAction::SelectionUp, handle_selection_up);
+    registry.register(&WmAction::SelectionDown, handle_selection_down);
     registry.register(&WmAction::ClearSelection, handle_clear_selection);
     registry.register(&WmAction::CopySelection, handle_copy_selection);
     registry.register(&WmAction::PasteClipboard, handle_paste_clipboard);
@@ -577,6 +581,34 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn default_selection_mode_bindings_resolve() {
+        let config = heca_config::theme::Config::default();
+        let (mode_keymaps, _) = build_modes(&config);
+        let keymap = mode_keymaps.get("selection").expect("selection mode exists");
+
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("h")),
+            Some(&WmAction::SelectionLeft)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("ArrowLeft")),
+            Some(&WmAction::SelectionLeft)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("l")),
+            Some(&WmAction::SelectionRight)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("ArrowUp")),
+            Some(&WmAction::SelectionUp)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("ArrowDown")),
+            Some(&WmAction::SelectionDown)
         );
     }
 
