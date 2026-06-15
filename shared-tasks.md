@@ -572,60 +572,36 @@ If practical, also live-check:
 
 - review must focus on extraction semantics first, not just “clipboard seems to work”
 - reject if the implementation duplicates wide-character filler cells or invents a terminal-only parallel selection source of truth
-  movement behavior yet.
-  The shared selection mode currently does not move the selection focus with
-  `h/j/k/l` or arrow keys, so the mode is not usable as a tmux-like keyboard
-  selection mode yet.
-- **Medium**: keyboard movement must not be implemented by matching raw keys
-  directly inside `handle_selection_mode`.
-  Selection movement must use `WmAction` variants resolved through the existing
-  keybinding/mode-keymap infrastructure, consistent with the project-wide
-  action architecture.
-- **Medium**: the entry gesture/binding contract is not yet settled.
-  `prefix+s` appeared as a delegated default binding, not as an approved final
-  UX decision. Treat it as provisional and keep the implementation/config path
-  flexible.
-- **Medium**: `Shift + click/drag` must be verified against pane move/drag
-  interactions.
-  The selection entry gesture must not conflict with pane move, floating drag,
-  resize handles, or normal terminal mouse forwarding.
-- **Medium**: the current selection overlay does not follow text semantics.
-  It paints a rectangular cell region, but terminal selection behavior needs to
-  follow text/line semantics rather than only showing a coarse area overlay.
-- **Medium**: there is currently no reliable exit path from mouse-started
-  selection.
-  The user reported that after `Shift + click` starts selection, `Esc`,
-  clicking away, and double-clicking do not reliably clear/exit the selection
-  state. The next fix pass must define and implement explicit exit behavior for
-  cancel/clear/confirm.
-- Verification rerun by reviewer:
-  - `cargo check -p heca`
-  - `cargo check -p heca-renderer`
-  - `cargo clippy -p heca --all-targets`
-  - `cargo clippy -p heca-renderer --all-targets`
-  - `cargo test -p heca`
-  - `cargo test -p heca-renderer`
 
 ---
 
-## Task 04 — Terminal Surface Transparency
+## Task 05 — Terminal Surface Transparency and Frosted Backdrop
 
 **Status:** Open
 
 **Goal**
 
-Add terminal pane transparency now, using the already-merged appearance
-contract, without waiting for the future reusable in-app blur pass.
+Add terminal surface transparency and shared frosted-backdrop blur to terminal
+panes using the now-available shared renderer primitives.
 
-This task is specifically about **transparency**, not blur.
+This task is about the **pane surface layer**:
+
+- transparent/translucent terminal surfaces
+- shared blurred backdrop sampling behind those surfaces
+- keeping terminal foreground rendering fully crisp
+
+This task is **not** about terminal-specific blur logic.
 
 **Scope**
 
 This task should:
 
 - make terminal pane surfaces participate in the existing transparency model
+- use the shared `Blur` + `Backdrop` renderer path for frosted terminal surfaces
+- support both tiled and floating terminal panes on the same shared architecture
+- preserve terminal readability by separating background/backdrop treatment from foreground rendering
 - keep terminal text, cursor, borders, and symbols visually crisp
-- keep the implementation reusable for later blur integration
+- keep the implementation reusable for future non-terminal pane surfaces
 
 This task must not:
 
@@ -644,32 +620,97 @@ Current merged behavior:
   [heca/src/app/startup.rs](/Users/antonio/projects/heca/heca/src/app/startup.rs)
 - chrome panels already use alpha-based translucent fills in
   [heca/src/app/render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs)
-  and [heca/src/chrome.rs](/Users/antonio/projects/heca/heca/src/chrome.rs)
-- the current compositor in
+  and [heca/src/chrome/mod.rs](/Users/antonio/projects/heca/heca/src/chrome/mod.rs)
+- shared blur primitive now exists in
+  [heca-renderer/src/blur.rs](/Users/antonio/projects/heca/heca-renderer/src/blur.rs)
+- shared backdrop sampler now exists in
+  [heca-renderer/src/backdrop.rs](/Users/antonio/projects/heca/heca-renderer/src/backdrop.rs)
+- the compositor scene texture is still the common offscreen scene target in
   [heca-renderer/src/composite.rs](/Users/antonio/projects/heca/heca-renderer/src/composite.rs)
-  is only a persistent scene texture + blit; it does **not** perform blur yet
 
-So this task should reuse the existing transparency contract and avoid
-pretending that blur is already available.
+So this task should reuse the existing appearance contract and the shared
+renderer blur/backdrop path, rather than inventing a terminal-specific effect.
+
+**Architectural Model**
+
+The correct render model is:
+
+1. render the base scene into the compositor scene texture
+2. produce a blurred copy of that scene texture with `Blur`
+3. stamp the blurred content back into selected pane surface rects with `Backdrop`
+4. draw a translucent pane surface fill on top of the backdrop
+5. draw terminal content on top of that surface:
+   - cell backgrounds
+   - glyphs
+   - underlines / undercurl
+   - selection overlay
+   - cursor
+6. draw pane borders / outlines as normal
+
+That means:
+
+- blur is a compositor/surface concern
+- terminal content remains terminal-renderer-owned
+- pane surface frosting is shared infrastructure
+
+**Important Visual Distinction**
+
+There are two different blur/transparency sources:
+
+1. OS vibrancy
+- blurs the desktop behind the window
+- already controlled by `appearance.vibrancy`
+- independent from terminal rendering
+
+2. in-app blur
+- blurs heca scene content already rendered behind the pane surface
+- controlled by `appearance.blur`
+- implemented through `Blur` + `Backdrop`
+
+The task must not confuse those two layers.
+
+**Terminal Surface Policy**
+
+The terminal surface must be split conceptually into:
+
+1. surface backdrop
+- optional blurred scene sampled through `Backdrop`
+- only present when transparency/blur contract says so
+
+2. surface tint/fill
+- alpha-modulated terminal background surface drawn over the blurred backdrop
+- this controls how “glassy” or “solid” the terminal pane feels
+
+3. terminal foreground
+- drawn fully readable and crisp on top
+- must not inherit surface alpha accidentally
+
+This separation is mandatory. Do not implement “blurred text” or “fade the whole terminal pass”.
 
 **Required Architecture**
 
-- transparency must be applied as a **surface/background policy**
+- transparency and blur must be applied as a **surface/background policy**
 - terminal foreground content remains opaque:
   - glyphs
   - cursor
   - underline/undercurl
   - box-drawing
   - powerline symbols
-- the solution must stay compatible with a future shared blur-surface pass
+- the solution must reuse the existing shared blur/backdrop path
 - do not put blur logic in
   [heca-renderer/src/terminal.rs](/Users/antonio/projects/heca/heca-renderer/src/terminal.rs)
+- do not make the terminal renderer own a `Blur` or `Backdrop`
+- keep the blur/backdrop owner at app/compositor level
 
 **Suggested Files**
 
+- [heca/src/app_state.rs](/Users/antonio/projects/heca/heca/src/app_state.rs)
+- [heca/src/app/startup.rs](/Users/antonio/projects/heca/heca/src/app/startup.rs)
+- [heca/src/app/events.rs](/Users/antonio/projects/heca/heca/src/app/events.rs)
 - [heca/src/app/render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs)
-- [heca/src/app/terminal_host.rs](/Users/antonio/projects/heca/heca/src/app/terminal_host.rs)
-- [heca-renderer/src/terminal.rs](/Users/antonio/projects/heca/heca-renderer/src/terminal.rs)
+- [heca-renderer/src/blur.rs](/Users/antonio/projects/heca/heca-renderer/src/blur.rs)
+- [heca-renderer/src/backdrop.rs](/Users/antonio/projects/heca/heca-renderer/src/backdrop.rs)
+- [heca-renderer/src/terminal.rs](/Users/antonio/projects/heca/heca-renderer/src/terminal.rs) only if a small API hook is strictly needed for alpha-friendly surface handling
 - [heca-config/src/appearance.rs](/Users/antonio/projects/heca/heca-config/src/appearance.rs)
 - [heca-config/src/theme.rs](/Users/antonio/projects/heca/heca-config/src/theme.rs)
 
@@ -677,31 +718,156 @@ Avoid unless strictly necessary:
 
 - sidebar/chrome-region widget files
 - `heca-grid-ui` structural widgets
-- compositor blur implementation files
+- selection / clipboard files
+- browser / future Neovim GUI files
 
 **Implementation Requirements**
 
-1. Surface alpha only
-- terminal pane background must become alpha-aware
-- alpha should come from the existing appearance/theme policy, not a terminal-only literal
+1. Shared blur/backdrop ownership
+- add shared blur/backdrop owners to app state if they are not already present
+- initialize them at startup using the surface format and framebuffer size
+- resize them on window resize
+- keep them at app/compositor layer, not in the terminal renderer
 
-2. Opaque foreground
+2. Correct units
+- `appearance.blur_radius()` is in logical px
+- `Blur::process(...)` consumes source-texture pixels, i.e. physical px for the compositor scene
+- convert correctly:
+  - `radius_physical = state.appearance.blur_radius() * state.scale_factor as f32`
+- document this at the call site
+
+3. Surface/background policy
+- terminal pane background must become alpha-aware
+- alpha must come from the existing appearance/theme policy, not a new hardcoded terminal-only literal
+- if the theme already provides terminal background overrides, preserve them and modulate only the surface alpha policy
+
+4. Backdrop draw order
+- blur the already-rendered scene texture once per frame when blur is enabled
+- draw the blurred backdrop into each pane surface rect before terminal foreground content
+- then draw translucent surface tint/fill
+- then draw terminal foreground content
+- then draw borders/outlines
+
+5. Opaque foreground
 - text and cursor must remain fully readable
 - do not globally fade terminal glyphs with the pane background
+- do not blur glyphs, selection text, cursor, or decorations
 
-3. Correct clipping
-- transparency must still respect terminal content rect clipping
-- no bleed into pane chrome or neighboring panes
+6. Tiled and floating panes
+- apply the same surface policy to:
+  - tiled terminal panes
+  - floating terminal panes
+- if you need to stage rollout, floating panes may be easier visually, but the final task is not complete until both are covered unless a strong code reason forces a staged follow-up
 
-4. Future compatibility
-- the shape of the code should make it easy to replace “alpha background only”
-  with “blurred backdrop + alpha background” later
+7. Clipping
+- blurred backdrop sampling must respect pane surface rects
+- terminal content must still respect `pane_content_rect` clipping
+- nothing may bleed under sidebar/status chrome or into neighboring panes
+
+8. Theme/config behavior
+- transparency amount should continue to come from `appearance.transparency`
+- in-app blur amount should come from `appearance.blur`
+- do not add separate terminal-only blur knobs in this task unless the existing plan already requires them
+- if you need a helper for terminal surface opacity, derive it from the shared appearance contract in a reusable way
+
+9. Performance expectations
+- avoid per-pane full-scene blur recomputation
+- preferred model:
+  - one blur of the scene texture per frame
+  - many `Backdrop::draw(...)` calls into pane rects
+- do not re-run `Blur::process(...)` separately for every pane
+
+10. Failure/disabled cases
+- if `appearance.transparency == 0` and `appearance.blur == 0`:
+  - behavior should remain effectively opaque/current
+- if transparency is enabled but blur is `0`:
+  - terminal panes should still become translucent without in-app blur
+- if blur is enabled but transparency is `0`:
+  - decide and document the intended policy clearly at implementation time
+  - recommended policy: no visible pane frosting unless the pane surface actually has alpha to reveal it
+  - do not guess silently; document the chosen behavior in code comments
+
+**Step-by-Step Implementation Plan**
+
+1. Add shared renderer owners to app state
+- add fields for blur/backdrop at app state level
+- initialize in startup beside compositor/grid/text/primitive renderers
+
+2. Handle resize lifecycle
+- on resize, resize blur targets to current framebuffer size
+- backdrop likely remains stateless aside from pipeline/sampler, but wire whatever resize/target bookkeeping is required
+
+3. Define terminal surface opacity helper
+- introduce one helper in app/render or a nearby app-layer module that answers:
+  - what alpha should a terminal pane surface use?
+  - under what conditions should blurred backdrop be drawn?
+- keep this helper shared and explicit
+
+4. Insert blur generation into render flow
+- after the base scene content needed for blur exists, compute the blurred scene once
+- do not do it after all overlays/content if that would blur terminal foreground too
+- this ordering matters; another agent must reason carefully here
+
+5. Stamp backdrop into pane surfaces
+- for each pane rect:
+  - convert pane rect from logical px to physical px
+  - use `Backdrop::draw(...)`
+  - use `src_uv = None` for the common “sample same screen location” case
+- then draw the pane tint/fill and terminal content on top
+
+6. Keep terminal renderer focused on terminal content
+- only change terminal renderer if needed to avoid it force-filling fully opaque default backgrounds across the whole content box
+- if terminal cell backgrounds are already part of terminal semantics, preserve them
+- the pane-level frosted surface must sit behind the terminal grid, not replace per-cell colors
+
+7. Verify floating and tiled pane behavior
+- make sure tiled panes do not bleed into chrome
+- make sure floating panes look correct over underlying content
+- make sure active borders/focus outlines still read clearly
+
+**Potential Pitfalls**
+
+1. Wrong blur ordering
+- if you blur after drawing terminal glyphs, you will blur the terminal itself
+- the blur source must be the scene content behind the pane, not the pane foreground
+
+2. Double-darkening
+- if you stamp blurred backdrop and also keep a fully opaque pane fill, the blur becomes invisible
+- pane fill alpha must actually reveal the backdrop
+
+3. HiDPI unit mismatch
+- backdrop rects and blur radius use physical px
+- pane layout geometry is in logical px
+- do not mix them
+
+4. Full-pane opaque default bg
+- today terminal rendering begins with a full content-box background fill from `default_bg`
+- if left fully opaque, the pane may stay visually opaque even when backdrop exists
+- another agent must decide carefully whether:
+  - the pane-level surface fill replaces that full default fill, or
+  - that fill needs alpha modulation, or
+  - only certain cases should modulate it
+- this is the central design detail of the task and must be handled explicitly
+
+5. Tiled blur usefulness
+- tiled panes may not always have much app content behind them
+- blur may be visually subtle there
+- that is not a bug if the architecture is correct
+- floating panes are a better visual proof case
+
+6. Performance regression
+- avoid per-pane repeated blur passes
+- one blurred scene, many backdrop stamps
 
 **Acceptance Criteria**
 
 - terminal panes visually participate in transparency
-- terminal text/cursor remain crisp
+- terminal panes can use the shared frosted backdrop blur path
+- foreground terminal content remains crisp
 - no terminal-specific blur implementation is introduced
+- blur/backdrop ownership remains shared at app/compositor level
+- tiled and floating panes both render correctly with clipping preserved
+- selection overlays, cursor, underline/undercurl, and symbols remain readable on top
 - code compiles and tests remain green
 
 **Verification**
@@ -717,9 +883,16 @@ cargo clippy -p heca-renderer --all-targets
 
 If practical, also live-check:
 
-1. terminal pane background is visibly translucent
-2. terminal text stays fully legible
-3. transparent panes still clip correctly in float/zoom states
+1. with transparency enabled and blur disabled:
+   - terminal pane surfaces are visibly translucent
+   - terminal text remains crisp
+2. with transparency enabled and blur enabled:
+   - floating terminal panes visibly show frosted in-app backdrop
+   - tiled terminal panes do not bleed into chrome
+3. focus borders/outlines remain readable
+4. selection overlay and cursor still render on top correctly
+5. float/zoom states still clip correctly
+6. performance does not obviously collapse from per-pane repeated blur work
 
 **Agent Completion**
 
@@ -735,7 +908,7 @@ If practical, also live-check:
 
 ---
 
-## Task 05 — heca-grid-ui Pane Replacement and Pane Gap Config
+## Task 06 — heca-grid-ui Pane Replacement and Pane Gap Config
 
 **Status:** Open
 
