@@ -263,6 +263,26 @@ impl Default for KeysConfig {
             Single("prefix+Shift+r".to_string()),
         );
 
+        // ── Selection (host capability, reusable across pane types) ──
+        bindings.insert(
+            "enter_selection_mode".to_string(),
+            Single("prefix+s".to_string()),
+        );
+        bindings.insert(
+            "clear_selection".to_string(),
+            Single("prefix+Shift+s".to_string()),
+        );
+        // `copy_selection` has a default keymap binding so the action is
+        // immediately reachable from the keyboard. The handler is a Phase 10
+        // placeholder; the binding exists for configurability.
+        bindings.insert(
+            "copy_selection".to_string(),
+            Single("prefix+y".to_string()),
+        );
+        // `paste_clipboard` is intentionally not given a default flat
+        // binding to avoid colliding with established keys; users can bind it
+        // in config.toml.
+
         // ── Move pane to column (NIRI-style) ──
         bindings.insert(
             "move_pane_left".to_string(),

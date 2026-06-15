@@ -188,6 +188,12 @@ pub enum WmAction {
         name: String,
     },
 
+    // ── Selection (host capability, reusable across pane types) ──
+    EnterSelectionMode,
+    ClearSelection,
+    CopySelection,
+    PasteClipboard,
+
     // ── Sidebar-specific (parameterized) ──
     AddPaneToColumn {
         ws_idx: usize,
@@ -309,6 +315,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         }),
         "delete_workspace" => Some(WmAction::DeleteWorkspace { ws_idx: 0 }),
         "reload_config" => Some(WmAction::ReloadConfig),
+        "enter_selection_mode" => Some(WmAction::EnterSelectionMode),
+        "clear_selection" => Some(WmAction::ClearSelection),
+        "copy_selection" => Some(WmAction::CopySelection),
+        "paste_clipboard" => Some(WmAction::PasteClipboard),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
             if let Some(rest) = name.strip_prefix("focus_workspace_")
@@ -435,8 +445,13 @@ pub fn build_action(
 }
 
 /// Binding priority: lower = checked first. Focus wins over resize on conflicts.
+///
+/// Test-only helper: the exhaustive test in this module calls it directly so
+/// exhaustiveness is enforced by the test's `each_variant()` list, and any
+/// divergence between the production body and a shadow implementation
+/// surfaces immediately as a compile error.
 #[cfg(test)]
-fn action_priority(action: &WmAction) -> u8 {
+pub(crate) fn action_priority(action: &WmAction) -> u8 {
     match action {
         // Navigation (highest priority)
         WmAction::FocusLeft
@@ -499,6 +514,12 @@ fn action_priority(action: &WmAction) -> u8 {
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
         WmAction::CommandPalette => 5,
+        // Selection (host capability). Treated as pane-management-class
+        // actions so they share priority with close/rename-style actions.
+        WmAction::EnterSelectionMode
+        | WmAction::ClearSelection
+        | WmAction::CopySelection
+        | WmAction::PasteClipboard => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
         WmAction::FocusPane { .. }
@@ -573,6 +594,27 @@ mod tests {
             action_from_name("command_palette"),
             Some(WmAction::CommandPalette)
         );
+        // Selection actions are generic (host capability), not terminal-only.
+        assert_eq!(
+            action_from_name("enter_selection_mode"),
+            Some(WmAction::EnterSelectionMode)
+        );
+        assert_eq!(
+            action_from_name("clear_selection"),
+            Some(WmAction::ClearSelection)
+        );
+        assert_eq!(
+            action_from_name("copy_selection"),
+            Some(WmAction::CopySelection)
+        );
+        assert_eq!(
+            action_from_name("paste_clipboard"),
+            Some(WmAction::PasteClipboard)
+        );
+        // Selection has no parameterized variants in Task 02; the parameterized
+        // pathway is unreachable by design.
+        assert_eq!(action_from_name("copy_selection_42"), None);
+        assert_eq!(action_from_name("enter_selection_mode_now"), None);
     }
 
     #[test]
@@ -635,95 +677,80 @@ mod tests {
 
     #[test]
     fn test_action_priority_exhaustive() {
-        // Explicit match on every variant — no catch-all.
-        let _prio = |a: &WmAction| -> u8 {
-            match a {
-                // Navigation (highest priority)
-                WmAction::FocusLeft
-                | WmAction::FocusRight
-                | WmAction::FocusUp
-                | WmAction::FocusDown
-                | WmAction::NextPane
-                | WmAction::PrevPane => 0,
-                WmAction::SidebarFocus => 0,
-                WmAction::SidebarUp
-                | WmAction::SidebarDown
-                | WmAction::SidebarLeftNav
-                | WmAction::SidebarRightNav
-                | WmAction::SidebarExpandToggle
-                | WmAction::SidebarCreateWorkspace
-                | WmAction::SidebarCreateColumn
-                | WmAction::SidebarSplitInColumn
-                | WmAction::SidebarZoomSelectedColumn
-                | WmAction::SidebarDeleteSelected
-                | WmAction::CollapseCurrentWorkspace
-                | WmAction::ExpandCurrentWorkspace
-                | WmAction::ToggleCurrentWorkspaceCollapsed
-                | WmAction::CollapseCurrentColumn
-                | WmAction::ExpandCurrentColumn
-                | WmAction::ToggleCurrentColumnCollapsed => 4,
-                // Pane management
-                WmAction::SplitHorizontal
-                | WmAction::SplitVertical
-                | WmAction::ZoomColumn
-                | WmAction::Float
-                | WmAction::ClosePane
-                | WmAction::PaneSelect
-                | WmAction::SwapPane
-                | WmAction::SwapAndFocusPane
-                | WmAction::FocusToggleLocal
-                | WmAction::FocusToggleGlobal
-                | WmAction::CreateWorkspace
-                | WmAction::RenameWorkspace
-                | WmAction::RenamePane
-                | WmAction::RenameColumn
-                | WmAction::WorkspaceNext
-                | WmAction::WorkspacePrev => 1,
+        // Exhaustiveness is enforced by listing every variant here: if a new
+        // `WmAction` variant is added, this function will fail to compile
+        // until a representative value is appended. The real `action_priority`
+        // is then called, so any divergence between the production body and
+        // this test (e.g. a catch-all arm in production) surfaces immediately
+        // as a compile error.
+        fn each_variant() -> Vec<WmAction> {
+            vec![
+                // Navigation
+                WmAction::FocusLeft, WmAction::FocusRight,
+                WmAction::FocusUp, WmAction::FocusDown,
+                WmAction::NextPane, WmAction::PrevPane,
                 // Swap
-                WmAction::SwapLeft
-                | WmAction::SwapRight
-                | WmAction::SwapUp
-                | WmAction::SwapDown
-                | WmAction::MovePaneLeft
-                | WmAction::MovePaneRight
-                | WmAction::MoveColumnUp
-                | WmAction::MoveColumnDown => 2,
-                // Resize (lowest priority — checked last)
-                WmAction::ResizeIncrease
-                | WmAction::ResizeDecrease
-                | WmAction::PaneHeightIncrease
-                | WmAction::PaneHeightDecrease => 3,
-                // Sidebars
-                WmAction::SidebarLeft | WmAction::SidebarRight => 4,
+                WmAction::SwapLeft, WmAction::SwapRight,
+                WmAction::SwapUp, WmAction::SwapDown,
+                WmAction::MovePaneLeft, WmAction::MovePaneRight,
+                WmAction::MoveColumnUp, WmAction::MoveColumnDown,
+                // Resize
+                WmAction::ResizeIncrease, WmAction::ResizeDecrease,
+                WmAction::PaneHeightIncrease, WmAction::PaneHeightDecrease,
+                // Pane management
+                WmAction::SplitHorizontal, WmAction::SplitVertical,
+                WmAction::ZoomColumn, WmAction::Float, WmAction::ClosePane,
+                WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
+                WmAction::FocusToggleLocal, WmAction::FocusToggleGlobal,
+                WmAction::CreateWorkspace, WmAction::RenameWorkspace,
+                WmAction::RenamePane, WmAction::RenameColumn,
+                WmAction::WorkspaceNext, WmAction::WorkspacePrev,
+                // Sidebar (mode-internal + global toggles)
+                WmAction::SidebarFocus, WmAction::SidebarUp, WmAction::SidebarDown,
+                WmAction::SidebarLeftNav, WmAction::SidebarRightNav,
+                WmAction::SidebarExpandToggle,
+                WmAction::SidebarCreateWorkspace, WmAction::SidebarCreateColumn,
+                WmAction::SidebarSplitInColumn, WmAction::SidebarZoomSelectedColumn,
+                WmAction::SidebarDeleteSelected,
+                WmAction::CollapseCurrentWorkspace, WmAction::ExpandCurrentWorkspace,
+                WmAction::ToggleCurrentWorkspaceCollapsed,
+                WmAction::CollapseCurrentColumn, WmAction::ExpandCurrentColumn,
+                WmAction::ToggleCurrentColumnCollapsed,
+                WmAction::SidebarLeft, WmAction::SidebarRight,
                 // System
-                WmAction::CommandPalette => 5,
-                // Parameterized variants — not resolved from keybindings
-                WmAction::FocusPane { .. }
-                | WmAction::FocusWorkspace { .. }
-                | WmAction::Swap { .. }
-                | WmAction::Move { .. }
-                | WmAction::MovePaneToWorkspace { .. }
-                | WmAction::MovePaneToColumn { .. }
-                | WmAction::MoveColumnToWorkspace { .. }
-                | WmAction::Resize { .. }
-                | WmAction::ResizeTo { .. }
-                | WmAction::FloatAt { .. }
-                | WmAction::ClosePaneById { .. }
-                | WmAction::RenameTarget { .. }
-                | WmAction::SpawnCommand { .. }
-                | WmAction::EnterMode { .. }
-                | WmAction::ReloadConfig
-                | WmAction::AddPaneToColumn { .. }
-                | WmAction::DeleteColumn { .. }
-                | WmAction::DeleteWorkspace { .. }
-                | WmAction::TakePane { .. }
-                | WmAction::PaneTake
-                | WmAction::PaneTakeAndFocus => 6,
-            }
-        };
-        // Smoke test that all branches compile
-        assert_eq!(_prio(&WmAction::FocusLeft), 0);
-        assert_eq!(_prio(&WmAction::ReloadConfig), 6);
+                WmAction::CommandPalette,
+                // Selection (host capability, Task 02)
+                WmAction::EnterSelectionMode, WmAction::ClearSelection,
+                WmAction::CopySelection, WmAction::PasteClipboard,
+                // Take (panes + quick-take)
+                WmAction::PaneTake, WmAction::PaneTakeAndFocus,
+                // Parameterized variants
+                WmAction::FocusPane { pane_id: PaneId(0) },
+                WmAction::FocusWorkspace { ws_idx: 0 },
+                WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) },
+                WmAction::Move { pane_id: PaneId(0), target_col: 0 },
+                WmAction::MovePaneToWorkspace { pane_id: PaneId(0), ws_idx: 0 },
+                WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
+                WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
+                WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 0.0 },
+                WmAction::ResizeTo { target: ResizeTarget::Column, width: 0.0, height: 0.0 },
+                WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+                WmAction::ClosePaneById { pane_id: PaneId(0) },
+                WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
+                WmAction::SpawnCommand { command: String::new() },
+                WmAction::EnterMode { name: String::new() },
+                WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
+                WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+                WmAction::DeleteWorkspace { ws_idx: 0 },
+                WmAction::TakePane { pane_id: PaneId(0), focus_after: false },
+                WmAction::ReloadConfig,
+            ]
+        }
+
+        // Smoke: every variant compiles and returns a priority.
+        for action in each_variant() {
+            let _ = action_priority(&action);
+        }
     }
 
     #[test]

@@ -36,6 +36,12 @@ pub enum PaneType {
     Terminal,
 }
 
+/// Backend-side alerts emitted by pane content sources.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendAlert {
+    Bell,
+}
+
 /// Backend-agnostic keyboard modifiers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BackendModifiers {
@@ -192,6 +198,11 @@ pub trait PaneBackend: Send {
 
     /// Notify the backend that pane focus changed.
     fn focus_changed(&mut self, _focused: bool) {}
+
+    /// Drain one-shot backend alerts that were raised since the previous poll.
+    fn take_alerts(&mut self) -> Vec<BackendAlert> {
+        Vec::new()
+    }
 
     /// Update logical terminal cell metrics used by snapshot rendering.
     ///

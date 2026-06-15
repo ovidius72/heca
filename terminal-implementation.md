@@ -1349,54 +1349,348 @@ This section must be updated:
 
 ### Next Recommended Task
 
-- Start the explicitly deferred terminal backlog from the merged Phase 3 baseline:
-  - selection / clipboard
-  - bracketed paste / `OSC 52`
-  - scrollback search
-  - hyperlink / open-link behavior
-  - bell handling
-  - richer image / graphics protocol support
-- After those terminal UX/protocol items, continue Phase 8 pane-shell integration with `heca-grid-ui`
+- Validate the now-landed measured-metric and symbol-renderer path across more live TUIs:
+  - retest Yazi after the measured metric, powerline, and per-cell text changes
+  - test multiple terminal Nerd Fonts in heca and compare terminal-UI behavior
+  - determine whether any remaining misalignment is mostly font-specific or still renderer-specific
+  - verify that the measured-metric path did not regress the now-correct shell/nvim cursor spacing
+- Expand the shared terminal symbol/decorations subsystem only where live TUIs justify it:
+  - keep box-drawing geometry
+  - keep powerline separator geometry (``, ``, ``, ``, ``, ``)
+  - keep underline/undercurl rendering GUI-native and app-agnostic
+  - defer rarer symbol families until a real TUI exposes them
+- Keep merge-readiness hardening in place:
+  - primitive rendering must stay `u32`-indexed
+  - terminal grid fitting must reject invalid cell dimensions before integer conversion
+  - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
+- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate merge path, but track Yazi image preview as the next protocol-facing TODO
+- then continue terminal visual/cell-fidelity refinement where runtime gaps remain
+- after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
 
-### Planned but Explicitly Post-Merge
+### Planned Post-Merge Terminal Backlog
 
-These items are intentionally **not** blockers for merging the current Phase 3
-terminal-core PR into `main`. They are tracked here so they do not get lost.
+These items are intentionally post-merge and must not be folded back into the
+completed Phase 3 terminal-core work. They are split into explicit phases so
+multiple agents can work on them without inventing incompatible interaction
+models.
 
-- clipboard and selection work is post-merge; details live in the capability backlog below
-- bracketed paste, `OSC 52`, scrollback search, hyperlink/open-link behavior, and bell handling are post-merge; details live in the capability backlog below
-- richer image/graphics protocols are post-merge; details live in the capability backlog below
-- Phase 8 pane-shell integration with `heca-grid-ui` is post-merge
+## Phase 9 — Shared Host Selection Capability
 
-### Full Terminal Capability Backlog
+Goal:
 
-These items are planned for a fuller terminal experience, but they are **not**
-all blockers for merging the current Phase 3 terminal-core PR into `main`.
+- build selection as a reusable **host capability**, not a terminal-only feature
+- make the same selection model usable by:
+  - terminal panes
+  - future custom Neovim GUI panes
+  - future embedded browser panes
+  - future heca-native content surfaces
 
-- Clipboard and selection:
-  - pointer-driven terminal text selection
-  - future keyboard selection expansion
-  - copy selected terminal text to the system clipboard
-  - paste system clipboard text into the focused terminal backend
-  - expose clipboard operations through mouse/UI, keyboard/action dispatch, and RPC where meaningful
-- Paste/clipboard protocol behavior:
-  - bracketed paste
-  - OSC 52 clipboard integration
-- Terminal UX/runtime features:
-  - scrollback search
-  - open-link action for OSC 8 hyperlinks
-  - bell handling
-  - copy-on-select policy if desired
-- Richer protocol/features:
-  - inline graphics/image protocol support
-  - Yazi image preview
-  - future hyperlink hover/activation affordances
-- Full terminal fidelity/integration:
-  - OSC 8 hyperlinks
-  - bell handling
-  - alternate-screen and focus-reporting validation
-  - richer mouse protocol coverage and selection-vs-terminal-mouse policy
-  - scrollback search and terminal UX actions
+### Why this phase exists
+
+Selection must not be implemented as:
+
+- terminal-only state
+- mouse-only interaction
+- `Shift+drag` as the whole feature
+- a renderer-only overlay with no action model
+
+The correct boundary is:
+
+- host owns the selection model and actions
+- each pane/backend advertises how it participates
+- rendering and text extraction are backend/surface specific
+
+### Required behavior contract
+
+Selection must be reachable through:
+
+1. mouse / UI
+2. keyboard via actions / keybindings
+3. RPC where meaningful
+
+Selection must support:
+
+- begin
+- update / expand
+- end / confirm
+- clear / cancel
+- copy selected content
+- paste later through the same capability family
+
+### Shared terminology
+
+- `selection owner`
+  - the pane/surface that currently owns the active selection
+- `selection source`
+  - mouse drag
+  - keyboard mode
+  - RPC/programmatic request
+- `selection state`
+  - inactive
+  - selecting
+  - selected
+- `selection rendering mode`
+  - host-rendered
+  - backend-native
+
+### Rendering model
+
+Two rendering strategies are supported.
+
+#### A. Host-rendered selection
+
+Used for surfaces where heca owns the text/grid model directly.
+
+Examples:
+
+- terminal pane
+- future custom Neovim GUI pane
+- future host-drawn text surfaces
+
+Host responsibilities:
+
+- hold selection anchor/focus state
+- map pointer or keyboard movement into logical cell/text positions
+- draw the selection overlay
+- extract selected text through the backend/surface adapter
+
+#### B. Backend-native selection
+
+Used for surfaces whose own engine already has strong native selection semantics.
+
+Examples:
+
+- future embedded browser
+
+Host responsibilities:
+
+- route actions into the backend
+- know whether the backend currently owns a selection
+- ask for copied text when needed
+
+The host must not force every pane type into host-rendered cell selection.
+
+### Mouse policy
+
+The default mouse policy must avoid breaking terminal/TUI mouse input.
+
+Rules:
+
+- unmodified mouse input continues to go to the focused terminal/TUI when mouse mode is active
+- host-side pointer selection must use an explicit entry path unless the active pane type declares safe plain-drag selection
+- the temporary default for terminal panes may remain `Shift + left-drag`, but this is only an entry gesture into the shared host selection subsystem, not the final definition of selection
+
+This means:
+
+- the gesture may vary by pane type
+- the underlying selection model must remain shared
+
+### Keyboard/action policy
+
+Selection must become a real action-driven mode.
+
+Required actions to plan for:
+
+- `EnterSelectionMode`
+- `ClearSelection`
+- `CopySelection`
+- `PasteClipboard`
+- `SelectAll` later where meaningful
+
+Future navigation/growth actions:
+
+- move selection caret left/right/up/down
+- expand selection left/right/up/down
+- page-wise expansion later if needed
+
+This mode should feel closer to tmux copy-mode than to a webview text field.
+
+### Backend/surface capability contract
+
+Add a reusable capability boundary rather than terminal-specific ad hoc fields.
+
+Target shape:
+
+- host asks whether the focused pane supports selection
+- host can begin/update/end/clear selection through a shared interface
+- host can request selected text for copy
+- host can ask the pane to paste clipboard content later
+
+The exact Rust type names can evolve, but the contract must support:
+
+- `supports_selection`
+- `selection_model_kind`:
+  - `host_grid`
+  - `backend_native`
+- `begin_selection`
+- `update_selection`
+- `end_selection`
+- `clear_selection`
+- `selection_text`
+
+### Phase 9 checklist
+
+- [ ] Define the shared selection state in app/core terms
+- [ ] Define action names and input-mode integration
+- [ ] Define backend/surface capability contract
+- [ ] Refactor current terminal-only selection groundwork onto the shared model
+- [ ] Implement host-rendered selection for terminal panes
+- [ ] Add keyboard-driven selection mode
+- [ ] Add copy action on top of shared selection
+- [ ] Add RPC-facing hooks where meaningful
+- [ ] Document pane-type-specific mouse entry rules
+
+### Phase 9 tasks
+
+#### Task 9.1 — Shared selection state model
+
+Details:
+
+- introduce one shared selection owner model in app state
+- selection must be keyed by pane/surface owner
+- do not bury it inside terminal-only structs
+
+Done when:
+
+- terminal, browser, and Neovim GUI can all target the same host concept
+
+#### Task 9.2 — Action and mode integration
+
+Details:
+
+- add selection actions through `WmAction`
+- wire them through `ActionRegistry`
+- add a selection input mode rather than relying on mouse-only behavior
+
+Done when:
+
+- selection can be entered and manipulated from keyboard/action dispatch
+
+#### Task 9.3 — Terminal adapter on shared model
+
+Details:
+
+- terminal becomes the first concrete backend using the shared selection system
+- preserve TUI mouse behavior by keeping pointer selection behind an explicit gesture/policy
+- terminal selection overlay/rendering must use the shared selection state
+
+Done when:
+
+- terminal selection no longer behaves like a terminal-only special case
+
+#### Task 9.4 — Copy extraction
+
+Details:
+
+- terminal/backend must expose selected text extraction
+- copy action must operate on the active selection owner
+- do not hardwire copy to terminal only
+
+Done when:
+
+- host can copy selected content regardless of owning pane type
+
+#### Task 9.5 — Backend-native selection path design
+
+Details:
+
+- define how future browser panes opt into backend-native selection
+- define how the host knows whether to render selection or defer to the backend
+
+Done when:
+
+- the browser/Neovim GUI path is specified clearly enough that another agent can implement it without redesign
+
+## Phase 10 — Clipboard and Paste Semantics
+
+Goal:
+
+- layer system clipboard and paste behavior on top of the shared selection model
+
+### Phase 10 checklist
+
+- [ ] Copy selected content to the system clipboard
+- [ ] Paste clipboard text into the focused pane through actions
+- [ ] Support bracketed paste for terminal panes
+- [ ] Support `OSC 52`
+- [ ] Define copy-on-select policy, if desired
+
+### Phase 10 tasks
+
+#### Task 10.1 — Copy action
+
+- copy must use the shared selection owner
+- copy must not assume terminal-only text sources
+
+#### Task 10.2 — Paste action
+
+- paste must route through the focused pane/backend
+- terminal paste must respect bracketed-paste policy when enabled
+
+#### Task 10.3 — Protocol-level clipboard support
+
+- add `OSC 52`
+- keep host clipboard and terminal protocol clipboard rules separate but compatible
+
+## Phase 11 — Terminal UX and Attention Features
+
+Goal:
+
+- finish user-facing runtime behaviors that are broader than core rendering/input
+
+### Phase 11 checklist
+
+- [ ] bell handling policy
+- [ ] scrollback search
+- [ ] hyperlink/open-link behavior
+- [ ] alternate-screen and focus-reporting validation
+- [ ] richer mouse protocol coverage and selection-vs-terminal-mouse policy
+
+### Phase 11 tasks
+
+#### Task 11.1 — Bell policy
+
+- backend alert capture
+- host window attention
+- audible bell policy
+- visual bell or pane-attention indicator policy
+
+#### Task 11.2 — Hyperlinks and scrollback UX
+
+- `OSC 8` links
+- open-link action
+- scrollback search entry points and actions
+
+#### Task 11.3 — Selection-vs-mouse final policy
+
+- define exactly how selection and TUI mouse mode coexist
+- document terminal defaults vs future pane-type-specific defaults
+
+## Phase 12 — Richer Graphics / Image Protocols
+
+Goal:
+
+- support modern terminal graphics without contaminating the core text/grid model
+
+### Phase 12 checklist
+
+- [ ] image/graphics protocol surface design
+- [ ] Yazi image preview support
+- [ ] renderer placement model for graphics
+- [ ] future hover/activation affordances where relevant
+
+## Phase 13 — Pane-Shell Integration with `heca-grid-ui`
+
+Goal:
+
+- integrate the completed terminal capability set into the future pane shell / chrome host architecture
+
+### Phase 13 checklist
+
+- [ ] terminal host mounted as content inside pane shell
+- [ ] process-aware shell state surfaced cleanly
+- [ ] selection/copy/paste actions still reachable through mouse, keyboard, and RPC after shell migration
+- [ ] float/transparency/blur planning remains shell-owned, not terminal-owned
 
 ### In-Flight Work
 

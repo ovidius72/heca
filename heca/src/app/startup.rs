@@ -306,6 +306,7 @@ pub(crate) async fn init_state(
         chrome_sinks: crate::chrome::ChromeSinks::new(),
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
+        selection: app_state::SelectionState::new(),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],
@@ -315,6 +316,7 @@ pub(crate) async fn init_state(
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         pending_reload: false,
+        window_focused: true,
     })
 }
 
