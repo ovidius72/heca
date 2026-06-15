@@ -257,6 +257,14 @@ pub struct AppState {
     /// Sinks the chrome widgets write into when clicked (pane focus, workspace
     /// collapse, …), read after dispatching a pointer event into `chrome_tree` (F4.2+).
     pub chrome_sinks: crate::chrome::ChromeSinks,
+    /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
+    /// Consolidates scattered chrome UI state; superseding `ChromeSinks` + parts of
+    /// `SidebarState`/`SidebarTree`/`input_mode` as consumers migrate onto it.
+    /// Foundation commit: constructed here (proves the reactive runtime at startup);
+    /// consumers (region vis/width, collapse, selection, targeting, scroll) migrate
+    /// onto it next, which is where it starts being read.
+    #[allow(dead_code)]
+    pub chrome_state: crate::chrome::SharedChromeState,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Host-owned shared selection state, reusable across pane/backend types.

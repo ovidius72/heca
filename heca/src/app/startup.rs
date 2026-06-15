@@ -304,6 +304,7 @@ pub(crate) async fn init_state(
         sidebar_tree,
         chrome_tree: None,
         chrome_sinks: crate::chrome::ChromeSinks::new(),
+        chrome_state: crate::chrome::SharedChromeState::new(200.0, 200.0),
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),

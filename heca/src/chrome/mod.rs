@@ -3,6 +3,13 @@
 //! UI dimensions, timing defaults, layout proportions, and render parameters
 //! that were previously scattered as magic numbers across the codebase.
 
+mod state;
+// Consumers migrate onto this incrementally (collapse, region vis/width, selection,
+// targeting, scroll); re-exports widen as each lands. `#[allow(unused)]` covers the
+// foundation commit where the store exists but isn't read yet.
+#[allow(unused_imports)]
+pub use state::{ChromeSelection, RegionState, SharedChromeState};
+
 use heca_core::layout::types::{Point, Rectangle, Size};
 use heca_core::layout::ColumnWidth;
 use std::time::Duration;
