@@ -65,6 +65,13 @@ pub enum InputMode {
     Mode {
         name: String,
     },
+    /// Host-owned selection mode. Entered via `WmAction::EnterSelectionMode`.
+    /// The actual selection data lifecycle (begin/update_focus/end) is driven
+    /// by mouse/UI/RPC adapters and `WmAction::ClearSelection`; this mode
+    /// represents the input state where selection semantics are active. Esc
+    /// clears the selection and returns to `Normal`; Enter confirms the
+    /// selection and returns to `Normal`. Other keys are ignored.
+    Selection,
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
     /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`

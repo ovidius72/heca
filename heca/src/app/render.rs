@@ -174,6 +174,7 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
                 ("TAKE", " pick a pane → ".to_string())
             }
         }
+        InputMode::Selection => ("SELECTION", String::new()),
     }
 }
 

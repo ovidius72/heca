@@ -221,7 +221,13 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePane
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
-        | WmAction::RenameTarget { .. } => ActionPolicy::FocusedPaneLocal,
+        | WmAction::RenameTarget { .. }
+        // Selection acts on the focused pane and is allowed in both
+        // tiled and floating domains.
+        | WmAction::EnterSelectionMode
+        | WmAction::ClearSelection
+        | WmAction::CopySelection
+        | WmAction::PasteClipboard => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -570,7 +576,16 @@ mod tests {
     #[test]
     fn tiled_domain_allows_focused_pane_local() {
         let session = test_session();
-        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane];
+        let actions = [
+            WmAction::Float,
+            WmAction::ClosePane,
+            WmAction::RenamePane,
+            // Selection (host capability, Task 02).
+            WmAction::EnterSelectionMode,
+            WmAction::ClearSelection,
+            WmAction::CopySelection,
+            WmAction::PasteClipboard,
+        ];
         for action in &actions {
             let decision = route_interaction_for_session(
                 &session,
@@ -698,6 +713,9 @@ mod tests {
             WmAction::WorkspaceNext, WmAction::WorkspacePrev,
             WmAction::CreateWorkspace, WmAction::RenameWorkspace,
             WmAction::CommandPalette, WmAction::ReloadConfig,
+            // Selection (host capability, Task 02).
+            WmAction::EnterSelectionMode, WmAction::ClearSelection,
+            WmAction::CopySelection, WmAction::PasteClipboard,
         ];
         for action in &unit_actions {
             let _policy = action_policy(action);
@@ -1044,7 +1062,7 @@ mod tests {
         }
     }
 
-    /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane) are still allowed.
+    /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane, selection actions) are still allowed.
     #[test]
     fn floating_allows_focused_pane_local_via_keyboard() {
         let mut session = test_session();
@@ -1054,6 +1072,11 @@ mod tests {
             WmAction::Float,
             WmAction::ClosePane,
             WmAction::RenamePane,
+            // Selection (host capability, Task 02) — allowed in both domains.
+            WmAction::EnterSelectionMode,
+            WmAction::ClearSelection,
+            WmAction::CopySelection,
+            WmAction::PasteClipboard,
         ];
         for action in &actions {
             let decision = route_interaction_for_session(
@@ -1081,7 +1104,15 @@ mod tests {
             InteractionSource::MouseContent,
             InteractionSource::MouseLeftSidebar,
         ];
-        let actions = [WmAction::Float, WmAction::ClosePane];
+        let actions = [
+            WmAction::Float,
+            WmAction::ClosePane,
+            // Selection (host capability, Task 02) — allowed from all sources.
+            WmAction::EnterSelectionMode,
+            WmAction::ClearSelection,
+            WmAction::CopySelection,
+            WmAction::PasteClipboard,
+        ];
 
         for source in &sources {
             for action in &actions {
