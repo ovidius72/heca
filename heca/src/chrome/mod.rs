@@ -4,11 +4,7 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod state;
-// Consumers migrate onto this incrementally (collapse, region vis/width, selection,
-// targeting, scroll); re-exports widen as each lands. `#[allow(unused)]` covers the
-// foundation commit where the store exists but isn't read yet.
-#[allow(unused_imports)]
-pub use state::{ChromeSelection, RegionState, SharedChromeState};
+pub use state::SharedChromeState;
 
 use heca_core::layout::types::{Point, Rectangle, Size};
 use heca_core::layout::ColumnWidth;
@@ -22,6 +18,8 @@ pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
 /// Default collapsed sidebar width in logical pixels.
 pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
+/// Default expanded sidebar width in logical pixels.
+pub const DEFAULT_SIDEBAR_WIDTH: f32 = 200.0;
 /// Minimum sidebar width to be considered expanded (for rendering decisions).
 pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
 

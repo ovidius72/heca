@@ -260,10 +260,12 @@ pub struct AppState {
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Consolidates scattered chrome UI state; superseding `ChromeSinks` + parts of
     /// `SidebarState`/`SidebarTree`/`input_mode` as consumers migrate onto it.
-    /// Foundation commit: constructed here (proves the reactive runtime at startup);
+    /// Foundation: constructed here (proves the reactive runtime at startup);
     /// consumers (region vis/width, collapse, selection, targeting, scroll) migrate
     /// onto it next, which is where it starts being read.
-    #[allow(dead_code)]
+    /// TODO(chrome-migration): remove this `expect` once a consumer reads the field
+    /// (it self-errors when no longer dead — see PLAN.md P0).
+    #[expect(dead_code, reason = "chrome-state consumers migrate incrementally; PLAN.md P0")]
     pub chrome_state: crate::chrome::SharedChromeState,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
