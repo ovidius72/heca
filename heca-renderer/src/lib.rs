@@ -1,5 +1,6 @@
 pub mod font;
 pub mod atlas;
+pub mod blur;
 pub mod composite;
 pub mod grid;
 pub mod primitive;
