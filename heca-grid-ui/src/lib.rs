@@ -51,7 +51,7 @@ pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, collect_damage,
     install_frame_request, request_frame,
 };
-pub use drag::{DragContext, DragItem, DragItemId, DragItemKind, DragLabel, DragSurfaceId, SurfaceDragPhase, SurfaceDragState};
+pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -72,7 +72,7 @@ pub mod prelude {
     pub use crate::builders::{LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
-    pub use crate::drag::{DragContext, DragItemId, DragItemKind, DragLabel, DragSurfaceId, SurfaceDragPhase, SurfaceDragState};
+    pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;

@@ -1,62 +1,50 @@
-//! Per-surface drag state and phase.
+//! Per-surface drag state and phase, generic over an app-defined payload `P`.
 //!
-//! [`SurfaceDragPhase`] models the lifecycle of a drag within a single surface:
+//! [`DragPhase`] models the lifecycle of a drag within a single surface:
 //! `Idle → Starting → Dragging → Idle`. The `Starting` phase captures the
 //! threshold state before a click becomes a drag.
 //!
-//! App-specific click actions (`WmAction`) are tracked at the app layer
-//! (`MouseState`), not here — this keeps the framework dependency-free.
+//! The framework carries no knowledge of *what* is being dragged: the payload
+//! `P` is defined by the app (e.g. a pane id + origin workspace + swap flag) and
+//! threaded through unchanged. This keeps the drag system domain-neutral and
+//! reusable by any surface/widget.
 
-use crate::drag::{DragItemId, DragItemKind};
+use crate::drag::DragItemId;
 
-/// Phase of a surface-local drag.
+/// Phase of a surface-local drag, carrying the app payload `P`.
 ///
 /// Transitions:
 /// ```text
-/// Idle → Starting  (mouse press on an item)
+/// Idle → Starting  (pointer press on a draggable item; payload captured)
 /// Starting → Dragging  (threshold exceeded)
 /// Starting → Idle  (released without exceeding threshold — app dispatches click)
 /// Dragging → Idle  (drop or cancel)
 /// ```
 #[derive(Clone, Debug)]
-pub enum SurfaceDragPhase {
+pub enum DragPhase<P> {
     /// Not dragging.
     Idle,
-    /// Threshold phase: mouse pressed, waiting to see if it's a drag or click.
+    /// Threshold phase: pointer pressed, waiting to see if it's a drag or click.
     Starting {
-        /// The item being pressed.
-        kind: DragItemKind,
-        /// Pane ID of the pressed item, if applicable.
-        pane_id: Option<u64>,
-        /// Original workspace index of the pressed item.
-        original_ws: usize,
+        /// The app payload describing what is being dragged.
+        payload: P,
         /// Cursor position at press time.
         start_pos: (f32, f32),
         /// Squared pixel threshold for drag start.
         threshold_sq: f32,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
     },
     /// Active drag: threshold exceeded, cursor is being tracked.
     Dragging {
-        /// The item kind being dragged.
-        kind: DragItemKind,
-        /// Pane ID of the dragged item, if applicable.
-        pane_id: Option<u64>,
-        /// Original workspace index.
-        original_ws: usize,
-        /// If true, drop performs a swap instead of a move.
-        swap: bool,
+        /// The app payload describing what is being dragged.
+        payload: P,
     },
 }
 
-
-
 /// Per-surface drag state. Each surface owns one independently.
 #[derive(Clone, Debug)]
-pub struct SurfaceDragState {
+pub struct SurfaceDragState<P> {
     /// Current drag phase for this surface.
-    pub phase: SurfaceDragPhase,
+    pub phase: DragPhase<P>,
     /// Which item the cursor is hovering over (drop target highlight).
     pub hover_item: Option<DragItemId>,
     /// Which item is the drag source (visual dim/strike-through).
@@ -65,10 +53,10 @@ pub struct SurfaceDragState {
     pub ghost_label: Option<DragLabel>,
 }
 
-impl Default for SurfaceDragState {
+impl<P> Default for SurfaceDragState<P> {
     fn default() -> Self {
         Self {
-            phase: SurfaceDragPhase::Idle,
+            phase: DragPhase::Idle,
             hover_item: None,
             source_item: None,
             ghost_label: None,
@@ -79,8 +67,8 @@ impl Default for SurfaceDragState {
 /// Visual info for a drag ghost label.
 ///
 /// Used by the renderer to draw the name of the dragged item following
-/// the cursor during a sidebar drag.
-#[derive(Clone, Debug)]
+/// the cursor during a drag. Domain-neutral: just text + a rect.
+#[derive(Clone, Debug, PartialEq)]
 pub struct DragLabel {
     /// Display text for the ghost label.
     pub text: String,
@@ -94,43 +82,33 @@ pub struct DragLabel {
     pub height: f32,
 }
 
-/// Convenience: return the active drag surface from the phase, if any.
-impl SurfaceDragState {
+impl<P> SurfaceDragState<P> {
     /// Returns true if this surface is in an active drag (Starting or Dragging).
     pub fn is_dragging(&self) -> bool {
-        !matches!(self.phase, SurfaceDragPhase::Idle)
+        !matches!(self.phase, DragPhase::Idle)
     }
 
-    /// Returns the pane_id of the item being dragged, if applicable.
-    pub fn dragged_pane_id(&self) -> Option<u64> {
+    /// Borrow the payload of the in-flight drag (Starting or Dragging), if any.
+    pub fn payload(&self) -> Option<&P> {
         match &self.phase {
-            SurfaceDragPhase::Starting { pane_id, .. } => *pane_id,
-            SurfaceDragPhase::Dragging { pane_id, .. } => *pane_id,
-            SurfaceDragPhase::Idle => None,
+            DragPhase::Starting { payload, .. } | DragPhase::Dragging { payload } => Some(payload),
+            DragPhase::Idle => None,
         }
     }
 
-    /// Returns the original workspace index of the drag, if active.
-    pub fn original_ws(&self) -> Option<usize> {
-        match &self.phase {
-            SurfaceDragPhase::Starting { original_ws, .. } => Some(*original_ws),
-            SurfaceDragPhase::Dragging { original_ws, .. } => Some(*original_ws),
-            SurfaceDragPhase::Idle => None,
-        }
-    }
-
-    /// Returns whether the drag is in swap mode.
-    pub fn is_swap(&self) -> bool {
-        match &self.phase {
-            SurfaceDragPhase::Starting { swap, .. } => *swap,
-            SurfaceDragPhase::Dragging { swap, .. } => *swap,
-            SurfaceDragPhase::Idle => false,
+    /// Mutably borrow the payload of the in-flight drag, if any. Lets the app
+    /// update drag parameters mid-gesture (e.g. toggle a swap flag when a
+    /// modifier is pressed) without the framework knowing the payload's shape.
+    pub fn payload_mut(&mut self) -> Option<&mut P> {
+        match &mut self.phase {
+            DragPhase::Starting { payload, .. } | DragPhase::Dragging { payload } => Some(payload),
+            DragPhase::Idle => None,
         }
     }
 
     /// Reset to Idle, clearing all associated state.
     pub fn reset(&mut self) {
-        self.phase = SurfaceDragPhase::Idle;
+        self.phase = DragPhase::Idle;
         self.hover_item = None;
         self.source_item = None;
         self.ghost_label = None;

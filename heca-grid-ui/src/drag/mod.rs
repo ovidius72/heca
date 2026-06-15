@@ -9,7 +9,7 @@
 //!
 //! - **No GPU code.** This crate emits state; the renderer rasterizes it.
 //! - **No app-specific types.** `WmAction` lives in `heca`; click actions
-//!   are tracked at the app layer, not in [`SurfaceDragPhase`].
+//!   are tracked at the app layer, not in [`DragPhase`].
 //! - **Closed set of surfaces.** [`DragSurfaceId`] is an enum, not a trait,
 //!   so the compiler enforces exhaustiveness and zero-cost dispatch.
 //! - **Per-surface state.** Each surface has independent hover/source/ghost.
@@ -21,6 +21,6 @@ mod math;
 mod state;
 
 pub use context::DragContext;
-pub use item::{DragItem, DragItemId, DragItemKind, DragSurfaceId};
+pub use item::{DragItemId, DragSurfaceId};
 pub use math::{rubberband, DEFAULT_DRAG_THRESHOLD_SQ};
-pub use state::{DragLabel, SurfaceDragPhase, SurfaceDragState};
+pub use state::{DragLabel, DragPhase, SurfaceDragState};

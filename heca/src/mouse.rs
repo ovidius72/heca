@@ -19,9 +19,9 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use heca_core::layout::PaneId;
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
-// NOTE: DragItemKind / DragItemId / DEFAULT_DRAG_THRESHOLD_SQ return when sidebar
-// DnD is re-enabled (F4.5); removed for now to keep the build warning-clean.
-use heca_grid_ui::drag::{DragSurfaceId, SurfaceDragPhase};
+// NOTE: DragItemId / DEFAULT_DRAG_THRESHOLD_SQ return when sidebar DnD is
+// re-enabled (F4.5); removed for now to keep the build warning-clean.
+use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -113,15 +113,15 @@ pub fn on_mouse_input(
                 match active {
                     DragSurfaceId::LeftSidebar => {
                         let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar).expect("LeftSidebar pre-populated in DragContext::default");
-                        let phase = std::mem::replace(&mut left.phase, SurfaceDragPhase::Idle);
+                        let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
                         match phase {
-                            SurfaceDragPhase::Dragging { pane_id, original_ws, swap, .. } => {
-                                release::handle_sidebar_drag_release(state, PaneId(pane_id.unwrap_or(0)), original_ws, swap, pos);
+                            DragPhase::Dragging { payload } => {
+                                release::handle_sidebar_drag_release(state, payload.pane_id, payload.origin_ws, payload.swap, pos);
                             }
-                            SurfaceDragPhase::Starting { .. } => {
+                            DragPhase::Starting { .. } => {
                                 return release::handle_sidebar_drag_starting_release(state);
                             }
-                            _ => {}
+                            DragPhase::Idle => {}
                         }
                     }
                 }

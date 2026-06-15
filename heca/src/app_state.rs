@@ -103,6 +103,24 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
+/// What a surface drag carries — the app payload `P` for
+/// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
+/// payload-agnostic (generic over `P`); this struct is the *one* place the app's
+/// drag semantics live, keeping pane/workspace concepts out of the UI crate.
+///
+/// Today only panes are dragged from the sidebar. As column/workspace/Docker/
+/// agent drags arrive, this grows into an enum of payload variants — the
+/// framework needs no change.
+#[derive(Clone, Debug)]
+pub struct AppDragPayload {
+    /// The pane being dragged.
+    pub pane_id: PaneId,
+    /// Workspace the drag originated in.
+    pub origin_ws: usize,
+    /// If true, drop performs a swap instead of a move.
+    pub swap: bool,
+}
+
 /// State for the interactive content-area drag (pane moved by mouse).
 ///
 /// This is separate from the surface drag system (`DragContext`) because
@@ -151,7 +169,7 @@ pub struct DetachedPane {
 pub struct MouseState {
     pub pos: (f32, f32),
     /// Surface drag coordinator (sidebar, inspector, etc.).
-    pub drag_ctx: DragContext,
+    pub drag_ctx: DragContext<AppDragPayload>,
     /// Content-area interactive move state (separate from surface drags).
     pub interactive_move: Option<InteractiveMovePhase>,
     /// Pane being dragged (detached from layout).
@@ -161,7 +179,7 @@ pub struct MouseState {
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
     /// Pending click action when a sidebar drag doesn't exceed threshold.
-    /// Stored here instead of in `SurfaceDragPhase` to keep the framework
+    /// Stored here instead of in `DragPhase` to keep the framework
     /// dependency-free (no `WmAction` in `heca-grid-ui`).
     pub pending_click_action: Option<WmAction>,
     /// Index of the button currently hovered in the sidebar (for hover visual effect).
