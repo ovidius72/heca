@@ -303,7 +303,7 @@ pub(crate) async fn init_state(
         },
         sidebar_tree,
         chrome_tree: None,
-        chrome_click: std::rc::Rc::new(std::cell::Cell::new(None)),
+        chrome_sinks: crate::chrome::ChromeSinks::new(),
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         last_focused: None,

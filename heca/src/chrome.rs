@@ -93,11 +93,43 @@ use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::cell::Cell;
 use std::rc::Rc;
 
-/// Host-owned sink the chrome widgets write into when activated, so the app can read
-/// the result after dispatching a pointer event into the retained tree (F4.2). Lives
-/// in `AppState` (survives tree rebuilds) and is cloned into pane-card `on_activate`
-/// closures. `Some(id)` = that pane card was clicked.
+/// Sink a pane card writes its id into when clicked. `Some(id)` = that card fired.
 pub(crate) type SidebarClickSink = Rc<Cell<Option<PaneId>>>;
+
+/// Host-owned sinks the chrome widgets write into when activated, so the app can read
+/// the result after dispatching a pointer event into the retained tree. Lives in
+/// `AppState` (survives tree rebuilds), cloned into widget callbacks. Grows as later
+/// slices add targeting (F4.4) / drag (F4.5).
+pub(crate) struct ChromeSinks {
+    /// `Some(pane_id)` = that pane card was clicked → focus it (F4.2).
+    pub click: SidebarClickSink,
+    /// `Some(ws_idx)` = that workspace header was toggled → flip its collapsed state (F4.3).
+    pub ws_toggle: Rc<Cell<Option<usize>>>,
+}
+
+impl ChromeSinks {
+    pub(crate) fn new() -> Self {
+        Self {
+            click: Rc::new(Cell::new(None)),
+            ws_toggle: Rc::new(Cell::new(None)),
+        }
+    }
+
+    fn clear(&self) {
+        self.click.set(None);
+        self.ws_toggle.set(None);
+    }
+}
+
+/// What a dispatched sidebar click resolved to.
+pub(crate) enum ChromeClick {
+    /// A pane card was clicked → focus this pane.
+    Pane(PaneId),
+    /// A workspace header was clicked → toggle this workspace's collapsed state.
+    WorkspaceToggle(usize),
+    /// Click landed on empty space / a non-interactive area.
+    None,
+}
 
 /// Leading glyph for a pane card. **Dynamic-ready seam:** today every pane hosts a
 /// terminal, so this is always [`Glyph::Terminal`]; later it becomes a function of
@@ -172,7 +204,7 @@ fn column_view(c: &SidebarColEntry, theme: &GuiTheme, sink: &SidebarClickSink) -
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
-fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sink: &SidebarClickSink) -> Flex {
+fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sinks: &ChromeSinks) -> Flex {
     let mut col = Flex::column().gap(6.0).grow(1.0);
     for ws in &tree.workspaces {
         let pane_count =
@@ -183,10 +215,15 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sink: &Sideb
         } else {
             Badge::neutral(pane_count.to_string())
         };
+        // The header toggle records the workspace in the toggle sink; the app flips
+        // its collapsed state (canonical) and the tree rebuilds (F4.3).
+        let ws_idx = ws.ws_idx;
+        let ws_sink = sinks.ws_toggle.clone();
         let mut dock = DockFrame::new(ws.name.clone())
             .frameless()
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!ws.collapsed)
+            .on_toggle(move |_| ws_sink.set(Some(ws_idx)))
             .header(
                 Flex::row()
                     .align(Align::Center)
@@ -197,10 +234,10 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sink: &Sideb
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, theme, sink));
+            cols = cols.child(column_view(c, theme, &sinks.click));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, sink.clone()));
+            cols = cols.child(pane_card(float, theme, sinks.click.clone()));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -218,7 +255,7 @@ fn build_sidebar_shell(
     left_w: f32,
     sidebar_h: f32,
     theme: &GuiTheme,
-    sink: &SidebarClickSink,
+    sinks: &ChromeSinks,
 ) -> Pane {
     // Header: a sidebar glyph + a collapse toggle pushed to the right. The toggle is
     // inert until interaction is wired (it becomes an action against shared state).
@@ -239,7 +276,7 @@ fn build_sidebar_shell(
         .gap(8.0)
         .background(theme.surface)
         .child(header)
-        .child(build_workspaces_container(tree, theme, sink))
+        .child(build_workspaces_container(tree, theme, sinks))
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
@@ -419,7 +456,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
             left_w,
             sidebar_h,
             &theme,
-            &state.chrome_click,
+            &state.chrome_sinks,
         ))
     } else {
         None
@@ -439,25 +476,31 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
 
 /// Hit-test a sidebar click by dispatching a pointer-press into the **retained**
 /// chrome tree (whose widgets are laid out at their real on-screen bounds), then
-/// reading which pane card recorded itself in the click sink. `pos` is in logical
-/// window coordinates (same space as the tree layout). Returns the clicked pane id.
+/// reading which widget recorded itself in a sink — a pane card ([`ChromeClick::Pane`])
+/// or a workspace header ([`ChromeClick::WorkspaceToggle`]). `pos` is in logical
+/// window coordinates (same space as the tree layout).
 ///
 /// The dispatched tree is then discarded (rebuilt next frame) so any incidental
-/// internal widget state changes (e.g. a `DockFrame` header toggle) don't persist
-/// out of sync with canonical state — proper collapse/toggle handling is F4.3.
-pub(crate) fn chrome_pick_pane(
+/// internal widget state (e.g. a `DockFrame`'s own expanded flag) doesn't persist
+/// out of sync with canonical state — the app applies the change to the `SidebarTree`.
+pub(crate) fn chrome_dispatch_click(
     state: &mut crate::app_state::AppState,
     pos: (f32, f32),
-) -> Option<PaneId> {
-    let sink = state.chrome_click.clone();
-    sink.set(None);
+) -> ChromeClick {
+    state.chrome_sinks.clear();
     if let Some(tree) = state.chrome_tree.as_mut() {
         tree.root.event(&Event::PointerPressed {
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
     state.chrome_tree = None;
-    sink.get()
+    if let Some(pane_id) = state.chrome_sinks.click.get() {
+        ChromeClick::Pane(pane_id)
+    } else if let Some(ws_idx) = state.chrome_sinks.ws_toggle.get() {
+        ChromeClick::WorkspaceToggle(ws_idx)
+    } else {
+        ChromeClick::None
+    }
 }
 
 fn sidebar_state_tag(s: &SidebarItemState) -> u8 {
@@ -617,10 +660,10 @@ mod tests {
         });
 
         let theme = GuiTheme::grid_tron();
-        let sink: super::SidebarClickSink = std::rc::Rc::new(std::cell::Cell::new(None));
+        let sinks = super::ChromeSinks::new();
         // The shell is [header, WorkspacesContainer]; the container hosts a dock per
         // workspace (so the tree's text is visible inside the shell).
-        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sink);
+        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks);
         assert_eq!(
             shell.base().children.len(),
             2,
