@@ -233,8 +233,8 @@ pub(crate) async fn init_state(
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: 200.0,
-        right_sidebar_width: 200.0,
+        left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
     };
     let log_w = physical.width as f32 / scale_factor as f32;
     let log_h = physical.height as f32 / scale_factor as f32;
@@ -297,13 +297,20 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         sidebar: SidebarState {
             left_visible: true,
-            left_width: 200.0,
+            left_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
             right_visible: true,
-            right_width: 200.0,
+            right_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         },
         sidebar_tree,
         chrome_tree: None,
         chrome_sinks: crate::chrome::ChromeSinks::new(),
+        // Initial chrome state mirrors SidebarState defaults during the migration.
+        chrome_state: crate::chrome::SharedChromeState::new(
+            crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+            true,
+            crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+            true,
+        ),
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),

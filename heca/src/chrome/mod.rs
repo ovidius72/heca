@@ -3,6 +3,9 @@
 //! UI dimensions, timing defaults, layout proportions, and render parameters
 //! that were previously scattered as magic numbers across the codebase.
 
+mod state;
+pub use state::SharedChromeState;
+
 use heca_core::layout::types::{Point, Rectangle, Size};
 use heca_core::layout::ColumnWidth;
 use std::time::Duration;
@@ -15,6 +18,8 @@ pub const DEFAULT_TAB_BAR_HEIGHT: f32 = 32.0;
 pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
 /// Default collapsed sidebar width in logical pixels.
 pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
+/// Default expanded sidebar width in logical pixels.
+pub const DEFAULT_SIDEBAR_WIDTH: f32 = 200.0;
 /// Minimum sidebar width to be considered expanded (for rendering decisions).
 pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
 
