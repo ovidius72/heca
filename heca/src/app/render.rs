@@ -102,6 +102,9 @@ struct TerminalRenderPassContext<'a> {
     encoder: &'a mut wgpu::CommandEncoder,
     scale_factor: f64,
     surface_physical_size: winit::dpi::PhysicalSize<u32>,
+    /// The scrolling content area; pane content is clipped to it so panes scrolled
+    /// partially behind the chrome (sidebars/status) don't bleed under it.
+    content_clip: Rectangle,
 }
 
 fn render_terminal_mount(
@@ -118,10 +121,20 @@ fn render_terminal_mount(
         encoder,
         scale_factor,
         surface_physical_size,
+        content_clip,
     } = render_ctx;
     let content_box = rect_to_text_box(mount.content_rect);
-    let (clip_x, clip_y, clip_w, clip_h) =
-        (content_box.x, content_box.y, content_box.w, content_box.h);
+    // Intersect the pane's own rect with the scrolling content area, so a pane
+    // scrolled partially under the sidebar/status chrome is cropped at the content
+    // edge instead of bleeding into the chrome region.
+    let clip_x = content_box.x.max(content_clip.loc.x as f32);
+    let clip_y = content_box.y.max(content_clip.loc.y as f32);
+    let clip_right =
+        (content_box.x + content_box.w).min((content_clip.loc.x + content_clip.size.w) as f32);
+    let clip_bottom =
+        (content_box.y + content_box.h).min((content_clip.loc.y + content_clip.size.h) as f32);
+    let clip_w = (clip_right - clip_x).max(0.0);
+    let clip_h = (clip_bottom - clip_y).max(0.0);
     {
         text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
@@ -310,6 +323,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
+    // The scrolling content area is left TRANSPARENT (no canvas fill) so empty
+    // (pane-less) space shows the frosted vibrancy, per design. Panes are still
+    // clipped to `pane_area` below so they don't bleed under the chrome.
+
     let active_pane_id = state
         .session
         .active_workspace()
@@ -323,17 +340,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
-
-    // Chrome status bar via grid-ui (replaces the hand-drawn bar above).
-    let chrome_scene = crate::chrome::build_chrome_scene(state);
-    render_chrome(
-        &mut state.grid_renderer,
-        &mut state.text_renderer,
-        &state.queue,
-        &chrome_scene,
-        scene_view,
-        &mut encoder,
-    );
 
     let theme_border = theme.border.to_f32x4();
     let border_width = theme.border_width;
@@ -353,6 +359,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
         .unwrap_or((0.0, 0.0));
     let surface_physical_size = state.window.inner_size();
+    // Scissor for the scrolling content area — pane backgrounds/borders are clipped
+    // to it so panes scrolled partially behind the chrome don't bleed under it.
+    let content_scissor = pane_scissor_rect(
+        pane_area.loc.x as f32,
+        pane_area.loc.y as f32,
+        pane_area.size.w as f32,
+        pane_area.size.h as f32,
+        state.scale_factor,
+        surface_physical_size,
+    );
 
     for (pane_id, rect) in &pane_positions {
         let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
@@ -392,6 +408,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         encoder: &mut encoder,
                         scale_factor: state.scale_factor,
                         surface_physical_size,
+                        content_clip: pane_area,
                     },
                     TerminalStyle {
                         font_size: theme.terminal_font_size,
@@ -430,7 +447,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     state
         .primitive_renderer
-        .render(&state.device, scene_view, &mut encoder);
+        .render_clipped(&state.device, scene_view, &mut encoder, content_scissor);
     state
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
@@ -476,6 +493,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             encoder: &mut encoder,
                             scale_factor: state.scale_factor,
                             surface_physical_size,
+                            content_clip: pane_area,
                         },
                         TerminalStyle {
                             font_size: theme.terminal_font_size,
@@ -526,64 +544,39 @@ pub(crate) fn render_frame(state: &mut AppState) {
         heca_core::layout::Size::new(pane_area.size.w, pane_area.size.h),
     );
 
-    state.primitive_renderer.draw_rect(
-        0.0,
-        sidebar_top,
-        chrome.left_sidebar_width,
-        sidebar_h,
-        side_bg,
-    );
-    state.primitive_renderer.draw_border(
-        chrome.left_sidebar_width - 1.0,
-        sidebar_top,
-        1.0,
-        sidebar_h,
-        theme.border.to_f32x4(),
-        1.0,
-    );
-    let candidates = state.input_mode.candidates();
-    let drag_hover = state
-        .mouse
-        .drag_ctx
-        .surface(DragSurfaceId::LeftSidebar)
-        .and_then(|s| s.hover_item);
-    let drag_source = state
-        .mouse
-        .drag_ctx
-        .surface(DragSurfaceId::LeftSidebar)
-        .and_then(|s| s.source_item);
-    let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
-    let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
-    if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
-        sidebar::render_sidebar_expanded(
-            &mut state.sidebar_tree,
+    // The EXPANDED left sidebar is now drawn by the grid-ui chrome scene
+    // (`build_chrome_scene`). Only the COLLAPSED icon rail is still hand-drawn
+    // here; when expanded we skip the hand-drawn bg/divider/content entirely so it
+    // doesn't paint over the grid sidebar.
+    if chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+        state.primitive_renderer.draw_rect(
             0.0,
             sidebar_top,
             chrome.left_sidebar_width,
             sidebar_h,
-            matches!(state.input_mode, InputMode::SidebarNav),
-            theme.accent.to_f32x4(),
-            theme.foreground.to_f32x4(),
-            [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],
-            [
-                theme.accent.to_f32x4()[0],
-                theme.accent.to_f32x4()[1],
-                theme.accent.to_f32x4()[2],
-                0.5,
-            ],
-            candidates,
-            active_pane_id,
-            &mut state.text_renderer,
-            &mut state.primitive_renderer,
-            drag_hover,
-            drag_source,
-            drag_source_bg,
-            drag_source_border,
-            state.mouse.sidebar_hovered_btn_idx,
-            theme.sidebar_label_font_size,
-            theme.sidebar_button_font_size,
+            side_bg,
         );
-    } else {
+        state.primitive_renderer.draw_border(
+            chrome.left_sidebar_width - 1.0,
+            sidebar_top,
+            1.0,
+            sidebar_h,
+            theme.border.to_f32x4(),
+            1.0,
+        );
+        let candidates = state.input_mode.candidates();
+        let drag_hover = state
+            .mouse
+            .drag_ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .and_then(|s| s.hover_item);
+        let drag_source = state
+            .mouse
+            .drag_ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .and_then(|s| s.source_item);
+        let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
+        let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
         sidebar::render_sidebar_collapsed(
             &mut state.sidebar_tree,
             0.0,
@@ -732,6 +725,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
+
+    // Grid-ui chrome (full-height sidebar SHELL + status bar) painted LAST so the
+    // shell sits ON TOP of the pane content/canvas instead of panes bleeding under
+    // it. The collapsed left rail + right "Details" sidebar stay hand-drawn above.
+    let chrome_scene = crate::chrome::build_chrome_scene(state, chrome);
+    render_chrome(
+        &mut state.grid_renderer,
+        &mut state.text_renderer,
+        &state.queue,
+        &chrome_scene,
+        scene_view,
+        &mut encoder,
+    );
 
     state.compositor.blit(&view, &mut encoder);
     state.queue.submit(std::iter::once(encoder.finish()));
