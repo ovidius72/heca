@@ -575,8 +575,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             .drag_ctx
             .surface(DragSurfaceId::LeftSidebar)
             .and_then(|s| s.source_item);
-        let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
-        let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
+        let drag_source_bg = theme.drag_source_bg.to_f32x4();
+        let drag_source_border = theme.drag_source_border.to_f32x4();
         sidebar::render_sidebar_collapsed(
             &mut state.sidebar_tree,
             0.0,
@@ -623,14 +623,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
             ghost_y,
             ghost_w,
             ghost_h,
-            theme.sidebar_drag_ghost_bg.to_f32x4(),
+            theme.drag_ghost_bg.to_f32x4(),
         );
         state.primitive_renderer.draw_border(
             ghost_x,
             ghost_y,
             ghost_w,
             ghost_h,
-            theme.sidebar_drag_source_border.to_f32x4(),
+            theme.drag_source_border.to_f32x4(),
             1.5,
         );
         state.text_renderer.queue_text(
@@ -638,7 +638,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             ghost_x + 6.0,
             ghost_y + 4.0,
             13.0,
-            theme.sidebar_drag_ghost_fg.to_f32x4(),
+            theme.drag_ghost_fg.to_f32x4(),
         );
     }
 
