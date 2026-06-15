@@ -647,7 +647,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 let i = pane_states.borrow().len();
                 pane_states.borrow_mut().push(row.state());
                 let pane_states = pane_states.clone();
-                row.on_activate(move || {
+                // DnD framework (universal `DragExt`): each card is a drag source
+                // carrying its index as the opaque id. The app resolves a drop via
+                // `drag::source_at`/`resolve_at` over the laid-out tree and paints
+                // `PaintCx::drag_ghost`/`drop_indicator` — see docs/widgets.md §Drag.
+                row.draggable(DragItemId::new(i)).on_activate(move || {
                     pane_sel.set(i);
                     for (j, s) in pane_states.borrow().iter().enumerate() {
                         s.set(j == i);
@@ -711,7 +715,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .dock(source_control);
 
             // PANES: each row a state-tinted card, its tag aligned to the title line.
+            // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
+                .drop_target(DragItemId::new(usize::MAX))
                 .child(
                     pane(
                         Icon::new(Glyph::Terminal).color(theme.success).size(20.0),

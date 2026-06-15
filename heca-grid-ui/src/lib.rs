@@ -45,13 +45,13 @@ pub mod widgets;
 pub use heca_core::layout::{Point, Rectangle, Size};
 
 pub use action::{Action, SignalData};
-pub use builders::{LayoutExt, Parent, StyleExt};
+pub use builders::{DragExt, LayoutExt, Parent, StyleExt};
 pub use color::Color;
 pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, collect_damage,
     install_frame_request, request_frame,
 };
-pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
+pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -69,7 +69,7 @@ pub use widgets::{
 /// Common imports for building UIs.
 pub mod prelude {
     pub use crate::action::{Action, SignalData};
-    pub use crate::builders::{LayoutExt, Parent, StyleExt};
+    pub use crate::builders::{DragExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
     pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
