@@ -3,10 +3,19 @@
 //! Given **any** source texture view, [`Blur::process`] produces a blurred copy
 //! via two passes (horizontal then vertical) through internal ping-pong targets,
 //! and returns the blurred view. It is **content-agnostic and host/compositor-
-//! owned**: the app uses it to frost chrome over the scene; a terminal/pane host
-//! can reuse the same primitive on its own offscreen content (see
-//! `pluggable-chrome-plugin-plan.md` Phase 7.5 — blur is a compositor concern,
-//! not terminal-owned).
+//! owned** (see `pluggable-chrome-plugin-plan.md` Phase 7.5 — blur is a compositor
+//! concern, not terminal-owned): the intended app use is to frost chrome over the
+//! scene, and a terminal/pane host can reuse it on its own offscreen content.
+//!
+//! **Status:** this is the standalone primitive only — it is **NOT yet wired into
+//! the app** (no `Blur` field on `AppState`, no call site in `render_frame`), so
+//! `appearance.blur` currently has no runtime effect. App-side wiring is a tracked
+//! follow-up (`PLAN.md`).
+//!
+//! **Units:** `radius` is in the **source texture's own pixel space** — i.e.
+//! *physical* pixels for the compositor scene texture (created at framebuffer size).
+//! `heca-config`'s `appearance.blur_radius()` is in **logical** px, so a caller must
+//! convert before calling: `radius_physical = blur_radius() * scale_factor`.
 //!
 //! Contract for reuse:
 //! ```ignore
@@ -16,8 +25,8 @@
 //!     blur.process(&device, &queue, &mut encoder, &source_view, radius);
 //! // sample `blurred` (linear) as a frosted backdrop, then draw translucent chrome over it.
 //! ```
-//! The source must match the blur's current size; `radius` is in source pixels
-//! (0 = passthrough). No app types, no GPU globals — just textures in/out.
+//! The source must match the blur's current size; `radius` is in source-texture
+//! pixels (see Units above; 0 = passthrough). No app types, no GPU globals.
 
 use wgpu::util::DeviceExt;
 
@@ -221,7 +230,9 @@ impl Blur {
         self.size = (width.max(1), height.max(1));
     }
 
-    /// Blur `src_view` (must match the current size) by `radius` source-pixels and
+    /// Blur `src_view` (must match the current size) by `radius` in **source-texture
+    /// pixels** (physical px for the compositor scene texture — convert from logical
+    /// `appearance.blur_radius()` via `* scale_factor`; see module Units note) and
     /// return the blurred view. `radius <= 0` still copies (passthrough). The
     /// returned view is owned by `self` and valid until the next `process`/`resize`.
     pub fn process(

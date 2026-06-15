@@ -1,7 +1,39 @@
 # heca — Agent Guide
 
 > Everything an AI coding agent needs to work effectively on the heca project.
-> Last updated: 2026-06-09
+> Last updated: 2026-06-15
+
+---
+
+## ⛔ STOP — read this before writing code (the two mistakes that get work rejected)
+
+These are made over and over. **Violating either = redo.**
+
+### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
+- **Before building ANY UI**, look at what already exists:
+  - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
+  - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
+    it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
+  - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
+    `DockFrame`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
+    `Label`, `Input`, `Select`, `Modal`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
+- **New UI = a proper, GENERIC, theme-driven `heca-grid-ui` widget** — embed `Base`, impl
+  `Component` + builder traits, read **ALL** styling from `Theme` (colors/font/radius/border).
+  **NEVER** ad-hoc inline `Flex`/`Surface` with hardcoded sizes/colors in the app. Domain-neutral
+  (never name a widget for workspace/column/pane). Full rule: **§ "Creating new widgets"** below.
+
+### 2. Behavior/keys → register through the registries. NEVER hardcode.
+- **Every action goes through `ActionRegistry`** (`heca/src/actions.rs`): `registry.register(...)` +
+  `registry.execute(...)`. **Registry bypasses are bugs.** No direct state mutation from input code.
+- **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
+  `config.toml`** — never hardcode a key→behavior mapping in handlers. heca is tmux-like: bindings
+  go through the prefix (see § Keybinding Style).
+- Adding an action? Follow the **"Adding New Actions" checklist** (§ below) end to end — `WmAction`
+  variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor.
+- Rule: a capability must be reachable from **mouse + keybinding/action + RPC**, never one surface only.
+
+> If a change touches UI or input and you didn't open `docs/widgets.md`/the showcase, or didn't go
+> through the registries, stop and redo it.
 
 ---
 
