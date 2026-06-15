@@ -105,9 +105,9 @@ Status values:
 
 ---
 
-## Task 03 — Terminal Selection Adapter and Overlay
+### Task 03 — Terminal Selection Adapter and Overlay
 
-**Status:** Needs Edit
+**Status:** Accepted
 
 **Goal**
 
@@ -238,7 +238,7 @@ If practical, also live-check:
 2. plain terminal mouse behavior in `nvim` still works
 3. selection overlay does not bleed into pane borders or status chrome
 
-**Agent Completion**
+**Delivered**
 
 - Added `SelectionOverlay` struct and `render_selection_overlay` method to `TerminalRenderer` in `heca-renderer/src/terminal.rs`:
   - `SelectionOverlay` carries raw cell coordinates (`anchor_row`, `anchor_col`, `focus_row`, `focus_col`) and a `color: [f32; 4]`. The renderer is agnostic of the shared selection model — it receives plain coordinates from the app layer.
@@ -302,22 +302,276 @@ The selection model warnings dropped from 9 to 7 — `active()`, `owner`, `begin
 
 These will resolve as future tasks add keyboard-driven selection mode, RPC-initiated selection, and backend-native selection paths.
 
+**Acceptance Basis**
+
+- terminal panes are the first concrete consumer of the shared host selection model
+- selection ownership is stored in shared host state, not terminal-only fields
+- the renderer consumes host-provided overlay spans and stays agnostic of the selection model
+- `Shift + left-drag` is an explicit selection entry path without breaking ordinary TUI mouse forwarding
+- selection mode movement is action-driven through registry + keymaps, not hardcoded raw feature keys
+- move/swap gesture coexistence is preserved:
+  - `Shift + drag` selects
+  - interactive move modifier + drag moves
+  - interactive move modifier + `Shift` + drag still reaches move/swap behavior
+- release outside the pane still confirms mouse-drag selection
+- verification passed:
+  - `cargo check -p heca`
+  - `cargo check -p heca-renderer`
+  - `cargo clippy -p heca --all-targets`
+  - `cargo clippy -p heca-renderer --all-targets`
+  - `cargo test -p heca`
+  - `cargo test -p heca-renderer`
+
+---
+
+## Task 04 — Shared Selection Text Extraction and Copy Action
+
+**Status:** Open
+
+**Goal**
+
+Complete the next planned selection slice by making the active shared selection
+actually copyable.
+
+This task must:
+
+- extract selected text from the active selection owner
+- implement `CopySelection` end-to-end
+- write the copied text to the system clipboard
+- preserve the shared host-selection architecture
+
+This is the first clipboard-facing task, but it is still scoped to **copy of
+existing selection only**. It must not implement paste yet.
+
+**Why this task exists**
+
+Selection visuals are already implemented for terminal panes. The next missing
+user-visible capability is converting that shared selection into real text and
+copying it through the existing action system.
+
+This task should finish the “selection is useful” milestone before we start
+paste / bracketed paste / `OSC 52`.
+
+**Scope**
+
+This task should implement:
+
+- shared selection text extraction for terminal panes
+- system clipboard write for `CopySelection`
+- action/registry/RPC integration for copy
+- no-op / safe handling when there is no active selection
+
+This task should not implement:
+
+- paste
+- bracketed paste
+- `OSC 52`
+- browser-native selection extraction
+- Neovim GUI selection extraction
+- selection search / scrollback search
+- selection rendering changes unless strictly required by text extraction
+
+**Required Architecture**
+
+The implementation must preserve these rules:
+
+1. Selection is still host-owned.
+- Do not add terminal-only “copied text” state.
+- Do not make the renderer the source of truth.
+- Do not bypass the existing `SelectionState`.
+
+2. Copy must go through the action system.
+- `WmAction::CopySelection` must remain the action entry point.
+- mouse/UI, keyboard bindings, and RPC should all reach the same action path.
+- do not add a raw “copy this selection now” helper that bypasses the registry.
+
+3. Extraction logic belongs at the pane/backend adapter layer.
+- The terminal backend snapshot already has the visible cell grid.
+- Selection text extraction should operate from snapshot/grid data and shared
+  selection coordinates.
+- The clipboard layer should receive a final `String`, not know terminal cell semantics.
+
+4. Design for future multi-surface selection owners.
+- This task may initially support `SelectionOwner::Pane(...)` for terminal panes only.
+- But the API shape must allow future browser / Neovim GUI / backend-native owners.
+- If a selection owner is unsupported for extraction, fail cleanly rather than
+  forcing terminal assumptions onto every owner.
+
+5. No hardcoded feature keys.
+- If you touch bindings or selection mode behavior, keep them action/keymap/config-driven.
+
+**Expected Behavior**
+
+For terminal panes:
+
+1. If there is an active host-grid selection owned by a terminal pane:
+- `CopySelection` extracts text from that selection
+- writes it to the system clipboard
+- leaves the selection active unless there is an explicit reason to clear it
+
+2. If there is no active selection:
+- `CopySelection` is a safe no-op
+- no panic
+- no bogus clipboard write
+
+3. If the owner is not yet extractable:
+- do not panic
+- either no-op or log in debug builds
+- keep the contract future-friendly
+
+**Terminal Extraction Contract**
+
+The agent must implement and document the exact text semantics used for terminal selection extraction.
+
+Use these rules unless the codebase already has a stronger established contract:
+
+1. Host-grid selection coordinates are inclusive cell coordinates.
+
+2. Row semantics:
+- single-row selection copies cells from `start_col..=end_col`
+- multi-row selection copies:
+  - first row: `start_col..end_of_row`
+  - middle rows: full logical selected row span
+  - last row: `0..=end_col`
+
+3. Text content comes from visible snapshot cells.
+- use the visible `TerminalSnapshot`
+- do not talk to the PTY directly for selection extraction
+- do not invent a second shadow text model
+
+4. Wide-character handling:
+- do not duplicate trailing filler cells
+- only copy the logical anchor cell text for a wide grapheme
+- extraction must respect the existing terminal cell width model
+
+5. Whitespace handling:
+- preserve internal spaces exactly
+- trim only row-end cells that are visually blank filler if the snapshot model
+  clearly distinguishes them as empty trailing space
+- be explicit in code comments about what is and is not trimmed
+
+6. Newlines:
+- join copied rows with `\n`
+- do not append an extra trailing newline after the last selected row unless
+  the selected content itself requires it
+
+7. Backend-native selection:
+- if `SelectionRegion::BackendNative`, do not try to reinterpret it as host-grid text
+- return `None` / unsupported cleanly for now
+
+**Clipboard Contract**
+
+Clipboard integration must be:
+
+- system clipboard, not an internal scratch buffer
+- action-driven
+- safe if clipboard write fails
+
+Preferred behavior:
+
+- write selected text to the clipboard
+- if clipboard write fails, keep app state coherent and report only in debug logs unless
+  the repo already has a user-facing error path for clipboard failures
+
+Do not:
+
+- clear selection automatically just because copy succeeded
+- tie copy implementation to terminal paste implementation
+- add terminal-protocol clipboard behavior here
+
+**Suggested Files**
+
+- [heca/src/handlers.rs](/Users/antonio/projects/heca/heca/src/handlers.rs)
+- [heca/src/app/terminal_host.rs](/Users/antonio/projects/heca/heca/src/app/terminal_host.rs)
+- [heca/src/app/selection_model.rs](/Users/antonio/projects/heca/heca/src/app/selection_model.rs)
+- [heca-core/src/backend/snapshot.rs](/Users/antonio/projects/heca/heca-core/src/backend/snapshot.rs)
+- [heca/src/rpc.rs](/Users/antonio/projects/heca/heca/src/rpc.rs)
+- any existing clipboard/platform helper files if already present in the repo
+
+Avoid unless strictly necessary:
+
+- renderer files
+- `heca-grid-ui` files
+- paste/protocol files
+- browser and future Neovim GUI code
+
+**Implementation Requirements**
+
+1. Extraction helper
+- add one clear extraction helper for terminal selections
+- it should take:
+  - the shared selection state or active selection
+  - the owning pane/backend snapshot
+- it should return:
+  - `Option<String>` or a small result type that can represent unsupported/empty/failure cleanly
+
+2. Handler wiring
+- `handle_copy_selection` must become real
+- route through the registry path already established
+- no direct bypass from input handlers
+
+3. Owner/type checks
+- only terminal-pane host-grid selection needs to work in this task
+- explicitly guard other cases
+
+4. Clipboard write
+- use the project’s preferred platform clipboard path if one exists
+- if no helper exists, implement the smallest correct cross-platform path in app code
+- keep the clipboard write localized; do not spread platform branches through selection logic
+
+5. Tests
+- add pure logic tests for text extraction
+- include:
+  - single-line selection
+  - multi-line selection
+  - reverse anchor/focus selection
+  - wide-character / filler-cell case if the snapshot model supports it
+  - inactive selection
+  - wrong owner / unsupported region
+
+**Acceptance Criteria**
+
+- `CopySelection` copies text from an active terminal host-grid selection
+- copied text respects row semantics and does not duplicate wide-char filler cells
+- no panic when there is no selection or when the owner is unsupported
+- clipboard write is triggered only through the action path
+- shared host-selection architecture remains intact
+- no raw feature-key shortcuts are added
+- no paste behavior is added in this task
+
+**Verification**
+
+At minimum:
+
+```bash
+cargo check -p heca
+cargo check -p heca-core
+cargo clippy -p heca --all-targets
+cargo clippy -p heca-core --all-targets
+cargo test -p heca
+cargo test -p heca-core
+```
+
+If practical, also live-check:
+
+1. select text in a terminal pane
+2. trigger `CopySelection`
+3. paste into another app and confirm the copied text matches the selected terminal text
+4. reverse-direction selections copy correctly
+5. a no-selection copy does nothing harmful
+
+**Agent Completion**
+
+- not started
+
 **Reviewer Decision**
 
-- Needs Edit.
+- pending
 
 **Reviewer Notes**
 
-- **Medium**: `Shift + drag` selection does not reliably end when the mouse is
-  released outside the owning terminal pane.
-  In [heca/src/app/terminal_host.rs](/Users/antonio/projects/heca/heca/src/app/terminal_host.rs),
-  the `Shift + Left Released` path first requires
-  `terminal_target_at_position(state, pos)`. If the pointer leaves the pane
-  before release, that lookup returns `None` and the function exits without
-  calling `state.selection.end()`. The task notes explicitly claim that
-  releasing outside the pane should still confirm the selection up to the last
-  in-bounds cell, but the current code does not do that.
-- **Medium**: `prefix+s` enters selection mode, but there is no keyboard
+- review must focus on extraction semantics first, not just “clipboard seems to work”
+- reject if the implementation duplicates wide-character filler cells or invents a terminal-only parallel selection source of truth
   movement behavior yet.
   The shared selection mode currently does not move the selection focus with
   `h/j/k/l` or arrow keys, so the mode is not usable as a tmux-like keyboard
