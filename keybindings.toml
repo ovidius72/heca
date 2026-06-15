@@ -169,6 +169,12 @@ enter_selection_mode = "prefix+s"        # Enter the host selection input mode
 clear_selection      = "prefix+Shift+s"  # Clear the active selection; exit selection mode
 copy_selection       = "prefix+y"        # Placeholder (Phase 10 clipboard)
 # paste_clipboard    = <no default>      # Bind in your config; placeholder (Phase 10)
+#
+# Built-in `selection` mode default bindings:
+#   h / ArrowLeft   -> selection_left
+#   l / ArrowRight  -> selection_right
+#   k / ArrowUp     -> selection_up
+#   j / ArrowDown   -> selection_down
 
 # -----------------------------------------------------------------------------
 # Custom Modes

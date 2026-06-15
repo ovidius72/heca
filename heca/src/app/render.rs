@@ -4,12 +4,14 @@
 //! of `main.rs` while preserving the current render pipeline behavior.
 
 use crate::app::terminal_host::prepare_terminal_mount;
+use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionState};
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
-use heca_core::layout::{Point, Rectangle, Size};
+use heca_core::layout::{PaneId, Point, Rectangle, Size};
+use heca_config::theme::Color;
 use heca_renderer::primitive::PrimitiveRenderer;
-use heca_renderer::terminal::{TerminalRenderer, TerminalStyle};
+use heca_renderer::terminal::{SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::{TextBox, TextRenderer};
@@ -111,6 +113,7 @@ fn render_terminal_mount(
     render_ctx: TerminalRenderPassContext<'_>,
     terminal_style: TerminalStyle<'_>,
     mount: crate::app::terminal_host::TerminalMount,
+    selection_overlay: Option<SelectionOverlay>,
 ) {
     let TerminalRenderPassContext {
         text_renderer,
@@ -143,6 +146,17 @@ fn render_terminal_mount(
             content_box,
             terminal_style,
         );
+        // Draw the host-level selection overlay after cell backgrounds and
+        // glyphs so the selected text remains readable, and before the
+        // cursor overlay so the cursor is always visible on top.
+        if let Some(ref overlay) = selection_overlay {
+            terminal_renderer.render_selection_overlay(
+                overlay,
+                content_box,
+                mount.snapshot.cell_w,
+                mount.snapshot.cell_h,
+            );
+        }
         text_renderer.set_clip(None);
     }
 
@@ -161,6 +175,113 @@ fn render_terminal_mount(
         terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
     }
     primitive_renderer.render_clipped(device, view, encoder, clip_rect);
+}
+
+/// Build a `SelectionOverlay` for a pane if the shared host selection is
+/// active, owned by that pane, and uses the `HostGrid` render mode.
+///
+/// Returns `None` when the selection is inactive, owned by a different pane,
+/// or uses `BackendNative` rendering (the host does not draw backend-native
+/// selections).
+///
+/// The anchor/focus cell coordinates from the selection model are converted
+/// into a min/max bounding box here so the renderer crate stays agnostic of
+/// selection-model semantics.
+fn selection_overlay_for_pane(
+    state: &AppState,
+    pane_id: PaneId,
+    cols: usize,
+) -> Option<SelectionOverlay> {
+    build_selection_overlay(&state.selection, pane_id, cols, &state.theme.accent)
+}
+
+/// Build a `SelectionOverlay` for a pane if the shared host selection is
+/// active, owned by that pane, and uses the `HostGrid` render mode.
+///
+/// Returns `None` when the selection is inactive, owned by a different pane,
+/// or uses `BackendNative` rendering (the host does not draw backend-native
+/// selections). The anchor/focus cell coordinates are converted into a
+/// min/max bounding box so the renderer stays agnostic of selection-model
+/// semantics.
+///
+/// Pure-logic counterpart of `selection_overlay_for_pane` — resolves all
+/// `AppState`-dependent lookups (`selection`, `accent`) at its call site so
+/// this function can be unit-tested without GPU state.
+fn build_selection_overlay(
+    selection: &SelectionState,
+    pane_id: PaneId,
+    cols: usize,
+    accent: &Color,
+) -> Option<SelectionOverlay> {
+    if cols == 0 {
+        return None;
+    }
+    let active = selection.active()?;
+    if active.owner != SelectionOwner::Pane(pane_id) {
+        return None;
+    }
+    match &active.region {
+        SelectionRegion::HostGrid {
+            anchor_row,
+            anchor_col,
+            focus_row,
+            focus_col,
+        } => {
+            let color = [
+                accent.r as f32 / 255.0,
+                accent.g as f32 / 255.0,
+                accent.b as f32 / 255.0,
+                0.25,
+            ];
+            let last_col = cols.saturating_sub(1);
+            let mut spans = Vec::new();
+            if anchor_row == focus_row {
+                spans.push(SelectionOverlaySpan {
+                    row: *anchor_row,
+                    start_col: *anchor_col.min(focus_col),
+                    end_col: (*anchor_col.max(focus_col)).min(last_col),
+                });
+            } else if anchor_row < focus_row {
+                spans.push(SelectionOverlaySpan {
+                    row: *anchor_row,
+                    start_col: (*anchor_col).min(last_col),
+                    end_col: last_col,
+                });
+                for row in (*anchor_row + 1)..*focus_row {
+                    spans.push(SelectionOverlaySpan {
+                        row,
+                        start_col: 0,
+                        end_col: last_col,
+                    });
+                }
+                spans.push(SelectionOverlaySpan {
+                    row: *focus_row,
+                    start_col: 0,
+                    end_col: (*focus_col).min(last_col),
+                });
+            } else {
+                spans.push(SelectionOverlaySpan {
+                    row: *focus_row,
+                    start_col: (*focus_col).min(last_col),
+                    end_col: last_col,
+                });
+                for row in (*focus_row + 1)..*anchor_row {
+                    spans.push(SelectionOverlaySpan {
+                        row,
+                        start_col: 0,
+                        end_col: last_col,
+                    });
+                }
+                spans.push(SelectionOverlaySpan {
+                    row: *anchor_row,
+                    start_col: 0,
+                    end_col: (*anchor_col).min(last_col),
+                });
+            }
+            Some(SelectionOverlay::new(spans, color))
+        }
+        SelectionRegion::BackendNative => None,
+    }
 }
 
 /// Human-readable status mode label and suffix for the status bar.
@@ -399,6 +520,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
         if let Some(content_rect) = content_rect {
             if let Some(mount) = pane_mount {
+                let selection_overlay =
+                    selection_overlay_for_pane(state, *pane_id, mount.snapshot.cols);
                 render_terminal_mount(
                     TerminalRenderPassContext {
                         text_renderer: &mut state.text_renderer,
@@ -417,6 +540,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         italic_font_family: &theme.terminal_italic_font_family,
                     },
                     mount,
+                    selection_overlay,
                 );
             } else {
                 let content_box = rect_to_text_box(content_rect);
@@ -484,6 +608,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             };
             if let Some(content_rect) = content_rect {
                 if let Some(mount) = pane_mount {
+                    let selection_overlay =
+                        selection_overlay_for_pane(state, float.pane.id, mount.snapshot.cols);
                     render_terminal_mount(
                         TerminalRenderPassContext {
                             text_renderer: &mut state.text_renderer,
@@ -502,6 +628,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             italic_font_family: &theme.terminal_italic_font_family,
                         },
                         mount,
+                        selection_overlay,
                     );
                 } else {
                     let content_box = rect_to_text_box(content_rect);
@@ -786,10 +913,128 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 
 #[cfg(test)]
 mod tests {
-    use super::status_mode_parts;
+    use super::{build_selection_overlay, status_mode_parts};
+    use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource, SelectionState};
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;
+    use heca_config::theme::Color;
     use heca_core::layout::PaneId;
+
+    #[test]
+    fn build_selection_overlay_returns_none_when_inactive() {
+        let selection = SelectionState::new();
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_none_when_owner_mismatch() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(7)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 3,
+                focus_row: 2,
+                focus_col: 3,
+            },
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        // Query with a different pane id -> None
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_none_for_backend_native() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::Rpc,
+            SelectionRegion::BackendNative,
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_overlay_for_host_grid_on_owning_pane() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 3,
+                focus_row: 2,
+                focus_col: 3,
+            },
+        );
+        selection.update_focus(5, 9);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent);
+        assert!(overlay.is_some());
+        let overlay = overlay.unwrap();
+        assert_eq!(overlay.spans.len(), 4);
+        assert_eq!(overlay.spans[0].row, 2);
+        assert_eq!(overlay.spans[0].start_col, 3);
+        assert_eq!(overlay.spans[0].end_col, 19);
+        assert_eq!(overlay.spans[3].row, 5);
+        assert_eq!(overlay.spans[3].start_col, 0);
+        assert_eq!(overlay.spans[3].end_col, 9);
+        // Color should be accent / 255 with 0.25 alpha
+        assert_eq!(overlay.color, [100.0 / 255.0, 150.0 / 255.0, 200.0 / 255.0, 0.25]);
+    }
+
+    #[test]
+    fn build_selection_overlay_handles_reverse_multiline_selection() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 8,
+                anchor_col: 12,
+                focus_row: 8,
+                focus_col: 12,
+            },
+        );
+        selection.update_focus(4, 3);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        assert_eq!(overlay.spans.len(), 5);
+        assert_eq!(overlay.spans[0].row, 4);
+        assert_eq!(overlay.spans[0].start_col, 3);
+        assert_eq!(overlay.spans[0].end_col, 19);
+        assert_eq!(overlay.spans[4].row, 8);
+        assert_eq!(overlay.spans[4].start_col, 0);
+        assert_eq!(overlay.spans[4].end_col, 12);
+    }
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {

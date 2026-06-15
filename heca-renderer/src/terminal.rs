@@ -5,6 +5,31 @@ use heca_core::backend::{
 };
 use heca_grid_ui::scene::TextAlign;
 
+/// Host-level selection overlay parameters for terminal panes.
+///
+/// The renderer is agnostic of the shared selection model; it receives
+/// pre-computed row spans and a color from the app layer. The app layer is
+/// responsible for converting anchor/focus cell coordinates into row-wise
+/// spans that follow terminal text-flow semantics.
+#[derive(Clone, Copy, Debug)]
+pub struct SelectionOverlaySpan {
+    pub row: usize,
+    pub start_col: usize,
+    pub end_col: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct SelectionOverlay {
+    pub spans: Vec<SelectionOverlaySpan>,
+    pub color: [f32; 4],
+}
+
+impl SelectionOverlay {
+    pub fn new(spans: Vec<SelectionOverlaySpan>, color: [f32; 4]) -> Self {
+        Self { spans, color }
+    }
+}
+
 pub struct TerminalStyle<'a> {
     pub font_size: f32,
     pub font_family: &'a str,
@@ -60,6 +85,44 @@ impl<'a> TerminalRenderer<'a> {
 
     pub fn render_cursor_overlay(&mut self, snapshot: &TerminalSnapshot, rect: TextBox) {
         queue_cursor_overlay(self.primitive_renderer, snapshot, rect);
+    }
+
+    /// Draw a host-level selection overlay inside the terminal content rect.
+    ///
+    /// Intended to be called after cell backgrounds and glyphs (so the
+    /// selected text remains readable) and before the cursor overlay (so the
+    /// cursor is always visible on top). The caller (`render_terminal_mount`)
+    /// is responsible for enforcing this ordering.
+    ///
+    /// Each span is clipped to the fitted grid and rendered as its own
+    /// rectangle, so multi-line selections follow row semantics rather than
+    /// painting one large bounding box.
+    pub fn render_selection_overlay(
+        &mut self,
+        overlay: &SelectionOverlay,
+        rect: TextBox,
+        cell_w: f32,
+        cell_h: f32,
+    ) {
+        let (fitted_rows, fitted_cols) = fitted_grid(rect, cell_w, cell_h);
+        if fitted_rows == 0 || fitted_cols == 0 {
+            return;
+        }
+
+        for span in &overlay.spans {
+            let visible_row = span.row.min(fitted_rows.saturating_sub(1));
+            let visible_start_col = span.start_col.min(fitted_cols.saturating_sub(1));
+            let visible_end_col = span.end_col.min(fitted_cols.saturating_sub(1));
+            if visible_start_col > visible_end_col {
+                continue;
+            }
+
+            let y = rect.y + visible_row as f32 * cell_h;
+            let x = rect.x + visible_start_col as f32 * cell_w;
+            let w = (visible_end_col - visible_start_col + 1) as f32 * cell_w;
+            self.primitive_renderer
+                .draw_rect(x, y, w, cell_h, overlay.color);
+        }
     }
 
 }

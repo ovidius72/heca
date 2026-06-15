@@ -190,6 +190,10 @@ pub enum WmAction {
 
     // ── Selection (host capability, reusable across pane types) ──
     EnterSelectionMode,
+    SelectionLeft,
+    SelectionRight,
+    SelectionUp,
+    SelectionDown,
     ClearSelection,
     CopySelection,
     PasteClipboard,
@@ -316,6 +320,10 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "delete_workspace" => Some(WmAction::DeleteWorkspace { ws_idx: 0 }),
         "reload_config" => Some(WmAction::ReloadConfig),
         "enter_selection_mode" => Some(WmAction::EnterSelectionMode),
+        "selection_left" => Some(WmAction::SelectionLeft),
+        "selection_right" => Some(WmAction::SelectionRight),
+        "selection_up" => Some(WmAction::SelectionUp),
+        "selection_down" => Some(WmAction::SelectionDown),
         "clear_selection" => Some(WmAction::ClearSelection),
         "copy_selection" => Some(WmAction::CopySelection),
         "paste_clipboard" => Some(WmAction::PasteClipboard),
@@ -517,6 +525,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         // Selection (host capability). Treated as pane-management-class
         // actions so they share priority with close/rename-style actions.
         WmAction::EnterSelectionMode
+        | WmAction::SelectionLeft
+        | WmAction::SelectionRight
+        | WmAction::SelectionUp
+        | WmAction::SelectionDown
         | WmAction::ClearSelection
         | WmAction::CopySelection
         | WmAction::PasteClipboard => 1,
@@ -598,6 +610,22 @@ mod tests {
         assert_eq!(
             action_from_name("enter_selection_mode"),
             Some(WmAction::EnterSelectionMode)
+        );
+        assert_eq!(
+            action_from_name("selection_left"),
+            Some(WmAction::SelectionLeft)
+        );
+        assert_eq!(
+            action_from_name("selection_right"),
+            Some(WmAction::SelectionRight)
+        );
+        assert_eq!(
+            action_from_name("selection_up"),
+            Some(WmAction::SelectionUp)
+        );
+        assert_eq!(
+            action_from_name("selection_down"),
+            Some(WmAction::SelectionDown)
         );
         assert_eq!(
             action_from_name("clear_selection"),
@@ -720,7 +748,10 @@ mod tests {
                 // System
                 WmAction::CommandPalette,
                 // Selection (host capability, Task 02)
-                WmAction::EnterSelectionMode, WmAction::ClearSelection,
+                WmAction::EnterSelectionMode,
+                WmAction::SelectionLeft, WmAction::SelectionRight,
+                WmAction::SelectionUp, WmAction::SelectionDown,
+                WmAction::ClearSelection,
                 WmAction::CopySelection, WmAction::PasteClipboard,
                 // Take (panes + quick-take)
                 WmAction::PaneTake, WmAction::PaneTakeAndFocus,

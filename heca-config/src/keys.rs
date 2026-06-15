@@ -520,6 +520,55 @@ impl Default for KeysConfig {
             bindings: sidebar_bindings,
         });
 
+        let selection_bindings = vec![
+            Mbc {
+                action: "selection_left".to_string(),
+                keys: "h".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_right".to_string(),
+                keys: "l".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_up".to_string(),
+                keys: "k".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_down".to_string(),
+                keys: "j".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_left".to_string(),
+                keys: "ArrowLeft".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_right".to_string(),
+                keys: "ArrowRight".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_up".to_string(),
+                keys: "ArrowUp".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "selection_down".to_string(),
+                keys: "ArrowDown".to_string(),
+                args: HashMap::new(),
+            },
+        ];
+        mode.push(KeyModeConfig {
+            name: "selection".to_string(),
+            trigger: String::new(),
+            sticky: true,
+            bindings: selection_bindings,
+        });
+
         Self {
             prefix: default_prefix_key(),
             bindings,

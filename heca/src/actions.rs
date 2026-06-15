@@ -527,6 +527,34 @@ impl ActionRegistry {
             default_binding: "s",
         },
         ActionDescriptor {
+            name: "selection_left",
+            label: "Selection Left",
+            description: "Move the active selection focus one cell left in selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "h,ArrowLeft",
+        },
+        ActionDescriptor {
+            name: "selection_right",
+            label: "Selection Right",
+            description: "Move the active selection focus one cell right in selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "l,ArrowRight",
+        },
+        ActionDescriptor {
+            name: "selection_up",
+            label: "Selection Up",
+            description: "Move the active selection focus one row up in selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "k,ArrowUp",
+        },
+        ActionDescriptor {
+            name: "selection_down",
+            label: "Selection Down",
+            description: "Move the active selection focus one row down in selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "j,ArrowDown",
+        },
+        ActionDescriptor {
             name: "clear_selection",
             label: "Clear Selection",
             description: "Clear the active selection and exit selection mode if active.",
@@ -606,6 +634,10 @@ mod tests {
     fn test_selection_action_descriptors_exist() {
         for name in [
             "enter_selection_mode",
+            "selection_left",
+            "selection_right",
+            "selection_up",
+            "selection_down",
             "clear_selection",
             "copy_selection",
             "paste_clipboard",
