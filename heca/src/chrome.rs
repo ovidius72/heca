@@ -223,11 +223,11 @@ fn build_sidebar_shell(tree: &SidebarTree, left_w: f32, sidebar_h: f32, theme: &
         .child(build_workspaces_container(tree, theme))
 }
 
-/// Build a full-window chrome [`Scene`]: a transparent tab band, a middle row
-/// hosting the (optional) full-height sidebar shell beside a transparent content
-/// spacer, and the opaque status bar at the bottom. Pure: takes plain values + a
-/// prebuilt sidebar so it can be unit-tested without wgpu/AppState.
-fn chrome_scene(
+/// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
+/// a middle row hosting the (optional) full-height sidebar shell + a transparent
+/// content spacer, and the opaque status bar at the bottom. Returns the concrete
+/// [`Flex`] so it can be **retained** across frames (see [`RetainedChrome`]).
+fn chrome_root(
     w: f32,
     h: f32,
     tab_bar_height: f32,
@@ -235,9 +235,8 @@ fn chrome_scene(
     status: &str,
     side_bg: Color,
     fg: Color,
-    theme: &GuiTheme,
     sidebar: Option<Pane>,
-) -> Scene {
+) -> Flex {
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
@@ -251,7 +250,7 @@ fn chrome_scene(
     }
     middle = middle.child(Flex::row().grow(1.0));
 
-    let mut root = Flex::column()
+    Flex::column()
         .width(Length::Px(w))
         .height(Length::Px(h))
         // Transparent tab band — the hand-drawn tab bar paints underneath.
@@ -270,84 +269,76 @@ fn chrome_scene(
                 .align(Align::Center)
                 .padding_xy(8.0, 0.0)
                 .child(Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg)),
-        );
+        )
+}
 
+/// Layout + paint a (retained) chrome root tree into a [`Scene`] at the window size.
+/// Re-run every frame; cheap and creates no signals (those live in the retained tree).
+pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiTheme) -> Scene {
     let mut scene = Scene::new();
     LayoutEngine::new()
         .base_font(theme.font_size)
-        .compute(&mut root, Size::new(w as f64, h as f64));
+        .compute(root, Size::new(w as f64, h as f64));
     {
-        let mut cx = PaintCx::new(&mut scene, theme)
-            .with_viewport(Size::new(w as f64, h as f64));
+        let mut cx =
+            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         root.paint(&mut cx);
     }
     scene
 }
 
-/// Read app state and produce a full-window chrome [`Scene`] (tab band, expanded
-/// LEFT sidebar, status bar). Pure projection: reads `state`, returns a `Scene`,
-/// mutates nothing. The collapsed sidebar rail is still hand-drawn in `render.rs`.
-pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState, chrome: ChromeConfig) -> Scene {
-    let phys = state.window.inner_size();
-    let scale = state.scale_factor as f32;
-    let w = phys.width as f32 / scale;
-    let h = phys.height as f32 / scale;
-
-    // Mirror the special-case from render.rs exactly.
-    let side_bg_base = if state.theme.name == "Catppuccin Mocha" {
-        Color::new(
-            (0.067_f32 * 255.0).round() as u8,
-            (0.067_f32 * 255.0).round() as u8,
-            (0.106_f32 * 255.0).round() as u8,
-            255,
-        )
-    } else {
-        Color::new(
-            (0.953_f32 * 255.0).round() as u8,
-            (0.957_f32 * 255.0).round() as u8,
-            (0.973_f32 * 255.0).round() as u8,
-            255,
-        )
-    };
-    // Frosted chrome: translucent status-bar background when the window is
-    // transparent (mirrors render.rs's chrome_alpha for the hand-drawn chrome).
-    let side_bg = side_bg_base.with_alpha((state.appearance.chrome_opacity() * 255.0).round() as u8);
-    // The sidebar SHELL is deliberately LESS transparent than the rest of the
-    // chrome (the main scrolling area stays fully transparent): blend the base
-    // opacity halfway toward solid so the shell reads as a panel, not a hole.
-    let sidebar_alpha = (0.5 + 0.5 * state.appearance.opacity()).clamp(0.0, 1.0);
-    let sidebar_bg = side_bg_base.with_alpha((sidebar_alpha * 255.0).round() as u8);
-
-    let pane_count = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.scrolling
-                .columns
-                .iter()
-                .map(|c| c.panes.len())
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
-    let focus_title = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|p| p.title.as_str())
-        .unwrap_or("—");
-    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
-    let status = format!(
-        "{} panes | {} | {}{}",
-        pane_count, focus_title, mode_str, rename_hint
+/// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
+/// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
+#[cfg(test)]
+fn chrome_scene(
+    w: f32,
+    h: f32,
+    tab_bar_height: f32,
+    status_bar_height: f32,
+    status: &str,
+    side_bg: Color,
+    fg: Color,
+    theme: &GuiTheme,
+    sidebar: Option<Pane>,
+) -> Scene {
+    let mut root = chrome_root(
+        w,
+        h,
+        tab_bar_height,
+        status_bar_height,
+        status,
+        side_bg,
+        fg,
+        sidebar,
     );
+    paint_chrome_root(&mut root, w, h, theme)
+}
 
+/// `(status-bar bg, sidebar-shell bg, foreground)` for the chrome, honoring the
+/// transparency setting: the sidebar shell is deliberately *less* frosted than the
+/// rest of the chrome (the main scrolling area stays fully transparent).
+fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
+    // Mirror render.rs's hand-drawn chrome base color exactly.
+    let base = if state.theme.name == "Catppuccin Mocha" {
+        Color::new(17, 17, 27, 255)
+    } else {
+        Color::new(243, 244, 248, 255)
+    };
+    let side_bg = base.with_alpha((state.appearance.chrome_opacity() * 255.0).round() as u8);
+    let sidebar_alpha = (0.5 + 0.5 * state.appearance.opacity()).clamp(0.0, 1.0);
+    let sidebar_bg = base.with_alpha((sidebar_alpha * 255.0).round() as u8);
     let fg = {
         let c = state.theme.foreground;
         Color::new(c.r, c.g, c.b, c.a)
     };
+    (side_bg, sidebar_bg, fg)
+}
 
-    // Bridge the app theme into a GuiTheme: frosted sidebar surface, app accent +
-    // border (the sidebar's brackets/markers read from these), app radius.
+/// Bridge the app theme into a GuiTheme for the chrome (frosted sidebar surface +
+/// app accent/border/radius). Cheap (no signals) — rebuilt each frame to paint the
+/// retained tree.
+pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
+    let (_, sidebar_bg, fg) = chrome_colors(state);
     let mut theme = GuiTheme::grid_tron();
     theme.foreground = fg;
     theme.surface = sidebar_bg;
@@ -360,21 +351,56 @@ pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState, chrome: Chr
         Color::new(c.r, c.g, c.b, c.a)
     };
     theme.radius = state.theme.border_radius;
+    theme
+}
+
+/// The status-bar text projection (`N panes | focus | MODE…`).
+fn chrome_status(state: &crate::app_state::AppState) -> String {
+    let pane_count = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
+        .unwrap_or(0);
+    let focus_title = state
+        .session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|p| p.title.as_str())
+        .unwrap_or("—");
+    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
+    format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint)
+}
+
+/// A **retained** chrome tree + the signature of the state that produced it. The
+/// tree is rebuilt only when [`chrome_signature`] changes; otherwise it is just
+/// re-laid-out and painted each frame. This keeps the widget signals alive across
+/// frames (no per-frame signal churn) and gives a live tree to dispatch events into
+/// (F4.2). The collapsed sidebar rail is still hand-drawn in `render.rs`.
+pub(crate) struct RetainedChrome {
+    pub(crate) root: Flex,
+    pub(crate) sig: u64,
+}
+
+/// Build the chrome root tree from app state (the expensive part — creates the
+/// widget tree and its signals). Call only when [`chrome_signature`] changes.
+pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: ChromeConfig) -> Flex {
+    let phys = state.window.inner_size();
+    let scale = state.scale_factor as f32;
+    let w = phys.width as f32 / scale;
+    let h = phys.height as f32 / scale;
+    let (side_bg, _sidebar_bg, fg) = chrome_colors(state);
+    let theme = chrome_gui_theme(state);
+    let status = chrome_status(state);
 
     let left_w = chrome.left_sidebar_width;
     let sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
         let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
-        Some(build_sidebar_shell(
-            &state.sidebar_tree,
-            left_w,
-            sidebar_h,
-            &theme,
-        ))
+        Some(build_sidebar_shell(&state.sidebar_tree, left_w, sidebar_h, &theme))
     } else {
         None
     };
 
-    chrome_scene(
+    chrome_root(
         w,
         h,
         DEFAULT_TAB_BAR_HEIGHT,
@@ -382,9 +408,60 @@ pub(crate) fn build_chrome_scene(state: &crate::app_state::AppState, chrome: Chr
         &status,
         side_bg,
         fg,
-        &theme,
         sidebar,
     )
+}
+
+fn sidebar_state_tag(s: &SidebarItemState) -> u8 {
+    match s {
+        SidebarItemState::Active => 0,
+        SidebarItemState::Visited => 1,
+        SidebarItemState::None => 2,
+    }
+}
+
+/// Hash of everything the chrome tree displays (window size, theme, status text,
+/// sidebar content). When it changes, the retained tree is rebuilt; otherwise the
+/// existing tree is reused (re-laid-out + painted only).
+pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: ChromeConfig) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hsh = std::collections::hash_map::DefaultHasher::new();
+    let phys = state.window.inner_size();
+    phys.width.hash(&mut hsh);
+    phys.height.hash(&mut hsh);
+    state.scale_factor.to_bits().hash(&mut hsh);
+    chrome.left_sidebar_width.to_bits().hash(&mut hsh);
+    state.theme.name.hash(&mut hsh);
+    for c in [state.theme.accent, state.theme.foreground, state.theme.border] {
+        (c.r, c.g, c.b, c.a).hash(&mut hsh);
+    }
+    state.theme.border_radius.to_bits().hash(&mut hsh);
+    state.appearance.chrome_opacity().to_bits().hash(&mut hsh);
+    state.appearance.opacity().to_bits().hash(&mut hsh);
+    chrome_status(state).hash(&mut hsh);
+    for ws in &state.sidebar_tree.workspaces {
+        ws.ws_idx.hash(&mut hsh);
+        ws.name.hash(&mut hsh);
+        ws.collapsed.hash(&mut hsh);
+        sidebar_state_tag(&ws.state).hash(&mut hsh);
+        for c in &ws.columns {
+            c.col_idx.hash(&mut hsh);
+            c.collapsed.hash(&mut hsh);
+            for p in &c.panes {
+                p.pane_id.0.hash(&mut hsh);
+                p.name.hash(&mut hsh);
+                sidebar_state_tag(&p.state).hash(&mut hsh);
+            }
+            u8::MAX.hash(&mut hsh); // column separator in the hash stream
+        }
+        for p in &ws.floating_panes {
+            p.pane_id.0.hash(&mut hsh);
+            p.name.hash(&mut hsh);
+            sidebar_state_tag(&p.state).hash(&mut hsh);
+        }
+        u64::MAX.hash(&mut hsh); // workspace separator
+    }
+    hsh.finish()
 }
 
 #[cfg(test)]

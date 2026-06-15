@@ -302,6 +302,7 @@ pub(crate) async fn init_state(
             right_width: 200.0,
         },
         sidebar_tree,
+        chrome_tree: None,
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         last_focused: None,

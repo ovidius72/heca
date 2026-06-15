@@ -729,7 +729,22 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Grid-ui chrome (full-height sidebar SHELL + status bar) painted LAST so the
     // shell sits ON TOP of the pane content/canvas instead of panes bleeding under
     // it. The collapsed left rail + right "Details" sidebar stay hand-drawn above.
-    let chrome_scene = crate::chrome::build_chrome_scene(state, chrome);
+    //
+    // F4.1 — retained tree: rebuild the widget tree only when the chrome signature
+    // changes; otherwise re-layout + paint the kept tree (no per-frame signal churn,
+    // and a live tree to dispatch events into in F4.2).
+    let chrome_sig = crate::chrome::chrome_signature(state, chrome);
+    if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
+        let root = crate::chrome::build_chrome_root(state, chrome);
+        state.chrome_tree = Some(crate::chrome::RetainedChrome { root, sig: chrome_sig });
+    }
+    let chrome_theme = crate::chrome::chrome_gui_theme(state);
+    let chrome_scene = crate::chrome::paint_chrome_root(
+        &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
+        w,
+        h,
+        &chrome_theme,
+    );
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,

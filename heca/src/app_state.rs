@@ -225,6 +225,9 @@ pub struct AppState {
     pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
+    /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
+    /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
+    pub chrome_tree: Option<crate::chrome::RetainedChrome>,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).
