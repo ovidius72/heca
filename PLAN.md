@@ -3,7 +3,6 @@
 > **The** prioritized plan for active work. Rewritten 2026-06-15 to end plan-doc sprawl.
 > Done/not-done below is **verified against the live codebase** (not the stale `.md` boards).
 > Supersedes the grid-ui/chrome/WS-A task boards (archived → `.planning/archive/`).
-> Product-milestone tracking still lives in GSD `.planning/` (`ROADMAP.md`, `STATE.md`).
 >
 > **Rule:** outstanding *tasks* live here; when one ships, **delete it** (git keeps history).
 > Deep *design rationale* lives in the design docs linked at the bottom.
@@ -132,7 +131,7 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   workspace collapse (F4.3).
 - **Generic DnD framework** (DnD Phase 1+2): `DragContext<P>`, universal `DragExt`,
   `resolve_at`/`source_at`, `drag_ghost`/`drop_indicator`, generic theme tokens.
-- **Terminal backend** live (GSD Phase 3 "The Content").
+- **Terminal backend** live.
 - Pluggable-chrome-plugin-plan **Precondition** (the 10-phase refactor) complete.
 
 ---

@@ -749,29 +749,9 @@ cargo watch -x check
 
 ---
 
-## GSD Workflow
+## Planning
 
-This project uses the Get Shit Done (GSD) system for structured development:
-
-| Command | What it does |
-|---------|-------------|
-| `/gsd-help` | Show available GSD commands |
-| `/gsd-start-phase` | Begin working on a phase |
-| `/gsd-complete-milestone` | Mark a milestone as done |
-| `/gsd-transition` | Transition to next development phase |
-
-See `.planning/PROJECT.md` for project overview, `.planning/ROADMAP.md` for phase details.
-
-### Current State
-
-| Phase | Status | Requirements |
-|-------|--------|-------------|
-| 1 — The Shell | ✅ ~Complete (GPU shell, theme, chrome) | 8 of 8 |
-| 2 — The Workspace | ✅ ~Complete (NIRI layout, animations, input) | 28 of 28 |
-| 3 — The Content | 🔄 In Progress (terminal backend wired) | PANE-01, PANE-02 done |
-| 3b — Sidebar + Actions | ✅ **DONE** (sidebar tree, naming, cross-ws ops, command palette backend, registry system) | 9 phases complete |
-| **3c — DnD Refactoring** | ✅ **DONE** (surface-agnostic DnD: framework types, enum dispatch, DragContext, InteractiveMove extraction) | 5 phases complete, PR #36 |
-| 4 — The Platform | ❌ Pending | Session persistence, RPC, plugins |
+Outstanding work lives in **`PLAN.md`** (single source of truth). See it for priorities and status.
 
 ---
 
