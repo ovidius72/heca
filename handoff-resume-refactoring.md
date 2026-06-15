@@ -48,14 +48,12 @@ Resume the current terminal refactor branch and get it merge-ready against `main
 5. Refresh PR notes/checklist if anything substantive changes.
 
 ## Explicitly Post-Merge Backlog
-These are planned, but they should **not** block merging the current terminal-core PR:
-- terminal selection and clipboard
-- bracketed paste and OSC 52
-- scrollback search
-- hyperlink / open-link behavior
-- bell handling
-- richer image / graphics protocols
-- Phase 8 pane-shell integration with `heca-grid-ui`
+These are planned, but they should **not** be treated as part of the old Phase 3 merge work:
+- Phase 9 — shared host selection capability
+- Phase 10 — clipboard and paste semantics
+- Phase 11 — bell / scrollback / hyperlinks / mouse-policy UX
+- Phase 12 — richer image / graphics protocols
+- Phase 13 — pane-shell integration with `heca-grid-ui`
 
 ## Known Risks / Open Follow-ups
 - Glyph shaping still relies on shared `TextRenderer` internals underneath the dedicated terminal renderer.
@@ -91,6 +89,7 @@ These are planned, but they should **not** block merging the current terminal-co
 
 ## Notes for the Next Agent
 - Do not restart the renderer/terminal architecture discussion from scratch; the important architectural boundary is already decided.
-- Do not move clipboard/selection/paste/backscroll/image protocols into the merge path for this PR.
+- Do not reintroduce clipboard/selection/paste/backscroll/image protocols into the old Phase 3 merge path.
+- Shared selection is now a host capability requirement, not a terminal-only feature.
 - Keep terminal behavior app-agnostic; the current terminal host is meant to become content inside the future `heca-grid-ui` pane shell.
 - The important question now is merge readiness, not more architectural rewrites.

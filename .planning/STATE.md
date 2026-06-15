@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: Phase 3 of 4 (The Content)
+current_phase: Phase 4 of 4 (The Platform)
 status: in_progress
 last_updated: "2026-06-14T00:00:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 1
   completed_plans: 0
-  percent: 62
+  percent: 75
 ---
 
 # State: heca
 
-**Current Phase:** Phase 3 — The Content
+**Current Phase:** Phase 4 — The Platform
 **Status:** In progress
-**Last Action:** Closed the renderer/core review blockers and follow-up cleanup, including u32 primitive indices, safe terminal grid fitting, deterministic spawn sizing, underline/undercurl safety, and shared terminal-grid helpers
+**Last Action:** Promoted the post-merge terminal backlog into explicit phases and defined shared host selection as the required architecture for selection/copy/paste
 
 ## Product Phase Progress
 
@@ -25,10 +25,10 @@ progress:
 |-------|--------|-------|
 | 1 — The Shell | ✅ Done | GPU windowing, theme/config, core renderer foundation landed |
 | 2 — The Workspace | ✅ Done | NIRI-style layout, chrome, actions, and refactoring track landed |
-| 3 — The Content | 🔄 In Progress | Real terminal backend live; typing lag improved; structured input path landed; final validation/review loop remains before merge |
-| 4 — The Platform | ⬜ Pending | Session, RPC, plugins, damage tracking polish |
+| 3 — The Content | ✅ Done | Real terminal backend and renderer landed and merged |
+| 4 — The Platform | 🔄 In Progress | Post-merge terminal backlog and future pane/platform integration work |
 
-## Phase 3 Status
+## Phase 4 Status
 
 ### Landed
 
@@ -89,16 +89,28 @@ progress:
 - Underline and undercurl decoration now render explicitly and are live-tested
 - Review-driven renderer/core hardening is landed and the affected checks/tests are green again
 
-### Remaining For Phase 3
+### Active Post-Merge Terminal Backlog
 
-- Finish the final live validation pass across a few more terminal fonts and a few more `nvim` colorschemes
-- Re-run the phase-end Rust review now that the terminal renderer/core hardening pass is landed
-- Fix anything the final Rust review finds, then rerun until clean
-- Keep the shared terminal symbol/decorations renderer app-agnostic:
-  - box drawing stays deterministic geometry
-  - powerline separators stay deterministic geometry
-  - underline/undercurl stay GUI-native and font-independent
-- Start the Neovim pane implementation after the terminal rendering/input path is fully settled
+- Phase 9 — Shared host selection capability
+  - selection must be reusable across terminal, future Neovim GUI, browser, and host-native panes
+  - selection must be reachable through mouse, keyboard/actions, and RPC where meaningful
+  - terminal-specific gestures may exist as entry paths, but selection itself must not remain terminal-only
+- Phase 10 — Clipboard and paste semantics
+  - copy selected content to system clipboard
+  - paste into focused pane
+  - bracketed paste
+  - `OSC 52`
+- Phase 11 — Terminal UX and attention features
+  - bell handling
+  - scrollback search
+  - hyperlink/open-link behavior
+  - richer mouse protocol coverage and final selection-vs-terminal-mouse policy
+- Phase 12 — Richer graphics / image protocols
+  - Yazi image preview
+  - broader image/graphics protocol support
+- Phase 13 — Pane-shell integration with `heca-grid-ui`
+  - terminal host mounted as content inside the future pane shell
+  - selection/copy/paste actions preserved across shell migration
 
 ## Backend Status
 
@@ -119,40 +131,25 @@ progress:
 - Terminal palette/theme fidelity still benefits from a few more live checks across additional themes and fonts before merge
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
 - Mouse-aware TUIs now have a structured forwarding path, but live behavior still needs one more verification pass after the latest renderer sync
-- The full clipboard/selection/backscroll/post-merge backlog is intentionally deferred and should not block this PR
+- Selection/copy/paste must now follow the shared host-selection contract rather than a terminal-only design
 
 ## Resume Point
 
 If resuming from a fresh session, do this first:
 
 1. Read `terminal-implementation.md`
-2. Continue Phase 3, not Phase 4
-3. Inspect the current live metrics/render path:
-- `heca/src/app/terminal_metrics.rs`
-- `heca/src/app/terminal_host.rs`
-- `heca-renderer/src/text.rs`
-- `heca-renderer/src/terminal.rs`
-4. Re-run the last user-validated runtime checks before making new changes:
-- `nvim` colorscheme switching
-- Yazi layout and right-edge symbol rendering
-- shell autosuggestion cursor placement
-- font-sensitive file-manager layout using at least one alternative Nerd Font if needed
-5. Then run the phase-end Rust review and fix anything it finds before merging
+2. Continue the post-merge Phase 4 terminal backlog, not the old merge track
+3. Read the shared-selection contract in `terminal-implementation.md` before extending selection/copy/paste
+4. Keep selection reusable across terminal, browser, future Neovim GUI, and host-native panes
+5. If touching bell/clipboard/graphics, avoid `heca-grid-ui` chrome files unless the task is explicitly pane-shell integration
 
-## Full Terminal Backlog (Post-Merge)
+## Structured Post-Merge Terminal Backlog
 
-- terminal selection state/rendering
-- copy selected terminal text to the system clipboard
-- paste system clipboard text into the focused terminal backend
-- bracketed paste
-- OSC 52 clipboard integration
-- hyperlink/open-link behavior
-- bell handling
-- alternate-screen and focus-reporting validation
-- richer mouse protocol coverage and selection-vs-terminal-mouse policy
-- scrollback search / terminal UX actions
-- richer image/graphics protocol support
-- Phase 8 pane-shell integration with `heca-grid-ui`
+- Phase 9 — Shared host selection capability
+- Phase 10 — Clipboard and paste semantics
+- Phase 11 — Terminal UX and attention features
+- Phase 12 — Richer graphics / image protocols
+- Phase 13 — Pane-shell integration with `heca-grid-ui`
 
 ## Verification
 
@@ -172,4 +169,4 @@ All passing at the current pause point.
 
 - Do not run the Rust-skill review on each task.
 - Run the Rust-skill review only at the end of a full implementation phase, then fix/review until clean.
-- Current phase is not complete yet, so no phase-end Rust-skill review has been run for this latest renderer work.
+- Phase 3 is complete and merged; new work should follow the explicit post-merge backlog phases above.
