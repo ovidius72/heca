@@ -230,6 +230,11 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sinks: &Chro
                     .child(badge)
                     .child(Flex::row().width(Length::Px(6.0))),
             );
+        if active_ws {
+            // Light accent wash over the whole active workspace area (+ the accent
+            // count badge) makes the active workspace clearly prominent.
+            dock = dock.background(theme.accent.with_alpha(28));
+        }
         // Columns stacked with a clear gap between them (the gap + bar mark each
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
