@@ -12,7 +12,7 @@ pub use model::{
     SidebarButtonHitbox, SidebarColEntry, SidebarItem, SidebarItemKind, SidebarPaneEntry,
     SidebarTree, SidebarWsEntry,
 };
-pub use render::{render_sidebar_collapsed, render_sidebar_expanded};
+pub use render::render_sidebar_collapsed;
 
 #[cfg(test)]
 mod tests;

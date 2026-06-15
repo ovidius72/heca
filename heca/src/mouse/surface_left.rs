@@ -106,7 +106,35 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
             return Some(button);
         }
 
-        // Non-button item hits: pane, workspace, column.
+        // Expanded grid-ui sidebar: dispatch the click into the retained chrome tree
+        // (real laid-out geometry) to resolve what was clicked — replaces the legacy
+        // fixed-row hit test. A pane card focuses that pane; a workspace header toggles
+        // its collapsed state. Empty space is a no-op.
+        if state.sidebar.left_visible && sw >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+            match crate::chrome::chrome_dispatch_click(state, pos) {
+                crate::chrome::ChromeClick::Pane(pane_id) => {
+                    if let Some(fi) = state.sidebar_tree.flat_items.iter().position(|it| {
+                        matches!(
+                            it,
+                            crate::sidebar::SidebarItem::Pane { pane_id: id }
+                                | crate::sidebar::SidebarItem::FloatingPane { pane_id: id, .. }
+                            if *id == pane_id
+                        )
+                    }) {
+                        state.sidebar_tree.cursor = fi;
+                    }
+                    return Some(WmAction::FocusPane { pane_id });
+                }
+                crate::chrome::ChromeClick::WorkspaceToggle(ws_idx) => {
+                    state.sidebar_tree.toggle_workspace_collapsed(ws_idx);
+                    state.needs_redraw = true;
+                    return None;
+                }
+                crate::chrome::ChromeClick::None => return None,
+            }
+        }
+
+        // Non-button item hits: pane, workspace, column. (legacy collapsed-rail path)
         let sidebar_h = sidebar_bottom - sidebar_top;
         if let Some(fi) =
             crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)

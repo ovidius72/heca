@@ -2,7 +2,11 @@
 //!
 //! [`DragSurfaceId`] identifies which surface is participating in a drag.
 //! [`DragItemId`] is an opaque wrapper around a flat index — each surface
-//! interprets it internally. [`DragItem`] bundles surface + id + kind.
+//! interprets it internally.
+//!
+//! Note there is intentionally **no** "item kind" or payload type here: *what*
+//! is being dragged is the app's concern, carried as the generic payload `P` on
+//! [`DragContext<P>`](crate::drag::DragContext). The framework stays domain-neutral.
 
 /// Closed set of drag surfaces.
 ///
@@ -35,23 +39,4 @@ impl DragItemId {
     pub fn raw(self) -> usize {
         self.0
     }
-}
-
-/// What kind of item is being dragged or dropped onto.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DragItemKind {
-    Pane,
-    Workspace,
-    Column,
-    FloatingPane,
-}
-
-/// An item on a drag surface, identified by surface + id + kind.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DragItem {
-    pub surface: DragSurfaceId,
-    pub id: DragItemId,
-    pub kind: DragItemKind,
-    /// The pane ID, if this item represents a pane.
-    pub pane_id: Option<u64>,
 }

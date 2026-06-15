@@ -11,6 +11,7 @@ use heca_core::layout::{Point, Rectangle, Size};
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::terminal::{TerminalRenderer, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::{TextBox, TextRenderer};
 
 fn pane_content_rect(px: f32, py: f32, pw: f32, ph: f32, border_width: f32) -> Option<(f32, f32, f32, f32)> {
@@ -101,6 +102,9 @@ struct TerminalRenderPassContext<'a> {
     encoder: &'a mut wgpu::CommandEncoder,
     scale_factor: f64,
     surface_physical_size: winit::dpi::PhysicalSize<u32>,
+    /// The scrolling content area; pane content is clipped to it so panes scrolled
+    /// partially behind the chrome (sidebars/status) don't bleed under it.
+    content_clip: Rectangle,
 }
 
 fn render_terminal_mount(
@@ -117,10 +121,20 @@ fn render_terminal_mount(
         encoder,
         scale_factor,
         surface_physical_size,
+        content_clip,
     } = render_ctx;
     let content_box = rect_to_text_box(mount.content_rect);
-    let (clip_x, clip_y, clip_w, clip_h) =
-        (content_box.x, content_box.y, content_box.w, content_box.h);
+    // Intersect the pane's own rect with the scrolling content area, so a pane
+    // scrolled partially under the sidebar/status chrome is cropped at the content
+    // edge instead of bleeding into the chrome region.
+    let clip_x = content_box.x.max(content_clip.loc.x as f32);
+    let clip_y = content_box.y.max(content_clip.loc.y as f32);
+    let clip_right =
+        (content_box.x + content_box.w).min((content_clip.loc.x + content_clip.size.w) as f32);
+    let clip_bottom =
+        (content_box.y + content_box.h).min((content_clip.loc.y + content_clip.size.h) as f32);
+    let clip_w = (clip_right - clip_x).max(0.0);
+    let clip_h = (clip_bottom - clip_y).max(0.0);
     {
         text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
@@ -177,6 +191,34 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
     }
 }
 
+/// Factored chrome render pass: feeds a grid-ui `Scene` through `GridRenderer`
+/// and `TextRenderer`. Base layer first, then each overlay segment as its own
+/// rects-then-text pass (matching the showcase ordering that avoids overlay
+/// text-bleed).
+///
+/// Takes the renderer fields individually (not `&mut AppState`) because
+/// `render_frame` holds `let theme = &state.theme;` across its body.
+fn render_chrome(
+    grid: &mut GridRenderer,
+    text: &mut TextRenderer,
+    queue: &wgpu::Queue,
+    scene: &heca_grid_ui::Scene,
+    view: &wgpu::TextureView,
+    encoder: &mut wgpu::CommandEncoder,
+) {
+    grid.begin_frame();
+    grid.set_damage(None);
+    grid.set_clip(None);
+    heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer());
+    grid.render(queue, view, encoder);
+    text.render(queue, view, encoder);
+    for overlay in scene.overlay_segments() {
+        heca_renderer::scene::enqueue_scene(grid, text, &overlay);
+        grid.render(queue, view, encoder);
+        text.render(queue, view, encoder);
+    }
+}
+
 /// Render the full frame for the current app state.
 pub(crate) fn render_frame(state: &mut AppState) {
     if !state.needs_redraw {
@@ -201,6 +243,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
+    let scene_view = state.compositor.scene_view();
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
@@ -235,17 +278,26 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state.text_renderer.set_clip(None);
 
     let bg = theme.background.to_linear_f32x4();
+    // Transparent window: clear fully transparent so empty/background areas show
+    // the frosted vibrancy at full strength. Chrome panels draw translucent
+    // (chrome_alpha) on top; opaque panes/text/borders stay crisp. transparent
+    // == false reproduces today's opaque clear exactly.
+    let (clear_r, clear_g, clear_b, clear_a) = if state.appearance.is_transparent() {
+        (0.0, 0.0, 0.0, 0.0)
+    } else {
+        (bg[0] as f64, bg[1] as f64, bg[2] as f64, bg[3] as f64)
+    };
     encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("clear"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
+            view: scene_view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: bg[0] as f64,
-                    g: bg[1] as f64,
-                    b: bg[2] as f64,
-                    a: bg[3] as f64,
+                    r: clear_r,
+                    g: clear_g,
+                    b: clear_b,
+                    a: clear_a,
                 }),
                 store: wgpu::StoreOp::Store,
             },
@@ -262,57 +314,32 @@ pub(crate) fn render_frame(state: &mut AppState) {
     } else {
         [0.953, 0.957, 0.973, 1.0]
     };
+    // Frosted chrome: when transparent, draw chrome backgrounds (tab bar,
+    // sidebars, status bar) translucent so the vibrancy shows through. Panes and
+    // text stay opaque. (Per-pane translucency comes later, driven by a protocol.)
+    let chrome_alpha = state.appearance.chrome_opacity();
+    let side_bg = [side_bg[0], side_bg[1], side_bg[2], chrome_alpha];
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
-    let sb_y = h - tb.status_bar_height;
-    state
-        .primitive_renderer
-        .draw_rect(0.0, sb_y, w, tb.status_bar_height, side_bg);
-    let pane_count = state
-        .session
-        .active_workspace()
-        .map(|ws| {
-            ws.scrolling
-                .columns
-                .iter()
-                .map(|c| c.panes.len())
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
+    // The scrolling content area is left TRANSPARENT (no canvas fill) so empty
+    // (pane-less) space shows the frosted vibrancy, per design. Panes are still
+    // clipped to `pane_area` below so they don't bleed under the chrome.
+
     let active_pane_id = state
         .session
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|pane| pane.id)
         .or(state.focused_pane);
-    let focus_title = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|p| p.title.as_str())
-        .unwrap_or("—");
-    let (mode_str, rename_hint) = status_mode_parts(&state.input_mode);
-    let status = format!(
-        "{} panes | {} | {}{}",
-        pane_count, focus_title, mode_str, rename_hint
-    );
-    let status_text_y = sb_y + (tb.status_bar_height - chrome_text) / 2.0;
-    state.text_renderer.queue_text(
-        &status,
-        8.0,
-        status_text_y,
-        chrome_text,
-        theme.foreground.to_f32x4(),
-    );
 
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render(&state.device, scene_view, &mut encoder);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
     let theme_border = theme.border.to_f32x4();
     let border_width = theme.border_width;
@@ -332,6 +359,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
         .unwrap_or((0.0, 0.0));
     let surface_physical_size = state.window.inner_size();
+    // Scissor for the scrolling content area — pane backgrounds/borders are clipped
+    // to it so panes scrolled partially behind the chrome don't bleed under it.
+    let content_scissor = pane_scissor_rect(
+        pane_area.loc.x as f32,
+        pane_area.loc.y as f32,
+        pane_area.size.w as f32,
+        pane_area.size.h as f32,
+        state.scale_factor,
+        surface_physical_size,
+    );
 
     for (pane_id, rect) in &pane_positions {
         let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
@@ -367,10 +404,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         primitive_renderer: &mut state.primitive_renderer,
                         device: &state.device,
                         queue: &state.queue,
-                        view: &view,
+                        view: scene_view,
                         encoder: &mut encoder,
                         scale_factor: state.scale_factor,
                         surface_physical_size,
+                        content_clip: pane_area,
                     },
                     TerminalStyle {
                         font_size: theme.terminal_font_size,
@@ -409,10 +447,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render_clipped(&state.device, scene_view, &mut encoder, content_scissor);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = h - chrome.status_bar_height;
@@ -451,10 +489,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             primitive_renderer: &mut state.primitive_renderer,
                             device: &state.device,
                             queue: &state.queue,
-                            view: &view,
+                            view: scene_view,
                             encoder: &mut encoder,
                             scale_factor: state.scale_factor,
                             surface_physical_size,
+                            content_clip: pane_area,
                         },
                         TerminalStyle {
                             font_size: theme.terminal_font_size,
@@ -505,64 +544,39 @@ pub(crate) fn render_frame(state: &mut AppState) {
         heca_core::layout::Size::new(pane_area.size.w, pane_area.size.h),
     );
 
-    state.primitive_renderer.draw_rect(
-        0.0,
-        sidebar_top,
-        chrome.left_sidebar_width,
-        sidebar_h,
-        side_bg,
-    );
-    state.primitive_renderer.draw_border(
-        chrome.left_sidebar_width - 1.0,
-        sidebar_top,
-        1.0,
-        sidebar_h,
-        theme.border.to_f32x4(),
-        1.0,
-    );
-    let candidates = state.input_mode.candidates();
-    let drag_hover = state
-        .mouse
-        .drag_ctx
-        .surface(DragSurfaceId::LeftSidebar)
-        .and_then(|s| s.hover_item);
-    let drag_source = state
-        .mouse
-        .drag_ctx
-        .surface(DragSurfaceId::LeftSidebar)
-        .and_then(|s| s.source_item);
-    let drag_source_bg = theme.sidebar_drag_source_bg.to_f32x4();
-    let drag_source_border = theme.sidebar_drag_source_border.to_f32x4();
-    if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
-        sidebar::render_sidebar_expanded(
-            &mut state.sidebar_tree,
+    // The EXPANDED left sidebar is now drawn by the grid-ui chrome scene
+    // (`build_chrome_scene`). Only the COLLAPSED icon rail is still hand-drawn
+    // here; when expanded we skip the hand-drawn bg/divider/content entirely so it
+    // doesn't paint over the grid sidebar.
+    if chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+        state.primitive_renderer.draw_rect(
             0.0,
             sidebar_top,
             chrome.left_sidebar_width,
             sidebar_h,
-            matches!(state.input_mode, InputMode::SidebarNav),
-            theme.accent.to_f32x4(),
-            theme.foreground.to_f32x4(),
-            [side_bg[0] * 2.0, side_bg[1] * 2.0, side_bg[2] * 2.0, 0.6],
-            [
-                theme.accent.to_f32x4()[0],
-                theme.accent.to_f32x4()[1],
-                theme.accent.to_f32x4()[2],
-                0.5,
-            ],
-            candidates,
-            active_pane_id,
-            &mut state.text_renderer,
-            &mut state.primitive_renderer,
-            drag_hover,
-            drag_source,
-            drag_source_bg,
-            drag_source_border,
-            state.mouse.sidebar_hovered_btn_idx,
-            theme.sidebar_label_font_size,
-            theme.sidebar_button_font_size,
+            side_bg,
         );
-    } else {
+        state.primitive_renderer.draw_border(
+            chrome.left_sidebar_width - 1.0,
+            sidebar_top,
+            1.0,
+            sidebar_h,
+            theme.border.to_f32x4(),
+            1.0,
+        );
+        let candidates = state.input_mode.candidates();
+        let drag_hover = state
+            .mouse
+            .drag_ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .and_then(|s| s.hover_item);
+        let drag_source = state
+            .mouse
+            .drag_ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .and_then(|s| s.source_item);
+        let drag_source_bg = theme.drag_source_bg.to_f32x4();
+        let drag_source_border = theme.drag_source_border.to_f32x4();
         sidebar::render_sidebar_collapsed(
             &mut state.sidebar_tree,
             0.0,
@@ -609,14 +623,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
             ghost_y,
             ghost_w,
             ghost_h,
-            theme.sidebar_drag_ghost_bg.to_f32x4(),
+            theme.drag_ghost_bg.to_f32x4(),
         );
         state.primitive_renderer.draw_border(
             ghost_x,
             ghost_y,
             ghost_w,
             ghost_h,
-            theme.sidebar_drag_source_border.to_f32x4(),
+            theme.drag_source_border.to_f32x4(),
             1.5,
         );
         state.text_renderer.queue_text(
@@ -624,7 +638,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             ghost_x + 6.0,
             ghost_y + 4.0,
             13.0,
-            theme.sidebar_drag_ghost_fg.to_f32x4(),
+            theme.drag_ghost_fg.to_f32x4(),
         );
     }
 
@@ -656,6 +670,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     mouse::render_detached_pane(state, pane_area_rect);
     mouse::render_insert_hint(state, pane_area_rect);
+
+    // Reborrow compositor scene texture for the final flush (the previous
+    // `scene_view` borrow ended at its last use before the mouse:: calls above).
+    let scene_view = state.compositor.scene_view();
 
     if let Some(candidates) = state.input_mode.candidates() {
         let letter_size = 48.0f32;
@@ -703,11 +721,40 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     state
         .primitive_renderer
-        .render(&state.device, &view, &mut encoder);
+        .render(&state.device, scene_view, &mut encoder);
     state
         .text_renderer
-        .render(&state.queue, &view, &mut encoder);
+        .render(&state.queue, scene_view, &mut encoder);
 
+    // Grid-ui chrome (full-height sidebar SHELL + status bar) painted LAST so the
+    // shell sits ON TOP of the pane content/canvas instead of panes bleeding under
+    // it. The collapsed left rail + right "Details" sidebar stay hand-drawn above.
+    //
+    // F4.1 — retained tree: rebuild the widget tree only when the chrome signature
+    // changes; otherwise re-layout + paint the kept tree (no per-frame signal churn,
+    // and a live tree to dispatch events into in F4.2).
+    let chrome_sig = crate::chrome::chrome_signature(state, chrome);
+    if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
+        let root = crate::chrome::build_chrome_root(state, chrome);
+        state.chrome_tree = Some(crate::chrome::RetainedChrome { root, sig: chrome_sig });
+    }
+    let chrome_theme = crate::chrome::chrome_gui_theme(state);
+    let chrome_scene = crate::chrome::paint_chrome_root(
+        &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
+        w,
+        h,
+        &chrome_theme,
+    );
+    render_chrome(
+        &mut state.grid_renderer,
+        &mut state.text_renderer,
+        &state.queue,
+        &chrome_scene,
+        scene_view,
+        &mut encoder,
+    );
+
+    state.compositor.blit(&view, &mut encoder);
     state.queue.submit(std::iter::once(encoder.finish()));
     surface_texture.present();
 }

@@ -13,6 +13,8 @@ use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_renderer::composite::Compositor;
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
@@ -26,22 +28,130 @@ fn add_initial_pane(session: &mut Session) -> PaneId {
     pane_id
 }
 
+/// Pick a surface composite-alpha mode. When transparency is requested, prefer a
+/// transparency-capable mode (premultiplied, matching the renderers' premultiplied
+/// blending, then postmultiplied). Otherwise keep today's opaque behavior.
+fn choose_alpha_mode(
+    modes: &[wgpu::CompositeAlphaMode],
+    transparent: bool,
+) -> wgpu::CompositeAlphaMode {
+    use wgpu::CompositeAlphaMode::*;
+    if transparent {
+        for pref in [PreMultiplied, PostMultiplied] {
+            if modes.contains(&pref) {
+                return pref;
+            }
+        }
+    } else if modes.contains(&Opaque) {
+        return Opaque;
+    }
+    modes.first().copied().unwrap_or(Auto)
+}
+
+/// Apply OS backdrop blur / vibrancy once after window creation, when enabled.
+/// macOS = `NSVisualEffectView`; Windows = acrylic; Linux/other = no-op (the
+/// effect is not portably available). Needs a transparent window (F2b) to show.
+pub(crate) fn apply_window_vibrancy(
+    window: &Window,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) {
+    let Some(vibrancy) = appearance.os_vibrancy() else {
+        return;
+    };
+    #[cfg(target_os = "macos")]
+    apply_macos_vibrancy(window, vibrancy);
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (vibrancy, window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125))));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = (window, vibrancy); // no portable backdrop blur on Linux/other
+    }
+}
+
+/// macOS backdrop blur done right. window-vibrancy adds the `NSVisualEffectView`
+/// as a subview of winit's content view, which draws *over* wgpu's metal layer
+/// and washes out the content. Reparenting the content view panics winit (it
+/// owns its content view). So instead we insert the effect view as a **sibling
+/// BEHIND** winit's content view, in the window's frame view (`superview`):
+/// winit's view is left untouched, and where the transparent metal surface shows
+/// through, the frosted effect view behind it is revealed.
+#[cfg(target_os = "macos")]
+fn apply_macos_vibrancy(window: &Window, vibrancy: heca_config::appearance::Vibrancy) {
+    use heca_config::appearance::Vibrancy;
+    use objc2_app_kit::{
+        NSAutoresizingMaskOptions, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+        NSVisualEffectState, NSVisualEffectView, NSWindowOrderingMode,
+    };
+    use objc2_foundation::MainThreadMarker;
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let material = match vibrancy {
+        Vibrancy::None => return,
+        Vibrancy::Sidebar => NSVisualEffectMaterial::Sidebar,
+        Vibrancy::HudWindow => NSVisualEffectMaterial::HUDWindow,
+        Vibrancy::UnderWindowBackground => NSVisualEffectMaterial::UnderWindowBackground,
+        Vibrancy::Popover => NSVisualEffectMaterial::Popover,
+        Vibrancy::Menu => NSVisualEffectMaterial::Menu,
+        Vibrancy::FullScreenUi => NSVisualEffectMaterial::FullScreenUI,
+        Vibrancy::WindowBackground => NSVisualEffectMaterial::WindowBackground,
+    };
+
+    let Ok(handle) = window.window_handle() else {
+        return;
+    };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
+        return;
+    };
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let fill = NSAutoresizingMaskOptions::NSViewWidthSizable
+        | NSAutoresizingMaskOptions::NSViewHeightSizable;
+
+    // SAFETY: `h.ns_view` is winit's live content NSView. We only READ it
+    // (superview/frame) and add a sibling behind it — we never reparent or mutate
+    // winit's view, so winit's ownership is intact. Main thread (init/event loop).
+    unsafe {
+        let content_view: &NSView = h.ns_view.cast().as_ref();
+        let Some(frame_view) = content_view.superview() else {
+            return;
+        };
+        let frame = content_view.frame();
+
+        let effect = NSVisualEffectView::initWithFrame(mtm.alloc(), frame);
+        effect.setMaterial(material);
+        effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+        effect.setState(NSVisualEffectState::Active);
+        effect.setAutoresizingMask(fill);
+        frame_view.addSubview_positioned_relativeTo(
+            &effect,
+            NSWindowOrderingMode::NSWindowBelow,
+            Some(content_view),
+        );
+    }
+}
+
 pub(crate) async fn init_state(
     app_config: &AppConfig,
     event_loop: &ActiveEventLoop,
     event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
 ) -> Box<AppState> {
+    let appearance = app_config.config.appearance;
     let window_attrs = Window::default_attributes()
         .with_title("heca")
         .with_inner_size(winit::dpi::LogicalSize::new(
             app_config.config.settings.window_width as f64,
             app_config.config.settings.window_height as f64,
-        ));
+        ))
+        .with_transparent(appearance.is_transparent());
     let window = Arc::new(
         event_loop
             .create_window(window_attrs)
             .expect("Failed to create window"),
     );
+    apply_window_vibrancy(window.as_ref(), &appearance);
     let scale_factor = window.scale_factor();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -89,7 +199,7 @@ pub(crate) async fn init_state(
         height: physical.height.max(1),
         present_mode: wgpu::PresentMode::AutoVsync,
         desired_maximum_frame_latency: 2,
-        alpha_mode: surface_caps.alpha_modes[0],
+        alpha_mode: choose_alpha_mode(&surface_caps.alpha_modes, appearance.is_transparent()),
         view_formats: vec![],
     };
     surface.configure(&device, &config);
@@ -110,6 +220,15 @@ pub(crate) async fn init_state(
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
+    let mut grid_renderer = GridRenderer::new(&device, surface_format);
+    grid_renderer.set_scale_factor(scale_factor);
+    grid_renderer.set_target_size(physical.width, physical.height);
+    grid_renderer.set_screen_size(
+        &queue,
+        physical.width as f32 / scale_factor as f32,
+        physical.height as f32 / scale_factor as f32,
+    );
+    let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -165,9 +284,12 @@ pub(crate) async fn init_state(
         surface_config: config,
         primitive_renderer,
         text_renderer,
+        grid_renderer,
+        compositor,
         session,
         backends,
         theme: app_config.theme.clone(),
+        appearance,
         terminal_cell_size,
         scale_factor,
         needs_redraw: true,
@@ -180,6 +302,8 @@ pub(crate) async fn init_state(
             right_width: 200.0,
         },
         sidebar_tree,
+        chrome_tree: None,
+        chrome_sinks: crate::chrome::ChromeSinks::new(),
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         last_focused: None,

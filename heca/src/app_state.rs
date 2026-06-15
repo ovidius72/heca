@@ -2,9 +2,12 @@ use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
+use heca_config::appearance::AppearanceConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
+use heca_renderer::composite::Compositor;
+use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::sync::Arc;
@@ -100,6 +103,24 @@ pub struct SidebarState {
     pub right_width: f32,
 }
 
+/// What a surface drag carries — the app payload `P` for
+/// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
+/// payload-agnostic (generic over `P`); this struct is the *one* place the app's
+/// drag semantics live, keeping pane/workspace concepts out of the UI crate.
+///
+/// Today only panes are dragged from the sidebar. As column/workspace/Docker/
+/// agent drags arrive, this grows into an enum of payload variants — the
+/// framework needs no change.
+#[derive(Clone, Debug)]
+pub struct AppDragPayload {
+    /// The pane being dragged.
+    pub pane_id: PaneId,
+    /// Workspace the drag originated in.
+    pub origin_ws: usize,
+    /// If true, drop performs a swap instead of a move.
+    pub swap: bool,
+}
+
 /// State for the interactive content-area drag (pane moved by mouse).
 ///
 /// This is separate from the surface drag system (`DragContext`) because
@@ -148,7 +169,7 @@ pub struct DetachedPane {
 pub struct MouseState {
     pub pos: (f32, f32),
     /// Surface drag coordinator (sidebar, inspector, etc.).
-    pub drag_ctx: DragContext,
+    pub drag_ctx: DragContext<AppDragPayload>,
     /// Content-area interactive move state (separate from surface drags).
     pub interactive_move: Option<InteractiveMovePhase>,
     /// Pane being dragged (detached from layout).
@@ -158,7 +179,7 @@ pub struct MouseState {
     /// Last time edge scroll was processed (for frame-rate independence).
     pub last_edge_scroll_time: Option<std::time::Instant>,
     /// Pending click action when a sidebar drag doesn't exceed threshold.
-    /// Stored here instead of in `SurfaceDragPhase` to keep the framework
+    /// Stored here instead of in `DragPhase` to keep the framework
     /// dependency-free (no `WmAction` in `heca-grid-ui`).
     pub pending_click_action: Option<WmAction>,
     /// Index of the button currently hovered in the sidebar (for hover visual effect).
@@ -206,10 +227,14 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
+    pub grid_renderer: GridRenderer,
+    pub compositor: Compositor,
     pub session: Session,
     /// Content backends for panes that have one.
     pub backends: BackendStore,
     pub theme: Theme,
+    /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
+    pub appearance: AppearanceConfig,
     pub terminal_cell_size: (f32, f32),
     pub scale_factor: f64,
     pub needs_redraw: bool,
@@ -218,6 +243,12 @@ pub struct AppState {
     pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
+    /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
+    /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
+    pub chrome_tree: Option<crate::chrome::RetainedChrome>,
+    /// Sinks the chrome widgets write into when clicked (pane focus, workspace
+    /// collapse, …), read after dispatching a pointer event into `chrome_tree` (F4.2+).
+    pub chrome_sinks: crate::chrome::ChromeSinks,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).

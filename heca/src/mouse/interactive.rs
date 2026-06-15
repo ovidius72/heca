@@ -10,7 +10,6 @@
 //! concepts that don't apply to sidebar/inspector surfaces.
 
 use heca_core::layout::{PaneId, Point};
-use heca_grid_ui::drag::SurfaceDragPhase;
 
 use crate::app_state::{AppState, InteractiveMovePhase};
 
@@ -179,12 +178,11 @@ fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
         Some(InteractiveMovePhase::Moving { swap: s, .. }) => *s = swap,
         None => {}
     }
-    // Surface drags
+    // Surface drags — the swap flag lives in the app payload, so reach it via the
+    // framework's generic `payload_mut` accessor (which spans Starting/Dragging).
     for surface_state in state.mouse.drag_ctx.surfaces.values_mut() {
-        match &mut surface_state.phase {
-            SurfaceDragPhase::Starting { swap: s, .. } => *s = swap,
-            SurfaceDragPhase::Dragging { swap: s, .. } => *s = swap,
-            SurfaceDragPhase::Idle => {}
+        if let Some(payload) = surface_state.payload_mut() {
+            payload.swap = swap;
         }
     }
 }

@@ -43,6 +43,9 @@ const CONTENT_PAD: f32 = 10.0;
 /// Tighter inset used in [`RegionMode::CollapsedRail`] so the centered icon fits
 /// a thin rail without colliding with the brackets.
 const RAIL_PAD: f32 = 6.0;
+/// Inset used when [`frameless`](DockFrame::frameless): no brackets to clear, so the
+/// content can sit tight against the (host-provided) outer frame.
+const FRAMELESS_PAD: f32 = 2.0;
 /// Gap between the title bar and the body.
 const HEADER_BODY_GAP: f32 = 8.0;
 /// Gap between body rows.
@@ -68,6 +71,10 @@ pub struct DockFrame {
     /// Hosting region's display mode; when present and `CollapsedRail`, the frame
     /// renders icon-only. Read-only — the host writes it via its toggle action.
     rail_mode: Option<Signal<RegionMode>>,
+    /// When true, the corner-bracket frame is not painted and the content inset is
+    /// tightened — for docks hosted inside an already-framed container (e.g. a
+    /// sidebar shell) where per-dock brackets would be a redundant double border.
+    frameless: bool,
 }
 
 impl DockFrame {
@@ -116,7 +123,16 @@ impl DockFrame {
             2,
             "DockFrame header children: [toggle, CONTROLS]"
         );
-        Self { base, expanded, chevron, on_toggle: None, rail_mode: None }
+        Self { base, expanded, chevron, on_toggle: None, rail_mode: None, frameless: false }
+    }
+
+    /// Drop the corner-bracket frame (and tighten the content inset). Use when the
+    /// dock is hosted inside an already-framed container — e.g. a sidebar shell —
+    /// so it reads as a flat section rather than a redundant nested border.
+    pub fn frameless(mut self) -> Self {
+        self.frameless = true;
+        self.sync();
+        self
     }
 
     /// Set the initial expanded state.
@@ -192,8 +208,15 @@ impl DockFrame {
         if self.base.children.len() > RAIL {
             self.base.children[RAIL].base_mut().style.hidden = !rail;
         }
-        // Tighten the frame inset in the rail so the icon fits the thin column.
-        self.base.style.padding = if rail { RAIL_PAD } else { CONTENT_PAD };
+        // Tighten the frame inset in the rail so the icon fits the thin column;
+        // frameless docks tighten too since there are no brackets to clear.
+        self.base.style.padding = if rail {
+            RAIL_PAD
+        } else if self.frameless {
+            FRAMELESS_PAD
+        } else {
+            CONTENT_PAD
+        };
     }
 }
 
@@ -228,8 +251,11 @@ impl Component for DockFrame {
             cx.rect(b, f, None, radius, self.base.style.glow);
         }
 
-        // Prominent flat corner-bracket frame (shared with Pane).
-        cx.bracket_frame(b, fill);
+        // Prominent flat corner-bracket frame (shared with Pane) — unless frameless
+        // (hosted inside an already-framed container, e.g. a sidebar shell).
+        if !self.frameless {
+            cx.bracket_frame(b, fill);
+        }
 
         // Header + body draw themselves; a collapsed (hidden) body is skipped so
         // its rows don't stamp at the layout-collapsed top-left.
