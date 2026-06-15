@@ -182,6 +182,7 @@ pub(crate) async fn init_state(
         sidebar_tree,
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
+        selection: app_state::SelectionState::new(),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],

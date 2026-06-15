@@ -1,5 +1,6 @@
 use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
+pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::Theme;
@@ -220,6 +221,8 @@ pub struct AppState {
     pub sidebar_tree: SidebarTree,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
+    /// Host-owned shared selection state, reusable across pane/backend types.
+    pub selection: SelectionState,
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
