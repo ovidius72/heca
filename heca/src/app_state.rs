@@ -103,13 +103,6 @@ impl InputMode {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct SidebarState {
-    pub left_visible: bool,
-    pub left_width: f32,
-    pub right_visible: bool,
-    pub right_width: f32,
-}
 
 /// What a surface drag carries — the app payload `P` for
 /// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
@@ -248,7 +241,6 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
-    pub sidebar: SidebarState,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
@@ -258,14 +250,8 @@ pub struct AppState {
     /// collapse, …), read after dispatching a pointer event into `chrome_tree` (F4.2+).
     pub chrome_sinks: crate::chrome::ChromeSinks,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
-    /// Consolidates scattered chrome UI state; superseding `ChromeSinks` + parts of
-    /// `SidebarState`/`SidebarTree`/`input_mode` as consumers migrate onto it.
-    /// Foundation: constructed here (proves the reactive runtime at startup);
-    /// consumers (region vis/width, collapse, selection, targeting, scroll) migrate
-    /// onto it next, which is where it starts being read.
-    /// TODO(chrome-migration): remove this `expect` once a consumer reads the field
-    /// (it self-errors when no longer dead — see PLAN.md P0).
-    #[expect(dead_code, reason = "chrome-state consumers migrate incrementally; PLAN.md P0")]
+    /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
+    /// selection, targeting candidates, and scroll migrate onto it next.
     pub chrome_state: crate::chrome::SharedChromeState,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,

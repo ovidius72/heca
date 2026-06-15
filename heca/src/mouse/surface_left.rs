@@ -36,7 +36,7 @@ pub(crate) fn item_at(state: &AppState, pos: (f32, f32)) -> Option<DragItemId> {
 fn sidebar_bounds(state: &AppState) -> (f32, f32, f32) {
     let chrome = super::chrome_config(state);
     let (_win_w, win_h) = super::window_logical_size(state);
-    let sw = if state.sidebar.left_visible {
+    let sw = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width
     } else {
         DEFAULT_COLLAPSED_SIDEBAR_WIDTH
@@ -110,7 +110,7 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
         // (real laid-out geometry) to resolve what was clicked — replaces the legacy
         // fixed-row hit test. A pane card focuses that pane; a workspace header toggles
         // its collapsed state. Empty space is a no-op.
-        if state.sidebar.left_visible && sw >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+        if state.chrome_state.left_visible() && sw >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
             match crate::chrome::chrome_dispatch_click(state, pos) {
                 crate::chrome::ChromeClick::Pane(pane_id) => {
                     if let Some(fi) = state.sidebar_tree.flat_items.iter().position(|it| {

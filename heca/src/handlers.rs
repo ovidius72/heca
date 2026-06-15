@@ -1156,21 +1156,32 @@ pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
 
 // ── Sidebar / Chrome ──
 
+/// Map a visible flag to a chrome region mode (visible = Expanded, hidden = Hidden).
+fn region_mode(visible: bool) -> heca_grid_ui::widgets::RegionMode {
+    if visible {
+        heca_grid_ui::widgets::RegionMode::Expanded
+    } else {
+        heca_grid_ui::widgets::RegionMode::Hidden
+    }
+}
+
 pub fn handle_sidebar_left(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.left_visible = !state.sidebar.left_visible;
+    let vis = !state.chrome_state.left_visible();
+    state.chrome_state.set_left_mode(region_mode(vis));
     update_session_viewport(state);
     after_layout_change(state);
 }
 
 pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.right_visible = !state.sidebar.right_visible;
+    let vis = !state.chrome_state.right_visible();
+    state.chrome_state.set_right_mode(region_mode(vis));
     update_session_viewport(state);
     after_layout_change(state);
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.left_visible = true;
-    state.sidebar.left_width = 200.0;
+    state.chrome_state.set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
+    state.chrome_state.set_left_size(crate::chrome::DEFAULT_SIDEBAR_WIDTH);
     state.input_mode = InputMode::SidebarNav;
     update_session_viewport(state);
     after_layout_change(state);
@@ -1178,7 +1189,7 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_up_collapsed();
         } else {
@@ -1190,7 +1201,7 @@ pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_down_collapsed();
         } else {
