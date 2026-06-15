@@ -10,11 +10,6 @@
 
 ---
 
-## On resume (every session)
-**First `git fetch origin` and sync `origin/main` into the working branch** before any new work
-(memory `resume-pull-main-and-sync`). Pushing/merging still needs an explicit, action-specific OK
-(memory `never-merge-or-push-without-explicit-ok`).
-
 ## Status snapshot (2026-06-15)
 
 - **main** has the full **WS-A** workstream merged (**PR #102**): `[appearance]` config +
