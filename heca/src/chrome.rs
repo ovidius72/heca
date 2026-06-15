@@ -82,13 +82,22 @@ impl ChromeConfig {
 
 use crate::app_state::SidebarItemState;
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
+use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, Pane, Row, Surface,
 };
-use heca_grid_ui::{Color, Component, LayoutEngine, PaintCx, Scene};
+use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
+use std::cell::Cell;
+use std::rc::Rc;
+
+/// Host-owned sink the chrome widgets write into when activated, so the app can read
+/// the result after dispatching a pointer event into the retained tree (F4.2). Lives
+/// in `AppState` (survives tree rebuilds) and is cloned into pane-card `on_activate`
+/// closures. `Some(id)` = that pane card was clicked.
+pub(crate) type SidebarClickSink = Rc<Cell<Option<PaneId>>>;
 
 /// Leading glyph for a pane card. **Dynamic-ready seam:** today every pane hosts a
 /// terminal, so this is always [`Glyph::Terminal`]; later it becomes a function of
@@ -103,15 +112,19 @@ fn pane_glyph(_pane_name: &str) -> Glyph {
 /// are intentionally omitted — that data (process status / branch / change info)
 /// isn't on `SidebarPaneEntry` yet; this is the composition seam for it. Display-only
 /// for now — interaction is wired with the F4 shared-state layer.
-fn pane_card(pane: &SidebarPaneEntry, theme: &GuiTheme) -> Row {
+fn pane_card(pane: &SidebarPaneEntry, theme: &GuiTheme, sink: SidebarClickSink) -> Row {
     let active = pane.state == SidebarItemState::Active;
     let tint = if active { theme.accent } else { theme.foreground };
+    let pane_id = pane.pane_id;
     Row::new()
         .background(tint.with_alpha(if active { 30 } else { 12 }))
         .radius(theme.control_radius())
         .padding(6.0)
         .marker(ActiveMarker::Bar)
         .active(active)
+        // On click/Enter the card records its pane id in the host sink; the app reads
+        // it after dispatch and focuses that pane (read-via-signal / write-via-action).
+        .on_activate(move || sink.set(Some(pane_id)))
         .child(
             Flex::row()
                 .align(Align::Center)
@@ -132,7 +145,7 @@ fn pane_card(pane: &SidebarPaneEntry, theme: &GuiTheme) -> Row {
 /// drag handle attach here (wired with the F4 shared-state layer). The bar brightens
 /// to the accent when the column holds the active pane. `Align::Stretch` (the Flex
 /// default) makes the fixed-width bar span the height of the pane stack.
-fn column_view(c: &SidebarColEntry, theme: &GuiTheme) -> Flex {
+fn column_view(c: &SidebarColEntry, theme: &GuiTheme, sink: &SidebarClickSink) -> Flex {
     let active = c.panes.iter().any(|p| p.state == SidebarItemState::Active);
     let bar_color = if active {
         theme.accent
@@ -141,7 +154,7 @@ fn column_view(c: &SidebarColEntry, theme: &GuiTheme) -> Flex {
     };
     let mut panes = Flex::column().gap(3.0).grow(1.0);
     for pane in &c.panes {
-        panes = panes.child(pane_card(pane, theme));
+        panes = panes.child(pane_card(pane, theme, sink.clone()));
     }
     Flex::row()
         .gap(6.0)
@@ -159,7 +172,7 @@ fn column_view(c: &SidebarColEntry, theme: &GuiTheme) -> Flex {
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
-fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme) -> Flex {
+fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sink: &SidebarClickSink) -> Flex {
     let mut col = Flex::column().gap(6.0).grow(1.0);
     for ws in &tree.workspaces {
         let pane_count =
@@ -184,10 +197,10 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme) -> Flex {
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, theme));
+            cols = cols.child(column_view(c, theme, sink));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme));
+            cols = cols.child(pane_card(float, theme, sink.clone()));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -200,7 +213,13 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme) -> Flex {
 /// the chrome plan (F5, `pluggable-chrome-plugin-plan.md` §2.1) the sidebar is a
 /// *shell*; the [`build_workspaces_container`] tree is mounted into the body as the
 /// first container (display-only until the F4 shared-state layer wires interaction).
-fn build_sidebar_shell(tree: &SidebarTree, left_w: f32, sidebar_h: f32, theme: &GuiTheme) -> Pane {
+fn build_sidebar_shell(
+    tree: &SidebarTree,
+    left_w: f32,
+    sidebar_h: f32,
+    theme: &GuiTheme,
+    sink: &SidebarClickSink,
+) -> Pane {
     // Header: a sidebar glyph + a collapse toggle pushed to the right. The toggle is
     // inert until interaction is wired (it becomes an action against shared state).
     let header = Flex::row()
@@ -220,7 +239,7 @@ fn build_sidebar_shell(tree: &SidebarTree, left_w: f32, sidebar_h: f32, theme: &
         .gap(8.0)
         .background(theme.surface)
         .child(header)
-        .child(build_workspaces_container(tree, theme))
+        .child(build_workspaces_container(tree, theme, sink))
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
@@ -395,7 +414,13 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
     let left_w = chrome.left_sidebar_width;
     let sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
         let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
-        Some(build_sidebar_shell(&state.sidebar_tree, left_w, sidebar_h, &theme))
+        Some(build_sidebar_shell(
+            &state.sidebar_tree,
+            left_w,
+            sidebar_h,
+            &theme,
+            &state.chrome_click,
+        ))
     } else {
         None
     };
@@ -410,6 +435,29 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
         fg,
         sidebar,
     )
+}
+
+/// Hit-test a sidebar click by dispatching a pointer-press into the **retained**
+/// chrome tree (whose widgets are laid out at their real on-screen bounds), then
+/// reading which pane card recorded itself in the click sink. `pos` is in logical
+/// window coordinates (same space as the tree layout). Returns the clicked pane id.
+///
+/// The dispatched tree is then discarded (rebuilt next frame) so any incidental
+/// internal widget state changes (e.g. a `DockFrame` header toggle) don't persist
+/// out of sync with canonical state — proper collapse/toggle handling is F4.3.
+pub(crate) fn chrome_pick_pane(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> Option<PaneId> {
+    let sink = state.chrome_click.clone();
+    sink.set(None);
+    if let Some(tree) = state.chrome_tree.as_mut() {
+        tree.root.event(&Event::PointerPressed {
+            pos: Point::new(pos.0 as f64, pos.1 as f64),
+        });
+    }
+    state.chrome_tree = None;
+    sink.get()
 }
 
 fn sidebar_state_tag(s: &SidebarItemState) -> u8 {
@@ -569,9 +617,10 @@ mod tests {
         });
 
         let theme = GuiTheme::grid_tron();
+        let sink: super::SidebarClickSink = std::rc::Rc::new(std::cell::Cell::new(None));
         // The shell is [header, WorkspacesContainer]; the container hosts a dock per
         // workspace (so the tree's text is visible inside the shell).
-        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme);
+        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sink);
         assert_eq!(
             shell.base().children.len(),
             2,

@@ -228,6 +228,9 @@ pub struct AppState {
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
+    /// Sink the chrome's pane cards write into when clicked, read after dispatching a
+    /// pointer event into `chrome_tree` to focus the picked pane (F4.2).
+    pub chrome_click: crate::chrome::SidebarClickSink,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Most recently focused pane (for "go back" behavior).
