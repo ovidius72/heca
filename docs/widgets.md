@@ -1051,3 +1051,65 @@ Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, 
 `remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
 builder traits. Reuse `PaintCx` helpers (`rect`, `corner_brackets`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
+
+### Drag and drop
+
+A small, **domain-neutral, reusable** drag-and-drop framework lives in
+`heca_grid_ui::drag`. It has three layers, each usable on its own:
+
+**1. Universal opt-in (`DragExt`).** Every widget gets `.draggable(id)` and
+`.drop_target(id)` for free (blanket impl, like `visible`/`disabled`). The id is an
+opaque `DragItemId` the *app* maps back to its own model — widgets stay neutral and
+no extra layout nodes are added.
+
+```rust
+Row::new().child(/* … */).draggable(DragItemId::new(i))   // a drag source
+Flex::column().drop_target(DragItemId::new(zone_id))       // a drop zone
+```
+
+**2. Resolution over the laid-out tree.** Pure bounds walks replace hand-computed
+hit-testing — they read each widget's `Base.bounds` (filled by layout each frame):
+
+- `drag::source_at(root, point) -> Option<DragItemId>` — what a press would pick up.
+- `drag::resolve_at(root, point) -> Option<DropHit>` — the topmost/deepest drop
+  target under the cursor, with `DropHit { id, bounds, side }` where
+  `DropSide` is `Before` / `Onto` / `After` (vertical thirds of the target).
+
+**3. Gesture state + theme-driven visuals.** The state machine is generic over an
+**app-defined payload** `P` — the framework never knows what's being dragged:
+
+- `DragContext<P>` coordinates surfaces (`DragSurfaceId`); each `SurfaceDragState<P>`
+  runs `DragPhase::{Idle, Starting, Dragging}` with a threshold
+  (`DEFAULT_DRAG_THRESHOLD_SQ`, `rubberband`). Use `payload()` / `payload_mut()` to
+  read/update the in-flight payload (e.g. toggle a swap flag mid-drag).
+- `PaintCx::drag_ghost(rect, text)` paints the cursor-following chip (overlay layer);
+  `PaintCx::drop_indicator(bounds, side)` paints the insertion line / onto-wash. Both
+  derive from `theme.accent` — no hardcoded colors.
+
+**Putting it together** (the app owns `DragContext<AppPayload>` and dispatches its
+own pointer events into the retained tree):
+
+```rust
+// press: pick up the source under the cursor
+if let Some(id) = drag::source_at(&tree, pos) {
+    let payload = app.payload_for(id);            // app maps id -> its model
+    ctx.surface_mut(surface).unwrap().phase = DragPhase::Starting {
+        payload, start_pos: (pos.x as f32, pos.y as f32),
+        threshold_sq: drag::DEFAULT_DRAG_THRESHOLD_SQ,
+    };
+}
+// move (past threshold): track hover for the indicator
+let hover = drag::resolve_at(&tree, pos);          // Option<DropHit>
+// release: apply the drop
+if let Some(DropHit { id, side, .. }) = hover {
+    app.perform_drop(dragged_payload, id, side);   // app action (move/swap/insert)
+}
+```
+
+Painted by the host after the tree paints: `cx.drop_indicator(hit.bounds, hit.side)`
+for the hovered target and `cx.drag_ghost(chip_rect, label)` at the cursor.
+
+> Why opaque ids + generic `P`: the framework hosts *any* future surface/container
+> (panes, columns, Docker, agents, git, notes) without change — see
+> `dnd-framework-refactor-plan.md`. Never put app concepts (pane/workspace/column)
+> into the `drag` module.

@@ -790,6 +790,14 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 - `heca-grid-ui/src/drag/` framework types (5 files, 430+ lines):
   - `DragSurfaceId` (enum), `DragItemId` (newtype), `DragContext` (per-surface state), `SurfaceDragPhase` (state machine)
   - `rubberband()` math with unit tests
+- **⚠️ SUPERSEDED (2026-06-15) — generic DnD refactor (WS-A):** the framework is now
+  **domain-neutral + generic over an app payload `P`**: `DragContext<P>` /
+  `SurfaceDragState<P>` / `DragPhase<P>` (was `SurfaceDragPhase`); `DragItemKind`/`DragItem`
+  removed (payload lives in the app's `AppDragPayload`). Added universal `DragExt`
+  (`.draggable`/`.drop_target`), tree-geometry `drag::resolve_at`/`source_at`
+  (`DropHit`/`DropSide`), and `PaintCx::drag_ghost`/`drop_indicator`. **Docs:
+  `docs/widgets.md` §"Drag and drop"; design: `dnd-framework-refactor-plan.md`.** Never
+  put pane/workspace/column concepts in the `drag` module.
 - App integration: replace `DragState` with `DragContext` + `InteractiveMovePhase` (13 files)
 - Enum dispatch: `mouse/target.rs` — compiler exhaustiveness when adding surfaces
 - `mouse/surface_left.rs` — left sidebar handler; deleted `sidebar.rs`/`sidebar_drop.rs` (528 lines removed)
