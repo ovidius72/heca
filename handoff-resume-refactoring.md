@@ -1,13 +1,14 @@
 # Handoff: heca terminal refactor closeout
 
 ## Goal
-Resume the current terminal refactor branch and get it merge-ready against `main` without re-discovering the work that already landed.
+Resume from the merged Phase 3 terminal-core baseline without re-discovering the work that already landed.
 
 ## Current Branch / PR
 - Branch: `refactor/paneid-newtype`
-- PR: https://github.com/ovidius72/heca/pull/99
-- PR state: ready for review
-- Latest committed checkpoint: `d12bb45` - `Harden terminal renderer and sizing path`
+- PR: https://github.com/ovidius72/heca/pull/100
+- PR state: merged
+- Merge timestamp: `2026-06-14T11:29:39Z`
+- Latest branch checkpoint before merge closeout updates: `dbb9888` - `Polish terminal review fixes`
 
 ## Current Status
 - Real PTY-backed terminal panes are live by default.
@@ -40,12 +41,10 @@ Resume the current terminal refactor branch and get it merge-ready against `main
   - wide-cell filler fixes
   - cursor overlay ordering
 
-## What Still Needs To Happen Before Merge
-1. Re-run the final live validation pass across a couple more terminal fonts and a couple more `nvim` colorschemes.
-2. Run the phase-end Rust review for the current phase.
-3. Fix anything that review finds.
-4. Re-run review until clean.
-5. Refresh PR notes/checklist if anything substantive changes.
+## Phase 3 Outcome
+1. PR `#100` is merged.
+2. Phase 3 terminal-core integration is complete.
+3. Remaining terminal work is deferred to the explicit post-merge backlog.
 
 ## Explicitly Post-Merge Backlog
 These are planned, but they should **not** be treated as part of the old Phase 3 merge work:
@@ -66,8 +65,7 @@ These are planned, but they should **not** be treated as part of the old Phase 3
 1. Read `terminal-implementation.md`.
 2. Read `.planning/STATE.md`.
 3. Check `git status` and confirm the branch is still clean apart from any intentional new work.
-4. If no code changes are needed, run the final live validation pass.
-5. Run the phase-end Rust review only after the full phase is complete.
+4. Start from the post-merge backlog or Phase 4 work, not from terminal-core merge readiness.
 
 ## Key Files
 - `terminal-implementation.md`
@@ -92,4 +90,4 @@ These are planned, but they should **not** be treated as part of the old Phase 3
 - Do not reintroduce clipboard/selection/paste/backscroll/image protocols into the old Phase 3 merge path.
 - Shared selection is now a host capability requirement, not a terminal-only feature.
 - Keep terminal behavior app-agnostic; the current terminal host is meant to become content inside the future `heca-grid-ui` pane shell.
-- The important question now is merge readiness, not more architectural rewrites.
+- The important question now is which post-merge terminal/platform task to start next, not terminal-core merge readiness.

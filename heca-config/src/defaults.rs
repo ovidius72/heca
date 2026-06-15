@@ -32,6 +32,18 @@ pub(crate) fn default_drag_source_border() -> Color {
     Color::new(137, 180, 250, 255)
 } // accent
 
+pub(crate) fn default_drop_target_bg() -> Color {
+    Color::new(137, 180, 250, 45)
+} // accent @ ~18%
+
+pub(crate) fn default_drop_target_border() -> Color {
+    Color::new(137, 180, 250, 255)
+} // accent
+
+pub(crate) fn default_drop_insertion() -> Color {
+    Color::new(137, 180, 250, 255)
+} // accent
+
 pub(crate) fn default_sidebar_label_font_size() -> f32 {
     14.0
 }

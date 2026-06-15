@@ -70,15 +70,25 @@ pub struct Theme {
     pub float_accent: Color,
     #[serde(default = "crate::defaults::default_float_focus")]
     pub float_focus: Color,
-    // ── Sidebar drag-and-drop colors ──
-    #[serde(default = "crate::defaults::default_drag_ghost_bg")]
-    pub sidebar_drag_ghost_bg: Color,
-    #[serde(default = "crate::defaults::default_drag_ghost_fg")]
-    pub sidebar_drag_ghost_fg: Color,
-    #[serde(default = "crate::defaults::default_drag_source_bg")]
-    pub sidebar_drag_source_bg: Color,
-    #[serde(default = "crate::defaults::default_drag_source_border")]
-    pub sidebar_drag_source_border: Color,
+    // ── Drag-and-drop colors (generic; any surface/widget, not just the sidebar).
+    //    Old `sidebar_drag_*` keys still parse via serde aliases. ──
+    #[serde(default = "crate::defaults::default_drag_ghost_bg", alias = "sidebar_drag_ghost_bg")]
+    pub drag_ghost_bg: Color,
+    #[serde(default = "crate::defaults::default_drag_ghost_fg", alias = "sidebar_drag_ghost_fg")]
+    pub drag_ghost_fg: Color,
+    #[serde(default = "crate::defaults::default_drag_source_bg", alias = "sidebar_drag_source_bg")]
+    pub drag_source_bg: Color,
+    #[serde(default = "crate::defaults::default_drag_source_border", alias = "sidebar_drag_source_border")]
+    pub drag_source_border: Color,
+    /// Fill highlight for a drop zone the cursor is hovering over a valid drop.
+    #[serde(default = "crate::defaults::default_drop_target_bg")]
+    pub drop_target_bg: Color,
+    /// Border/outline of a hovered drop zone.
+    #[serde(default = "crate::defaults::default_drop_target_border")]
+    pub drop_target_border: Color,
+    /// The insertion-line color drawn between items to show where a drop lands.
+    #[serde(default = "crate::defaults::default_drop_insertion")]
+    pub drop_insertion: Color,
     // ── Sidebar font sizes ──
     #[serde(default = "crate::defaults::default_sidebar_label_font_size")]
     pub sidebar_label_font_size: f32,
@@ -120,10 +130,13 @@ impl Theme {
             float_background: Color::new(49, 50, 68, 255),
             float_accent: Color::new(137, 180, 250, 255),
             float_focus: Color::new(250, 179, 135, 255),
-            sidebar_drag_ghost_bg: Color::new(137, 180, 250, 217),
-            sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
-            sidebar_drag_source_bg: Color::new(137, 180, 250, 38),
-            sidebar_drag_source_border: Color::new(137, 180, 250, 255),
+            drag_ghost_bg: Color::new(137, 180, 250, 217),
+            drag_ghost_fg: Color::new(255, 255, 255, 255),
+            drag_source_bg: Color::new(137, 180, 250, 38),
+            drag_source_border: Color::new(137, 180, 250, 255),
+            drop_target_bg: Color::new(137, 180, 250, 45),
+            drop_target_border: Color::new(137, 180, 250, 255),
+            drop_insertion: Color::new(137, 180, 250, 255),
             sidebar_label_font_size: 14.0,
             sidebar_button_font_size: 11.0,
         }
@@ -160,10 +173,13 @@ impl Theme {
             float_background: Color::new(204, 208, 218, 255),
             float_accent: Color::new(30, 102, 245, 255),
             float_focus: Color::new(230, 126, 34, 255),
-            sidebar_drag_ghost_bg: Color::new(30, 102, 245, 217),
-            sidebar_drag_ghost_fg: Color::new(255, 255, 255, 255),
-            sidebar_drag_source_bg: Color::new(30, 102, 245, 38),
-            sidebar_drag_source_border: Color::new(30, 102, 245, 255),
+            drag_ghost_bg: Color::new(30, 102, 245, 217),
+            drag_ghost_fg: Color::new(255, 255, 255, 255),
+            drag_source_bg: Color::new(30, 102, 245, 38),
+            drag_source_border: Color::new(30, 102, 245, 255),
+            drop_target_bg: Color::new(30, 102, 245, 45),
+            drop_target_border: Color::new(30, 102, 245, 255),
+            drop_insertion: Color::new(30, 102, 245, 255),
             sidebar_label_font_size: 14.0,
             sidebar_button_font_size: 11.0,
         }

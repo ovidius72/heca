@@ -434,9 +434,25 @@ To remove a default binding, add it to `[keys.unbind]`:
 - The existing chrome becomes a **consumer** of `heca-grid-ui`; over time this should evolve toward a pluggable chrome host with left/right/top/bottom regions.
 - Important separation: the `Sidebar` in `heca-grid-ui` is a **shell/layout widget**, while the current workspace tree should evolve into a built-in `WorkspacesContainer` mounted inside that shell.
 
+### Creating new widgets / components (MANDATORY — read before adding ANY UI element)
+
+Any new visual or interactive element belongs in **`heca-grid-ui` as a proper widget** — **never** as ad-hoc inline composition in the app (`heca/src/chrome.rs`, sidebar, …) with hardcoded sizes/colors/alphas. **Plan the widget, build it in `heca-grid-ui`, integrate it into the catalog — then have the app compose it.**
+
+A new widget **MUST**:
+
+- **Be domain-neutral / GENERIC.** `heca-grid-ui` widgets must **never** encode an app domain — never name or couple a widget to `workspace`/`column`/`pane` (nor `docker`/`agent`/`git`). They are generic primitives (frames, groups, rows, rails, marker bars, target hints, regions); the **domain meaning is applied app-side** by the mounted container/provider. The chrome regions (left/right/top/bottom) host *generic containers* — `WorkspacesContainer` today, but also Docker instances, AI agents, git status, notes, plugin-defined containers (see `pluggable-chrome-plugin-plan.md`). So a widget built to render the workspace "columns" must be a **generic grouping/marker primitive that ANY container can reuse** — e.g. not `ColumnGroup`, but a generic `MarkerGroup`/`RailGroup` whose left bar + target-hint mean nothing in particular until a container gives them meaning. The existing widgets model this: `DockFrame`/`ItemGroup`/`Row`/`RailCell`/`ChromeRegion`/`KeyHint` are all domain-free. **Read how they are built — and run the live showcase (`cargo run -p heca-renderer --example showcase`, `heca-renderer/examples/showcase.rs`) — before adding a new one** (it demonstrates the widgets + chrome recipes to take inspiration from).
+- **Embed `Base` and implement `Component`** (+ builder traits `LayoutExt`/`StyleExt`/`Parent` as appropriate). This gives it — for free and uniformly with every other widget — `visible`/`disabled`/`focused`/`focus_visible`, `bounds` (so hit-testing + event dispatch work), `tab_index`, children, `mark_needs_paint`, and `tick(dt)` animation. Inline `Flex`+`Surface` blobs inherit **none** of this.
+- **Read ALL styling from the `Theme` (read at paint via `cx.theme()`) — hardcode nothing.** Colors, font family/size, border width, radius, glow, and transparency come from theme tokens, **not** literal `Color::new(...)` / `with_alpha(28)` / `Length::Px(3.0)` magic numbers in the app. Core project rule (see "No hardcoded color/style/theme" above): widgets must respond to `config.toml`, runtime theme reload (`prefix+Shift+r`), font changes, and the `[appearance]` transparency settings.
+- **Drive state styling from the theme**: active/inactive border + color, border width, radius, hover/press/focus — all from theme tokens, so behaviour is consistent across the library.
+- **Be planned + integrated**: export in `widgets/mod.rs`, add to the catalog in this file + `docs/widgets.md`, and add unit tests. No one-off escape hatches bolted on under deadline — if a variant is needed, design it as a proper, documented, theme-driven widget option.
+
+The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
+
+**Why this is non-negotiable (a real mistake made 2026-06-15):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in `heca/src/chrome.rs` with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.
+
 ### Using the widgets
 
-**Full per-widget API reference + examples: [`docs/widgets.md`](docs/widgets.md)** — read it before using the library. Quick orientation:
+**Live showcase: [`heca-renderer/examples/showcase.rs`](heca-renderer/examples/showcase.rs)** — run `cargo run -p heca-renderer --example showcase`. It exercises **every** widget (and chrome recipes: the EXPLORER `DockFrame`→`ItemGroup` tree, PANES cards, the `ChromeRegion` sidebar shell, `RailCell`/`KeyHint` rail, command palette, toasts) with real interaction. **Always look at the showcase first** — both to see how to *use* a widget and to take inspiration / copy patterns when building a new one. **Full per-widget API reference + examples: [`docs/widgets.md`](docs/widgets.md)** — read it before using the library. Quick orientation:
 
 - Import via `use heca_grid_ui::prelude::*;` (widgets, builder traits, `Theme`, `Color`, signals, events).
 - Build a retained tree (`Flex`/`Card`/`Button`/…), then each frame: `LayoutEngine::new().compute(&mut root, size)` → paint into a `Scene` with `PaintCx` → `heca_renderer::scene::enqueue_scene(grid, text, &scene)`.
@@ -774,6 +790,14 @@ Track 2 — Surface-agnostic DnD architecture completed on `feature/gpt-refactor
 - `heca-grid-ui/src/drag/` framework types (5 files, 430+ lines):
   - `DragSurfaceId` (enum), `DragItemId` (newtype), `DragContext` (per-surface state), `SurfaceDragPhase` (state machine)
   - `rubberband()` math with unit tests
+- **⚠️ SUPERSEDED (2026-06-15) — generic DnD refactor (WS-A):** the framework is now
+  **domain-neutral + generic over an app payload `P`**: `DragContext<P>` /
+  `SurfaceDragState<P>` / `DragPhase<P>` (was `SurfaceDragPhase`); `DragItemKind`/`DragItem`
+  removed (payload lives in the app's `AppDragPayload`). Added universal `DragExt`
+  (`.draggable`/`.drop_target`), tree-geometry `drag::resolve_at`/`source_at`
+  (`DropHit`/`DropSide`), and `PaintCx::drag_ghost`/`drop_indicator`. **Docs:
+  `docs/widgets.md` §"Drag and drop"; design: `dnd-framework-refactor-plan.md`.** Never
+  put pane/workspace/column concepts in the `drag` module.
 - App integration: replace `DragState` with `DragContext` + `InteractiveMovePhase` (13 files)
 - Enum dispatch: `mouse/target.rs` — compiler exhaustiveness when adding surfaces
 - `mouse/surface_left.rs` — left sidebar handler; deleted `sidebar.rs`/`sidebar_drop.rs` (528 lines removed)

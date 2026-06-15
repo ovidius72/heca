@@ -1185,7 +1185,7 @@ This section must be updated:
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: Phase 3 remains open only for the final validation/review loop before merge
+- Active implementation phase: Phase 3 terminal-core work is complete and merged; remaining terminal tasks are post-merge backlog items
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
   - cursor/text regressions after the sync
@@ -1365,6 +1365,7 @@ This section must be updated:
   - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
 - Keep richer graphics/image protocol support explicitly out-of-scope for the immediate merge path, but track Yazi image preview as the next protocol-facing TODO
 - then continue terminal visual/cell-fidelity refinement where runtime gaps remain
+- after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
 
 ### Planned Post-Merge Terminal Backlog
 

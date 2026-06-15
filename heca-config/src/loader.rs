@@ -55,6 +55,8 @@ pub struct Config {
     #[serde(default)]
     pub settings: SettingsConfig,
     #[serde(default)]
+    pub appearance: crate::appearance::AppearanceConfig,
+    #[serde(default)]
     pub keys: KeysConfig,
 }
 
@@ -70,9 +72,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> Self {
-        let config = Self::load_config_file().unwrap_or_else(|e| {
+        let config = Self::load_config_file().unwrap_or_else(|_e| {
             #[cfg(debug_assertions)]
-            eprintln!("[heca] config load: {e}, using defaults");
+            eprintln!("[heca] config load: {_e}, using defaults");
             Config::default()
         });
         let mut theme = Theme::load(&config.settings.theme);

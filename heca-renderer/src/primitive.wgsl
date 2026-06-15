@@ -43,5 +43,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(srgb_to_linear(in.color.rgb), in.color.a);
+    let a = in.color.a;
+    return vec4<f32>(srgb_to_linear(in.color.rgb) * a, a);
 }

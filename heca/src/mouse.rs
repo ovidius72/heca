@@ -19,7 +19,9 @@ use crate::app_state::{AppState, InteractiveMovePhase};
 use heca_core::layout::PaneId;
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
-use heca_grid_ui::drag::{DragItemKind, DragItemId, DragSurfaceId, SurfaceDragPhase, DEFAULT_DRAG_THRESHOLD_SQ};
+// NOTE: DragItemId / DEFAULT_DRAG_THRESHOLD_SQ return when sidebar DnD is
+// re-enabled (F4.5); removed for now to keep the build warning-clean.
+use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -72,44 +74,18 @@ pub fn on_mouse_input(
             // Sidebar click.
             let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
-            // Check if this is a sidebar pane hit (no button) → start drag detection.
-            let is_pane_item = sidebar_pane_hit_test(state, pos).is_some();
-
-            if is_pane_item {
-                // Start drag detection — if mouse moves beyond threshold it becomes SidebarDrag.
-                if let Some(pane_id) = sidebar_pane_hit_test(state, pos) {
-                    let (ws_idx, _, _) = match crate::find_pane_location(&state.session, pane_id) {
-                        Some(loc) => loc,
-                        None => return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar)),
-                    };
-                    let swap = state.modifiers.shift_key();
-                    // Store click action at the app layer (not in SurfaceDragPhase).
-                    state.mouse.pending_click_action = sidebar_action.clone();
-                    // Compute source_fi before mutable borrow of drag_ctx.
-                    let source_fi = {
-                        let chrome = chrome_config(state);
-                        let (_win_w, win_h) = window_logical_size(state);
-                        let sidebar_top = chrome.tab_bar_height;
-                        let sidebar_bottom = win_h - chrome.status_bar_height;
-                        let sw = if state.sidebar.left_visible { chrome.left_sidebar_width } else { DEFAULT_COLLAPSED_SIDEBAR_WIDTH };
-                        crate::sidebar::sidebar_hit_test(
-                            &state.sidebar_tree, sidebar_top, sidebar_bottom - sidebar_top, sw, pos.1
-                        ).unwrap_or(0)
-                    };
-                    if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
-                        left.phase = SurfaceDragPhase::Starting {
-                            kind: DragItemKind::Pane,
-                            pane_id: Some(pane_id.0),
-                            original_ws: ws_idx,
-                            start_pos: pos,
-                            threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
-                            swap,
-                        };
-                        left.source_item = Some(DragItemId::new(source_fi));
-                    }
-                    state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
-                    return None;
+            // Sidebar DnD is temporarily DISABLED (F4.5): the drag source/hover/drop
+            // all still resolve via the stale fixed-row `sidebar_hit_test` geometry,
+            // which no longer matches the grid-ui layout, so dragging mis-targets.
+            // Until drag is migrated to the retained-tree geometry (with the column
+            // marker bar as the drop target), a press on a sidebar pane is handled as
+            // a plain click — the action was computed by `surface_click_action` above
+            // — and no drag is started. Re-enable by restoring the drag-start here.
+            if sidebar_pane_hit_test(state, pos).is_some() {
+                if let Some(action) = sidebar_action {
+                    return Some((action, InteractionSource::MouseLeftSidebar));
                 }
+                return None;
             }
 
             // Sidebar button clicks / non-pane item clicks dispatch immediately.
@@ -137,15 +113,15 @@ pub fn on_mouse_input(
                 match active {
                     DragSurfaceId::LeftSidebar => {
                         let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar).expect("LeftSidebar pre-populated in DragContext::default");
-                        let phase = std::mem::replace(&mut left.phase, SurfaceDragPhase::Idle);
+                        let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
                         match phase {
-                            SurfaceDragPhase::Dragging { pane_id, original_ws, swap, .. } => {
-                                release::handle_sidebar_drag_release(state, PaneId(pane_id.unwrap_or(0)), original_ws, swap, pos);
+                            DragPhase::Dragging { payload } => {
+                                release::handle_sidebar_drag_release(state, payload.pane_id, payload.origin_ws, payload.swap, pos);
                             }
-                            SurfaceDragPhase::Starting { .. } => {
+                            DragPhase::Starting { .. } => {
                                 return release::handle_sidebar_drag_starting_release(state);
                             }
-                            _ => {}
+                            DragPhase::Idle => {}
                         }
                     }
                 }

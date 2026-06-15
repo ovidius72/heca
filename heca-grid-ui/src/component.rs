@@ -7,6 +7,7 @@
 //! once on [`PaintCx`], so every component reuses it (DRY).
 
 use crate::color::Color;
+use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
@@ -112,6 +113,16 @@ pub struct Base {
     pub tab_index: Option<i32>,
     /// Child components, laid out by this component's flex container.
     pub children: Vec<Box<dyn Component>>,
+    /// If set, this widget is a **drag source**: a press inside its bounds can
+    /// begin a drag carrying this opaque id (the app maps it back to a pane /
+    /// column / etc.). Universal opt-in via [`DragExt::draggable`](crate::builders::DragExt::draggable);
+    /// resolved generically by [`drag::source_at`](crate::drag::source_at).
+    pub drag_source: Option<DragItemId>,
+    /// If set, this widget is a **drop target**: a drag released over its bounds
+    /// drops onto this opaque id. Universal opt-in via
+    /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved
+    /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
+    pub drop_target: Option<DragItemId>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
@@ -136,6 +147,8 @@ impl Base {
             focus_visible: signal(false),
             tab_index: None,
             children: Vec::new(),
+            drag_source: None,
+            drop_target: None,
             font: 15.0,
             needs_paint: Cell::new(true),
         }
@@ -343,6 +356,20 @@ pub trait Component {
     /// box. Default: the widget's own `bounds`.
     fn damage_bounds(&self) -> Rectangle {
         self.base().bounds
+    }
+
+    /// The opaque drag-source id if this widget is draggable (see
+    /// [`Base::drag_source`]). Default reads the base; widgets needing dynamic
+    /// behavior may override. Walked by [`drag::source_at`](crate::drag::source_at).
+    fn as_drag_source(&self) -> Option<DragItemId> {
+        self.base().drag_source
+    }
+
+    /// The opaque drop-target id if this widget accepts drops (see
+    /// [`Base::drop_target`]). Default reads the base. Walked by
+    /// [`drag::resolve_at`](crate::drag::resolve_at).
+    fn as_drop_target(&self) -> Option<DragItemId> {
+        self.base().drop_target
     }
 }
 
@@ -633,6 +660,55 @@ impl<'a> PaintCx<'a> {
             radius,
             None,
         );
+    }
+
+    /// Draw the **drag ghost** — the small labelled chip that follows the cursor
+    /// during a drag. Theme-driven: an accent-filled rounded rect with the label in
+    /// the background color, painted on the **overlay layer** so it sits above all
+    /// chrome. `rect` is the chip's bounds (the app positions it at the cursor).
+    pub fn drag_ghost(&mut self, rect: Rectangle, text: &str) {
+        let (accent, bg, radius) = (self.theme.accent, self.theme.background, self.theme.radius);
+        let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
+        self.with_overlay(|cx| {
+            cx.rect(rect, accent.with_alpha(217), None, radius, None);
+            cx.rect(rect, Color::TRANSPARENT, Some(Border { color: accent, width: 1.5 }), radius, None);
+            cx.text(rect, text, bg, font, TextAlign::Center, false);
+        });
+    }
+
+    /// Draw a **drop indicator** over a target's `bounds`: an accent insertion line
+    /// for [`DropSide::Before`]/[`After`](DropSide), or an accent wash + outline for
+    /// [`DropSide::Onto`]. Theme-driven (derives from `accent`); the app calls this
+    /// over the bounds returned by [`resolve_at`](crate::drag::resolve_at).
+    pub fn drop_indicator(&mut self, bounds: Rectangle, side: DropSide) {
+        let accent = self.theme.accent;
+        match side {
+            DropSide::Onto => {
+                self.rect(bounds, accent.with_alpha(45), None, self.theme.radius, None);
+                self.rect(
+                    bounds,
+                    Color::TRANSPARENT,
+                    Some(Border { color: accent, width: 1.5 }),
+                    self.theme.radius,
+                    None,
+                );
+            }
+            DropSide::Before | DropSide::After => {
+                let thickness = 2.0;
+                let y = if side == DropSide::Before {
+                    bounds.loc.y - thickness / 2.0
+                } else {
+                    bounds.loc.y + bounds.size.h - thickness / 2.0
+                };
+                self.rect(
+                    Rectangle::new(Point::new(bounds.loc.x, y), Size::new(bounds.size.w, thickness)),
+                    accent,
+                    None,
+                    1.0,
+                    None,
+                );
+            }
+        }
     }
 
     /// Dim `rect` with a background-colored scrim — the standard look for a

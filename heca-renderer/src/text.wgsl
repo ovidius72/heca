@@ -50,6 +50,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let alpha = textureSample(text_texture, text_sampler, in.texcoord).r;
-    return vec4<f32>(srgb_to_linear(in.color.rgb), in.color.a * alpha);
+    let cov = textureSample(text_texture, text_sampler, in.texcoord).r;
+    let a = in.color.a * cov;
+    return vec4<f32>(srgb_to_linear(in.color.rgb) * a, a);
 }

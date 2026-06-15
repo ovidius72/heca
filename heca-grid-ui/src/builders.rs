@@ -11,6 +11,7 @@
 
 use crate::color::Color;
 use crate::component::Component;
+use crate::drag::DragItemId;
 use crate::reactive::SignalUpdate;
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length, WidgetSize};
@@ -127,6 +128,33 @@ pub trait StyleExt: Component + Sized {
         self
     }
 }
+
+/// Drag-and-drop opt-in — **universal**, available on every widget via a blanket
+/// impl (like the base-level `visible`/`disabled` properties). Marks a widget as a
+/// drag source and/or a drop target by storing an opaque [`DragItemId`] the app
+/// interprets. The framework resolves these generically from the retained tree's
+/// laid-out bounds ([`drag::source_at`](crate::drag::source_at) /
+/// [`drag::resolve_at`](crate::drag::resolve_at)) — no per-surface geometry.
+///
+/// Domain-neutral by construction: the id is opaque and the payload (what the drag
+/// *carries*) lives in the app's `DragContext<P>`, never in the widget.
+pub trait DragExt: Component + Sized {
+    /// Make this widget a **drag source** carrying `id`. A press inside its bounds
+    /// can begin a drag; the app maps `id` back to the dragged thing.
+    fn draggable(mut self, id: DragItemId) -> Self {
+        self.base_mut().drag_source = Some(id);
+        self
+    }
+    /// Make this widget a **drop target** identified by `id`. A drag released over
+    /// its bounds drops onto `id`.
+    fn drop_target(mut self, id: DragItemId) -> Self {
+        self.base_mut().drop_target = Some(id);
+        self
+    }
+}
+
+/// Every component gets the drag/drop builders for free.
+impl<T: Component + Sized> DragExt for T {}
 
 /// Components that contain children.
 pub trait Parent: Component + Sized {

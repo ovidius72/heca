@@ -17,7 +17,7 @@ progress:
 
 **Current Phase:** Phase 4 — The Platform
 **Status:** In progress
-**Last Action:** Promoted the post-merge terminal backlog into explicit phases and defined shared host selection as the required architecture for selection/copy/paste
+**Last Action:** Phase 3 terminal-core work is merged; post-merge terminal backlog is active with shared host selection as the required architecture for selection/copy/paste
 
 ## Product Phase Progress
 
