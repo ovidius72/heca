@@ -20,31 +20,62 @@
 
 ---
 
-## Priority sequence (locked)
+## Priority sequence (locked; blur pulled forward 2026-06-15 — cross-team dep)
 
-1. **Consolidate planning docs** ← *this file* (in progress)
-2. **SharedChromeState** (global AppState store) — *discuss first*; **gates F4.4/F4.5**
-3. **F4.4** — generic marker/rail widget + targeting
-4. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
-5. **Pane numbering** feature
-6. **Appearance & sizing** — finish in-app blur, app zoom, app/terminal font sizing
-7. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom
+1. ~~Consolidate planning docs~~ ✅
+2. **In-app blur (F3)** ← **NEXT** — compositor-owned; terminal agents will reuse it
+3. **SharedChromeState** (global AppState store) — *discuss first*; **gates F4.4/F4.5**
+4. **F4.4** — generic marker/rail widget + targeting
+5. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
+6. **Pane numbering** feature
+7. **Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec
+8. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom
 
 ---
 
 ## Now / Next (detailed)
 
-### P0 — SharedChromeState (global AppState store) — *discuss before building* — NOT BUILT
-Verified absent: no `heca/src/chrome/state.rs`, no `SharedChromeState`. Today chrome uses a
-`ChromeSinks` `Rc<Cell>` stopgap + scattered state (`SidebarTree`, `AppState.sidebar`,
-`mouse.drag_ctx`, `input_mode`).
-- New `heca/src/chrome/state.rs` `SharedChromeState`: region visibility/mode/widths, selection
-  (active/hovered pane), per-workspace collapse, drag state, targeting candidates, scroll.
-  Session stays canonical; this holds **derived UI state + ids**. Endgame = a **namespaced
-  signal store** (one namespace per feature/dock/plugin).
-- **Design:** `F4-chrome-state-design.md` §2.2, `grid-ui-chrome-plan.md` §4,
-  `pluggable-chrome-plugin-plan.md` Phase 2. Foundation-first (memory `chrome-integration-realignment`)
-  puts this *before* more chrome content.
+### NEXT — In-app blur (F3), compositor-owned — NOT BUILT (only a config knob)
+Verified: `blur: u8` config + `blur_radius()` exist but have **zero consumers**; no blur shader/
+pass in `heca-renderer`. Pulled forward because **other agents' terminal work wants to reuse it**.
+- Build a separable-Gaussian blur pass in `heca-renderer` over the existing `Compositor` offscreen
+  scene texture (`composite.rs`): capture region → downsample → 2-pass (H/V) Gaussian → composite
+  back, **clip-aware** (respect pane/overlay bounds), driven by the existing `blur_radius()` token.
+- **Host/compositor-owned, NOT terminal-owned** (`pluggable-chrome-plugin-plan.md` Phase 7.5):
+  terminals/chrome get blur by mounting into shells the compositor blurs. Expose a small reuse
+  **contract** so the terminal agents code against the interface, not a private impl.
+- Transparency/vibrancy is already done + in main (the reuse contract is `heca-config::appearance`
+  + `startup::apply_window_vibrancy` + `Compositor`); blur is the missing piece on top.
+
+### P0 — SharedChromeState (global AppState store) — DESIGN LOCKED, build in progress
+Consolidate the scattered chrome UI state (`SidebarTree` cursor/collapsed, `AppState.sidebar`
+vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag stays in
+`mouse.drag_ctx`) into one store. Session stays canonical; this holds **derived UI state + ids**.
+
+**Decisions (locked 2026-06-15):**
+- **Concrete struct, namespace-shaped** — a real `SharedChromeState` for today, designed so the
+  future namespaced signal store wraps it as the `chrome` namespace (not a hack, not the full
+  plugin registry yet).
+- **Scope:** consolidate **all** chrome UI state in this effort (regions vis/mode/width, chrome
+  selection active/hovered pane, per-workspace collapse, targeting candidates, scroll).
+- **Read model = fine-grained signals** (`Signal<T>` fields; chrome widgets bind via `.get()` in
+  paint/layout; writes mark dirty → coalesced redraw). Truest to the locked read-via-signals /
+  write-via-actions contract.
+- **Module:** `heca/src/chrome/state.rs` (chrome.rs already restructured → `chrome/mod.rs`).
+- **Naming:** chrome's selection is **active/hovered PANE** — name it `ChromeSelection` inside
+  `SharedChromeState`; do NOT collide with the terminal `SelectionState` (text selection, merged
+  from main).
+
+**Integration notes discovered (must handle):**
+- heca creates **no signals at startup today**; no `Scope`/runtime setup exists. Verify
+  `floem_reactive` signals can be created at `AppState` construction (global runtime on the UI
+  thread) — app-lifetime signals never dispose (fine).
+- Reconcile fine-grained signals with the **F4.1 rebuild-on-signature + damage** model: widgets
+  re-subscribe on rebuild; the only-affected-repaint payoff needs signal-dirty to feed the
+  `needs_paint`/`collect_damage` path. This is the deep part of the work.
+
+**Design refs:** `F4-chrome-state-design.md` §2.2, `grid-ui-chrome-plan.md` §4,
+`pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
 
 ### P1 — F4.4 — generic marker/rail widget + targeting (built drag-aware)
 - Build a **generic** `MarkerGroup`/`RailGroup` widget in `heca-grid-ui` (rows + left marker/rail
