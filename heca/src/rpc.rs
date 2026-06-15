@@ -18,6 +18,9 @@
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
 //!   command-palette
+//!   enter-selection-mode | clear-selection | copy-selection | paste-clipboard
+//!     (selection is a host capability; these commands are reachable from
+//!      RPC, keyboard bindings, and future mouse/UI dispatch)
 
 use crate::input::{ResizeTarget, WmAction};
 use heca_core::layout::PaneId;
@@ -247,6 +250,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
         "command-palette" => Ok(WmAction::CommandPalette),
+        // Selection (host capability, Task 02). Reachable from RPC, keyboard
+        // bindings, and future mouse/UI dispatch. Phase 10 will own the
+        // real `copy-selection` and `paste-clipboard` behavior; today they
+        // are routed placeholders that set `needs_redraw`.
+        "enter-selection-mode" => Ok(WmAction::EnterSelectionMode),
+        "clear-selection" => Ok(WmAction::ClearSelection),
+        "copy-selection" => Ok(WmAction::CopySelection),
+        "paste-clipboard" => Ok(WmAction::PasteClipboard),
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
 }
@@ -462,6 +473,28 @@ use heca_core::layout::PaneId;
         assert_eq!(
             parse_rpc_command("command-palette"),
             Ok(WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn test_selection_commands() {
+        // Selection is a host capability (Task 02) and must be reachable
+        // from RPC, not just from keyboard bindings.
+        assert_eq!(
+            parse_rpc_command("enter-selection-mode"),
+            Ok(WmAction::EnterSelectionMode)
+        );
+        assert_eq!(
+            parse_rpc_command("clear-selection"),
+            Ok(WmAction::ClearSelection)
+        );
+        assert_eq!(
+            parse_rpc_command("copy-selection"),
+            Ok(WmAction::CopySelection)
+        );
+        assert_eq!(
+            parse_rpc_command("paste-clipboard"),
+            Ok(WmAction::PasteClipboard)
         );
     }
 

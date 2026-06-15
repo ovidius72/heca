@@ -517,6 +517,36 @@ impl ActionRegistry {
             category: ActionCategory::System,
             default_binding: "Shift+r",
         },
+
+        // ── Selection (host capability) ──
+        ActionDescriptor {
+            name: "enter_selection_mode",
+            label: "Enter Selection Mode",
+            description: "Enter the host-owned selection input mode. Selection data is driven by surface adapters (mouse, keyboard, RPC).",
+            category: ActionCategory::Pane,
+            default_binding: "s",
+        },
+        ActionDescriptor {
+            name: "clear_selection",
+            label: "Clear Selection",
+            description: "Clear the active selection and exit selection mode if active.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+s",
+        },
+        ActionDescriptor {
+            name: "copy_selection",
+            label: "Copy Selection",
+            description: "Copy the active selection to the system clipboard. Placeholder until Phase 10 lands clipboard integration.",
+            category: ActionCategory::Pane,
+            default_binding: "y",
+        },
+        ActionDescriptor {
+            name: "paste_clipboard",
+            label: "Paste Clipboard",
+            description: "Paste system clipboard content into the focused pane. Placeholder until Phase 10 lands paste integration.",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+        },
     ];
 
     /// Look up an action descriptor by its config name.
@@ -570,6 +600,23 @@ mod tests {
     #[test]
     fn test_find_unknown_action() {
         assert!(ActionRegistry::find("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_selection_action_descriptors_exist() {
+        for name in [
+            "enter_selection_mode",
+            "clear_selection",
+            "copy_selection",
+            "paste_clipboard",
+        ] {
+            let desc = ActionRegistry::find(name);
+            assert!(desc.is_some(), "missing descriptor for {name}");
+            let desc = desc.unwrap();
+            assert!(!desc.default_binding.is_empty(), "{name} default_binding must be set");
+            assert!(!desc.label.is_empty(), "{name} label must be set");
+            assert!(!desc.description.is_empty(), "{name} description must be set");
+        }
     }
 
     #[test]

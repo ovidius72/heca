@@ -458,6 +458,12 @@ pub fn build_registry() -> ActionRegistry {
         handle_enter_mode,
     );
 
+    // ── Selection (host capability) ──
+    registry.register(&WmAction::EnterSelectionMode, handle_enter_selection_mode);
+    registry.register(&WmAction::ClearSelection, handle_clear_selection);
+    registry.register(&WmAction::CopySelection, handle_copy_selection);
+    registry.register(&WmAction::PasteClipboard, handle_paste_clipboard);
+
     registry
 }
 
@@ -543,6 +549,31 @@ mod tests {
             keymap.resolve("normal", &KeyCombo::parse("]")),
             Some(&WmAction::NextPane)
         );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("p")),
+            Some(&WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn default_selection_bindings_resolve() {
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("s")),
+            Some(&WmAction::EnterSelectionMode)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Shift+s")),
+            Some(&WmAction::ClearSelection)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("y")),
+            Some(&WmAction::CopySelection)
+        );
+        // paste_clipboard is intentionally not given a default flat binding
+        // to avoid colliding with established keys; users bind it in config.
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("p")),
             Some(&WmAction::CommandPalette)

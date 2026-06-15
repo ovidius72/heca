@@ -16,6 +16,7 @@ pub mod pane_ops;
 pub mod registry;
 pub mod render;
 pub mod selection;
+pub mod selection_model;
 pub mod startup;
 pub mod terminal_host;
 pub mod terminal_metrics;

@@ -1,5 +1,6 @@
 use crate::app::backend_store::BackendStore;
 use crate::app::events::AppEvent;
+pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::appearance::AppearanceConfig;
@@ -67,6 +68,13 @@ pub enum InputMode {
     Mode {
         name: String,
     },
+    /// Host-owned selection mode. Entered via `WmAction::EnterSelectionMode`.
+    /// The actual selection data lifecycle (begin/update_focus/end) is driven
+    /// by mouse/UI/RPC adapters and `WmAction::ClearSelection`; this mode
+    /// represents the input state where selection semantics are active. Esc
+    /// clears the selection and returns to `Normal`; Enter confirms the
+    /// selection and returns to `Normal`. Other keys are ignored.
+    Selection,
     /// Confirmation prompt for destructive operations.
     /// `y` executes the stored action, `n` or `Esc` cancels.
     /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
@@ -251,6 +259,8 @@ pub struct AppState {
     pub chrome_sinks: crate::chrome::ChromeSinks,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
+    /// Host-owned shared selection state, reusable across pane/backend types.
+    pub selection: SelectionState,
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
@@ -270,6 +280,8 @@ pub struct AppState {
     /// Set to true when the user requests a config reload (e.g. via keybinding).
     /// The app checks this in about_to_wait and rebuilds keymaps/settings.
     pub pending_reload: bool,
+    /// Whether the application window is currently focused.
+    pub window_focused: bool,
 }
 
 #[cfg(test)]

@@ -1487,6 +1487,66 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
     state.needs_redraw = true;
 }
 
+// ── Selection (host capability) ──
+
+/// Enter the host-owned selection input mode.
+///
+/// This action transitions the input mode only. It does **not** start a
+/// selection gesture by itself; the actual `SelectionState::begin(...)`
+/// call is driven by the surface adapter (mouse drag, keyboard cursor in
+/// selection mode, RPC) in later tasks.
+///
+/// The action only transitions the input mode so that:
+/// - status bar shows `SELECTION`
+/// - `Esc` / `Enter` semantics become "clear / confirm selection"
+/// - other keys are not forwarded to the focused backend
+///
+/// Pre-existing selections are allowed: a user who confirmed a selection
+/// with `Enter` (leaving it in the `Selected` phase) can re-enter selection
+/// mode to reposition it, and the surface adapter is responsible for
+/// calling `state.selection.begin(...)` to refresh the gesture. The handler
+/// therefore does not assert on the active state — it only transitions the
+/// input mode. Mode-internal keyboard behavior (`Esc` clears, `Enter`
+/// confirms, `prefix` returns to Prefix) is owned by
+/// `app::input::handle_selection_mode`.
+pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) {
+    state.input_mode = InputMode::Selection;
+    state.needs_redraw = true;
+}
+
+/// Clear the active selection and exit selection input mode.
+pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) {
+    state.selection.clear();
+    if matches!(state.input_mode, InputMode::Selection) {
+        state.input_mode = InputMode::Normal;
+    }
+    state.needs_redraw = true;
+}
+
+/// Placeholder for the future copy-selection action.
+///
+/// Routes the action today so it is reachable from `config.toml` and RPC
+/// without forcing a fake implementation. The real clipboard integration
+/// belongs to Phase 10. The handler is intentionally minimal — a real
+/// implementation will need clipboard state and the active selection owner.
+pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
+    // Phase 10 will extract the selected text from the active selection
+    // owner and write it to the system clipboard.
+    state.needs_redraw = true;
+}
+
+/// Placeholder for the future paste-clipboard action.
+///
+/// Routes the action today so it is reachable from `config.toml` and RPC
+/// without forcing a fake implementation. The real paste integration
+/// belongs to Phase 10. The handler is intentionally minimal — a real
+/// implementation will need clipboard state and the focused pane's backend.
+pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
+    // Phase 10 will read the system clipboard and forward the text into the
+    // focused pane through the appropriate backend.
+    state.needs_redraw = true;
+}
+
 // ── Config ──
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {

@@ -6,14 +6,17 @@
 use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::{AppState, InputMode};
+use heca_core::backend::BackendAlert;
 use crate::mouse;
 use std::time::Instant;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::window::UserAttentionType;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct BackendPollResult {
     pub has_data: bool,
     pub closed_any: bool,
+    pub bell_any: bool,
 }
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
@@ -21,6 +24,11 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     for backend in state.backends.values_mut() {
         if backend.update() {
             result.has_data = true;
+        }
+        for alert in backend.take_alerts() {
+            if matches!(alert, BackendAlert::Bell) {
+                result.bell_any = true;
+            }
         }
     }
     let closing_panes = state.backends.pane_ids_to_close();
@@ -57,6 +65,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     state.session.advance_animations();
 
     let backend_poll = poll_backends(state);
+    if backend_poll.bell_any && !state.window_focused {
+        state
+            .window
+            .request_user_attention(Some(UserAttentionType::Informational));
+    }
 
     let needs_frame =
         state.needs_redraw

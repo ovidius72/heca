@@ -101,6 +101,9 @@ pub(crate) fn handle_keyboard_input(
         InputMode::SidebarNav => {
             handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
+        InputMode::Selection => {
+            handle_selection_mode(registry, state, ctx);
+        }
         _ => {}
     }
 }
@@ -503,6 +506,62 @@ fn workspace_focus_target(ws: &heca_core::layout::Workspace) -> Option<PaneId> {
         .or_else(|| ws.floating_panes.first().map(|float| float.pane.id))
 }
 
+fn handle_selection_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    ctx: KeyInputContext<'_>,
+) {
+    // Selection mode keyboard contract (Task 02):
+    //   Esc     → dispatch `WmAction::ClearSelection` through the action
+    //             architecture (no registry bypass), then return to Normal.
+    //   Enter   → confirm the active selection (`selection.end()`) and
+    //             return to Normal. There is no `ConfirmSelection` action
+    //             in the Task 02 surface; Enter is a mode-internal key like
+    //             the `Esc`/`Enter` arms of `handle_rename_input` and
+    //             `handle_confirm_delete_input`, which also directly mutate
+    //             state for mode-internal semantics.
+    //   prefix  → return to Prefix mode AND arm the prefix timeout
+    //             (`prefix_entered_at = Some(now)`). This matches the
+    //             Normal→Prefix promotion in `handle_keyboard_input`; the
+    //             prefix-mode arm itself only clears `prefix_entered_at`,
+    //             it never sets it. Without arming the timestamp here, the
+    //             app would be stuck in Prefix mode until the user types
+    //             something that triggers `handle_prefix_mode` to clear it.
+    //   other keys → ignored; do not forward to the focused backend.
+    //
+    // The actual selection-data lifecycle (begin/update_focus/end) is driven
+    // by surface adapters in later tasks; this mode only owns the input-mode
+    // semantics for selection.
+    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
+    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
+
+    if is_escape {
+        // Route through the action architecture — no direct selection-state
+        // mutation here, consistent with the "no registry bypasses" rule.
+        // We set the mode to Normal first so the dispatched handler runs
+        // against a consistent state; the handler's mode check would
+        // otherwise be a no-op for us (it only resets Selection, and the
+        // mode is already Normal by the time the handler runs).
+        state.input_mode = InputMode::Normal;
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::ClearSelection,
+        );
+    } else if is_enter {
+        state.selection.end();
+        state.input_mode = InputMode::Normal;
+        state.needs_redraw = true;
+    } else if ctx.is_prefix {
+        // Match the Normal→Prefix promotion exactly: set the mode AND
+        // arm the timeout. `handle_prefix_mode` will not arm it later.
+        state.input_mode = InputMode::Prefix;
+        state.prefix_entered_at = Some(std::time::Instant::now());
+        state.needs_redraw = true;
+    }
+}
+
 fn mode_combo(ctx: KeyInputContext<'_>) -> KeyCombo {
     KeyCombo {
         key: normalize_key_text(
@@ -612,4 +671,28 @@ mod tests {
         let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
         assert_eq!(target, Some(PaneId(77)));
     }
+
+    // Note: `handle_selection_mode` is not unit-tested directly because it
+    // requires a fully-constructed `AppState` (winit window + wgpu device).
+    // Its contracts are verified by:
+    //   - the `selection_model` unit tests (clear/end/SelectionState lifecycle)
+    //   - the registry integration (ClearSelection is registered and routed
+    //     through `build_registry()`)
+    //   - the keymap test `default_selection_bindings_resolve` (the
+    //     `prefix+s` binding reaches the action surface)
+    //   - the `cargo check`/`cargo clippy` builds (compile-time
+    //     exhaustiveness of the `InputMode::Selection` arm and the
+    //     `action_from_name` mapping)
+    //
+    // The two coordinator-flagged regressions are structurally prevented by
+    // the implementation:
+    //   - `handle_selection_mode`'s `ctx.is_prefix` arm sets
+    //     `state.prefix_entered_at = Some(Instant::now())` alongside the
+    //     `InputMode::Prefix` transition, so the timeout in
+    //     `lifecycle::handle_about_to_wait` is armed and the prefix mode
+    //     cannot get stuck.
+    //   - The Esc path dispatches `WmAction::ClearSelection` through
+    //     `dispatch_action(...)` instead of calling
+    //     `state.selection.clear()` directly, so the new action surface
+    //     is the only entry point for clearing the selection.
 }

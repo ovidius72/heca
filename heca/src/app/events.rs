@@ -19,7 +19,6 @@ use crate::mouse;
 use std::collections::HashMap;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-
 #[derive(Clone, Debug)]
 pub enum AppEvent {
     BackendWake,
@@ -75,6 +74,10 @@ pub(crate) fn handle_window_event(
             state.needs_redraw = true;
         }
         WindowEvent::Focused(focused) => {
+            state.window_focused = focused;
+            if focused {
+                state.window.request_user_attention(None);
+            }
             notify_window_focus_changed(state, focused);
             state.needs_redraw = true;
         }
