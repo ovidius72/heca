@@ -174,6 +174,12 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 7. **Docs**: theme-token reference + config.toml configurability; demote `docs/the-grid-ui.md` to
    reference-only; end-user docs (after everything ships).
 8. **B-series renderer**: physical-pixel 1px alignment on fractional scale; dedicated scanline shader.
+9. **`heca-grid-ui` crate-review debt** (from the two crate reviews, both ~8/10; docs removed):
+   `badge.rs` `unreachable!()` in a reachable match arm; add `[workspace.lints]`/package lints;
+   `#[allow]`→`#[expect]` in `component.rs`; `#![deny(missing_docs)]`; `#[non_exhaustive]` on public
+   enums; hot-path allocs (`Input::chars_vec`, `CommandPalette::results`, scene `to_vec`/`clone`);
+   widget test coverage (~3% — widgets largely untested); shared hover/flash/anim helper to cut
+   ~200 lines duplicated across Button/Toggle/Checkbox/IconButton/Item/Row/RailCell.
 
 ---
 
