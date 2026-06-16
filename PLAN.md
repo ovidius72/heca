@@ -137,6 +137,18 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.
+- **Split `heca/src/app/render.rs` (~1400 lines)** into a `render/` folder — *do at the end, its own
+  PR, not mid-feature.* `render_frame` (~765 lines) shrinks to ~250. Target 6 files:
+  `mod.rs` (frame orchestrator + `update_session_viewport`), `geometry.rs` (pane/scissor/textbox
+  math), `terminal.rs` (`TerminalRenderPassContext` + `render_terminal_mount` — the terminal pass),
+  `panes.rs` (tiled+floating passes: blur stamps, border scenes, content), `selection.rs`
+  (`build_selection_overlay`/`selection_overlay_for_pane`/`status_mode_parts` + tests),
+  `overlays.rs` (collapsed rails, drag ghost, pane-select labels, `render_chrome` flush).
+  Easy: geometry/terminal/selection/`render_chrome` already take explicit params (mechanical move).
+  Risk: `panes.rs` + rail/ghost live INSIDE `render_frame` and touch many `AppState` fields while
+  `scene_view` borrows `state.compositor` → extract via a granular-field context struct (the
+  `TerminalRenderPassContext` pattern), never `&mut AppState`. Verify by running the app (GPU
+  ordering isn't unit-tested).
 
 ---
 
