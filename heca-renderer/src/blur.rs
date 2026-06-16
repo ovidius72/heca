@@ -7,10 +7,22 @@
 //! concern, not terminal-owned): the intended app use is to frost chrome over the
 //! scene, and a terminal/pane host can reuse it on its own offscreen content.
 //!
-//! **Status:** this is the standalone primitive only — it is **NOT yet wired into
-//! the app** (no `Blur` field on `AppState`, no call site in `render_frame`), so
-//! `appearance.blur` currently has no runtime effect. App-side wiring is a tracked
-//! follow-up (`PLAN.md`).
+//! **Status:** wired into the app — `Blur` and `Backdrop` are owned by `AppState`
+//! and called from `render_frame()` in `heca/src/app/render.rs`. When
+//! `appearance.transparency > 0` and `appearance.blur > 0`, two blur passes are
+//! performed per frame so both tiled and floating panes receive frosted backdrop:
+//!
+//! - **Pass 1** (after chrome/background, before tiled panes): blur source is
+//!   chrome/background only. Stamped behind tiled panes, frosting the chrome
+//!   and gaps visible through their translucent surfaces.
+//! - **Pass 2** (after tiled panes render, before floating panes): blur source
+//!   includes tiled pane content. Stamped behind floating panes, frosting the
+//!   actual tiled content behind them.
+//!
+//! Both pane types use `surface_alpha` (from `terminal_surface_opacity()`) for
+//! their translucent surface fill, and both receive `Backdrop::draw` stamps.
+//! This is O(2) blurs per frame (not per-pane), satisfying the performance
+//! requirement.
 //!
 //! **Units:** `radius` is in the **source texture's own pixel space** — i.e.
 //! *physical* pixels for the compositor scene texture (created at framebuffer size).

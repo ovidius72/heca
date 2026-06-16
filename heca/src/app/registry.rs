@@ -467,6 +467,8 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ClearSelection, handle_clear_selection);
     registry.register(&WmAction::CopySelection, handle_copy_selection);
     registry.register(&WmAction::PasteClipboard, handle_paste_clipboard);
+    registry.register(&WmAction::BeginSelection, handle_begin_selection);
+    registry.register(&WmAction::ToggleSelectionEndpoint, handle_toggle_selection_endpoint);
 
     registry
 }
@@ -609,6 +611,24 @@ mod tests {
         assert_eq!(
             keymap.resolve("selection", &KeyCombo::parse("ArrowDown")),
             Some(&WmAction::SelectionDown)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("y")),
+            Some(&WmAction::CopySelection)
+        );
+        // BeginSelection: direct keys in selection mode.
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("v")),
+            Some(&WmAction::BeginSelection)
+        );
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("Space")),
+            Some(&WmAction::BeginSelection)
+        );
+        // ToggleSelectionEndpoint.
+        assert_eq!(
+            keymap.resolve("selection", &KeyCombo::parse("o")),
+            Some(&WmAction::ToggleSelectionEndpoint)
         );
     }
 

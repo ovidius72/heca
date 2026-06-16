@@ -18,15 +18,33 @@ pub struct SelectionOverlaySpan {
     pub end_col: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct CaretIndicator {
+    pub row: usize,
+    pub col: usize,
+    /// When true, the caret marks the active endpoint of an existing
+    /// selection (thicker, more prominent). When false, the caret is in
+    /// caret-only state (thin bar, no selection yet).
+    pub is_selection_endpoint: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct SelectionOverlay {
     pub spans: Vec<SelectionOverlaySpan>,
     pub color: [f32; 4],
+    /// Caret indicator: drawn as a blinking cursor-like block when in
+    /// caret-only state (selection mode entered but no selection started).
+    pub caret: Option<CaretIndicator>,
 }
 
 impl SelectionOverlay {
     pub fn new(spans: Vec<SelectionOverlaySpan>, color: [f32; 4]) -> Self {
-        Self { spans, color }
+        Self { spans, color, caret: None }
+    }
+
+    pub fn with_caret(mut self, caret: CaretIndicator) -> Self {
+        self.caret = Some(caret);
+        self
     }
 }
 
@@ -34,6 +52,11 @@ pub struct TerminalStyle<'a> {
     pub font_size: f32,
     pub font_family: &'a str,
     pub italic_font_family: &'a str,
+    /// Alpha multiplier for the terminal surface background.
+    /// 1.0 = fully opaque (no transparency). When < 1.0, the default-bg fill
+    /// becomes translucent so a frosted backdrop can show through.
+    /// Derived from `AppearanceConfig::opacity()`.
+    pub surface_alpha: f32,
 }
 
 pub struct TerminalRenderer<'a> {
@@ -123,6 +146,42 @@ impl<'a> TerminalRenderer<'a> {
             self.primitive_renderer
                 .draw_rect(x, y, w, cell_h, overlay.color);
         }
+
+        // Draw caret indicator.
+        //
+        // Two visual modes:
+        // - Caret-only (no selection): thin 2px bar at 0.8 alpha — the user
+        //   hasn't started selecting yet, so the caret is subtle but visible.
+        // - Selection endpoint: wider 4px bar at 0.9 alpha — the user is
+        //   actively growing a selection and needs to see exactly which end
+        //   will move when they press h/j/k/l or after toggling with `o`.
+        if let Some(caret) = &overlay.caret {
+            let visible_row = caret.row.min(fitted_rows.saturating_sub(1));
+            let visible_col = caret.col.min(fitted_cols.saturating_sub(1));
+            let y = rect.y + visible_row as f32 * cell_h;
+            let (caret_w, caret_alpha, x) = if caret.is_selection_endpoint {
+                // Selection endpoint: draw at the RIGHT boundary of the focus
+                // cell so it visually marks the end of the selected range.
+                // 4px wide, 0.9 alpha, right-aligned to the cell edge.
+                let w = 4.0;
+                let x = rect.x + (visible_col + 1) as f32 * cell_w - w;
+                (w, 0.9, x)
+            } else {
+                // Caret-only (no selection): thin 2px bar at the LEFT edge of
+                // the cell, like a normal text cursor.
+                let w = 2.0;
+                let x = rect.x + visible_col as f32 * cell_w;
+                (w, 0.8, x)
+            };
+            let caret_color = [
+                overlay.color[0],
+                overlay.color[1],
+                overlay.color[2],
+                caret_alpha,
+            ];
+            self.primitive_renderer
+                .draw_rect(x, y, caret_w, cell_h, caret_color);
+        }
     }
 
 }
@@ -152,7 +211,16 @@ fn render_terminal_lines(
     if fitted_rows == 0 || fitted_cols == 0 {
         return;
     }
-    primitive_renderer.draw_rect(px, py, pw, ph, default_bg);
+    // Modulate the default-bg fill alpha by the surface opacity so the
+    // frosted backdrop (stamped before this by the app layer) can show
+    // through. When opacity is 1.0 (opaque), this is a no-op.
+    let surface_bg = [
+        default_bg[0],
+        default_bg[1],
+        default_bg[2],
+        default_bg[3] * style.surface_alpha,
+    ];
+    primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
 
     let max_rows = fitted_rows.min(rows).min(lines.len());
     let max_cols = fitted_cols.min(cols);
