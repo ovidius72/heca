@@ -1489,21 +1489,61 @@ This means:
 
 Selection must become a real action-driven mode.
 
+Entering selection mode must **not** automatically begin a selection.
+Instead:
+
+- entering selection mode places a keyboard caret at the current terminal cursor
+- movement keys move that caret before any selection exists
+- a separate action begins selection from the current caret position
+- once selection exists, movement updates the active end
+- another action can flip which end is active
+
+This should feel closer to tmux copy-mode / Vim visual mode than to a
+mouse-driven webview selection model.
+
 Required actions to plan for:
 
 - `EnterSelectionMode`
+- `BeginSelection`
 - `ClearSelection`
+- `ToggleSelectionEndpoint`
 - `CopySelection`
 - `PasteClipboard`
 - `SelectAll` later where meaningful
 
-Future navigation/growth actions:
+Required movement actions:
 
-- move selection caret left/right/up/down
-- expand selection left/right/up/down
-- page-wise expansion later if needed
+- `SelectionLeft`
+- `SelectionRight`
+- `SelectionUp`
+- `SelectionDown`
 
-This mode should feel closer to tmux copy-mode than to a webview text field.
+Mode semantics:
+
+- before selection starts:
+  - `h/j/k/l` and arrows move the caret
+- begin selection:
+  - direct mode-local `v`
+  - direct mode-local `Space`
+- after selection starts:
+  - movement updates the active endpoint
+- `o` flips the active endpoint so expansion can continue from the other side
+- `y` copies and **stays in selection mode**
+- `x` pastes in selection mode later, once paste is implemented
+- `Esc` clears selection and exits selection mode
+
+No prefix should be required for the mode-local bindings above. They must still
+be routed through `WmAction` + `ActionRegistry` + `KeymapRegistry` + config
+bindings, but while already in selection mode the active keymap should make:
+
+- `v`
+- `Space`
+- `o`
+- `y`
+- `x` later
+- movement keys
+
+direct mode-local bindings.
 
 ### Backend/surface capability contract
 
@@ -1532,10 +1572,13 @@ The exact Rust type names can evolve, but the contract must support:
 
 - [ ] Define the shared selection state in app/core terms
 - [ ] Define action names and input-mode integration
+- [ ] Add a keyboard caret model separate from “selection already exists”
 - [ ] Define backend/surface capability contract
 - [ ] Refactor current terminal-only selection groundwork onto the shared model
 - [ ] Implement host-rendered selection for terminal panes
 - [ ] Add keyboard-driven selection mode
+- [ ] Add explicit begin-selection actions (`v`, `Space`)
+- [ ] Add active-end inversion action (`o`)
 - [ ] Add copy action on top of shared selection
 - [ ] Add RPC-facing hooks where meaningful
 - [ ] Document pane-type-specific mouse entry rules
@@ -1561,6 +1604,8 @@ Details:
 - add selection actions through `WmAction`
 - wire them through `ActionRegistry`
 - add a selection input mode rather than relying on mouse-only behavior
+- entering selection mode must position a caret at the terminal cursor, not start a selection immediately
+- mode-local bindings must be direct once inside selection mode (no prefix), but still action/keymap/config-driven
 
 Done when:
 
@@ -1573,6 +1618,12 @@ Details:
 - terminal becomes the first concrete backend using the shared selection system
 - preserve TUI mouse behavior by keeping pointer selection behind an explicit gesture/policy
 - terminal selection overlay/rendering must use the shared selection state
+- keyboard-only flow must support:
+  - enter selection mode
+  - move caret to a start point
+  - begin selection with `v` or `Space`
+  - expand via movement keys
+  - flip active end via `o`
 
 Done when:
 
@@ -1614,6 +1665,7 @@ Goal:
 - [ ] Support bracketed paste for terminal panes
 - [ ] Support `OSC 52`
 - [ ] Define copy-on-select policy, if desired
+- [ ] When notifications/toasts are implemented, show a short shared host toast on successful copy instead of terminal-specific visual feedback
 
 ### Phase 10 tasks
 
@@ -1621,6 +1673,7 @@ Goal:
 
 - copy must use the shared selection owner
 - copy must not assume terminal-only text sources
+- reminder: copy-success feedback should later use the shared notification/toast system, not a terminal-only flash or overlay
 
 #### Task 10.2 — Paste action
 

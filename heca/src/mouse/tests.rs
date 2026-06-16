@@ -121,6 +121,7 @@ fn test_chrome_content_rect_left_sidebar() {
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: 200.0,
         right_sidebar_width: 0.0,
+        sidebar_gap: 0.0,
     };
     let r = cfg.content_rect(1280.0, 800.0);
     assert_eq!(r.loc.x, 200.0);
@@ -136,6 +137,7 @@ fn test_chrome_content_rect_no_sidebars() {
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: 40.0,
         right_sidebar_width: 0.0,
+        sidebar_gap: 0.0,
     };
     let r = cfg.content_rect(1280.0, 800.0);
     assert_eq!(r.loc.x, 40.0);

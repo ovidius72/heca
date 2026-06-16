@@ -7,6 +7,8 @@ use heca_config::appearance::AppearanceConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
+use heca_renderer::backdrop::Backdrop;
+use heca_renderer::blur::Blur;
 use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -230,6 +232,13 @@ pub struct AppState {
     pub text_renderer: TextRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
+    /// In-app frosted-blur primitive (shared, compositor-owned).
+    /// Produces a blurred copy of the scene texture once per frame, then many
+    /// `Backdrop::draw` calls stamp it into pane surface rects.
+    pub blur: Blur,
+    /// Backdrop sampler (shared, stateless pipeline). Draws blurred scene regions
+    /// into arbitrary on-screen rects with alpha blending.
+    pub backdrop: Backdrop,
     pub session: Session,
     /// Content backends for panes that have one.
     pub backends: BackendStore,
@@ -278,6 +287,24 @@ pub struct AppState {
     pub pending_reload: bool,
     /// Whether the application window is currently focused.
     pub window_focused: bool,
+}
+
+impl AppState {
+    /// Terminal pane surface opacity, derived from the shared appearance contract.
+    ///
+    /// Returns `1.0` (opaque) when transparency is disabled, and the global
+    /// `opacity()` when enabled. This is the alpha used for the translucent
+    /// pane surface fill drawn over the frosted backdrop.
+    ///
+    /// In-app blur (frosted backdrop) is only drawn when this value is < 1.0
+    /// AND `appearance.blur_radius() > 0`. See `render_frame` for the policy.
+    pub fn terminal_surface_opacity(&self) -> f32 {
+        if self.appearance.is_transparent() {
+            self.appearance.opacity()
+        } else {
+            1.0
+        }
+    }
 }
 
 #[cfg(test)]

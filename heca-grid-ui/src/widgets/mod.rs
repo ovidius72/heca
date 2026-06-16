@@ -59,7 +59,7 @@ pub use item_group::ItemGroup;
 pub use key_hint::{HintPlacement, KeyHint};
 pub use label::Label;
 pub use modal::Modal;
-pub use pane::Pane;
+pub use pane::{Pane, PaneFrame};
 pub use progress::ProgressBar;
 pub use rail_cell::RailCell;
 pub use row::Row;

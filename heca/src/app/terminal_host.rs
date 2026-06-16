@@ -4,9 +4,12 @@
 //! implementation so future `heca-grid-ui` pane shells can host terminals
 //! through the same contract.
 
+use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
+use crate::app::interaction::{dispatch_action, InteractionSource};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
+use crate::input::WmAction;
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
     TerminalSnapshot,
@@ -123,7 +126,15 @@ pub(crate) fn forward_mouse_button(
     pos: (f32, f32),
     button: MouseButton,
     button_state: ElementState,
+    registry: &ActionRegistry,
 ) {
+    // Plain left-click (no Shift) while a selection is active: clear the selection
+    // and exit selection mode. This is intentional — a plain click in a terminal
+    // pane should clear any host selection so the user can resume normal terminal
+    // interaction. If we instead placed the caret at the click position, the user
+    // would be trapped in selection mode until they press Esc. The clear-on-click
+    // behavior matches most terminal emulators (select text, click elsewhere to
+    // deselect).
     if button == MouseButton::Left
         && button_state == ElementState::Pressed
         && !state.modifiers.shift_key()
@@ -156,7 +167,17 @@ pub(crate) fn forward_mouse_button(
             if state.selection.is_selecting()
                 && state.selection.source() == Some(SelectionSource::MouseDrag)
             {
+                // Confirm the selection, then copy to clipboard via the
+                // action registry (no registry bypass). Shift+drag is a
+                // complete gesture: select → release → copy, like most
+                // terminal emulators.
                 state.selection.end();
+                dispatch_action(
+                    state,
+                    registry,
+                    InteractionSource::MouseContent,
+                    &WmAction::CopySelection,
+                );
                 state.input_mode = InputMode::Selection;
                 state.needs_redraw = true;
             }
@@ -301,25 +322,23 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
         return false;
     };
 
-    let region = match state.selection.active() {
-        Some(active)
-            if active.owner == SelectionOwner::Pane(pane_id)
-                && matches!(active.region, SelectionRegion::HostGrid { .. }) =>
-        {
-            active.region
-        }
-        _ => SelectionRegion::HostGrid {
-            anchor_row: snapshot.cursor.row,
-            anchor_col: snapshot.cursor.col,
-            focus_row: snapshot.cursor.row,
-            focus_col: snapshot.cursor.col,
-        },
-    };
+    // If a selection already exists for this pane, preserve it
+    // (re-entering selection mode does not discard an existing selection).
+    if let Some(active) = state.selection.active()
+        && active.owner == SelectionOwner::Pane(pane_id)
+        && matches!(active.region, SelectionRegion::HostGrid { .. })
+    {
+        state.input_mode = InputMode::Selection;
+        state.needs_redraw = true;
+        return true;
+    }
 
-    state.selection.begin(
+    // Place a caret at the terminal cursor position — do NOT start a selection.
+    // The user begins selection explicitly with `v` or `Space`.
+    state.selection.set_caret(
         SelectionOwner::Pane(pane_id),
-        SelectionSource::KeyboardMode,
-        region,
+        snapshot.cursor.row,
+        snapshot.cursor.col,
     );
     state.input_mode = InputMode::Selection;
     state.needs_redraw = true;
@@ -342,6 +361,22 @@ pub(crate) fn move_focused_terminal_selection(
         return false;
     };
 
+    let max_row = snapshot.rows.saturating_sub(1);
+    let max_col = snapshot.cols.saturating_sub(1);
+
+    // Handle caret-only state: move the caret, don't start a selection.
+    if state.selection.is_caret() {
+        if let Some((row, col)) = state.selection.caret_pos() {
+            let next_row = row.saturating_add_signed(row_delta).min(max_row);
+            let next_col = col.saturating_add_signed(col_delta).min(max_col);
+            state.selection.move_caret(next_row, next_col);
+            state.needs_redraw = true;
+            return true;
+        }
+        return false;
+    }
+
+    // Handle active selection: update the focus end.
     let (anchor_row, anchor_col, focus_row, focus_col) = match state.selection.active() {
         Some(active)
             if active.owner == SelectionOwner::Pane(pane_id) =>
@@ -366,8 +401,6 @@ pub(crate) fn move_focused_terminal_selection(
         ),
     };
 
-    let max_row = snapshot.rows.saturating_sub(1);
-    let max_col = snapshot.cols.saturating_sub(1);
     let next_row = focus_row.saturating_add_signed(row_delta).min(max_row);
     let next_col = focus_col.saturating_add_signed(col_delta).min(max_col);
 
@@ -626,6 +659,7 @@ fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {
         } else {
             crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },
+        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     }
 }
 

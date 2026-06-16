@@ -35,6 +35,40 @@ pub trait LayoutExt: Component + Sized {
         self.base_mut().style.gap = v;
         self
     }
+    /// Outer margin on all sides.
+    fn margin(mut self, m: f32) -> Self {
+        self.base_mut().style.margin = m;
+        self
+    }
+    /// Outer margin split per axis: `x` left+right, `y` top+bottom.
+    fn margin_xy(mut self, x: f32, y: f32) -> Self {
+        let s = &mut self.base_mut().style;
+        s.margin_left = Some(x);
+        s.margin_right = Some(x);
+        s.margin_top = Some(y);
+        s.margin_bottom = Some(y);
+        self
+    }
+    /// Left outer margin only.
+    fn margin_left(mut self, v: f32) -> Self {
+        self.base_mut().style.margin_left = Some(v);
+        self
+    }
+    /// Right outer margin only.
+    fn margin_right(mut self, v: f32) -> Self {
+        self.base_mut().style.margin_right = Some(v);
+        self
+    }
+    /// Top outer margin only.
+    fn margin_top(mut self, v: f32) -> Self {
+        self.base_mut().style.margin_top = Some(v);
+        self
+    }
+    /// Bottom outer margin only.
+    fn margin_bottom(mut self, v: f32) -> Self {
+        self.base_mut().style.margin_bottom = Some(v);
+        self
+    }
     /// Main-axis distribution.
     fn justify(mut self, j: Justify) -> Self {
         self.base_mut().style.justify = j;

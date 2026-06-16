@@ -564,7 +564,7 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "copy_selection",
             label: "Copy Selection",
-            description: "Copy the active selection to the system clipboard. Placeholder until Phase 10 lands clipboard integration.",
+            description: "Copy the active selection text to the system clipboard.",
             category: ActionCategory::Pane,
             default_binding: "y",
         },
@@ -574,6 +574,20 @@ impl ActionRegistry {
             description: "Paste system clipboard content into the focused pane. Placeholder until Phase 10 lands paste integration.",
             category: ActionCategory::Pane,
             default_binding: "unbound",
+        },
+        ActionDescriptor {
+            name: "begin_selection",
+            label: "Begin Selection",
+            description: "Start a selection from the caret position in selection mode. No-op if a selection already exists — clear first to restart.",
+            category: ActionCategory::Pane,
+            default_binding: "v",
+        },
+        ActionDescriptor {
+            name: "toggle_selection_endpoint",
+            label: "Toggle Selection Endpoint",
+            description: "Swap which end of the selection is active so movement grows from the other side.",
+            category: ActionCategory::Pane,
+            default_binding: "o",
         },
     ];
 

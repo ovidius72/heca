@@ -14,6 +14,8 @@ use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_renderer::composite::Compositor;
+use heca_renderer::backdrop::Backdrop;
+use heca_renderer::blur::Blur;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -229,12 +231,15 @@ pub(crate) async fn init_state(
         physical.height as f32 / scale_factor as f32,
     );
     let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
+    let blur = Blur::new(&device, surface_format, physical.width, physical.height);
+    let backdrop = Backdrop::new(&device, surface_format);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        sidebar_gap: app_config.config.appearance.effective_sidebar_gap(&app_config.theme),
     };
     let log_w = physical.width as f32 / scale_factor as f32;
     let log_h = physical.height as f32 / scale_factor as f32;
@@ -242,6 +247,7 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = heca_core::layout::types::LayoutOptions {
+        gaps: app_config.config.appearance.effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
         ..Default::default()
     };
@@ -286,6 +292,8 @@ pub(crate) async fn init_state(
         text_renderer,
         grid_renderer,
         compositor,
+        blur,
+        backdrop,
         session,
         backends,
         theme: app_config.theme.clone(),

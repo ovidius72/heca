@@ -20,28 +20,33 @@ use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
 
 /// Returns true if the cursor is within the left sidebar bounds.
 pub(crate) fn contains(state: &AppState, pos: (f32, f32)) -> bool {
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom
+    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom
 }
 
 /// Returns the flat index of the sidebar item at the cursor position.
 pub(crate) fn item_at(state: &AppState, pos: (f32, f32)) -> Option<DragItemId> {
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    let (_sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
     let sidebar_h = sidebar_bottom - sidebar_top;
     crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)
         .map(DragItemId::new)
 }
 
 /// Helper: compute sidebar geometry (width, top, bottom).
-fn sidebar_bounds(state: &AppState) -> (f32, f32, f32) {
+fn sidebar_bounds(state: &AppState) -> (f32, f32, f32, f32) {
     let chrome = super::chrome_config(state);
     let (_win_w, win_h) = super::window_logical_size(state);
-    let sw = if state.chrome_state.left_visible() {
+    let total_w = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width
     } else {
         DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
-    (sw, chrome.tab_bar_height, win_h - chrome.status_bar_height)
+    let gap = chrome.sidebar_gap.max(0.0);
+    let sx = gap.min(total_w * 0.5);
+    let sw = (total_w - sx * 2.0).max(0.0);
+    let sidebar_top = chrome.tab_bar_height + gap;
+    let sidebar_bottom = (win_h - chrome.status_bar_height - gap).max(sidebar_top);
+    (sx, sw, sidebar_top, sidebar_bottom)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -52,10 +57,10 @@ fn sidebar_bounds(state: &AppState) -> (f32, f32, f32) {
 ///
 /// Routes to button clicks, workspace switches, or pane focus actions.
 pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
     let was_sidebar_nav = matches!(state.input_mode, crate::app_state::InputMode::SidebarNav);
 
-    if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+    if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         // Button hits (close, delete) take priority.
         if let Some((btn_idx, button)) =
             crate::sidebar::sidebar_button_hit_test(&state.sidebar_tree, pos.0, pos.1)
@@ -174,11 +179,11 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
 
 /// Update the hover item for the left sidebar during a drag.
 pub(crate) fn update_hover(state: &mut AppState) {
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
     let pos = state.mouse.pos;
     let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
-    if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+    if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;
         let fi = crate::sidebar::sidebar_hit_test(
             &state.sidebar_tree,
@@ -233,8 +238,8 @@ pub(crate) fn accept_drop(
     state.mouse.interactive_move = None;
 
     if swap {
-        let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-        if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
+        let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+        if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
             let sidebar_h = sidebar_bottom - sidebar_top;
             if let Some(fi) = crate::sidebar::sidebar_hit_test(
                 &state.sidebar_tree,
@@ -277,8 +282,9 @@ pub(crate) fn accept_drop(
     };
     let removed_pane = removed.pane;
 
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    let on_sidebar = pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom;
+    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    let on_sidebar =
+        pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom;
 
     if on_sidebar {
         let sidebar_h = sidebar_bottom - sidebar_top;
@@ -435,8 +441,8 @@ fn place_pane_at_sidebar_target(
 /// Returns true if the drop was handled (sidebar target found).
 /// Ported from the former `sidebar_drop::handle_drop()`.
 pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)) -> bool {
-    let (sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    if pos.0 < 0.0 || pos.0 >= sw || pos.1 < sidebar_top || pos.1 >= sidebar_bottom {
+    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
+    if pos.0 < sx || pos.0 >= sx + sw || pos.1 < sidebar_top || pos.1 >= sidebar_bottom {
         return false;
     }
 
