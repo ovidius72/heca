@@ -1156,21 +1156,32 @@ pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
 
 // ── Sidebar / Chrome ──
 
+/// Map a visible flag to a chrome region mode (visible = Expanded, hidden = Hidden).
+fn region_mode(visible: bool) -> heca_grid_ui::widgets::RegionMode {
+    if visible {
+        heca_grid_ui::widgets::RegionMode::Expanded
+    } else {
+        heca_grid_ui::widgets::RegionMode::Hidden
+    }
+}
+
 pub fn handle_sidebar_left(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.left_visible = !state.sidebar.left_visible;
+    let vis = !state.chrome_state.left_visible();
+    state.chrome_state.set_left_mode(region_mode(vis));
     update_session_viewport(state);
     after_layout_change(state);
 }
 
 pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.right_visible = !state.sidebar.right_visible;
+    let vis = !state.chrome_state.right_visible();
+    state.chrome_state.set_right_mode(region_mode(vis));
     update_session_viewport(state);
     after_layout_change(state);
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    state.sidebar.left_visible = true;
-    state.sidebar.left_width = 200.0;
+    state.chrome_state.set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
+    state.chrome_state.set_left_size(crate::chrome::DEFAULT_SIDEBAR_WIDTH);
     state.input_mode = InputMode::SidebarNav;
     update_session_viewport(state);
     after_layout_change(state);
@@ -1178,7 +1189,7 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_up_collapsed();
         } else {
@@ -1190,7 +1201,7 @@ pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.sidebar.left_visible || state.sidebar.left_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_down_collapsed();
         } else {
@@ -1202,7 +1213,7 @@ pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.collapse();
+        state.sidebar_tree.collapse(&state.chrome_state.workspaces);
         state.needs_redraw = true;
     }
 }
@@ -1220,7 +1231,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 state.input_mode = InputMode::Normal;
             }
             _ => {
-                state.sidebar_tree.expand();
+                state.sidebar_tree.expand(&state.chrome_state.workspaces);
             }
         }
         state.needs_redraw = true;
@@ -1234,7 +1245,7 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
             Some(sidebar::SidebarItem::Pane { .. })
             | Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
-                state.sidebar_tree.toggle_expand();
+                state.sidebar_tree.toggle_expand(&state.chrome_state.workspaces);
             }
         }
         state.needs_redraw = true;
@@ -1396,11 +1407,22 @@ pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) 
     }
 }
 
+/// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
+/// then project it into the sidebar nav model. `collapse = None` toggles.
+pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: Option<bool>) {
+    match collapse {
+        Some(c) => state.chrome_state.workspaces.set_ws_collapsed(ws_idx, c),
+        None => state.chrome_state.workspaces.toggle_ws_collapsed(ws_idx),
+    }
+    let set = state.chrome_state.workspaces.with_collapsed_ws(|s| s.clone());
+    state.sidebar_tree.apply_ws_collapsed(&set, Some(ws_idx));
+}
+
 pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.collapse_workspace(ws_idx);
+    apply_ws_collapse(state, ws_idx, Some(true));
     state.needs_redraw = true;
 }
 
@@ -1408,7 +1430,7 @@ pub fn handle_expand_current_workspace(state: &mut AppState, _action: &WmAction)
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.expand_workspace(ws_idx);
+    apply_ws_collapse(state, ws_idx, Some(false));
     state.needs_redraw = true;
 }
 
@@ -1416,7 +1438,7 @@ pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: 
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.toggle_workspace_collapsed(ws_idx);
+    apply_ws_collapse(state, ws_idx, None);
     state.needs_redraw = true;
 }
 

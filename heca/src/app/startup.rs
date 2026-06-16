@@ -6,7 +6,7 @@
 use crate::app::backend_factory::{create_terminal_backend, estimate_terminal_grid};
 use crate::app::backend_store::BackendStore;
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
-use crate::app_state::{self, AppState, InputMode, SidebarState};
+use crate::app_state::{self, AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
@@ -295,16 +295,10 @@ pub(crate) async fn init_state(
         needs_redraw: true,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
-        sidebar: SidebarState {
-            left_visible: true,
-            left_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-            right_visible: true,
-            right_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        },
         sidebar_tree,
         chrome_tree: None,
         chrome_sinks: crate::chrome::ChromeSinks::new(),
-        // Initial chrome state mirrors SidebarState defaults during the migration.
+        // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state: crate::chrome::SharedChromeState::new(
             crate::chrome::DEFAULT_SIDEBAR_WIDTH,
             true,

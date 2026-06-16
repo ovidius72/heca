@@ -19,7 +19,7 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
     let chrome = super::chrome_config(state);
     let pane_area = chrome.content_rect(win_w, win_h);
 
-    let sidebar_left_w = if state.sidebar.left_visible {
+    let sidebar_left_w = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width
     } else {
         40.0
@@ -31,7 +31,7 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
         return None;
     }
     if pos.0 > win_h / 2.0
-        && state.sidebar.right_visible
+        && state.chrome_state.right_visible()
         && pos.0 > win_w - chrome.right_sidebar_width
     {
         return None;
@@ -85,7 +85,7 @@ pub(super) fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option
     let chrome = super::chrome_config(state);
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.sidebar.left_visible {
+    let sw = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width
     } else {
         40.0

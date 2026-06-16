@@ -258,13 +258,13 @@ fn chrome_config(state: &AppState) -> ChromeConfig {
     ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: if state.sidebar.left_visible {
-            state.sidebar.left_width
+        left_sidebar_width: if state.chrome_state.left_visible() {
+            state.chrome_state.left_size()
         } else {
             DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },
-        right_sidebar_width: if state.sidebar.right_visible {
-            state.sidebar.right_width
+        right_sidebar_width: if state.chrome_state.right_visible() {
+            state.chrome_state.right_size()
         } else {
             DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },

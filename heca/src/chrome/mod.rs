@@ -4,7 +4,7 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod state;
-pub use state::SharedChromeState;
+pub use state::{SharedChromeState, WorkspacesContainerState};
 
 use heca_core::layout::types::{Point, Rectangle, Size};
 use heca_core::layout::ColumnWidth;

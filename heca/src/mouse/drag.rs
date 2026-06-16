@@ -63,7 +63,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
                 .unwrap_or_else(|| format!("pane{}", pane_id));
 
             let chrome = super::chrome_config(state);
-            let sw = if state.sidebar.left_visible {
+            let sw = if state.chrome_state.left_visible() {
                 chrome.left_sidebar_width
             } else {
                 DEFAULT_COLLAPSED_SIDEBAR_WIDTH
@@ -123,7 +123,7 @@ fn update_sidebar_drag_hover(state: &mut AppState) {
     let pos = state.mouse.pos;
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.sidebar.left_visible {
+    let sw = if state.chrome_state.left_visible() {
         chrome.left_sidebar_width
     } else {
         DEFAULT_COLLAPSED_SIDEBAR_WIDTH
