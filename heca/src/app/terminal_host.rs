@@ -659,6 +659,7 @@ fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {
         } else {
             crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
         },
+        sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     }
 }
 

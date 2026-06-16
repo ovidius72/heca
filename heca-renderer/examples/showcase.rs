@@ -585,6 +585,41 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Button::destructive("DELETE PANE…").on_click(move || open.set(true)))
                 .child(modal)
         })
+        // Pane frame variants: three Panes side-by-side showing None, Bordered,
+        // and Bracketed modes. Each has a background + border so the decoration
+        // is visible. Click and keyboard interactivity via the `.on_activate`
+        // on each child Item.
+        .child({
+            Flex::row()
+                .gap(8.0)
+                .align(Align::Center)
+                .child(
+                    Pane::new()
+                        .frameless()
+                        .width(Length::Px(100.0))
+                        .height(Length::Px(80.0))
+                        .background(theme.surface)
+                        .child(Label::new("None").font_size(12.0).color(theme.muted)),
+                )
+                .child(
+                    Pane::new()
+                        .bordered()
+                        .width(Length::Px(100.0))
+                        .height(Length::Px(80.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 2.0)
+                        .child(Label::new("Bordered").font_size(12.0).color(theme.accent)),
+                )
+                .child(
+                    Pane::new()
+                        .bracketed()
+                        .width(Length::Px(100.0))
+                        .height(Length::Px(80.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 2.0)
+                        .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
+                )
+        })
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the

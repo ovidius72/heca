@@ -65,6 +65,7 @@ pub struct ChromeConfig {
     pub status_bar_height: f32,
     pub left_sidebar_width: f32,
     pub right_sidebar_width: f32,
+    pub sidebar_gap: f32,
 }
 
 impl ChromeConfig {
@@ -74,10 +75,10 @@ impl ChromeConfig {
         let x = self.left_sidebar_width;
         let y = self.tab_bar_height;
         let w = window_width
-            - self.left_sidebar_width.min(window_width)
+            - x
             - self
                 .right_sidebar_width
-                .min(window_width - self.left_sidebar_width);
+                .min(window_width - x);
         let h = window_height - self.tab_bar_height - self.status_bar_height;
         Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
     }
@@ -266,7 +267,10 @@ fn build_sidebar_shell(
     sidebar_h: f32,
     theme: &GuiTheme,
     sinks: &ChromeSinks,
-) -> Pane {
+    sidebar_gap: f32,
+) -> Flex {
+    let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
+    let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
     // Header: a sidebar glyph + a collapse toggle pushed to the right. The toggle is
     // inert until interaction is wired (it becomes an action against shared state).
     let header = Flex::row()
@@ -279,14 +283,57 @@ fn build_sidebar_shell(
             Icon::new(Glyph::CaretRight).size(14.0).color(theme.muted),
         ));
 
-    Pane::new()
+    Flex::column()
         .width(Length::Px(left_w))
         .height(Length::Px(sidebar_h))
-        .padding(10.0)
-        .gap(8.0)
-        .background(theme.surface)
-        .child(header)
-        .child(build_workspaces_container(tree, theme, sinks))
+        .padding(sidebar_gap)
+        .child(
+            Pane::new()
+                .bracketed()
+                .width(Length::Px(inner_w))
+                .height(Length::Px(inner_h))
+                .padding(10.0)
+                .gap(8.0)
+                .background(theme.surface)
+                .border(theme.border, theme.border_width)
+                .child(header)
+                .child(build_workspaces_container(tree, theme, sinks)),
+        )
+}
+
+fn build_right_sidebar_shell(
+    right_w: f32,
+    sidebar_h: f32,
+    theme: &GuiTheme,
+    sidebar_gap: f32,
+) -> Flex {
+    let inner_w = (right_w - sidebar_gap * 2.0).max(0.0);
+    let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
+    let header = Flex::row()
+        .align(Align::Center)
+        .gap(6.0)
+        .padding_xy(2.0, 2.0)
+        .child(Label::new("Details").color(theme.foreground))
+        .child(Flex::row().grow(1.0))
+        .child(IconButton::new(
+            Icon::new(Glyph::CaretRight).size(14.0).color(theme.muted),
+        ));
+
+    Flex::column()
+        .width(Length::Px(right_w))
+        .height(Length::Px(sidebar_h))
+        .padding(sidebar_gap)
+        .child(
+            Pane::new()
+                .bracketed()
+                .width(Length::Px(inner_w))
+                .height(Length::Px(inner_h))
+                .padding(10.0)
+                .gap(8.0)
+                .background(theme.surface)
+                .border(theme.border, theme.border_width)
+                .child(header),
+        )
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
@@ -301,7 +348,8 @@ fn chrome_root(
     status: &str,
     side_bg: Color,
     fg: Color,
-    sidebar: Option<Pane>,
+    left_sidebar: Option<Flex>,
+    right_sidebar: Option<Flex>,
 ) -> Flex {
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
 
@@ -311,10 +359,13 @@ fn chrome_root(
     let mut middle = Flex::row()
         .width(Length::Px(w))
         .height(Length::Px(middle_h));
-    if let Some(shell) = sidebar {
+    if let Some(shell) = left_sidebar {
         middle = middle.child(shell);
     }
     middle = middle.child(Flex::row().grow(1.0));
+    if let Some(shell) = right_sidebar {
+        middle = middle.child(shell);
+    }
 
     Flex::column()
         .width(Length::Px(w))
@@ -365,7 +416,8 @@ fn chrome_scene(
     side_bg: Color,
     fg: Color,
     theme: &GuiTheme,
-    sidebar: Option<Pane>,
+    left_sidebar: Option<Flex>,
+    right_sidebar: Option<Flex>,
 ) -> Scene {
     let mut root = chrome_root(
         w,
@@ -375,7 +427,8 @@ fn chrome_scene(
         status,
         side_bg,
         fg,
-        sidebar,
+        left_sidebar,
+        right_sidebar,
     );
     paint_chrome_root(&mut root, w, h, theme)
 }
@@ -459,7 +512,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
     let status = chrome_status(state);
 
     let left_w = chrome.left_sidebar_width;
-    let sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
+    let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
         let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
         Some(build_sidebar_shell(
             &state.sidebar_tree,
@@ -467,6 +520,19 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
             sidebar_h,
             &theme,
             &state.chrome_sinks,
+            state.appearance.effective_sidebar_gap(&state.theme),
+        ))
+    } else {
+        None
+    };
+    let right_w = chrome.right_sidebar_width;
+    let right_sidebar = if right_w >= SIDEBAR_EXPANDED_THRESHOLD {
+        let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
+        Some(build_right_sidebar_shell(
+            right_w,
+            sidebar_h,
+            &theme,
+            state.appearance.effective_sidebar_gap(&state.theme),
         ))
     } else {
         None
@@ -480,7 +546,8 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
         &status,
         side_bg,
         fg,
-        sidebar,
+        left_sidebar,
+        right_sidebar,
     )
 }
 
@@ -532,6 +599,8 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     phys.height.hash(&mut hsh);
     state.scale_factor.to_bits().hash(&mut hsh);
     chrome.left_sidebar_width.to_bits().hash(&mut hsh);
+    chrome.right_sidebar_width.to_bits().hash(&mut hsh);
+    chrome.sidebar_gap.to_bits().hash(&mut hsh);
     state.theme.name.hash(&mut hsh);
     for c in [state.theme.accent, state.theme.foreground, state.theme.border] {
         (c.r, c.g, c.b, c.a).hash(&mut hsh);
@@ -576,6 +645,7 @@ mod tests {
             status_bar_height: 24.0,
             left_sidebar_width: 200.0,
             right_sidebar_width: 200.0,
+            sidebar_gap: 0.0,
         };
         let r = c.content_rect(1280.0, 800.0);
         assert_eq!(r.loc.x, 200.0);
@@ -595,6 +665,7 @@ mod tests {
             status_bar_height: 10.0,
             left_sidebar_width: 300.0,
             right_sidebar_width: 300.0,
+            sidebar_gap: 0.0,
         };
         let r = c.content_rect(500.0, 600.0);
         // x = 300, y = 20
@@ -615,6 +686,7 @@ mod tests {
             status_bar_height: 24.0,
             left_sidebar_width: 0.0,
             right_sidebar_width: 0.0,
+            sidebar_gap: 0.0,
         };
         let r = c.content_rect(1024.0, 768.0);
         assert_eq!(r.loc.x, 0.0);

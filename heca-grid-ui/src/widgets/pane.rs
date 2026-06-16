@@ -1,28 +1,58 @@
-//! [`Pane`] — a generic container framed by **prominent flat corner brackets**
-//! (no glow, no shadow). The shell for sidebars and panes: a dark surface with a
-//! subtle border and accent corner angles; its children (e.g. [`Item`](super::Item)
-//! rows in a sidebar) stack inside.
+//! [`Pane`] — a generic container with configurable frame decoration.
 //!
-//! Like [`Surface`](super::Surface) it is a styled, child-holding container
-//! (`LayoutExt` + `StyleExt` + `Parent`), but it always draws the corner
-//! brackets and defaults to a vertical (column) layout.
+//! Supports three frame modes via [`PaneFrame`]:
+//!
+//! | Mode | Visual |
+//! |------|--------|
+//! | [`PaneFrame::None`] | Background fill only — no border, no brackets |
+//! | [`PaneFrame::Bordered`] | A clean border from `style.border` |
+//! | [`PaneFrame::Bracketed`] | `style.border` + accent corner brackets on top |
+//!
+//! Default mode is [`PaneFrame::Bordered`] — a fill-only container that
+//! becomes a bordered panel once `.border(color, width)` is called.
+//!
+//! Use `.bracketed()` to opt into the decorative corner-accent look.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::color::Color;
 use crate::component::{paint_child, Base, Component, PaintCx};
 use crate::reactive::SignalGet;
 use crate::style::Direction;
 
-/// A bracket-framed container for sidebars / panes.
+/// Frame decoration mode for a [`Pane`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneFrame {
+    /// Fill only — no border, no brackets. Use when you just want the
+    /// background without any frame decoration.
+    None,
+    /// A clean border from `style.border` (set via `.border(color, width)`).
+    /// No corner brackets.
+    Bordered,
+    /// `style.border` + accent corner brackets on top (the classic
+    /// bracket-framed look).
+    Bracketed,
+}
+
+/// A generic container with configurable frame decoration.
+///
+/// Default [`PaneFrame`] is [`PaneFrame::Bordered`] — just a fill until
+/// `.border(color, width)` is supplied.
 pub struct Pane {
     base: Base,
+    frame: PaneFrame,
 }
 
 impl Pane {
-    /// A new vertical (column) pane. Add content with `.child(...)`.
+    /// A new vertical (column) pane with the default [`PaneFrame::Bordered`].
+    /// Content is inset by 8.0 px by default — override with `.padding(x)`.
     pub fn new() -> Self {
         let mut base = Base::new();
         base.style.direction = Direction::Column;
-        Self { base }
+        base.style.padding = 8.0;
+        Self {
+            base,
+            frame: PaneFrame::Bordered,
+        }
     }
 
     /// A horizontal (row) pane.
@@ -30,6 +60,30 @@ impl Pane {
         let mut pane = Self::new();
         pane.base.style.direction = Direction::Row;
         pane
+    }
+
+    /// Choose the frame decoration mode.
+    pub fn frame(mut self, f: PaneFrame) -> Self {
+        self.frame = f;
+        self
+    }
+
+    /// Shorthand: set frame to [`PaneFrame::Bordered`].
+    pub fn bordered(mut self) -> Self {
+        self.frame = PaneFrame::Bordered;
+        self
+    }
+
+    /// Shorthand: set frame to [`PaneFrame::Bracketed`].
+    pub fn bracketed(mut self) -> Self {
+        self.frame = PaneFrame::Bracketed;
+        self
+    }
+
+    /// Shorthand: set frame to [`PaneFrame::None`].
+    pub fn frameless(mut self) -> Self {
+        self.frame = PaneFrame::None;
+        self
     }
 }
 
@@ -45,19 +99,44 @@ impl Component for Pane {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let radius = cx.theme().radius;
         let b = self.base.bounds;
         let fill = self.base.style.fill;
 
-        // Background fill — rounded by theme radius.
-        if let Some(f) = fill {
-            cx.rect(b, f, None, radius, self.base.style.glow);
+        // Radius: per-widget override (> 0), else theme fallback.
+        let radius = if self.base.style.radius > 0.0 {
+            self.base.style.radius
+        } else {
+            cx.theme().radius
+        };
+
+        match self.frame {
+            PaneFrame::None => {
+                // Fill only — no border, no brackets.
+                if let Some(f) = fill {
+                    cx.rect(b, f, None, radius, self.base.style.glow);
+                }
+            }
+            PaneFrame::Bordered => {
+                // Fill + clean border from style.border.
+                let border = self.base.style.border;
+                if let Some(f) = fill {
+                    cx.rect(b, f, border, radius, self.base.style.glow);
+                } else if border.is_some() {
+                    cx.rect(b, Color::TRANSPARENT, border, radius, None);
+                }
+            }
+            PaneFrame::Bracketed => {
+                // Fill + style.border + bracket accents on top.
+                let border = self.base.style.border;
+                if let Some(f) = fill {
+                    cx.rect(b, f, border, radius, self.base.style.glow);
+                } else if border.is_some() {
+                    cx.rect(b, Color::TRANSPARENT, border, radius, None);
+                }
+                cx.bracket_frame(b, fill);
+            }
         }
 
-        // Prominent flat corner-bracket frame (shared with DockFrame).
-        cx.bracket_frame(b, fill);
-
-        // Children (sidebar Items, pane content, …); skip any hidden (collapsed).
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
         }

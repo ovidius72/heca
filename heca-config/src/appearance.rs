@@ -107,6 +107,12 @@ pub struct AppearanceConfig {
     /// Gap between panes (logical px). `None` → 8.0 (built-in layout default).
     #[serde(default)]
     pub pane_gap: Option<f32>,
+    /// Internal padding inside panes (logical px). `None` → 8.0.
+    #[serde(default)]
+    pub pane_padding: Option<f32>,
+    /// Gap between sidebar and content area (logical px). `None` → 2.0.
+    #[serde(default)]
+    pub sidebar_gap: Option<f32>,
 }
 
 impl AppearanceConfig {
@@ -172,6 +178,16 @@ impl AppearanceConfig {
     pub fn effective_pane_gap(&self, _theme: &Theme) -> f32 {
         self.pane_gap.unwrap_or(8.0)
     }
+
+    /// Effective pane internal padding. Config override → 8.0.
+    pub fn effective_pane_padding(&self, _theme: &Theme) -> f32 {
+        self.pane_padding.unwrap_or(8.0)
+    }
+
+    /// Effective sidebar gap. Config override → 12.0.
+    pub fn effective_sidebar_gap(&self, _theme: &Theme) -> f32 {
+        self.sidebar_gap.unwrap_or(12.0)
+    }
 }
 
 impl Default for AppearanceConfig {
@@ -185,6 +201,8 @@ impl Default for AppearanceConfig {
             pane_border_radius: None,
             pane_active_border_color: None,
             pane_gap: None,
+            pane_padding: None,
+            sidebar_gap: None,
         }
     }
 }

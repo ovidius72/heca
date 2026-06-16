@@ -122,17 +122,17 @@ impl HecaApp {
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
-            // Pane gap: update layout options so the gap change takes effect
-            // immediately without restart. Both session-level and per-workspace
-            // scrolling options carry the gaps value.
+            // Pane gap and chrome geometry changes must reflow the real viewport
+            // path so cached column widths, pane sizes, and working areas stay
+            // coherent after reload.
             let pane_gap = self.app_config.config.appearance.effective_pane_gap(&self.app_config.theme) as f64;
             if (state.session.options.gaps - pane_gap).abs() > f64::EPSILON {
                 state.session.options.gaps = pane_gap;
                 for ws in &mut state.session.workspaces {
                     ws.scrolling.options.gaps = pane_gap;
-                    ws.scrolling.update_all_column_widths();
                 }
             }
+            update_session_viewport(state);
             state.needs_redraw = true;
         }
     }

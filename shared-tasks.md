@@ -187,20 +187,32 @@ If practical, also live-check:
    - Result: after config reload, the new gap value can exist in state without immediately producing the correct pane geometry.
    - Fix: after changing gaps on reload, trigger the same layout recomputation path used for viewport/working-area updates.
 
-2. Inactive pane borders now use `draw_outline`, which changes border geometry inconsistently relative to content layout.
-   - [render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs#L592)
-   - [primitive.rs](/Users/antonio/projects/heca/heca-renderer/src/primitive.rs#L183)
-   - [primitive.rs](/Users/antonio/projects/heca/heca-renderer/src/primitive.rs#L196)
-   - `stable_tiled_content_rect(..., pane_border_width)` still shrinks content as if the border consumes interior space, but inactive panes now render an outer outline instead of an inner border.
-   - Active panes still render `draw_border + draw_outline`, inactive panes only `draw_outline`, so active/inactive panes no longer share the same border model.
-   - Result: geometry and visual spacing differ by focus state, and outlines can spill outward into gaps/adjacent space unexpectedly.
-   - Fix: use one consistent border model for both active and inactive panes, or update content-rect math to match the new outside-only outline semantics.
+2. Floating panes still bypass the new pane chrome path.
+   - [render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs#L775)
+   - [render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs#L858)
+   - Tiled panes now use the grid-scene rounded border path, but floating panes still use `theme.float_focus` / `theme.float_accent` with primitive `draw_border`.
+   - Result:
+     - `pane_border_radius` still has no effect on floating panes
+     - pane border colors are inconsistent between tiled and floating panes
+     - the task still does not deliver one pane chrome system across pane types
+   - Fix: route floating panes through the same pane chrome model, or explicitly scope this slice to tiled panes only and keep the task open.
 
-3. The task board overclaims completion.
+3. `sidebar_gap` is not a coherent host-wide geometry rule yet.
+   - [chrome/mod.rs](/Users/antonio/projects/heca/heca/src/chrome/mod.rs#L74)
+   - [chrome/mod.rs](/Users/antonio/projects/heca/heca/src/chrome/mod.rs#L284)
+   - [surface_left.rs](/Users/antonio/projects/heca/heca/src/mouse/surface_left.rs#L36)
+   - [render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs#L873)
+   - Expanded left sidebar shell uses `.margin(sidebar_gap)` and `content_rect()` shifts pane content, but sidebar hit-testing still uses only `left_sidebar_width`, and the collapsed rail ignores the gap entirely.
+   - Result: the configured “margin around the sidebar” does not behave consistently across visuals, content geometry, and mouse interaction.
+   - Fix: decide whether `sidebar_gap` is:
+     - a true chrome geometry gap that all sidebar states and hit-testing must honor, or
+     - only an expanded-shell visual margin.
+     Then apply that rule consistently across render + hit-testing + content-rect math.
+
+4. The task board still overclaims completion.
    - [shared-tasks.md](/Users/antonio/projects/heca/shared-tasks.md#L35)
-   - [render.rs](/Users/antonio/projects/heca/heca/src/app/render.rs#L545)
-   - `Task 07` is marked `Completed by Agent`, but the two core promised outcomes are still not true:
-     - pane radius is still ignored (`_pane_border_radius` is read but unused)
-     - the `heca-grid-ui` pane path has not been integrated; this is still primitive-renderer border styling
-   - This is acceptable as interim groundwork, but not as task completion.
-   - Fix: keep the task open and describe this slice as preparatory pane-style/config work, not task completion.
+   - This slice is useful groundwork, but Task 07 is still not complete:
+     - floating panes do not use the new pane chrome path
+     - sidebar-gap behavior is still inconsistent
+     - full existing `heca-grid-ui` pane replacement is not done yet
+   - Keep the task open and describe this slice as preparatory pane-style/config work, not task completion.

@@ -239,6 +239,7 @@ pub(crate) async fn init_state(
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+        sidebar_gap: app_config.config.appearance.effective_sidebar_gap(&app_config.theme),
     };
     let log_w = physical.width as f32 / scale_factor as f32;
     let log_h = physical.height as f32 / scale_factor as f32;
