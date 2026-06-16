@@ -1,3 +1,5 @@
+use crate::color::Color;
+use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -59,7 +61,7 @@ const MAX_BLUR_PX: f32 = 24.0;
 
 /// Read-only appearance contract shared by all rendering layers — none owns it.
 ///
-/// Three intuitive, cross-platform controls (all amounts are `0..=100`):
+/// Four intuitive, cross-platform controls:
 /// - `transparency` — how see-through the app is (`0` opaque, `100` fully
 ///   transparent). Portable (window/surface alpha).
 /// - `blur` — the **in-app** frosted-glass blur amount behind translucent panels
@@ -67,6 +69,8 @@ const MAX_BLUR_PX: f32 = 24.0;
 /// - `vibrancy` — the **OS backdrop** material (blurs the desktop *behind* the
 ///   window). Not numeric, not portable: macOS materials, Windows acrylic, Linux
 ///   no-op. [`Vibrancy::None`] = off.
+/// - pane chrome — border width, colors, radius, gap. These override the theme
+///   when set; leaving them unset inherits from the theme automatically.
 ///
 /// All fields are `Copy`. Missing `[appearance]` sections fall back to these
 /// defaults (everything off → identical to an opaque app).
@@ -84,6 +88,25 @@ pub struct AppearanceConfig {
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
+
+    // ── Pane chrome ──
+    // All default to `None` (= inherit from theme). Set explicitly in
+    // config.toml to override the theme-derived value.
+    /// Pane border stroke width (logical px). `None` → inherits `theme.border_width`.
+    #[serde(default)]
+    pub pane_border_width: Option<f32>,
+    /// Pane border color for inactive/unfocused panes. `None` → inherits `theme.border` at 50% alpha.
+    #[serde(default)]
+    pub pane_border_color: Option<Color>,
+    /// Pane corner radius. `None` → inherits `theme.border_radius`.
+    #[serde(default)]
+    pub pane_border_radius: Option<f32>,
+    /// Pane border color when focused/active. `None` → inherits `theme.accent`.
+    #[serde(default)]
+    pub pane_active_border_color: Option<Color>,
+    /// Gap between panes (logical px). `None` → 8.0 (built-in layout default).
+    #[serde(default)]
+    pub pane_gap: Option<f32>,
 }
 
 impl AppearanceConfig {
@@ -119,6 +142,36 @@ impl AppearanceConfig {
     pub fn os_vibrancy(&self) -> Option<Vibrancy> {
         (self.vibrancy != Vibrancy::None).then_some(self.vibrancy)
     }
+
+    // ── Pane chrome resolvers ──
+    // Config.toml `[appearance]` overrides take precedence; `None` inherits
+    // from the theme automatically.
+
+    /// Effective pane border width. Config override → theme `border_width`.
+    pub fn effective_pane_border_width(&self, theme: &Theme) -> f32 {
+        self.pane_border_width.unwrap_or(theme.border_width)
+    }
+
+    /// Effective inactive pane border color. Config override → theme `border` at 50% alpha.
+    pub fn effective_pane_border_color(&self, theme: &Theme) -> Color {
+        self.pane_border_color
+            .unwrap_or_else(|| theme.border.with_alpha(128))
+    }
+
+    /// Effective pane corner radius. Config override → theme `border_radius`.
+    pub fn effective_pane_border_radius(&self, theme: &Theme) -> f32 {
+        self.pane_border_radius.unwrap_or(theme.border_radius)
+    }
+
+    /// Effective active pane border color. Config override → theme `accent`.
+    pub fn effective_pane_active_border_color(&self, theme: &Theme) -> Color {
+        self.pane_active_border_color.unwrap_or(theme.accent)
+    }
+
+    /// Effective pane gap. Config override → 8.0 (built-in layout default).
+    pub fn effective_pane_gap(&self, _theme: &Theme) -> f32 {
+        self.pane_gap.unwrap_or(8.0)
+    }
 }
 
 impl Default for AppearanceConfig {
@@ -127,6 +180,11 @@ impl Default for AppearanceConfig {
             transparency: default_transparency(),
             blur: default_blur(),
             vibrancy: default_vibrancy(),
+            pane_border_width: None,
+            pane_border_color: None,
+            pane_border_radius: None,
+            pane_active_border_color: None,
+            pane_gap: None,
         }
     }
 }
@@ -157,6 +215,7 @@ mod tests {
             transparency: 25,
             blur: 50,
             vibrancy: Vibrancy::Sidebar,
+            ..Default::default()
         };
         assert!((cfg.opacity() - 0.75).abs() < 1e-6);
         assert!(cfg.is_transparent());

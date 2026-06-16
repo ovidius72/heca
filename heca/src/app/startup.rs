@@ -246,6 +246,7 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = heca_core::layout::types::LayoutOptions {
+        gaps: app_config.config.appearance.effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
         ..Default::default()
     };

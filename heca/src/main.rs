@@ -90,8 +90,18 @@ impl HecaApp {
 
     fn reload_config(&mut self) {
         if let Some(ref mut state) = self.state {
-            let new_config = AppConfig::load();
-            self.app_config = new_config.clone();
+            // Try to load the config file. On error, keep the current working
+            // config and report the problem — a bad config must not silently
+            // overwrite the user's working settings.
+            let new_config = match heca_config::loader::AppConfig::try_load() {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    eprintln!("[heca] reload failed: {e}");
+                    eprintln!("[heca] fix config.toml and press prefix+Shift+r to retry");
+                    return;
+                }
+            };
+            self.app_config = new_config;
             self.keymap = build_keymap(&self.app_config.config);
             let (new_mode_keymaps, new_mode_triggers) = build_modes(&self.app_config.config);
             self.mode_keymaps = new_mode_keymaps;
@@ -112,6 +122,17 @@ impl HecaApp {
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
+            // Pane gap: update layout options so the gap change takes effect
+            // immediately without restart. Both session-level and per-workspace
+            // scrolling options carry the gaps value.
+            let pane_gap = self.app_config.config.appearance.effective_pane_gap(&self.app_config.theme) as f64;
+            if (state.session.options.gaps - pane_gap).abs() > f64::EPSILON {
+                state.session.options.gaps = pane_gap;
+                for ws in &mut state.session.workspaces {
+                    ws.scrolling.options.gaps = pane_gap;
+                    ws.scrolling.update_all_column_widths();
+                }
+            }
             state.needs_redraw = true;
         }
     }

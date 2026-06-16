@@ -17,14 +17,15 @@ use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::{TextBox, TextRenderer};
 
 fn pane_content_rect(px: f32, py: f32, pw: f32, ph: f32, border_width: f32) -> Option<(f32, f32, f32, f32)> {
-    let inset = border_width.max(1.0);
-    let content_w = (pw - inset * 2.0).max(0.0);
-    let content_h = (ph - inset * 2.0).max(0.0);
+    // Border is drawn inside the pane rect via draw_border. Content must be
+    // inset by border_width so terminal fills don't overlap the border stroke.
+    let content_w = (pw - border_width * 2.0).max(0.0);
+    let content_h = (ph - border_width * 2.0).max(0.0);
     if content_w <= 0.0 || content_h <= 0.0 {
         return None;
     }
 
-    Some((px + inset, py + inset, content_w, content_h))
+    Some((px + border_width, py + border_width, content_w, content_h))
 }
 
 fn stable_tiled_content_rect(
@@ -537,17 +538,23 @@ pub(crate) fn render_frame(state: &mut AppState) {
         ));
     }
 
-    let theme_border = theme.border.to_f32x4();
-    let border_width = theme.border_width;
-    let accent_color = theme.accent.to_f32x4();
+    // ── Pane chrome from pane-specific config ──
+    // These are separate from the global theme border/accent so panes can
+    // have their own border width, radius, and color treatment.
+    let pane_border_color = state.appearance.effective_pane_border_color(theme).to_f32x4();
+    let pane_active_border_color = state.appearance.effective_pane_active_border_color(theme).to_f32x4();
+    let pane_border_width = state.appearance.effective_pane_border_width(theme);
+    // Pane border radius: read from config but the primitive renderer does not yet
+    // implement rounded corner clipping. When the heca-grid-ui Scene integration
+    // replaces the primitive draw_border path, radius will take full effect.
+    // Until then, `draw_border` draws straight rectangles regardless of this value.
+    let _pane_border_radius = state.appearance.effective_pane_border_radius(theme);
 
     let pane_positions = state
         .session
         .active_workspace()
         .map(|ws| ws.scrolling.panes_with_positions())
         .unwrap_or_default();
-    let mut active_tiled_borders = Vec::new();
-    let mut active_float_borders = Vec::new();
 
     let ws_geometries = state.session.workspace_geometries();
     let ws_offset = ws_geometries
@@ -566,6 +573,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         surface_physical_size,
     );
 
+    // ── Pass 1: Pane borders (under terminal content) ──
+    // Draw all borders first so they appear below terminal content when columns
+    // overlap during scrolling. Borders use draw_border (inside the pane rect)
+    // so they stay within the pane bounds and leave gap space clean. Terminal
+    // content fills an inset rect (content_rect = pane_rect - border_width)
+    // so borders are never covered.
     for (pane_id, rect) in &pane_positions {
         let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
@@ -573,14 +586,33 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let ph = rect.size.h as f32;
         let is_active = active_pane_id == Some(*pane_id);
         let bcolor = if is_active {
-            accent_color
+            pane_active_border_color
         } else {
-            [theme_border[0], theme_border[1], theme_border[2], 0.5]
+            pane_border_color
         };
-        let pane_border_width = border_width;
-        let focus_outline_width = border_width.max(2.0);
-        let content_rect = stable_tiled_content_rect(px, py, pw, ph, border_width);
+        state
+            .primitive_renderer
+            .draw_border(px, py, pw, ph, bcolor, pane_border_width);
+    }
+    // Flush all borders before terminal content.
+    state
+        .primitive_renderer
+        .render_clipped(&state.device, scene_view, &mut encoder, content_scissor);
+    state
+        .text_renderer
+        .render(&state.queue, scene_view, &mut encoder);
 
+    // ── Pass 2: Terminal content (on top of borders) ──
+    // Pre-compute the pane background color from theme, modulated by surface
+    // opacity, for the fallback fill when no backend is mounted.
+    let theme_base = theme.background.to_f32x4();
+    let pane_bg = [theme_base[0], theme_base[1], theme_base[2], theme_base[3] * surface_alpha];
+    for (pane_id, rect) in &pane_positions {
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        let content_rect = stable_tiled_content_rect(px, py, pw, ph, pane_border_width);
         let pane_mount = if let Some(content_rect) = content_rect {
             prepare_terminal_mount(
                 &mut state.backends,
@@ -647,30 +679,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 let content_box = rect_to_text_box(content_rect);
                 state
                     .primitive_renderer
-                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, [0.118, 0.118, 0.180, surface_alpha]);
+                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, pane_bg);
             }
         } else {
             state
                 .primitive_renderer
-                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, surface_alpha]);
-        }
-
-        if is_active {
-            active_tiled_borders.push((px, py, pw, ph, bcolor, pane_border_width, focus_outline_width));
-        } else {
-            state
-                .primitive_renderer
-                .draw_border(px, py, pw, ph, bcolor, pane_border_width);
+                .draw_rect(px, py, pw, ph, pane_bg);
         }
     }
-    for (px, py, pw, ph, color, width, outline_width) in active_tiled_borders {
-        state
-            .primitive_renderer
-            .draw_border(px, py, pw, ph, color, width);
-        state
-            .primitive_renderer
-            .draw_outline(px, py, pw, ph, color, outline_width);
-    }
+    // ── End pass 2 (terminal content flushed inside render_terminal_mount) ──
     state
         .primitive_renderer
         .render_clipped(&state.device, scene_view, &mut encoder, content_scissor);
@@ -710,9 +727,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             } else {
                 theme.float_accent.to_f32x4()
             };
-            let float_border_width = border_width * 2.0;
-            let float_outline_width = (border_width * 2.0).max(3.0);
-            let content_rect = stable_floating_content_rect(fx, fy, fw, fh, border_width);
+            let float_border_width = pane_border_width * 2.0;
+            let content_rect = stable_floating_content_rect(fx, fy, fw, fh, pane_border_width);
             let pane_mount = if let Some(content_rect) = content_rect {
                 prepare_terminal_mount(
                     &mut state.backends,
@@ -789,22 +805,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     theme.float_background.to_f32x4(),
                 );
             }
-            if is_focused {
-                active_float_borders.push((fx, fy, fw, fh, fborder, float_border_width, float_outline_width));
-            } else {
-                state
-                    .primitive_renderer
-                    .draw_border(fx, fy, fw, fh, fborder, float_border_width);
-            }
+            state
+                .primitive_renderer
+                .draw_border(fx, fy, fw, fh, fborder, float_border_width);
         }
-    }
-    for (fx, fy, fw, fh, color, width, outline_width) in active_float_borders {
-        state
-            .primitive_renderer
-            .draw_border(fx, fy, fw, fh, color, width);
-        state
-            .primitive_renderer
-            .draw_outline(fx, fy, fw, fh, color, outline_width);
     }
 
     let pane_area_rect = heca_core::layout::Rectangle::new(

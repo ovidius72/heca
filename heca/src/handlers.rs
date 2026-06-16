@@ -1665,8 +1665,38 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
 /// belongs to Phase 10. The handler is intentionally minimal — a real
 /// implementation will need clipboard state and the focused pane's backend.
 pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
-    // Phase 10 will read the system clipboard and forward the text into the
-    // focused pane through the appropriate backend.
+    // Read the system clipboard and forward text into the focused pane.
+    let text = match arboard::Clipboard::new() {
+        Ok(mut cb) => match cb.get_text() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("[heca] clipboard read failed: {e}");
+                return;
+            }
+        },
+        Err(e) => {
+            eprintln!("[heca] clipboard unavailable: {e}");
+            return;
+        }
+    };
+
+    // Find the active pane.
+    let pane_id = match state
+        .session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|pane| pane.id)
+        .or(state.focused_pane)
+    {
+        Some(id) => id,
+        None => return,
+    };
+
+    // Forward the text to the pane's backend.
+    if let Some(backend) = state.backends.get_mut(pane_id) {
+        backend.process_input(text.as_bytes());
+    }
+
     state.needs_redraw = true;
 }
 

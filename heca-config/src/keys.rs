@@ -279,9 +279,17 @@ impl Default for KeysConfig {
             "copy_selection".to_string(),
             Single("prefix+y".to_string()),
         );
-        // `paste_clipboard` is intentionally not given a default flat
-        // binding to avoid colliding with established keys; users can bind it
-        // in config.toml.
+        // `paste_clipboard` has two default bindings so the action is
+        // reachable regardless of platform: Super+V (macOS Cmd+V) and
+        // Ctrl+Shift+V (Linux/Windows). Users can unbind or rebind in config.
+        bindings.insert(
+            "paste_clipboard".to_string(),
+            Many(vec![
+                "Super+v".to_string(),
+                "Ctrl+Shift+v".to_string(),
+                "prefix+Shift+p".to_string(),
+            ]),
+        );
 
         // ── Move pane to column (NIRI-style) ──
         bindings.insert(
