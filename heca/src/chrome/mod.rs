@@ -710,6 +710,7 @@ mod tests {
             Color::new(200, 200, 200, 255),
             &theme,
             None,
+            None,
         );
         assert!(!scene.is_empty(), "scene should not be empty");
         assert!(
@@ -745,13 +746,19 @@ mod tests {
         let sinks = super::ChromeSinks::new();
         // The shell is [header, WorkspacesContainer]; the container hosts a dock per
         // workspace (so the tree's text is visible inside the shell).
-        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks);
+        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks, 0.0);
         assert_eq!(
             shell.base().children.len(),
-            2,
-            "sidebar shell must be [header, WorkspacesContainer body]",
+            1,
+            "sidebar shell should wrap one mounted Pane child",
         );
-        let container = &shell.base().children[1];
+        let pane = &shell.base().children[0];
+        assert_eq!(
+            pane.base().children.len(),
+            2,
+            "mounted Pane must be [header, WorkspacesContainer body]",
+        );
+        let container = &pane.base().children[1];
         assert!(
             !container.base().children.is_empty(),
             "WorkspacesContainer must host a dock per workspace",

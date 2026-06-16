@@ -1659,7 +1659,10 @@ fn item_trailing_border_draws_a_flat_frame_no_glow() {
 #[test]
 fn pane_draws_rounded_accent_border_no_brackets() {
     let theme = Theme::grid_tron();
-    let mut pane = Pane::new().background(theme.surface).child(Label::new("X"));
+    let mut pane = Pane::new()
+        .background(theme.surface)
+        .border(theme.accent, theme.border_width)
+        .child(Label::new("X"));
     LayoutEngine::new().compute(&mut pane, Size::new(200.0, 300.0));
 
     let mut scene = Scene::new();
