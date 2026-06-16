@@ -22,8 +22,8 @@
 ## Priority sequence (locked; blur pulled forward 2026-06-15 — cross-team dep)
 
 1. ~~Consolidate planning docs~~ ✅
-2. **In-app blur (F3)** ← **NEXT** — compositor-owned; terminal agents will reuse it
-3. **SharedChromeState** (global AppState store) — *discuss first*; **gates F4.4/F4.5**
+2. **In-app blur (F3)** — reusable primitive ✅ (`Blur` + `Backdrop`, PR #105/#107); **app-wiring remains**
+3. **SharedChromeState** — foundation ✅ (PR #107); ← **NEXT: consumer migration**
 4. **F4.4** — generic marker/rail widget + targeting
 5. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
 6. **Pane numbering** feature
@@ -34,17 +34,15 @@
 
 ## Now / Next (detailed)
 
-### NEXT — In-app blur (F3), compositor-owned — NOT BUILT (only a config knob)
-Verified: `blur: u8` config + `blur_radius()` exist but have **zero consumers**; no blur shader/
-pass in `heca-renderer`. Pulled forward because **other agents' terminal work wants to reuse it**.
-- Build a separable-Gaussian blur pass in `heca-renderer` over the existing `Compositor` offscreen
-  scene texture (`composite.rs`): capture region → downsample → 2-pass (H/V) Gaussian → composite
-  back, **clip-aware** (respect pane/overlay bounds), driven by the existing `blur_radius()` token.
-- **Host/compositor-owned, NOT terminal-owned** (`pluggable-chrome-plugin-plan.md` Phase 7.5):
-  terminals/chrome get blur by mounting into shells the compositor blurs. Expose a small reuse
-  **contract** so the terminal agents code against the interface, not a private impl.
-- Transparency/vibrancy is already done + in main (the reuse contract is `heca-config::appearance`
-  + `startup::apply_window_vibrancy` + `Compositor`); blur is the missing piece on top.
+### In-app blur (F3) — reusable primitive DONE; app-wiring REMAINS
+- ✅ `heca-renderer::blur::Blur` — separable-Gaussian over any source texture (PR #105).
+- ✅ `heca-renderer::backdrop::Backdrop` — draw a texture region into a rect (UV + opacity); the
+  stage that makes blur consumable. End-to-end path: Compositor scene tex → `Blur::process` →
+  `Backdrop::draw(rect)` → translucent content over it (PR #107). Terminal agents reuse this.
+- **REMAINING (app's own use):** wire it in `render_frame` — after rendering content into the
+  compositor scene texture, blur it and frost the chrome (sidebar/status) over the blurred
+  backdrop, driven by `appearance.blur_radius()` **converted logical→physical** (`* scale_factor`;
+  compositor texture is physical-sized). Clip-aware.
 
 ### P0 — SharedChromeState (global AppState store) — DESIGN LOCKED, build in progress
 Consolidate the scattered chrome UI state (`SidebarTree` cursor/collapsed, `AppState.sidebar`
