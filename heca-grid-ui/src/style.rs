@@ -179,6 +179,18 @@ pub struct Style {
     pub justify: Justify,
     pub align: Align,
     pub gap: f32,
+    /// Uniform outer margin (all sides), unless overridden per side by
+    /// [`margin_left`](Self::margin_left) / [`margin_right`](Self::margin_right)
+    /// / [`margin_top`](Self::margin_top) / [`margin_bottom`](Self::margin_bottom).
+    pub margin: f32,
+    /// Left margin override; `None` ⇒ use [`margin`](Self::margin).
+    pub margin_left: Option<f32>,
+    /// Right margin override; `None` ⇒ use [`margin`](Self::margin).
+    pub margin_right: Option<f32>,
+    /// Top margin override; `None` ⇒ use [`margin`](Self::margin).
+    pub margin_top: Option<f32>,
+    /// Bottom margin override; `None` ⇒ use [`margin`](Self::margin).
+    pub margin_bottom: Option<f32>,
     /// Uniform inner padding (all sides), unless overridden per axis by
     /// [`padding_x`](Self::padding_x) / [`padding_y`](Self::padding_y).
     pub padding: f32,
@@ -221,6 +233,11 @@ impl Default for Style {
             justify: Justify::Start,
             align: Align::Stretch,
             gap: 0.0,
+            margin: 0.0,
+            margin_left: None,
+            margin_right: None,
+            margin_top: None,
+            margin_bottom: None,
             padding: 0.0,
             padding_x: None,
             padding_y: None,
@@ -262,6 +279,15 @@ impl Style {
             gap: Size {
                 width: length(self.gap),
                 height: length(self.gap),
+            },
+            margin: {
+                let m = self.margin;
+                Rect {
+                    left: length(self.margin_left.unwrap_or(m)),
+                    right: length(self.margin_right.unwrap_or(m)),
+                    top: length(self.margin_top.unwrap_or(m)),
+                    bottom: length(self.margin_bottom.unwrap_or(m)),
+                }
             },
             padding: {
                 let px = self.padding_x.unwrap_or(self.padding);

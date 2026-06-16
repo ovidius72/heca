@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 /// Errors that can occur when loading the configuration file.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ConfigError {
     /// No config file found in any search path.
     NotFound,
@@ -71,15 +72,29 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Load config with fallback to built-in defaults on error.
+    ///
+    /// Intended for initial startup where a user config is optional.
     pub fn load() -> Self {
-        let config = Self::load_config_file().unwrap_or_else(|_e| {
-            #[cfg(debug_assertions)]
-            eprintln!("[heca] config load: {_e}, using defaults");
-            Config::default()
-        });
+        Self::try_load().unwrap_or_else(|e| {
+            eprintln!("[heca] config load: {e}, using defaults");
+            let config = Config::default();
+            let mut theme = Theme::load(&config.settings.theme);
+            apply_terminal_overrides(&mut theme, &config.settings);
+            Self { config, theme }
+        })
+    }
+
+    /// Load config from disk, failing on parse/io errors rather than
+    /// falling back to defaults.
+    ///
+    /// Intended for runtime reload so a bad config file doesn't silently
+    /// overwrite the current working config.
+    pub fn try_load() -> Result<Self, ConfigError> {
+        let config = Self::load_config_file()?;
         let mut theme = Theme::load(&config.settings.theme);
         apply_terminal_overrides(&mut theme, &config.settings);
-        Self { config, theme }
+        Ok(Self { config, theme })
     }
 
     fn load_config_file() -> Result<Config, ConfigError> {

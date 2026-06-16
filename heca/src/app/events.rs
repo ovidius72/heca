@@ -59,6 +59,7 @@ pub(crate) fn handle_window_event(
                 .grid_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
             state.compositor.resize(&state.device, phys.width, phys.height);
+            state.blur.resize(&state.device, phys.width, phys.height);
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
         }
@@ -144,7 +145,7 @@ pub(crate) fn handle_window_event(
             }
             let started_interactive_move = !interactive_before && state.mouse.interactive_move.is_some();
             if !started_interactive_move {
-                forward_mouse_button(state, state.mouse.pos, button, button_state);
+                forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
             }
             state.needs_redraw = true;
         }

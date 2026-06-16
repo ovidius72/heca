@@ -158,23 +158,25 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # Selection (host capability, reusable across pane types)
 # -----------------------------------------------------------------------------
 # Selection is a host-level capability, not a terminal-only feature.
-# Today (Task 02) it is a state machine + action surface. The actual
-# selection-data lifecycle (begin/update_focus/end) is driven by surface
-# adapters (mouse, keyboard, RPC) in later tasks.
-# Copy / paste are Phase 10 placeholders that route the action but do not
-# touch the system clipboard yet. `paste_clipboard` has no default binding
-# to avoid colliding with established keys; bind it in your config if you
-# want a default for it.
-enter_selection_mode = "prefix+s"        # Enter the host selection input mode
+# Entering selection mode places a caret at the terminal cursor; the user
+# then explicitly begins selection with v or Space and grows it with
+# movement keys. o flips which end is active so both ends can be adjusted.
+# y copies without leaving the mode; Esc clears and exits.
+enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only, no selection)
 clear_selection      = "prefix+Shift+s"  # Clear the active selection; exit selection mode
-copy_selection       = "prefix+y"        # Placeholder (Phase 10 clipboard)
-# paste_clipboard    = <no default>      # Bind in your config; placeholder (Phase 10)
+copy_selection       = "prefix+y"        # Copy selected text to system clipboard (also y in selection mode)
+# paste_clipboard    = <no default>      # Bind in your config if you want a default for paste
+begin_selection      = <selection-mode-only>  # Start selection from caret (keys: v, Space)
+toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: o)
 #
-# Built-in `selection` mode default bindings:
-#   h / ArrowLeft   -> selection_left
+# Built-in selection mode default bindings:
+#   h / ArrowLeft   -> selection_left    (move caret before selection, grow selection after)
 #   l / ArrowRight  -> selection_right
 #   k / ArrowUp     -> selection_up
 #   j / ArrowDown   -> selection_down
+#   v / Space      -> begin_selection    (start selection from caret position)
+#   o              -> toggle_selection_endpoint (swap which end moves)
+#   y              -> copy_selection    (copies, stays in selection mode)
 
 # -----------------------------------------------------------------------------
 # Custom Modes

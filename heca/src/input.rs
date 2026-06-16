@@ -197,6 +197,8 @@ pub enum WmAction {
     ClearSelection,
     CopySelection,
     PasteClipboard,
+    BeginSelection,
+    ToggleSelectionEndpoint,
 
     // ── Sidebar-specific (parameterized) ──
     AddPaneToColumn {
@@ -327,6 +329,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "clear_selection" => Some(WmAction::ClearSelection),
         "copy_selection" => Some(WmAction::CopySelection),
         "paste_clipboard" => Some(WmAction::PasteClipboard),
+        "begin_selection" => Some(WmAction::BeginSelection),
+        "toggle_selection_endpoint" => Some(WmAction::ToggleSelectionEndpoint),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
             if let Some(rest) = name.strip_prefix("focus_workspace_")
@@ -531,7 +535,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SelectionDown
         | WmAction::ClearSelection
         | WmAction::CopySelection
-        | WmAction::PasteClipboard => 1,
+        | WmAction::PasteClipboard
+        | WmAction::BeginSelection
+        | WmAction::ToggleSelectionEndpoint => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
         WmAction::FocusPane { .. }
@@ -638,6 +644,14 @@ mod tests {
         assert_eq!(
             action_from_name("paste_clipboard"),
             Some(WmAction::PasteClipboard)
+        );
+        assert_eq!(
+            action_from_name("begin_selection"),
+            Some(WmAction::BeginSelection)
+        );
+        assert_eq!(
+            action_from_name("toggle_selection_endpoint"),
+            Some(WmAction::ToggleSelectionEndpoint)
         );
         // Selection has no parameterized variants in Task 02; the parameterized
         // pathway is unreachable by design.
@@ -753,6 +767,7 @@ mod tests {
                 WmAction::SelectionUp, WmAction::SelectionDown,
                 WmAction::ClearSelection,
                 WmAction::CopySelection, WmAction::PasteClipboard,
+                WmAction::BeginSelection, WmAction::ToggleSelectionEndpoint,
                 // Take (panes + quick-take)
                 WmAction::PaneTake, WmAction::PaneTakeAndFocus,
                 // Parameterized variants

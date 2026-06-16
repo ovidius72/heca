@@ -24,6 +24,16 @@ impl Color {
         Self { r, g, b, a }
     }
 
+    /// Return a copy with the alpha channel replaced.
+    pub const fn with_alpha(self, a: u8) -> Self {
+        Self {
+            r: self.r,
+            g: self.g,
+            b: self.b,
+            a,
+        }
+    }
+
     pub fn to_f32x4(&self) -> [f32; 4] {
         [
             self.r as f32 / 255.0,
