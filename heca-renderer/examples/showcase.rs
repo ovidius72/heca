@@ -782,7 +782,28 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     "exit 1",
                     Badge::danger("STOP"),
                 ));
-            let panes_col = Flex::column().width(Length::Px(380.0)).child(panes);
+            // MarkerGroup: a column-style grouping fronted by a left marker bar
+            // that lights to the accent when the group is active (here: the first).
+            let marker_demo = Flex::column()
+                .gap(8.0)
+                .child(Label::new("MARKER GROUP").color(theme.muted).font_scale(0.8))
+                .child(
+                    MarkerGroup::new()
+                        .active(true)
+                        .gap(4.0)
+                        .child(Row::new().padding(6.0).child(Label::new("pane A")))
+                        .child(Row::new().padding(6.0).child(Label::new("pane B"))),
+                )
+                .child(
+                    MarkerGroup::new()
+                        .gap(4.0)
+                        .child(Row::new().padding(6.0).child(Label::new("pane C"))),
+                );
+            let panes_col = Flex::column()
+                .width(Length::Px(380.0))
+                .gap(16.0)
+                .child(panes)
+                .child(marker_demo);
 
             // Workspaces rail (enumerate flavor): one icon cell PER pane, so every
             // pane stays visible + addressable when collapsed — unlike a tool dock

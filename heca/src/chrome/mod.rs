@@ -150,8 +150,13 @@ fn pane_glyph(_pane_name: &str) -> Glyph {
 /// are intentionally omitted — that data (process status / branch / change info)
 /// isn't on `SidebarPaneEntry` yet; this is the composition seam for it. Display-only
 /// for now — interaction is wired with the F4 shared-state layer.
-fn pane_card(pane: &SidebarPaneEntry, theme: &GuiTheme, sink: SidebarClickSink) -> Row {
-    let active = pane.state == SidebarItemState::Active;
+fn pane_card(
+    pane: &SidebarPaneEntry,
+    theme: &GuiTheme,
+    sink: SidebarClickSink,
+    active_pane: Option<PaneId>,
+) -> Row {
+    let active = active_pane == Some(pane.pane_id);
     let tint = if active { theme.accent } else { theme.foreground };
     let pane_id = pane.pane_id;
     Row::new()
@@ -183,8 +188,13 @@ fn pane_card(pane: &SidebarPaneEntry, theme: &GuiTheme, sink: SidebarClickSink) 
 /// drag handle attach here (wired with the F4 shared-state layer). The bar brightens
 /// to the accent when the column holds the active pane. `Align::Stretch` (the Flex
 /// default) makes the fixed-width bar span the height of the pane stack.
-fn column_view(c: &SidebarColEntry, theme: &GuiTheme, sink: &SidebarClickSink) -> Flex {
-    let active = c.panes.iter().any(|p| p.state == SidebarItemState::Active);
+fn column_view(
+    c: &SidebarColEntry,
+    theme: &GuiTheme,
+    sink: &SidebarClickSink,
+    active_pane: Option<PaneId>,
+) -> Flex {
+    let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
     let bar_color = if active {
         theme.accent
     } else {
@@ -192,7 +202,7 @@ fn column_view(c: &SidebarColEntry, theme: &GuiTheme, sink: &SidebarClickSink) -
     };
     let mut panes = Flex::column().gap(3.0).grow(1.0);
     for pane in &c.panes {
-        panes = panes.child(pane_card(pane, theme, sink.clone()));
+        panes = panes.child(pane_card(pane, theme, sink.clone(), active_pane));
     }
     Flex::row()
         .gap(6.0)
@@ -210,25 +220,41 @@ fn column_view(c: &SidebarColEntry, theme: &GuiTheme, sink: &SidebarClickSink) -
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
-fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sinks: &ChromeSinks) -> Flex {
+fn build_workspaces_container(
+    tree: &SidebarTree,
+    theme: &GuiTheme,
+    sinks: &ChromeSinks,
+    ws_state: &WorkspacesContainerState,
+) -> Flex {
+    // Selection is sourced from the container's shared state (the Phase-2 boundary),
+    // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
+    // active pane.
+    let active_pane = ws_state.active_pane();
     let mut col = Flex::column().gap(6.0).grow(1.0);
     for ws in &tree.workspaces {
         let pane_count =
             ws.columns.iter().map(|c| c.panes.len()).sum::<usize>() + ws.floating_panes.len();
-        let active_ws = ws.state == SidebarItemState::Active;
+        let active_ws = active_pane.is_some_and(|pid| {
+            ws.columns
+                .iter()
+                .flat_map(|c| &c.panes)
+                .chain(&ws.floating_panes)
+                .any(|p| p.pane_id == pid)
+        });
         let badge = if active_ws {
             Badge::accent(pane_count.to_string())
         } else {
             Badge::neutral(pane_count.to_string())
         };
         // The header toggle records the workspace in the toggle sink; the app flips
-        // its collapsed state (canonical) and the tree rebuilds (F4.3).
+        // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
+        // rebuilds (F4.3). Collapse is read back from that same shared state.
         let ws_idx = ws.ws_idx;
         let ws_sink = sinks.ws_toggle.clone();
         let mut dock = DockFrame::new(ws.name.clone())
             .frameless()
             .gap(4.0) // tighten the workspace header → body spacing
-            .expanded(!ws.collapsed)
+            .expanded(!ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| ws_sink.set(Some(ws_idx)))
             .header(
                 Flex::row()
@@ -245,10 +271,10 @@ fn build_workspaces_container(tree: &SidebarTree, theme: &GuiTheme, sinks: &Chro
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, theme, &sinks.click));
+            cols = cols.child(column_view(c, theme, &sinks.click, active_pane));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, sinks.click.clone()));
+            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -267,6 +293,7 @@ fn build_sidebar_shell(
     sidebar_h: f32,
     theme: &GuiTheme,
     sinks: &ChromeSinks,
+    ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
 ) -> Flex {
     let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
@@ -297,7 +324,7 @@ fn build_sidebar_shell(
                 .background(theme.surface)
                 .border(theme.border, theme.border_width)
                 .child(header)
-                .child(build_workspaces_container(tree, theme, sinks)),
+                .child(build_workspaces_container(tree, theme, sinks, ws_state)),
         )
 }
 
@@ -336,21 +363,30 @@ fn build_right_sidebar_shell(
         )
 }
 
+/// The chrome frame's geometry, colors, and status text — grouped so the assembly
+/// helpers stay under clippy's argument-count lint. Borrowed `status` keeps the
+/// caller's `String` in place.
+#[derive(Clone, Copy)]
+struct ChromeFrame<'a> {
+    w: f32,
+    h: f32,
+    tab_bar_height: f32,
+    status_bar_height: f32,
+    status: &'a str,
+    side_bg: Color,
+    fg: Color,
+}
+
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
 /// a middle row hosting the (optional) full-height sidebar shell + a transparent
 /// content spacer, and the opaque status bar at the bottom. Returns the concrete
 /// [`Flex`] so it can be **retained** across frames (see [`RetainedChrome`]).
 fn chrome_root(
-    w: f32,
-    h: f32,
-    tab_bar_height: f32,
-    status_bar_height: f32,
-    status: &str,
-    side_bg: Color,
-    fg: Color,
+    frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
 ) -> Flex {
+    let ChromeFrame { w, h, tab_bar_height, status_bar_height, status, side_bg, fg } = *frame;
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
@@ -408,29 +444,13 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
 /// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
 #[cfg(test)]
 fn chrome_scene(
-    w: f32,
-    h: f32,
-    tab_bar_height: f32,
-    status_bar_height: f32,
-    status: &str,
-    side_bg: Color,
-    fg: Color,
+    frame: &ChromeFrame,
     theme: &GuiTheme,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
 ) -> Scene {
-    let mut root = chrome_root(
-        w,
-        h,
-        tab_bar_height,
-        status_bar_height,
-        status,
-        side_bg,
-        fg,
-        left_sidebar,
-        right_sidebar,
-    );
-    paint_chrome_root(&mut root, w, h, theme)
+    let mut root = chrome_root(frame, left_sidebar, right_sidebar);
+    paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
 /// `(status-bar bg, sidebar-shell bg, foreground)` for the chrome, honoring the
@@ -520,6 +540,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
             sidebar_h,
             &theme,
             &state.chrome_sinks,
+            &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
         ))
     } else {
@@ -539,13 +560,15 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
     };
 
     chrome_root(
-        w,
-        h,
-        DEFAULT_TAB_BAR_HEIGHT,
-        DEFAULT_STATUS_BAR_HEIGHT,
-        &status,
-        side_bg,
-        fg,
+        &ChromeFrame {
+            w,
+            h,
+            tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
+            status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
+            status: &status,
+            side_bg,
+            fg,
+        },
         left_sidebar,
         right_sidebar,
     )
@@ -701,13 +724,15 @@ mod tests {
         let theme = GuiTheme::grid_tron();
         // No sidebar (collapsed) — just the status bar should produce text.
         let scene = super::chrome_scene(
-            800.0,
-            600.0,
-            32.0,
-            24.0,
-            "2 panes | foo | NORMAL",
-            Color::new(17, 17, 27, 255),
-            Color::new(200, 200, 200, 255),
+            &super::ChromeFrame {
+                w: 800.0,
+                h: 600.0,
+                tab_bar_height: 32.0,
+                status_bar_height: 24.0,
+                status: "2 panes | foo | NORMAL",
+                side_bg: Color::new(17, 17, 27, 255),
+                fg: Color::new(200, 200, 200, 255),
+            },
             &theme,
             None,
             None,
@@ -744,19 +769,22 @@ mod tests {
 
         let theme = GuiTheme::grid_tron();
         let sinks = super::ChromeSinks::new();
-        // The shell is [header, WorkspacesContainer]; the container hosts a dock per
-        // workspace (so the tree's text is visible inside the shell).
-        let shell = super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks, 0.0);
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        chrome.workspaces.set_active_pane(Some(heca_core::layout::PaneId(1)));
+        // The shell wraps a bracketed Pane that holds [header, WorkspacesContainer];
+        // the container hosts a dock per workspace (so the tree's text is visible).
+        let shell =
+            super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks, &chrome.workspaces, 8.0);
         assert_eq!(
             shell.base().children.len(),
             1,
-            "sidebar shell should wrap one mounted Pane child",
+            "sidebar shell wraps a single bracketed Pane",
         );
         let pane = &shell.base().children[0];
         assert_eq!(
             pane.base().children.len(),
             2,
-            "mounted Pane must be [header, WorkspacesContainer body]",
+            "the shell Pane holds [header, WorkspacesContainer body]",
         );
         let container = &pane.base().children[1];
         assert!(

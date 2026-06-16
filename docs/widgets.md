@@ -23,7 +23,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
-  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
+  - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
@@ -805,6 +805,27 @@ rows out of layout (`display: none`); a hidden subtree is never painted or Tab-f
 ItemGroup::new("src")
     .child(Item::new("main.rs"))
     .child(Item::new("lib.rs"));
+```
+
+### MarkerGroup
+
+A vertical group of rows fronted by a left **marker bar** that brightens to the theme accent (+
+glow) when the group is `active`. Domain-neutral: a host composes rows in and flips `active` to
+show the group holds the current selection (e.g. a sidebar *column* whose bar lights when it holds
+the focused pane). The bar reserves a fixed left gutter — children never overlap it — and is the
+seam for a move/swap [`KeyHint`](#keyhint) target / drag handle (wrap the group, or mark it
+draggable; the bar stays a pure indicator). All bar styling is read from the `Theme` at paint.
+
+- **Construct**: `MarkerGroup::new()`. Add rows with `.child(...)`.
+- **Builders**: `.active(bool)`.
+- **Accessors**: `.state() -> Signal<bool>` (active) — bind it; the host writes it when the
+  group's selection changes and the bar repaints without a rebuild.
+
+```rust
+MarkerGroup::new()
+    .active(holds_focus)
+    .child(Row::new().child(Label::new("pane 1")))
+    .child(Row::new().child(Label::new("pane 2")));
 ```
 
 ### DockFrame

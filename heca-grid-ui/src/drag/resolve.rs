@@ -102,7 +102,7 @@ pub fn source_at(root: &dyn Component, point: Point) -> Option<DragItemId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builders::{DragExt, Parent};
+    use crate::builders::DragExt;
     use crate::widgets::{Flex, Surface};
     use heca_core::layout::{Point, Rectangle, Size};
 

@@ -89,6 +89,11 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|p| p.id);
+    // Project canonical WM focus onto the chrome's derived selection (write-via-action).
+    // The chrome build reads selection from here, not from `Session` — the Phase-2
+    // state boundary (`pluggable-chrome-plugin-plan.md` §3.3): the WorkspacesContainer
+    // (and future providers) consume `chrome_state`, never `Session` directly.
+    state.chrome_state.workspaces.set_active_pane(state.focused_pane);
     notify_focus_changed(state, prev_focused, state.focused_pane);
 
     let focus_changed = prev_focused != state.focused_pane;

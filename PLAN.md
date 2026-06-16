@@ -22,8 +22,8 @@
 ## Priority sequence (locked; blur pulled forward 2026-06-15 — cross-team dep)
 
 1. ~~Consolidate planning docs~~ ✅
-2. **In-app blur (F3)** ← **NEXT** — compositor-owned; terminal agents will reuse it
-3. **SharedChromeState** (global AppState store) — *discuss first*; **gates F4.4/F4.5**
+2. **In-app blur (F3)** — reusable primitive ✅ (`Blur` + `Backdrop`, PR #105/#107); **app-wiring remains**
+3. **SharedChromeState** — foundation ✅ (PR #107); ← **NEXT: consumer migration**
 4. **F4.4** — generic marker/rail widget + targeting
 5. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
 6. **Pane numbering** feature
@@ -34,17 +34,15 @@
 
 ## Now / Next (detailed)
 
-### NEXT — In-app blur (F3), compositor-owned — NOT BUILT (only a config knob)
-Verified: `blur: u8` config + `blur_radius()` exist but have **zero consumers**; no blur shader/
-pass in `heca-renderer`. Pulled forward because **other agents' terminal work wants to reuse it**.
-- Build a separable-Gaussian blur pass in `heca-renderer` over the existing `Compositor` offscreen
-  scene texture (`composite.rs`): capture region → downsample → 2-pass (H/V) Gaussian → composite
-  back, **clip-aware** (respect pane/overlay bounds), driven by the existing `blur_radius()` token.
-- **Host/compositor-owned, NOT terminal-owned** (`pluggable-chrome-plugin-plan.md` Phase 7.5):
-  terminals/chrome get blur by mounting into shells the compositor blurs. Expose a small reuse
-  **contract** so the terminal agents code against the interface, not a private impl.
-- Transparency/vibrancy is already done + in main (the reuse contract is `heca-config::appearance`
-  + `startup::apply_window_vibrancy` + `Compositor`); blur is the missing piece on top.
+### In-app blur (F3) — reusable primitive DONE; app-wiring REMAINS
+- ✅ `heca-renderer::blur::Blur` — separable-Gaussian over any source texture (PR #105).
+- ✅ `heca-renderer::backdrop::Backdrop` — draw a texture region into a rect (UV + opacity); the
+  stage that makes blur consumable. End-to-end path: Compositor scene tex → `Blur::process` →
+  `Backdrop::draw(rect)` → translucent content over it (PR #107). Terminal agents reuse this.
+- **REMAINING (app's own use):** wire it in `render_frame` — after rendering content into the
+  compositor scene texture, blur it and frost the chrome (sidebar/status) over the blurred
+  backdrop, driven by `appearance.blur_radius()` **converted logical→physical** (`* scale_factor`;
+  compositor texture is physical-sized). Clip-aware.
 
 ### P0 — SharedChromeState (global AppState store) — DESIGN LOCKED, build in progress
 Consolidate the scattered chrome UI state (`SidebarTree` cursor/collapsed, `AppState.sidebar`
@@ -77,19 +75,36 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 `pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
 
 ### P1 — F4.4 — generic marker/rail widget + targeting (built drag-aware)
-- Build a **generic** `MarkerGroup`/`RailGroup` widget in `heca-grid-ui` (rows + left marker/rail
-  bar + `KeyHint` target slot + drag-handle seam), theme-driven, `Base` + `Component` + builders.
-  Note: it's drag-ready already — the universal `DragExt` (`.draggable`/`.drop_target`) shipped.
-- Migrate `chrome.rs`'s inline `column_view` / `pane_card` alphas/padding / the `ba8049b`
-  active-ws wash onto theme-driven widgets — after this `chrome.rs` only *composes* + projects.
-- Wire move/swap/take targeting: pick mode lights `KeyHint` letters; app feeds candidates from
-  `collect_all_pane_candidates`. (KeyHint stays universal — memory `grid-ui-keyhint-universal`.)
+- ✅ **`heca-grid-ui::MarkerGroup` built** — generic, theme-driven, `Base`+`Component`+builders;
+  vertical row group + left **marker bar**. Bar reads 3 ways: dim=inactive, accent+glow=active
+  (`active` signal), brighter+thicker=grip **hover**. Reserves a ~12px left **grip gutter** (the
+  group's own grab/target surface; bar is its 3px visual). Exposes `state()` (active) + `hovered()`
+  (grip hover) signal handles. Cataloged (`docs/widgets.md`), in the showcase (PANES col), 6 tests.
+  Stays generic — drag/peek are **composed on** via universal `DragExt`/`KeyHint`, never built in.
+- **REMAINING F4.4:** migrate `chrome/mod.rs`'s inline `column_view` `Surface` bar / `pane_card`
+  alphas+padding / the active-ws wash onto `MarkerGroup` + theme-driven `Row` (constant card bg +
+  signal-driven active overlay) — after this `chrome.rs` only *composes* + projects. **Then** the
+  active/hover signal-binding + signature-strip from the consumer migration becomes unblocked.
+- Wire move/swap/take **targeting**: pick mode lights `KeyHint` letters; wrap pane `Row`s AND
+  `MarkerGroup`s (column letter on/at the bar, top-anchored overlay) in `KeyHint`; app feeds
+  candidates from `chrome_state.workspaces.pick_candidates` (consume that field). KeyHint stays
+  universal (memory `grid-ui-keyhint-universal`).
 
 ### P2 — F4.5 ≡ DnD Phase 3 — re-enable sidebar DnD on the new framework
-- Framework ready (DnD Phase 1+2 merged): use `drag::source_at`/`resolve_at` over the retained
-  tree (kills `sidebar_hit_test` for DnD); F4.4 marker bar = drag handle / drop target; paint
-  `PaintCx::drag_ghost`/`drop_indicator`. Restore the drag-start block disabled in `45143b5`.
-  **One task** (F4.5 and "DnD Phase 3" are the same). Design: `dnd-framework-refactor-plan.md`.
+- Framework ready (DnD Phase 1+2 merged): `drag::source_at`/`resolve_at` over the retained tree
+  (kills `sidebar_hit_test` for DnD); paint `PaintCx::drag_ghost`/`drop_indicator`. Restore the
+  drag-start block disabled in `45143b5`. Design: `dnd-framework-refactor-plan.md`.
+- **Granularity (decided 2026-06-16): panes AND columns are draggable.** Mark each pane `Row`
+  `.draggable(Pane)` and each `MarkerGroup` `.draggable(Column)`. Hit-testing is innermost-first,
+  so a press on a card → pane drag; a press in the `MarkerGroup` **grip gutter** (its only own
+  surface) → column drag. The gutter is the column's drag handle for free — no special-casing.
+- **Drag cursor (decided 2026-06-16; belongs HERE, not earlier): app-side winit policy.** heca
+  sets **no** OS cursor today (`grep set_cursor` = none); heca-grid-ui must stay cursor-free
+  (emits a Scene). Add a general **cursor-policy** helper in the cursor-moved path (`mouse.rs`):
+  each move compute `CursorIcon` from state — `is_dragging()`→`Grabbing`; pointer over a grabbable
+  grip/item (via `MarkerGroup::hovered()` + the same `resolve_at`/`source_at` "is draggable" test)
+  →`Grab`; else default. Build it general so it extends to text I-beam / resize cursors later.
+  Deferred to here because `Grab`-on-hover would be a lie until items are actually `.draggable`.
 
 ### P3 — Pane numbering feature (agreed, spec'd — memory `heca-pane-numbering-spec`)
 - `prefix+<ws 1-9>+<pane 1-9>` → focus that pane (deterministic cross-ws chord; ws-switch is

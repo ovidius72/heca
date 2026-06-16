@@ -15,7 +15,7 @@ These are made over and over. **Violating either = redo.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
-    `DockFrame`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
+    `DockFrame`, `MarkerGroup`, `ChromeRegion`, `RailCell`, `KeyHint`, `Grid`, `Icon`, `Badge`, `Tag`, `Button`,
     `Label`, `Input`, `Select`, `Modal`, `CommandPalette`, `Toast`, `Tabs`, `Pane`, …
 - **New UI = a proper, GENERIC, theme-driven `heca-grid-ui` widget** — embed `Base`, impl
   `Component` + builder traits, read **ALL** styling from `Theme` (colors/font/radius/border).
