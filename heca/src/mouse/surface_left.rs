@@ -237,32 +237,19 @@ pub(crate) fn accept_drop(
     state.mouse.drag_ctx.cancel_all();
     state.mouse.interactive_move = None;
 
-    if swap {
-        let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-        if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
-            let sidebar_h = sidebar_bottom - sidebar_top;
-            if let Some(fi) = crate::sidebar::sidebar_hit_test(
-                &state.sidebar_tree,
-                sidebar_top,
-                sidebar_h,
-                sw,
-                pos.1,
-            ) && let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned()
-                && let crate::sidebar::SidebarItem::Pane {
-                    pane_id: target_pid,
-                } = item
-            {
-                crate::handlers::handle_swap_param(
-                    state,
-                    &WmAction::Swap {
-                        a_id: pane_id,
-                        b_id: target_pid,
-                    },
-                );
-                crate::app::mutations::after_layout_change(state);
-                return;
-            }
+    // Drop target resolved from the RETAINED chrome tree's bounds (F4.5), not the
+    // legacy fixed-row geometry.
+    let target = crate::chrome::sidebar_drop_target(state, pos).map(|(pid, _side)| pid);
+
+    if swap && let Some(target_pid) = target {
+        if target_pid != pane_id {
+            crate::handlers::handle_swap_param(
+                state,
+                &WmAction::Swap { a_id: pane_id, b_id: target_pid },
+            );
+            crate::app::mutations::after_layout_change(state);
         }
+        return;
     }
 
     let old_rect = state.session.workspaces.get(original_ws).and_then(|ws| {
@@ -282,31 +269,20 @@ pub(crate) fn accept_drop(
     };
     let removed_pane = removed.pane;
 
-    let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
-    let on_sidebar =
-        pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom;
-
-    if on_sidebar {
-        let sidebar_h = sidebar_bottom - sidebar_top;
-        let fi = crate::sidebar::sidebar_hit_test(
-            &state.sidebar_tree,
-            sidebar_top,
-            sidebar_h,
-            sw,
-            pos.1,
-        );
-
-        if let Some(fi) = fi {
-            if let Some(item) = state.sidebar_tree.flat_items.get(fi).cloned() {
-                place_pane_at_sidebar_target(state, original_ws, removed_pane, item);
-            } else {
-                state.session.add_pane(removed_pane, None, true);
-            }
-        } else {
+    match target {
+        // Dropped onto a pane card → place relative to it (reuses the Pane arm).
+        Some(target_pid) if target_pid != pane_id => {
+            place_pane_at_sidebar_target(
+                state,
+                original_ws,
+                removed_pane,
+                crate::sidebar::SidebarItem::Pane { pane_id: target_pid },
+            );
+        }
+        // Off any card (or onto itself) → re-add to the active workspace.
+        _ => {
             state.session.add_pane(removed_pane, None, true);
         }
-    } else {
-        state.session.add_pane(removed_pane, None, true);
     }
 
     let new_ws = state.session.active_workspace_idx;
