@@ -512,22 +512,11 @@ fn handle_selection_mode(
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) {
-    // Selection mode keyboard contract (Task 02):
-    //   Esc     → dispatch `WmAction::ClearSelection` through the action
-    //             architecture (no registry bypass), then return to Normal.
-    //   Enter   → confirm the active selection (`selection.end()`) and
-    //             return to Normal. There is no `ConfirmSelection` action
-    //             in the Task 02 surface; Enter is a mode-internal key like
-    //             the `Esc`/`Enter` arms of `handle_rename_input` and
-    //             `handle_confirm_delete_input`, which also directly mutate
-    //             state for mode-internal semantics.
-    //   prefix  → return to Prefix mode AND arm the prefix timeout
-    //             (`prefix_entered_at = Some(now)`). This matches the
-    //             Normal→Prefix promotion in `handle_keyboard_input`; the
-    //             prefix-mode arm itself only clears `prefix_entered_at`,
-    //             it never sets it. Without arming the timestamp here, the
-    //             app would be stuck in Prefix mode until the user types
-    //             something that triggers `handle_prefix_mode` to clear it.
+    // Selection mode keyboard contract (Task 05 — keyboard-first selection):
+    //   Esc     → clear selection/caret and return to Normal.
+    //   Enter   → if selection exists: confirm and return to Normal.
+    //             if caret-only: just return to Normal (no selection to confirm).
+    //   prefix  → return to Prefix mode AND arm the prefix timeout.
     //   mode bindings → resolve through the `selection` mode keymap and
     //                   dispatch real actions via the registry.
     //   other keys → ignored; do not forward to the focused backend.
@@ -539,9 +528,7 @@ fn handle_selection_mode(
         // Route through the action architecture — no direct selection-state
         // mutation here, consistent with the "no registry bypasses" rule.
         // We set the mode to Normal first so the dispatched handler runs
-        // against a consistent state; the handler's mode check would
-        // otherwise be a no-op for us (it only resets Selection, and the
-        // mode is already Normal by the time the handler runs).
+        // against a consistent state.
         state.input_mode = InputMode::Normal;
         dispatch_action(
             state,
@@ -550,7 +537,17 @@ fn handle_selection_mode(
             &WmAction::ClearSelection,
         );
     } else if is_enter {
-        state.selection.end();
+        // Enter confirms the selection and returns to Normal.
+        // `selection.end()` is a mode-internal state transition (Selecting → Selected),
+        // not a user-visible action. Unlike `ClearSelection` (which is exposed as a
+        // WmAction because it can be triggered from keyboard/mouse/RPC), confirming
+        // a selection only happens via Enter in selection mode — there is no
+        // `ConfirmSelection` action because the confirmation is a mode-internal
+        // gesture (like Enter in rename or confirm-delete modes).
+        if state.selection.is_active() {
+            state.selection.end();
+        }
+        // Whether we had a selection or just a caret, return to Normal.
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
     } else if ctx.is_prefix {

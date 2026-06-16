@@ -14,6 +14,8 @@ use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_renderer::composite::Compositor;
+use heca_renderer::backdrop::Backdrop;
+use heca_renderer::blur::Blur;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -229,6 +231,8 @@ pub(crate) async fn init_state(
         physical.height as f32 / scale_factor as f32,
     );
     let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
+    let blur = Blur::new(&device, surface_format, physical.width, physical.height);
+    let backdrop = Backdrop::new(&device, surface_format);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -286,6 +290,8 @@ pub(crate) async fn init_state(
         text_renderer,
         grid_renderer,
         compositor,
+        blur,
+        backdrop,
         session,
         backends,
         theme: app_config.theme.clone(),

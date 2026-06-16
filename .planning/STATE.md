@@ -132,6 +132,13 @@ progress:
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
 - Mouse-aware TUIs now have a structured forwarding path, but live behavior still needs one more verification pass after the latest renderer sync
 - Selection/copy/paste must now follow the shared host-selection contract rather than a terminal-only design
+- Selection mode must become keyboard-first:
+  - entering selection mode places a caret at the terminal cursor
+  - entering selection mode does not automatically start selection
+  - `v` / `Space` begin selection from the caret
+  - `o` flips the active endpoint
+  - `y` copies and stays in selection mode
+  - `x` is reserved for paste once paste is implemented
 
 ## Resume Point
 

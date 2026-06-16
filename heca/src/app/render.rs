@@ -11,7 +11,7 @@ use crate::{mouse, sidebar};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use heca_config::theme::Color;
 use heca_renderer::primitive::PrimitiveRenderer;
-use heca_renderer::terminal::{SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle};
+use heca_renderer::terminal::{CaretIndicator, SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::{TextBox, TextRenderer};
@@ -216,6 +216,28 @@ fn build_selection_overlay(
     if cols == 0 {
         return None;
     }
+
+    // Caret-only state: return a thin caret indicator (no selection spans).
+    if let SelectionState::Caret { owner, row, col } = selection {
+        if *owner != SelectionOwner::Pane(pane_id) {
+            return None;
+        }
+        let color = [
+            accent.r as f32 / 255.0,
+            accent.g as f32 / 255.0,
+            accent.b as f32 / 255.0,
+            0.25,
+        ];
+        return Some(
+            SelectionOverlay::new(vec![], color)
+                .with_caret(CaretIndicator {
+                    row: *row,
+                    col: *col,
+                    is_selection_endpoint: false,
+                }),
+        );
+    }
+
     let active = selection.active()?;
     if active.owner != SelectionOwner::Pane(pane_id) {
         return None;
@@ -278,7 +300,17 @@ fn build_selection_overlay(
                     end_col: (*anchor_col).min(last_col),
                 });
             }
-            Some(SelectionOverlay::new(spans, color))
+            // Add a prominent caret at the focus (active) end of the selection
+            // so the user can see which endpoint will move when they press
+            // h/j/k/l or after toggling with `o`.
+            Some(
+                SelectionOverlay::new(spans, color)
+                    .with_caret(CaretIndicator {
+                        row: *focus_row,
+                        col: *focus_col,
+                        is_selection_endpoint: true,
+                    }),
+            )
         }
         SelectionRegion::BackendNative => None,
     }
@@ -373,6 +405,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let h = phys_size.height as f32 / scale;
 
     let theme = &state.theme;
+    let surface_alpha = state.terminal_surface_opacity();
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -463,6 +496,47 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
 
+    // ── In-app frosted backdrop blur (two-pass) ──
+    //
+    // Both tiled and floating panes receive frosted backdrop stamps, per the task
+    // spec ("apply the same surface policy to tiled and floating panes").
+    //
+    // Two blur passes are needed so each pane type frosts the content actually
+    // behind it:
+    //
+    //   Pass 1: blur the chrome/background (no pane content yet).
+    //     → Stamped behind tiled panes (frosts chrome/adjacent gaps).
+    //
+    //   Pass 2: blur the scene including tiled pane content.
+    //     → Stamped behind floating panes (frosts the tiled content behind them).
+    //
+    // This is O(2) blurs per frame (not per-pane), which satisfies the performance
+    // requirement ("avoid per-pane full-scene blur recomputation").
+    //
+    // Correct unit conversion: `appearance.blur_radius()` returns logical px,
+    // but `Blur::process` consumes source-texture pixels (physical px for the
+    // compositor scene texture). Scale by `scale_factor`.
+    //
+    // Policy: no visible pane frosting unless the pane surface actually has
+    // alpha to reveal it (`terminal_surface_opacity() < 1.0`). When blur is 0
+    // or transparency is off, this is a no-op (radius 0 = passthrough).
+    let needs_frosted_backdrop = state.appearance.is_transparent()
+        && state.appearance.blur_radius() > 0.0;
+    let mut tiled_blurred_view: Option<&wgpu::TextureView> = None;
+    let mut float_blurred_view: Option<&wgpu::TextureView> = None;
+
+    // Blur pass 1: chrome/background only (before any pane content).
+    if needs_frosted_backdrop {
+        let radius_physical = state.appearance.blur_radius() * state.scale_factor as f32;
+        tiled_blurred_view = Some(state.blur.process(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            scene_view,
+            radius_physical,
+        ));
+    }
+
     let theme_border = theme.border.to_f32x4();
     let border_width = theme.border_width;
     let accent_color = theme.accent.to_f32x4();
@@ -519,6 +593,32 @@ pub(crate) fn render_frame(state: &mut AppState) {
         };
 
         if let Some(content_rect) = content_rect {
+            // ── Frosted backdrop stamp for tiled pane surfaces ──
+            //
+            // When transparency + in-app blur are enabled, stamp the pre-computed
+            // blurred chrome/background behind each tiled pane rect so the frosted-glass
+            // effect is visible through the translucent surface fill.
+            //
+            // Physical px conversion: pane rect is in logical px, backdrop uses
+            // physical px (matching the compositor scene texture).
+            if let Some(blurred) = tiled_blurred_view {
+                let scale = state.scale_factor as f32;
+                let vp_w = surface_physical_size.width as f32;
+                let vp_h = surface_physical_size.height as f32;
+                let dst = (px * scale, py * scale, pw * scale, ph * scale);
+                state.backdrop.draw(
+                    &state.device,
+                    &state.queue,
+                    &mut encoder,
+                    scene_view,
+                    blurred,
+                    (vp_w, vp_h),
+                    dst,
+                    None, // src_uv = None: sample same screen location
+                    surface_alpha,
+                );
+            }
+
             if let Some(mount) = pane_mount {
                 let selection_overlay =
                     selection_overlay_for_pane(state, *pane_id, mount.snapshot.cols);
@@ -538,6 +638,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         font_size: theme.terminal_font_size,
                         font_family: &theme.terminal_font_family,
                         italic_font_family: &theme.terminal_italic_font_family,
+                        surface_alpha,
                     },
                     mount,
                     selection_overlay,
@@ -546,12 +647,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 let content_box = rect_to_text_box(content_rect);
                 state
                     .primitive_renderer
-                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, [0.118, 0.118, 0.180, 1.0]);
+                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, [0.118, 0.118, 0.180, surface_alpha]);
             }
         } else {
             state
                 .primitive_renderer
-                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
+                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, surface_alpha]);
         }
 
         if is_active {
@@ -576,6 +677,22 @@ pub(crate) fn render_frame(state: &mut AppState) {
     state
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
+
+    // ── Blur pass 2: scene including tiled pane content ──
+    //
+    // Capture a second blur after tiled panes have been rendered into the scene.
+    // This lets floating panes frost the actual tiled content behind them, not
+    // just the chrome/background.
+    if needs_frosted_backdrop {
+        let radius_physical = state.appearance.blur_radius() * state.scale_factor as f32;
+        float_blurred_view = Some(state.blur.process(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            scene_view,
+            radius_physical,
+        ));
+    }
 
     let sidebar_top = chrome.tab_bar_height;
     let sidebar_bottom = h - chrome.status_bar_height;
@@ -607,6 +724,28 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 None
             };
             if let Some(content_rect) = content_rect {
+                // ── Frosted backdrop stamp for floating pane surfaces ──
+                //
+                // Uses blur pass 2 (includes tiled content) so floating panes frost
+                // the actual tiled pane content behind them.
+                if let Some(blurred) = float_blurred_view {
+                    let scale = state.scale_factor as f32;
+                    let vp_w = surface_physical_size.width as f32;
+                    let vp_h = surface_physical_size.height as f32;
+                    let dst = (fx * scale, fy * scale, fw * scale, fh * scale);
+                    state.backdrop.draw(
+                        &state.device,
+                        &state.queue,
+                        &mut encoder,
+                        scene_view,
+                        blurred,
+                        (vp_w, vp_h),
+                        dst,
+                        None,
+                        surface_alpha,
+                    );
+                }
+
                 if let Some(mount) = pane_mount {
                     let selection_overlay =
                         selection_overlay_for_pane(state, float.pane.id, mount.snapshot.cols);
@@ -626,6 +765,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             font_size: theme.terminal_font_size,
                             font_family: &theme.terminal_font_family,
                             italic_font_family: &theme.terminal_italic_font_family,
+                            surface_alpha,
                         },
                         mount,
                         selection_overlay,
@@ -1034,6 +1174,65 @@ mod tests {
         assert_eq!(overlay.spans[4].row, 8);
         assert_eq!(overlay.spans[4].start_col, 0);
         assert_eq!(overlay.spans[4].end_col, 12);
+    }
+
+    #[test]
+    fn build_selection_overlay_caret_returns_caret_indicator() {
+        let mut selection = SelectionState::new();
+        selection.set_caret(SelectionOwner::Pane(PaneId(1)), 3, 7);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        // Caret-only state: no selection spans.
+        assert!(overlay.spans.is_empty());
+        // But we get a caret indicator at the caret position.
+        let caret = overlay.caret.expect("caret should be present in caret-only state");
+        assert_eq!((caret.row, caret.col), (3, 7));
+        assert!(!caret.is_selection_endpoint, "caret-only should not be a selection endpoint");
+    }
+
+    #[test]
+    fn build_selection_overlay_caret_owner_mismatch_returns_none() {
+        let mut selection = SelectionState::new();
+        selection.set_caret(SelectionOwner::Pane(PaneId(2)), 0, 0);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 20, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_active_selection_has_focus_caret() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::KeyboardMode,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 0,
+                focus_row: 4,
+                focus_col: 5,
+            },
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        // Active selection: should have both selection spans and a focus-end caret.
+        assert!(!overlay.spans.is_empty());
+        let caret = overlay.caret.expect("focus caret should be present for active selection");
+        assert_eq!((caret.row, caret.col), (4, 5));
+        assert!(caret.is_selection_endpoint, "active selection caret should be a selection endpoint");
     }
 
     #[test]

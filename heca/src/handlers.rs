@@ -8,6 +8,7 @@ use crate::app::backend_factory::{create_terminal_backend, terminal_grid_for_wor
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
 use crate::app::focus::{focus_pane_by_id, sync_focus};
+use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app::terminal_host::{enter_selection_mode_for_focused_terminal, move_focused_terminal_selection};
 use crate::app_state::{AppState, InputMode, RenameTarget};
 use crate::input::WmAction;
@@ -1531,10 +1532,10 @@ pub fn handle_enter_mode(state: &mut AppState, action: &WmAction) {
 /// focus cell) is owned by
 /// `app::input::handle_selection_mode`.
 pub fn handle_enter_selection_mode(state: &mut AppState, _action: &WmAction) {
-    if !enter_selection_mode_for_focused_terminal(state) {
-        state.input_mode = InputMode::Selection;
-        state.needs_redraw = true;
-    }
+    // If we can't place a caret on the focused terminal, do nothing.
+    // Entering selection mode without a caret violates the contract:
+    // the user must have a caret position to move and begin selection from.
+    let _ = enter_selection_mode_for_focused_terminal(state);
 }
 
 pub fn handle_selection_left(state: &mut AppState, _action: &WmAction) {
@@ -1553,6 +1554,34 @@ pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) {
     let _ = move_focused_terminal_selection(state, 1, 0);
 }
 
+/// Begin selection from the caret position.
+///
+/// When in caret-only state (selection mode entered but no selection started),
+/// this starts a selection with anchor and focus both at the caret position.
+/// Movement keys will then grow the selection from that point.
+///
+/// If a selection already exists, this is a no-op — the user should clear
+/// and re-enter if they want to restart selection from a different point.
+/// This avoids accidental loss of an in-progress selection.
+pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) {
+    if state.selection.is_caret() {
+        state.selection.begin_selection_from_caret(SelectionSource::KeyboardMode);
+        state.needs_redraw = true;
+    }
+    // If selection already exists: no-op. Document the policy — user must
+    // clear (Esc) and re-enter selection mode to restart from caret.
+}
+
+/// Toggle which endpoint of the selection is active (anchor vs focus).
+///
+/// After toggling, movement keys update the other end of the selection.
+/// This lets the keyboard user grow the selection from both ends without
+/// restarting.
+pub fn handle_toggle_selection_endpoint(state: &mut AppState, _action: &WmAction) {
+    state.selection.toggle_selection_endpoint();
+    state.needs_redraw = true;
+}
+
 /// Clear the active selection and exit selection input mode.
 pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) {
     state.selection.clear();
@@ -1562,15 +1591,70 @@ pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
-/// Placeholder for the future copy-selection action.
+/// Copy the active host-grid selection text to the system clipboard.
 ///
-/// Routes the action today so it is reachable from `config.toml` and RPC
-/// without forcing a fake implementation. The real clipboard integration
-/// belongs to Phase 10. The handler is intentionally minimal — a real
-/// implementation will need clipboard state and the active selection owner.
+/// Routes through the action registry so it is reachable from keyboard,
+/// mouse/UI, and RPC. The extraction uses the shared `SelectionState` and
+/// the terminal backend snapshot — no terminal-only selection state.
+///
+/// # Clipboard contract
+///
+/// - Uses the system clipboard via `arboard`.
+/// - If clipboard write fails, logs in debug builds and keeps app state coherent.
+/// - Does NOT clear the selection after copy — the user clears explicitly.
+/// - Safe no-op when there is no active selection or the owner is unsupported.
 pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
-    // Phase 10 will extract the selected text from the active selection
-    // owner and write it to the system clipboard.
+    let text = {
+        let active = match state.selection.active() {
+            Some(a) => a,
+            None => return, // No active selection — safe no-op.
+        };
+        let SelectionOwner::Pane(pane_id) = active.owner;
+        // Only host-grid selections are extractable for now.
+        match &active.region {
+            SelectionRegion::HostGrid { .. } => {}
+            SelectionRegion::BackendNative => return, // Unsupported — safe no-op.
+        }
+
+        // Get the terminal snapshot for the owning pane.
+        let snapshot = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+            Some(s) => s,
+            None => return, // No snapshot — safe no-op.
+        };
+
+        // Extract text using the shared extraction logic.
+        match crate::app::selection_model::extract_selection_text(
+            &state.selection,
+            &snapshot.lines,
+            snapshot.cols,
+            snapshot.default_bg,
+        ) {
+            Some(t) => t,
+            None => return, // Extraction returned nothing — safe no-op.
+        }
+    };
+
+    if text.is_empty() {
+        return;
+    }
+
+    // Write to system clipboard.
+    match arboard::Clipboard::new() {
+        Ok(mut clipboard) => {
+            if let Err(e) = clipboard.set_text(&text) {
+                #[cfg(debug_assertions)]
+                eprintln!("[heca] clipboard write failed: {e}");
+                let _ = e; // Suppress unused warning in release.
+            }
+        }
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[heca] clipboard unavailable: {e}");
+            let _ = e;
+        }
+    }
+
+    // Do NOT clear the selection after copy — the user clears explicitly.
     state.needs_redraw = true;
 }
 

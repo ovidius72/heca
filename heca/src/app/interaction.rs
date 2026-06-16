@@ -231,7 +231,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SelectionDown
         | WmAction::ClearSelection
         | WmAction::CopySelection
-        | WmAction::PasteClipboard => ActionPolicy::FocusedPaneLocal,
+        | WmAction::PasteClipboard
+        | WmAction::BeginSelection
+        | WmAction::ToggleSelectionEndpoint => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -726,6 +728,7 @@ mod tests {
             WmAction::SelectionLeft, WmAction::SelectionRight,
             WmAction::SelectionUp, WmAction::SelectionDown,
             WmAction::CopySelection, WmAction::PasteClipboard,
+            WmAction::BeginSelection, WmAction::ToggleSelectionEndpoint,
         ];
         for action in &unit_actions {
             let _policy = action_policy(action);

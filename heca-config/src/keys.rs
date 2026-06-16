@@ -561,6 +561,32 @@ impl Default for KeysConfig {
                 keys: "ArrowDown".to_string(),
                 args: HashMap::new(),
             },
+            // Copy: direct key in selection mode (like tmux copy-mode `y`).
+            // Routed through action registry, not hardcoded.
+            Mbc {
+                action: "copy_selection".to_string(),
+                keys: "y".to_string(),
+                args: HashMap::new(),
+            },
+            // Begin selection: direct keys that start selection from the caret.
+            // `v` is the vi-like visual-selection key; `Space` is an alternative
+            // for users who prefer it (both do the same thing).
+            Mbc {
+                action: "begin_selection".to_string(),
+                keys: "v".to_string(),
+                args: HashMap::new(),
+            },
+            Mbc {
+                action: "begin_selection".to_string(),
+                keys: "Space".to_string(),
+                args: HashMap::new(),
+            },
+            // Toggle active endpoint: swap which end of the selection moves.
+            Mbc {
+                action: "toggle_selection_endpoint".to_string(),
+                keys: "o".to_string(),
+                args: HashMap::new(),
+            },
         ];
         mode.push(KeyModeConfig {
             name: "selection".to_string(),
