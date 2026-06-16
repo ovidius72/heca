@@ -548,7 +548,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // implement rounded corner clipping. When the heca-grid-ui Scene integration
     // replaces the primitive draw_border path, radius will take full effect.
     // Until then, `draw_border` draws straight rectangles regardless of this value.
-    let _pane_border_radius = state.appearance.effective_pane_border_radius(theme);
+    let pane_border_radius = state.appearance.effective_pane_border_radius(theme);
 
     let pane_positions = state
         .session
@@ -573,34 +573,81 @@ pub(crate) fn render_frame(state: &mut AppState) {
         surface_physical_size,
     );
 
-    // ── Pass 1: Pane borders (under terminal content) ──
-    // Draw all borders first so they appear below terminal content when columns
-    // overlap during scrolling. Borders use draw_border (inside the pane rect)
-    // so they stay within the pane bounds and leave gap space clean. Terminal
-    // content fills an inset rect (content_rect = pane_rect - border_width)
-    // so borders are never covered.
-    for (pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        let is_active = active_pane_id == Some(*pane_id);
-        let bcolor = if is_active {
-            pane_active_border_color
-        } else {
-            pane_border_color
-        };
-        state
-            .primitive_renderer
-            .draw_border(px, py, pw, ph, bcolor, pane_border_width);
+    // ── Pass 1: Pane chrome Scene (rounded borders via grid renderer) ──
+    //
+    // Build a Scene with a rounded-rect outline for each tiled pane so the
+    // pane_border_radius config value takes effect. The Scene is rendered via
+    // the GridRenderer (same path as the chrome sidebar) before terminal
+    // content, so borders sit below terminal fills. The pane area clip
+    // prevents border overflow under the tab bar / status bar.
+    if !pane_positions.is_empty() {
+        let mut pane_scene = heca_grid_ui::Scene::new();
+        {
+            use heca_grid_ui::color::Color as GuiColor;
+            use heca_grid_ui::scene::Border;
+            use heca_grid_ui::theme::Theme as GuiTheme;
+            use heca_grid_ui::PaintCx;
+
+            let gui_theme = GuiTheme::grid_tron();
+            let mut cx = PaintCx::new(&mut pane_scene, &gui_theme)
+                .with_viewport(heca_grid_ui::Size::new(w as f64, h as f64));
+
+            // Clip to the pane content area so borders don't bleed under
+            // the chrome (tab bar, status bar).
+            cx.with_clip(
+                Rectangle::new(
+                    Point::new(pane_area.loc.x, pane_area.loc.y),
+                    Size::new(pane_area.size.w, pane_area.size.h),
+                ),
+                |cx| {
+                    for (pane_id, rect) in &pane_positions {
+                        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+                        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+                        let pw = rect.size.w as f32;
+                        let ph = rect.size.h as f32;
+                        let is_active = active_pane_id == Some(*pane_id);
+                        let bcolor = if is_active {
+                            pane_active_border_color
+                        } else {
+                            pane_border_color
+                        };
+
+                        // Clamp radius so it never exceeds half the smaller
+                        // pane dimension (avoids rendering artifacts).
+                        let max_r = pw.min(ph) * 0.5;
+                        let radius = pane_border_radius.min(max_r).max(0.0);
+
+                        cx.rect(
+                            heca_grid_ui::Rectangle::new(
+                                heca_grid_ui::Point::new(px as f64, py as f64),
+                                heca_grid_ui::Size::new(pw as f64, ph as f64),
+                            ),
+                            GuiColor::TRANSPARENT,
+                            Some(Border {
+                                color: GuiColor::new(
+                                    (bcolor[0] * 255.0) as u8,
+                                    (bcolor[1] * 255.0) as u8,
+                                    (bcolor[2] * 255.0) as u8,
+                                    (bcolor[3] * 255.0) as u8,
+                                ),
+                                width: pane_border_width,
+                            }),
+                            radius,
+                            None, // glow
+                        );
+                    }
+                },
+            );
+        }
+        render_chrome(
+            &mut state.grid_renderer,
+            &mut state.text_renderer,
+            &state.queue,
+            &pane_scene,
+            scene_view,
+            &mut encoder,
+        );
     }
-    // Flush all borders before terminal content.
-    state
-        .primitive_renderer
-        .render_clipped(&state.device, scene_view, &mut encoder, content_scissor);
-    state
-        .text_renderer
-        .render(&state.queue, scene_view, &mut encoder);
 
     // ── Pass 2: Terminal content (on top of borders) ──
     // Pre-compute the pane background color from theme, modulated by surface
