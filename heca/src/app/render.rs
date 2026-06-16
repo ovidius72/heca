@@ -542,7 +542,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
 
-<<<<<<< HEAD
     // ── In-app frosted backdrop blur (two-pass) ──
     //
     // Both tiled and floating panes receive frosted backdrop stamps, per the task
@@ -595,56 +594,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // replaces the primitive draw_border path, radius will take full effect.
     // Until then, `draw_border` draws straight rectangles regardless of this value.
     let pane_border_radius = state.appearance.effective_pane_border_radius(theme);
-||||||| 1e1009b
-    let theme_border = theme.border.to_f32x4();
-    let border_width = theme.border_width;
-    let accent_color = theme.accent.to_f32x4();
-=======
-    // ── In-app frosted backdrop blur (two-pass) ──
-    //
-    // Both tiled and floating panes receive frosted backdrop stamps, per the task
-    // spec ("apply the same surface policy to tiled and floating panes").
-    //
-    // Two blur passes are needed so each pane type frosts the content actually
-    // behind it:
-    //
-    //   Pass 1: blur the chrome/background (no pane content yet).
-    //     → Stamped behind tiled panes (frosts chrome/adjacent gaps).
-    //
-    //   Pass 2: blur the scene including tiled pane content.
-    //     → Stamped behind floating panes (frosts the tiled content behind them).
-    //
-    // This is O(2) blurs per frame (not per-pane), which satisfies the performance
-    // requirement ("avoid per-pane full-scene blur recomputation").
-    //
-    // Correct unit conversion: `appearance.blur_radius()` returns logical px,
-    // but `Blur::process` consumes source-texture pixels (physical px for the
-    // compositor scene texture). Scale by `scale_factor`.
-    //
-    // Policy: no visible pane frosting unless the pane surface actually has
-    // alpha to reveal it (`terminal_surface_opacity() < 1.0`). When blur is 0
-    // or transparency is off, this is a no-op (radius 0 = passthrough).
-    let needs_frosted_backdrop = state.appearance.is_transparent()
-        && state.appearance.blur_radius() > 0.0;
-    let mut tiled_blurred_view: Option<&wgpu::TextureView> = None;
-    let mut float_blurred_view: Option<&wgpu::TextureView> = None;
-
-    // Blur pass 1: chrome/background only (before any pane content).
-    if needs_frosted_backdrop {
-        let radius_physical = state.appearance.blur_radius() * state.scale_factor as f32;
-        tiled_blurred_view = Some(state.blur.process(
-            &state.device,
-            &state.queue,
-            &mut encoder,
-            scene_view,
-            radius_physical,
-        ));
-    }
-
-    let theme_border = theme.border.to_f32x4();
-    let border_width = theme.border_width;
-    let accent_color = theme.accent.to_f32x4();
->>>>>>> origin/terminal-backlog-bell
 
     let pane_positions = state
         .session
@@ -781,32 +730,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         };
 
         if let Some(content_rect) = content_rect {
-            // ── Frosted backdrop stamp for tiled pane surfaces ──
-            //
-            // When transparency + in-app blur are enabled, stamp the pre-computed
-            // blurred chrome/background behind each tiled pane rect so the frosted-glass
-            // effect is visible through the translucent surface fill.
-            //
-            // Physical px conversion: pane rect is in logical px, backdrop uses
-            // physical px (matching the compositor scene texture).
-            if let Some(blurred) = tiled_blurred_view {
-                let scale = state.scale_factor as f32;
-                let vp_w = surface_physical_size.width as f32;
-                let vp_h = surface_physical_size.height as f32;
-                let dst = (px * scale, py * scale, pw * scale, ph * scale);
-                state.backdrop.draw(
-                    &state.device,
-                    &state.queue,
-                    &mut encoder,
-                    scene_view,
-                    blurred,
-                    (vp_w, vp_h),
-                    dst,
-                    None, // src_uv = None: sample same screen location
-                    surface_alpha,
-                );
-            }
-
             if let Some(mount) = pane_mount {
                 let selection_overlay =
                     selection_overlay_for_pane(state, *pane_id, mount.snapshot.cols);
@@ -835,40 +758,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 let content_box = rect_to_text_box(content_rect);
                 state
                     .primitive_renderer
-<<<<<<< HEAD
                     .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, pane_bg);
-||||||| 1e1009b
-                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, [0.118, 0.118, 0.180, 1.0]);
-=======
-                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, [0.118, 0.118, 0.180, surface_alpha]);
->>>>>>> origin/terminal-backlog-bell
             }
         } else {
             state
                 .primitive_renderer
-<<<<<<< HEAD
                 .draw_rect(px, py, pw, ph, pane_bg);
-||||||| 1e1009b
-                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 1.0]);
-        }
-
-        if is_active {
-            active_tiled_borders.push((px, py, pw, ph, bcolor, pane_border_width, focus_outline_width));
-        } else {
-            state
-                .primitive_renderer
-                .draw_border(px, py, pw, ph, bcolor, pane_border_width);
-=======
-                .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, surface_alpha]);
-        }
-
-        if is_active {
-            active_tiled_borders.push((px, py, pw, ph, bcolor, pane_border_width, focus_outline_width));
-        } else {
-            state
-                .primitive_renderer
-                .draw_border(px, py, pw, ph, bcolor, pane_border_width);
->>>>>>> origin/terminal-backlog-bell
         }
     }
     // ── End pass 2 (terminal content flushed inside render_terminal_mount) ──
@@ -923,7 +818,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 None
             };
             if let Some(content_rect) = content_rect {
-<<<<<<< HEAD
                 // ── Frosted backdrop stamp for floating pane surfaces ──
                 //
                 // Uses blur pass 2 (includes tiled content) so floating panes frost
@@ -983,31 +877,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     state.grid_renderer.render(&state.queue, scene_view, &mut encoder);
                 }
 
-||||||| 1e1009b
-=======
-                // ── Frosted backdrop stamp for floating pane surfaces ──
-                //
-                // Uses blur pass 2 (includes tiled content) so floating panes frost
-                // the actual tiled pane content behind them.
-                if let Some(blurred) = float_blurred_view {
-                    let scale = state.scale_factor as f32;
-                    let vp_w = surface_physical_size.width as f32;
-                    let vp_h = surface_physical_size.height as f32;
-                    let dst = (fx * scale, fy * scale, fw * scale, fh * scale);
-                    state.backdrop.draw(
-                        &state.device,
-                        &state.queue,
-                        &mut encoder,
-                        scene_view,
-                        blurred,
-                        (vp_w, vp_h),
-                        dst,
-                        None,
-                        surface_alpha,
-                    );
-                }
-
->>>>>>> origin/terminal-backlog-bell
                 if let Some(mount) = pane_mount {
                     let selection_overlay =
                         selection_overlay_for_pane(state, float.pane.id, mount.snapshot.cols);
