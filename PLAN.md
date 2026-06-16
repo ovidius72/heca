@@ -105,6 +105,13 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   grip/item (via `MarkerGroup::hovered()` + the same `resolve_at`/`source_at` "is draggable" test)
   →`Grab`; else default. Build it general so it extends to text I-beam / resize cursors later.
   Deferred to here because `Grab`-on-hover would be a lie until items are actually `.draggable`.
+- **Hover dispatch (decided 2026-06-16; belongs HERE): the app must feed `PointerMoved` into the
+  retained chrome tree.** Today only `PointerPressed` is dispatched (`chrome_dispatch_click`), so
+  `MarkerGroup`/`Row` `hovered` never updates in the app — the grip hover/grab affordance is inert
+  in the real sidebar (works in the showcase, which runs a full event loop). Wire move-dispatch +
+  repaint into the cursor-moved path alongside the cursor policy + drag, so the grab affordance and
+  drag light up together (a hover "grab me" cue is meaningless until drag works). The widget is
+  already correct — this is app interaction wiring only.
 
 ### P3 — Pane numbering feature (agreed, spec'd — memory `heca-pane-numbering-spec`)
 - `prefix+<ws 1-9>+<pane 1-9>` → focus that pane (deterministic cross-ws chord; ws-switch is

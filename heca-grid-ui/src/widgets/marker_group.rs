@@ -48,9 +48,12 @@ const BAR_INSET: f64 = 2.0;
 const INACTIVE_BAR_ALPHA: u8 = 90;
 /// Bar alpha when **hovered but inactive** — brighter than resting, to read as grabbable.
 const HOVER_BAR_ALPHA: u8 = 170;
-/// Glow radius (logical px) of the active bar.
+/// Base glow falloff radius (logical px) of the active bar. **Config-driven:**
+/// `cx.rect` scales this by `theme.glow_size` and drops the glow entirely at
+/// `GlowLevel::None` (see [`PaintCx::rect`](crate::component::PaintCx::rect)).
 const BAR_GLOW_RADIUS: f32 = 8.0;
-/// Glow intensity of the active bar.
+/// Base glow strength of the active bar, **scaled at paint by `theme.intensity`**
+/// (`Off` ⇒ no glow). Config-driven, not a fixed look.
 const BAR_GLOW_INTENSITY: f32 = 0.16;
 
 /// A vertical group of rows with a left marker bar. Flip
@@ -145,9 +148,12 @@ impl Component for MarkerGroup {
         // grip is hovered; a dimmed accent at rest.
         let active = self.active.get_untracked();
         let hovered = self.hovered.get_untracked();
-        let (accent, glow_c) = {
+        // All effect parameters come from the theme (→ config.toml): glow color, plus
+        // its strength via `intensity` (radius/enable are scaled in `cx.rect` by
+        // `glow_size`). Nothing about the *look* is fixed here.
+        let (accent, glow_c, glow_strength) = {
             let t = cx.theme();
-            (t.accent, t.glow)
+            (t.accent, t.glow, t.intensity.glow_scale())
         };
         let b = self.base.bounds;
         let bar_w = if hovered { BAR_W_HOVER } else { BAR_W };
@@ -156,7 +162,12 @@ impl Component for MarkerGroup {
             Size::new(bar_w, (b.size.h - 2.0 * BAR_INSET).max(0.0)),
         );
         let (color, glow) = if active {
-            (accent, Some(Glow { color: glow_c, radius: BAR_GLOW_RADIUS, intensity: BAR_GLOW_INTENSITY }))
+            let g = Glow {
+                color: glow_c,
+                radius: BAR_GLOW_RADIUS,
+                intensity: BAR_GLOW_INTENSITY * glow_strength,
+            };
+            (accent, Some(g))
         } else if hovered {
             (accent.with_alpha(HOVER_BAR_ALPHA), None)
         } else {
