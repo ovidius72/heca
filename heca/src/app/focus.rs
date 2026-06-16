@@ -128,4 +128,8 @@ pub(crate) fn sync_focus(state: &mut AppState) {
         state.focused_pane,
         &state.last_visited_pane_per_ws,
     );
+    // Re-project the canonical workspace-collapse set (chrome_state) onto the rebuilt
+    // tree — sync_from_session defaults to expanded.
+    let collapsed = state.chrome_state.with_collapsed_ws(|s| s.clone());
+    state.sidebar_tree.apply_ws_collapsed(&collapsed, None);
 }

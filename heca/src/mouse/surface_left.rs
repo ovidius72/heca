@@ -126,7 +126,7 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
                     return Some(WmAction::FocusPane { pane_id });
                 }
                 crate::chrome::ChromeClick::WorkspaceToggle(ws_idx) => {
-                    state.sidebar_tree.toggle_workspace_collapsed(ws_idx);
+                    crate::handlers::apply_ws_collapse(state, ws_idx, None);
                     state.needs_redraw = true;
                     return None;
                 }

@@ -1213,7 +1213,7 @@ pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.collapse();
+        state.sidebar_tree.collapse(&state.chrome_state);
         state.needs_redraw = true;
     }
 }
@@ -1231,7 +1231,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 state.input_mode = InputMode::Normal;
             }
             _ => {
-                state.sidebar_tree.expand();
+                state.sidebar_tree.expand(&state.chrome_state);
             }
         }
         state.needs_redraw = true;
@@ -1245,7 +1245,7 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
             Some(sidebar::SidebarItem::Pane { .. })
             | Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
-                state.sidebar_tree.toggle_expand();
+                state.sidebar_tree.toggle_expand(&state.chrome_state);
             }
         }
         state.needs_redraw = true;
@@ -1407,11 +1407,22 @@ pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) 
     }
 }
 
+/// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
+/// then project it into the sidebar nav model. `collapse = None` toggles.
+pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: Option<bool>) {
+    match collapse {
+        Some(c) => state.chrome_state.set_ws_collapsed(ws_idx, c),
+        None => state.chrome_state.toggle_ws_collapsed(ws_idx),
+    }
+    let set = state.chrome_state.with_collapsed_ws(|s| s.clone());
+    state.sidebar_tree.apply_ws_collapsed(&set, Some(ws_idx));
+}
+
 pub fn handle_collapse_current_workspace(state: &mut AppState, _action: &WmAction) {
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.collapse_workspace(ws_idx);
+    apply_ws_collapse(state, ws_idx, Some(true));
     state.needs_redraw = true;
 }
 
@@ -1419,7 +1430,7 @@ pub fn handle_expand_current_workspace(state: &mut AppState, _action: &WmAction)
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.expand_workspace(ws_idx);
+    apply_ws_collapse(state, ws_idx, Some(false));
     state.needs_redraw = true;
 }
 
@@ -1427,7 +1438,7 @@ pub fn handle_toggle_current_workspace_collapsed(state: &mut AppState, _action: 
     let Some(ws_idx) = current_active_workspace_idx(state) else {
         return;
     };
-    state.sidebar_tree.toggle_workspace_collapsed(ws_idx);
+    apply_ws_collapse(state, ws_idx, None);
     state.needs_redraw = true;
 }
 

@@ -115,12 +115,9 @@ impl SidebarTree {
         focused_pane: Option<PaneId>,
         last_visited_pane_per_ws: &[Option<PaneId>],
     ) {
-        // Preserve collapsed state across rebuild.
-        let prev_ws_collapsed: std::collections::HashMap<usize, bool> = self
-            .workspaces
-            .iter()
-            .map(|w| (w.ws_idx, w.collapsed))
-            .collect();
+        // Preserve column collapse across rebuild. Workspace collapse is owned by
+        // `chrome_state.collapsed_ws` now — callers re-apply it via `apply_ws_collapsed`
+        // after sync (so it defaults to expanded here).
         let prev_col_collapsed: std::collections::HashMap<(usize, usize), bool> = self
             .workspaces
             .iter()
@@ -148,7 +145,8 @@ impl SidebarTree {
 
             let last_visited_in_ws = last_visited_pane_per_ws.get(ws_idx).copied().flatten();
 
-            let collapsed = prev_ws_collapsed.get(&ws_idx).copied().unwrap_or(false);
+            // Defaults to expanded; chrome_state's collapse set is applied post-sync.
+            let collapsed = false;
 
             let mut ws_entry = SidebarWsEntry {
                 ws_idx,
@@ -404,46 +402,29 @@ impl SidebarTree {
         }
     }
 
-    pub fn toggle_workspace_collapsed(&mut self, ws_idx: usize) {
-        let move_cursor_to_parent = self.current_item_in_workspace(ws_idx)
-            && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx);
-        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
-            ws_entry.collapsed = !ws_entry.collapsed;
-            let now_collapsed = ws_entry.collapsed;
-            self.sync_flat_items();
-            if move_cursor_to_parent
-                && now_collapsed
-                && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
-            {
-                self.cursor = parent_idx;
-            }
-            self.clamp_cursor();
+    /// Project the canonical workspace-collapse set (`chrome_state.collapsed_ws`)
+    /// into the nav model: refresh the `WsEntry.collapsed` mirror from `set`, rebuild
+    /// the flat list, and adjust the cursor (when `changed_ws` just became collapsed
+    /// and the cursor was inside it, move it to the workspace header). Collapse is
+    /// owned by `chrome_state`; this only mirrors it for navigation/rendering.
+    pub fn apply_ws_collapsed(&mut self, set: &std::collections::HashSet<usize>, changed_ws: Option<usize>) {
+        // Decide the cursor move BEFORE the flat list changes (indices shift on sync).
+        let move_cursor_to_parent = changed_ws.is_some_and(|ws_idx| {
+            set.contains(&ws_idx)
+                && self.current_item_in_workspace(ws_idx)
+                && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx)
+        });
+        for ws_entry in &mut self.workspaces {
+            ws_entry.collapsed = set.contains(&ws_entry.ws_idx);
         }
-    }
-
-    pub fn expand_workspace(&mut self, ws_idx: usize) {
-        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx)
-            && ws_entry.collapsed
+        self.sync_flat_items();
+        if move_cursor_to_parent
+            && let Some(ws_idx) = changed_ws
+            && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
         {
-            ws_entry.collapsed = false;
-            self.sync_flat_items();
-            self.clamp_cursor();
+            self.cursor = parent_idx;
         }
-    }
-
-    pub fn collapse_workspace(&mut self, ws_idx: usize) {
-        let move_cursor_to_parent = self.current_item_in_workspace(ws_idx)
-            && !matches!(self.current_item(), Some(SidebarItem::Workspace { ws_idx: item_ws }) if *item_ws == ws_idx);
-        if let Some(ws_entry) = self.workspaces.get_mut(ws_idx) {
-            ws_entry.collapsed = true;
-            self.sync_flat_items();
-            if move_cursor_to_parent
-                && let Some(parent_idx) = self.workspace_flat_index(ws_idx)
-            {
-                self.cursor = parent_idx;
-            }
-            self.clamp_cursor();
-        }
+        self.clamp_cursor();
     }
 
     pub fn toggle_column_collapsed(&mut self, ws_idx: usize, col_idx: usize) {
@@ -493,13 +474,16 @@ impl SidebarTree {
         }
     }
 
-    /// Toggle expand/collapse of the item under cursor.
-    pub fn toggle_expand(&mut self) {
+    /// Toggle expand/collapse of the item under cursor. Workspace collapse is owned
+    /// by `chrome_state`; columns stay in the tree.
+    pub fn toggle_expand(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
                     if let SidebarItem::Workspace { ws_idx } = item {
-                        self.toggle_workspace_collapsed(ws_idx);
+                        chrome_state.toggle_ws_collapsed(ws_idx);
+                        let set = chrome_state.with_collapsed_ws(|s| s.clone());
+                        self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 SidebarItemKind::Column => {
@@ -513,12 +497,14 @@ impl SidebarTree {
     }
 
     /// Expand the item under cursor (recurse into children).
-    pub fn expand(&mut self) {
+    pub fn expand(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
                     if let SidebarItem::Workspace { ws_idx } = item {
-                        self.expand_workspace(ws_idx);
+                        chrome_state.set_ws_collapsed(ws_idx, false);
+                        let set = chrome_state.with_collapsed_ws(|s| s.clone());
+                        self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 SidebarItemKind::Column => {
@@ -532,12 +518,14 @@ impl SidebarTree {
     }
 
     /// Collapse the item under cursor.
-    pub fn collapse(&mut self) {
+    pub fn collapse(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
                     if let SidebarItem::Workspace { ws_idx } = item {
-                        self.collapse_workspace(ws_idx);
+                        chrome_state.set_ws_collapsed(ws_idx, true);
+                        let set = chrome_state.with_collapsed_ws(|s| s.clone());
+                        self.apply_ws_collapsed(&set, Some(ws_idx));
                     }
                 }
                 SidebarItemKind::Column => {

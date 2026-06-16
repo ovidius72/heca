@@ -8,6 +8,22 @@
         types::{SessionId, Size},
     };
 
+    // Workspace collapse is owned by chrome_state; these helpers drive it the way the
+    // app does — mutate chrome_state, then project onto the tree via apply_ws_collapsed.
+    fn test_chrome() -> crate::chrome::SharedChromeState {
+        crate::chrome::SharedChromeState::new(200.0, true, 200.0, true)
+    }
+    fn toggle_ws(tree: &mut SidebarTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize) {
+        chrome.toggle_ws_collapsed(ws_idx);
+        let set = chrome.with_collapsed_ws(|s| s.clone());
+        tree.apply_ws_collapsed(&set, Some(ws_idx));
+    }
+    fn set_ws_collapsed(tree: &mut SidebarTree, chrome: &crate::chrome::SharedChromeState, ws_idx: usize, collapsed: bool) {
+        chrome.set_ws_collapsed(ws_idx, collapsed);
+        let set = chrome.with_collapsed_ws(|s| s.clone());
+        tree.apply_ws_collapsed(&set, Some(ws_idx));
+    }
+
     fn make_test_session() -> (Session, Vec<u64>) {
         let viewport = Size::new(1280.0, 800.0);
         let mut session = Session::new(
@@ -146,8 +162,9 @@
         );
 
         // Move cursor to workspace 0 and toggle expand
+        let chrome = test_chrome();
         tree.cursor = 0;
-        tree.toggle_expand();
+        tree.toggle_expand(&chrome);
 
         // Should now be collapsed
         assert!(
@@ -159,7 +176,7 @@
         let collapsed_count = tree.flat_items.len();
 
         // Toggle again to expand
-        tree.toggle_expand();
+        tree.toggle_expand(&chrome);
         assert!(
             !tree.workspaces[0].collapsed,
             "WS 0 should be expanded after second toggle"
@@ -328,9 +345,10 @@
             .position(|i| matches!(i, SidebarItem::Column { .. }))
             .expect("should have a column");
         tree.cursor = col_idx;
+        let chrome = test_chrome();
 
         // Collapse the column.
-        tree.toggle_expand();
+        tree.toggle_expand(&chrome);
         if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
             assert!(
                 tree.workspaces[ws_idx].columns[c].collapsed,
@@ -339,7 +357,7 @@
         }
 
         // Expand it back.
-        tree.toggle_expand();
+        tree.toggle_expand(&chrome);
         if let SidebarItem::Column { ws_idx, col_idx: c } = tree.flat_items[tree.cursor] {
             assert!(
                 !tree.workspaces[ws_idx].columns[c].collapsed,
@@ -361,7 +379,8 @@
             .expect("should have a pane row");
         tree.cursor = pane_idx;
 
-        tree.collapse_workspace(0);
+        let chrome = test_chrome();
+        set_ws_collapsed(&mut tree, &chrome, 0, true);
 
         assert!(matches!(
             tree.current_item(),
@@ -413,15 +432,16 @@
             .position(|item| matches!(item, SidebarItem::Pane { .. }))
             .expect("should have a pane row");
         tree.cursor = pane_idx;
+        let chrome = test_chrome();
 
-        tree.toggle_workspace_collapsed(0);
+        toggle_ws(&mut tree, &chrome, 0);
         assert!(tree.workspaces[0].collapsed);
         assert!(matches!(
             tree.current_item(),
             Some(SidebarItem::Workspace { ws_idx }) if *ws_idx == 0
         ));
 
-        tree.toggle_workspace_collapsed(0);
+        toggle_ws(&mut tree, &chrome, 0);
         assert!(!tree.workspaces[0].collapsed);
         assert!(matches!(
             tree.current_item(),
@@ -501,18 +521,22 @@
 
         // Collapse workspace 0.
         tree.cursor = 0;
-        tree.toggle_expand();
+        let chrome = test_chrome();
+        tree.toggle_expand(&chrome);
         assert!(
             tree.workspaces[0].collapsed,
             "WS 0 should be collapsed after toggle"
         );
         let collapsed_count = tree.flat_items.len();
 
-        // Rebuild from session — collapse state should survive.
+        // Rebuild from session — sync defaults to expanded; the app re-applies the
+        // canonical collapse set from chrome_state (as focus.rs does after sync).
         tree.sync_from_session(&session, None, Some(PaneId(1)), &[]);
+        let set = chrome.with_collapsed_ws(|s| s.clone());
+        tree.apply_ws_collapsed(&set, None);
         assert!(
             tree.workspaces[0].collapsed,
-            "WS 0 collapse should persist across rebuild"
+            "WS 0 collapse should persist across rebuild (via chrome_state)"
         );
         assert_eq!(
             tree.flat_items.len(),
