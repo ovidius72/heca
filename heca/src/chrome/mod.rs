@@ -93,7 +93,8 @@ use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, Pane, Row, Surface,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, MarkerGroup, Pane, Row,
+    Surface,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::cell::Cell;
@@ -157,10 +158,14 @@ fn pane_card(
     active_pane: Option<PaneId>,
 ) -> Row {
     let active = active_pane == Some(pane.pane_id);
-    let tint = if active { theme.accent } else { theme.foreground };
     let pane_id = pane.pane_id;
+    // A constant theme-driven card; the *selected* look (accent pill + border + bar)
+    // is drawn by `Row` from its `active` signal, not baked into the background. This
+    // keeps styling fully signal-driven (so active state can later flip without a
+    // tree rebuild) and theme-driven (no ad-hoc per-state alphas).
     Row::new()
-        .background(tint.with_alpha(if active { 30 } else { 12 }))
+        .background(theme.foreground.with_alpha(12))
+        .highlight(theme.accent)
         .radius(theme.control_radius())
         .padding(6.0)
         .marker(ActiveMarker::Bar)
@@ -172,47 +177,30 @@ fn pane_card(
             Flex::row()
                 .align(Align::Center)
                 .gap(8.0)
-                .child(Icon::new(pane_glyph(&pane.name)).size(16.0).color(tint))
-                .child(Label::new(pane.name.clone()).color(if active {
-                    theme.accent
-                } else {
-                    theme.foreground
-                })),
+                .child(Icon::new(pane_glyph(&pane.name)).size(16.0).color(theme.foreground))
+                .child(Label::new(pane.name.clone()).color(theme.foreground)),
         )
 }
 
-/// One **column**, rendered compactly: a full-height left **marker bar** + the
-/// column's stacked pane cards — no per-column header row (columns are spatial
+/// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
+/// the column's stacked pane cards — no per-column header row (columns are spatial
 /// groupings whose only user-facing job is to be a move/swap target + drag handle).
-/// The bar is the **seam** for that: the move/swap letter target and future DnD
-/// drag handle attach here (wired with the F4 shared-state layer). The bar brightens
-/// to the accent when the column holds the active pane. `Align::Stretch` (the Flex
-/// default) makes the fixed-width bar span the height of the pane stack.
+/// The `MarkerGroup` bar brightens to the accent when the column holds the active
+/// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
+/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
+/// baked into the widget.
 fn column_view(
     c: &SidebarColEntry,
     theme: &GuiTheme,
     sink: &SidebarClickSink,
     active_pane: Option<PaneId>,
-) -> Flex {
+) -> MarkerGroup {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
-    let bar_color = if active {
-        theme.accent
-    } else {
-        theme.accent.with_alpha(90)
-    };
-    let mut panes = Flex::column().gap(3.0).grow(1.0);
+    let mut col = MarkerGroup::new().active(active).gap(3.0);
     for pane in &c.panes {
-        panes = panes.child(pane_card(pane, theme, sink.clone(), active_pane));
+        col = col.child(pane_card(pane, theme, sink.clone(), active_pane));
     }
-    Flex::row()
-        .gap(6.0)
-        .child(
-            Surface::new()
-                .width(Length::Px(3.0))
-                .radius(1.5)
-                .background(bar_color),
-        )
-        .child(panes)
+    col
 }
 
 /// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
