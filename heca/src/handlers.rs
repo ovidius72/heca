@@ -1213,7 +1213,7 @@ pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_left_nav(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        state.sidebar_tree.collapse(&state.chrome_state);
+        state.sidebar_tree.collapse(&state.chrome_state.workspaces);
         state.needs_redraw = true;
     }
 }
@@ -1231,7 +1231,7 @@ pub fn handle_sidebar_right_nav(state: &mut AppState, _action: &WmAction) {
                 state.input_mode = InputMode::Normal;
             }
             _ => {
-                state.sidebar_tree.expand(&state.chrome_state);
+                state.sidebar_tree.expand(&state.chrome_state.workspaces);
             }
         }
         state.needs_redraw = true;
@@ -1245,7 +1245,7 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
             Some(sidebar::SidebarItem::Pane { .. })
             | Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
-                state.sidebar_tree.toggle_expand(&state.chrome_state);
+                state.sidebar_tree.toggle_expand(&state.chrome_state.workspaces);
             }
         }
         state.needs_redraw = true;
@@ -1411,10 +1411,10 @@ pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) 
 /// then project it into the sidebar nav model. `collapse = None` toggles.
 pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: Option<bool>) {
     match collapse {
-        Some(c) => state.chrome_state.set_ws_collapsed(ws_idx, c),
-        None => state.chrome_state.toggle_ws_collapsed(ws_idx),
+        Some(c) => state.chrome_state.workspaces.set_ws_collapsed(ws_idx, c),
+        None => state.chrome_state.workspaces.toggle_ws_collapsed(ws_idx),
     }
-    let set = state.chrome_state.with_collapsed_ws(|s| s.clone());
+    let set = state.chrome_state.workspaces.with_collapsed_ws(|s| s.clone());
     state.sidebar_tree.apply_ws_collapsed(&set, Some(ws_idx));
 }
 

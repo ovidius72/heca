@@ -476,7 +476,7 @@ impl SidebarTree {
 
     /// Toggle expand/collapse of the item under cursor. Workspace collapse is owned
     /// by `chrome_state`; columns stay in the tree.
-    pub fn toggle_expand(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
+    pub fn toggle_expand(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
@@ -497,7 +497,7 @@ impl SidebarTree {
     }
 
     /// Expand the item under cursor (recurse into children).
-    pub fn expand(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
+    pub fn expand(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
@@ -518,7 +518,7 @@ impl SidebarTree {
     }
 
     /// Collapse the item under cursor.
-    pub fn collapse(&mut self, chrome_state: &crate::chrome::SharedChromeState) {
+    pub fn collapse(&mut self, chrome_state: &crate::chrome::WorkspacesContainerState) {
         if let Some(item) = self.flat_items.get(self.cursor).cloned() {
             match item.kind() {
                 SidebarItemKind::Workspace => {
