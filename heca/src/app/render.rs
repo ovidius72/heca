@@ -1004,11 +1004,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
         );
     }
 
-    if let Some(label) = state
-        .mouse
-        .drag_ctx
-        .surface(DragSurfaceId::LeftSidebar)
-        .and_then(|s| s.ghost_label.as_ref())
+    // Legacy hand-drawn ghost — only for the COLLAPSED rail. When the sidebar is
+    // expanded the grid-ui chrome shell is painted on top (covering this), so the
+    // ghost is drawn into the chrome scene instead via `paint_drag_overlay` below.
+    if chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
+        && let Some(label) = state
+            .mouse
+            .drag_ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .and_then(|s| s.ghost_label.as_ref())
     {
         let ghost_w = label.width;
         let ghost_h = 22.0;
@@ -1147,12 +1151,18 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // focus/mode changes update in place without a rebuild (the signature excludes them).
     crate::chrome::sync_chrome_signals(state);
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
-    let chrome_scene = crate::chrome::paint_chrome_root(
+    let mut chrome_scene = crate::chrome::paint_chrome_root(
         &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
         w,
         h,
         &chrome_theme,
     );
+    // F4.5 1b — in-drag visuals on the expanded sidebar: paint the drop indicator +
+    // ghost into the chrome scene so they sit ON TOP of the grid-ui shell. (Collapsed
+    // rail uses the hand-drawn ghost above.)
+    if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+        crate::chrome::paint_drag_overlay(state, &mut chrome_scene, w, h, &chrome_theme);
+    }
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,

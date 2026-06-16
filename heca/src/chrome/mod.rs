@@ -88,7 +88,8 @@ impl ChromeConfig {
 
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_core::layout::PaneId;
-use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
@@ -164,6 +165,10 @@ fn pane_card(
     // is drawn by `Row` from its `active` signal, not baked into the background. This
     // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
     // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
+    // Pane id encodes directly into the opaque DragItemId (panes are globally
+    // unique), so `drag::source_at`/`resolve_at` over the retained tree round-trip
+    // it without a side-map. The card is both a drag source and a drop target (F4.5).
+    let drag_id = DragItemId::new(pane_id.0 as usize);
     let card = Row::new()
         .background(theme.foreground.with_alpha(12))
         .highlight(theme.accent)
@@ -171,6 +176,8 @@ fn pane_card(
         .padding(6.0)
         .marker(ActiveMarker::Bar)
         .active(active)
+        .draggable(drag_id)
+        .drop_target(drag_id)
         // On click/Enter the card records its pane id in the host sink; the app reads
         // it after dispatch and focuses that pane (read-via-signal / write-via-action).
         .on_activate(move || sink.set(Some(pane_id)))
@@ -442,6 +449,46 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
     scene
 }
 
+/// Paint the in-flight sidebar-drag overlay (drop indicator + ghost chip) into the
+/// chrome `scene`, on top of the **expanded** grid-ui sidebar (F4.5 1b). Driven by the
+/// retained-tree geometry (`resolve_at`) — not the legacy fixed-row hit-test — so the
+/// indicator tracks the real laid-out pane cards. No-op unless a sidebar drag is in its
+/// `Dragging` phase. The collapsed rail keeps its own hand-drawn ghost/highlight, so the
+/// caller only invokes this for the expanded sidebar.
+pub(crate) fn paint_drag_overlay(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
+        return;
+    };
+    if !matches!(surf.phase, DragPhase::Dragging { .. }) {
+        return;
+    }
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+
+    // Drop indicator on the hovered pane card, from the retained tree's real bounds.
+    if let Some(tree) = state.chrome_tree.as_ref() {
+        let p = Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64);
+        if let Some(hit) = heca_grid_ui::drag::resolve_at(&tree.root, p) {
+            cx.drop_indicator(hit.bounds, hit.side);
+        }
+    }
+
+    // Ghost chip following the cursor (offset off the pointer + vertically centered,
+    // mirroring the legacy hand-drawn ghost so the two paths look identical).
+    if let Some(label) = &surf.ghost_label {
+        let rect = Rectangle::new(
+            Point::new((label.x + 10.0) as f64, (label.y - label.height / 2.0) as f64),
+            Size::new(label.width as f64, label.height as f64),
+        );
+        cx.drag_ghost(rect, &label.text);
+    }
+}
+
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
 /// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
 #[cfg(test)]
@@ -659,6 +706,26 @@ pub(crate) fn chrome_dispatch_click(
     } else {
         ChromeClick::None
     }
+}
+
+/// The pane a press at `pos` (logical window coords) would start dragging, found by
+/// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
+/// the legacy fixed-row `sidebar_hit_test`. `None` off any pane card.
+pub(crate) fn sidebar_drag_source(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<PaneId> {
+    let tree = state.chrome_tree.as_ref()?;
+    let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    Some(PaneId(id.raw() as u64))
+}
+
+/// The pane + [`DropSide`](heca_grid_ui::drag::DropSide) a drop at `pos` lands on, via
+/// the retained chrome tree. `None` off any pane card.
+pub(crate) fn sidebar_drop_target(
+    state: &crate::app_state::AppState,
+    pos: (f32, f32),
+) -> Option<(PaneId, heca_grid_ui::drag::DropSide)> {
+    let tree = state.chrome_tree.as_ref()?;
+    let hit = heca_grid_ui::drag::resolve_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    Some((PaneId(hit.id.raw() as u64), hit.side))
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,
