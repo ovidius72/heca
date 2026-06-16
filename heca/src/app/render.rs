@@ -1140,9 +1140,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let root = crate::chrome::build_chrome_root(state, chrome);
-        state.chrome_tree = Some(crate::chrome::RetainedChrome { root, sig: chrome_sig });
+        let (root, signals) = crate::chrome::build_chrome_root(state, chrome);
+        state.chrome_tree = Some(crate::chrome::RetainedChrome { root, sig: chrome_sig, signals });
     }
+    // Push value-state (selection + status) into the retained tree's bound signals so
+    // focus/mode changes update in place without a rebuild (the signature excludes them).
+    crate::chrome::sync_chrome_signals(state);
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let chrome_scene = crate::chrome::paint_chrome_root(
         &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
