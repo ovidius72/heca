@@ -573,7 +573,36 @@ pub(crate) fn render_frame(state: &mut AppState) {
         surface_physical_size,
     );
 
-    // ── Pass 1: Pane chrome Scene (rounded borders via grid renderer) ──
+    // ── Pass A: Frosted backdrop stamps (under borders) ──
+    //
+    // Stamp the blurred chrome/background behind each tiled pane rect FIRST
+    // so the border scene below sits on top of the frosted surface.
+    // This matches the float pane ordering: backdrop → border → content.
+    for (_pane_id, rect) in &pane_positions {
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        if let Some(blurred) = tiled_blurred_view {
+            let scale = state.scale_factor as f32;
+            let vp_w = surface_physical_size.width as f32;
+            let vp_h = surface_physical_size.height as f32;
+            let dst = (px * scale, py * scale, pw * scale, ph * scale);
+            state.backdrop.draw(
+                &state.device,
+                &state.queue,
+                &mut encoder,
+                scene_view,
+                blurred,
+                (vp_w, vp_h),
+                dst,
+                None,
+                surface_alpha,
+            );
+        }
+    }
+
+    // ── Pass B: Pane chrome Scene (rounded borders on top of backdrop) ──
     //
     // Build a Scene with a rounded-rect outline for each tiled pane so the
     // pane_border_radius config value takes effect. The Scene is rendered via
@@ -649,7 +678,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         );
     }
 
-    // ── Pass 2: Terminal content (on top of borders) ──
+    // ── Pass 2: Terminal content (on top of backdrop + borders) ──
     // Pre-compute the pane background color from theme, modulated by surface
     // opacity, for the fallback fill when no backend is mounted.
     let theme_base = theme.background.to_f32x4();
@@ -672,32 +701,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         };
 
         if let Some(content_rect) = content_rect {
-            // ── Frosted backdrop stamp for tiled pane surfaces ──
-            //
-            // When transparency + in-app blur are enabled, stamp the pre-computed
-            // blurred chrome/background behind each tiled pane rect so the frosted-glass
-            // effect is visible through the translucent surface fill.
-            //
-            // Physical px conversion: pane rect is in logical px, backdrop uses
-            // physical px (matching the compositor scene texture).
-            if let Some(blurred) = tiled_blurred_view {
-                let scale = state.scale_factor as f32;
-                let vp_w = surface_physical_size.width as f32;
-                let vp_h = surface_physical_size.height as f32;
-                let dst = (px * scale, py * scale, pw * scale, ph * scale);
-                state.backdrop.draw(
-                    &state.device,
-                    &state.queue,
-                    &mut encoder,
-                    scene_view,
-                    blurred,
-                    (vp_w, vp_h),
-                    dst,
-                    None, // src_uv = None: sample same screen location
-                    surface_alpha,
-                );
-            }
-
             if let Some(mount) = pane_mount {
                 let selection_overlay =
                     selection_overlay_for_pane(state, *pane_id, mount.snapshot.cols);
