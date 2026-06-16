@@ -89,7 +89,7 @@ impl ChromeConfig {
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_core::layout::PaneId;
 use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
-use heca_grid_ui::drag::DragItemId;
+use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
@@ -447,6 +447,46 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
         root.paint(&mut cx);
     }
     scene
+}
+
+/// Paint the in-flight sidebar-drag overlay (drop indicator + ghost chip) into the
+/// chrome `scene`, on top of the **expanded** grid-ui sidebar (F4.5 1b). Driven by the
+/// retained-tree geometry (`resolve_at`) — not the legacy fixed-row hit-test — so the
+/// indicator tracks the real laid-out pane cards. No-op unless a sidebar drag is in its
+/// `Dragging` phase. The collapsed rail keeps its own hand-drawn ghost/highlight, so the
+/// caller only invokes this for the expanded sidebar.
+pub(crate) fn paint_drag_overlay(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
+        return;
+    };
+    if !matches!(surf.phase, DragPhase::Dragging { .. }) {
+        return;
+    }
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+
+    // Drop indicator on the hovered pane card, from the retained tree's real bounds.
+    if let Some(tree) = state.chrome_tree.as_ref() {
+        let p = Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64);
+        if let Some(hit) = heca_grid_ui::drag::resolve_at(&tree.root, p) {
+            cx.drop_indicator(hit.bounds, hit.side);
+        }
+    }
+
+    // Ghost chip following the cursor (offset off the pointer + vertically centered,
+    // mirroring the legacy hand-drawn ghost so the two paths look identical).
+    if let Some(label) = &surf.ghost_label {
+        let rect = Rectangle::new(
+            Point::new((label.x + 10.0) as f64, (label.y - label.height / 2.0) as f64),
+            Size::new(label.width as f64, label.height as f64),
+        );
+        cx.drag_ghost(rect, &label.text);
+    }
 }
 
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree

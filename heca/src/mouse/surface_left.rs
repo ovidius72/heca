@@ -12,7 +12,7 @@ use crate::chrome::{DEFAULT_COLLAPSED_SIDEBAR_WIDTH, default_column_width};
 use crate::input::WmAction;
 use heca_core::layout::types::Point;
 use heca_core::layout::{ColumnId, ColumnWidth, PaneId};
-use heca_grid_ui::drag::{DragItemId, DragSurfaceId};
+use heca_grid_ui::drag::{DragItemId, DragSurfaceId, DropSide};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Geometry
@@ -237,11 +237,12 @@ pub(crate) fn accept_drop(
     state.mouse.drag_ctx.cancel_all();
     state.mouse.interactive_move = None;
 
-    // Drop target resolved from the RETAINED chrome tree's bounds (F4.5), not the
-    // legacy fixed-row geometry.
-    let target = crate::chrome::sidebar_drop_target(state, pos).map(|(pid, _side)| pid);
+    // Drop target + side resolved from the RETAINED chrome tree's bounds (F4.5), not
+    // the legacy fixed-row geometry. The side (Before/Onto/After, from vertical thirds)
+    // decides which edge of the target the source lands on.
+    let target = crate::chrome::sidebar_drop_target(state, pos);
 
-    if swap && let Some(target_pid) = target {
+    if swap && let Some((target_pid, _side)) = target {
         if target_pid != pane_id {
             crate::handlers::handle_swap_param(
                 state,
@@ -271,12 +272,13 @@ pub(crate) fn accept_drop(
 
     match target {
         // Dropped onto a pane card → place relative to it (reuses the Pane arm).
-        Some(target_pid) if target_pid != pane_id => {
+        Some((target_pid, side)) if target_pid != pane_id => {
             place_pane_at_sidebar_target(
                 state,
                 original_ws,
                 removed_pane,
                 crate::sidebar::SidebarItem::Pane { pane_id: target_pid },
+                side,
             );
         }
         // Off any card (or onto itself) → re-add to the active workspace.
@@ -315,6 +317,7 @@ fn place_pane_at_sidebar_target(
     original_ws: usize,
     pane: heca_core::layout::Pane,
     item: crate::sidebar::SidebarItem,
+    side: DropSide,
 ) {
     let default_width = state
         .session
@@ -328,9 +331,11 @@ fn place_pane_at_sidebar_target(
                 crate::find_pane_location(&state.session, target_pid)
             {
                 let new_col_id = ColumnId(state.session.next_id());
+                // Before → insert above the target; Onto/After → below it.
+                let pane_idx = if side == DropSide::Before { t_pi } else { t_pi + 1 };
                 let position = heca_core::layout::types::PaneInsertTarget::InColumn {
                     col_idx: t_col,
-                    pane_idx: t_pi + 1,
+                    pane_idx,
                 };
                 if let Some(ws) = state.session.workspaces.get_mut(t_ws) {
                     let _ = insert_pane_at_position(
