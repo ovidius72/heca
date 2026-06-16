@@ -164,10 +164,20 @@ reload_config   = "prefix+Shift+r"  # Reload config at runtime
 # y copies without leaving the mode; Esc clears and exits.
 enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only, no selection)
 clear_selection      = "prefix+Shift+s"  # Clear the active selection; exit selection mode
+<<<<<<< HEAD
 copy_selection       = "prefix+y"        # Copy selected text to system clipboard (also y in selection mode)
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]  # Paste clipboard into active pane (global + prefix)
 begin_selection      = <selection-mode-only>  # Start selection from caret (keys: v, Space)
 toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: o)
+||||||| 1e1009b
+copy_selection       = "prefix+y"        # Placeholder (Phase 10 clipboard)
+# paste_clipboard    = <no default>      # Bind in your config; placeholder (Phase 10)
+=======
+copy_selection       = "prefix+y"        # Copy selected text to system clipboard (also y in selection mode)
+# paste_clipboard    = <no default>      # Bind in your config if you want a default for paste
+begin_selection      = <selection-mode-only>  # Start selection from caret (keys: v, Space)
+toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: o)
+>>>>>>> origin/terminal-backlog-bell
 #
 # Built-in selection mode default bindings:
 #   h / ArrowLeft   -> selection_left    (move caret before selection, grow selection after)
