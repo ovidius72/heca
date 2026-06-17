@@ -829,20 +829,36 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .gap(8.0)
                 .child(Label::new("MARKER GROUP").color(theme.muted).font_scale(0.8))
                 .child(
+                    // Wide rows wrapped in KeyHint with `CenterRight`: the pick keycap
+                    // pins to the right edge (vs the rail's `Center`) so the row label
+                    // stays readable, and the transparent wrapper lets each row fill the
+                    // column width. Driven by the same `p` pick as the rail.
                     MarkerGroup::new()
                         .active(true)
                         .gap(4.0)
                         .draggable(DragItemId::new(900))
                         .drop_target(DragItemId::new(900))
-                        .child(Row::new().padding(6.0).child(Label::new("pane A")))
-                        .child(Row::new().padding(6.0).child(Label::new("pane B"))),
+                        .child(
+                            KeyHint::new(Row::new().padding(6.0).child(Label::new("pane A")))
+                                .hint(rail_hints[0])
+                                .placement(HintPlacement::CenterRight),
+                        )
+                        .child(
+                            KeyHint::new(Row::new().padding(6.0).child(Label::new("pane B")))
+                                .hint(rail_hints[1])
+                                .placement(HintPlacement::CenterRight),
+                        ),
                 )
                 .child(
                     MarkerGroup::new()
                         .gap(4.0)
                         .draggable(DragItemId::new(901))
                         .drop_target(DragItemId::new(901))
-                        .child(Row::new().padding(6.0).child(Label::new("pane C"))),
+                        .child(
+                            KeyHint::new(Row::new().padding(6.0).child(Label::new("pane C")))
+                                .hint(rail_hints[2])
+                                .placement(HintPlacement::CenterRight),
+                        ),
                 )
                 // The two host-painted drop visuals: a MOVE inserts (line on an edge);
                 // a SWAP exchanges the whole item (double frame, no before/after).

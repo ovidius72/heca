@@ -20,7 +20,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{paint_child, Base, Component, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet};
 use crate::scene::{Glow, TextAlign};
-use crate::style::Length;
+use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
 
 /// Where the keycap sits over the target.
@@ -31,6 +31,10 @@ pub enum HintPlacement {
     TopCenter,
     /// Centered over the whole target — for large targets (content-area panes).
     Center,
+    /// Vertically centered, pinned to the **right edge** — for wide list rows
+    /// (sidebar pane/column cards) where a right-aligned keycap keeps the row's
+    /// label readable.
+    CenterRight,
 }
 
 /// Keycap font size as a fraction of the wrapped component's resolved font.
@@ -40,6 +44,8 @@ const PAD_X_FRAC: f32 = 0.42;
 const PAD_Y_FRAC: f32 = 0.22;
 /// Inset of a `TopCenter` keycap from the target's top edge (logical px).
 const TOP_INSET: f64 = 2.0;
+/// Inset of a `CenterRight` keycap from the target's right edge (logical px).
+const RIGHT_INSET: f64 = 6.0;
 /// Per-glyph advance estimate (fraction of font) for sizing the keycap to its text.
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
 /// Keycap fill alpha — slightly translucent so it reads as an overlay, not a
@@ -66,6 +72,11 @@ impl KeyHint {
         // Hug the child so the wrapper's bounds match it (overlay positions off them).
         base.style.width = Length::Auto;
         base.style.height = Length::Auto;
+        // Column direction so the single child stretches to the wrapper's full width
+        // (cross-axis, default `Align::Stretch`). This keeps the wrapper transparent
+        // to a stretching parent: a wide list row fills its column instead of
+        // shrinking to content width, while a hugged square target is unaffected.
+        base.style.direction = Direction::Column;
         base.children.push(Box::new(child));
         Self { base, hint: signal(None), placement: HintPlacement::default(), size: None }
     }
@@ -113,6 +124,9 @@ impl KeyHint {
             }
             HintPlacement::Center => {
                 (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + (b.size.h - h) / 2.0)
+            }
+            HintPlacement::CenterRight => {
+                (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + (b.size.h - h) / 2.0)
             }
         };
         Rectangle::new(Point::new(x, y), Size::new(w, h))
