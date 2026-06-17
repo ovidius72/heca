@@ -7,6 +7,41 @@
 
 ---
 
+## Re-verification — 2026-06-17
+
+> The original analysis below was written against an **older codebase** (inline `main.rs` key
+> handling). Since then the input layer was **rebuilt** on `ActionRegistry` (`heca/src/actions.rs`) +
+> `KeymapRegistry`/`KeyCombo` (`heca/src/keymap.rs`, dispatch in `heca/src/app/input.rs`), and the
+> prefix key is now **configurable** (`heca-config/src/keys.rs`). So **most of Part 1 is fixed or
+> obsolete**; **Part 2 (layout) is mixed** — the niri *design principles* it cites remain the
+> north-star, and a few code issues persist. Status verified against the current tree:
+
+| ID | Current status (2026-06-17) | Evidence |
+|----|------------------------------|----------|
+| K1 | **Restructured** — ctrl is now part of `KeyCombo`; the `ctrl=false` hardcode is gone (re-test Ctrl chords to confirm end-to-end) | `app/input.rs` resolves via `keymap.resolve(.., &combo)`; `mode_combo` sets `is_ctrl` |
+| K2 | **✅ Fixed** — prefix key is configurable | `heca-config/src/keys.rs:102` `prefix_key` (default `default_prefix_key()`) |
+| K3 | **Unverified this pass** — re-check for a prefix timeout | — |
+| K4 | **✅ Obsolete** — shift-from-char inference removed; shift lives in `KeyCombo` | no `key_implies_shift`/`is_ascii_uppercase` in keymap |
+| K5 | **✅ Obsolete** — the no-op actions were removed | no `Scratchpad`/`Hide`/`ResizeLeft…` in `WmAction` |
+| K6 | **Unverified this pass** — modifiers still read from `state.modifiers`; re-check vs event | — |
+| K7 | **Unverified this pass** — re-check literal-prefix forwarding | — |
+| K8 | **✅ Addressed** — `action_priority` now uses explicit arms (no `_ => 4` catch-all) | `heca/src/input.rs:511` |
+| L1/L2 | **⚠️ Still present** — `update_all_column_widths()` is still called on every mutation | `heca-core/src/layout/scrolling.rs` (many call sites) |
+| L3 | **Unverified this pass** — re-audit viewport/chrome coordinate math | — |
+| L4 | **⚠️ Still present** — `focus_up()` falls through to `switch_workspace_up()` | `heca-core/src/layout/session.rs:304→310` |
+| L5 | **Unverified this pass** — likely still a single easing anim model; re-audit | — |
+| L6 | **Changed** — `ColumnDisplay::Tabbed` no longer found; re-audit which features remain dead | grep: no `Tabbed` in `heca-core`/render |
+| L7 | **Unverified this pass** — re-audit the `computed_width` / `column_widths` double-cache | — |
+| L8 | **✅ Obsolete** — `view_offset_to_restore` field removed | grep: gone from `heca-core` |
+
+**Net:** keep this doc as the **heca-vs-niri reference** (per PLAN.md). The keybinding bugs are largely
+resolved by the registry rewrite; the live design work is layout (L1/L2 no-reflow, L4 focus-vs-workspace
+separation) — both still diverge from niri principle 1 ("opening a window must not resize others") and
+niri's separation of pane-focus from workspace-switch. The "Unverified this pass" rows need a code re-audit
+before they're trusted either way.
+
+---
+
 ## Part 1: Keybinding Issues
 
 ### Critical
