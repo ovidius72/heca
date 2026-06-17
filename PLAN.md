@@ -166,6 +166,7 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Generic DnD framework** (DnD Phase 1+2): `DragContext<P>`, universal `DragExt`,
   `resolve_at`/`source_at`, `drag_ghost`/`drop_indicator`, generic theme tokens.
 - **Terminal backend** live.
+- **Pane shell (Phase 13 visual blocker 1)**: borders/radius now render through the `heca-grid-ui` `Pane` container (PR #121 — `GridRenderer` `begin_frame`-once-per-frame contract fix); terminal content clipped to the rounded border via a stencil-write pass; snug padding + chrome value clamps + theme-driven `pane_padding`. Blocker 2 (`terminal_blur`) still open — see P4.
 - Pluggable-chrome-plugin-plan **Precondition** (the 10-phase refactor) complete.
 
 ---
@@ -208,7 +209,13 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
 ## Locked rules / constraints (ignore → redo)
 - **New UI = generic, theme-driven `heca-grid-ui` widget** — embed `Base`, read ALL styling from
   `Theme`; domain-neutral; never ad-hoc inline `Flex`/`Surface` in the app. (AGENTS.md; memory
-  `heca-widgets-in-grid-ui`.)
+  `heca-widgets-in-grid-ui`.) **Covers every new element/component/widget from the terminal backlog**
+  (e.g. the Phase 11 context menu, any image-preview chrome): build it as a proper `heca-grid-ui`
+  widget following the existing design rules (embed `Base`, read ALL styling from `Theme`,
+  domain-neutral name/semantics, no hardcoded sizes/colors/alphas), route behavior through
+  `ActionRegistry`/`KeymapRegistry` (mouse + keybinding + RPC parity). Low-level image *texture*
+  rendering (Phase 12) is `heca-renderer` (wgpu) — a different altitude, not a grid-ui widget; any
+  UI *around* it still is.
 - **Foundation before style** (`foundation-state-before-style`); **best architecture up front, no
   half-measures** (`build-future-proof-no-half-measures`).
 - **DnD framework stays domain-neutral** — payload in the app's `AppDragPayload`, never in `drag/`.
