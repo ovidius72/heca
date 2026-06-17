@@ -4,6 +4,9 @@ use wgpu::util::DeviceExt;
 
 use crate::font;
 
+use crate::clip::{combine_clip, intersect};
+use crate::composite::content_clip_stencil_state;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct TextVertex {
@@ -67,24 +70,6 @@ struct DrawRange {
     clip: Option<[f32; 4]>,
     first_index: u32,
     index_count: u32,
-}
-
-/// Intersection of two logical `[x, y, w, h]` rects (empty if disjoint).
-fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
-    let x0 = a[0].max(b[0]);
-    let y0 = a[1].max(b[1]);
-    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
-    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
-    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
-}
-
-/// Combine the frame damage with a per-label clip; `None` means "unbounded".
-fn combine_clip(damage: Option<[f32; 4]>, clip: Option<[f32; 4]>) -> Option<[f32; 4]> {
-    match (damage, clip) {
-        (None, None) => None,
-        (Some(r), None) | (None, Some(r)) => Some(r),
-        (Some(a), Some(b)) => Some(intersect(a, b)),
-    }
 }
 
 /// Convert a logical clip rect to a physical scissor rect clamped to the
@@ -199,6 +184,9 @@ pub struct TextRenderer {
     font_system: FontSystem,
     swash_cache: SwashCache,
     pipeline: wgpu::RenderPipeline,
+    /// Stencil-test variant: same as `pipeline` but tests `Equal` against the
+    /// rounded content-clip mask. Used when `render` is given a stencil view.
+    stencil_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
@@ -359,6 +347,62 @@ impl TextRenderer {
             cache: None,
         });
 
+        // Stencil-test variant: identical to `pipeline` but tests the rounded
+        // content-clip mask (`Equal` to ref 1, set per pass). Depth disabled.
+        let stencil_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("text_stencil_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<TextVertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                            shader_location: 2,
+                            format: wgpu::VertexFormat::Float32x4,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(content_clip_stencil_state()),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         // Per-glyph quads (vs one quad per label) → more vertices/indices; size
         // generously. Indices are u32 (a frame can exceed 65 536 vertices).
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -422,6 +466,7 @@ impl TextRenderer {
             font_system,
             swash_cache: SwashCache::new(),
             pipeline,
+            stencil_pipeline,
             vertex_buffer,
             index_buffer,
             uniform_buffer,
@@ -909,6 +954,7 @@ impl TextRenderer {
         queue: &wgpu::Queue,
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
+        stencil: Option<&wgpu::TextureView>,
     ) {
         if self.commands.is_empty() {
             return;
@@ -942,12 +988,28 @@ impl TextRenderer {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: stencil.as_ref().map(|view| {
+                wgpu::RenderPassDepthStencilAttachment {
+                    view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                }
+            }),
             occlusion_query_set: None,
             timestamp_writes: None,
         });
 
-        rpass.set_pipeline(&self.pipeline);
+        rpass.set_pipeline(if stencil.is_some() {
+            &self.stencil_pipeline
+        } else {
+            &self.pipeline
+        });
+        if stencil.is_some() {
+            rpass.set_stencil_reference(1);
+        }
         // One bind group for all text now: the shared glyph atlas.
         rpass.set_bind_group(0, &self.atlas_bind_group, &[]);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -984,41 +1046,6 @@ impl TextRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn intersect_overlapping_and_disjoint() {
-        // Overlap → the shared box.
-        assert_eq!(
-            intersect([0.0, 0.0, 100.0, 100.0], [40.0, 30.0, 100.0, 100.0]),
-            [40.0, 30.0, 60.0, 70.0],
-        );
-        // Disjoint → zero area (clamped, never negative).
-        let r = intersect([0.0, 0.0, 10.0, 10.0], [50.0, 50.0, 10.0, 10.0]);
-        assert_eq!((r[2], r[3]), (0.0, 0.0), "disjoint rects cull to nothing");
-    }
-
-    #[test]
-    fn combine_clip_pairs() {
-        let a = [0.0, 0.0, 100.0, 100.0];
-        let b = [40.0, 30.0, 100.0, 100.0];
-        assert_eq!(combine_clip(None, None), None, "unbounded ∩ unbounded = unbounded");
-        assert_eq!(combine_clip(Some(a), None), Some(a), "one side unbounded passes through");
-        assert_eq!(combine_clip(None, Some(b)), Some(b), "one side unbounded passes through");
-        assert_eq!(combine_clip(Some(a), Some(b)), Some(intersect(a, b)), "both bounded ⇒ intersect");
-    }
-
-    #[test]
-    fn cull_skips_only_provably_outside_labels() {
-        // A label whose ink bbox misses the redraw region is culled; one that touches
-        // it (even at the edge) is kept. Mirrors the check in `build_labels`.
-        let region = [200.0, 200.0, 100.0, 100.0];
-        let outside = [0.0, 0.0, 50.0, 50.0];
-        let touching = [250.0, 250.0, 100.0, 100.0];
-        let i_out = intersect(region, outside);
-        let i_touch = intersect(region, touching);
-        assert!(i_out[2] <= 0.0 || i_out[3] <= 0.0, "outside label is culled");
-        assert!(i_touch[2] > 0.0 && i_touch[3] > 0.0, "overlapping label is kept");
-    }
 
     #[test]
     fn emit_key_distinguishes_color_and_position() {

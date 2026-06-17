@@ -1,5 +1,7 @@
 use wgpu::util::DeviceExt;
 
+use crate::composite::content_clip_stencil_state;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
@@ -10,6 +12,9 @@ struct Vertex {
 /// GPU renderer for primitive shapes: rectangles, borders.
 pub struct PrimitiveRenderer {
     pipeline: wgpu::RenderPipeline,
+    /// Stencil-test variant: same as `pipeline` but tests `Equal` against the
+    /// rounded content-clip mask. Used when `render_clipped` is given a stencil.
+    stencil_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     vertices: Vec<Vertex>,
@@ -119,6 +124,57 @@ impl PrimitiveRenderer {
             cache: None,
         });
 
+        // Stencil-test variant: identical to `pipeline` but tests the rounded
+        // content-clip mask (`Equal` to ref 1, set per pass). Depth disabled.
+        let stencil_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("primitive_stencil_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x4,
+                        },
+                    ],
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: target_format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(content_clip_stencil_state()),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("primitive_vertex_buffer"),
             size: 1024 * 1024, // 1MB
@@ -135,6 +191,7 @@ impl PrimitiveRenderer {
 
         Self {
             pipeline,
+            stencil_pipeline,
             vertex_buffer,
             index_buffer,
             vertices: Vec::new(),
@@ -250,16 +307,20 @@ impl PrimitiveRenderer {
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        self.render_clipped(device, view, encoder, None);
+        self.render_clipped(device, view, encoder, None, None);
     }
 
     /// Submit all queued primitives to the GPU with an optional scissor clip.
+    /// When `stencil` is `Some`, the pass tests against the rounded content-clip
+    /// mask (stencil `Equal` to ref 1) so primitives only draw inside the pane's
+    /// rounded shape — used for terminal surface/cell/selection/cursor fills.
     pub fn render_clipped(
         &mut self,
         device: &wgpu::Device,
         view: &wgpu::TextureView,
         encoder: &mut wgpu::CommandEncoder,
         clip_rect: Option<(u32, u32, u32, u32)>,
+        stencil: Option<&wgpu::TextureView>,
     ) {
         if self.vertices.is_empty() {
             return;
@@ -305,15 +366,31 @@ impl PrimitiveRenderer {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: stencil.as_ref().map(|view| {
+                wgpu::RenderPassDepthStencilAttachment {
+                    view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                }
+            }),
             occlusion_query_set: None,
             timestamp_writes: None,
         });
 
-        rpass.set_pipeline(&self.pipeline);
+        rpass.set_pipeline(if stencil.is_some() {
+            &self.stencil_pipeline
+        } else {
+            &self.pipeline
+        });
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        if stencil.is_some() {
+            rpass.set_stencil_reference(1);
+        }
         if let Some((x, y, w, h)) = clip_rect {
             rpass.set_scissor_rect(x, y, w, h);
         }

@@ -63,6 +63,9 @@ pub struct Theme {
     pub terminal_font_size: f32,
     pub border_radius: f32,
     pub border_width: f32,
+    /// Internal padding inside panes (logical px). Fallback for
+    /// `appearance.pane_padding` when unset; clamped to `[0, 20]` downstream.
+    pub pane_padding: f32,
     pub shadow: Shadow,
     #[serde(default = "crate::defaults::default_float_bg")]
     pub float_background: Color,
@@ -126,6 +129,7 @@ impl Theme {
             terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,
             border_width: 1.0,
+            pane_padding: 4.0,
             shadow: Shadow::default(),
             float_background: Color::new(49, 50, 68, 255),
             float_accent: Color::new(137, 180, 250, 255),
@@ -165,6 +169,7 @@ impl Theme {
             terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,
             border_width: 1.0,
+            pane_padding: 4.0,
             shadow: Shadow {
                 color: "#000000".to_string(),
                 alpha: 0.15,

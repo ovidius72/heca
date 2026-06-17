@@ -1,5 +1,6 @@
 pub mod font;
 pub mod atlas;
+pub(crate) mod clip;
 pub mod backdrop;
 pub mod blur;
 pub mod composite;

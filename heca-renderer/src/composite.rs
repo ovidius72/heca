@@ -14,12 +14,50 @@
 pub struct Compositor {
     scene_tex: wgpu::Texture,
     scene_view: wgpu::TextureView,
+    /// Stencil buffer paired with `scene_tex` (sized to match). Holds the rounded
+    /// content-clip mask; see [`STENCIL_FORMAT`].
+    stencil_tex: wgpu::Texture,
+    stencil_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
     size: (u32, u32),
     format: wgpu::TextureFormat,
+}
+
+/// Stencil buffer format paired with the scene texture. Used by the rounded
+/// content-clip mechanism: a stencil-write pass marks each pane's inner rounded
+/// rect, and the content renderers (backdrop/primitive/text) test against it so
+/// terminal content follows the pane's rounded border instead of poking past it
+/// at high corner radii. `Depth24PlusStencil8` is a core-guaranteed format.
+pub const STENCIL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
+
+/// Depth/stencil state for content render passes (backdrop/primitive/text) that
+/// test against the rounded content-clip mask written by [`GridRenderer::render_stencil`].
+/// Stencil compare `Equal` to the pass reference (1), all ops `Keep` (content never
+/// modifies the mask), depth disabled. Pipelines using this require their render
+/// pass to attach the stencil view with `depth_ops: None` + `stencil_ops: Some(Load/Store)`
+/// and call `set_stencil_reference(1)`.
+pub fn content_clip_stencil_state() -> wgpu::DepthStencilState {
+    let face = wgpu::StencilFaceState {
+        compare: wgpu::CompareFunction::Equal,
+        fail_op: wgpu::StencilOperation::Keep,
+        depth_fail_op: wgpu::StencilOperation::Keep,
+        pass_op: wgpu::StencilOperation::Keep,
+    };
+    wgpu::DepthStencilState {
+        format: STENCIL_FORMAT,
+        depth_write_enabled: false,
+        depth_compare: wgpu::CompareFunction::Always,
+        stencil: wgpu::StencilState {
+            front: face,
+            back: face,
+            read_mask: 0xFFFFFFFF,
+            write_mask: 0,
+        },
+        bias: wgpu::DepthBiasState::default(),
+    }
 }
 
 impl Compositor {
@@ -95,10 +133,13 @@ impl Compositor {
 
         let (scene_tex, scene_view, bind_group) =
             Self::make_target(device, &bind_group_layout, &sampler, format, width, height);
+        let (stencil_tex, stencil_view) = Self::make_stencil(device, width, height);
 
         Self {
             scene_tex,
             scene_view,
+            stencil_tex,
+            stencil_view,
             sampler,
             bind_group_layout,
             bind_group,
@@ -165,12 +206,47 @@ impl Compositor {
         self.scene_tex = tex;
         self.scene_view = view;
         self.bind_group = bind_group;
+        let (stencil_tex, stencil_view) = Self::make_stencil(device, width, height);
+        self.stencil_tex = stencil_tex;
+        self.stencil_view = stencil_view;
         self.size = (width.max(1), height.max(1));
+    }
+
+    /// (Re)create the stencil buffer paired with the scene texture at
+    /// `width`×`height`. Depth is unused (depth ops are `None` everywhere); only
+    /// the stencil aspect holds the rounded content-clip mask.
+    fn make_stencil(
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
+        let tex = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("scene_stencil"),
+            size: wgpu::Extent3d {
+                width: width.max(1),
+                height: height.max(1),
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: STENCIL_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+        (tex, view)
     }
 
     /// The view the UI renders the scene into (instead of the swapchain).
     pub fn scene_view(&self) -> &wgpu::TextureView {
         &self.scene_view
+    }
+
+    /// The stencil buffer paired with the scene texture. Content renderers attach
+    /// this and test against the rounded content-clip mask written each frame.
+    pub fn stencil_view(&self) -> &wgpu::TextureView {
+        &self.stencil_view
     }
 
     /// Blit the persistent scene texture onto `target` (the swapchain view).
