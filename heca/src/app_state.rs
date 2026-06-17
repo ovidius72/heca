@@ -125,6 +125,15 @@ pub enum AppDragPayload {
         /// If true, drop performs a swap instead of a move.
         swap: bool,
     },
+    /// A column (its `MarkerGroup` grip) dragged from the sidebar.
+    Column {
+        /// Workspace the column lives in (its origin).
+        ws: usize,
+        /// The column's index within that workspace.
+        col: usize,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
+    },
 }
 
 /// State for the interactive content-area drag (pane moved by mouse).

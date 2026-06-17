@@ -24,5 +24,5 @@ mod state;
 pub use context::DragContext;
 pub use item::{DragItemId, DragSurfaceId};
 pub use math::{rubberband, DEFAULT_DRAG_THRESHOLD_SQ};
-pub use resolve::{resolve_at, source_at, DropHit, DropSide};
+pub use resolve::{resolve_at, resolve_at_filtered, source_at, DropHit, DropSide};
 pub use state::{DragLabel, DragPhase, SurfaceDragState};

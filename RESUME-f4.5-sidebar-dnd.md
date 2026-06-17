@@ -126,6 +126,17 @@ visual + scrolling-area mouse DnD (needs a new middle "swap-zone" hint).
 Hit-testing is innermost-first, so a press in the `MarkerGroup` grip gutter → column; on a pane card →
 pane — falls out for free. (RESUME "step 3" hover-dispatch + grab-cursor stays a SEPARATE sub-phase.)
 
+**Source-aware drop targeting (added slice 2, 2026-06-17):** the deepest drop target wins, but pane cards
+are nested in the column `MarkerGroup`, so an unfiltered resolve made a column drag target panes. Fixed
+with framework `drag::resolve_at_filtered(root, point, accept)` + app `resolve_sidebar_drop` /
+`target_accepted_by`: a Pane drag accepts Pane targets; a Column drag accepts Column+Workspace (never
+panes). Resolve BEFORE cancelling the drag (filter reads the live payload — `accept_drop` reordered).
+
+**DEFERRED (user, 2026-06-17 — NOT this PR): drag a workspace to REORDER workspaces.** Workspaces are
+drop-target-only here. Reorder-by-drag = its own follow-up: make the workspace `DockFrame` a drag source
+(add `Workspace` to `AppDragPayload`), add a workspace-reorder `WmAction` (none exists; workspaces are a
+vertical discrete list) + handler + RPC, and column-style visuals. Decided useful, just later.
+
 ### 3 — hover dispatch + grab cursor (decided 2026-06-16; PLAN P2)
 - **Hover:** the app dispatches **only `PointerPressed`** into the chrome tree today, so `MarkerGroup`/
   `Row` `hovered` never updates in-app (the grip hover/grab cue is inert; works only in the showcase).

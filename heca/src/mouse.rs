@@ -81,22 +81,40 @@ pub fn on_mouse_input(
             // from the RETAINED chrome tree's real bounds (F4.5), not the legacy
             // fixed-row geometry. If the threshold isn't crossed it falls back to the
             // pending click action (stored below); see `mouse/drag.rs`.
-            if let Some(pane_id) = drag_source {
-                let origin_ws = match crate::find_pane_location(&state.session, pane_id) {
-                    Some((ws_idx, _, _)) => ws_idx,
-                    None => {
+            if let Some(item) = drag_source {
+                let swap = state.modifiers.shift_key();
+                // Build the drag payload from the source kind. Workspaces are
+                // drop-targets only (never `.draggable`), so `source_at` can only
+                // return a pane or a column here.
+                let (payload, source_item) = match item {
+                    crate::chrome::ChromeDragItem::Pane(pane_id) => {
+                        let origin_ws = match crate::find_pane_location(&state.session, pane_id) {
+                            Some((ws_idx, _, _)) => ws_idx,
+                            None => {
+                                return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar))
+                            }
+                        };
+                        (
+                            AppDragPayload::Pane { pane_id, origin_ws, swap },
+                            // Legacy collapsed-rail dim id (pane-only); see render.rs.
+                            Some(DragItemId::new(pane_id.0 as usize)),
+                        )
+                    }
+                    crate::chrome::ChromeDragItem::Column { ws, col } => {
+                        (AppDragPayload::Column { ws, col, swap }, None)
+                    }
+                    crate::chrome::ChromeDragItem::Workspace { .. } => {
                         return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar))
                     }
                 };
-                let swap = state.modifiers.shift_key();
                 state.mouse.pending_click_action = sidebar_action.clone();
                 if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
                     left.phase = DragPhase::Starting {
-                        payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
+                        payload,
                         start_pos: pos,
                         threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
                     };
-                    left.source_item = Some(DragItemId::new(pane_id.0 as usize));
+                    left.source_item = source_item;
                 }
                 state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
                 return None;
@@ -132,6 +150,9 @@ pub fn on_mouse_input(
                             DragPhase::Dragging { payload } => match payload {
                                 AppDragPayload::Pane { pane_id, origin_ws, swap } => {
                                     release::handle_sidebar_drag_release(state, pane_id, origin_ws, swap, pos);
+                                }
+                                AppDragPayload::Column { ws, col, swap } => {
+                                    release::handle_sidebar_column_drag_release(state, ws, col, swap, pos);
                                 }
                             },
                             DragPhase::Starting { .. } => {

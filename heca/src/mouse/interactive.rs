@@ -183,7 +183,9 @@ fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
     for surface_state in state.mouse.drag_ctx.surfaces.values_mut() {
         if let Some(payload) = surface_state.payload_mut() {
             match payload {
-                AppDragPayload::Pane { swap: s, .. } => *s = swap,
+                AppDragPayload::Pane { swap: s, .. } | AppDragPayload::Column { swap: s, .. } => {
+                    *s = swap
+                }
             }
         }
     }

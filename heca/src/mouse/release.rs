@@ -70,6 +70,21 @@ pub(super) fn handle_sidebar_drag_release(
     super::target::surface_accept_drop(state, DragSurfaceId::LeftSidebar, pane_id, original_ws, swap, pos);
 }
 
+/// Handle release during an active sidebar **column** drag.
+///
+/// Slice-2 stub: the widgets/payload are wired, but the move/swap action lands in
+/// slice 4 (`MoveColumn`/`SwapColumns`). For now just clear the drag so it can't get
+/// stuck — dropping a column is a visible-but-inert no-op until then.
+pub(super) fn handle_sidebar_column_drag_release(
+    state: &mut AppState,
+    _ws: usize,
+    _col: usize,
+    _swap: bool,
+    _pos: (f32, f32),
+) {
+    state.mouse.drag_ctx.cancel_all();
+}
+
 /// Handle release during sidebar drag starting (threshold not exceeded).
 ///
 /// If a pending click action was stored, dispatch it. Otherwise, just clear the drag state.

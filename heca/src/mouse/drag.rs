@@ -33,70 +33,52 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
     let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
     let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
-    if let DragPhase::Starting {
-        payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
-        start_pos,
-        threshold_sq,
-    } = phase
-    {
-        let dx = pos.0 - start_pos.0;
-        let dy = pos.1 - start_pos.1;
-        let sq_dist = dx * dx + dy * dy;
-
-        if sq_dist > threshold_sq {
-            let label = state.sidebar_tree.flat_items.iter()
-                .find(|item| matches!(item, crate::sidebar::SidebarItem::Pane { pane_id: pid } if *pid == pane_id))
-                .and_then(|item| {
-                    if let crate::sidebar::SidebarItem::Pane { pane_id: pid } = item {
-                        for ws in &state.sidebar_tree.workspaces {
-                            for col in &ws.columns {
-                                for p in &col.panes {
-                                    if p.pane_id == *pid {
-                                        return Some(p.name.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    None
-                })
-                .unwrap_or_else(|| format!("pane{}", pane_id));
-
-            let chrome = super::chrome_config(state);
-            let sw = if state.chrome_state.left_visible() {
-                chrome.left_sidebar_width
-            } else {
-                DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-            };
-
-            let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
-                .expect("LeftSidebar pre-populated in DragContext::default");
-            left.ghost_label = Some(DragLabel {
-                text: label,
-                x: pos.0,
-                y: pos.1,
-                width: sw,
-                height: 20.0,
-            });
-            left.phase = DragPhase::Dragging {
-                payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
-            };
-            // source_item was already set when the Starting phase began
-        } else {
-            // Threshold not exceeded — restore the Starting phase
-            state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
-                .expect("LeftSidebar pre-populated in DragContext::default")
-                .phase = DragPhase::Starting {
-                    payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
-                    start_pos,
-                    threshold_sq,
-                };
-        }
-    } else {
-        // Not a Starting phase — restore whatever it was
+    let DragPhase::Starting { payload, start_pos, threshold_sq } = phase else {
+        // Not a Starting phase — restore whatever it was.
         state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
             .expect("LeftSidebar pre-populated in DragContext::default")
             .phase = phase;
+        return;
+    };
+
+    let dx = pos.0 - start_pos.0;
+    let dy = pos.1 - start_pos.1;
+    if dx * dx + dy * dy <= threshold_sq {
+        // Threshold not exceeded — restore the Starting phase.
+        state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+            .expect("LeftSidebar pre-populated in DragContext::default")
+            .phase = DragPhase::Starting { payload, start_pos, threshold_sq };
+        return;
+    }
+
+    // Threshold exceeded — promote to an active drag: ghost label + Dragging phase.
+    let label = drag_ghost_label(state, &payload);
+    let chrome = super::chrome_config(state);
+    let sw = if state.chrome_state.left_visible() {
+        chrome.left_sidebar_width
+    } else {
+        DEFAULT_COLLAPSED_SIDEBAR_WIDTH
+    };
+    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+        .expect("LeftSidebar pre-populated in DragContext::default");
+    left.ghost_label = Some(DragLabel { text: label, x: pos.0, y: pos.1, width: sw, height: 20.0 });
+    left.phase = DragPhase::Dragging { payload };
+    // source_item was already set when the Starting phase began.
+}
+
+/// Human-readable ghost-chip text for an in-flight sidebar drag.
+fn drag_ghost_label(state: &AppState, payload: &AppDragPayload) -> String {
+    match payload {
+        AppDragPayload::Pane { pane_id, .. } => state
+            .sidebar_tree
+            .workspaces
+            .iter()
+            .flat_map(|ws| &ws.columns)
+            .flat_map(|col| &col.panes)
+            .find(|p| p.pane_id == *pane_id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| format!("pane{}", pane_id)),
+        AppDragPayload::Column { col, .. } => format!("column {}", col + 1),
     }
 }
 

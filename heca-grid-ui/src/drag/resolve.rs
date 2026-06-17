@@ -63,15 +63,31 @@ fn skip(c: &dyn Component) -> bool {
 /// descends before testing the parent, so the most specific target under the
 /// cursor is returned. `None` if no drop target is hit.
 pub fn resolve_at(root: &dyn Component, point: Point) -> Option<DropHit> {
+    resolve_at_filtered(root, point, &|_| true)
+}
+
+/// Like [`resolve_at`], but only considers drop targets whose id satisfies
+/// `accept`. A rejected target is skipped *and the walk continues outward*, so the
+/// deepest **accepted** target under the cursor wins — e.g. while dragging a
+/// container you can accept only container-level targets and have a nested
+/// leaf target fall through to its accepted ancestor. Domain-neutral: the app
+/// decides acceptance from the opaque [`DragItemId`].
+pub fn resolve_at_filtered(
+    root: &dyn Component,
+    point: Point,
+    accept: &dyn Fn(DragItemId) -> bool,
+) -> Option<DropHit> {
     if skip(root) {
         return None;
     }
     for child in root.base().children.iter().rev() {
-        if let Some(hit) = resolve_at(child.as_ref(), point) {
+        if let Some(hit) = resolve_at_filtered(child.as_ref(), point, accept) {
             return Some(hit);
         }
     }
-    if let Some(id) = root.as_drop_target() {
+    if let Some(id) = root.as_drop_target()
+        && accept(id)
+    {
         let bounds = root.base().bounds;
         if bounds.contains(point) {
             return Some(DropHit {
@@ -144,6 +160,30 @@ mod tests {
         assert_eq!(resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id), Some(DragItemId::new(2)));
         // Outside the inner but inside the outer → the outer.
         assert_eq!(resolve_at(&outer, Point::new(80.0, 80.0)).map(|h| h.id), Some(DragItemId::new(1)));
+    }
+
+    #[test]
+    fn resolve_at_filtered_falls_through_rejected_nested_target_to_accepted_ancestor() {
+        // Outer accepted target (1) contains an inner rejected target (2) — like a
+        // column MarkerGroup containing pane cards. A hit inside the inner must skip it
+        // and resolve to the outer, so dragging a column targets the column, not a pane.
+        let mut inner = Surface::new().drop_target(DragItemId::new(2));
+        inner.base_mut().bounds = Rectangle::new(Point::new(10.0, 10.0), Size::new(30.0, 30.0));
+        let mut outer = Surface::new().drop_target(DragItemId::new(1));
+        outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
+        outer.base_mut().children.push(Box::new(inner));
+
+        let accept = |id: DragItemId| id != DragItemId::new(2);
+        assert_eq!(
+            resolve_at_filtered(&outer, Point::new(20.0, 20.0), &accept).map(|h| h.id),
+            Some(DragItemId::new(1)),
+            "a hit inside the rejected inner target resolves to the accepted outer one",
+        );
+        // Unfiltered still returns the deepest (inner).
+        assert_eq!(
+            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id),
+            Some(DragItemId::new(2)),
+        );
     }
 
     #[test]
