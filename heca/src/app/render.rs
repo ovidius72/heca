@@ -4,356 +4,22 @@
 //! of `main.rs` while preserving the current render pipeline behavior.
 
 use crate::app::terminal_host::prepare_terminal_mount;
-use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionState};
+use crate::app::terminal_render::{
+    paint_terminal_pane_shell, pane_scissor_rect, render_terminal_mount,
+    selection_overlay_for_pane, stable_floating_content_rect,
+    stable_tiled_content_rect, PaneRenderState, TerminalRenderPassContext,
+};
 use crate::app_state::{AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
-use heca_core::layout::{PaneId, Point, Rectangle, Size};
-use heca_config::theme::Color;
-use heca_renderer::primitive::PrimitiveRenderer;
-use heca_renderer::terminal::{CaretIndicator, SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle};
+use heca_grid_ui::{
+    Point as GuiPoint,
+    Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
+};
+use heca_renderer::terminal::TerminalStyle;
 use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
-use heca_renderer::text::{TextBox, TextRenderer};
-
-fn pane_content_rect(px: f32, py: f32, pw: f32, ph: f32, border_width: f32) -> Option<(f32, f32, f32, f32)> {
-    // Border is drawn inside the pane rect via draw_border. Content must be
-    // inset by border_width so terminal fills don't overlap the border stroke.
-    let content_w = (pw - border_width * 2.0).max(0.0);
-    let content_h = (ph - border_width * 2.0).max(0.0);
-    if content_w <= 0.0 || content_h <= 0.0 {
-        return None;
-    }
-
-    Some((px + border_width, py + border_width, content_w, content_h))
-}
-
-fn stable_tiled_content_rect(
-    px: f32,
-    py: f32,
-    pw: f32,
-    ph: f32,
-    theme_border_width: f32,
-) -> Option<Rectangle> {
-    pane_content_rect(px, py, pw, ph, theme_border_width).map(|(x, y, w, h)| {
-        Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
-    })
-}
-
-fn stable_floating_content_rect(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    theme_border_width: f32,
-) -> Option<Rectangle> {
-    pane_content_rect(x, y, w, h, theme_border_width).map(|(cx, cy, cw, ch)| {
-        Rectangle::new(
-            Point::new(cx as f64, cy as f64),
-            Size::new(cw as f64, ch as f64),
-        )
-    })
-}
-
-fn push_pane_border_rect(
-    scene: &mut heca_grid_ui::Scene,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    border_color: [f32; 4],
-    border_width: f32,
-    border_radius: f32,
-) {
-    use heca_grid_ui::color::Color as GuiColor;
-    use heca_grid_ui::scene::{Border, DrawCommand, RectCmd};
-    use heca_grid_ui::{Point as GuiPoint, Rectangle as GuiRect, Size as GuiSize};
-
-    let max_r = w.min(h) * 0.5;
-    let radius = border_radius.min(max_r).max(0.0);
-
-    scene.push(DrawCommand::Rect(RectCmd {
-        rect: GuiRect::new(
-            GuiPoint::new(x as f64, y as f64),
-            GuiSize::new(w as f64, h as f64),
-        ),
-        fill: GuiColor::TRANSPARENT,
-        border: Some(Border {
-            color: GuiColor::new(
-                (border_color[0] * 255.0) as u8,
-                (border_color[1] * 255.0) as u8,
-                (border_color[2] * 255.0) as u8,
-                (border_color[3] * 255.0) as u8,
-            ),
-            width: border_width,
-        }),
-        radius,
-        glow: None,
-        shadow: None,
-    }));
-}
-
-fn pane_scissor_rect(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    scale_factor: f64,
-    physical_size: winit::dpi::PhysicalSize<u32>,
-) -> Option<(u32, u32, u32, u32)> {
-    if w <= 0.0 || h <= 0.0 {
-        return None;
-    }
-
-    let scale = scale_factor as f32;
-    let left = (x.max(0.0) * scale).floor() as u32;
-    let top = (y.max(0.0) * scale).floor() as u32;
-    let right = ((x + w).max(0.0) * scale).ceil() as u32;
-    let bottom = ((y + h).max(0.0) * scale).ceil() as u32;
-
-    let clipped_left = left.min(physical_size.width);
-    let clipped_top = top.min(physical_size.height);
-    let clipped_right = right.min(physical_size.width);
-    let clipped_bottom = bottom.min(physical_size.height);
-    let clipped_width = clipped_right.saturating_sub(clipped_left);
-    let clipped_height = clipped_bottom.saturating_sub(clipped_top);
-
-    if clipped_width == 0 || clipped_height == 0 {
-        return None;
-    }
-
-    Some((clipped_left, clipped_top, clipped_width, clipped_height))
-}
-
-fn rect_to_text_box(rect: Rectangle) -> TextBox {
-    TextBox {
-        x: rect.loc.x as f32,
-        y: rect.loc.y as f32,
-        w: rect.size.w as f32,
-        h: rect.size.h as f32,
-    }
-}
-
-struct TerminalRenderPassContext<'a> {
-    text_renderer: &'a mut TextRenderer,
-    primitive_renderer: &'a mut PrimitiveRenderer,
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    view: &'a wgpu::TextureView,
-    encoder: &'a mut wgpu::CommandEncoder,
-    scale_factor: f64,
-    surface_physical_size: winit::dpi::PhysicalSize<u32>,
-    /// The scrolling content area; pane content is clipped to it so panes scrolled
-    /// partially behind the chrome (sidebars/status) don't bleed under it.
-    content_clip: Rectangle,
-}
-
-fn render_terminal_mount(
-    render_ctx: TerminalRenderPassContext<'_>,
-    terminal_style: TerminalStyle<'_>,
-    mount: crate::app::terminal_host::TerminalMount,
-    selection_overlay: Option<SelectionOverlay>,
-) {
-    let TerminalRenderPassContext {
-        text_renderer,
-        primitive_renderer,
-        device,
-        queue,
-        view,
-        encoder,
-        scale_factor,
-        surface_physical_size,
-        content_clip,
-    } = render_ctx;
-    let content_box = rect_to_text_box(mount.content_rect);
-    // Intersect the pane's own rect with the scrolling content area, so a pane
-    // scrolled partially under the sidebar/status chrome is cropped at the content
-    // edge instead of bleeding into the chrome region.
-    let clip_x = content_box.x.max(content_clip.loc.x as f32);
-    let clip_y = content_box.y.max(content_clip.loc.y as f32);
-    let clip_right =
-        (content_box.x + content_box.w).min((content_clip.loc.x + content_clip.size.w) as f32);
-    let clip_bottom =
-        (content_box.y + content_box.h).min((content_clip.loc.y + content_clip.size.h) as f32);
-    let clip_w = (clip_right - clip_x).max(0.0);
-    let clip_h = (clip_bottom - clip_y).max(0.0);
-    {
-        text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
-        let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-        terminal_renderer.render_snapshot(
-            &mount.snapshot,
-            content_box,
-            terminal_style,
-        );
-        // Draw the host-level selection overlay after cell backgrounds and
-        // glyphs so the selected text remains readable, and before the
-        // cursor overlay so the cursor is always visible on top.
-        if let Some(ref overlay) = selection_overlay {
-            terminal_renderer.render_selection_overlay(
-                overlay,
-                content_box,
-                mount.snapshot.cell_w,
-                mount.snapshot.cell_h,
-            );
-        }
-        text_renderer.set_clip(None);
-    }
-
-    let clip_rect = pane_scissor_rect(
-        clip_x,
-        clip_y,
-        clip_w,
-        clip_h,
-        scale_factor,
-        surface_physical_size,
-    );
-    primitive_renderer.render_clipped(device, view, encoder, clip_rect);
-    text_renderer.render(queue, view, encoder);
-    {
-        let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-        terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
-    }
-    primitive_renderer.render_clipped(device, view, encoder, clip_rect);
-}
-
-/// Build a `SelectionOverlay` for a pane if the shared host selection is
-/// active, owned by that pane, and uses the `HostGrid` render mode.
-///
-/// Returns `None` when the selection is inactive, owned by a different pane,
-/// or uses `BackendNative` rendering (the host does not draw backend-native
-/// selections).
-///
-/// The anchor/focus cell coordinates from the selection model are converted
-/// into a min/max bounding box here so the renderer crate stays agnostic of
-/// selection-model semantics.
-fn selection_overlay_for_pane(
-    state: &AppState,
-    pane_id: PaneId,
-    cols: usize,
-) -> Option<SelectionOverlay> {
-    build_selection_overlay(&state.selection, pane_id, cols, &state.theme.accent)
-}
-
-/// Build a `SelectionOverlay` for a pane if the shared host selection is
-/// active, owned by that pane, and uses the `HostGrid` render mode.
-///
-/// Returns `None` when the selection is inactive, owned by a different pane,
-/// or uses `BackendNative` rendering (the host does not draw backend-native
-/// selections). The anchor/focus cell coordinates are converted into a
-/// min/max bounding box so the renderer stays agnostic of selection-model
-/// semantics.
-///
-/// Pure-logic counterpart of `selection_overlay_for_pane` — resolves all
-/// `AppState`-dependent lookups (`selection`, `accent`) at its call site so
-/// this function can be unit-tested without GPU state.
-fn build_selection_overlay(
-    selection: &SelectionState,
-    pane_id: PaneId,
-    cols: usize,
-    accent: &Color,
-) -> Option<SelectionOverlay> {
-    if cols == 0 {
-        return None;
-    }
-
-    // Caret-only state: return a thin caret indicator (no selection spans).
-    if let SelectionState::Caret { owner, row, col } = selection {
-        if *owner != SelectionOwner::Pane(pane_id) {
-            return None;
-        }
-        let color = [
-            accent.r as f32 / 255.0,
-            accent.g as f32 / 255.0,
-            accent.b as f32 / 255.0,
-            0.25,
-        ];
-        return Some(
-            SelectionOverlay::new(vec![], color)
-                .with_caret(CaretIndicator {
-                    row: *row,
-                    col: *col,
-                    is_selection_endpoint: false,
-                }),
-        );
-    }
-
-    let active = selection.active()?;
-    if active.owner != SelectionOwner::Pane(pane_id) {
-        return None;
-    }
-    match &active.region {
-        SelectionRegion::HostGrid {
-            anchor_row,
-            anchor_col,
-            focus_row,
-            focus_col,
-        } => {
-            let color = [
-                accent.r as f32 / 255.0,
-                accent.g as f32 / 255.0,
-                accent.b as f32 / 255.0,
-                0.25,
-            ];
-            let last_col = cols.saturating_sub(1);
-            let mut spans = Vec::new();
-            if anchor_row == focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: *anchor_col.min(focus_col),
-                    end_col: (*anchor_col.max(focus_col)).min(last_col),
-                });
-            } else if anchor_row < focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: (*anchor_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*anchor_row + 1)..*focus_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
-                }
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: 0,
-                    end_col: (*focus_col).min(last_col),
-                });
-            } else {
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: (*focus_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*focus_row + 1)..*anchor_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
-                }
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: 0,
-                    end_col: (*anchor_col).min(last_col),
-                });
-            }
-            // Add a prominent caret at the focus (active) end of the selection
-            // so the user can see which endpoint will move when they press
-            // h/j/k/l or after toggling with `o`.
-            Some(
-                SelectionOverlay::new(spans, color)
-                    .with_caret(CaretIndicator {
-                        row: *focus_row,
-                        col: *focus_col,
-                        is_selection_endpoint: true,
-                    }),
-            )
-        }
-        SelectionRegion::BackendNative => None,
-    }
-}
+use heca_renderer::text::TextRenderer;
 
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
@@ -533,6 +199,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .active_workspace()
         .and_then(|ws| ws.active_pane())
         .map(|pane| pane.id)
+        .or_else(|| state.chrome_state.workspaces.active_pane())
         .or(state.focused_pane);
 
     state
@@ -559,21 +226,22 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // This is O(2) blurs per frame (not per-pane), which satisfies the performance
     // requirement ("avoid per-pane full-scene blur recomputation").
     //
-    // Correct unit conversion: `appearance.blur_radius()` returns logical px,
+    // Correct unit conversion: `appearance.terminal_blur_radius()` returns logical px,
     // but `Blur::process` consumes source-texture pixels (physical px for the
     // compositor scene texture). Scale by `scale_factor`.
     //
     // Policy: no visible pane frosting unless the pane surface actually has
     // alpha to reveal it (`terminal_surface_opacity() < 1.0`). When blur is 0
-    // or transparency is off, this is a no-op (radius 0 = passthrough).
-    let needs_frosted_backdrop = state.appearance.is_transparent()
-        && state.appearance.blur_radius() > 0.0;
+    // or the terminal surface stays opaque, this is a no-op.
+    let needs_frosted_backdrop = surface_alpha < 1.0
+        && state.appearance.terminal_blur_radius() > 0.0;
     let mut tiled_blurred_view: Option<&wgpu::TextureView> = None;
     let mut float_blurred_view: Option<&wgpu::TextureView> = None;
 
     // Blur pass 1: chrome/background only (before any pane content).
     if needs_frosted_backdrop {
-        let radius_physical = state.appearance.blur_radius() * state.scale_factor as f32;
+        let radius_physical =
+            state.appearance.terminal_blur_radius() * state.scale_factor as f32;
         tiled_blurred_view = Some(state.blur.process(
             &state.device,
             &state.queue,
@@ -589,12 +257,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let pane_border_color = state.appearance.effective_pane_border_color(theme).to_f32x4();
     let pane_active_border_color = state.appearance.effective_pane_active_border_color(theme).to_f32x4();
     let pane_border_width = state.appearance.effective_pane_border_width(theme);
-    // Pane border radius: read from config but the primitive renderer does not yet
-    // implement rounded corner clipping. When the heca-grid-ui Scene integration
-    // replaces the primitive draw_border path, radius will take full effect.
-    // Until then, `draw_border` draws straight rectangles regardless of this value.
     let pane_border_radius = state.appearance.effective_pane_border_radius(theme);
-
+    let pane_content_inset = state
+        .appearance
+        .effective_pane_padding(theme)
+        .max(pane_border_width + 1.0);
     let pane_positions = state
         .session
         .active_workspace()
@@ -618,21 +285,55 @@ pub(crate) fn render_frame(state: &mut AppState) {
         surface_physical_size,
     );
 
+    let mut tiled_panes = Vec::with_capacity(pane_positions.len());
+    for (pane_id, rect) in &pane_positions {
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        let content_rect = stable_tiled_content_rect(px, py, pw, ph, pane_content_inset);
+        let mount = content_rect.and_then(|content_rect| {
+            prepare_terminal_mount(
+                &mut state.backends,
+                *pane_id,
+                content_rect,
+                state.terminal_cell_size,
+            )
+        });
+        tiled_panes.push(PaneRenderState {
+            pane_id: *pane_id,
+            x: px,
+            y: py,
+            w: pw,
+            h: ph,
+            is_active: active_pane_id == Some(*pane_id),
+            content_rect,
+            mount,
+        });
+    }
+
     // ── Pass A: Frosted backdrop stamps (under borders) ──
     //
     // Stamp the blurred chrome/background behind each tiled pane rect FIRST
     // so the border scene below sits on top of the frosted surface.
     // This matches the float pane ordering: backdrop → border → content.
-    for (_pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
+    for pane in &tiled_panes {
         if let Some(blurred) = tiled_blurred_view {
             let scale = state.scale_factor as f32;
             let vp_w = surface_physical_size.width as f32;
             let vp_h = surface_physical_size.height as f32;
-            let dst = (px * scale, py * scale, pw * scale, ph * scale);
+            let (dst_x, dst_y, dst_w, dst_h) = pane
+                .content_rect
+                .map(|r| {
+                    (
+                        r.loc.x as f32,
+                        r.loc.y as f32,
+                        r.size.w as f32,
+                        r.size.h as f32,
+                    )
+                })
+                .unwrap_or((pane.x, pane.y, pane.w, pane.h));
+            let dst = (dst_x * scale, dst_y * scale, dst_w * scale, dst_h * scale);
             state.backdrop.draw(
                 &state.device,
                 &state.queue,
@@ -647,92 +348,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
-    // ── Pass B: Pane chrome borders (rounded rect outlines via grid renderer) ──
-    //
-    // Draw a rounded-rect outline for each tiled pane as a `DrawCommand::Rect`
-    // so pane_border_radius takes effect. Rendered via the grid renderer on top
-    // of the frosted backdrop and below terminal content. Clipped to the pane
-    // content area so borders don't bleed under chrome.
-    if !pane_positions.is_empty() {
-        use heca_grid_ui::scene::DrawCommand;
-        use heca_grid_ui::Rectangle as GuiRect;
-        use heca_grid_ui::Point as GuiPoint;
-        use heca_grid_ui::Size as GuiSize;
-
-        // Clip the whole pass to the pane content area.
-        let mut pane_scene = heca_grid_ui::Scene::new();
-        pane_scene.push(DrawCommand::PushClip(
-            GuiRect::new(
-                GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
-                GuiSize::new(pane_area.size.w, pane_area.size.h),
-            ),
-        ));
-
-        for (pane_id, rect) in &pane_positions {
-            let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-            let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-            let pw = rect.size.w as f32;
-            let ph = rect.size.h as f32;
-            let is_active = active_pane_id == Some(*pane_id);
-            let bcolor = if is_active {
-                pane_active_border_color
-            } else {
-                pane_border_color
-            };
-            push_pane_border_rect(
-                &mut pane_scene,
-                px,
-                py,
-                pw,
-                ph,
-                bcolor,
-                pane_border_width,
-                pane_border_radius,
-            );
-        }
-
-        pane_scene.push(DrawCommand::PopClip);
-
-        // Flush the border scene through the grid renderer.
-        state.grid_renderer.begin_frame();
-        state.grid_renderer.set_damage(None);
-        state.grid_renderer.set_clip(None);
-        heca_renderer::scene::enqueue_scene(
-            &mut state.grid_renderer,
-            &mut state.text_renderer,
-            &pane_scene,
-        );
-        state.grid_renderer.render(
-            &state.queue, scene_view, &mut encoder,
-        );
-    }
-
-    // ── Pass 2: Terminal content (on top of backdrop + borders) ──
-    // Pre-compute the pane background color from theme, modulated by surface
-    // opacity, for the fallback fill when no backend is mounted.
-    let theme_base = theme.background.to_f32x4();
-    let pane_bg = [theme_base[0], theme_base[1], theme_base[2], theme_base[3] * surface_alpha];
-    for (pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        let content_rect = stable_tiled_content_rect(px, py, pw, ph, pane_border_width);
-        let pane_mount = if let Some(content_rect) = content_rect {
-            prepare_terminal_mount(
-                &mut state.backends,
-                *pane_id,
-                content_rect,
-                state.terminal_cell_size,
-            )
-        } else {
-            None
-        };
-
-        if let Some(content_rect) = content_rect {
-            if let Some(mount) = pane_mount {
+    // ── Pass 2: Terminal content ──
+    for pane in &tiled_panes {
+        if let Some(_content_rect) = pane.content_rect {
+            if let Some(mount) = pane.mount.as_ref() {
                 let selection_overlay =
-                    selection_overlay_for_pane(state, *pane_id, mount.snapshot.cols);
+                    selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
                 render_terminal_mount(
                     TerminalRenderPassContext {
                         text_renderer: &mut state.text_renderer,
@@ -751,19 +372,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         italic_font_family: &theme.terminal_italic_font_family,
                         surface_alpha,
                     },
-                    mount,
+                    crate::app::terminal_host::TerminalMount {
+                        content_rect: mount.content_rect,
+                        snapshot: mount.snapshot.clone(),
+                    },
                     selection_overlay,
                 );
-            } else {
-                let content_box = rect_to_text_box(content_rect);
-                state
-                    .primitive_renderer
-                    .draw_rect(content_box.x, content_box.y, content_box.w, content_box.h, pane_bg);
             }
-        } else {
-            state
-                .primitive_renderer
-                .draw_rect(px, py, pw, ph, pane_bg);
         }
     }
     // ── End pass 2 (terminal content flushed inside render_terminal_mount) ──
@@ -774,13 +389,60 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder);
 
+    // ── Pass 3: Pane chrome overlay (on top of terminal content) ──
+    //
+    // The terminal content is a rectangular raster path; drawing the shell after
+    // it guarantees the border/radius/highlight stay visible instead of being
+    // visually swallowed by the terminal surface.
+    if !tiled_panes.is_empty() {
+        let mut pane_scene = GuiScene::new();
+        pane_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
+            GuiRectangle::new(
+                GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
+                GuiSize::new(pane_area.size.w, pane_area.size.h),
+            ),
+        ));
+
+        for pane in &tiled_panes {
+            let bcolor = if pane.is_active {
+                pane_active_border_color
+            } else {
+                pane_border_color
+            };
+            paint_terminal_pane_shell(
+                state,
+                &mut pane_scene,
+                pane.x,
+                pane.y,
+                pane.w,
+                pane.h,
+                bcolor,
+                pane_border_width,
+                pane_border_radius,
+                pane_content_inset,
+                pane.is_active,
+            );
+        }
+
+        pane_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
+        render_chrome(
+            &mut state.grid_renderer,
+            &mut state.text_renderer,
+            &state.queue,
+            &pane_scene,
+            scene_view,
+            &mut encoder,
+        );
+    }
+
     // ── Blur pass 2: scene including tiled pane content ──
     //
     // Capture a second blur after tiled panes have been rendered into the scene.
     // This lets floating panes frost the actual tiled content behind them, not
     // just the chrome/background.
     if needs_frosted_backdrop {
-        let radius_physical = state.appearance.blur_radius() * state.scale_factor as f32;
+        let radius_physical =
+            state.appearance.terminal_blur_radius() * state.scale_factor as f32;
         float_blurred_view = Some(state.blur.process(
             &state.device,
             &state.queue,
@@ -794,132 +456,128 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let sidebar_bottom = h - chrome.status_bar_height;
     let sidebar_h = sidebar_bottom - sidebar_top;
 
+    let mut floating_panes = Vec::new();
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
             let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
             let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
-            let is_focused = active_pane_id == Some(float.pane.id);
-            let fborder = if is_focused {
-                pane_active_border_color
-            } else {
-                pane_border_color
-            };
-            let content_rect = stable_floating_content_rect(fx, fy, fw, fh, pane_border_width);
-            let pane_mount = if let Some(content_rect) = content_rect {
+            let content_rect = stable_floating_content_rect(fx, fy, fw, fh, pane_content_inset);
+            let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
                     &mut state.backends,
                     float.pane.id,
                     content_rect,
                     state.terminal_cell_size,
                 )
-            } else {
-                None
-            };
-            if let Some(content_rect) = content_rect {
-                // ── Frosted backdrop stamp for floating pane surfaces ──
-                //
-                // Uses blur pass 2 (includes tiled content) so floating panes frost
-                // the actual tiled pane content behind them.
-                if let Some(blurred) = float_blurred_view {
-                    let scale = state.scale_factor as f32;
-                    let vp_w = surface_physical_size.width as f32;
-                    let vp_h = surface_physical_size.height as f32;
-                    let dst = (fx * scale, fy * scale, fw * scale, fh * scale);
-                    state.backdrop.draw(
-                        &state.device,
-                        &state.queue,
-                        &mut encoder,
-                        scene_view,
-                        blurred,
-                        (vp_w, vp_h),
-                        dst,
-                        None,
-                        surface_alpha,
-                    );
-                }
+            });
+            floating_panes.push(PaneRenderState {
+                pane_id: float.pane.id,
+                x: fx,
+                y: fy,
+                w: fw,
+                h: fh,
+                is_active: active_pane_id == Some(float.pane.id),
+                content_rect,
+                mount,
+            });
+        }
+    }
 
-                // Draw floating pane chrome through the same rounded scene path
-                // used by tiled panes so border color/width/radius stay consistent.
-                {
-                    use heca_grid_ui::scene::DrawCommand;
-                    use heca_grid_ui::Rectangle as GuiRect;
-                    use heca_grid_ui::Point as GuiPoint;
-                    use heca_grid_ui::Size as GuiSize;
-
-                    let mut float_scene = heca_grid_ui::Scene::new();
-                    float_scene.push(DrawCommand::PushClip(
-                        GuiRect::new(
-                            GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
-                            GuiSize::new(pane_area.size.w, pane_area.size.h),
-                        ),
-                    ));
-                    push_pane_border_rect(
-                        &mut float_scene,
-                        fx,
-                        fy,
-                        fw,
-                        fh,
-                        fborder,
-                        pane_border_width,
-                        pane_border_radius,
-                    );
-                    float_scene.push(DrawCommand::PopClip);
-                    state.grid_renderer.begin_frame();
-                    state.grid_renderer.set_damage(None);
-                    state.grid_renderer.set_clip(None);
-                    heca_renderer::scene::enqueue_scene(
-                        &mut state.grid_renderer,
-                        &mut state.text_renderer,
-                        &float_scene,
-                    );
-                    state.grid_renderer.render(&state.queue, scene_view, &mut encoder);
-                }
-
-                if let Some(mount) = pane_mount {
-                    let selection_overlay =
-                        selection_overlay_for_pane(state, float.pane.id, mount.snapshot.cols);
-                    render_terminal_mount(
-                        TerminalRenderPassContext {
-                            text_renderer: &mut state.text_renderer,
-                            primitive_renderer: &mut state.primitive_renderer,
-                            device: &state.device,
-                            queue: &state.queue,
-                            view: scene_view,
-                            encoder: &mut encoder,
-                            scale_factor: state.scale_factor,
-                            surface_physical_size,
-                            content_clip: pane_area,
-                        },
-                        TerminalStyle {
-                            font_size: theme.terminal_font_size,
-                            font_family: &theme.terminal_font_family,
-                            italic_font_family: &theme.terminal_italic_font_family,
-                            surface_alpha,
-                        },
-                        mount,
-                        selection_overlay,
-                    );
-                } else {
-                    let content_box = rect_to_text_box(content_rect);
-                    state.primitive_renderer.draw_rect(
-                        content_box.x,
-                        content_box.y,
-                        content_box.w,
-                        content_box.h,
-                        theme.float_background.to_f32x4(),
-                    );
-                }
-            } else {
-                state.primitive_renderer.draw_rect(
-                    fx,
-                    fy,
-                    fw,
-                    fh,
-                    theme.float_background.to_f32x4(),
+    for pane in &floating_panes {
+        let fborder = if pane.is_active {
+            pane_active_border_color
+        } else {
+            pane_border_color
+        };
+        if let Some(content_rect) = pane.content_rect {
+            // ── Frosted backdrop stamp for floating pane surfaces ──
+            //
+            // Uses blur pass 2 (includes tiled content) so floating panes frost
+            // the actual tiled pane content behind them.
+            if let Some(blurred) = float_blurred_view {
+                let scale = state.scale_factor as f32;
+                let vp_w = surface_physical_size.width as f32;
+                let vp_h = surface_physical_size.height as f32;
+                let (dst_x, dst_y, dst_w, dst_h) = (
+                    content_rect.loc.x as f32,
+                    content_rect.loc.y as f32,
+                    content_rect.size.w as f32,
+                    content_rect.size.h as f32,
+                );
+                let dst = (dst_x * scale, dst_y * scale, dst_w * scale, dst_h * scale);
+                state.backdrop.draw(
+                    &state.device,
+                    &state.queue,
+                    &mut encoder,
+                    scene_view,
+                    blurred,
+                    (vp_w, vp_h),
+                    dst,
+                    None,
+                    surface_alpha,
                 );
             }
+
+            if let Some(mount) = pane.mount.as_ref() {
+                let selection_overlay =
+                    selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
+                render_terminal_mount(
+                    TerminalRenderPassContext {
+                        text_renderer: &mut state.text_renderer,
+                        primitive_renderer: &mut state.primitive_renderer,
+                        device: &state.device,
+                        queue: &state.queue,
+                        view: scene_view,
+                        encoder: &mut encoder,
+                        scale_factor: state.scale_factor,
+                        surface_physical_size,
+                        content_clip: pane_area,
+                    },
+                    TerminalStyle {
+                        font_size: theme.terminal_font_size,
+                        font_family: &theme.terminal_font_family,
+                        italic_font_family: &theme.terminal_italic_font_family,
+                        surface_alpha,
+                    },
+                    crate::app::terminal_host::TerminalMount {
+                        content_rect: mount.content_rect,
+                        snapshot: mount.snapshot.clone(),
+                    },
+                    selection_overlay,
+                );
+            }
+
+            let mut float_scene = GuiScene::new();
+            float_scene.push(heca_grid_ui::scene::DrawCommand::PushClip(
+                GuiRectangle::new(
+                    GuiPoint::new(pane_area.loc.x, pane_area.loc.y),
+                    GuiSize::new(pane_area.size.w, pane_area.size.h),
+                ),
+            ));
+            paint_terminal_pane_shell(
+                state,
+                &mut float_scene,
+                pane.x,
+                pane.y,
+                pane.w,
+                pane.h,
+                fborder,
+                pane_border_width,
+                pane_border_radius,
+                pane_content_inset,
+                pane.is_active,
+            );
+            float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
+            render_chrome(
+                &mut state.grid_renderer,
+                &mut state.text_renderer,
+                &state.queue,
+                &float_scene,
+                scene_view,
+                &mut encoder,
+            );
         }
     }
 

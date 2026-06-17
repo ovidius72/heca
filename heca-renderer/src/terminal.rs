@@ -206,22 +206,23 @@ fn render_terminal_lines(
         y: py,
         w: pw,
         h: ph,
+        ..
     } = rect;
     let (fitted_rows, fitted_cols) = fitted_grid(rect, cell_w, cell_h);
     if fitted_rows == 0 || fitted_cols == 0 {
         return;
     }
-    // Modulate the default-bg fill alpha by the surface opacity so the
-    // frosted backdrop (stamped before this by the app layer) can show
-    // through. When opacity is 1.0 (opaque), this is a no-op.
+    // The terminal owns the translucent surface inside the pane content rect.
+    // The outer pane shell owns border/radius/highlight only.
     let surface_bg = [
         default_bg[0],
         default_bg[1],
         default_bg[2],
         default_bg[3] * style.surface_alpha,
     ];
-    primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
-
+    if surface_bg[3] > 0.0 {
+        primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
+    }
     let max_rows = fitted_rows.min(rows).min(lines.len());
     let max_cols = fitted_cols.min(cols);
     if max_rows == 0 || max_cols == 0 {
@@ -241,10 +242,13 @@ fn render_terminal_lines(
             while bg_end < visible_cols && line.cells[bg_end].bg == bg_color {
                 bg_end += 1;
             }
-            if bg_color[3] > 0.0 {
-                let x = px + bg_start as f32 * cell_w;
-                let w = (bg_end - bg_start) as f32 * cell_w;
-                primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
+            if !is_default_bg(bg_color, default_bg) {
+                let bg_color = with_surface_alpha(bg_color, style.surface_alpha);
+                if bg_color[3] > 0.0 {
+                    let x = px + bg_start as f32 * cell_w;
+                    let w = (bg_end - bg_start) as f32 * cell_w;
+                    primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
+                }
             }
             bg_start = bg_end;
         }
@@ -304,6 +308,18 @@ fn render_terminal_lines(
             );
         }
     }
+}
+
+fn with_surface_alpha(color: [f32; 4], surface_alpha: f32) -> [f32; 4] {
+    [color[0], color[1], color[2], color[3] * surface_alpha.clamp(0.0, 1.0)]
+}
+
+fn is_default_bg(bg: [f32; 4], default_bg: [f32; 4]) -> bool {
+    const EPS: f32 = 1e-6;
+    (bg[0] - default_bg[0]).abs() < EPS
+        && (bg[1] - default_bg[1]).abs() < EPS
+        && (bg[2] - default_bg[2]).abs() < EPS
+        && (bg[3] - default_bg[3]).abs() < EPS
 }
 
 fn queue_cursor_overlay(
@@ -479,6 +495,35 @@ fn draw_terminal_symbol_cell(
     }
 
     draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_default_bg, with_surface_alpha};
+
+    #[test]
+    fn with_surface_alpha_scales_alpha_only() {
+        let color = [0.25, 0.5, 0.75, 0.8];
+        let scaled = with_surface_alpha(color, 0.5);
+        assert_eq!(scaled[0], color[0]);
+        assert_eq!(scaled[1], color[1]);
+        assert_eq!(scaled[2], color[2]);
+        assert!((scaled[3] - 0.4).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn with_surface_alpha_clamps_input() {
+        let color = [1.0, 1.0, 1.0, 0.8];
+        assert!((with_surface_alpha(color, 2.0)[3] - 0.8).abs() < f32::EPSILON);
+        assert!((with_surface_alpha(color, -1.0)[3] - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn is_default_bg_uses_exact_visual_match() {
+        let bg = [0.1, 0.2, 0.3, 1.0];
+        assert!(is_default_bg(bg, bg));
+        assert!(!is_default_bg(bg, [0.1, 0.2, 0.31, 1.0]));
+    }
 }
 
 fn draw_box_drawing_cell(

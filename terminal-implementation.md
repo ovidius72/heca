@@ -1760,6 +1760,124 @@ Goal:
 - Terminal panes now use dedicated terminal font settings and fallback assets instead of inheriting only the UI theme font
 - A future pane-shell phase is now planned to host this terminal inside `heca-grid-ui` while adding process/global-state awareness at the shell layer
 
+### Current Blocker — Terminal Pane Shell / Frosted Terminal Surface
+
+Current user-verified state:
+
+- terminal transparency amount now clearly responds to `terminal_transparency`
+- terminal blur amount does **not** clearly respond to `terminal_blur`
+- terminal panes still do **not** show the expected `Pane` shell border / radius
+- pane gap now reads mainly because the terminal content rect is inset correctly, not because the shell border is visibly rendering
+
+Agreed contract:
+
+- `Pane` is the container of each terminal
+- `Pane` owns:
+  - border width
+  - border color
+  - border radius
+  - active/inactive shell treatment
+- the scrolling/layout container owns pane gap
+- the terminal renders **inside** the pane content rect only
+- terminal blur/transparency remain terminal-specific config knobs
+
+What was implemented and should be kept:
+
+- terminal-specific config:
+  - `appearance.terminal_transparency`
+  - `appearance.terminal_blur`
+- runtime wiring:
+  - `AppState::terminal_surface_opacity()`
+  - terminal blur gate/radius in `heca/src/app/render.rs`
+- real renderer fix:
+  - `heca-renderer/src/backdrop.rs`
+  - `heca-renderer/src/backdrop.wgsl`
+  - fixed the `wgpu` uniform-layout mismatch
+- structural cleanup:
+  - terminal pane composition was extracted out of `heca/src/app/render.rs`
+  - new owner: `heca/src/app/terminal_render.rs`
+- content-rect alignment:
+  - `heca/src/app/terminal_host.rs` now uses the same pane content inset rule as the render path
+
+What was tried and did **not** solve it:
+
+1. Letting the pane shell own the terminal surface fill
+- result:
+  - terminal panes became visually wrong / over-transparent
+  - border/radius still did not read
+- reverted
+
+2. Falling back tiled terminal shell color to `theme.float_background`
+- result:
+  - semantically wrong
+  - not approved
+  - did not solve border visibility
+- reverted
+
+3. Rendering terminal pane shell under terminal content
+- result:
+  - shell was visually swallowed by the terminal surface/content
+- changed
+
+4. Rendering terminal pane shell over terminal content
+- result:
+  - still no visible border/radius in the real runtime
+- still unresolved
+
+5. Debugging through `Pane::bordered()` shell fill
+- added obvious diagnostic shell fills through the `Pane` widget path
+- result:
+  - shell did not read the way expected
+  - not sufficient to prove the border path was correct
+- removed
+
+6. Debugging through a direct low-level `DrawCommand::Rect`
+- result:
+  - proved the outer pane geometry/path can reach the screen
+  - but did not resolve the actual `Pane` border/radius rendering problem
+- removed
+
+What this means technically:
+
+- the terminal content rect is no longer the primary bug
+- config reload for terminal transparency is no longer the primary bug
+- the unresolved bug is the **pane shell visual path** for terminal panes
+- there is also a second unresolved issue: `terminal_blur` does not produce a clearly distinct visual response across values in the current tiled-pane composition
+
+Likely remaining causes:
+
+1. the `Pane` widget path is not producing a visible border-only shell for terminals in the current render ordering/composition
+2. tiled terminal blur is still too visually weak / too similar across values because the current blurred source and terminal surface composition do not produce enough perceptible change
+
+What should be done next:
+
+1. Do **not** keep guessing style values in `render.rs`
+2. Keep terminal pane composition isolated in `heca/src/app/terminal_render.rs`
+3. Debug the `Pane` shell path itself:
+   - verify exactly which `DrawCommand`s are emitted for terminal panes
+   - compare them to a sidebar shell / showcase pane that visibly renders borders
+   - identify whether the issue is:
+     - missing border command emission
+     - wrong border alpha/color after theme bridging
+     - wrong clip/order in the terminal shell pass
+4. Separately debug tiled blur strength:
+   - compare `terminal_blur = 0`, `20`, `70`, `100`
+   - if visually flat, revisit the tiled-pane blur composition rather than terminal config parsing
+5. Do not invent a new shell abstraction:
+   - stay on the agreed `Pane` container path unless the user explicitly approves a change
+
+Uncommitted local files at pause point for this blocker:
+
+- `heca-config/src/appearance.rs`
+- `heca-renderer/src/backdrop.rs`
+- `heca-renderer/src/backdrop.wgsl`
+- `heca-renderer/src/terminal.rs`
+- `heca/src/app/mod.rs`
+- `heca/src/app/render.rs`
+- `heca/src/app/terminal_host.rs`
+- `heca/src/app/terminal_render.rs`
+- `heca/src/app_state.rs`
+
 ### Runtime Notes
 
 - Normal app runtime now uses `TerminalBackend`, not `FakeBackend`
@@ -1775,7 +1893,9 @@ Goal:
 
 ### Blockers
 
-- None at planning level
+- Phase 13 terminal pane shell integration is currently blocked on two live runtime issues:
+  - terminal `Pane` shell border/radius still not visibly rendering as expected
+  - `terminal_blur` differences are still not visibly distinct enough in the tiled-pane runtime
 
 ### Verification State
 
@@ -1795,6 +1915,32 @@ Goal:
   - `cargo clippy -p heca --all-targets` passes
   - `cargo clippy -p heca-renderer --all-targets` passes
   - floating-pane terminal panic from row-width mismatch is fixed
+- During the current pane-shell blocker investigation:
+  - `cargo check -p heca` passes after each structural/render-order change
+  - `cargo test -p heca-renderer terminal::tests -- --nocapture` passes for the terminal alpha helpers
+
+### Fresh Session Restart Steps
+
+If starting a brand-new session for this exact blocker:
+
+1. Read `AGENTS.md`
+2. Read `terminal-implementation.md`
+3. Read `.planning/STATE.md`
+4. Read the current local diffs in:
+   - `heca/src/app/terminal_render.rs`
+   - `heca/src/app/render.rs`
+   - `heca-renderer/src/terminal.rs`
+   - `heca-config/src/appearance.rs`
+   - `heca/src/app_state.rs`
+   - `heca/src/app/terminal_host.rs`
+5. Preserve these decisions:
+   - do not invent a new shell path without approval
+   - `Pane` remains the terminal container abstraction
+   - terminal blur/transparency remain terminal-owned, not shell-owned
+   - ask before changing unplanned architecture/styling/layer decisions
+6. Start from the two concrete unresolved questions only:
+   - why the `Pane` shell border/radius is still not visibly rendering
+   - why `terminal_blur` values still do not produce a strong visible difference
 
 ### Update Template
 

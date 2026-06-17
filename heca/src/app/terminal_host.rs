@@ -606,8 +606,8 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
             let y = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
             let w = float.size.w as f32;
             let h = float.size.h as f32;
-            let border = state.theme.border_width * 2.0;
-            return inset_content_rect(x, y, w, h, border);
+            let inset = pane_content_inset(state);
+            return inset_content_rect(x, y, w, h, inset);
         }
     }
 
@@ -624,8 +624,8 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
         let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let w = rect.size.w as f32;
         let h = rect.size.h as f32;
-        let border = state.theme.border_width;
-        return inset_content_rect(x, y, w, h, border);
+        let inset = pane_content_inset(state);
+        return inset_content_rect(x, y, w, h, inset);
     }
 
     None
@@ -643,6 +643,12 @@ fn inset_content_rect(x: f32, y: f32, w: f32, h: f32, border_width: f32) -> Opti
         Point::new((x + inset) as f64, (y + inset) as f64),
         Size::new(content_w as f64, content_h as f64),
     ))
+}
+
+fn pane_content_inset(state: &AppState) -> f32 {
+    let border = state.appearance.effective_pane_border_width(&state.theme);
+    let padding = state.appearance.effective_pane_padding(&state.theme);
+    padding.max(border + 1.0)
 }
 
 fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {

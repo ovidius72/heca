@@ -34,8 +34,7 @@ struct Params {
     dst_max: [f32; 2],
     uv_min: [f32; 2],
     uv_max: [f32; 2],
-    opacity: f32,
-    _pad: [f32; 3],
+    opacity_pad: [f32; 4],
 }
 
 /// Draws a (sub-region of a) texture into a destination rect, alpha-blended.
@@ -170,8 +169,7 @@ impl Backdrop {
             dst_max: [r, b],
             uv_min: [uv[0], uv[1]],
             uv_max: [uv[2], uv[3]],
-            opacity: opacity.clamp(0.0, 1.0),
-            _pad: [0.0; 3],
+            opacity_pad: [opacity.clamp(0.0, 1.0), 0.0, 0.0, 0.0],
         };
         // Per-draw uniform + bind group so multiple backdrops can be drawn in one
         // frame/encoder without clobbering each other (src view is caller-owned).

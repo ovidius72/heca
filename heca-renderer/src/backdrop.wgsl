@@ -12,9 +12,9 @@ struct Params {
     // Source rect in UV space (0..1), origin top-left: (left, top) and (right, bottom).
     uv_min: vec2<f32>,
     uv_max: vec2<f32>,
-    // Multiplied into the sampled alpha (0 = invisible, 1 = full).
-    opacity: f32,
-    _pad: vec3<f32>,
+    // Multiplied into the sampled alpha (0 = invisible, 1 = full). Packed into a
+    // full vec4 so the uniform layout matches Rust exactly.
+    opacity_pad: vec4<f32>,
 };
 
 @group(0) @binding(0) var src_tex: texture_2d<f32>;
@@ -48,6 +48,6 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var color = textureSample(src_tex, src_samp, in.uv);
-    color.a = color.a * p.opacity;
+    color.a = color.a * p.opacity_pad.x;
     return color;
 }
