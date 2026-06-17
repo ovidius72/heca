@@ -239,14 +239,12 @@ pub(crate) fn accept_drop(
     // so only pane targets count; dropping a pane onto a column/workspace falls through
     // to "re-add to the active workspace" (pane→column placement is a later enhancement).
     //
-    // Resolve BEFORE cancelling: the source-aware filter reads the live drag payload.
-    let target = crate::chrome::sidebar_drop_target(state, pos).and_then(|(item, side)| {
-        match item {
+    let target = crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
+        .and_then(|(item, side)| match item {
             crate::chrome::ChromeDragItem::Pane(pid) => Some((pid, side)),
             crate::chrome::ChromeDragItem::Column { .. }
             | crate::chrome::ChromeDragItem::Workspace { .. } => None,
-        }
-    });
+        });
 
     // Now clear all drag state.
     state.mouse.drag_ctx.cancel_all();

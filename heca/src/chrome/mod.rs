@@ -482,14 +482,20 @@ pub(crate) fn paint_drag_overlay(
     let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
         return;
     };
-    if !matches!(surf.phase, DragPhase::Dragging { .. }) {
-        return;
-    }
+    // During paint the drag is in flight (phase is still `Dragging`), so the live
+    // payload gives the source kind for the indicator's source-aware filter.
+    let source = match &surf.phase {
+        DragPhase::Dragging { payload } => match payload {
+            crate::app_state::AppDragPayload::Pane { .. } => DragSourceKind::Pane,
+            crate::app_state::AppDragPayload::Column { .. } => DragSourceKind::Column,
+        },
+        _ => return,
+    };
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
 
     // Drop indicator on the hovered target, resolved with the *source-aware* filter
     // (a column drag hints columns/workspaces, not the nested pane cards).
-    if let Some((_item, hit)) = resolve_sidebar_drop(state, state.mouse.pos) {
+    if let Some((_item, hit)) = resolve_sidebar_drop(state, state.mouse.pos, source) {
         cx.drop_indicator(hit.bounds, hit.side);
     }
 
@@ -783,32 +789,39 @@ pub(crate) fn sidebar_drag_source(
     tree.drag_items.get(id).cloned()
 }
 
+/// The kind of thing being dragged — passed **explicitly** by the caller so drop
+/// resolution never depends on the live drag payload, which is already wiped to
+/// `Idle` by the time the release handler runs (`mouse.rs` `mem::replace`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DragSourceKind {
+    /// A pane is being dragged.
+    Pane,
+    /// A column is being dragged.
+    Column,
+}
+
 /// Which drop-target kinds a given drag source may land on (F4.5 scope C). A pane
 /// drag targets panes; a column drag targets columns + workspaces — **never** the
 /// nested pane cards, or the deepest hit would always be a pane and a column could
 /// never be dropped on another column.
-fn target_accepted_by(source: &crate::app_state::AppDragPayload, item: &ChromeDragItem) -> bool {
-    use crate::app_state::AppDragPayload;
+fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
     match source {
-        AppDragPayload::Pane { .. } => matches!(item, ChromeDragItem::Pane(_)),
-        AppDragPayload::Column { .. } => {
+        DragSourceKind::Pane => matches!(item, ChromeDragItem::Pane(_)),
+        DragSourceKind::Column => {
             matches!(item, ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. })
         }
     }
 }
 
-/// Resolve the drop the **active** sidebar drag would land on at `pos`, filtered to
-/// the target kinds its source accepts (see [`target_accepted_by`]). `None` when no
-/// drag is active or no acceptable target is under the cursor.
-///
-/// Source kind comes from the live drag payload, so callers must resolve **before**
-/// cancelling the drag.
+/// Resolve the drop a drag of `source` kind would land on at `pos`, filtered to the
+/// target kinds it accepts (see [`target_accepted_by`]). `None` when no acceptable
+/// target is under the cursor.
 fn resolve_sidebar_drop(
     state: &crate::app_state::AppState,
     pos: (f32, f32),
+    source: DragSourceKind,
 ) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropHit)> {
     let tree = state.chrome_tree.as_ref()?;
-    let source = state.mouse.drag_ctx.active()?.payload()?;
     let accept = |id| tree.drag_items.get(id).is_some_and(|it| target_accepted_by(source, it));
     let hit = heca_grid_ui::drag::resolve_at_filtered(
         &tree.root,
@@ -819,14 +832,15 @@ fn resolve_sidebar_drop(
     Some((item, hit))
 }
 
-/// The drop target + [`DropSide`](heca_grid_ui::drag::DropSide) the active drag at
-/// `pos` lands on, source-aware (see [`resolve_sidebar_drop`]). `None` off any
-/// acceptable item.
+/// The drop target + [`DropSide`](heca_grid_ui::drag::DropSide) a drag of `source`
+/// kind at `pos` lands on, source-aware (see [`resolve_sidebar_drop`]). `None` off
+/// any acceptable item.
 pub(crate) fn sidebar_drop_target(
     state: &crate::app_state::AppState,
     pos: (f32, f32),
+    source: DragSourceKind,
 ) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropSide)> {
-    resolve_sidebar_drop(state, pos).map(|(item, hit)| (item, hit.side))
+    resolve_sidebar_drop(state, pos, source).map(|(item, hit)| (item, hit.side))
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,

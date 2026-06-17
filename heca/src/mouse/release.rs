@@ -87,7 +87,7 @@ pub(super) fn handle_sidebar_column_drag_release(
     swap: bool,
     pos: (f32, f32),
 ) {
-    let target = crate::chrome::sidebar_drop_target(state, pos);
+    let target = crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Column);
     state.mouse.drag_ctx.cancel_all();
 
     let Some((item, side)) = target else {
