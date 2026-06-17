@@ -110,6 +110,22 @@ pub enum WmAction {
         ws_idx: usize,
         focus: bool,
     },
+    /// Move a column to a position (within its workspace, or into another) — sidebar
+    /// column DnD / RPC (F4.5). `src_ws == dst_ws` reorders; otherwise it moves.
+    MoveColumn {
+        src_ws: usize,
+        src_col: usize,
+        dst_ws: usize,
+        dst_idx: usize,
+        focus: bool,
+    },
+    /// Swap two columns' positions — Shift+drag column swap / RPC (F4.5).
+    SwapColumns {
+        a_ws: usize,
+        a_col: usize,
+        b_ws: usize,
+        b_col: usize,
+    },
     Resize {
         target: ResizeTarget,
         axis: ResizeAxis,
@@ -300,6 +316,19 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
             ws_idx: 0,
             focus: true,
         }),
+        "move_column" => Some(WmAction::MoveColumn {
+            src_ws: 0,
+            src_col: 0,
+            dst_ws: 0,
+            dst_idx: 0,
+            focus: true,
+        }),
+        "swap_columns" => Some(WmAction::SwapColumns {
+            a_ws: 0,
+            a_col: 0,
+            b_ws: 0,
+            b_col: 0,
+        }),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
         "workspace_next" => Some(WmAction::WorkspaceNext),
@@ -406,6 +435,22 @@ pub fn build_action(
             pane_id: PaneId(get_u64(args, "pane_id")?),
             ws_idx: get_usize(args, "ws_idx")?,
             col_idx: get_usize(args, "col_idx")?,
+        }),
+        "move_column" => Some(WmAction::MoveColumn {
+            src_ws: get_usize(args, "src_ws")?,
+            src_col: get_usize(args, "src_col")?,
+            dst_ws: get_usize(args, "dst_ws")?,
+            dst_idx: get_usize(args, "dst_idx")?,
+            focus: args
+                .get("focus")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
+        }),
+        "swap_columns" => Some(WmAction::SwapColumns {
+            a_ws: get_usize(args, "a_ws")?,
+            a_col: get_usize(args, "a_col")?,
+            b_ws: get_usize(args, "b_ws")?,
+            b_col: get_usize(args, "b_col")?,
         }),
         "resize" => Some(WmAction::Resize {
             target: get_enum(args, "target")?,
@@ -547,6 +592,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::MovePaneToWorkspace { .. }
         | WmAction::MovePaneToColumn { .. }
         | WmAction::MoveColumnToWorkspace { .. }
+        | WmAction::MoveColumn { .. }
+        | WmAction::SwapColumns { .. }
         | WmAction::Resize { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::FloatAt { .. }
@@ -778,6 +825,8 @@ mod tests {
                 WmAction::MovePaneToWorkspace { pane_id: PaneId(0), ws_idx: 0 },
                 WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
                 WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
+                WmAction::MoveColumn { src_ws: 0, src_col: 0, dst_ws: 0, dst_idx: 0, focus: false },
+                WmAction::SwapColumns { a_ws: 0, a_col: 0, b_ws: 0, b_col: 0 },
                 WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 0.0 },
                 WmAction::ResizeTo { target: ResizeTarget::Column, width: 0.0, height: 0.0 },
                 WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },

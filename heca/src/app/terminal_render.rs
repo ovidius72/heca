@@ -250,7 +250,9 @@ fn rect_to_text_box(rect: Rectangle) -> TextBox {
     }
 }
 
-fn build_selection_overlay(
+// `pub(super)` so the selection-overlay unit tests (in `app::render`) can reach it
+// after #118 moved this fn out of `render.rs`.
+pub(super) fn build_selection_overlay(
     selection: &SelectionState,
     pane_id: PaneId,
     cols: usize,

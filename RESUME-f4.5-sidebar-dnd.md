@@ -81,17 +81,69 @@ Today the drag shows nothing until drop. Add, via the grid-ui paint path:
   is effectively unused there. Replace/retire it; drive the indicator from `resolve_at` instead.
 - Once `DropSide` is painted, also honor it in `accept_drop` (Before → insert at `t_pi`, After/Onto → `t_pi+1`).
 
-### 2 — column drag (panes AND columns; decided 2026-06-16)
-- **`AppDragPayload` (`heca/src/app_state.rs:118`) must become an enum** (`Pane{pane_id,origin_ws,swap}
-  | Column{ws,col_idx,swap}`) — the struct comment already says it. This breaks the struct-destructures
-  in `mouse/drag.rs` (handle_sidebar_drag_starting/move) + `mouse.rs` + `release.rs` — update all.
-- Mark `MarkerGroup` (column) `.draggable(id)`/`.drop_target(id)` in `chrome/mod.rs::column_view`.
-  Columns have NO global id → need a **side-map** `DragItemId → (ws, col_idx)` collected during build
-  (same pattern as `ChromeSignals`, store on `RetainedChrome`), since the pane-id-as-id trick won't work.
-  Use a disjoint id space (e.g. high-bit tag, or the side-map decides kind).
-- Hit-testing is innermost-first, so a press in the `MarkerGroup` **grip gutter** (its only own surface,
-  not covered by child rows) → column; a press on a pane card → pane. Falls out for free.
-- New WM action for column reorder; apply in `accept_drop` (column branch). Route through the registry.
+### 2 — column drag — DESIGN LOCKED via /grill-me (2026-06-17)
+**Scope = C (full matrix):** columns draggable via `MarkerGroup` grip-gutter; drop targets = column
+markers (same/cross-workspace) + workspace headers. Within-ws reorder, cross-ws move, drop-on-header
+→ **append at end**.
+**Interaction (mirrors panes 1a/1b):** drag = move+focus (Before/After thirds = insert pos; **Onto→After**);
+**Shift+drag = swap** (same- or cross-ws). Keyboard/RPC unchanged (targeting is **verb-first** — modes
+`PaneSwap`/`PaneTake`±focus already exist; thirds are mouse-only). **Parked (future):** middle-third=swap
+visual + scrolling-area mouse DnD (needs a new middle "swap-zone" hint).
+**Why ColumnId can't be the DragItemId:** `ColumnId` is assigned inconsistently (`scrolling.rs:704`
+`ColumnId(pane.id.0)` can equal a pane id; `workspace.rs:166` `ws.id*1000+len`) → not disjoint from
+`PaneId`. So a **build-time side-map decides kind** (not bit-tags).
+
+**Locked actions (new, positional, full registry + RPC; existing column actions untouched):**
+- `WmAction::MoveColumn { src_ws, src_col, dst_ws, dst_idx, focus }` — within (src_ws==dst_ws) OR cross.
+- `WmAction::SwapColumns { a_ws, a_col, b_ws, b_col }` — Shift+drag, same- or cross-ws.
+
+**Locked id-space:** `enum ChromeDragItem { Pane(PaneId), Column{ws,col}, Workspace{ws} }`; build-time
+`DragItemRegistry` (dense `Vec<ChromeDragItem>`, id = push index; threaded like `ChromeSignals`) stored on
+`RetainedChrome`; **panes unified onto it** (drop pane-id-as-id at `chrome/mod.rs:171`); `AppDragPayload`
+→ enum `Pane{pane_id,origin_ws,swap} | Column{ws,col,swap}`.
+
+**Slices (branch `grid-ui-f4.5-sidebar-dnd-2`, atomic commits) — ALL DONE (2026-06-17, not pushed):**
+1. ✅ **Foundation** `4e03f5d` — `ChromeDragItem`+`DragItemRegistry`, panes unified, `AppDragPayload`→enum.
+2. ✅ **Columns+headers targets** `4c87c16` — `MarkerGroup`/`DockFrame` draggable/drop-target; source-aware
+   `resolve_at_filtered` (column drag targets columns/workspaces, falls through nested panes).
+3. ✅ **Actions** `7188184` — `MoveColumn`+`SwapColumns` fully wired (incl. `ScrollingSpace::reorder_column`/
+   `swap_columns`) + RPC `move-column`/`swap-columns`.
+4. ✅ **Drop wired** `025b685` — `handle_sidebar_column_drag_release` dispatches move/swap; header→end.
+5. ✅ **Swap indicator** `e3480e1` — `PaintCx::swap_indicator` (whole-item double frame, NO thirds for swap).
+   Plus `4234656` **fix** — resolve drop by EXPLICIT `DragSourceKind` (release-time payload is wiped to
+   Idle by `mouse.rs` mem::replace → was resolving no target; also restored pane drops). `b4c37b4` chore.
+
+**Confirmed behavior:** column→column = move (Before/After) or swap (Shift); hovering a pane targets ITS
+column (large hit area, never swaps with a pane); column→workspace = move to end. Whole workspace clippy-
+clean; heca 196 + workspace tests green.
+
+**STILL OPEN (decide before/at PR):**
+- **Grip discoverability** — column drag starts only from the ~12px left grip gutter (`MarkerGroup` GRIP_W).
+  User found it fiddly earlier; may want to widen the grab zone or add a clearer handle. NOT yet changed.
+- **Workspace drag-to-reorder** — DEFERRED (own follow-up; see below).
+
+(Historical slice-5 note retained:) verify `paint_drag_overlay`/`resolve_at`
+   ghost+indicator on column/header bounds (mostly free via 1b). **Swap is whole-item — NO thirds**
+   (decided 2026-06-17): when the in-flight payload is a swap, the indicator must NOT draw a Before/After
+   insertion line (misleading — swap exchanges the entire pane/column, not an edge). Use a **distinct
+   swap visual** (its own style, NOT the `DropSide::Onto` wash) — add a theme-driven, domain-neutral
+   `PaintCx::swap_indicator(bounds)` in `heca-grid-ui` (e.g. two-way-arrow affordance). **Retrofit panes
+   (merged 1b) too** — `paint_drag_overlay` branches on swap. Logic is already whole-target (swap branch
+   in `accept_drop` ignores `DropSide`); this is the matching VISUAL.
+
+Hit-testing is innermost-first, so a press in the `MarkerGroup` grip gutter → column; on a pane card →
+pane — falls out for free. (RESUME "step 3" hover-dispatch + grab-cursor stays a SEPARATE sub-phase.)
+
+**Source-aware drop targeting (added slice 2, 2026-06-17):** the deepest drop target wins, but pane cards
+are nested in the column `MarkerGroup`, so an unfiltered resolve made a column drag target panes. Fixed
+with framework `drag::resolve_at_filtered(root, point, accept)` + app `resolve_sidebar_drop` /
+`target_accepted_by`: a Pane drag accepts Pane targets; a Column drag accepts Column+Workspace (never
+panes). Resolve BEFORE cancelling the drag (filter reads the live payload — `accept_drop` reordered).
+
+**DEFERRED (user, 2026-06-17 — NOT this PR): drag a workspace to REORDER workspaces.** Workspaces are
+drop-target-only here. Reorder-by-drag = its own follow-up: make the workspace `DockFrame` a drag source
+(add `Workspace` to `AppDragPayload`), add a workspace-reorder `WmAction` (none exists; workspaces are a
+vertical discrete list) + handler + RPC, and column-style visuals. Decided useful, just later.
 
 ### 3 — hover dispatch + grab cursor (decided 2026-06-16; PLAN P2)
 - **Hover:** the app dispatches **only `PointerPressed`** into the chrome tree today, so `MarkerGroup`/

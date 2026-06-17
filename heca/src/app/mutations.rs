@@ -352,3 +352,127 @@ pub(crate) fn destroy_empty_workspace(state: &mut AppState, ws_idx: usize) {
         }
     }
 }
+
+/// Move the column at `(src_ws, src_col)` to index `dst_idx` in workspace `dst_ws`
+/// — the positional primitive behind sidebar column DnD (F4.5). Handles **within**
+/// workspace reorder (`src_ws == dst_ws`) and **cross**-workspace move; a cross move
+/// that empties the source workspace destroys it. `focus` switches to / activates the
+/// moved column. No-op on out-of-range indices.
+pub(crate) fn move_column(
+    state: &mut AppState,
+    src_ws: usize,
+    src_col: usize,
+    dst_ws: usize,
+    dst_idx: usize,
+    focus: bool,
+) {
+    let ws_count = state.session.workspaces.len();
+    if src_ws >= ws_count || dst_ws >= ws_count {
+        return;
+    }
+    match state.session.workspaces.get(src_ws) {
+        Some(ws) if src_col < ws.scrolling.columns.len() => {}
+        _ => return,
+    }
+
+    if src_ws == dst_ws {
+        if let Some(ws) = state.session.workspaces.get_mut(src_ws) {
+            ws.scrolling.reorder_column(src_col, dst_idx);
+        }
+        if focus {
+            state.session.switch_to_workspace(src_ws);
+        }
+        sync_focus(state);
+        state.needs_redraw = true;
+        return;
+    }
+
+    let Some(column) = state
+        .session
+        .workspaces
+        .get_mut(src_ws)
+        .and_then(|ws| ws.scrolling.remove_column(src_col))
+    else {
+        return;
+    };
+
+    // A cross-workspace move can empty the source workspace; destroy it (cross moves
+    // always have ≥2 workspaces, so no single-workspace placeholder case applies).
+    let mut dst_ws = dst_ws;
+    let source_empty = state
+        .session
+        .workspaces
+        .get(src_ws)
+        .is_some_and(|ws| ws.scrolling.columns.is_empty());
+    if source_empty && ws_count > 1 {
+        if src_ws < dst_ws {
+            dst_ws -= 1;
+        }
+        destroy_empty_workspace(state, src_ws);
+    }
+
+    if let Some(ws) = state.session.workspaces.get_mut(dst_ws) {
+        let idx = dst_idx.min(ws.scrolling.columns.len());
+        ws.scrolling.add_column(Some(idx), column, focus);
+    }
+    if focus {
+        state.session.switch_to_workspace(dst_ws);
+    }
+    sync_focus(state);
+    state.needs_redraw = true;
+}
+
+/// Swap the columns at `(a_ws, a_col)` and `(b_ws, b_col)` — Shift+drag column swap
+/// (F4.5). Same-workspace swaps positions in place; cross-workspace exchanges the two
+/// columns between workspaces (counts unchanged, so no workspace empties). No-op on
+/// out-of-range indices or a self-swap.
+pub(crate) fn swap_columns_at(
+    state: &mut AppState,
+    a_ws: usize,
+    a_col: usize,
+    b_ws: usize,
+    b_col: usize,
+) {
+    let ws_count = state.session.workspaces.len();
+    if a_ws >= ws_count || b_ws >= ws_count {
+        return;
+    }
+    let in_range = |ws: usize, col: usize, s: &AppState| {
+        s.session
+            .workspaces
+            .get(ws)
+            .is_some_and(|w| col < w.scrolling.columns.len())
+    };
+    if !in_range(a_ws, a_col, state) || !in_range(b_ws, b_col, state) {
+        return;
+    }
+    if a_ws == b_ws {
+        if a_col == b_col {
+            return;
+        }
+        if let Some(ws) = state.session.workspaces.get_mut(a_ws) {
+            ws.scrolling.swap_columns(a_col, b_col);
+        }
+    } else {
+        let col_a = state
+            .session
+            .workspaces
+            .get_mut(a_ws)
+            .and_then(|w| w.scrolling.remove_column(a_col));
+        let col_b = state
+            .session
+            .workspaces
+            .get_mut(b_ws)
+            .and_then(|w| w.scrolling.remove_column(b_col));
+        if let (Some(ca), Some(cb)) = (col_a, col_b) {
+            if let Some(w) = state.session.workspaces.get_mut(a_ws) {
+                w.scrolling.add_column(Some(a_col), cb, false);
+            }
+            if let Some(w) = state.session.workspaces.get_mut(b_ws) {
+                w.scrolling.add_column(Some(b_col), ca, false);
+            }
+        }
+    }
+    sync_focus(state);
+    state.needs_redraw = true;
+}

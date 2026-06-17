@@ -711,6 +711,44 @@ impl<'a> PaintCx<'a> {
         }
     }
 
+    /// Draw a **swap indicator** over a target's whole `bounds` — for an *exchange*
+    /// gesture (Shift+drag) where the entire target is swapped with the source. There
+    /// is no before/after for a swap, so this deliberately draws a whole-item **double
+    /// accent frame** (+ faint wash) instead of [`drop_indicator`](Self::drop_indicator)'s
+    /// insertion line or `Onto` wash — a distinct cue that the whole item is the target.
+    /// Theme-driven (derives from `accent` / `radius` / `border_width`).
+    pub fn swap_indicator(&mut self, bounds: Rectangle) {
+        let accent = self.theme.accent;
+        let radius = self.theme.radius;
+        // Faint wash + bold outer frame.
+        self.rect(bounds, accent.with_alpha(28), None, radius, None);
+        let outer_w = (self.theme.border_width * 2.0).max(2.5);
+        self.rect(
+            bounds,
+            Color::TRANSPARENT,
+            Some(Border { color: accent, width: outer_w }),
+            radius,
+            None,
+        );
+        // Inset second line → reads as a "double frame" (= swap the whole item),
+        // visually separating it from the single-outline `Onto` look.
+        let inset = 3.0_f64;
+        let inner = Rectangle::new(
+            Point::new(bounds.loc.x + inset, bounds.loc.y + inset),
+            Size::new(
+                (bounds.size.w - inset * 2.0).max(0.0),
+                (bounds.size.h - inset * 2.0).max(0.0),
+            ),
+        );
+        self.rect(
+            inner,
+            Color::TRANSPARENT,
+            Some(Border { color: accent.with_alpha(120), width: 1.0 }),
+            (radius - inset as f32).max(0.0),
+            None,
+        );
+    }
+
     /// Dim `rect` with a background-colored scrim — the standard look for a
     /// **disabled** widget. `radius` must match the widget's corner radius so the
     /// scrim follows its rounded shape. DRY: every widget reuses this instead of

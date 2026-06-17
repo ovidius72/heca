@@ -233,14 +233,22 @@ pub(crate) fn accept_drop(
     swap: bool,
     pos: (f32, f32),
 ) {
-    // Clear all drag state first.
-    state.mouse.drag_ctx.cancel_all();
-    state.mouse.interactive_move = None;
-
     // Drop target + side resolved from the RETAINED chrome tree's bounds (F4.5), not
     // the legacy fixed-row geometry. The side (Before/Onto/After, from vertical thirds)
-    // decides which edge of the target the source lands on.
-    let target = crate::chrome::sidebar_drop_target(state, pos);
+    // decides which edge of the target the source lands on. This is the PANE drop path,
+    // so only pane targets count; dropping a pane onto a column/workspace falls through
+    // to "re-add to the active workspace" (pane→column placement is a later enhancement).
+    //
+    let target = crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
+        .and_then(|(item, side)| match item {
+            crate::chrome::ChromeDragItem::Pane(pid) => Some((pid, side)),
+            crate::chrome::ChromeDragItem::Column { .. }
+            | crate::chrome::ChromeDragItem::Workspace { .. } => None,
+        });
+
+    // Now clear all drag state.
+    state.mouse.drag_ctx.cancel_all();
+    state.mouse.interactive_move = None;
 
     if swap && let Some((target_pid, _side)) = target {
         if target_pid != pane_id {

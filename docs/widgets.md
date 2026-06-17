@@ -1104,8 +1104,13 @@ hit-testing — they read each widget's `Base.bounds` (filled by layout each fra
   (`DEFAULT_DRAG_THRESHOLD_SQ`, `rubberband`). Use `payload()` / `payload_mut()` to
   read/update the in-flight payload (e.g. toggle a swap flag mid-drag).
 - `PaintCx::drag_ghost(rect, text)` paints the cursor-following chip (overlay layer);
-  `PaintCx::drop_indicator(bounds, side)` paints the insertion line / onto-wash. Both
-  derive from `theme.accent` — no hardcoded colors.
+  `PaintCx::drop_indicator(bounds, side)` paints the insertion line / onto-wash for a
+  **move**; `PaintCx::swap_indicator(bounds)` paints a whole-item **double frame** for a
+  **swap** (an exchange has no before/after — so it deliberately avoids the insertion
+  line). `drag::resolve_at_filtered(root, point, accept)` is the source-aware variant of
+  `resolve_at` (the deepest *accepted* target wins) — e.g. while dragging a container,
+  accept only container-level targets so nested leaves fall through. All derive from
+  `theme.accent` — no hardcoded colors.
 
 **Putting it together** (the app owns `DragContext<AppPayload>` and dispatches its
 own pointer events into the retained tree):

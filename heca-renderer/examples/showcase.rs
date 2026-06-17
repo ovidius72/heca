@@ -22,6 +22,43 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
+/// A static swatch that paints a drag drop-indicator over its bounds so the
+/// catalog can *show* the visual without a live drag loop: `swap=false` → the
+/// **move** insertion line (`drop_indicator`, `After`); `swap=true` → the
+/// whole-item **swap** double-frame (`swap_indicator`). Both are host-painted in
+/// the real app (F4.5 sidebar pane/column DnD).
+struct IndicatorSwatch {
+    base: heca_grid_ui::component::Base,
+    swap: bool,
+}
+
+impl IndicatorSwatch {
+    fn new(swap: bool) -> Self {
+        Self { base: heca_grid_ui::component::Base::new(), swap }
+    }
+}
+
+impl Component for IndicatorSwatch {
+    fn base(&self) -> &heca_grid_ui::component::Base {
+        &self.base
+    }
+    fn base_mut(&mut self) -> &mut heca_grid_ui::component::Base {
+        &mut self.base
+    }
+    fn paint(&self, cx: &mut PaintCx) {
+        let b = self.base.bounds;
+        // A faint tile so the indicator reads against a surface, like a sidebar item.
+        cx.rect(b, cx.theme().surface, None, cx.theme().radius, None);
+        if self.swap {
+            cx.swap_indicator(b);
+        } else {
+            cx.drop_indicator(b, heca_grid_ui::drag::DropSide::After);
+        }
+    }
+}
+
+impl LayoutExt for IndicatorSwatch {}
+
 /// Map a winit logical key onto the renderer-agnostic `GridKey`.
 fn to_grid_key(key: &Key) -> Option<GridKey> {
     Some(match key {
@@ -784,6 +821,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 ));
             // MarkerGroup: a column-style grouping fronted by a left marker bar
             // that lights to the accent when the group is active (here: the first).
+            // Each group is also a DnD drag source + drop target (universal `DragExt`)
+            // grabbed by its left grip gutter — this is how the app drags whole
+            // *columns* (F4.5). A column drag accepts only column/workspace targets via
+            // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.
             let marker_demo = Flex::column()
                 .gap(8.0)
                 .child(Label::new("MARKER GROUP").color(theme.muted).font_scale(0.8))
@@ -791,13 +832,36 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     MarkerGroup::new()
                         .active(true)
                         .gap(4.0)
+                        .draggable(DragItemId::new(900))
+                        .drop_target(DragItemId::new(900))
                         .child(Row::new().padding(6.0).child(Label::new("pane A")))
                         .child(Row::new().padding(6.0).child(Label::new("pane B"))),
                 )
                 .child(
                     MarkerGroup::new()
                         .gap(4.0)
+                        .draggable(DragItemId::new(901))
+                        .drop_target(DragItemId::new(901))
                         .child(Row::new().padding(6.0).child(Label::new("pane C"))),
+                )
+                // The two host-painted drop visuals: a MOVE inserts (line on an edge);
+                // a SWAP exchanges the whole item (double frame, no before/after).
+                .child(Label::new("DROP INDICATORS").color(theme.muted).font_scale(0.8))
+                .child(
+                    Flex::row()
+                        .gap(12.0)
+                        .child(
+                            Flex::column()
+                                .gap(4.0)
+                                .child(IndicatorSwatch::new(false).width(Length::Px(120.0)).height(Length::Px(34.0)))
+                                .child(Label::new("move").color(theme.muted).font_scale(0.8)),
+                        )
+                        .child(
+                            Flex::column()
+                                .gap(4.0)
+                                .child(IndicatorSwatch::new(true).width(Length::Px(120.0)).height(Length::Px(34.0)))
+                                .child(Label::new("swap (Shift)").color(theme.muted).font_scale(0.8)),
+                        ),
                 );
             let panes_col = Flex::column()
                 .width(Length::Px(380.0))

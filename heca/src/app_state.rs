@@ -111,17 +111,29 @@ impl InputMode {
 /// payload-agnostic (generic over `P`); this struct is the *one* place the app's
 /// drag semantics live, keeping pane/workspace concepts out of the UI crate.
 ///
-/// Today only panes are dragged from the sidebar. As column/workspace/Docker/
-/// agent drags arrive, this grows into an enum of payload variants — the
-/// framework needs no change.
+/// One variant per draggable sidebar source. Panes were first (1a/1b); columns
+/// arrive in F4.5 step 2. The drop *target* is resolved separately at release
+/// (see `ChromeDragItem`) — this is only what the in-flight drag carries.
 #[derive(Clone, Debug)]
-pub struct AppDragPayload {
-    /// The pane being dragged.
-    pub pane_id: PaneId,
-    /// Workspace the drag originated in.
-    pub origin_ws: usize,
-    /// If true, drop performs a swap instead of a move.
-    pub swap: bool,
+pub enum AppDragPayload {
+    /// A pane card dragged from the sidebar.
+    Pane {
+        /// The pane being dragged.
+        pane_id: PaneId,
+        /// Workspace the drag originated in.
+        origin_ws: usize,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
+    },
+    /// A column (its `MarkerGroup` grip) dragged from the sidebar.
+    Column {
+        /// Workspace the column lives in (its origin).
+        ws: usize,
+        /// The column's index within that workspace.
+        col: usize,
+        /// If true, drop performs a swap instead of a move.
+        swap: bool,
+    },
 }
 
 /// State for the interactive content-area drag (pane moved by mouse).
