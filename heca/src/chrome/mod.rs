@@ -86,15 +86,17 @@ impl ChromeConfig {
 
 // ── Grid-UI chrome scene builder ──────────────────────────────────────────────
 
-use crate::app_state::SidebarItemState;
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_core::layout::PaneId;
-use heca_grid_ui::builders::{LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, Pane, Row, Surface,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, MarkerGroup, Pane, Row,
+    Surface,
 };
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -155,16 +157,27 @@ fn pane_card(
     theme: &GuiTheme,
     sink: SidebarClickSink,
     active_pane: Option<PaneId>,
+    signals: &mut ChromeSignals,
 ) -> Row {
     let active = active_pane == Some(pane.pane_id);
-    let tint = if active { theme.accent } else { theme.foreground };
     let pane_id = pane.pane_id;
-    Row::new()
-        .background(tint.with_alpha(if active { 30 } else { 12 }))
+    // A constant theme-driven card; the *selected* look (accent pill + border + bar)
+    // is drawn by `Row` from its `active` signal, not baked into the background. This
+    // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
+    // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
+    // Pane id encodes directly into the opaque DragItemId (panes are globally
+    // unique), so `drag::source_at`/`resolve_at` over the retained tree round-trip
+    // it without a side-map. The card is both a drag source and a drop target (F4.5).
+    let drag_id = DragItemId::new(pane_id.0 as usize);
+    let card = Row::new()
+        .background(theme.foreground.with_alpha(12))
+        .highlight(theme.accent)
         .radius(theme.control_radius())
         .padding(6.0)
         .marker(ActiveMarker::Bar)
         .active(active)
+        .draggable(drag_id)
+        .drop_target(drag_id)
         // On click/Enter the card records its pane id in the host sink; the app reads
         // it after dispatch and focuses that pane (read-via-signal / write-via-action).
         .on_activate(move || sink.set(Some(pane_id)))
@@ -172,47 +185,37 @@ fn pane_card(
             Flex::row()
                 .align(Align::Center)
                 .gap(8.0)
-                .child(Icon::new(pane_glyph(&pane.name)).size(16.0).color(tint))
-                .child(Label::new(pane.name.clone()).color(if active {
-                    theme.accent
-                } else {
-                    theme.foreground
-                })),
-        )
+                .child(Icon::new(pane_glyph(&pane.name)).size(16.0).color(theme.foreground))
+                .child(Label::new(pane.name.clone()).color(theme.foreground)),
+        );
+    // Bind the card's active signal so focus changes update it without a rebuild.
+    signals.pane_active.push((pane_id, card.state()));
+    card
 }
 
-/// One **column**, rendered compactly: a full-height left **marker bar** + the
-/// column's stacked pane cards — no per-column header row (columns are spatial
+/// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
+/// the column's stacked pane cards — no per-column header row (columns are spatial
 /// groupings whose only user-facing job is to be a move/swap target + drag handle).
-/// The bar is the **seam** for that: the move/swap letter target and future DnD
-/// drag handle attach here (wired with the F4 shared-state layer). The bar brightens
-/// to the accent when the column holds the active pane. `Align::Stretch` (the Flex
-/// default) makes the fixed-width bar span the height of the pane stack.
+/// The `MarkerGroup` bar brightens to the accent when the column holds the active
+/// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
+/// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
+/// baked into the widget.
 fn column_view(
     c: &SidebarColEntry,
     theme: &GuiTheme,
     sink: &SidebarClickSink,
     active_pane: Option<PaneId>,
-) -> Flex {
+    signals: &mut ChromeSignals,
+) -> MarkerGroup {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
-    let bar_color = if active {
-        theme.accent
-    } else {
-        theme.accent.with_alpha(90)
-    };
-    let mut panes = Flex::column().gap(3.0).grow(1.0);
+    let mut col = MarkerGroup::new().active(active).gap(3.0);
     for pane in &c.panes {
-        panes = panes.child(pane_card(pane, theme, sink.clone(), active_pane));
+        col = col.child(pane_card(pane, theme, sink.clone(), active_pane, signals));
     }
-    Flex::row()
-        .gap(6.0)
-        .child(
-            Surface::new()
-                .width(Length::Px(3.0))
-                .radius(1.5)
-                .background(bar_color),
-        )
-        .child(panes)
+    // Bind the column bar's active signal (lit iff it holds the active pane).
+    let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
+    signals.col_active.push((pane_ids, col.state()));
+    col
 }
 
 /// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
@@ -225,6 +228,7 @@ fn build_workspaces_container(
     theme: &GuiTheme,
     sinks: &ChromeSinks,
     ws_state: &WorkspacesContainerState,
+    signals: &mut ChromeSignals,
 ) -> Flex {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
@@ -271,10 +275,10 @@ fn build_workspaces_container(
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, theme, &sinks.click, active_pane));
+            cols = cols.child(column_view(c, theme, &sinks.click, active_pane, signals));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane));
+            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane, signals));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -295,6 +299,7 @@ fn build_sidebar_shell(
     sinks: &ChromeSinks,
     ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
+    signals: &mut ChromeSignals,
 ) -> Flex {
     let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -324,7 +329,7 @@ fn build_sidebar_shell(
                 .background(theme.surface)
                 .border(theme.border, theme.border_width)
                 .child(header)
-                .child(build_workspaces_container(tree, theme, sinks, ws_state)),
+                .child(build_workspaces_container(tree, theme, sinks, ws_state, signals)),
         )
 }
 
@@ -385,9 +390,13 @@ fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
+    signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame { w, h, tab_bar_height, status_bar_height, status, side_bg, fg } = *frame;
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
+    // The status label's text is bound so mode/focus changes update it in place.
+    let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
+    signals.status = Some(status_label.text_signal());
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
@@ -421,7 +430,7 @@ fn chrome_root(
                 .radius(0.0)
                 .align(Align::Center)
                 .padding_xy(8.0, 0.0)
-                .child(Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg)),
+                .child(status_label),
         )
 }
 
@@ -440,6 +449,46 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
     scene
 }
 
+/// Paint the in-flight sidebar-drag overlay (drop indicator + ghost chip) into the
+/// chrome `scene`, on top of the **expanded** grid-ui sidebar (F4.5 1b). Driven by the
+/// retained-tree geometry (`resolve_at`) — not the legacy fixed-row hit-test — so the
+/// indicator tracks the real laid-out pane cards. No-op unless a sidebar drag is in its
+/// `Dragging` phase. The collapsed rail keeps its own hand-drawn ghost/highlight, so the
+/// caller only invokes this for the expanded sidebar.
+pub(crate) fn paint_drag_overlay(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(surf) = state.mouse.drag_ctx.surface(DragSurfaceId::LeftSidebar) else {
+        return;
+    };
+    if !matches!(surf.phase, DragPhase::Dragging { .. }) {
+        return;
+    }
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+
+    // Drop indicator on the hovered pane card, from the retained tree's real bounds.
+    if let Some(tree) = state.chrome_tree.as_ref() {
+        let p = Point::new(state.mouse.pos.0 as f64, state.mouse.pos.1 as f64);
+        if let Some(hit) = heca_grid_ui::drag::resolve_at(&tree.root, p) {
+            cx.drop_indicator(hit.bounds, hit.side);
+        }
+    }
+
+    // Ghost chip following the cursor (offset off the pointer + vertically centered,
+    // mirroring the legacy hand-drawn ghost so the two paths look identical).
+    if let Some(label) = &surf.ghost_label {
+        let rect = Rectangle::new(
+            Point::new((label.x + 10.0) as f64, (label.y - label.height / 2.0) as f64),
+            Size::new(label.width as f64, label.height as f64),
+        );
+        cx.drag_ghost(rect, &label.text);
+    }
+}
+
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
 /// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
 #[cfg(test)]
@@ -449,7 +498,8 @@ fn chrome_scene(
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
 ) -> Scene {
-    let mut root = chrome_root(frame, left_sidebar, right_sidebar);
+    let mut signals = ChromeSignals::default();
+    let mut root = chrome_root(frame, left_sidebar, right_sidebar, &mut signals);
     paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
@@ -518,11 +568,62 @@ fn chrome_status(state: &crate::app_state::AppState) -> String {
 pub(crate) struct RetainedChrome {
     pub(crate) root: Flex,
     pub(crate) sig: u64,
+    /// Handles to the tree's **value** signals (selection + status), so they update
+    /// in place via [`sync_chrome_signals`] instead of forcing a rebuild.
+    pub(crate) signals: ChromeSignals,
+}
+
+/// Handles to the retained chrome tree's **value** signals — the state that changes
+/// without a structural change (pane/column selection + status text). Collected
+/// during [`build_chrome_root`] and pushed each frame by [`sync_chrome_signals`], so
+/// these values are **not** in [`chrome_signature`] and focus changes no longer
+/// rebuild the tree. Rebuilt with the tree on structural change.
+#[derive(Default)]
+pub(crate) struct ChromeSignals {
+    /// Each pane card's `active` signal, keyed by pane id.
+    pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
+    /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
+    /// iff it contains the active pane).
+    pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// The status-bar label's text signal.
+    pub(crate) status: Option<Signal<String>>,
+}
+
+/// Push the chrome's value-state (selection + status text) into the retained tree's
+/// bound signals. Guarded — writes only on change, so unchanged frames cause no
+/// signal churn. Called each frame before paint; this is what lets focus changes
+/// update the highlight + status **without** rebuilding the tree.
+pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
+    let Some(retained) = state.chrome_tree.as_ref() else {
+        return;
+    };
+    let active = state.chrome_state.workspaces.active_pane();
+    for (pid, sig) in &retained.signals.pane_active {
+        let v = active == Some(*pid);
+        if sig.get_untracked() != v {
+            sig.set(v);
+        }
+    }
+    for (pids, sig) in &retained.signals.col_active {
+        let v = active.is_some_and(|a| pids.contains(&a));
+        if sig.get_untracked() != v {
+            sig.set(v);
+        }
+    }
+    if let Some(status) = retained.signals.status {
+        let next = chrome_status(state);
+        if status.get_untracked() != next {
+            status.set(next);
+        }
+    }
 }
 
 /// Build the chrome root tree from app state (the expensive part — creates the
 /// widget tree and its signals). Call only when [`chrome_signature`] changes.
-pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: ChromeConfig) -> Flex {
+pub(crate) fn build_chrome_root(
+    state: &crate::app_state::AppState,
+    chrome: ChromeConfig,
+) -> (Flex, ChromeSignals) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -530,6 +631,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
     let (side_bg, _sidebar_bg, fg) = chrome_colors(state);
     let theme = chrome_gui_theme(state);
     let status = chrome_status(state);
+    let mut signals = ChromeSignals::default();
 
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
@@ -542,6 +644,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
             &state.chrome_sinks,
             &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
+            &mut signals,
         ))
     } else {
         None
@@ -559,7 +662,7 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
         None
     };
 
-    chrome_root(
+    let root = chrome_root(
         &ChromeFrame {
             w,
             h,
@@ -571,7 +674,9 @@ pub(crate) fn build_chrome_root(state: &crate::app_state::AppState, chrome: Chro
         },
         left_sidebar,
         right_sidebar,
-    )
+        &mut signals,
+    );
+    (root, signals)
 }
 
 /// Hit-test a sidebar click by dispatching a pointer-press into the **retained**
@@ -603,12 +708,24 @@ pub(crate) fn chrome_dispatch_click(
     }
 }
 
-fn sidebar_state_tag(s: &SidebarItemState) -> u8 {
-    match s {
-        SidebarItemState::Active => 0,
-        SidebarItemState::Visited => 1,
-        SidebarItemState::None => 2,
-    }
+/// The pane a press at `pos` (logical window coords) would start dragging, found by
+/// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
+/// the legacy fixed-row `sidebar_hit_test`. `None` off any pane card.
+pub(crate) fn sidebar_drag_source(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<PaneId> {
+    let tree = state.chrome_tree.as_ref()?;
+    let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    Some(PaneId(id.raw() as u64))
+}
+
+/// The pane + [`DropSide`](heca_grid_ui::drag::DropSide) a drop at `pos` lands on, via
+/// the retained chrome tree. `None` off any pane card.
+pub(crate) fn sidebar_drop_target(
+    state: &crate::app_state::AppState,
+    pos: (f32, f32),
+) -> Option<(PaneId, heca_grid_ui::drag::DropSide)> {
+    let tree = state.chrome_tree.as_ref()?;
+    let hit = heca_grid_ui::drag::resolve_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
+    Some((PaneId(hit.id.raw() as u64), hit.side))
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,
@@ -631,26 +748,27 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     state.theme.border_radius.to_bits().hash(&mut hsh);
     state.appearance.chrome_opacity().to_bits().hash(&mut hsh);
     state.appearance.opacity().to_bits().hash(&mut hsh);
-    chrome_status(state).hash(&mut hsh);
+    // The active workspace (which gets the accent wash + count badge) is structural
+    // enough to rebuild on a workspace SWITCH — but pane-to-pane focus *within* a
+    // workspace must NOT rebuild: pane/column `active` + the status text are bound
+    // signals (`sync_chrome_signals`), deliberately excluded from this signature.
+    state.session.active_workspace_idx.hash(&mut hsh);
     for ws in &state.sidebar_tree.workspaces {
         ws.ws_idx.hash(&mut hsh);
         ws.name.hash(&mut hsh);
         ws.collapsed.hash(&mut hsh);
-        sidebar_state_tag(&ws.state).hash(&mut hsh);
         for c in &ws.columns {
             c.col_idx.hash(&mut hsh);
             c.collapsed.hash(&mut hsh);
             for p in &c.panes {
                 p.pane_id.0.hash(&mut hsh);
                 p.name.hash(&mut hsh);
-                sidebar_state_tag(&p.state).hash(&mut hsh);
             }
             u8::MAX.hash(&mut hsh); // column separator in the hash stream
         }
         for p in &ws.floating_panes {
             p.pane_id.0.hash(&mut hsh);
             p.name.hash(&mut hsh);
-            sidebar_state_tag(&p.state).hash(&mut hsh);
         }
         u64::MAX.hash(&mut hsh); // workspace separator
     }
@@ -746,6 +864,7 @@ mod tests {
 
     #[test]
     fn sidebar_shell_hosts_header_and_container() {
+        use crate::app_state::SidebarItemState;
         use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
         use heca_grid_ui::Component;
 
@@ -773,8 +892,16 @@ mod tests {
         chrome.workspaces.set_active_pane(Some(heca_core::layout::PaneId(1)));
         // The shell wraps a bracketed Pane that holds [header, WorkspacesContainer];
         // the container hosts a dock per workspace (so the tree's text is visible).
-        let shell =
-            super::build_sidebar_shell(&tree, 280.0, 600.0, &theme, &sinks, &chrome.workspaces, 8.0);
+        let shell = super::build_sidebar_shell(
+            &tree,
+            280.0,
+            600.0,
+            &theme,
+            &sinks,
+            &chrome.workspaces,
+            8.0,
+            &mut super::ChromeSignals::default(),
+        );
         assert_eq!(
             shell.base().children.len(),
             1,

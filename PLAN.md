@@ -105,6 +105,13 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   grip/item (via `MarkerGroup::hovered()` + the same `resolve_at`/`source_at` "is draggable" test)
   →`Grab`; else default. Build it general so it extends to text I-beam / resize cursors later.
   Deferred to here because `Grab`-on-hover would be a lie until items are actually `.draggable`.
+- **Hover dispatch (decided 2026-06-16; belongs HERE): the app must feed `PointerMoved` into the
+  retained chrome tree.** Today only `PointerPressed` is dispatched (`chrome_dispatch_click`), so
+  `MarkerGroup`/`Row` `hovered` never updates in the app — the grip hover/grab affordance is inert
+  in the real sidebar (works in the showcase, which runs a full event loop). Wire move-dispatch +
+  repaint into the cursor-moved path alongside the cursor policy + drag, so the grab affordance and
+  drag light up together (a hover "grab me" cue is meaningless until drag works). The widget is
+  already correct — this is app interaction wiring only.
 
 ### P3 — Pane numbering feature (agreed, spec'd — memory `heca-pane-numbering-spec`)
 - `prefix+<ws 1-9>+<pane 1-9>` → focus that pane (deterministic cross-ws chord; ws-switch is
@@ -130,6 +137,18 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.
+- **Split `heca/src/app/render.rs` (~1400 lines)** into a `render/` folder — *do at the end, its own
+  PR, not mid-feature.* `render_frame` (~765 lines) shrinks to ~250. Target 6 files:
+  `mod.rs` (frame orchestrator + `update_session_viewport`), `geometry.rs` (pane/scissor/textbox
+  math), `terminal.rs` (`TerminalRenderPassContext` + `render_terminal_mount` — the terminal pass),
+  `panes.rs` (tiled+floating passes: blur stamps, border scenes, content), `selection.rs`
+  (`build_selection_overlay`/`selection_overlay_for_pane`/`status_mode_parts` + tests),
+  `overlays.rs` (collapsed rails, drag ghost, pane-select labels, `render_chrome` flush).
+  Easy: geometry/terminal/selection/`render_chrome` already take explicit params (mechanical move).
+  Risk: `panes.rs` + rail/ghost live INSIDE `render_frame` and touch many `AppState` fields while
+  `scene_view` borrows `state.compositor` → extract via a granular-field context struct (the
+  `TerminalRenderPassContext` pattern), never `&mut AppState`. Verify by running the app (GPU
+  ordering isn't unit-tested).
 
 ---
 
@@ -167,6 +186,12 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 7. **Docs**: theme-token reference + config.toml configurability; demote `docs/the-grid-ui.md` to
    reference-only; end-user docs (after everything ships).
 8. **B-series renderer**: physical-pixel 1px alignment on fractional scale; dedicated scanline shader.
+9. **`heca-grid-ui` crate-review debt** (from the two crate reviews, both ~8/10; docs removed):
+   `badge.rs` `unreachable!()` in a reachable match arm; add `[workspace.lints]`/package lints;
+   `#[allow]`→`#[expect]` in `component.rs`; `#![deny(missing_docs)]`; `#[non_exhaustive]` on public
+   enums; hot-path allocs (`Input::chars_vec`, `CommandPalette::results`, scene `to_vec`/`clone`);
+   widget test coverage (~3% — widgets largely untested); shared hover/flash/anim helper to cut
+   ~200 lines duplicated across Button/Toggle/Checkbox/IconButton/Item/Row/RailCell.
 
 ---
 

@@ -16,13 +16,11 @@ mod target;
 
 use crate::app::interaction::InteractionSource;
 use crate::app::terminal_host::should_intercept_selection_gesture;
-use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
 use heca_core::layout::PaneId;
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
 use crate::input::WmAction;
-// NOTE: DragItemId / DEFAULT_DRAG_THRESHOLD_SQ return when sidebar DnD is
-// re-enabled (F4.5); removed for now to keep the build warning-clean.
-use heca_grid_ui::drag::{DragPhase, DragSurfaceId};
+use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId, DEFAULT_DRAG_THRESHOLD_SQ};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -73,20 +71,34 @@ pub fn on_mouse_input(
                 return None;
             }
 
+            // Resolve the drag source FIRST — `surface_click_action` dispatches into
+            // (and discards) the retained chrome tree, so it must run after this.
+            let drag_source = crate::chrome::sidebar_drag_source(state, pos);
             // Sidebar click.
             let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
-            // Sidebar DnD is temporarily DISABLED (F4.5): the drag source/hover/drop
-            // all still resolve via the stale fixed-row `sidebar_hit_test` geometry,
-            // which no longer matches the grid-ui layout, so dragging mis-targets.
-            // Until drag is migrated to the retained-tree geometry (with the column
-            // marker bar as the drop target), a press on a sidebar pane is handled as
-            // a plain click — the action was computed by `surface_click_action` above
-            // — and no drag is started. Re-enable by restoring the drag-start here.
-            if sidebar_pane_hit_test(state, pos).is_some() {
-                if let Some(action) = sidebar_action {
-                    return Some((action, InteractionSource::MouseLeftSidebar));
+            // Sidebar pane press → start drag-detection, resolving the source pane
+            // from the RETAINED chrome tree's real bounds (F4.5), not the legacy
+            // fixed-row geometry. If the threshold isn't crossed it falls back to the
+            // pending click action (stored below); see `mouse/drag.rs`.
+            if let Some(pane_id) = drag_source {
+                let origin_ws = match crate::find_pane_location(&state.session, pane_id) {
+                    Some((ws_idx, _, _)) => ws_idx,
+                    None => {
+                        return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar))
+                    }
+                };
+                let swap = state.modifiers.shift_key();
+                state.mouse.pending_click_action = sidebar_action.clone();
+                if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
+                    left.phase = DragPhase::Starting {
+                        payload: AppDragPayload { pane_id, origin_ws, swap },
+                        start_pos: pos,
+                        threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
+                    };
+                    left.source_item = Some(DragItemId::new(pane_id.0 as usize));
                 }
+                state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
                 return None;
             }
 
@@ -231,7 +243,6 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 pub(crate) use hit_test::{hit_test_pane, hit_test_pane_excluding};
-use hit_test::sidebar_pane_hit_test;
 
 pub(crate) use render::{render_detached_pane, render_insert_hint};
 

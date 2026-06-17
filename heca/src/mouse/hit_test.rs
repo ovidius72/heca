@@ -79,29 +79,3 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
     None
 }
 
-/// Check if a sidebar pane item is under the cursor. Returns pane_id if found.
-pub(super) fn sidebar_pane_hit_test(state: &AppState, pos: (f32, f32)) -> Option<PaneId> {
-    let (_win_w, win_h) = super::window_logical_size(state);
-    let chrome = super::chrome_config(state);
-    let sidebar_top = chrome.tab_bar_height;
-    let sidebar_bottom = win_h - chrome.status_bar_height;
-    let sw = if state.chrome_state.left_visible() {
-        chrome.left_sidebar_width
-    } else {
-        40.0
-    };
-
-    if pos.0 < 0.0 || pos.0 >= sw || pos.1 < sidebar_top || pos.1 >= sidebar_bottom {
-        return None;
-    }
-
-    let sidebar_h = sidebar_bottom - sidebar_top;
-    let fi =
-        crate::sidebar::sidebar_hit_test(&state.sidebar_tree, sidebar_top, sidebar_h, sw, pos.1)?;
-    let item = state.sidebar_tree.flat_items.get(fi);
-    match item? {
-        crate::sidebar::SidebarItem::Pane { pane_id }
-        | crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => Some(*pane_id),
-        _ => None,
-    }
-}
