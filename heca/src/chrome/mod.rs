@@ -782,6 +782,20 @@ pub(crate) fn chrome_dispatch_click(
     }
 }
 
+/// Feed a pointer-move into the retained chrome tree so its **hover affordances**
+/// update in the real app — the `MarkerGroup` grip brightening (the column's "grab
+/// me" cue) and `Row` hover. The app otherwise only dispatches `PointerPressed`, so
+/// these were inert in the sidebar though they work in the showcase. Unlike
+/// [`chrome_dispatch_click`] this does **not** discard the tree — hover is transient
+/// and must persist across moves; the caller already requests a repaint.
+pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
+    if let Some(tree) = state.chrome_tree.as_mut() {
+        tree.root.event(&Event::PointerMoved {
+            pos: Point::new(pos.0 as f64, pos.1 as f64),
+        });
+    }
+}
+
 /// The pane a press at `pos` (logical window coords) would start dragging, found by
 /// hit-testing the **retained** chrome tree's real laid-out bounds (F4.5) — replaces
 /// the legacy fixed-row `sidebar_hit_test`. `None` off any pane card.

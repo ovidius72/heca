@@ -131,6 +131,10 @@ pub(crate) fn handle_window_event(
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
                 dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
+            // Feed the move into the retained chrome tree so sidebar hover affordances
+            // (MarkerGroup grip "grab" cue, Row hover) light up — the app otherwise
+            // only sends presses. Repaint is already requested below.
+            crate::chrome::chrome_dispatch_move(state, pos);
             forward_mouse_move(state, pos);
             state.needs_redraw = true;
         }
