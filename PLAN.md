@@ -91,8 +91,8 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   re-subscribe on rebuild; the only-affected-repaint payoff needs signal-dirty to feed the
   `needs_paint`/`collect_damage` path. This is the deep part of the work.
 
-**Design refs:** `F4-chrome-state-design.md` §2.2, `grid-ui-chrome-plan.md` §4,
-`pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
+**Design refs:** the locked SharedChromeState design lives in this P0 section (above); see also
+`grid-ui-chrome-plan.md` §4, `pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
 
 ### P1 — F4.4 — generic marker/rail widget + targeting (built drag-aware)
 - ✅ **`heca-grid-ui::MarkerGroup` built** — generic, theme-driven, `Base`+`Component`+builders;
@@ -257,8 +257,11 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
 ## Design references (kept in root — rationale, not task lists)
 - `pluggable-chrome-plugin-plan.md` — chrome-plugin architecture north star.
 - `grid-ui-chrome-plan.md` — chrome widget vocabulary + shared-state strategy (§4).
-- `F4-chrome-state-design.md` — SharedChromeState design.
 - `dnd-framework-refactor-plan.md` — generic DnD framework design (Phase 1+2 shipped).
+- `niri-compatibility-review.md` + `docs/niri-wiki/` — **important** niri layout/keybinding reference;
+  **needs updating** to reflect current heca (flagged 2026-06-17). Keep — do **not** delete.
+  *(The `F4-chrome-state-design.md` doc was outdated and removed; its live SharedChromeState design is
+  now in the **P0** section above.)*
 
 ## Archived (history → `.planning/archive/`)
 - `grid-ui-plan.md` — the big grid-ui task board (full backlog detail).
