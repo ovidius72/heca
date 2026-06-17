@@ -93,10 +93,10 @@ use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, Icon, IconButton, Label, MarkerGroup, Pane, Row,
-    Surface,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label,
+    MarkerGroup, Pane, Row, Surface,
 };
-use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate};
+use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -159,7 +159,7 @@ fn pane_card(
     active_pane: Option<PaneId>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-) -> Row {
+) -> KeyHint {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
@@ -191,7 +191,14 @@ fn pane_card(
         );
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
-    card
+    // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
+    // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
+    // events/focus/drag straight through — so the card stays a drag source + target
+    // and clickable. The hint signal is driven each frame in `sync_chrome_signals`
+    // from the active `InputMode` candidates (keyboard logic stays the source of truth).
+    let hint = signal(None);
+    signals.pane_hint.push((pane_id, hint));
+    KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight)
 }
 
 /// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
@@ -657,8 +664,33 @@ pub(crate) struct ChromeSignals {
     /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
     /// iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
+    /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
+    /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
+    /// `None`. This is the move/swap/take **targeting overlay** — the keyboard logic
+    /// (candidates + key consumption) already lives in the action/input layer; this
+    /// only projects it into the retained Dock.
+    pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
     /// The status-bar label's text signal.
     pub(crate) status: Option<Signal<String>>,
+}
+
+/// The move/swap/take pick keycap for `pane` — `Some(letter)` while it is a pick
+/// candidate, else `None`. The currently focused pane is never a target, so it shows
+/// no keycap. Pure projection of the active `InputMode` candidates; mirrors the
+/// legacy hand-drawn sidebar's `candidate_char` so the overlay reads identically.
+fn pick_keycap(
+    pane: PaneId,
+    active: Option<PaneId>,
+    candidates: Option<&[(char, PaneId)]>,
+) -> Option<String> {
+    if active == Some(pane) {
+        return None;
+    }
+    candidates?
+        .iter()
+        .find(|(_, p)| *p == pane)
+        .map(|(ch, _)| ch.to_string())
 }
 
 /// Push the chrome's value-state (selection + status text) into the retained tree's
@@ -680,6 +712,18 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
+        }
+    }
+    // Project the active move/swap/take pick candidates onto each pane's KeyHint
+    // keycap. The candidates (char→PaneId) and the key-press consumption already
+    // live in the `InputMode` / action layer (`app/input.rs`); this only mirrors the
+    // letters into the retained Dock. The currently focused pane is never a target,
+    // so it shows no keycap (matches the legacy hand-drawn sidebar's behavior).
+    let candidates = state.input_mode.candidates();
+    for (pid, sig) in &retained.signals.pane_hint {
+        let next = pick_keycap(*pid, active, candidates);
+        if sig.get_untracked() != next {
+            sig.set(next);
         }
     }
     if let Some(status) = retained.signals.status {
@@ -912,6 +956,23 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pick_keycap_projects_candidates() {
+        let p1 = PaneId(1);
+        let p2 = PaneId(2);
+        let p3 = PaneId(3);
+        let cands = [('a', p1), ('s', p2)];
+        // No pick active → no keycap.
+        assert_eq!(pick_keycap(p1, Some(p3), None), None);
+        // Candidate pane → its letter.
+        assert_eq!(pick_keycap(p1, Some(p3), Some(&cands)), Some("a".to_string()));
+        assert_eq!(pick_keycap(p2, Some(p3), Some(&cands)), Some("s".to_string()));
+        // Non-candidate pane → none.
+        assert_eq!(pick_keycap(p3, Some(p1), Some(&cands)), None);
+        // The focused pane is never a target, even if listed as a candidate.
+        assert_eq!(pick_keycap(p1, Some(p1), Some(&cands)), None);
+    }
 
     #[test]
     fn test_content_rect_full() {
