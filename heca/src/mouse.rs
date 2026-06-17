@@ -39,6 +39,8 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
 /// cursors here as more affordances arrive.
 pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
     use winit::window::CursorIcon;
+    // The cursor only signals grabbable/grabbed (there is no "swap" cursor); the
+    // move-vs-swap distinction lives on the drag ghost + the on-target indicator.
     let icon = if state.mouse.drag_ctx.is_dragging() {
         CursorIcon::Grabbing
     } else if crate::chrome::sidebar_drag_source(state, pos).is_some() {
