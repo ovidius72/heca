@@ -209,7 +209,13 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
 ## Locked rules / constraints (ignore → redo)
 - **New UI = generic, theme-driven `heca-grid-ui` widget** — embed `Base`, read ALL styling from
   `Theme`; domain-neutral; never ad-hoc inline `Flex`/`Surface` in the app. (AGENTS.md; memory
-  `heca-widgets-in-grid-ui`.)
+  `heca-widgets-in-grid-ui`.) **Covers every new element/component/widget from the terminal backlog**
+  (e.g. the Phase 11 context menu, any image-preview chrome): build it as a proper `heca-grid-ui`
+  widget following the existing design rules (embed `Base`, read ALL styling from `Theme`,
+  domain-neutral name/semantics, no hardcoded sizes/colors/alphas), route behavior through
+  `ActionRegistry`/`KeymapRegistry` (mouse + keybinding + RPC parity). Low-level image *texture*
+  rendering (Phase 12) is `heca-renderer` (wgpu) — a different altitude, not a grid-ui widget; any
+  UI *around* it still is.
 - **Foundation before style** (`foundation-state-before-style`); **best architecture up front, no
   half-measures** (`build-future-proof-no-half-measures`).
 - **DnD framework stays domain-neutral** — payload in the app's `AppDragPayload`, never in `drag/`.
