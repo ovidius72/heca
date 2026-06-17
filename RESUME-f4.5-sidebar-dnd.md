@@ -102,19 +102,27 @@ visual + scrolling-area mouse DnD (needs a new middle "swap-zone" hint).
 `RetainedChrome`; **panes unified onto it** (drop pane-id-as-id at `chrome/mod.rs:171`); `AppDragPayload`
 → enum `Pane{pane_id,origin_ws,swap} | Column{ws,col,swap}`.
 
-**Slices (one PR `grid-ui-f4.5-sidebar-dnd-2`, atomic commits):**
-1. **Foundation refactor (behavior-preserving):** add `ChromeDragItem`+`DragItemRegistry`, thread through
-   build, unify panes onto it, `sidebar_drag_source/target` → registry lookup, `AppDragPayload`→enum
-   (Pane only); rewrite destructures in `mouse/drag.rs`/`mouse.rs`/`release.rs`/`surface_left.rs` as
-   `match`/`if let` (so slice 2 only ADDS arms). Panes behave identically; tests green.
-2. **Columns + workspace-headers draggable/drop-target:** mark `MarkerGroup` (`column_view`) + ws headers,
-   register them, add `Column` payload variant + column drag-start.
-3. **Actions:** `MoveColumn`+`SwapColumns` → `action_from_name`/`build_action`/`action_priority` →
-   handlers (+ public arbitrary-column move primitive in `ScrollingSpace`; `move_column_to` is
-   private/active-only) → `build_registry` → RPC → descriptors.
-4. **`accept_drop` column branch:** decode source/target `ChromeDragItem`; dispatch move/swap honoring
-   Before/After + focus; header-drop → end.
-5. **Column in-drag visuals + swap-aware indicator:** verify `paint_drag_overlay`/`resolve_at`
+**Slices (branch `grid-ui-f4.5-sidebar-dnd-2`, atomic commits) — ALL DONE (2026-06-17, not pushed):**
+1. ✅ **Foundation** `4e03f5d` — `ChromeDragItem`+`DragItemRegistry`, panes unified, `AppDragPayload`→enum.
+2. ✅ **Columns+headers targets** `4c87c16` — `MarkerGroup`/`DockFrame` draggable/drop-target; source-aware
+   `resolve_at_filtered` (column drag targets columns/workspaces, falls through nested panes).
+3. ✅ **Actions** `7188184` — `MoveColumn`+`SwapColumns` fully wired (incl. `ScrollingSpace::reorder_column`/
+   `swap_columns`) + RPC `move-column`/`swap-columns`.
+4. ✅ **Drop wired** `025b685` — `handle_sidebar_column_drag_release` dispatches move/swap; header→end.
+5. ✅ **Swap indicator** `e3480e1` — `PaintCx::swap_indicator` (whole-item double frame, NO thirds for swap).
+   Plus `4234656` **fix** — resolve drop by EXPLICIT `DragSourceKind` (release-time payload is wiped to
+   Idle by `mouse.rs` mem::replace → was resolving no target; also restored pane drops). `b4c37b4` chore.
+
+**Confirmed behavior:** column→column = move (Before/After) or swap (Shift); hovering a pane targets ITS
+column (large hit area, never swaps with a pane); column→workspace = move to end. Whole workspace clippy-
+clean; heca 196 + workspace tests green.
+
+**STILL OPEN (decide before/at PR):**
+- **Grip discoverability** — column drag starts only from the ~12px left grip gutter (`MarkerGroup` GRIP_W).
+  User found it fiddly earlier; may want to widen the grab zone or add a clearer handle. NOT yet changed.
+- **Workspace drag-to-reorder** — DEFERRED (own follow-up; see below).
+
+(Historical slice-5 note retained:) verify `paint_drag_overlay`/`resolve_at`
    ghost+indicator on column/header bounds (mostly free via 1b). **Swap is whole-item — NO thirds**
    (decided 2026-06-17): when the in-flight payload is a swap, the indicator must NOT draw a Before/After
    insertion line (misleading — swap exchanges the entire pane/column, not an edge). Use a **distinct
