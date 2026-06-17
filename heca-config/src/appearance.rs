@@ -48,6 +48,14 @@ fn default_blur() -> u8 {
     0
 }
 
+fn default_terminal_transparency() -> u8 {
+    0
+}
+
+fn default_terminal_blur() -> u8 {
+    0
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -69,6 +77,8 @@ const MAX_BLUR_PX: f32 = 24.0;
 /// - `vibrancy` — the **OS backdrop** material (blurs the desktop *behind* the
 ///   window). Not numeric, not portable: macOS materials, Windows acrylic, Linux
 ///   no-op. [`Vibrancy::None`] = off.
+/// - `terminal_transparency` / `terminal_blur` — terminal-pane surface controls,
+///   independent from the global chrome/window knobs above.
 /// - pane chrome — border width, colors, radius, gap. These override the theme
 ///   when set; leaving them unset inherits from the theme automatically.
 ///
@@ -84,6 +94,16 @@ pub struct AppearanceConfig {
     /// distinct from the OS `vibrancy` backdrop.
     #[serde(default = "default_blur")]
     pub blur: u8,
+
+    /// Terminal pane transparency amount, `0..=100` (`0` opaque, `100`
+    /// see-through). Independent from the global window/chrome transparency.
+    #[serde(default = "default_terminal_transparency")]
+    pub terminal_transparency: u8,
+
+    /// Terminal pane in-app blur amount, `0..=100` (`0` = off). Independent from
+    /// the global chrome/window blur amount.
+    #[serde(default = "default_terminal_blur")]
+    pub terminal_blur: u8,
 
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
@@ -144,6 +164,17 @@ impl AppearanceConfig {
         (self.blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
     }
 
+    /// Terminal pane surface opacity in `0.0..=1.0` (`terminal_transparency = 0`
+    /// → `1.0` opaque).
+    pub fn terminal_opacity(&self) -> f32 {
+        1.0 - (self.terminal_transparency.min(100) as f32) / 100.0
+    }
+
+    /// Terminal-pane in-app blur radius in logical px (`0.0` = off).
+    pub fn terminal_blur_radius(&self) -> f32 {
+        (self.terminal_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
+    }
+
     /// The OS backdrop material to apply, or `None` when disabled.
     pub fn os_vibrancy(&self) -> Option<Vibrancy> {
         (self.vibrancy != Vibrancy::None).then_some(self.vibrancy)
@@ -195,6 +226,8 @@ impl Default for AppearanceConfig {
         Self {
             transparency: default_transparency(),
             blur: default_blur(),
+            terminal_transparency: default_terminal_transparency(),
+            terminal_blur: default_terminal_blur(),
             vibrancy: default_vibrancy(),
             pane_border_width: None,
             pane_border_color: None,
@@ -220,10 +253,14 @@ mod tests {
         let cfg = AppearanceConfig::default();
         assert_eq!(cfg.transparency, 0);
         assert_eq!(cfg.blur, 0);
+        assert_eq!(cfg.terminal_transparency, 0);
+        assert_eq!(cfg.terminal_blur, 0);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
         assert!(!cfg.is_transparent());
         assert!((cfg.opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.blur_radius()).abs() < f32::EPSILON);
+        assert!((cfg.terminal_opacity() - 1.0).abs() < f32::EPSILON);
+        assert!((cfg.terminal_blur_radius()).abs() < f32::EPSILON);
         assert_eq!(cfg.os_vibrancy(), None);
     }
 
@@ -232,21 +269,27 @@ mod tests {
         let cfg = AppearanceConfig {
             transparency: 25,
             blur: 50,
+            terminal_transparency: 40,
+            terminal_blur: 75,
             vibrancy: Vibrancy::Sidebar,
             ..Default::default()
         };
         assert!((cfg.opacity() - 0.75).abs() < 1e-6);
         assert!(cfg.is_transparent());
         assert!((cfg.blur_radius() - 12.0).abs() < 1e-6); // 50% of 24px
+        assert!((cfg.terminal_opacity() - 0.6).abs() < 1e-6);
+        assert!((cfg.terminal_blur_radius() - 18.0).abs() < 1e-6);
         assert_eq!(cfg.os_vibrancy(), Some(Vibrancy::Sidebar));
     }
 
     #[test]
     fn partial_toml_fills_defaults() {
-        let cfg: AppearanceConfig = toml::from_str("transparency = 30\n")
+        let cfg: AppearanceConfig = toml::from_str("transparency = 30\nterminal_transparency = 15\n")
             .expect("partial appearance toml should parse");
         assert_eq!(cfg.transparency, 30);
         assert_eq!(cfg.blur, 0);
+        assert_eq!(cfg.terminal_transparency, 15);
+        assert_eq!(cfg.terminal_blur, 0);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
     }
 

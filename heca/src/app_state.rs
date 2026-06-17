@@ -292,15 +292,16 @@ pub struct AppState {
 impl AppState {
     /// Terminal pane surface opacity, derived from the shared appearance contract.
     ///
-    /// Returns `1.0` (opaque) when transparency is disabled, and the global
-    /// `opacity()` when enabled. This is the alpha used for the translucent
-    /// pane surface fill drawn over the frosted backdrop.
+    /// Returns `1.0` (opaque) when `terminal_transparency = 0`, and the
+    /// terminal-specific `terminal_opacity()` otherwise. This is the alpha used
+    /// for the translucent pane surface fill drawn over the frosted backdrop.
     ///
     /// In-app blur (frosted backdrop) is only drawn when this value is < 1.0
-    /// AND `appearance.blur_radius() > 0`. See `render_frame` for the policy.
+    /// AND `appearance.terminal_blur_radius() > 0`. See `render_frame` for the
+    /// policy.
     pub fn terminal_surface_opacity(&self) -> f32 {
-        if self.appearance.is_transparent() {
-            self.appearance.opacity()
+        if self.appearance.terminal_transparency > 0 {
+            self.appearance.terminal_opacity()
         } else {
             1.0
         }

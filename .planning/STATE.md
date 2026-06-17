@@ -127,6 +127,10 @@ progress:
 ## Known Risks
 
 - Terminal drawing now enters through a dedicated renderer module, but glyph shaping still relies on generic `TextRenderer` internals
+- Phase 13 pane-shell integration is not visually correct yet:
+  - terminal transparency amount now responds to config
+  - terminal blur amount still does not produce a strong visible difference across values
+  - terminal pane border/radius still are not visibly rendering as expected through the `heca-grid-ui` `Pane` container path
 - Yazi image preview still spins forever because richer graphics/image protocol support is not implemented yet
 - Terminal palette/theme fidelity still benefits from a few more live checks across additional themes and fonts before merge
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
@@ -149,6 +153,12 @@ If resuming from a fresh session, do this first:
 3. Read the shared-selection contract in `terminal-implementation.md` before extending selection/copy/paste
 4. Keep selection reusable across terminal, browser, future Neovim GUI, and host-native panes
 5. If touching bell/clipboard/graphics, avoid `heca-grid-ui` chrome files unless the task is explicitly pane-shell integration
+6. For the current pane-shell blocker:
+   - stay on the agreed `Pane` container path
+   - do not invent a new shell abstraction without approval
+   - focus only on:
+     - missing visible pane border/radius
+     - weak / non-distinct `terminal_blur` response
 
 ## Structured Post-Merge Terminal Backlog
 

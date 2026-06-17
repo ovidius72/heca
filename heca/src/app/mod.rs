@@ -20,3 +20,4 @@ pub mod selection_model;
 pub mod startup;
 pub mod terminal_host;
 pub mod terminal_metrics;
+pub mod terminal_render;
