@@ -25,7 +25,7 @@
 2. **In-app blur (F3)** — reusable primitive ✅ (`Blur` + `Backdrop`, PR #105/#107); **app-wiring remains**
 3. **SharedChromeState** — foundation ✅ (PR #107); ← **NEXT: consumer migration**
 4. **F4.4** — generic marker/rail widget + targeting
-5. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
+5. ~~**F4.5 ≡ DnD Phase 3** — sidebar DnD~~ ✅ DONE (PRs #116/#117/#119/#120). Leftovers: grip-widen, workspace drag-to-reorder, Onto semantics — see RESUME.md §4
 6. **Pane numbering** feature
 7. **Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec
 8. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom
@@ -90,7 +90,11 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   candidates from `chrome_state.workspaces.pick_candidates` (consume that field). KeyHint stays
   universal (memory `grid-ui-keyhint-universal`).
 
-### P2 — F4.5 ≡ DnD Phase 3 — re-enable sidebar DnD on the new framework
+### P2 — F4.5 ≡ DnD Phase 3 — sidebar DnD — ✅ DONE (#116/#117/#119/#120)
+> Panes + columns drag/move/swap, source-aware targeting, grab cursor, swap visual, RPC,
+> docs + showcase all shipped. Remaining polish (own follow-ups): grip-widen, workspace
+> drag-to-reorder, Onto-third semantics. Full detail + file map in **RESUME.md**.
+> Original plan kept below for reference.
 - Framework ready (DnD Phase 1+2 merged): `drag::source_at`/`resolve_at` over the retained tree
   (kills `sidebar_hit_test` for DnD); paint `PaintCx::drag_ghost`/`drop_indicator`. Restore the
   drag-start block disabled in `45143b5`. Design: `dnd-framework-refactor-plan.md`.
