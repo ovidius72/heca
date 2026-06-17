@@ -897,7 +897,10 @@ mouse, keyboard, and RPC all light it up identically.
 
 - **Construct**: `KeyHint::new(child)`.
 - **Builders**: `.hint(Signal<Option<String>>)`, `.placement(HintPlacement)`
-  (`TopCenter` | `Center`), `.size(px)`.
+  (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
+  for wide list rows — keycap pinned to the right edge so the row label stays readable),
+  `.size(px)`. The wrapper is **transparent to a stretching parent**: a wide child row
+  fills its column instead of shrinking to content width.
 - **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
 
 ```rust
