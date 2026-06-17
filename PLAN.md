@@ -166,6 +166,7 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Generic DnD framework** (DnD Phase 1+2): `DragContext<P>`, universal `DragExt`,
   `resolve_at`/`source_at`, `drag_ghost`/`drop_indicator`, generic theme tokens.
 - **Terminal backend** live.
+- **Pane shell (Phase 13 visual blocker 1)**: borders/radius now render through the `heca-grid-ui` `Pane` container (PR #121 — `GridRenderer` `begin_frame`-once-per-frame contract fix); terminal content clipped to the rounded border via a stencil-write pass; snug padding + chrome value clamps + theme-driven `pane_padding`. Blocker 2 (`terminal_blur`) still open — see P4.
 - Pluggable-chrome-plugin-plan **Precondition** (the 10-phase refactor) complete.
 
 ---

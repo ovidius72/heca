@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 4 of 4 (The Platform)
 status: in_progress
-last_updated: "2026-06-14T00:00:00.000Z"
+last_updated: "2026-06-17T00:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
@@ -17,7 +17,7 @@ progress:
 
 **Current Phase:** Phase 4 — The Platform
 **Status:** In progress
-**Last Action:** Phase 3 terminal-core work is merged; post-merge terminal backlog is active with shared host selection as the required architecture for selection/copy/paste
+**Last Action:** Phase 13 pane-shell visual blocker 1 (border/radius rendering) fixed in PR #121; blocker 2 (terminal_blur) remains. Stencil rounded content-clip + snug padding + chrome value clamps + theme-driven `pane_padding` landed; pre-existing clippy lints deferred to pre-PR cleanup.
 
 ## Product Phase Progress
 
@@ -71,6 +71,7 @@ progress:
 - Terminal engine now supports explicit terminal default foreground/background overrides without forcing terminal defaults to follow the outer app theme
 - Terminal snapshot generation now preserves styled blank cells across the full visible row, which is required for `nvim` and other full-screen TUIs to render their background colors correctly
 - Terminal palette configuration now supports default colors plus ANSI/brights/cursor/selection colors through config/theme plumbing
+- Phase 13 pane-shell visual blocker 1 (PR #121): pane borders/radius now render (root cause = `GridRenderer` persistent-buffer `begin_frame`-once-per-frame contract violated by `render_chrome`); terminal content clipped to the rounded border via a stencil-write pass (new `fs_stencil` WGSL + `STENCIL_FORMAT` + stencil-view plumbing across backdrop/primitive/text); snug `pane_padding` (8→4); chrome value clamps (radius/border_width/pane_padding) in resolvers; `Theme.pane_padding` field (theme-driven, no hardcode); `keybindings.toml` `[appearance]` reference documented; `heca-renderer/src/clip.rs` extracted (`intersect`/`combine_clip`). heca 196 / heca-renderer 10 / heca-config 31 tests green; 0 new clippy warnings. Blocker 2 (`terminal_blur`) remains open.
 
 ### Current User-Verified Runtime State
 
@@ -127,10 +128,11 @@ progress:
 ## Known Risks
 
 - Terminal drawing now enters through a dedicated renderer module, but glyph shaping still relies on generic `TextRenderer` internals
-- Phase 13 pane-shell integration is not visually correct yet:
-  - terminal transparency amount now responds to config
-  - terminal blur amount still does not produce a strong visible difference across values
-  - terminal pane border/radius still are not visibly rendering as expected through the `heca-grid-ui` `Pane` container path
+- Phase 13 pane-shell integration — visual correctness:
+  - ✅ terminal transparency amount responds to config
+  - ✅ terminal pane border/radius now render correctly through the `heca-grid-ui` `Pane` container path (PR #121 — root cause: `render_chrome` violated the `GridRenderer` persistent-buffer `begin_frame`-once-per-frame contract, resetting the vertex offset; fix = `begin_frame()` once at frame top)
+  - ✅ terminal content follows the pane's rounded border (stencil rounded content-clip, no corner overflow) + snug padding (`pane_padding` 8→4) + chrome value clamps (radius [0,20], border_width [0,10], pane_padding [0,20]) + theme-driven `pane_padding`
+  - ⛔ terminal blur amount still does not produce a strong visible difference across values — **next**
 - Yazi image preview still spins forever because richer graphics/image protocol support is not implemented yet
 - Terminal palette/theme fidelity still benefits from a few more live checks across additional themes and fonts before merge
 - Terminal font family naming must match the embedded font metadata (`Maple Mono Normal NF`)
@@ -156,9 +158,8 @@ If resuming from a fresh session, do this first:
 6. For the current pane-shell blocker:
    - stay on the agreed `Pane` container path
    - do not invent a new shell abstraction without approval
-   - focus only on:
-     - missing visible pane border/radius
-     - weak / non-distinct `terminal_blur` response
+   - ✅ missing visible pane border/radius — fixed (PR #121)
+   - ⛔ weak / non-distinct `terminal_blur` response — **remaining focus**
 
 ## Structured Post-Merge Terminal Backlog
 
