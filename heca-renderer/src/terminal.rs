@@ -497,34 +497,6 @@ fn draw_terminal_symbol_cell(
     draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{is_default_bg, with_surface_alpha};
-
-    #[test]
-    fn with_surface_alpha_scales_alpha_only() {
-        let color = [0.25, 0.5, 0.75, 0.8];
-        let scaled = with_surface_alpha(color, 0.5);
-        assert_eq!(scaled[0], color[0]);
-        assert_eq!(scaled[1], color[1]);
-        assert_eq!(scaled[2], color[2]);
-        assert!((scaled[3] - 0.4).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn with_surface_alpha_clamps_input() {
-        let color = [1.0, 1.0, 1.0, 0.8];
-        assert!((with_surface_alpha(color, 2.0)[3] - 0.8).abs() < f32::EPSILON);
-        assert!((with_surface_alpha(color, -1.0)[3] - 0.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn is_default_bg_uses_exact_visual_match() {
-        let bg = [0.1, 0.2, 0.3, 1.0];
-        assert!(is_default_bg(bg, bg));
-        assert!(!is_default_bg(bg, [0.1, 0.2, 0.31, 1.0]));
-    }
-}
 
 fn draw_box_drawing_cell(
     primitive_renderer: &mut PrimitiveRenderer,
@@ -730,4 +702,33 @@ fn fitted_grid(rect: TextBox, cell_w: f32, cell_h: f32) -> (usize, usize) {
         rows.min(usize::MAX as f32) as usize,
         cols.min(usize::MAX as f32) as usize,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_default_bg, with_surface_alpha};
+
+    #[test]
+    fn with_surface_alpha_scales_alpha_only() {
+        let color = [0.25, 0.5, 0.75, 0.8];
+        let scaled = with_surface_alpha(color, 0.5);
+        assert_eq!(scaled[0], color[0]);
+        assert_eq!(scaled[1], color[1]);
+        assert_eq!(scaled[2], color[2]);
+        assert!((scaled[3] - 0.4).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn with_surface_alpha_clamps_input() {
+        let color = [1.0, 1.0, 1.0, 0.8];
+        assert!((with_surface_alpha(color, 2.0)[3] - 0.8).abs() < f32::EPSILON);
+        assert!((with_surface_alpha(color, -1.0)[3] - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn is_default_bg_uses_exact_visual_match() {
+        let bg = [0.1, 0.2, 0.3, 1.0];
+        assert!(is_default_bg(bg, bg));
+        assert!(!is_default_bg(bg, [0.1, 0.2, 0.31, 1.0]));
+    }
 }
