@@ -5,6 +5,13 @@
 **Starts only after:** the current refactoring is complete (it is — all 10 phases done).
 **Important note:** this document defines the next architecture program. The structural cleanup is finished; the codebase now has clean seams for this work to begin.
 
+> **Scope — this is NOT the full plan.** This file is the architecture *north-star / rationale* for **one
+> workstream**: the pluggable-chrome + WASM-plugin arc (Phases 0–11). It does **not** track the broader
+> active work (appearance/blur/zoom/font, pane numbering, F4.4/F4.5 sidebar, grid-ui maturity backlog,
+> render split, …). The **single operational source of truth is [`PLAN.md`](./PLAN.md)** — it owns the
+> prioritized task list and current status, and references this file for the long-arc design. Keep this
+> doc for *rationale*; track *tasks* in PLAN.md. Checklist (§7) status updated 2026-06-17.
+
 ---
 
 ## 1. Why This Document Exists
@@ -1148,15 +1155,15 @@ This architecture implies future changes to at least these areas:
 ## Architecture
 
 - [ ] Write and ratify the formal chrome host + provider + plugin contracts
-- [ ] Define chrome regions and allowed contribution types
-- [ ] Define shared UI/chrome state model
+- [ ] Define chrome regions and allowed contribution types — *(partial: `ChromeRegion` widget exists for all 4 oriented regions; the formal contribution-type contract is unwritten)*
+- [x] Define shared UI/chrome state model — *design locked (`F4-chrome-state-design.md`); `SharedChromeState` foundation landed (PR #107)*
 - [ ] Define provider lifecycle model
 - [ ] Define overlay ownership and result-returning API shape
 
 ## Core runtime
 
-- [ ] Introduce shared UI/chrome state layer
-- [ ] Introduce ChromeHost and region hosts
+- [ ] Introduce shared UI/chrome state layer — *(partial: `SharedChromeState` foundation landed, PR #107; consumer migration is PLAN.md P0, not done)*
+- [ ] Introduce ChromeHost and region hosts — *(partial: `ChromeRegion` widget exists; app-side ChromeHost does not)*
 - [ ] Introduce built-in provider system
 - [ ] Migrate current sidebar/workspace logic into `WorkspacesContainerProvider`
 
@@ -1170,23 +1177,23 @@ This architecture implies future changes to at least these areas:
 
 ## UI/widgets
 
-- [ ] Add `SidebarContainerFrame`-style presentation primitives to `heca-grid-ui`
-- [ ] Add richer sidebar item/group widgets as needed
-- [ ] Add or generalize region/top/bottom/right-side widgets
-- [ ] Add list/scroll primitives if needed
+- [x] Add `SidebarContainerFrame`-style presentation primitives to `heca-grid-ui` — *`DockFrame` (bracket-framed, collapsible, rail-aware container shell)*
+- [x] Add richer sidebar item/group widgets as needed — *`Item`, `ItemGroup`, `MarkerGroup`, `RailCell`, `Row`, `KeyHint`*
+- [x] Add or generalize region/top/bottom/right-side widgets — *`ChromeRegion` (one oriented shell for all 4 regions)*
+- [ ] Add list/scroll primitives if needed — *G7: unblocked (renderer clip landed), not yet built*
 
 ## Compositing effects
 
-- [ ] Define shell-level transparency/blur effect contracts
-- [ ] Add renderer support for backdrop capture / offscreen compositing where needed
-- [ ] Add blur/translucency support for floating pane shells
-- [ ] Add blur/translucency support for the broader app shell/chrome where appropriate
-- [ ] Ensure effects remain clip-aware and host-owned rather than terminal/provider-owned
+- [ ] Define shell-level transparency/blur effect contracts — *(partial: window transparency + vibrancy shipped; blur primitive done; the shell-level contract/policy is still informal)*
+- [x] Add renderer support for backdrop capture / offscreen compositing where needed — *`Blur` + `Backdrop` (PR #105/#107)*
+- [ ] Add blur/translucency support for floating pane shells — *`terminal_blur` open (PLAN.md P4)*
+- [ ] Add blur/translucency support for the broader app shell/chrome where appropriate — *app blur-wiring open (PLAN.md P4)*
+- [x] Ensure effects remain clip-aware and host-owned rather than terminal/provider-owned — *`PushClip`/`PopClip` (scissor) in the renderer; effects owned by the `Compositor`*
 
 ## Overlays
 
-- [ ] Add host-owned modal API
-- [ ] Add host-owned dropdown/popover API
+- [x] Add host-owned modal API — *`Modal` widget (host-routed input, overlay layer)*
+- [x] Add host-owned dropdown/popover API — *`Select` (overlay-layer dropdown); `Tooltip`, `CommandPalette`, `ToastStack` also host-owned*
 - [ ] Support async result-returning overlay flows
 
 ## Plugins

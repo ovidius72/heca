@@ -9,39 +9,46 @@
 
 ---
 
-## Status snapshot (2026-06-15; synced 2026-06-17)
+## Status snapshot (updated 2026-06-17)
 
-- **main** has the full **WS-A** workstream merged (**PR #102**): `[appearance]` config +
-  transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained
-  chrome tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2).
-- Active branch: `grid-ui-chrome-integration` (in sync with main).
-- Build + full test suite green; warning-clean (bar the transitive `block v0.1.6` note).
-- **2026-06-17 sync:** F4.5 DnD + grab-cursor merged (#116/#117/#119/#120); #121 split the terminal
-  pass out of `render.rs` → `app/terminal_render.rs`; the priority order below is re-synced to
-  RESUME.md §4; **F4.4 KeyHint-in-Dock logged as a regression** (lost in the grid-ui sidebar swap — see P1).
+> **This is the single planning file.** The separate `RESUME.md` handoff was folded in and removed —
+> PLAN.md now carries both the prioritized plan **and** the "where we are now" resume point. (The
+> architecture *rationale* docs at the bottom stay as references, not task lists.)
+
+- **`origin/main` @ #122** has the full **WS-A** workstream (**PR #102**): `[appearance]` config +
+  transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained chrome
+  tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2); plus F4.5 sidebar
+  DnD (#116/#117/#119/#120) and the terminal pane-shell work (#121/#122 → `app/terminal_render.rs`).
+- **In flight (open / pending PRs):**
+  - **PR #123** (`fix/f4.4-keyhint-dock-pick`) — F4.4 KeyHint move/swap/take pick overlay **restored** in
+    the grid-ui Dock (+ new `KeyHint::CenterRight` + transparent-stretch). **Open, not merged.**
+  - `feature/f4.5-grip-widen` — grip gutter 12→20px + swap-arrows (⇄) cue. **Committed locally, no PR yet.**
+- Build + full test suite green; warning-clean **bar** the transitive `block v0.1.6` note **and**
+  pre-existing dead-code warnings in `app/selection_model.rs` / `terminal_render.rs` (from #121/#122 — not
+  yet cleaned).
 
 ---
 
-## Priority sequence (re-synced to RESUME.md §4 on 2026-06-17 — RESUME is authoritative for near-term order)
+## Priority sequence (this file is authoritative; updated 2026-06-17)
 
 **Done foundations** (don't re-plan): ~~consolidate docs~~ ✅ · in-app blur **primitive** ✅
 (`Blur`+`Backdrop`, PR #105/#107 — app-wiring still open, folded into P4) · SharedChromeState
 **foundation** ✅ (PR #107) · ~~F4.5 sidebar DnD~~ ✅ (PRs #116/#117/#119/#120).
 
-**Near-term (RESUME §4 order):**
-1. **F4.5 leftovers** — grip-widen, workspace drag-to-reorder, Onto-third semantics (see the F4.5 note below / RESUME §4).
-2. **F4.4 KeyHint-in-Dock — REGRESSION** — the pane/column move-swap-take `KeyHint` overlay worked in
-   the old hand-drawn sidebar and was **lost when the sidebar was replaced by the grid-ui Dock**; the
-   `pick_candidates` scaffolding exists but is unconsumed by the tree. Small, self-contained (details in P1 below).
+**Near-term order:**
+1. **F4.5 leftovers** — ✅ grip-widen + swap-arrows (⇄) cue done (`feature/f4.5-grip-widen`, PR pending);
+   **remaining:** workspace drag-to-reorder, Onto-third semantics (see the F4.5 note below).
+2. **F4.4 KeyHint-in-Dock — ✅ pane pick overlay RESTORED** (PR #123). **Remaining:** column-level pick
+   keycaps (needs column-pick candidate infra = new keyboard logic) + the P1 widget-migration leftover.
 3. **P3 — Pane numbering** feature.
 4. **P4 — Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec, finish in-app blur app-wiring.
 5. **P0 — SharedChromeState consumer migration** (+ the F4.4 widget migration it unblocks) — the deep,
-   foundational piece; RESUME orders it last in the near-term run.
-6. **render.rs split** — partly done by #121 (terminal pass → `app/terminal_render.rs`); reassess the remainder.
+   foundational piece; deliberately sequenced last in the near-term run.
+6. **render.rs split** — partly done by #121/#122 (terminal pass → `app/terminal_render.rs`); reassess the remainder.
 7. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
 
 > The `P0–P4` labels on the sections below are **stable anchors, not priority rank** — follow this list
-> for order. (P0 SharedChromeState is foundational but deliberately sequenced last near-term per RESUME.)
+> for order. (P0 SharedChromeState is foundational but deliberately sequenced last near-term.)
 
 ---
 
@@ -98,19 +105,18 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   alphas+padding / the active-ws wash onto `MarkerGroup` + theme-driven `Row` (constant card bg +
   signal-driven active overlay) — after this `chrome.rs` only *composes* + projects. **Then** the
   active/hover signal-binding + signature-strip from the consumer migration becomes unblocked.
-- **Wire move/swap/take targeting — REGRESSION since the grid-ui sidebar replacement.** The pick
-  `KeyHint` overlay rendered in the **old hand-drawn sidebar** but was dropped when the Dock became the
-  grid-ui retained tree; **no `KeyHint` is built in `chrome/mod.rs` today** (only doc-comment seams at
-  `column_view`/`pane_card`; the `pick_candidates` signal in `chrome/state.rs` exists but is
-  **unconsumed**; `KeyHint` is live only in the showcase). Pick mode must light `KeyHint` letters: wrap
-  pane `Row`s AND `MarkerGroup`s (column letter on/at the bar, top-anchored overlay) in `KeyHint`; app
-  feeds candidates from `chrome_state.workspaces.pick_candidates` (consume that field). Small +
-  self-contained — the scaffolding is ready. KeyHint stays universal (memory `grid-ui-keyhint-universal`).
+- **Wire move/swap/take targeting — ✅ DONE for panes (PR #123).** The pick `KeyHint` overlay (lost when
+  the grid-ui Dock replaced the hand-drawn sidebar) is restored: each pane card is wrapped in the universal
+  `KeyHint`, and `sync_chrome_signals` projects `state.input_mode.candidates()` onto a per-pane hint signal
+  each frame (pure `pick_keycap` helper). Right-aligned via the new `KeyHint::CenterRight`. The keyboard
+  logic (candidates + key consumption in `app/input.rs`) was always intact — only the visual was lost.
+  **Remaining:** column-level pick keycaps — there are no column-pick candidates today, so this needs new
+  candidate computation (genuinely new keyboard logic). KeyHint stays universal (memory `grid-ui-keyhint-universal`).
 
 ### P2 — F4.5 ≡ DnD Phase 3 — sidebar DnD — ✅ DONE (#116/#117/#119/#120)
 > Panes + columns drag/move/swap, source-aware targeting, grab cursor, swap visual, RPC,
 > docs + showcase all shipped. Remaining polish (own follow-ups): grip-widen, workspace
-> drag-to-reorder, Onto-third semantics. Full detail + file map in **RESUME.md**.
+> drag-to-reorder, Onto-third semantics. (Grip-widen + swap cue shipped on `feature/f4.5-grip-widen`.)
 > Original plan kept below for reference.
 - Framework ready (DnD Phase 1+2 merged): `drag::source_at`/`resolve_at` over the retained tree
   (kills `sidebar_hit_test` for DnD); paint `PaintCx::drag_ghost`/`drop_indicator`. Restore the
