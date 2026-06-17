@@ -30,6 +30,28 @@ pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction
     None
 }
 
+/// Cursor policy: pick the OS cursor for the current state and apply it to the
+/// window — but only when it changes (cursor-moved fires very often). While a sidebar
+/// drag is in flight → `Grabbing`; hovering a draggable source (a pane card or a column
+/// grip, via [`sidebar_drag_source`](crate::chrome::sidebar_drag_source)) → `Grab`;
+/// otherwise the default arrow. `heca-grid-ui` stays cursor-free (it only emits a
+/// `Scene`) — the OS cursor is a host concern. General by design: add text/resize
+/// cursors here as more affordances arrive.
+pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
+    use winit::window::CursorIcon;
+    let icon = if state.mouse.drag_ctx.is_dragging() {
+        CursorIcon::Grabbing
+    } else if crate::chrome::sidebar_drag_source(state, pos).is_some() {
+        CursorIcon::Grab
+    } else {
+        CursorIcon::Default
+    };
+    if state.current_cursor != icon {
+        state.current_cursor = icon;
+        state.window.set_cursor(icon);
+    }
+}
+
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.

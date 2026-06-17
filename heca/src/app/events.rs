@@ -136,6 +136,8 @@ pub(crate) fn handle_window_event(
             // only sends presses. Repaint is already requested below.
             crate::chrome::chrome_dispatch_move(state, pos);
             forward_mouse_move(state, pos);
+            // Cursor affordance: Grab over a draggable, Grabbing while dragging.
+            mouse::update_cursor(state, pos);
             state.needs_redraw = true;
         }
         WindowEvent::MouseInput {
@@ -151,6 +153,9 @@ pub(crate) fn handle_window_event(
             if !started_interactive_move {
                 forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
             }
+            // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
+            // without waiting for the next move.
+            mouse::update_cursor(state, state.mouse.pos);
             state.needs_redraw = true;
         }
         WindowEvent::MouseWheel { delta, .. } => {

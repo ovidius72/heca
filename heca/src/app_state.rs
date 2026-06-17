@@ -299,6 +299,10 @@ pub struct AppState {
     pub pending_reload: bool,
     /// Whether the application window is currently focused.
     pub window_focused: bool,
+    /// The OS cursor currently set on the window. Tracked so the cursor policy only
+    /// calls `Window::set_cursor` when the icon actually changes (cursor-moved fires
+    /// very often). See `mouse::update_cursor`.
+    pub current_cursor: winit::window::CursorIcon,
 }
 
 impl AppState {
