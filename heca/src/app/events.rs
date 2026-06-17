@@ -133,8 +133,12 @@ pub(crate) fn handle_window_event(
             }
             // Feed the move into the retained chrome tree so sidebar hover affordances
             // (MarkerGroup grip "grab" cue, Row hover) light up — the app otherwise
-            // only sends presses. Repaint is already requested below.
-            crate::chrome::chrome_dispatch_move(state, pos);
+            // only sends presses. NOT during a drag: otherwise pane rows would light
+            // their hover as if droppable, contradicting the source-aware drop
+            // indicator (a column drag targets columns, not the panes inside them).
+            if !state.mouse.drag_ctx.is_dragging() {
+                crate::chrome::chrome_dispatch_move(state, pos);
+            }
             forward_mouse_move(state, pos);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
