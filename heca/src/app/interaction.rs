@@ -181,6 +181,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::MovePaneToWorkspace { .. }
         | WmAction::MovePaneToColumn { .. }
         | WmAction::MoveColumnToWorkspace { .. }
+        | WmAction::MoveColumn { .. }
+        | WmAction::SwapColumns { .. }
         | WmAction::Resize { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn

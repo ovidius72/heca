@@ -778,36 +778,71 @@ impl ScrollingSpace {
     }
 
     fn move_column_to(&mut self, new_idx: usize) {
-        if self.active_column_idx == new_idx {
-            return;
+        self.reorder_column(self.active_column_idx, new_idx);
+    }
+
+    /// Move the column at `from` to index `to` within this workspace, animating the
+    /// shift and leaving the moved column **active**. `to` is clamped to the column
+    /// range; no-op if `from` is out of range or `from == to`. Returns whether it
+    /// moved. The general primitive behind keyboard left/right *and* DnD reorder (F4.5).
+    pub fn reorder_column(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.columns.len() {
+            return false;
+        }
+        let to = to.min(self.columns.len() - 1);
+        if from == to {
+            return false;
         }
 
-        let old_idx = self.active_column_idx;
-
-        // Save old column positions by ID.
+        // Save old column positions by ID (for the shift animation).
         let old_xs: Vec<(ColumnId, f64)> = self
             .column_xs()
             .zip(self.columns.iter())
             .map(|(x, c)| (c.id, x))
             .collect();
-
         let old_view_pos = self.view_pos();
 
         // Remove from old position and insert at new position.
-        let column = self.columns.remove(old_idx);
-        let width = self.column_widths.remove(old_idx);
-        self.columns.insert(new_idx, column);
-        self.column_widths.insert(new_idx, width);
+        let column = self.columns.remove(from);
+        let width = self.column_widths.remove(from);
+        self.columns.insert(to, column);
+        self.column_widths.insert(to, width);
 
-        // Update active index BEFORE computing new positions.
-        self.active_column_idx = new_idx;
+        // The moved column stays active. Update the index BEFORE computing positions.
+        self.active_column_idx = to;
 
         // Preserve view position so the layout stays visually fixed.
         let new_view_pos = self.view_pos();
         let delta = old_view_pos - new_view_pos;
         self.view_offset.offset(delta);
 
-        // Animate all columns from their old positions to new.
+        self.animate_columns_from(&old_xs);
+        true
+    }
+
+    /// Swap the columns at `a` and `b` within this workspace (positions only — each
+    /// column keeps its panes), animating the shift. No-op if either index is out of
+    /// range or `a == b`. Returns whether it swapped. (DnD column swap — F4.5.)
+    pub fn swap_columns(&mut self, a: usize, b: usize) -> bool {
+        let len = self.columns.len();
+        if a >= len || b >= len || a == b {
+            return false;
+        }
+        let old_xs: Vec<(ColumnId, f64)> = self
+            .column_xs()
+            .zip(self.columns.iter())
+            .map(|(x, c)| (c.id, x))
+            .collect();
+        self.columns.swap(a, b);
+        self.column_widths.swap(a, b);
+        self.animate_columns_from(&old_xs);
+        true
+    }
+
+    /// Animate every column from its previous x (keyed by [`ColumnId`]) to its new
+    /// laid-out x — shared by [`reorder_column`](Self::reorder_column) and
+    /// [`swap_columns`](Self::swap_columns).
+    fn animate_columns_from(&mut self, old_xs: &[(ColumnId, f64)]) {
         let new_xs: Vec<f64> = self.column_xs().collect();
         for (i, col) in self.columns.iter_mut().enumerate() {
             let old_x = old_xs
@@ -1024,6 +1059,46 @@ mod tests {
             Pane::new(PaneId(id), format!("Pane {id}")),
             width,
         )
+    }
+
+    /// A space with columns whose ids are `1..=n`, in order.
+    fn space_with_columns(n: u64) -> ScrollingSpace {
+        let mut space = test_scrolling_space();
+        // activate=true appends in order (activate=false inserts at active+1).
+        for id in 1..=n {
+            space.add_column(None, test_column(id, ColumnWidth::Proportion(0.5)), true);
+        }
+        space
+    }
+
+    fn column_ids(space: &ScrollingSpace) -> Vec<u64> {
+        space.columns.iter().map(|c| c.id.0).collect()
+    }
+
+    #[test]
+    fn reorder_column_moves_and_activates() {
+        let mut space = space_with_columns(4); // [1,2,3,4]
+        assert!(space.reorder_column(0, 2));
+        assert_eq!(column_ids(&space), vec![2, 3, 1, 4]);
+        assert_eq!(space.active_column_idx, 2, "the moved column becomes active");
+    }
+
+    #[test]
+    fn reorder_column_clamps_and_no_ops() {
+        let mut space = space_with_columns(3); // [1,2,3]
+        assert!(space.reorder_column(0, 99), "dst clamps to the last index");
+        assert_eq!(column_ids(&space), vec![2, 3, 1]);
+        assert!(!space.reorder_column(1, 1), "same index is a no-op");
+        assert!(!space.reorder_column(9, 0), "out-of-range source is a no-op");
+    }
+
+    #[test]
+    fn swap_columns_exchanges_positions() {
+        let mut space = space_with_columns(4); // [1,2,3,4]
+        assert!(space.swap_columns(0, 3));
+        assert_eq!(column_ids(&space), vec![4, 2, 3, 1]);
+        assert!(!space.swap_columns(1, 1), "self-swap is a no-op");
+        assert!(!space.swap_columns(0, 9), "out-of-range is a no-op");
     }
 
     #[test]

@@ -316,6 +316,33 @@ pub fn handle_move_column_to_workspace(state: &mut AppState, action: &WmAction) 
     crate::move_column_to_workspace(state, *col_idx, *ws_idx, *focus);
 }
 
+pub fn handle_move_column(state: &mut AppState, action: &WmAction) {
+    let WmAction::MoveColumn {
+        src_ws,
+        src_col,
+        dst_ws,
+        dst_idx,
+        focus,
+    } = action
+    else {
+        return;
+    };
+    crate::app::mutations::move_column(state, *src_ws, *src_col, *dst_ws, *dst_idx, *focus);
+}
+
+pub fn handle_swap_columns(state: &mut AppState, action: &WmAction) {
+    let WmAction::SwapColumns {
+        a_ws,
+        a_col,
+        b_ws,
+        b_col,
+    } = action
+    else {
+        return;
+    };
+    crate::app::mutations::swap_columns_at(state, *a_ws, *a_col, *b_ws, *b_col);
+}
+
 pub fn handle_swap_param(state: &mut AppState, action: &WmAction) {
     let WmAction::Swap { a_id, b_id } = action else {
         return;

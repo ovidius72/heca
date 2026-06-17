@@ -305,6 +305,25 @@ pub fn build_registry() -> ActionRegistry {
         handle_move_column_to_workspace,
     );
     registry.register(
+        &WmAction::MoveColumn {
+            src_ws: 0,
+            src_col: 0,
+            dst_ws: 0,
+            dst_idx: 0,
+            focus: true,
+        },
+        handle_move_column,
+    );
+    registry.register(
+        &WmAction::SwapColumns {
+            a_ws: 0,
+            a_col: 0,
+            b_ws: 0,
+            b_col: 0,
+        },
+        handle_swap_columns,
+    );
+    registry.register(
         &WmAction::Resize {
             target: input::ResizeTarget::Column,
             axis: input::ResizeAxis::X,
