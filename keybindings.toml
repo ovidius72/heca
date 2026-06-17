@@ -32,6 +32,37 @@
 # prefix = "ctrl+a"
 
 # -----------------------------------------------------------------------------
+# Appearance settings  ([appearance] in config.toml — not under [keys])
+# -----------------------------------------------------------------------------
+# A config override takes precedence; `None` inherits from the theme. Three
+# pane-chrome values are clamped to a safe range (marked CAP below) so the
+# rounded content-clip stays gentle and terminal content isn't cut off at the
+# borders.
+#
+# Window / chrome transparency + blur (each 0..=100, default 0):
+#   transparency           = 0    # Window background opacity  (0 = opaque, 100 = see-through)
+#   blur                   = 0    # Window backdrop blur (portable GPU pass; 0 = none)
+#
+# Terminal-pane transparency + blur (each 0..=100, default 0; independent of the window ones):
+#   terminal_transparency = 0    # Terminal surface opacity   (0 = opaque, 100 = see-through)
+#   terminal_blur          = 0    # Terminal in-app frost      (0 = none)
+#
+# OS backdrop material (platform-dependent; default "none"):
+#   vibrancy = "under_window_background"
+#     # one of: none | sidebar | hud_window | under_window_background |
+#     #         popover | menu | full_screen_ui | window_background
+#
+# Pane chrome (Option<f32> / Option<Color>; None → theme):
+#   pane_border_width        = 2.0       # CAP [0, 10]. Default: theme.border_width (mocha: 1.0).
+#   pane_border_radius       = 20.0      # CAP [0, 20]. Default: theme.border_radius (mocha: 6.0).
+#                                        # Capped at 20: higher radii carve into terminal cells at the corners.
+#   pane_padding             = 4.0       # CAP [0, 20]. Default: 4.0 (snug — the rounded clip handles corners).
+#   pane_border_color        = "#313244" # Default: theme.border at 50% alpha (inactive/unfocused panes).
+#   pane_active_border_color = "#89b4fa" # Default: theme.accent (focused pane).
+#   pane_gap                 = 8.0       # Default: 8.0 (gap between panes).
+#   sidebar_gap              = 12.0      # Default: 12.0 (gap between sidebar and content area).
+
+# -----------------------------------------------------------------------------
 # Navigation (within workspace)
 # -----------------------------------------------------------------------------
 focus_left  = ["prefix+h", "prefix+ArrowLeft"]    # Focus column left (animated scroll)

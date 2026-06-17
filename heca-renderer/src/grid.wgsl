@@ -144,3 +144,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     return vec4<f32>(out_rgb, out_a);
 }
+
+// Stencil-write fragment: mark only fragments INSIDE the rounded rect. Used by the
+// rounded content-clip mechanism — `render_stencil` draws each pane's inner
+// rounded rect here with `StencilOp::Replace`, then the content renderers
+// (backdrop/primitive/text) test against the mask so terminal content follows the
+// pane's rounded border instead of poking past it at high corner radii. There are
+// no color targets on the stencil pipeline, so this shader writes nothing to color;
+// `discard`-ing outside the shape leaves the stencil untouched there.
+@fragment
+fn fs_stencil(in: VertexOutput) {
+    let p = in.world - in.center;
+    let d = sd_round_box(p, in.half_size, in.radius);
+    if (d > 0.0) {
+        discard;
+    }
+}

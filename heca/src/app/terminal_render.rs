@@ -135,6 +135,9 @@ pub(crate) struct TerminalRenderPassContext<'a> {
     pub(crate) scale_factor: f64,
     pub(crate) surface_physical_size: winit::dpi::PhysicalSize<u32>,
     pub(crate) content_clip: Rectangle,
+    /// Rounded content-clip mask. When `Some`, terminal surface/cells/selection/cursor
+    /// + glyphs test against it so content follows the pane's rounded border.
+    pub(crate) stencil: Option<&'a wgpu::TextureView>,
 }
 
 pub(crate) fn render_terminal_mount(
@@ -153,6 +156,7 @@ pub(crate) fn render_terminal_mount(
         scale_factor,
         surface_physical_size,
         content_clip,
+        stencil,
     } = render_ctx;
     let content_box = rect_to_text_box(mount.content_rect);
     let clip_x = content_box.x.max(content_clip.loc.x as f32);
@@ -186,13 +190,13 @@ pub(crate) fn render_terminal_mount(
         scale_factor,
         surface_physical_size,
     );
-    primitive_renderer.render_clipped(device, view, encoder, clip_rect);
-    text_renderer.render(queue, view, encoder);
+    primitive_renderer.render_clipped(device, view, encoder, clip_rect, stencil);
+    text_renderer.render(queue, view, encoder, stencil);
     {
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
         terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
     }
-    primitive_renderer.render_clipped(device, view, encoder, clip_rect);
+    primitive_renderer.render_clipped(device, view, encoder, clip_rect, stencil);
 }
 
 pub(crate) fn selection_overlay_for_pane(
@@ -352,5 +356,190 @@ pub(super) fn build_selection_overlay(
             )
         }
         SelectionRegion::BackendNative => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_selection_overlay;
+    use crate::app::selection_model::{
+        SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
+    };
+    use heca_config::theme::Color;
+    use heca_core::layout::PaneId;
+
+    #[test]
+    fn build_selection_overlay_returns_none_when_inactive() {
+        let selection = SelectionState::new();
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_none_when_owner_mismatch() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(7)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 3,
+                focus_row: 2,
+                focus_col: 3,
+            },
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        // Query with a different pane id -> None
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_none_for_backend_native() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::Rpc,
+            SelectionRegion::BackendNative,
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_returns_overlay_for_host_grid_on_owning_pane() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 3,
+                focus_row: 2,
+                focus_col: 3,
+            },
+        );
+        selection.update_focus(5, 9);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent);
+        assert!(overlay.is_some());
+        let overlay = overlay.unwrap();
+        assert_eq!(overlay.spans.len(), 4);
+        assert_eq!(overlay.spans[0].row, 2);
+        assert_eq!(overlay.spans[0].start_col, 3);
+        assert_eq!(overlay.spans[0].end_col, 19);
+        assert_eq!(overlay.spans[3].row, 5);
+        assert_eq!(overlay.spans[3].start_col, 0);
+        assert_eq!(overlay.spans[3].end_col, 9);
+        // Color should be accent / 255 with 0.25 alpha
+        assert_eq!(overlay.color, [100.0 / 255.0, 150.0 / 255.0, 200.0 / 255.0, 0.25]);
+    }
+
+    #[test]
+    fn build_selection_overlay_handles_reverse_multiline_selection() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::MouseDrag,
+            SelectionRegion::HostGrid {
+                anchor_row: 8,
+                anchor_col: 12,
+                focus_row: 8,
+                focus_col: 12,
+            },
+        );
+        selection.update_focus(4, 3);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        assert_eq!(overlay.spans.len(), 5);
+        assert_eq!(overlay.spans[0].row, 4);
+        assert_eq!(overlay.spans[0].start_col, 3);
+        assert_eq!(overlay.spans[0].end_col, 19);
+        assert_eq!(overlay.spans[4].row, 8);
+        assert_eq!(overlay.spans[4].start_col, 0);
+        assert_eq!(overlay.spans[4].end_col, 12);
+    }
+
+    #[test]
+    fn build_selection_overlay_caret_returns_caret_indicator() {
+        let mut selection = SelectionState::new();
+        selection.set_caret(SelectionOwner::Pane(PaneId(1)), 3, 7);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        // Caret-only state: no selection spans.
+        assert!(overlay.spans.is_empty());
+        // But we get a caret indicator at the caret position.
+        let caret = overlay.caret.expect("caret should be present in caret-only state");
+        assert_eq!((caret.row, caret.col), (3, 7));
+        assert!(!caret.is_selection_endpoint, "caret-only should not be a selection endpoint");
+    }
+
+    #[test]
+    fn build_selection_overlay_caret_owner_mismatch_returns_none() {
+        let mut selection = SelectionState::new();
+        selection.set_caret(SelectionOwner::Pane(PaneId(2)), 0, 0);
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        assert!(build_selection_overlay(&selection, PaneId(1), 20, &accent).is_none());
+    }
+
+    #[test]
+    fn build_selection_overlay_active_selection_has_focus_caret() {
+        let mut selection = SelectionState::new();
+        selection.begin(
+            SelectionOwner::Pane(PaneId(1)),
+            SelectionSource::KeyboardMode,
+            SelectionRegion::HostGrid {
+                anchor_row: 2,
+                anchor_col: 0,
+                focus_row: 4,
+                focus_col: 5,
+            },
+        );
+        let accent = Color {
+            r: 100,
+            g: 150,
+            b: 200,
+            a: 255,
+        };
+        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        // Active selection: should have both selection spans and a focus-end caret.
+        assert!(!overlay.spans.is_empty());
+        let caret = overlay.caret.expect("focus caret should be present for active selection");
+        assert_eq!((caret.row, caret.col), (4, 5));
+        assert!(caret.is_selection_endpoint, "active selection caret should be a selection endpoint");
     }
 }

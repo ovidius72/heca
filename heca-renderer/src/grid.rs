@@ -3,6 +3,9 @@
 
 use wgpu::util::DeviceExt;
 
+use crate::clip::combine_clip;
+use crate::composite::STENCIL_FORMAT;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct GridVertex {
@@ -54,6 +57,10 @@ pub struct GlowRect {
 /// staging pattern so it slots into the same render loop.
 pub struct GridRenderer {
     pipeline: wgpu::RenderPipeline,
+    /// Stencil-write variant: same vertex layout + SDF shader, `fs_stencil`
+    /// fragment (keep inside the rounded rect), `StencilOp::Replace`, no color
+    /// targets. Backs [`render_stencil`](Self::render_stencil).
+    stencil_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     vertices: Vec<GridVertex>,
@@ -79,24 +86,6 @@ pub struct GridRenderer {
     /// frame-time spikes. Reset by [`begin_frame`](GridRenderer::begin_frame).
     frame_vtx: u32,
     frame_idx: u32,
-}
-
-/// Intersection of two logical `[x, y, w, h]` rects (empty if disjoint).
-fn intersect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
-    let x0 = a[0].max(b[0]);
-    let y0 = a[1].max(b[1]);
-    let x1 = (a[0] + a[2]).min(b[0] + b[2]);
-    let y1 = (a[1] + a[3]).min(b[1] + b[3]);
-    [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)]
-}
-
-/// Combine the frame damage with a per-draw clip; `None` means "unbounded".
-fn combine_clip(damage: Option<[f32; 4]>, clip: Option<[f32; 4]>) -> Option<[f32; 4]> {
-    match (damage, clip) {
-        (None, None) => None,
-        (Some(r), None) | (None, Some(r)) => Some(r),
-        (Some(a), Some(b)) => Some(intersect(a, b)),
-    }
 }
 
 impl GridRenderer {
@@ -196,6 +185,57 @@ impl GridRenderer {
             cache: None,
         });
 
+        // Stencil-write pipeline: same vertex layout + SDF shader, but a fragment
+        // that keeps only fragments INSIDE the rounded rect (`fs_stencil`) and a
+        // stencil state that `Replace`-s the stencil with the pass reference. No
+        // color targets — the pass attaches only the stencil buffer. Used by
+        // `render_stencil` to write the rounded content-clip mask.
+        let stencil_face = wgpu::StencilFaceState {
+            compare: wgpu::CompareFunction::Always,
+            fail_op: wgpu::StencilOperation::Keep,
+            depth_fail_op: wgpu::StencilOperation::Keep,
+            pass_op: wgpu::StencilOperation::Replace,
+        };
+        let stencil_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("grid_stencil_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<GridVertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &attributes,
+                }],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_stencil"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: STENCIL_FORMAT,
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilState {
+                    front: stencil_face,
+                    back: stencil_face,
+                    read_mask: 0xFFFFFFFF,
+                    write_mask: 0xFFFFFFFF,
+                },
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("grid_vertex_buffer"),
             size: 4 * 1024 * 1024,
@@ -212,6 +252,7 @@ impl GridRenderer {
 
         Self {
             pipeline,
+            stencil_pipeline,
             vertex_buffer,
             index_buffer,
             vertices: Vec::new(),
@@ -401,6 +442,65 @@ impl GridRenderer {
             start = at;
             clip = next_clip;
         }
+
+        self.frame_vtx += self.vertices.len() as u32;
+        self.frame_idx += self.indices.len() as u32;
+        self.vertices.clear();
+        self.indices.clear();
+        self.clip_marks.clear();
+        self.current_clip = None;
+    }
+
+    /// Write the queued rounded rects to the stencil buffer as a rounded
+    /// content-clip mask, then clear the queue. The pass clears the stencil to 0
+    /// and `Replace`-writes 1 inside each rounded rect (via `fs_stencil`, which
+    /// discards outside). Content renderers then attach `stencil_view` and test
+    /// `Equal` to ref 1 so they only draw inside the rounded shape. Call once per
+    /// frame after queueing the panes' inner rounded rects with [`draw`](Self::draw),
+    /// before the content render passes. Appends at the running frame offset like
+    /// [`render`](Self::render), so it composes with the color passes.
+    pub fn render_stencil(
+        &mut self,
+        queue: &wgpu::Queue,
+        stencil_view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if self.vertices.is_empty() {
+            return;
+        }
+
+        let vertex_data: &[u8] = bytemuck::cast_slice(&self.vertices);
+        let index_data: &[u8] = bytemuck::cast_slice(&self.indices);
+        let v_off = self.frame_vtx as u64 * std::mem::size_of::<GridVertex>() as u64;
+        let i_off = self.frame_idx as u64 * std::mem::size_of::<u32>() as u64;
+        queue.write_buffer(&self.vertex_buffer, v_off, vertex_data);
+        queue.write_buffer(&self.index_buffer, i_off, index_data);
+
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("grid_stencil_pass"),
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: stencil_view,
+                depth_ops: None,
+                stencil_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0u32),
+                    store: wgpu::StoreOp::Store,
+                }),
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+        rpass.set_pipeline(&self.stencil_pipeline);
+        rpass.set_bind_group(0, &self.bind_group, &[]);
+        rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        rpass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        rpass.set_stencil_reference(1);
+        // Draw the whole mask unscissored — `fs_stencil` shapes it via the SDF.
+        // Clip marks are ignored here (the queued rects ARE the rounded masks,
+        // not scissored color spans).
+        let idx_base = self.frame_idx;
+        let base_vertex = self.frame_vtx as i32;
+        rpass.draw_indexed(idx_base..idx_base + self.indices.len() as u32, base_vertex, 0..1);
 
         self.frame_vtx += self.vertices.len() as u32;
         self.frame_idx += self.indices.len() as u32;

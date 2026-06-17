@@ -127,10 +127,10 @@ pub struct AppearanceConfig {
     /// Gap between panes (logical px). `None` → 8.0 (built-in layout default).
     #[serde(default)]
     pub pane_gap: Option<f32>,
-    /// Internal padding inside panes (logical px). `None` → 8.0.
+    /// Internal padding inside panes (logical px). `None` → 4.0; clamped to `[0, 20]`.
     #[serde(default)]
     pub pane_padding: Option<f32>,
-    /// Gap between sidebar and content area (logical px). `None` → 2.0.
+    /// Gap between sidebar and content area (logical px). `None` → 12.0.
     #[serde(default)]
     pub sidebar_gap: Option<f32>,
 }
@@ -184,9 +184,13 @@ impl AppearanceConfig {
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
 
-    /// Effective pane border width. Config override → theme `border_width`.
+    /// Effective pane border width. Config override → theme `border_width`,
+    /// clamped to `[0, 10]` so the border stays a reasonable frame regardless of
+    /// config/theme values.
     pub fn effective_pane_border_width(&self, theme: &Theme) -> f32 {
-        self.pane_border_width.unwrap_or(theme.border_width)
+        self.pane_border_width
+            .unwrap_or(theme.border_width)
+            .clamp(0.0, 10.0)
     }
 
     /// Effective inactive pane border color. Config override → theme `border` at 50% alpha.
@@ -195,9 +199,14 @@ impl AppearanceConfig {
             .unwrap_or_else(|| theme.border.with_alpha(128))
     }
 
-    /// Effective pane corner radius. Config override → theme `border_radius`.
+    /// Effective pane corner radius. Config override → theme `border_radius`,
+    /// clamped to `[0, 20]`. Higher radii make the rounded content-clip (stencil)
+    /// eat into terminal content at the corners; capping keeps the clip gentle
+    /// so cells/text aren't cut off.
     pub fn effective_pane_border_radius(&self, theme: &Theme) -> f32 {
-        self.pane_border_radius.unwrap_or(theme.border_radius)
+        self.pane_border_radius
+            .unwrap_or(theme.border_radius)
+            .clamp(0.0, 20.0)
     }
 
     /// Effective active pane border color. Config override → theme `accent`.
@@ -210,9 +219,12 @@ impl AppearanceConfig {
         self.pane_gap.unwrap_or(8.0)
     }
 
-    /// Effective pane internal padding. Config override → 8.0.
-    pub fn effective_pane_padding(&self, _theme: &Theme) -> f32 {
-        self.pane_padding.unwrap_or(8.0)
+    /// Effective pane internal padding (content inset from the pane border).
+    /// Config override → `theme.pane_padding` (4.0 for mocha), clamped to
+    /// `[0, 20]`. Snug by default now that the rounded content-clip (stencil)
+    /// handles corners — a small straight-edge gap no longer overflows.
+    pub fn effective_pane_padding(&self, theme: &Theme) -> f32 {
+        self.pane_padding.unwrap_or(theme.pane_padding).clamp(0.0, 20.0)
     }
 
     /// Effective sidebar gap. Config override → 12.0.
@@ -321,5 +333,51 @@ theme = "mocha"
         .expect("config without [appearance] should parse");
 
         assert_eq!(cfg.appearance, AppearanceConfig::default());
+    }
+
+    #[test]
+    fn pane_chrome_values_are_clamped_to_safe_ranges() {
+        let theme = crate::theme::Theme::default();
+
+        // Explicit config values above the cap clamp down into range.
+        let over = AppearanceConfig {
+            pane_border_width: Some(999.0),
+            pane_border_radius: Some(88.0),
+            pane_padding: Some(999.0),
+            ..Default::default()
+        };
+        assert_eq!(over.effective_pane_border_width(&theme), 10.0);
+        assert_eq!(over.effective_pane_border_radius(&theme), 20.0);
+        assert_eq!(over.effective_pane_padding(&theme), 20.0);
+
+        // Negative values clamp to the lower bound (0).
+        let under = AppearanceConfig {
+            pane_border_width: Some(-5.0),
+            pane_border_radius: Some(-2.0),
+            pane_padding: Some(-1.0),
+            ..Default::default()
+        };
+        assert_eq!(under.effective_pane_border_width(&theme), 0.0);
+        assert_eq!(under.effective_pane_border_radius(&theme), 0.0);
+        assert_eq!(under.effective_pane_padding(&theme), 0.0);
+
+        // Defaults (None) fall back to the theme then clamp — theme defaults
+        // (border_width 1.0, border_radius 6.0) are already in range, and pane
+        // padding defaults to 4.0.
+        let dflt = AppearanceConfig::default();
+        assert_eq!(dflt.effective_pane_border_width(&theme), theme.border_width);
+        assert_eq!(dflt.effective_pane_border_radius(&theme), theme.border_radius);
+        assert_eq!(dflt.effective_pane_padding(&theme), 4.0);
+
+        // In-range values pass through unchanged.
+        let mid = AppearanceConfig {
+            pane_border_width: Some(4.0),
+            pane_border_radius: Some(15.0),
+            pane_padding: Some(8.0),
+            ..Default::default()
+        };
+        assert_eq!(mid.effective_pane_border_width(&theme), 4.0);
+        assert_eq!(mid.effective_pane_border_radius(&theme), 15.0);
+        assert_eq!(mid.effective_pane_padding(&theme), 8.0);
     }
 }

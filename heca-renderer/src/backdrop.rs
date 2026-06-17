@@ -24,6 +24,8 @@
 
 use wgpu::util::DeviceExt;
 
+use crate::composite::content_clip_stencil_state;
+
 /// A rectangle in physical pixels: `(x, y, w, h)`, origin top-left.
 pub type RectPx = (f32, f32, f32, f32);
 
@@ -40,6 +42,9 @@ struct Params {
 /// Draws a (sub-region of a) texture into a destination rect, alpha-blended.
 pub struct Backdrop {
     pipeline: wgpu::RenderPipeline,
+    /// Stencil-test variant: same as `pipeline` but tests `Equal` against the rounded
+    /// content-clip mask. Used when `draw` is given a stencil view.
+    stencil_pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -129,7 +134,43 @@ impl Backdrop {
             cache: None,
         });
 
-        Self { pipeline, layout, sampler }
+        // Stencil-test variant: identical to `pipeline` but tests the rounded
+        // content-clip mask (`Equal` to ref 1, set per pass). Depth disabled.
+        let stencil_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("backdrop_stencil_pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: Some(content_clip_stencil_state()),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        Self {
+            pipeline,
+            stencil_pipeline,
+            layout,
+            sampler,
+        }
     }
 
     /// Stamp a region of `src` into `dst` (physical px) on `target`, at `opacity`.
@@ -149,6 +190,7 @@ impl Backdrop {
         dst: RectPx,
         src_uv: Option<[f32; 4]>,
         opacity: f32,
+        stencil: Option<&wgpu::TextureView>,
     ) {
         let (vw, vh) = viewport_px;
         if vw <= 0.0 || vh <= 0.0 || dst.2 <= 0.0 || dst.3 <= 0.0 {
@@ -198,12 +240,28 @@ impl Backdrop {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: stencil.as_ref().map(|view| {
+                wgpu::RenderPassDepthStencilAttachment {
+                    view,
+                    depth_ops: None,
+                    stencil_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                }
+            }),
             occlusion_query_set: None,
             timestamp_writes: None,
         });
-        rpass.set_pipeline(&self.pipeline);
+        rpass.set_pipeline(if stencil.is_some() {
+            &self.stencil_pipeline
+        } else {
+            &self.pipeline
+        });
         rpass.set_bind_group(0, &bind_group, &[]);
+        if stencil.is_some() {
+            rpass.set_stencil_reference(1);
+        }
         rpass.draw(0..6, 0..1);
     }
 }
