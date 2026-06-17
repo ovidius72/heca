@@ -483,20 +483,25 @@ pub(crate) fn paint_drag_overlay(
         return;
     };
     // During paint the drag is in flight (phase is still `Dragging`), so the live
-    // payload gives the source kind for the indicator's source-aware filter.
-    let source = match &surf.phase {
+    // payload gives the source kind (for the source-aware filter) + the swap flag.
+    let (source, swap) = match &surf.phase {
         DragPhase::Dragging { payload } => match payload {
-            crate::app_state::AppDragPayload::Pane { .. } => DragSourceKind::Pane,
-            crate::app_state::AppDragPayload::Column { .. } => DragSourceKind::Column,
+            crate::app_state::AppDragPayload::Pane { swap, .. } => (DragSourceKind::Pane, *swap),
+            crate::app_state::AppDragPayload::Column { swap, .. } => (DragSourceKind::Column, *swap),
         },
         _ => return,
     };
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
 
-    // Drop indicator on the hovered target, resolved with the *source-aware* filter
-    // (a column drag hints columns/workspaces, not the nested pane cards).
+    // Indicator on the hovered target, resolved with the *source-aware* filter (a
+    // column drag hints columns/workspaces, not the nested pane cards). A swap targets
+    // the WHOLE item (no before/after), so it uses the distinct swap indicator.
     if let Some((_item, hit)) = resolve_sidebar_drop(state, state.mouse.pos, source) {
-        cx.drop_indicator(hit.bounds, hit.side);
+        if swap {
+            cx.swap_indicator(hit.bounds);
+        } else {
+            cx.drop_indicator(hit.bounds, hit.side);
+        }
     }
 
     // Ghost chip following the cursor (offset off the pointer + vertically centered,
