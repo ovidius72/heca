@@ -34,7 +34,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
         .expect("LeftSidebar pre-populated in DragContext::default");
     let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
     if let DragPhase::Starting {
-        payload: AppDragPayload { pane_id, origin_ws, swap },
+        payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
         start_pos,
         threshold_sq,
     } = phase
@@ -79,7 +79,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
                 height: 20.0,
             });
             left.phase = DragPhase::Dragging {
-                payload: AppDragPayload { pane_id, origin_ws, swap },
+                payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
             };
             // source_item was already set when the Starting phase began
         } else {
@@ -87,7 +87,7 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
             state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
                 .expect("LeftSidebar pre-populated in DragContext::default")
                 .phase = DragPhase::Starting {
-                    payload: AppDragPayload { pane_id, origin_ws, swap },
+                    payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
                     start_pos,
                     threshold_sq,
                 };

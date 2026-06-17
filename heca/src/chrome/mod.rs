@@ -158,6 +158,7 @@ fn pane_card(
     sink: SidebarClickSink,
     active_pane: Option<PaneId>,
     signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
 ) -> Row {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
@@ -165,10 +166,10 @@ fn pane_card(
     // is drawn by `Row` from its `active` signal, not baked into the background. This
     // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
     // no tree rebuild) and theme-driven (no ad-hoc per-state alphas).
-    // Pane id encodes directly into the opaque DragItemId (panes are globally
-    // unique), so `drag::source_at`/`resolve_at` over the retained tree round-trip
-    // it without a side-map. The card is both a drag source and a drop target (F4.5).
-    let drag_id = DragItemId::new(pane_id.0 as usize);
+    // The card is both a drag source and a drop target (F4.5); its opaque DragItemId
+    // is assigned by the registry (which records that it's this pane) so the kind
+    // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
+    let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
     let card = Row::new()
         .background(theme.foreground.with_alpha(12))
         .highlight(theme.accent)
@@ -206,11 +207,12 @@ fn column_view(
     sink: &SidebarClickSink,
     active_pane: Option<PaneId>,
     signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
 ) -> MarkerGroup {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
     let mut col = MarkerGroup::new().active(active).gap(3.0);
     for pane in &c.panes {
-        col = col.child(pane_card(pane, theme, sink.clone(), active_pane, signals));
+        col = col.child(pane_card(pane, theme, sink.clone(), active_pane, signals, drag));
     }
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
@@ -229,6 +231,7 @@ fn build_workspaces_container(
     sinks: &ChromeSinks,
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
 ) -> Flex {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
@@ -275,10 +278,10 @@ fn build_workspaces_container(
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, theme, &sinks.click, active_pane, signals));
+            cols = cols.child(column_view(c, theme, &sinks.click, active_pane, signals, drag));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane, signals));
+            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane, signals, drag));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -300,6 +303,7 @@ fn build_sidebar_shell(
     ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
     signals: &mut ChromeSignals,
+    drag: &mut DragItemRegistry,
 ) -> Flex {
     let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -329,7 +333,7 @@ fn build_sidebar_shell(
                 .background(theme.surface)
                 .border(theme.border, theme.border_width)
                 .child(header)
-                .child(build_workspaces_container(tree, theme, sinks, ws_state, signals)),
+                .child(build_workspaces_container(tree, theme, sinks, ws_state, signals, drag)),
         )
 }
 
@@ -571,6 +575,42 @@ pub(crate) struct RetainedChrome {
     /// Handles to the tree's **value** signals (selection + status), so they update
     /// in place via [`sync_chrome_signals`] instead of forcing a rebuild.
     pub(crate) signals: ChromeSignals,
+    /// Maps each draggable/droppable widget's opaque [`DragItemId`] back to *what it
+    /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
+    /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
+    pub(crate) drag_items: DragItemRegistry,
+}
+
+/// What a sidebar [`DragItemId`] refers to. The drag framework is domain-neutral
+/// (ids are opaque `usize`); this app-side map gives them meaning. `ColumnId` can't
+/// be the id directly — it's assigned inconsistently and can collide with a `PaneId`
+/// (`scrolling.rs` builds `ColumnId(pane.id.0)`), so kind is decided by this map.
+/// (Step 2 adds `Column { ws, col }` + `Workspace { ws }` variants here.)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ChromeDragItem {
+    /// A pane card (drag source + drop target).
+    Pane(PaneId),
+}
+
+/// Build-time registry that hands out dense [`DragItemId`]s (id = push index) and
+/// records what each refers to. Lives on [`RetainedChrome`]; rebuilt with the tree.
+#[derive(Default, Clone, Debug)]
+pub(crate) struct DragItemRegistry {
+    items: Vec<ChromeDragItem>,
+}
+
+impl DragItemRegistry {
+    /// Register a draggable/droppable item and return its freshly-assigned id.
+    fn register(&mut self, item: ChromeDragItem) -> DragItemId {
+        let id = DragItemId::new(self.items.len());
+        self.items.push(item);
+        id
+    }
+
+    /// Decode an id back to what it refers to (`None` if not from this build).
+    pub(crate) fn get(&self, id: DragItemId) -> Option<&ChromeDragItem> {
+        self.items.get(id.raw())
+    }
 }
 
 /// Handles to the retained chrome tree's **value** signals — the state that changes
@@ -623,7 +663,7 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-) -> (Flex, ChromeSignals) {
+) -> (Flex, ChromeSignals, DragItemRegistry) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -632,6 +672,7 @@ pub(crate) fn build_chrome_root(
     let theme = chrome_gui_theme(state);
     let status = chrome_status(state);
     let mut signals = ChromeSignals::default();
+    let mut drag_items = DragItemRegistry::default();
 
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
@@ -645,6 +686,7 @@ pub(crate) fn build_chrome_root(
             &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
             &mut signals,
+            &mut drag_items,
         ))
     } else {
         None
@@ -676,7 +718,7 @@ pub(crate) fn build_chrome_root(
         right_sidebar,
         &mut signals,
     );
-    (root, signals)
+    (root, signals, drag_items)
 }
 
 /// Hit-test a sidebar click by dispatching a pointer-press into the **retained**
@@ -714,7 +756,9 @@ pub(crate) fn chrome_dispatch_click(
 pub(crate) fn sidebar_drag_source(state: &crate::app_state::AppState, pos: (f32, f32)) -> Option<PaneId> {
     let tree = state.chrome_tree.as_ref()?;
     let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    Some(PaneId(id.raw() as u64))
+    match tree.drag_items.get(id)? {
+        ChromeDragItem::Pane(pane_id) => Some(*pane_id),
+    }
 }
 
 /// The pane + [`DropSide`](heca_grid_ui::drag::DropSide) a drop at `pos` lands on, via
@@ -725,7 +769,9 @@ pub(crate) fn sidebar_drop_target(
 ) -> Option<(PaneId, heca_grid_ui::drag::DropSide)> {
     let tree = state.chrome_tree.as_ref()?;
     let hit = heca_grid_ui::drag::resolve_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
-    Some((PaneId(hit.id.raw() as u64), hit.side))
+    match tree.drag_items.get(hit.id)? {
+        ChromeDragItem::Pane(pane_id) => Some((*pane_id, hit.side)),
+    }
 }
 
 /// Hash of everything the chrome tree displays (window size, theme, status text,
@@ -901,6 +947,7 @@ mod tests {
             &chrome.workspaces,
             8.0,
             &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
         );
         assert_eq!(
             shell.base().children.len(),

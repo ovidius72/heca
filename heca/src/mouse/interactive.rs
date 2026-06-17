@@ -11,7 +11,7 @@
 
 use heca_core::layout::{PaneId, Point};
 
-use crate::app_state::{AppState, InteractiveMovePhase};
+use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
 
 /// Start an interactive move from a content-area pane.
 ///
@@ -182,7 +182,9 @@ fn set_drag_swap_mode(state: &mut AppState, swap: bool) {
     // framework's generic `payload_mut` accessor (which spans Starting/Dragging).
     for surface_state in state.mouse.drag_ctx.surfaces.values_mut() {
         if let Some(payload) = surface_state.payload_mut() {
-            payload.swap = swap;
+            match payload {
+                AppDragPayload::Pane { swap: s, .. } => *s = swap,
+            }
         }
     }
 }

@@ -350,35 +350,35 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     // ── Pass 2: Terminal content ──
     for pane in &tiled_panes {
-        if let Some(_content_rect) = pane.content_rect {
-            if let Some(mount) = pane.mount.as_ref() {
-                let selection_overlay =
-                    selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
-                render_terminal_mount(
-                    TerminalRenderPassContext {
-                        text_renderer: &mut state.text_renderer,
-                        primitive_renderer: &mut state.primitive_renderer,
-                        device: &state.device,
-                        queue: &state.queue,
-                        view: scene_view,
-                        encoder: &mut encoder,
-                        scale_factor: state.scale_factor,
-                        surface_physical_size,
-                        content_clip: pane_area,
-                    },
-                    TerminalStyle {
-                        font_size: theme.terminal_font_size,
-                        font_family: &theme.terminal_font_family,
-                        italic_font_family: &theme.terminal_italic_font_family,
-                        surface_alpha,
-                    },
-                    crate::app::terminal_host::TerminalMount {
-                        content_rect: mount.content_rect,
-                        snapshot: mount.snapshot.clone(),
-                    },
-                    selection_overlay,
-                );
-            }
+        if pane.content_rect.is_some()
+            && let Some(mount) = pane.mount.as_ref()
+        {
+            let selection_overlay =
+                selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
+            render_terminal_mount(
+                TerminalRenderPassContext {
+                    text_renderer: &mut state.text_renderer,
+                    primitive_renderer: &mut state.primitive_renderer,
+                    device: &state.device,
+                    queue: &state.queue,
+                    view: scene_view,
+                    encoder: &mut encoder,
+                    scale_factor: state.scale_factor,
+                    surface_physical_size,
+                    content_clip: pane_area,
+                },
+                TerminalStyle {
+                    font_size: theme.terminal_font_size,
+                    font_family: &theme.terminal_font_family,
+                    italic_font_family: &theme.terminal_italic_font_family,
+                    surface_alpha,
+                },
+                crate::app::terminal_host::TerminalMount {
+                    content_rect: mount.content_rect,
+                    snapshot: mount.snapshot.clone(),
+                },
+                selection_overlay,
+            );
         }
     }
     // ── End pass 2 (terminal content flushed inside render_terminal_mount) ──
@@ -802,8 +802,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals) = crate::chrome::build_chrome_root(state, chrome);
-        state.chrome_tree = Some(crate::chrome::RetainedChrome { root, sig: chrome_sig, signals });
+        let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
+        state.chrome_tree =
+            Some(crate::chrome::RetainedChrome { root, sig: chrome_sig, signals, drag_items });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
@@ -862,7 +863,8 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_selection_overlay, status_mode_parts};
+    use super::status_mode_parts;
+    use crate::app::terminal_render::build_selection_overlay;
     use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource, SelectionState};
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;

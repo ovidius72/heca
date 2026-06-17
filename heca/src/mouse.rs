@@ -92,7 +92,7 @@ pub fn on_mouse_input(
                 state.mouse.pending_click_action = sidebar_action.clone();
                 if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
                     left.phase = DragPhase::Starting {
-                        payload: AppDragPayload { pane_id, origin_ws, swap },
+                        payload: AppDragPayload::Pane { pane_id, origin_ws, swap },
                         start_pos: pos,
                         threshold_sq: DEFAULT_DRAG_THRESHOLD_SQ,
                     };
@@ -129,9 +129,11 @@ pub fn on_mouse_input(
                         let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar).expect("LeftSidebar pre-populated in DragContext::default");
                         let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
                         match phase {
-                            DragPhase::Dragging { payload } => {
-                                release::handle_sidebar_drag_release(state, payload.pane_id, payload.origin_ws, payload.swap, pos);
-                            }
+                            DragPhase::Dragging { payload } => match payload {
+                                AppDragPayload::Pane { pane_id, origin_ws, swap } => {
+                                    release::handle_sidebar_drag_release(state, pane_id, origin_ws, swap, pos);
+                                }
+                            },
                             DragPhase::Starting { .. } => {
                                 return release::handle_sidebar_drag_starting_release(state);
                             }
