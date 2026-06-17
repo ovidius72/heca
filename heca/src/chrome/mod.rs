@@ -511,7 +511,7 @@ pub(crate) fn paint_drag_overlay(
             Point::new((label.x + 10.0) as f64, (label.y - label.height / 2.0) as f64),
             Size::new(label.width as f64, label.height as f64),
         );
-        cx.drag_ghost(rect, &label.text);
+        cx.drag_ghost(rect, &label.text, swap);
     }
 }
 

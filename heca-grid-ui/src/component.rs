@@ -666,12 +666,30 @@ impl<'a> PaintCx<'a> {
     /// during a drag. Theme-driven: an accent-filled rounded rect with the label in
     /// the background color, painted on the **overlay layer** so it sits above all
     /// chrome. `rect` is the chip's bounds (the app positions it at the cursor).
-    pub fn drag_ghost(&mut self, rect: Rectangle, text: &str) {
+    ///
+    /// When `swap` is true the chip gains an inset **double frame** — the same motif
+    /// as [`swap_indicator`](Self::swap_indicator) — so the cursor-following chip tells
+    /// the user this drag is an **exchange**, not a move (there is no OS "swap" cursor).
+    pub fn drag_ghost(&mut self, rect: Rectangle, text: &str, swap: bool) {
         let (accent, bg, radius) = (self.theme.accent, self.theme.background, self.theme.radius);
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
             cx.rect(rect, Color::TRANSPARENT, Some(Border { color: accent, width: 1.5 }), radius, None);
+            if swap {
+                let inset = 3.0_f64;
+                let inner = Rectangle::new(
+                    Point::new(rect.loc.x + inset, rect.loc.y + inset),
+                    Size::new((rect.size.w - inset * 2.0).max(0.0), (rect.size.h - inset * 2.0).max(0.0)),
+                );
+                cx.rect(
+                    inner,
+                    Color::TRANSPARENT,
+                    Some(Border { color: bg.with_alpha(180), width: 1.0 }),
+                    (radius - inset as f32).max(0.0),
+                    None,
+                );
+            }
             cx.text(rect, text, bg, font, TextAlign::Center, false);
         });
     }

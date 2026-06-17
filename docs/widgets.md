@@ -1103,7 +1103,9 @@ hit-testing — they read each widget's `Base.bounds` (filled by layout each fra
   runs `DragPhase::{Idle, Starting, Dragging}` with a threshold
   (`DEFAULT_DRAG_THRESHOLD_SQ`, `rubberband`). Use `payload()` / `payload_mut()` to
   read/update the in-flight payload (e.g. toggle a swap flag mid-drag).
-- `PaintCx::drag_ghost(rect, text)` paints the cursor-following chip (overlay layer);
+- `PaintCx::drag_ghost(rect, text, swap)` paints the cursor-following chip (overlay
+  layer); `swap=true` adds an inset double frame (matching `swap_indicator`) so the chip
+  reads as an **exchange**, not a move;
   `PaintCx::drop_indicator(bounds, side)` paints the insertion line / onto-wash for a
   **move**; `PaintCx::swap_indicator(bounds)` paints a whole-item **double frame** for a
   **swap** (an exchange has no before/after — so it deliberately avoids the insertion
