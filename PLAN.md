@@ -9,26 +9,39 @@
 
 ---
 
-## Status snapshot (2026-06-15)
+## Status snapshot (2026-06-15; synced 2026-06-17)
 
 - **main** has the full **WS-A** workstream merged (**PR #102**): `[appearance]` config +
   transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained
   chrome tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2).
 - Active branch: `grid-ui-chrome-integration` (in sync with main).
 - Build + full test suite green; warning-clean (bar the transitive `block v0.1.6` note).
+- **2026-06-17 sync:** F4.5 DnD + grab-cursor merged (#116/#117/#119/#120); #121 split the terminal
+  pass out of `render.rs` → `app/terminal_render.rs`; the priority order below is re-synced to
+  RESUME.md §4; **F4.4 KeyHint-in-Dock logged as a regression** (lost in the grid-ui sidebar swap — see P1).
 
 ---
 
-## Priority sequence (locked; blur pulled forward 2026-06-15 — cross-team dep)
+## Priority sequence (re-synced to RESUME.md §4 on 2026-06-17 — RESUME is authoritative for near-term order)
 
-1. ~~Consolidate planning docs~~ ✅
-2. **In-app blur (F3)** — reusable primitive ✅ (`Blur` + `Backdrop`, PR #105/#107); **app-wiring remains**
-3. **SharedChromeState** — foundation ✅ (PR #107); ← **NEXT: consumer migration**
-4. **F4.4** — generic marker/rail widget + targeting
-5. ~~**F4.5 ≡ DnD Phase 3** — sidebar DnD~~ ✅ DONE (PRs #116/#117/#119/#120). Leftovers: grip-widen, workspace drag-to-reorder, Onto semantics — see RESUME.md §4
-6. **Pane numbering** feature
-7. **Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec
-8. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom
+**Done foundations** (don't re-plan): ~~consolidate docs~~ ✅ · in-app blur **primitive** ✅
+(`Blur`+`Backdrop`, PR #105/#107 — app-wiring still open, folded into P4) · SharedChromeState
+**foundation** ✅ (PR #107) · ~~F4.5 sidebar DnD~~ ✅ (PRs #116/#117/#119/#120).
+
+**Near-term (RESUME §4 order):**
+1. **F4.5 leftovers** — grip-widen, workspace drag-to-reorder, Onto-third semantics (see the F4.5 note below / RESUME §4).
+2. **F4.4 KeyHint-in-Dock — REGRESSION** — the pane/column move-swap-take `KeyHint` overlay worked in
+   the old hand-drawn sidebar and was **lost when the sidebar was replaced by the grid-ui Dock**; the
+   `pick_candidates` scaffolding exists but is unconsumed by the tree. Small, self-contained (details in P1 below).
+3. **P3 — Pane numbering** feature.
+4. **P4 — Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec, finish in-app blur app-wiring.
+5. **P0 — SharedChromeState consumer migration** (+ the F4.4 widget migration it unblocks) — the deep,
+   foundational piece; RESUME orders it last in the near-term run.
+6. **render.rs split** — partly done by #121 (terminal pass → `app/terminal_render.rs`); reassess the remainder.
+7. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
+
+> The `P0–P4` labels on the sections below are **stable anchors, not priority rank** — follow this list
+> for order. (P0 SharedChromeState is foundational but deliberately sequenced last near-term per RESUME.)
 
 ---
 
@@ -85,10 +98,14 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   alphas+padding / the active-ws wash onto `MarkerGroup` + theme-driven `Row` (constant card bg +
   signal-driven active overlay) — after this `chrome.rs` only *composes* + projects. **Then** the
   active/hover signal-binding + signature-strip from the consumer migration becomes unblocked.
-- Wire move/swap/take **targeting**: pick mode lights `KeyHint` letters; wrap pane `Row`s AND
-  `MarkerGroup`s (column letter on/at the bar, top-anchored overlay) in `KeyHint`; app feeds
-  candidates from `chrome_state.workspaces.pick_candidates` (consume that field). KeyHint stays
-  universal (memory `grid-ui-keyhint-universal`).
+- **Wire move/swap/take targeting — REGRESSION since the grid-ui sidebar replacement.** The pick
+  `KeyHint` overlay rendered in the **old hand-drawn sidebar** but was dropped when the Dock became the
+  grid-ui retained tree; **no `KeyHint` is built in `chrome/mod.rs` today** (only doc-comment seams at
+  `column_view`/`pane_card`; the `pick_candidates` signal in `chrome/state.rs` exists but is
+  **unconsumed**; `KeyHint` is live only in the showcase). Pick mode must light `KeyHint` letters: wrap
+  pane `Row`s AND `MarkerGroup`s (column letter on/at the bar, top-anchored overlay) in `KeyHint`; app
+  feeds candidates from `chrome_state.workspaces.pick_candidates` (consume that field). Small +
+  self-contained — the scaffolding is ready. KeyHint stays universal (memory `grid-ui-keyhint-universal`).
 
 ### P2 — F4.5 ≡ DnD Phase 3 — sidebar DnD — ✅ DONE (#116/#117/#119/#120)
 > Panes + columns drag/move/swap, source-aware targeting, grab cursor, swap visual, RPC,
@@ -141,8 +158,11 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.
-- **Split `heca/src/app/render.rs` (~1400 lines)** into a `render/` folder — *do at the end, its own
-  PR, not mid-feature.* `render_frame` (~765 lines) shrinks to ~250. Target 6 files:
+- **Split `heca/src/app/render.rs`** into a `render/` folder — *do at the end, its own PR, not
+  mid-feature.* **Partly done by #121** (the terminal pass is already extracted to
+  `app/terminal_render.rs` — `PaneRenderState`, `paint_terminal_pane_shell`, `render_terminal_mount`,
+  `selection_overlay_for_pane`); re-scope the remainder against that before splitting further.
+  `render_frame` shrinks toward ~250. Remaining target files:
   `mod.rs` (frame orchestrator + `update_session_viewport`), `geometry.rs` (pane/scissor/textbox
   math), `terminal.rs` (`TerminalRenderPassContext` + `render_terminal_mount` — the terminal pass),
   `panes.rs` (tiled+floating passes: blur stamps, border scenes, content), `selection.rs`

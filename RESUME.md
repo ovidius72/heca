@@ -2,7 +2,8 @@
 
 > Resume doc for a cleared session. **PLAN.md** is the prioritized task list (single
 > source of truth); **this** doc = what just happened + exactly where to pick up + the
-> reference map. Detail rule: memory `handoffs-must-be-detailed`. Last updated 2026-06-17.
+> reference map. Detail rule: memory `handoffs-must-be-detailed`. Last updated 2026-06-17
+> (synced with PLAN.md — F4.4 KeyHint-in-Dock regression captured; §4 order made authoritative).
 
 ---
 
@@ -108,7 +109,17 @@ Ghost chip gets a double-frame on swap. No misleading pane-hover during a drag.
    `release.rs::handle_sidebar_column_drag_release` (the `before = side == DropSide::Before` line) -- e.g.
    middle = swap, or nearest-edge.
 
-### Then per PLAN.md priority sequence
+### F4.4 KeyHint-in-Dock — REGRESSION (worked before the grid-ui sidebar replacement)
+The pane/column move/swap/take **`KeyHint`** pick overlay rendered in the **old hand-drawn sidebar** and
+was **lost when the sidebar was replaced by the grid-ui Dock**. It's the unbuilt *targeting* half of
+**F4.4 (P1)** — a regression, not a new feature. State: `chrome/mod.rs` builds **no** `KeyHint` (only
+doc-comment seams in `column_view`/`pane_card`); the `pick_candidates` signal in `chrome/state.rs` exists
+but is **unconsumed**; `KeyHint` is live only in the showcase (`showcase.rs`). *Fix (small — scaffolding
+ready):* wrap pane `Row`s + column `MarkerGroup`s in `KeyHint` and feed letters from
+`workspaces.pick_candidates` during a pick (KeyHint stays universal — memory `grid-ui-keyhint-universal`).
+See PLAN.md → P1/F4.4.
+
+### Then per PLAN.md priority sequence (consistent with PLAN.md's near-term list)
 - **P3 — Pane numbering** (memory `heca-pane-numbering-spec`): `prefix+<ws>+<pane>` deterministic
   addressing + per-ws sidebar numbers; `prefix+q` peek stays.
 - **P4 — Appearance & sizing** (memory `appearance-blur-zoom-font`): app-wide zoom like the showcase;
