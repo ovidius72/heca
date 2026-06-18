@@ -58,7 +58,16 @@ Verification:
 - `cargo clippy -p heca --all-targets --quiet` (existing warnings only in `selection_model.rs` and `terminal_render.rs`)
 Notes:
 - I extracted the runtime projection into a dedicated helper so Phase 1 has a direct acceptance test for canonical session state mirroring into the reactive store, rather than only store-local setter tests.
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Reviewer Decision:** Accepted · **Reviewer Notes:** Rust-skill review on the merged diff (PR #130 / `1bc51ee`). All findings F1–F7 fixed in the review-fix PR:
+- F1 `#[allow(dead_code)]` on `with_pane_runtime` now has an explanatory comment (AGENTS rule 7).
+- F2 reactive hazard fixed: setters now decide inside the `panes` borrow and `.set()`+emit **outside** it (signal handles are `Copy`, captured into outer locals); `PaneRuntimeSignals` now `Copy`.
+- F3 `sync_pane_runtime_state` per-frame push documented as tech debt (TODO) for the Phase 0 reactive damage-path reconciliation.
+- F4 `set_pane_*`/`with_pane_runtime`/`retain_panes` tightened to `pub(crate)`.
+- F5 `set_pane_runtime` collapsed to a single `panes.update` (was six per-field borrows).
+- F6 `PaneRuntimeSignals` fields + struct documented; `Copy` rationale explained.
+- F7 `HashSet` imported instead of fully-qualified.
+Verification: `cargo test -p heca-core -p heca` 204+40 green; `cargo clippy -p heca-core -p heca --all-targets --all-features` — 0 new lints (same 8 pre-existing).
+Note: the 6 per-field setters carry a documented `#[allow(dead_code)]` — they are the Phase 2 process-monitor write API, exercised by tests today; not removable dead code.
 
 ## Phase 2 — Process detection (OS-native foreground + exit; event-first)
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §4 Phase 2

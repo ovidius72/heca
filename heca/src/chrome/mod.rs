@@ -808,7 +808,14 @@ fn sync_pane_runtime_state(
     session: &heca_core::layout::Session,
     workspaces: &WorkspacesContainerState,
 ) {
-    let mut live_panes = std::collections::HashSet::new();
+    use std::collections::HashSet;
+    // TODO(reactivity): this is a per-frame full-sync push of every pane's runtime
+    // state into the store — the same push model Phase 0 is moving away from. It
+    // is change-guarded (the setters only `.set()`/emit on real change, so there
+    // are no spurious events or repaints), but it still borrows `panes` once per
+    // pane per frame. Fold this into the reactive damage-path work (Phase 0's last
+    // task) so runtime changes flow core→signal→paint without a per-frame scan.
+    let mut live_panes = HashSet::new();
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {

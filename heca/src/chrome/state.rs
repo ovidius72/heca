@@ -41,13 +41,26 @@ use heca_grid_ui::widgets::RegionMode;
 
 use super::{ChromeEvent, ChromeEventBus, ChromeRegion};
 
-#[derive(Clone, Debug)]
+/// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
+///
+/// Each field is a separate [`Signal`] so a change marks only that field's
+/// subscribers dirty. The struct is `Copy` because every `Signal` handle is
+/// `Copy` (a cheap ID) — callers copy a handle out of a `panes.update` closure
+/// and call `.set()` *outside* the borrow, so a `.set()` that fires an effect
+/// reading `panes` can't double-borrow the `panes` signal (which would panic).
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct PaneRuntimeSignals {
+    /// Raw foreground program name, verbatim (e.g. `"nvim"`); `None` until detected.
     pub(crate) program: Signal<Option<String>>,
+    /// High-level foreground-process lifecycle status.
     pub(crate) status: Signal<ProcessStatus>,
+    /// Current working directory of the pane's foreground process.
     pub(crate) cwd: Signal<Option<PathBuf>>,
+    /// Exit code of the last exited process (set on `Exit`/`Success`/`Error`).
     pub(crate) exit_code: Signal<Option<i32>>,
+    /// Git summary for `cwd` if it is inside a repo; `None` otherwise.
     pub(crate) git: Signal<Option<GitInfo>>,
+    /// Source/content kind hosted by the pane (`Terminal` now; `App`/`Plugin` later).
     pub(crate) kind: Signal<ContentKind>,
 }
 
@@ -159,8 +172,10 @@ impl WorkspacesContainerState {
     pub fn with_pick_candidates<R>(&self, f: impl FnOnce(&[(char, PaneId)]) -> R) -> R {
         self.pick_candidates.with(|c| f(c))
     }
+    // Consumed by Phase 7 pane-info widgets; exercised by tests today, hence
+    // `#[allow(dead_code)]` until a widget binds it.
     #[allow(dead_code)]
-    pub fn with_pane_runtime<R>(&self, pane: PaneId, f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R) -> R {
+    pub(crate) fn with_pane_runtime<R>(&self, pane: PaneId, f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R) -> R {
         self.panes.with(|panes| f(panes.get(&pane)))
     }
 
@@ -205,95 +220,169 @@ impl WorkspacesContainerState {
             candidates: Vec::new(),
         });
     }
-    pub fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) {
-        self.set_pane_program(pane, runtime.program.clone());
-        self.set_pane_status(pane, runtime.status.clone());
-        self.set_pane_cwd(pane, runtime.cwd.clone());
-        self.set_pane_exit_code(pane, runtime.exit_code);
-        self.set_pane_git(pane, runtime.git.clone());
-        self.set_pane_kind(pane, runtime.kind.clone());
+    pub(crate) fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) {
+        // Bulk path (per-frame from `sync_pane_runtime_state`): ONE `panes.update`
+        // to ensure the entry + read the per-field signal handles (Copy) and the
+        // current values into outer locals. The `.set()`s + emits run OUTSIDE the
+        // borrow so a future effect reading `panes` during a set can't double-borrow
+        // (reactive hazard — `SignalUpdate::update` borrows `panes` mutably; a
+        // `.set()` inside it that fires a `panes`-reading effect would panic).
+        let mut sigs: Option<PaneRuntimeSignals> = None;
+        let mut cur: Option<PaneRuntime> = None;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            sigs = Some(*entry); // PaneRuntimeSignals is Copy (all-handles-Copy)
+            cur = Some(PaneRuntime {
+                program: entry.program.get_untracked(),
+                status: entry.status.get_untracked(),
+                cwd: entry.cwd.get_untracked(),
+                exit_code: entry.exit_code.get_untracked(),
+                git: entry.git.get_untracked(),
+                kind: entry.kind.get_untracked(),
+            });
+        });
+        let sigs = sigs.expect("entry ensured above");
+        let cur = cur.expect("entry ensured above");
+        if cur.program != runtime.program {
+            sigs.program.set(runtime.program.clone());
+            self.events.emit(ChromeEvent::PaneProcessChanged { pane });
+        }
+        if cur.status != runtime.status {
+            sigs.status.set(runtime.status.clone());
+            self.events
+                .emit(ChromeEvent::PaneStatusChanged { pane, status: runtime.status.clone() });
+        }
+        if cur.cwd != runtime.cwd {
+            sigs.cwd.set(runtime.cwd.clone());
+            self.events.emit(ChromeEvent::PaneCwdChanged { pane });
+        }
+        if cur.exit_code != runtime.exit_code {
+            sigs.exit_code.set(runtime.exit_code);
+        }
+        if cur.git != runtime.git {
+            sigs.git.set(runtime.git.clone());
+            self.events.emit(ChromeEvent::PaneGitChanged { pane });
+        }
+        if cur.kind != runtime.kind {
+            sigs.kind.set(runtime.kind.clone());
+        }
     }
-    pub fn set_pane_program(&self, pane: PaneId, program: Option<String>) {
-        let mut changed = false;
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_program(&self, pane: PaneId, program: Option<String>) {
+        // Decide inside the borrow; `.set()` + emit OUTSIDE it (reactive hazard fix).
+        let mut sig: Option<Signal<Option<String>>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.program.get_untracked() != program {
-                entry.program.set(program.clone());
-                changed = true;
+                sig = Some(entry.program); // Copy the handle out
             }
         });
-        if changed {
+        if let Some(sig) = sig {
+            sig.set(program);
             self.events.emit(ChromeEvent::PaneProcessChanged { pane });
         }
     }
-    pub fn set_pane_status(&self, pane: PaneId, status: ProcessStatus) {
-        let mut changed = false;
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_status(&self, pane: PaneId, status: ProcessStatus) {
+        let mut sig: Option<Signal<ProcessStatus>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.status.get_untracked() != status {
-                entry.status.set(status.clone());
-                changed = true;
+                sig = Some(entry.status);
             }
         });
-        if changed {
+        if let Some(sig) = sig {
+            sig.set(status.clone());
             self.events.emit(ChromeEvent::PaneStatusChanged { pane, status });
         }
     }
-    pub fn set_pane_cwd(&self, pane: PaneId, cwd: Option<PathBuf>) {
-        let mut changed = false;
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_cwd(&self, pane: PaneId, cwd: Option<PathBuf>) {
+        let mut sig: Option<Signal<Option<PathBuf>>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.cwd.get_untracked() != cwd {
-                entry.cwd.set(cwd.clone());
-                changed = true;
+                sig = Some(entry.cwd);
             }
         });
-        if changed {
+        if let Some(sig) = sig {
+            sig.set(cwd);
             self.events.emit(ChromeEvent::PaneCwdChanged { pane });
         }
     }
-    pub fn set_pane_exit_code(&self, pane: PaneId, exit_code: Option<i32>) {
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_exit_code(&self, pane: PaneId, exit_code: Option<i32>) {
+        let mut sig: Option<Signal<Option<i32>>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.exit_code.get_untracked() != exit_code {
-                entry.exit_code.set(exit_code);
+                sig = Some(entry.exit_code);
             }
         });
+        if let Some(sig) = sig {
+            sig.set(exit_code);
+        }
     }
-    pub fn set_pane_git(&self, pane: PaneId, git: Option<GitInfo>) {
-        let mut changed = false;
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_git(&self, pane: PaneId, git: Option<GitInfo>) {
+        let mut sig: Option<Signal<Option<GitInfo>>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.git.get_untracked() != git {
-                entry.git.set(git.clone());
-                changed = true;
+                sig = Some(entry.git);
             }
         });
-        if changed {
+        if let Some(sig) = sig {
+            sig.set(git);
             self.events.emit(ChromeEvent::PaneGitChanged { pane });
         }
     }
-    pub fn set_pane_kind(&self, pane: PaneId, kind: ContentKind) {
+    // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
+    // the bulk path used in prod today; these are exercised by tests and will
+    // be called individually once detection lands (Phase 2+).
+    #[allow(dead_code)]
+    pub(crate) fn set_pane_kind(&self, pane: PaneId, kind: ContentKind) {
+        let mut sig: Option<Signal<ContentKind>> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
                 .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
             if entry.kind.get_untracked() != kind {
-                entry.kind.set(kind);
+                sig = Some(entry.kind);
             }
         });
+        if let Some(sig) = sig {
+            sig.set(kind);
+        }
     }
-    pub fn retain_panes(&self, keep: &HashSet<PaneId>) {
+    pub(crate) fn retain_panes(&self, keep: &HashSet<PaneId>) {
         self.panes.update(|panes| panes.retain(|pane, _| keep.contains(pane)));
     }
     /// Set a workspace's collapsed state explicitly.
