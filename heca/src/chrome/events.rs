@@ -38,6 +38,13 @@ pub enum ChromeEvent {
     PaneGitChanged {
         pane: PaneId,
     },
+    /// A pane's terminal (PTY child) has exited. `code` is the captured exit code
+    /// (from `try_wait`). Emitted once via the per-wake monitor's `take_exit_code`;
+    /// the existing auto-close then fires for shell panes (§0.6 — no `Exit` status).
+    PaneExited {
+        pane: PaneId,
+        code: Option<i32>,
+    },
     WorkspaceCollapsedChanged {
         ws_idx: usize,
         collapsed: bool,
@@ -65,6 +72,7 @@ impl ChromeEvent {
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
             ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
             ChromeEvent::PaneGitChanged { .. } => "pane.git.changed",
+            ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
             ChromeEvent::WorkspacesScrollChanged { .. } => "workspaces.scroll.changed",
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",

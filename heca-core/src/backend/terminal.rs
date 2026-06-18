@@ -2,17 +2,20 @@
 //! `wezterm-term` for terminal emulation.
 
 mod engine;
+mod process;
 mod pty;
 
 use super::{
     BackendAlert, BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType,
     TerminalDamage, TerminalPaletteDefaults, TerminalSnapshot,
 };
+use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
 use engine::TerminalEngine;
 pub use pty::PtyError;
 use pty::{PtyHandle, PtyRead};
 use std::io;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// A backend that runs a real shell inside a PTY and models its state via
 /// `wezterm-term`.
@@ -27,6 +30,14 @@ pub struct TerminalBackend {
     exited: bool,
     reaped: bool,
     dirty: bool,
+    /// Cached canonical runtime truth (program/status/cwd/exit_code/kind). Updated
+    /// in [`update`] (event-driven) and exposed via [`PaneBackend::runtime`].
+    runtime: PaneRuntime,
+    /// One-shot exit code captured when the PTY child is reaped; drained by the
+    /// per-wake monitor via [`PaneBackend::take_exit_code`] to emit `pane.exited`.
+    pending_exit: Option<i32>,
+    /// Timestamp of the last foreground re-sample (debounce on the output-wake path).
+    last_fg_check: Instant,
 }
 
 impl TerminalBackend {
@@ -83,6 +94,11 @@ impl TerminalBackend {
         };
         let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults)?;
 
+        // Seed `last_fg_check` one debounce in the past so the very first `update`
+        // wake re-samples the foreground immediately (no 250 ms blind start).
+        let last_fg_check = Instant::now()
+            .checked_sub(process::FOREGROUND_DEBOUNCE)
+            .unwrap_or_else(Instant::now);
         Ok(Self {
             engine,
             pty,
@@ -94,9 +110,46 @@ impl TerminalBackend {
             exited: false,
             reaped: false,
             dirty: true,
+            runtime: PaneRuntime {
+                kind: ContentKind::Terminal,
+                ..PaneRuntime::default()
+            },
+            pending_exit: None,
+            last_fg_check,
         })
     }
 
+    /// Re-sample the PTY's foreground process (event-driven; debounced in
+    /// [`update`](PaneBackend::update)). Updates the cached `runtime`
+    /// program/status/cwd. `program == None` from the detector ⇒ the shell is
+    /// foreground ⇒ report the shell basename + `Idle`.
+    fn refresh_foreground(&mut self) {
+        #[cfg(unix)]
+        {
+            let Some(master_fd) = self.pty.as_raw_fd() else {
+                return;
+            };
+            let shell_pgrp = self.pty.process_group_leader().unwrap_or(-1);
+            let Some(info) = process::detect_foreground(master_fd, shell_pgrp) else {
+                return;
+            };
+            let shell_basename = std::path::Path::new(self.pty.shell_path())
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned());
+            self.runtime.status = if info.program.is_some() {
+                ProcessStatus::Running
+            } else {
+                ProcessStatus::Idle
+            };
+            self.runtime.program = info.program.or(shell_basename);
+            self.runtime.cwd = info.cwd;
+        }
+        // Non-Unix: no foreground detection (stub); runtime stays at its default.
+        #[cfg(not(unix))]
+        {
+            let _ = &mut self.runtime;
+        }
+    }
     #[cfg(test)]
     fn new_for_test_with_shell(cols: usize, rows: usize, shell: &str) -> Result<Self, PtyError> {
         Self::with_test_shell(
@@ -182,17 +235,46 @@ impl PaneBackend for TerminalBackend {
             }
         }
 
-        let reap_result = if self.reaped {
-            Ok(false)
-        } else {
-            self.pty.try_wait().map(|status| status.is_some())
-        };
+        // Exit detection (event: reader-EOF wake → try_wait). Capture the exit
+        // code (previously discarded — only `is_some()` was checked) so the
+        // per-wake monitor can emit `pane.exited{code}`. No polling loop.
+        let was_reaped = self.reaped;
+        let mut reap_result: io::Result<bool> = Ok(false);
+        let mut exit_code: Option<i32> = None;
+        if !self.reaped {
+            match self.pty.try_wait() {
+                Ok(Some(status)) => {
+                    exit_code = Some(status.exit_code() as i32);
+                    reap_result = Ok(true);
+                }
+                Ok(None) => reap_result = Ok(false),
+                Err(_) => reap_result = Err(io::Error::other("try_wait")),
+            }
+        }
         reconcile_exit_state(
             self.reader_disconnected,
             &mut self.exited,
             &mut self.reaped,
             reap_result,
         );
+        if !was_reaped
+            && self.reaped
+            && let Some(code) = exit_code
+        {
+            self.runtime.exit_code = Some(code);
+            self.pending_exit = Some(code);
+        }
+
+        // Foreground detection — event-first, debounced (NO periodic timer per
+        // plan §0.2). Re-sample on the output/EOF wake, at most once per
+        // `FOREGROUND_DEBOUNCE`, and only while the shell is alive.
+        if !self.exited {
+            let now = Instant::now();
+            if process::fg_re_sample_due(now.duration_since(self.last_fg_check)) {
+                self.last_fg_check = now;
+                self.refresh_foreground();
+            }
+        }
 
         if had_data {
             self.dirty = true;
@@ -234,6 +316,14 @@ impl PaneBackend for TerminalBackend {
 
     fn cell_size(&self) -> (f32, f32) {
         (self.cell_w, self.cell_h)
+    }
+
+    fn runtime(&self) -> PaneRuntime {
+        self.runtime.clone()
+    }
+
+    fn take_exit_code(&mut self) -> Option<i32> {
+        self.pending_exit.take()
     }
 }
 
@@ -348,6 +438,29 @@ mod tests {
         let exited = pump_backend_until(&mut backend, TerminalBackend::should_close);
         assert!(exited, "backend should report shell exit");
         assert!(backend.reaped, "backend should reap the PTY child after exit");
+    }
+
+    #[test]
+    fn terminal_backend_exit_captures_code_via_take_exit() {
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
+
+        warm_shell(&mut backend);
+        backend.process_input(shell_exit_command().as_bytes());
+
+        let exited = pump_backend_until(&mut backend, TerminalBackend::should_close);
+        assert!(exited, "backend should report shell exit");
+
+        // Phase 2: the exit code is captured (previously discarded — only
+        // `is_some()` was checked) and drained once via `take_exit_code` so the
+        // per-wake monitor can emit `pane.exited{code}`. `exit` ⇒ code 0.
+        assert_eq!(backend.take_exit_code(), Some(0), "shell `exit` ⇒ code 0");
+        assert_eq!(backend.take_exit_code(), None, "exit code drains once only");
+        assert_eq!(
+            backend.runtime().exit_code,
+            Some(0),
+            "runtime snapshot carries the captured exit code"
+        );
     }
 
     #[test]

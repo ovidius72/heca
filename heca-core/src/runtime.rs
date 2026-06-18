@@ -7,6 +7,11 @@
 use std::path::PathBuf;
 
 /// High-level runtime status for a pane's foreground process lifecycle.
+///
+/// There is **no `Exit` variant**: a pane whose terminal (shell) has died is
+/// closed, so it has no status left to display. The exit *code* is carried by the
+/// `pane.exited{code}` event + `PaneRuntime::exit_code` (for Phase 6 close-policy
+/// on direct-spawn panes), not by a status. See `pane-runtime-state-plan.md` §0.6.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ProcessStatus {
     #[default]
@@ -14,7 +19,6 @@ pub enum ProcessStatus {
     Running,
     Success,
     Error,
-    Exit,
 }
 
 /// Source/content type hosted by a pane.

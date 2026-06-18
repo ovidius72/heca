@@ -13,6 +13,7 @@ pub mod keyboard;
 pub mod lifecycle;
 pub mod mutations;
 pub mod pane_ops;
+pub mod process_monitor;
 pub mod registry;
 pub mod render;
 pub mod selection;
