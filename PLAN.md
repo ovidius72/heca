@@ -272,6 +272,16 @@ WorkspacesContainer migration → Phase 6 dynamic ActionRegistry → Phase 7 ≈
 (largely done) → Phase 7.5 shell compositing (largely done) → Phase 8 overlay host APIs → Phase 9
 WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/palette integration.
 (Plus 8.1 placeholder tokens, 8.2 simple config.toml plugins — "to be analyzed later".)
+**After this arc is complete**, the next initiative is **AI Agent Integration**
+(`agent-integration/agent-integration-plan.md` + board `agent-integration/agent-integration-tasks.md`):
+per-pane structured `AgentStatus` (Working/WaitingForInput/WaitingForPermission/Finished/Error/
+Compacting/SubagentRunning) sourced from each agent's lifecycle hooks (Claude Code `terminalSequence`,
+Codex native OSC 9, pi extension), carried over a per-driver transport (in-band OSC / AF_UNIX
+side-channel) into `PaneRuntime.agent`, emitted as `pane.agent.changed` on the existing event bus
+(plugin-visible), displayed alongside program/git, plus transition sounds (rodio). Generic +
+pluggable: an `AgentDriver` trait + registry is the seam — built-in Rust drivers now, the same
+contract becomes the WASM plugin host contract for third-party agents later. Research complete;
+design locked; pre-implementation (parked until the plugin arc above is done).
 
 ---
 
@@ -297,6 +307,9 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
 - `pane-runtime-state-plan.md` — **active initiative**: pane runtime state + reactive chrome store +
   plugin event bus (detailed phased plan); board in `pane-runtime-tasks.md`.
 - `pluggable-chrome-plugin-plan.md` — chrome-plugin architecture north star.
+- `agent-integration/agent-integration-plan.md` — **post-plugin-plan initiative**: AI agent status
+  tracking + sounds (board in `agent-integration/agent-integration-tasks.md`). Research complete;
+  parked until the pluggable-chrome arc is done.
 - `grid-ui-chrome-plan.md` — chrome widget vocabulary + shared-state strategy (§4).
 - `dnd-framework-refactor-plan.md` — generic DnD framework design (Phase 1+2 shipped).
 - `niri-compatibility-review.md` + `docs/niri-wiki/` — **important** niri layout/keybinding reference;
