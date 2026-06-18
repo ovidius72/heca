@@ -2,6 +2,25 @@
 
 > Full reference of niri's system architecture, layout engine internals, rendering pipeline, and data flow.
 
+## Relationship to heca (read first)
+
+This document describes **upstream niri** — the Wayland compositor whose **scrollable-tiling layout model**
+heca adopts (workspaces → columns → panes, view-offset scrolling, "open a window without resizing others").
+heca is **not** a Wayland compositor: it is a terminal-multiplexer host rendering with **wgpu** (vs niri's
+GLES/Vulkan + smithay), and it drives bindings through a **tmux-style prefix** + `ActionRegistry`/
+`KeymapRegistry` (vs niri's direct `Mod`+key bindings).
+
+- **Where heca matches niri:** the layout engine in `heca-core/src/layout/` (Session → Workspace →
+  `ScrollingSpace` → Column) mirrors niri's data model and scrolling principles.
+- **Where heca diverges (and known gaps):** see [`../../niri-compatibility-review.md`](../../niri-compatibility-review.md)
+  — re-verified 2026-06-17/18. The keybinding gaps in that review are largely resolved by the registry
+  rewrite. The one still-open layout question is whether heca's habit of recomputing all column widths on
+  every change actually *resizes existing columns* (niri never does) — unconfirmed, needs a runtime test.
+  (An earlier "focus-up jumps to another workspace" claim was tested and proved **false** — heca's focus-up
+  stays within the workspace, like niri.)
+
+> Keep both docs current: this file = upstream-niri reference; the compat review = the heca↔niri delta.
+
 ## System Architecture
 
 ```

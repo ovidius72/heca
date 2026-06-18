@@ -9,26 +9,46 @@
 
 ---
 
-## Status snapshot (2026-06-15)
+## Status snapshot (updated 2026-06-17)
 
-- **main** has the full **WS-A** workstream merged (**PR #102**): `[appearance]` config +
-  transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained
-  chrome tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2).
-- Active branch: `grid-ui-chrome-integration` (in sync with main).
-- Build + full test suite green; warning-clean (bar the transitive `block v0.1.6` note).
+> **This is the single planning file.** The separate `RESUME.md` handoff was folded in and removed —
+> PLAN.md now carries both the prioritized plan **and** the "where we are now" resume point. (The
+> architecture *rationale* docs at the bottom stay as references, not task lists.)
+
+- **`origin/main` @ #122** has the full **WS-A** workstream (**PR #102**): `[appearance]` config +
+  transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained chrome
+  tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2); plus F4.5 sidebar
+  DnD (#116/#117/#119/#120) and the terminal pane-shell work (#121/#122 → `app/terminal_render.rs`).
+- **In flight (open / pending PRs):**
+  - **PR #123** (`fix/f4.4-keyhint-dock-pick`) — F4.4 KeyHint move/swap/take pick overlay **restored** in
+    the grid-ui Dock (+ new `KeyHint::CenterRight` + transparent-stretch). **Open, not merged.**
+  - `feature/f4.5-grip-widen` — grip gutter 12→20px + swap-arrows (⇄) cue. **Committed locally, no PR yet.**
+- Build + full test suite green; warning-clean **bar** the transitive `block v0.1.6` note **and**
+  pre-existing dead-code warnings in `app/selection_model.rs` / `terminal_render.rs` (from #121/#122 — not
+  yet cleaned).
 
 ---
 
-## Priority sequence (locked; blur pulled forward 2026-06-15 — cross-team dep)
+## Priority sequence (this file is authoritative; updated 2026-06-17)
 
-1. ~~Consolidate planning docs~~ ✅
-2. **In-app blur (F3)** — reusable primitive ✅ (`Blur` + `Backdrop`, PR #105/#107); **app-wiring remains**
-3. **SharedChromeState** — foundation ✅ (PR #107); ← **NEXT: consumer migration**
-4. **F4.4** — generic marker/rail widget + targeting
-5. **F4.5 ≡ DnD Phase 3** — re-enable sidebar DnD on the framework
-6. **Pane numbering** feature
-7. **Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec
-8. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom
+**Done foundations** (don't re-plan): ~~consolidate docs~~ ✅ · in-app blur **primitive** ✅
+(`Blur`+`Backdrop`, PR #105/#107 — app-wiring still open, folded into P4) · SharedChromeState
+**foundation** ✅ (PR #107) · ~~F4.5 sidebar DnD~~ ✅ (PRs #116/#117/#119/#120).
+
+**Near-term order:**
+1. **F4.5 leftovers** — ✅ grip-widen + swap-arrows (⇄) cue done (`feature/f4.5-grip-widen`, PR pending);
+   **remaining:** workspace drag-to-reorder, Onto-third semantics (see the F4.5 note below).
+2. **F4.4 KeyHint-in-Dock — ✅ pane pick overlay RESTORED** (PR #123). **Remaining:** column-level pick
+   keycaps (needs column-pick candidate infra = new keyboard logic) + the P1 widget-migration leftover.
+3. **P3 — Pane numbering** feature.
+4. **P4 — Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec, finish in-app blur app-wiring.
+5. **P0 — SharedChromeState consumer migration** (+ the F4.4 widget migration it unblocks) — the deep,
+   foundational piece; deliberately sequenced last in the near-term run.
+6. **render.rs split** — partly done by #121/#122 (terminal pass → `app/terminal_render.rs`); reassess the remainder.
+7. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
+
+> The `P0–P4` labels on the sections below are **stable anchors, not priority rank** — follow this list
+> for order. (P0 SharedChromeState is foundational but deliberately sequenced last near-term.)
 
 ---
 
@@ -71,8 +91,8 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   re-subscribe on rebuild; the only-affected-repaint payoff needs signal-dirty to feed the
   `needs_paint`/`collect_damage` path. This is the deep part of the work.
 
-**Design refs:** `F4-chrome-state-design.md` §2.2, `grid-ui-chrome-plan.md` §4,
-`pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
+**Design refs:** the locked SharedChromeState design lives in this P0 section (above); see also
+`grid-ui-chrome-plan.md` §4, `pluggable-chrome-plugin-plan.md` Phase 2/§3.3.
 
 ### P1 — F4.4 — generic marker/rail widget + targeting (built drag-aware)
 - ✅ **`heca-grid-ui::MarkerGroup` built** — generic, theme-driven, `Base`+`Component`+builders;
@@ -85,12 +105,19 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   alphas+padding / the active-ws wash onto `MarkerGroup` + theme-driven `Row` (constant card bg +
   signal-driven active overlay) — after this `chrome.rs` only *composes* + projects. **Then** the
   active/hover signal-binding + signature-strip from the consumer migration becomes unblocked.
-- Wire move/swap/take **targeting**: pick mode lights `KeyHint` letters; wrap pane `Row`s AND
-  `MarkerGroup`s (column letter on/at the bar, top-anchored overlay) in `KeyHint`; app feeds
-  candidates from `chrome_state.workspaces.pick_candidates` (consume that field). KeyHint stays
-  universal (memory `grid-ui-keyhint-universal`).
+- **Wire move/swap/take targeting — ✅ DONE for panes (PR #123).** The pick `KeyHint` overlay (lost when
+  the grid-ui Dock replaced the hand-drawn sidebar) is restored: each pane card is wrapped in the universal
+  `KeyHint`, and `sync_chrome_signals` projects `state.input_mode.candidates()` onto a per-pane hint signal
+  each frame (pure `pick_keycap` helper). Right-aligned via the new `KeyHint::CenterRight`. The keyboard
+  logic (candidates + key consumption in `app/input.rs`) was always intact — only the visual was lost.
+  **Remaining:** column-level pick keycaps — there are no column-pick candidates today, so this needs new
+  candidate computation (genuinely new keyboard logic). KeyHint stays universal (memory `grid-ui-keyhint-universal`).
 
-### P2 — F4.5 ≡ DnD Phase 3 — re-enable sidebar DnD on the new framework
+### P2 — F4.5 ≡ DnD Phase 3 — sidebar DnD — ✅ DONE (#116/#117/#119/#120)
+> Panes + columns drag/move/swap, source-aware targeting, grab cursor, swap visual, RPC,
+> docs + showcase all shipped. Remaining polish (own follow-ups): grip-widen, workspace
+> drag-to-reorder, Onto-third semantics. (Grip-widen + swap cue shipped on `feature/f4.5-grip-widen`.)
+> Original plan kept below for reference.
 - Framework ready (DnD Phase 1+2 merged): `drag::source_at`/`resolve_at` over the retained tree
   (kills `sidebar_hit_test` for DnD); paint `PaintCx::drag_ghost`/`drop_indicator`. Restore the
   drag-start block disabled in `45143b5`. Design: `dnd-framework-refactor-plan.md`.
@@ -137,8 +164,11 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.
-- **Split `heca/src/app/render.rs` (~1400 lines)** into a `render/` folder — *do at the end, its own
-  PR, not mid-feature.* `render_frame` (~765 lines) shrinks to ~250. Target 6 files:
+- **Split `heca/src/app/render.rs`** into a `render/` folder — *do at the end, its own PR, not
+  mid-feature.* **Partly done by #121** (the terminal pass is already extracted to
+  `app/terminal_render.rs` — `PaneRenderState`, `paint_terminal_pane_shell`, `render_terminal_mount`,
+  `selection_overlay_for_pane`); re-scope the remainder against that before splitting further.
+  `render_frame` shrinks toward ~250. Remaining target files:
   `mod.rs` (frame orchestrator + `update_session_viewport`), `geometry.rs` (pane/scissor/textbox
   math), `terminal.rs` (`TerminalRenderPassContext` + `render_terminal_mount` — the terminal pass),
   `panes.rs` (tiled+floating passes: blur stamps, border scenes, content), `selection.rs`
@@ -149,6 +179,33 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   `scene_view` borrows `state.compositor` → extract via a granular-field context struct (the
   `TerminalRenderPassContext` pattern), never `&mut AppState`. Verify by running the app (GPU
   ordering isn't unit-tested).
+
+---
+
+## niri parity — audit + improvements (from the 2026-06-17/18 compat re-check)
+
+> Context: `niri-compatibility-review.md` was re-verified against current heca. The keybinding
+> complaints are mostly fixed (registry rewrite). These three remain. **Lesson learned:** one claim
+> ("focus-up jumps workspaces") was tested and proved false — so verify behavior by *running it*, not
+> just by reading a code path.
+
+- **Catalog every animation (for a future animation overhaul).** Write down the full set of motions niri
+  animates and how (open, close, move, resize, workspace-switch, view-scroll, overview — niri gives each
+  its own spring/easing config and an off switch), then map each to what heca does today. Right now heca
+  appears to use one simple easing for everything, with no spring physics, no per-motion config, and no way
+  to turn animations off. Goal of this task = the catalog/gap-list; the actual improvement is a later effort.
+- **Confirm whether adding/removing a column actually resizes the other columns.** heca recomputes all
+  column widths on every layout change (`update_all_column_widths()` runs on every mutation in
+  `heca-core/src/layout/scrolling.rs`). niri never resizes existing columns when you open a new one. The
+  open question is whether heca's recompute *actually* changes existing widths at runtime or just re-derives
+  the same numbers. **Test it live** (resize a column, then add/remove another, then resize the window —
+  does the first column keep its size?). If it reflows, switch to storing each column's width and only
+  recomputing the changed one.
+- **Re-audit the compat items not yet checked deeply.** Several rows in the compat review are still marked
+  "unverified": prefix-mode timeout, whether modifiers are read from the event vs a cache, sending a literal
+  prefix key through to the terminal, the viewport/chrome coordinate math, the single-animation model, and
+  the column-width double-caching. Go through each against current code (and run it where behavior matters)
+  and update the review's status table.
 
 ---
 
@@ -227,8 +284,11 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
 ## Design references (kept in root — rationale, not task lists)
 - `pluggable-chrome-plugin-plan.md` — chrome-plugin architecture north star.
 - `grid-ui-chrome-plan.md` — chrome widget vocabulary + shared-state strategy (§4).
-- `F4-chrome-state-design.md` — SharedChromeState design.
 - `dnd-framework-refactor-plan.md` — generic DnD framework design (Phase 1+2 shipped).
+- `niri-compatibility-review.md` + `docs/niri-wiki/` — **important** niri layout/keybinding reference;
+  **needs updating** to reflect current heca (flagged 2026-06-17). Keep — do **not** delete.
+  *(The `F4-chrome-state-design.md` doc was outdated and removed; its live SharedChromeState design is
+  now in the **P0** section above.)*
 
 ## Archived (history → `.planning/archive/`)
 - `grid-ui-plan.md` — the big grid-ui task board (full backlog detail).

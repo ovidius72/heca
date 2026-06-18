@@ -7,6 +7,42 @@
 
 ---
 
+## Re-verification — 2026-06-17
+
+> The original analysis below was written against an **older codebase** (inline `main.rs` key
+> handling). Since then the input layer was **rebuilt** on `ActionRegistry` (`heca/src/actions.rs`) +
+> `KeymapRegistry`/`KeyCombo` (`heca/src/keymap.rs`, dispatch in `heca/src/app/input.rs`), and the
+> prefix key is now **configurable** (`heca-config/src/keys.rs`). So **most of Part 1 is fixed or
+> obsolete**; **Part 2 (layout) is mixed** — the niri *design principles* it cites remain the
+> north-star, and a few code issues persist. Status verified against the current tree:
+
+| ID | Current status (2026-06-17) | Evidence |
+|----|------------------------------|----------|
+| K1 | **Restructured** — ctrl is now part of `KeyCombo`; the `ctrl=false` hardcode is gone (re-test Ctrl chords to confirm end-to-end) | `app/input.rs` resolves via `keymap.resolve(.., &combo)`; `mode_combo` sets `is_ctrl` |
+| K2 | **✅ Fixed** — prefix key is configurable | `heca-config/src/keys.rs:102` `prefix_key` (default `default_prefix_key()`) |
+| K3 | **Unverified this pass** — re-check for a prefix timeout | — |
+| K4 | **✅ Obsolete** — shift-from-char inference removed; shift lives in `KeyCombo` | no `key_implies_shift`/`is_ascii_uppercase` in keymap |
+| K5 | **✅ Obsolete** — the no-op actions were removed | no `Scratchpad`/`Hide`/`ResizeLeft…` in `WmAction` |
+| K6 | **Unverified this pass** — modifiers still read from `state.modifiers`; re-check vs event | — |
+| K7 | **Unverified this pass** — re-check literal-prefix forwarding | — |
+| K8 | **✅ Addressed** — `action_priority` now uses explicit arms (no `_ => 4` catch-all) | `heca/src/input.rs:511` |
+| L1/L2 | **⚠️ Still present** — `update_all_column_widths()` is still called on every mutation | `heca-core/src/layout/scrolling.rs` (many call sites) |
+| L3 | **Unverified this pass** — re-audit viewport/chrome coordinate math | — |
+| L4 | **✅ Corrected 2026-06-18 — NOT a real divergence.** The focus-up *binding* (`handle_focus_up` → workspace-level `ws.focus_up()`) stays inside the workspace: move within the column, wrap to the previous column's last pane, or stop at the top. It does **not** switch workspaces. The session-level `Session::focus_up()` that falls through to `switch_workspace_up()` exists but is **not** the binding path. Confirmed by runtime test (focus-up at top of ws 2 did nothing). | `heca/src/handlers.rs:37`, `heca-core/src/layout/workspace.rs:193` |
+| L5 | **Unverified this pass** — likely still a single easing anim model; re-audit | — |
+| L6 | **Changed** — `ColumnDisplay::Tabbed` no longer found; re-audit which features remain dead | grep: no `Tabbed` in `heca-core`/render |
+| L7 | **Unverified this pass** — re-audit the `computed_width` / `column_widths` double-cache | — |
+| L8 | **✅ Obsolete** — `view_offset_to_restore` field removed | grep: gone from `heca-core` |
+
+**Net:** keep this doc as the **heca-vs-niri reference** (per PLAN.md). The keybinding bugs are largely
+resolved by the registry rewrite. The one still-open layout question is the **column-width recompute on
+every mutation** — it *might* diverge from niri's "opening a window must not resize others," but whether it
+**actually reflows at runtime** is unconfirmed and needs a real test (the focus-up "teleport" above turned
+out to be a false alarm once tested, so the recompute claim deserves the same scrutiny). The "Unverified
+this pass" rows still need a code re-audit before they're trusted.
+
+---
+
 ## Part 1: Keybinding Issues
 
 ### Critical
