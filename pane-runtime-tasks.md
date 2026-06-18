@@ -25,7 +25,7 @@
 ---
 
 ## Phase 0 — Chrome event bus + finish SharedChromeState migration  ⟶ FOUNDATION
-**Status:** Open · **Assigned:** — · **Depends-on:** none · **Plan:** §4 Phase 0
+**Status:** In Progress · **Assigned:** agent (dispatched 2026-06-18) · **Depends-on:** none · **Plan:** §4 Phase 0
 **One-liner:** typed event bus + emit-on-mutation; consume the dead store fields; retire the `Rc<Cell>`
 click mailbox; feed signal changes into the damage/repaint path.
 **Agent Completion:** _(branch, PRs, what was built, how verified, deviations)_
@@ -95,3 +95,4 @@ then 3→4 and 6 alongside.
 
 ## Activity log
 - 2026-06-18 — board created; plan locked (`pane-runtime-state-plan.md`); all phases `Open`.
+- 2026-06-18 — docs landed (PR #127); **Phase 0 dispatched** to an agent (foundation).
