@@ -81,8 +81,7 @@ auto-close stays (only fires on shell death — §0.6); **remove `ProcessStatus:
 
 ## Phase 3 — Shell integration (OSC 133 / OSC 7)
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
-**One-liner:** parse OSC 133 (success/error+code) + OSC 7 (cwd); re-sample foreground on markers; ship a
-bash/zsh/fish hook auto-enabled via PTY env.
+**One-liner:** passive OSC snooper in heca-core before `advance_bytes` (§0.8) — parse OSC 133 (success/error+code) + OSC 7 (cwd, macOS preferred); re-sample foreground on markers; **hybrid shell wrap** (bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`) auto-enabled by `settings.shell_integration` (bool, default true). **Implementation-shape decisions locked in §0.8** after an agent flagged them as pre-coding blockers.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
@@ -132,3 +131,4 @@ then 3→4 and 6 alongside.
 - 2026-06-18 — board created; plan locked (`pane-runtime-state-plan.md`); all phases `Open`.
 - 2026-06-18 — docs landed (PR #127); **Phase 0 dispatched** to an agent (foundation).
 - 2026-06-18 — **Phase 2 implemented + merged**: code PR #133 (`e8ac856`), design/deferral docs PR #132. Accepted by merge. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked).
+- 2026-06-18 — **Phase 3 implementation-shape locked (§0.8)**: shell-hook mechanism (hybrid bash/zsh/fish wrap), config switch (`settings.shell_integration` bool), OSC parsing ownership (passive pre-parse snooper before `advance_bytes`). **Lesson:** an agent raised these as pre-coding blockers — they were implementation-shape decisions the lead left open after locking only the high-level Phase 3 design. The lead should lock implementation-shape up-front, not just design intent. Gaps now recorded so no agent has to guess.
