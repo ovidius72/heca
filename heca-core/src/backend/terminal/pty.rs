@@ -76,6 +76,10 @@ pub(super) struct PtyHandle {
     master: Box<dyn portable_pty::MasterPty + Send>,
     writer: SharedWriter,
     rx: Receiver<Vec<u8>>,
+    /// The resolved shell path this PTY spawned (e.g. `/bin/zsh`). Used by the
+    /// backend to report the foreground program name when the shell itself is
+    /// foreground (`Idle`).
+    shell: String,
 }
 
 impl PtyHandle {
@@ -100,7 +104,7 @@ impl PtyHandle {
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
         let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
-        let mut cmd = CommandBuilder::new(shell);
+        let mut cmd = CommandBuilder::new(shell.clone());
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
@@ -147,11 +151,31 @@ impl PtyHandle {
             master: pair.master,
             writer,
             rx,
+            shell,
         })
     }
 
     pub(super) fn writer(&self) -> SharedWriter {
         self.writer.clone()
+    }
+
+    /// The resolved shell path this PTY spawned (e.g. `/bin/zsh`).
+    pub(super) fn shell_path(&self) -> &str {
+        &self.shell
+    }
+
+    /// The PTY child's process-group leader pid (the shell's pgrp). `None` where
+    /// the platform exposes no such accessor.
+    #[cfg(unix)]
+    pub(super) fn process_group_leader(&self) -> Option<libc::pid_t> {
+        self.master.process_group_leader()
+    }
+
+    /// The raw fd of the PTY master, for `tcgetpgrp` (foreground pgrp lookup).
+    /// `None` where the platform exposes no such accessor.
+    #[cfg(unix)]
+    pub(super) fn as_raw_fd(&self) -> Option<std::os::unix::io::RawFd> {
+        self.master.as_raw_fd()
     }
 
     pub(super) fn resize(&self, cols: usize, rows: usize) -> Result<(), PtyError> {

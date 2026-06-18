@@ -846,6 +846,9 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
     } else {
         state.chrome_state.workspaces.set_pick_candidates(next_candidates);
     }
+    // Phase 2: bridge backend-detected runtime → canonical `Pane.runtime` + emit
+    // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
+    crate::app::process_monitor::sync_pane_runtime_from_backends(state);
     sync_pane_runtime_state(&state.session, &state.chrome_state.workspaces);
 }
 

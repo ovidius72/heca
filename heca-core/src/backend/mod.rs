@@ -13,6 +13,8 @@ pub use snapshot::{
 };
 pub use terminal::{PtyError, TerminalBackend};
 
+use crate::runtime::PaneRuntime;
+
 /// Theme-derived default colors for terminal emulation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TerminalPaletteDefaults {
@@ -256,5 +258,21 @@ pub trait PaneBackend: Send {
     /// Default: (8.4, 14.0) — a reasonable monospace approximation.
     fn cell_size(&self) -> (f32, f32) {
         (8.4, 14.0)
+    }
+
+    /// Canonical per-pane runtime metadata (program, status, cwd, exit code, git,
+    /// content-kind). The backend owns detection (PTY/OS); the app's chrome store
+    /// mirrors this reactively. Default: `PaneRuntime::default()` for backends
+    /// without detection (e.g. non-terminal/fake backends).
+    fn runtime(&self) -> PaneRuntime {
+        PaneRuntime::default()
+    }
+
+    /// Drain a one-shot exit code captured since the last call (set when the
+    /// backend's child process exited). The per-wake monitor drains this to emit
+    /// `pane.exited{code}`. Returns `Some(code)` once, then `None` until another
+    /// exit is captured. Default: `None` (no exit to report).
+    fn take_exit_code(&mut self) -> Option<i32> {
+        None
     }
 }

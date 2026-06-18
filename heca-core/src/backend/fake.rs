@@ -5,6 +5,7 @@ use super::{
     TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalLine, TerminalSnapshot,
     TerminalUnderlineStyle,
 };
+use crate::runtime::PaneRuntime;
 
 /// A fake backend that renders a static test pattern without any I/O.
 pub struct FakeBackend {
@@ -14,6 +15,10 @@ pub struct FakeBackend {
     cell_w: f32,
     cell_h: f32,
     dirty: bool,
+    /// Settable runtime snapshot for tests (detection lives in `TerminalBackend`).
+    runtime: PaneRuntime,
+    /// One-shot exit code drained by `take_exit_code` (tests simulate exits).
+    pending_exit: Option<i32>,
 }
 
 impl FakeBackend {
@@ -29,7 +34,19 @@ impl FakeBackend {
             cell_w,
             cell_h,
             dirty: true,
+            runtime: PaneRuntime::default(),
+            pending_exit: None,
         }
+    }
+
+    /// Set the runtime snapshot this fake reports via [`PaneBackend::runtime`].
+    pub fn set_runtime(&mut self, runtime: PaneRuntime) {
+        self.runtime = runtime;
+    }
+
+    /// Queue an exit code to be drained once via [`PaneBackend::take_exit_code`].
+    pub fn queue_exit(&mut self, code: i32) {
+        self.pending_exit = Some(code);
     }
 }
 
@@ -191,11 +208,43 @@ impl PaneBackend for FakeBackend {
     fn cell_size(&self) -> (f32, f32) {
         (self.cell_w, self.cell_h)
     }
+
+    fn runtime(&self) -> PaneRuntime {
+        self.runtime.clone()
+    }
+
+    fn take_exit_code(&mut self) -> Option<i32> {
+        self.pending_exit.take()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fake_backend_runtime_and_exit_round_trip() {
+        use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
+        let mut backend = FakeBackend::new(16, 8);
+
+        // Default runtime before any set.
+        assert_eq!(backend.runtime(), PaneRuntime::default());
+
+        let runtime = PaneRuntime {
+            program: Some("nvim".into()),
+            status: ProcessStatus::Running,
+            kind: ContentKind::Terminal,
+            ..PaneRuntime::default()
+        };
+        backend.set_runtime(runtime.clone());
+        assert_eq!(backend.runtime(), runtime);
+
+        // Exit code drains exactly once.
+        assert_eq!(backend.take_exit_code(), None, "no exit queued ⇒ None");
+        backend.queue_exit(7);
+        assert_eq!(backend.take_exit_code(), Some(7), "queued exit drains once");
+        assert_eq!(backend.take_exit_code(), None, "drained exit does not repeat");
+    }
 
     #[test]
     fn fake_backend_exposes_terminal_snapshot() {

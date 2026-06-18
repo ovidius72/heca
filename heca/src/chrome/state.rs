@@ -442,7 +442,6 @@ impl SharedChromeState {
         }
     }
 
-    #[allow(dead_code)]
     pub fn events(&self) -> ChromeEventBus { self.events.clone() }
 
     // ── Region (shell) reads/writes — RegionMode/f32 are Copy → `.get()` is cheap ──
