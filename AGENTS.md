@@ -35,6 +35,11 @@ These are made over and over. **Violating either = redo.**
 > If a change touches UI or input and you didn't open `docs/widgets.md`/the showcase, or didn't go
 > through the registries, stop and redo it.
 
+### 3. No "for now" fixes left behind.
+- Do **not** land temporary workarounds, degraded fallbacks, or "we'll fix this later" code as the final state of a task.
+- If a bug needs a real architectural fix, implement that fix in the same task before closing it.
+- If work truly cannot be completed in the task, record the follow-up explicitly in the repo's tracked plan/task files **before** stopping. Untracked cleanup debt is a bug.
+
 ---
 
 ## What This Is

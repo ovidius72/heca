@@ -13,7 +13,7 @@ use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
 };
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
-use crate::app_state::AppState;
+use crate::app_state::{AppState, ChromeDamageMode};
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use std::collections::HashMap;
@@ -41,6 +41,7 @@ pub(crate) fn handle_window_event(
     match event {
         WindowEvent::CloseRequested => event_loop.exit(),
         WindowEvent::Resized(phys) if phys.width > 0 && phys.height > 0 => {
+            state.chrome_damage_mode = ChromeDamageMode::Full;
             state.surface_config.width = phys.width;
             state.surface_config.height = phys.height;
             state
@@ -77,7 +78,7 @@ pub(crate) fn handle_window_event(
             state.text_renderer.set_scale_factor(scale_factor);
             state.grid_renderer.set_scale_factor(scale_factor);
             refresh_terminal_cell_size(state);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         WindowEvent::Focused(focused) => {
             state.window_focused = focused;
@@ -85,13 +86,13 @@ pub(crate) fn handle_window_event(
                 state.window.request_user_attention(None);
             }
             notify_window_focus_changed(state, focused);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         WindowEvent::KeyboardInput { event, .. } => {
             if event.state != ElementState::Pressed {
                 return;
             }
-            state.needs_redraw = true;
+            state.mark_full_redraw();
 
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
@@ -125,7 +126,7 @@ pub(crate) fn handle_window_event(
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
             mouse::on_modifiers_changed(state);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         WindowEvent::CursorMoved { position, .. } => {
             let pos = (
@@ -147,7 +148,7 @@ pub(crate) fn handle_window_event(
             forward_mouse_move(state, pos);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         WindowEvent::MouseInput {
             state: button_state,
@@ -165,11 +166,11 @@ pub(crate) fn handle_window_event(
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
             // without waiting for the next move.
             mouse::update_cursor(state, state.mouse.pos);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         WindowEvent::MouseWheel { delta, .. } => {
             forward_mouse_wheel(state, state.mouse.pos, delta);
-            state.needs_redraw = true;
+            state.mark_full_redraw();
         }
         _ => {}
     }

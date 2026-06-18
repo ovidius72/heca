@@ -34,10 +34,16 @@ pub enum SelectionSource {
     /// Keyboard-driven selection mode.
     KeyboardMode,
     /// RPC or other programmatic request.
+    #[allow(dead_code)]
     Rpc,
 }
 
 /// Lifecycle phase of a selection.
+///
+/// Reserved for the planned RPC/backend-native selection flow. Today the app
+/// matches directly on [`SelectionState`], but the phase enum stays in sync with
+/// the shared selection contract that the next task will wire up.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum SelectionPhase {
     /// No active selection.
@@ -50,6 +56,9 @@ pub enum SelectionPhase {
 }
 
 /// Who renders the selection visual and owns the anchor semantics.
+///
+/// Reserved for the planned RPC/backend-native selection flow.
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SelectionRenderMode {
     /// heca owns the text/grid model and renders the selection overlay.
@@ -73,11 +82,13 @@ pub enum SelectionRegion {
         focus_col: usize,
     },
     /// Opaque backend-native region. The host does not interpret it.
+    #[allow(dead_code)]
     BackendNative,
 }
 
 impl SelectionRegion {
     /// Return the host-grid render mode this region belongs to.
+    #[allow(dead_code)]
     pub fn render_mode(&self) -> SelectionRenderMode {
         match self {
             SelectionRegion::HostGrid { .. } => SelectionRenderMode::HostGrid,
@@ -114,6 +125,7 @@ pub struct ActiveSelection {
 
 impl ActiveSelection {
     /// Who renders the selection visual.
+    #[allow(dead_code)]
     pub fn render_mode(&self) -> SelectionRenderMode {
         self.region.render_mode()
     }
@@ -167,10 +179,11 @@ impl SelectionState {
     }
 
     /// Current lifecycle phase.
+    #[allow(dead_code)]
     pub fn phase(&self) -> SelectionPhase {
         match self {
             SelectionState::Inactive => SelectionPhase::Inactive,
-            SelectionState::Caret { .. } => SelectionPhase::Inactive, // Caret is pre-selection
+            SelectionState::Caret { .. } => SelectionPhase::Inactive,
             SelectionState::Selecting(_) => SelectionPhase::Selecting,
             SelectionState::Selected(_) => SelectionPhase::Selected,
         }
@@ -190,11 +203,13 @@ impl SelectionState {
     }
 
     /// Who renders the selection visual, if a selection is active.
+    #[allow(dead_code)]
     pub fn render_mode(&self) -> Option<SelectionRenderMode> {
         self.active().map(|a| a.render_mode())
     }
 
     /// Selection region, if active.
+    #[allow(dead_code)]
     pub fn region(&self) -> Option<&SelectionRegion> {
         self.active().map(|a| &a.region)
     }
@@ -210,6 +225,7 @@ impl SelectionState {
     }
 
     /// True if a selection has been confirmed.
+    #[allow(dead_code)]
     pub fn has_selection(&self) -> bool {
         matches!(self, SelectionState::Selected(_))
     }
@@ -276,7 +292,7 @@ impl SelectionState {
                 std::mem::swap(anchor_row, focus_row);
                 std::mem::swap(anchor_col, focus_col);
             }
-            _ => {} // BackendNative or Caret/Inactive: no-op
+            _ => {}
         }
     }
 

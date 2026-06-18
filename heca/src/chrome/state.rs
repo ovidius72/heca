@@ -107,12 +107,11 @@ impl RegionState {
 #[derive(Clone, Debug)]
 pub(crate) struct ChromeSelection {
     pub(crate) active_pane: Signal<Option<PaneId>>,
-    pub(crate) hovered_pane: Signal<Option<PaneId>>,
 }
 
 impl ChromeSelection {
     fn new() -> Self {
-        Self { active_pane: signal(None), hovered_pane: signal(None) }
+        Self { active_pane: signal(None) }
     }
 }
 
@@ -151,7 +150,6 @@ impl WorkspacesContainerState {
 
     // ── Reads ──
     pub fn active_pane(&self) -> Option<PaneId> { self.selection.active_pane.get() }
-    pub fn hovered_pane(&self) -> Option<PaneId> { self.selection.hovered_pane.get() }
     #[allow(dead_code)]
     pub fn scroll(&self) -> f32 { self.scroll.get() }
 
@@ -186,13 +184,6 @@ impl WorkspacesContainerState {
         }
         self.selection.active_pane.set(pane);
         self.events.emit(ChromeEvent::PaneActiveChanged { pane });
-    }
-    pub fn set_hovered_pane(&self, pane: Option<PaneId>) {
-        if self.selection.hovered_pane.get_untracked() == pane {
-            return;
-        }
-        self.selection.hovered_pane.set(pane);
-        self.events.emit(ChromeEvent::PaneHoveredChanged { pane });
     }
     #[allow(dead_code)]
     pub fn set_scroll(&self, offset: f32) {
