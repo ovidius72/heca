@@ -789,7 +789,12 @@ mod tests {
             WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
             WmAction::ClosePaneById { pane_id: PaneId(0) },
             WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
-            WmAction::SpawnCommand { command: String::new() },
+            WmAction::SpawnCommand {
+                command: String::new(),
+                kind: crate::input::SpawnKind::Terminal,
+                float: false,
+                close_policy: heca_core::runtime::PaneClosePolicy::default(),
+            },
             WmAction::EnterMode { name: String::new() },
             WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
             WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
@@ -1102,7 +1107,12 @@ mod tests {
 
         let actions = [
             WmAction::CommandPalette,
-            WmAction::SpawnCommand { command: String::new() },
+            WmAction::SpawnCommand {
+                command: String::new(),
+                kind: crate::input::SpawnKind::Terminal,
+                float: false,
+                close_policy: heca_core::runtime::PaneClosePolicy::default(),
+            },
         ];
         for action in &actions {
             let decision = route_interaction_for_session(

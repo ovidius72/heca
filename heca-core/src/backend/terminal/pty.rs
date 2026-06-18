@@ -108,7 +108,33 @@ impl PtyHandle {
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
         let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
-        let mut cmd = command_for_shell(&shell, shell_integration.as_ref());
+        let cmd = command_for_shell(&shell, shell_integration.as_ref());
+        Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
+    }
+
+    pub(super) fn new_with_command(
+        cols: usize,
+        rows: usize,
+        wake_on_output: Option<WakeCallback>,
+        command: &str,
+    ) -> Result<Self, PtyError> {
+        let pty_system = native_pty_system();
+        let size = pty_size(cols, rows);
+        let pair = pty_system
+            .openpty(size)
+            .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
+
+        let shell = default_shell();
+        let cmd = command_for_spawned_command(&shell, command);
+        Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
+    }
+
+    fn spawn_with_command_builder(
+        pair: portable_pty::PtyPair,
+        shell: String,
+        mut cmd: CommandBuilder,
+        wake_on_output: Option<WakeCallback>,
+    ) -> Result<Self, PtyError> {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
@@ -234,6 +260,21 @@ fn command_for_shell(
     cmd
 }
 
+fn command_for_spawned_command(shell: &str, command: &str) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(shell);
+    #[cfg(windows)]
+    {
+        cmd.arg("/C");
+        cmd.arg(command);
+    }
+    #[cfg(not(windows))]
+    {
+        cmd.arg("-lc");
+        cmd.arg(command);
+    }
+    cmd
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ShellKind {
     Bash,
@@ -279,7 +320,9 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{PtyError, PtyOperation, ShellKind, resolve_shell, shell_kind};
+    use super::{
+        PtyError, PtyOperation, ShellKind, command_for_spawned_command, resolve_shell, shell_kind,
+    };
     use std::error::Error;
     use std::io;
 
@@ -305,6 +348,16 @@ mod tests {
         assert_eq!(shell_kind("/opt/homebrew/bin/zsh"), Some(ShellKind::Zsh));
         assert_eq!(shell_kind("/usr/bin/fish"), Some(ShellKind::Fish));
         assert_eq!(shell_kind("/bin/sh"), None);
+    }
+
+    #[test]
+    fn command_for_spawned_command_uses_shell_execution() {
+        let rendered = format!("{:?}", command_for_spawned_command("/bin/sh", "lazygit"));
+        #[cfg(windows)]
+        assert!(rendered.contains("/C"));
+        #[cfg(not(windows))]
+        assert!(rendered.contains("-lc"));
+        assert!(rendered.contains("lazygit"));
     }
 
     #[test]

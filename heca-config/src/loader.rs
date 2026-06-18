@@ -249,8 +249,11 @@ focus_left = ["h", "Left"]
 focus_right = "l"
 
 [[keys.command]]
-key = "prefix+Shift+g"
+keys = "prefix+Shift+g"
 command = "lazygit"
+float = true
+close_pane = true
+keep_on_error = true
 
 [[keys.mode]]
 name = "resize"
@@ -271,6 +274,10 @@ keys = "="
             vec!["l"]
         );
         assert_eq!(cfg.keys.command.len(), 1);
+        assert_eq!(cfg.keys.command[0].kind, "terminal");
+        assert!(cfg.keys.command[0].float);
+        assert!(cfg.keys.command[0].close_pane);
+        assert!(cfg.keys.command[0].keep_on_error);
         assert_eq!(cfg.keys.mode.len(), 1);
         assert_eq!(cfg.keys.mode[0].name, "resize");
         assert_eq!(cfg.keys.mode[0].bindings.len(), 1);

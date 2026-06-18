@@ -28,6 +28,30 @@ pub enum ContentKind {
     Terminal,
 }
 
+/// Exit-time close policy for a pane that directly spawned a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PaneClosePolicy {
+    pub close_pane: bool,
+    pub keep_on_error: bool,
+    pub keep_on_success: bool,
+}
+
+impl PaneClosePolicy {
+    /// Decide whether a pane should close for the given exit code.
+    pub fn should_close(self, code: Option<i32>) -> bool {
+        if !self.close_pane {
+            return false;
+        }
+        if self.keep_on_error && code.is_some_and(|exit| exit != 0) {
+            return false;
+        }
+        if self.keep_on_success && code == Some(0) {
+            return false;
+        }
+        true
+    }
+}
+
 /// Git summary for the pane's current working directory.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GitInfo {

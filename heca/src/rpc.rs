@@ -20,11 +20,14 @@
 //!   collapse-current-column | expand-current-column | toggle-current-column-collapsed
 //!   rename-pane | rename-workspace
 //!   command-palette
+//!   spawn-command [--kind terminal|app|plugin] [--float] [--close-pane]
+//!     [--keep-on-error] [--keep-on-success] -- <command...>
 //!   enter-selection-mode | clear-selection | copy-selection | paste-clipboard
 //!     (selection is a host capability; these commands are reachable from
 //!      RPC, keyboard bindings, and future mouse/UI dispatch)
 
-use crate::input::{ResizeTarget, WmAction};
+use crate::input::{ResizeTarget, SpawnKind, WmAction};
+use heca_core::runtime::PaneClosePolicy;
 use heca_core::layout::PaneId;
 
 /// Errors that can occur when parsing an RPC command.
@@ -280,6 +283,67 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
         "command-palette" => Ok(WmAction::CommandPalette),
+        "spawn-command" => {
+            let mut kind = SpawnKind::Terminal;
+            let mut float = false;
+            let mut close_policy = PaneClosePolicy::default();
+            let rest: Vec<&str> = parts.collect();
+            let split = rest
+                .iter()
+                .position(|part| *part == "--")
+                .ok_or_else(|| RpcError::MissingArgument {
+                    cmd: cmd.clone(),
+                    arg: "-- <command>".to_string(),
+                })?;
+
+            let mut idx = 0;
+            while idx < split {
+                match rest[idx] {
+                    "--kind" => {
+                        let value = rest.get(idx + 1).ok_or_else(|| RpcError::MissingArgument {
+                            cmd: cmd.clone(),
+                            arg: "kind".to_string(),
+                        })?;
+                        kind = value
+                            .parse()
+                            .map_err(|_| RpcError::UnknownCommand((*value).to_string()))?;
+                        idx += 2;
+                    }
+                    "--float" => {
+                        float = true;
+                        idx += 1;
+                    }
+                    "--close-pane" => {
+                        close_policy.close_pane = true;
+                        idx += 1;
+                    }
+                    "--keep-on-error" => {
+                        close_policy.keep_on_error = true;
+                        idx += 1;
+                    }
+                    "--keep-on-success" => {
+                        close_policy.keep_on_success = true;
+                        idx += 1;
+                    }
+                    other => return Err(RpcError::UnknownCommand(other.to_string())),
+                }
+            }
+
+            let command = rest[split + 1..].join(" ");
+            if command.trim().is_empty() {
+                return Err(RpcError::MissingArgument {
+                    cmd: cmd.clone(),
+                    arg: "command".to_string(),
+                });
+            }
+
+            Ok(WmAction::SpawnCommand {
+                command,
+                kind,
+                float,
+                close_policy,
+            })
+        }
         // Selection (host capability, Task 02). Reachable from RPC, keyboard
         // bindings, and future mouse/UI dispatch. Phase 10 will own the
         // real `copy-selection` and `paste-clipboard` behavior; today they
@@ -527,6 +591,25 @@ use heca_core::layout::PaneId;
         assert_eq!(
             parse_rpc_command("command-palette"),
             Ok(WmAction::CommandPalette)
+        );
+    }
+
+    #[test]
+    fn test_spawn_command_with_options() {
+        assert_eq!(
+            parse_rpc_command(
+                "spawn-command --kind terminal --float --close-pane --keep-on-error -- lazygit"
+            ),
+            Ok(WmAction::SpawnCommand {
+                command: "lazygit".to_string(),
+                kind: SpawnKind::Terminal,
+                float: true,
+                close_policy: PaneClosePolicy {
+                    close_pane: true,
+                    keep_on_error: true,
+                    keep_on_success: false,
+                },
+            })
         );
     }
 

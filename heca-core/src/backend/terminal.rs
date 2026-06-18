@@ -37,6 +37,15 @@ struct ShellLaunch<'a> {
     override_path: Option<&'a str>,
 }
 
+struct CommandLaunch<'a> {
+    command: &'a str,
+}
+
+enum LaunchTarget<'a> {
+    Shell(ShellLaunch<'a>),
+    Command(CommandLaunch<'a>),
+}
+
 /// Optional terminal-backend spawn behavior layered on top of the required
 /// grid size and cell metrics.
 #[derive(Default)]
@@ -75,6 +84,8 @@ pub struct TerminalBackend {
     /// When true, semantic OSC status (`Success`/`Error`) is active and must not
     /// be immediately overwritten by shell-foreground `Idle` refreshes.
     semantic_status_active: bool,
+    /// Whether the pane should auto-close as soon as the PTY child exits.
+    auto_close_on_exit: bool,
 }
 
 impl TerminalBackend {
@@ -125,40 +136,68 @@ impl TerminalBackend {
         cell_h: f32,
         options: TerminalBackendOptions,
     ) -> Result<Self, PtyError> {
-        Self::with_test_shell(
+        Self::with_launch_target(
             cols,
             rows,
             cell_w,
             cell_h,
             options.palette_defaults,
             options.wake_on_output,
-            ShellLaunch {
+            LaunchTarget::Shell(ShellLaunch {
                 integration: options.shell_integration,
                 override_path: None,
-            },
+            }),
         )
     }
 
-    fn with_test_shell(
+    pub fn with_command(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+        command: &str,
+        options: TerminalBackendOptions,
+    ) -> Result<Self, PtyError> {
+        Self::with_launch_target(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            options.palette_defaults,
+            options.wake_on_output,
+            LaunchTarget::Command(CommandLaunch { command }),
+        )
+    }
+
+    fn with_launch_target(
         cols: usize,
         rows: usize,
         cell_w: f32,
         cell_h: f32,
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
-        shell: ShellLaunch<'_>,
+        launch: LaunchTarget<'_>,
     ) -> Result<Self, PtyError> {
-        let pty = match shell.override_path {
-            Some(shell_path) => {
-                PtyHandle::new_with_shell(
-                    cols,
-                    rows,
-                    wake_on_output,
-                    shell.integration,
-                    Some(shell_path),
-                )?
+        let (pty, auto_close_on_exit) = match launch {
+            LaunchTarget::Shell(shell) => {
+                let pty = match shell.override_path {
+                    Some(shell_path) => {
+                        PtyHandle::new_with_shell(
+                            cols,
+                            rows,
+                            wake_on_output,
+                            shell.integration,
+                            Some(shell_path),
+                        )?
+                    }
+                    None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
+                };
+                (pty, true)
             }
-            None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
+            LaunchTarget::Command(command) => (
+                PtyHandle::new_with_command(cols, rows, wake_on_output, command.command)?,
+                false,
+            ),
         };
         let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults)?;
 
@@ -186,6 +225,7 @@ impl TerminalBackend {
             last_fg_check,
             osc: OscSnooper::default(),
             semantic_status_active: false,
+            auto_close_on_exit,
         })
     }
 
@@ -248,6 +288,27 @@ impl TerminalBackend {
                 false
             }
         }
+    }
+
+    #[cfg(test)]
+    fn with_test_shell(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+        palette_defaults: Option<TerminalPaletteDefaults>,
+        wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
+        shell: ShellLaunch<'_>,
+    ) -> Result<Self, PtyError> {
+        Self::with_launch_target(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            palette_defaults,
+            wake_on_output,
+            LaunchTarget::Shell(shell),
+        )
     }
 
     #[cfg(test)]
@@ -372,6 +433,11 @@ impl PaneBackend for TerminalBackend {
             && self.reaped
             && let Some(code) = exit_code
         {
+            self.runtime.status = if code == 0 {
+                ProcessStatus::Success
+            } else {
+                ProcessStatus::Error
+            };
             self.runtime.exit_code = Some(code);
             self.pending_exit = Some(code);
         }
@@ -422,7 +488,7 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn should_close(&self) -> bool {
-        self.exited
+        self.exited && self.auto_close_on_exit
     }
 
     fn cell_size(&self) -> (f32, f32) {
@@ -705,6 +771,33 @@ mod tests {
                 backend.runtime().cwd.as_deref() == Some(std::path::Path::new("/tmp"))
             }),
             "bash shell integration should update cwd via OSC 7 after `cd /tmp`"
+        );
+    }
+
+    #[test]
+    fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
+        let mut backend = TerminalBackend::with_command(
+            80,
+            24,
+            8.4,
+            14.0,
+            "printf 'phase6-ok\\n'; exit 7",
+            TerminalBackendOptions::default(),
+        )
+        .expect("command backend should initialize");
+
+        assert!(
+            pump_backend_until(&mut backend, |backend| backend.runtime().exit_code == Some(7)),
+            "command backend should capture the exit code"
+        );
+        assert_eq!(backend.runtime().status, ProcessStatus::Error);
+        assert!(
+            terminal_text(&backend).contains("phase6-ok"),
+            "command backend should render command output"
+        );
+        assert!(
+            !backend.should_close(),
+            "direct command backends stay open until pane close-policy decides"
         );
     }
 

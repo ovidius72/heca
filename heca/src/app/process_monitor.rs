@@ -10,28 +10,39 @@
 //! the chrome store and emits the per-field `pane.*.changed` events.
 
 use crate::app::backend_store::BackendStore;
+use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::AppState;
-use crate::chrome::{ChromeEvent, ChromeEventBus};
+use crate::chrome::ChromeEvent;
 use heca_core::layout::{PaneId, Session};
 
-/// Copy each live pane's backend `runtime()` → its canonical `Pane.runtime`, and
-/// drain any one-shot exit codes → emit `pane.exited{code}`.
+/// Copy each live pane's backend `runtime()` → its canonical `Pane.runtime`, drain
+/// any one-shot exit codes → emit `pane.exited{code}`, then apply pane-owned
+/// close-policy for direct command spawns.
 ///
 /// Called once per frame in `sync_chrome_state`, **before** `sync_pane_runtime_state`
 /// so the store mirror sees fresh canonical values.
 pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
     let bus = state.chrome_state.events();
-    sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.backends, &bus);
+    let exits = sync_pane_runtime_from_backends_impl(&mut state.session, &mut state.backends);
+    let mut panes_to_close = Vec::new();
+    for (pane, code) in exits {
+        bus.emit(ChromeEvent::PaneExited { pane, code });
+        if pane_exit_should_close(&state.session, pane, code) {
+            panes_to_close.push(pane);
+        }
+    }
+    for pane in panes_to_close {
+        close_pane_by_id_anywhere(state, pane);
+    }
 }
 
-/// Testable core of [`sync_pane_runtime_from_backends`] — takes the three pieces
-/// the monitor touches directly (session, backends, event bus) so unit tests can
-/// drive it without constructing a full GPU/window `AppState`.
+/// Testable core of [`sync_pane_runtime_from_backends`] — takes the two pieces
+/// the monitor touches directly (session + backends) so unit tests can drive it
+/// without constructing a full GPU/window `AppState`.
 fn sync_pane_runtime_from_backends_impl(
     session: &mut Session,
     backends: &mut BackendStore,
-    bus: &ChromeEventBus,
-) {
+ ) -> Vec<(PaneId, Option<i32>)> {
     let mut exits: Vec<(PaneId, Option<i32>)> = Vec::new();
 
     for ws in &mut session.workspaces {
@@ -55,17 +66,21 @@ fn sync_pane_runtime_from_backends_impl(
         }
     }
 
-    // Emit `pane.exited{code}` for backends that exited this wake. Done after the
-    // session/backends borrows end; the bus is `Rc`-shared, so emitting reaches the
-    // same subscribers as the store setters.
-    for (pane, code) in exits {
-        bus.emit(ChromeEvent::PaneExited { pane, code });
-    }
+    exits
+}
+
+fn pane_exit_should_close(session: &Session, pane_id: PaneId, code: Option<i32>) -> bool {
+    session
+        .workspaces
+        .iter()
+        .find_map(|ws| ws.find_pane(pane_id))
+        .map(|pane| pane.close_policy.should_close(code))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::sync_pane_runtime_from_backends_impl;
+    use super::{pane_exit_should_close, sync_pane_runtime_from_backends_impl};
     use crate::app::backend_store::BackendStore;
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
@@ -73,7 +88,7 @@ mod tests {
         workspace::FloatingPane, ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session,
         SessionId, Size,
     };
-    use heca_core::runtime::{ContentKind, PaneRuntime, ProcessStatus};
+    use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
     use std::rc::Rc;
 
@@ -119,7 +134,8 @@ mod tests {
         backends.insert_for_pane(pid, Box::new(fake));
         let bus = ChromeEventBus::default();
 
-        sync_pane_runtime_from_backends_impl(&mut session, &mut backends, &bus);
+        let _ = bus;
+        let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
 
         let pane_runtime = session
             .active_workspace()
@@ -149,9 +165,13 @@ mod tests {
             }
         });
 
-        sync_pane_runtime_from_backends_impl(&mut session, &mut backends, &bus);
+        for (pane, code) in sync_pane_runtime_from_backends_impl(&mut session, &mut backends) {
+            bus.emit(ChromeEvent::PaneExited { pane, code });
+        }
         // A second wake must NOT re-emit: take_exit_code drains once.
-        sync_pane_runtime_from_backends_impl(&mut session, &mut backends, &bus);
+        for (pane, code) in sync_pane_runtime_from_backends_impl(&mut session, &mut backends) {
+            bus.emit(ChromeEvent::PaneExited { pane, code });
+        }
 
         assert_eq!(seen.borrow().as_slice(), &[(pid, Some(42))]);
     }
@@ -165,7 +185,8 @@ mod tests {
         let bus = ChromeEventBus::default();
 
         // Must not panic and must leave the pane's runtime at its default.
-        sync_pane_runtime_from_backends_impl(&mut session, &mut backends, &bus);
+        let _ = bus;
+        let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
         let rt = session
             .active_workspace()
             .and_then(|ws| ws.find_pane(pid))
@@ -202,7 +223,8 @@ mod tests {
         backends.insert_for_pane(pid, Box::new(fake));
         let bus = ChromeEventBus::default();
 
-        sync_pane_runtime_from_backends_impl(&mut session, &mut backends, &bus);
+        let _ = bus;
+        let _ = sync_pane_runtime_from_backends_impl(&mut session, &mut backends);
 
         let rt = session
             .active_workspace()
@@ -211,5 +233,35 @@ mod tests {
             .expect("floating pane should exist");
         assert_eq!(rt.program.as_deref(), Some("lazygit"));
         assert_eq!(rt.status, ProcessStatus::Running);
+    }
+
+    #[test]
+    fn pane_exit_should_close_obeys_close_policy_truth_table() {
+        let pid = PaneId(21);
+        let mut session = session_with_tiled_pane(pid);
+        let pane = session
+            .active_workspace_mut()
+            .and_then(|ws| ws.find_pane_mut(pid))
+            .expect("pane should exist");
+
+        pane.close_policy = PaneClosePolicy {
+            close_pane: true,
+            keep_on_error: true,
+            keep_on_success: false,
+        };
+        assert!(!pane_exit_should_close(&session, pid, Some(7)));
+        assert!(pane_exit_should_close(&session, pid, Some(0)));
+
+        let pane = session
+            .active_workspace_mut()
+            .and_then(|ws| ws.find_pane_mut(pid))
+            .expect("pane should exist");
+        pane.close_policy = PaneClosePolicy {
+            close_pane: true,
+            keep_on_error: false,
+            keep_on_success: true,
+        };
+        assert!(!pane_exit_should_close(&session, pid, Some(0)));
+        assert!(pane_exit_should_close(&session, pid, Some(1)));
     }
 }
