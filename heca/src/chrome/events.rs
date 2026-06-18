@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use heca_core::layout::PaneId;
+use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::widgets::RegionMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,6 +24,19 @@ pub enum ChromeEvent {
     },
     PanePickCandidatesChanged {
         candidates: Vec<(char, PaneId)>,
+    },
+    PaneProcessChanged {
+        pane: PaneId,
+    },
+    PaneStatusChanged {
+        pane: PaneId,
+        status: ProcessStatus,
+    },
+    PaneCwdChanged {
+        pane: PaneId,
+    },
+    PaneGitChanged {
+        pane: PaneId,
     },
     WorkspaceCollapsedChanged {
         ws_idx: usize,
@@ -47,6 +61,10 @@ impl ChromeEvent {
             ChromeEvent::PaneActiveChanged { .. } => "pane.active.changed",
             ChromeEvent::PaneHoveredChanged { .. } => "pane.hovered.changed",
             ChromeEvent::PanePickCandidatesChanged { .. } => "pane.pick.changed",
+            ChromeEvent::PaneProcessChanged { .. } => "pane.process.changed",
+            ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
+            ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
+            ChromeEvent::PaneGitChanged { .. } => "pane.git.changed",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
             ChromeEvent::WorkspacesScrollChanged { .. } => "workspaces.scroll.changed",
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",

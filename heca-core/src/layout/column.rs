@@ -1,5 +1,6 @@
 use super::animation::{Animated, Animation, AnimationConfig};
 use super::types::*;
+use crate::runtime::PaneRuntime;
 
 /// A column of panes arranged according to a layout mode.
 ///
@@ -266,6 +267,7 @@ impl Pane {
 pub struct Pane {
     pub id: PaneId,
     pub title: String,
+    pub runtime: PaneRuntime,
     /// Preferred fixed height (None = auto).
     pub preferred_height: Option<f64>,
     /// Move animation offset (entry/exit animations).
@@ -280,6 +282,7 @@ impl Pane {
         Self {
             id,
             title: title.into(),
+            runtime: PaneRuntime::default(),
             preferred_height: None,
             move_offset: Animated::Static(Point::default()),
             interactive_move_offset: Point::default(),

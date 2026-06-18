@@ -804,6 +804,26 @@ fn pick_keycap(
         .map(|(ch, _)| ch.to_string())
 }
 
+fn sync_pane_runtime_state(
+    session: &heca_core::layout::Session,
+    workspaces: &WorkspacesContainerState,
+) {
+    let mut live_panes = std::collections::HashSet::new();
+    for ws in &session.workspaces {
+        for col in &ws.scrolling.columns {
+            for pane in &col.panes {
+                live_panes.insert(pane.id);
+                workspaces.set_pane_runtime(pane.id, &pane.runtime);
+            }
+        }
+        for float in &ws.floating_panes {
+            live_panes.insert(float.pane.id);
+            workspaces.set_pane_runtime(float.pane.id, &float.pane.runtime);
+        }
+    }
+    workspaces.retain_panes(&live_panes);
+}
+
 /// Mirror canonical app/runtime state into the shared chrome store before the
 /// retained tree reads it. `InputMode` remains the source of truth for keyboard
 /// pick flows; the store is the reactive UI mirror.
@@ -819,6 +839,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
     } else {
         state.chrome_state.workspaces.set_pick_candidates(next_candidates);
     }
+    sync_pane_runtime_state(&state.session, &state.chrome_state.workspaces);
 }
 
 /// Push the chrome's value-state (selection + status text) into the retained tree's
@@ -1120,6 +1141,9 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_core::layout::{LayoutOptions, Session, SessionId};
+    use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
+    use std::path::PathBuf;
 
     #[test]
     fn pick_keycap_projects_candidates() {
@@ -1325,5 +1349,128 @@ mod tests {
         assert!(items.contains(&super::ChromeDragItem::Pane(heca_core::layout::PaneId(7))));
         assert!(items.contains(&super::ChromeDragItem::Column { ws: 0, col: 0 }));
         assert!(items.contains(&super::ChromeDragItem::Workspace { ws: 0 }));
+    }
+
+    #[test]
+    fn sync_pane_runtime_state_projects_session_runtime_into_store() {
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+        {
+            let ws = session
+                .active_workspace_mut()
+                .expect("session should create an initial workspace");
+            ws.add_pane(
+                heca_core::layout::Pane::new(PaneId(10), "editor"),
+                None,
+                true,
+                ColumnWidth::Proportion(0.5),
+            );
+            ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
+                pane: heca_core::layout::Pane::new(PaneId(20), "git"),
+                position: Point::new(50.0, 50.0),
+                size: Size::new(400.0, 300.0),
+                is_active: true,
+                original_column_idx: None,
+                original_pane_idx: None,
+            });
+            ws.find_pane_mut(PaneId(10)).expect("tiled pane").runtime = PaneRuntime {
+                program: Some("nvim".into()),
+                status: ProcessStatus::Running,
+                cwd: Some(PathBuf::from("/tmp/project")),
+                exit_code: Some(0),
+                git: Some(GitInfo {
+                    branch: Some("main".into()),
+                    ahead: 1,
+                    behind: 0,
+                    added: 2,
+                    modified: 3,
+                    deleted: 4,
+                    dirty: true,
+                }),
+                kind: ContentKind::Terminal,
+            };
+            ws.find_pane_mut(PaneId(20)).expect("floating pane").runtime = PaneRuntime {
+                program: Some("lazygit".into()),
+                status: ProcessStatus::Idle,
+                cwd: Some(PathBuf::from("/tmp/project")),
+                exit_code: None,
+                git: None,
+                kind: ContentKind::Terminal,
+            };
+        }
+
+        sync_pane_runtime_state(&session, &chrome.workspaces);
+
+        let tiled = chrome
+            .workspaces
+            .with_pane_runtime(PaneId(10), |runtime| runtime.expect("tiled runtime").snapshot());
+        let floating = chrome.workspaces.with_pane_runtime(PaneId(20), |runtime| {
+            runtime.expect("floating runtime").snapshot()
+        });
+        assert_eq!(tiled.program.as_deref(), Some("nvim"));
+        assert_eq!(tiled.status, ProcessStatus::Running);
+        assert_eq!(tiled.cwd, Some(PathBuf::from("/tmp/project")));
+        assert_eq!(
+            tiled.git,
+            Some(GitInfo {
+                branch: Some("main".into()),
+                ahead: 1,
+                behind: 0,
+                added: 2,
+                modified: 3,
+                deleted: 4,
+                dirty: true,
+            })
+        );
+        assert_eq!(floating.program.as_deref(), Some("lazygit"));
+        assert_eq!(floating.status, ProcessStatus::Idle);
+    }
+
+    #[test]
+    fn sync_pane_runtime_state_prunes_removed_panes() {
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut session = Session::new(
+            SessionId(1),
+            Size::new(1280.0, 800.0),
+            1.0,
+            LayoutOptions::default(),
+        );
+        {
+            let ws = session
+                .active_workspace_mut()
+                .expect("session should create an initial workspace");
+            ws.add_pane(
+                heca_core::layout::Pane::new(PaneId(10), "editor"),
+                None,
+                true,
+                ColumnWidth::Proportion(0.5),
+            );
+        }
+
+        sync_pane_runtime_state(&session, &chrome.workspaces);
+        assert!(
+            chrome
+                .workspaces
+                .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
+        );
+
+        session
+            .active_workspace_mut()
+            .expect("session should keep its workspace")
+            .scrolling
+            .columns
+            .clear();
+        sync_pane_runtime_state(&session, &chrome.workspaces);
+
+        assert!(
+            !chrome
+                .workspaces
+                .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
+        );
     }
 }
