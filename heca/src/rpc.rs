@@ -37,6 +37,7 @@ use heca_core::layout::PaneId;
 pub enum RpcError {
     UnknownCommand(String),
     MissingArgument { cmd: String, arg: String },
+    MissingSeparator { cmd: String },
     ParseInt { cmd: String, value: String },
     ParseFloat { cmd: String, value: String },
     /// The app is not yet initialized (no state available).
@@ -49,6 +50,9 @@ impl std::fmt::Display for RpcError {
             RpcError::UnknownCommand(cmd) => write!(f, "unknown command: {cmd}"),
             RpcError::MissingArgument { cmd, arg } => {
                 write!(f, "command '{cmd}' missing argument: {arg}")
+            }
+            RpcError::MissingSeparator { cmd } => {
+                write!(f, "command '{cmd}' missing '--' separator before command")
             }
             RpcError::ParseInt { cmd, value } => {
                 write!(f, "command '{cmd}' expected integer, got: {value}")
@@ -291,10 +295,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let split = rest
                 .iter()
                 .position(|part| *part == "--")
-                .ok_or_else(|| RpcError::MissingArgument {
-                    cmd: cmd.clone(),
-                    arg: "-- <command>".to_string(),
-                })?;
+                .ok_or_else(|| RpcError::MissingSeparator { cmd: cmd.clone() })?;
 
             let mut idx = 0;
             while idx < split {
@@ -333,7 +334,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             if command.trim().is_empty() {
                 return Err(RpcError::MissingArgument {
                     cmd: cmd.clone(),
-                    arg: "command".to_string(),
+                    arg: "command after '--'".to_string(),
                 });
             }
 
@@ -611,6 +612,22 @@ use heca_core::layout::PaneId;
                 },
             })
         );
+    }
+
+    #[test]
+    fn test_spawn_command_reports_missing_separator() {
+        assert!(matches!(
+            parse_rpc_command("spawn-command --kind terminal lazygit"),
+            Err(RpcError::MissingSeparator { .. })
+        ));
+    }
+
+    #[test]
+    fn test_spawn_command_reports_missing_command_after_separator() {
+        assert!(matches!(
+            parse_rpc_command("spawn-command --kind terminal --"),
+            Err(RpcError::MissingArgument { arg, .. }) if arg == "command after '--'"
+        ));
     }
 
     #[test]

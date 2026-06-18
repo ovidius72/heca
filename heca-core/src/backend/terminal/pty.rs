@@ -269,7 +269,9 @@ fn command_for_spawned_command(shell: &str, command: &str) -> CommandBuilder {
     }
     #[cfg(not(windows))]
     {
-        cmd.arg("-lc");
+        // Use interactive command mode so terminal-first programs keep shell UX
+        // features such as job control and interactive rc sourcing.
+        cmd.arg("-ic");
         cmd.arg(command);
     }
     cmd
@@ -356,7 +358,7 @@ mod tests {
         #[cfg(windows)]
         assert!(rendered.contains("/C"));
         #[cfg(not(windows))]
-        assert!(rendered.contains("-lc"));
+        assert!(rendered.contains("-ic"));
         assert!(rendered.contains("lazygit"));
     }
 

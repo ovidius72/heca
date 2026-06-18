@@ -59,6 +59,9 @@ pub(crate) fn create_command_backend_for_state(
     rows: usize,
     command: &str,
 ) -> Box<dyn PaneBackend> {
+    // Direct command panes spawn a concrete program inside the PTY; shell
+    // integration is intentionally disabled because OSC prompt/cwd hooks are a
+    // shell concern and would only add noise here.
     let options = terminal_backend_options(&state.theme, Some(&state.event_proxy), false);
     create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)
 }

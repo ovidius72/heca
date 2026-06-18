@@ -31,8 +31,11 @@ pub enum ContentKind {
 /// Exit-time close policy for a pane that directly spawned a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PaneClosePolicy {
+    /// Close the pane automatically when the direct command exits.
     pub close_pane: bool,
+    /// Keep the pane open when the command exits with a non-zero code.
     pub keep_on_error: bool,
+    /// Keep the pane open when the command exits successfully (`0`).
     pub keep_on_success: bool,
 }
 

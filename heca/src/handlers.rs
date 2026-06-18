@@ -1490,9 +1490,12 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     else {
         return;
     };
-    if *kind != SpawnKind::Terminal {
-        eprintln!("[heca] spawn kind '{kind:?}' not yet implemented");
-        return;
+    match kind {
+        SpawnKind::Terminal => {}
+        SpawnKind::App | SpawnKind::Plugin => {
+            eprintln!("[heca] spawn kind '{kind:?}' not yet implemented");
+            return;
+        }
     }
 
     let active_ws = state.session.active_workspace_idx;

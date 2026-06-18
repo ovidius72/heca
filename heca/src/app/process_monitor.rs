@@ -42,7 +42,7 @@ pub(crate) fn sync_pane_runtime_from_backends(state: &mut AppState) {
 fn sync_pane_runtime_from_backends_impl(
     session: &mut Session,
     backends: &mut BackendStore,
- ) -> Vec<(PaneId, Option<i32>)> {
+) -> Vec<(PaneId, Option<i32>)> {
     let mut exits: Vec<(PaneId, Option<i32>)> = Vec::new();
 
     for ws in &mut session.workspaces {

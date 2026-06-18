@@ -715,7 +715,7 @@ Supported options today:
 - `close_pane = true` to close the pane when the command exits.
 - `keep_on_error = true` or `keep_on_success = true` to override `close_pane` for that exit outcome.
 
-Commands run in a real PTY using the user's shell (`-lc` on Unix, `/C` on Windows), so existing shell-style command strings keep working.
+Commands run in a real PTY using the user's shell (`-ic` on Unix, `/C` on Windows), so existing shell-style command strings keep working while preserving interactive shell behavior.
 
 ### Planned `spawn_pane` action contract
 

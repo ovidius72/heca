@@ -11,6 +11,11 @@ use std::path::PathBuf;
 pub enum ConfigError {
     /// No config file found in any search path.
     NotFound,
+    /// Config file parsed, but semantic validation failed.
+    Invalid {
+        path: PathBuf,
+        message: String,
+    },
     /// Config file found but could not be parsed as valid TOML.
     Parse {
         path: PathBuf,
@@ -27,6 +32,9 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigError::NotFound => write!(f, "no config file found"),
+            ConfigError::Invalid { path, message } => {
+                write!(f, "invalid config in {}: {message}", path.display())
+            }
             ConfigError::Parse { path, source } => {
                 write!(f, "parse error in {}: {source}", path.display())
             }
@@ -41,6 +49,7 @@ impl std::error::Error for ConfigError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConfigError::NotFound => None,
+            ConfigError::Invalid { .. } => None,
             ConfigError::Parse { source, .. } => Some(source),
             ConfigError::Io { source, .. } => Some(source),
         }
@@ -107,6 +116,10 @@ impl AppConfig {
                 Ok(content) => {
                     match toml::from_str::<Config>(&content) {
                         Ok(config) => {
+                            validate_config(&config).map_err(|message| ConfigError::Invalid {
+                                path: path.clone(),
+                                message,
+                            })?;
                             return Ok(config);
                         }
                         Err(e) => {
@@ -167,6 +180,13 @@ fn apply_terminal_overrides(theme: &mut Theme, settings: &SettingsConfig) {
     if let Some(size) = settings.terminal_font_size {
         theme.terminal_font_size = size;
     }
+}
+
+fn validate_config(config: &Config) -> Result<(), String> {
+    for command in &config.keys.command {
+        command.validate()?;
+    }
+    Ok(())
 }
 
 pub fn config_dir() -> PathBuf {
@@ -318,5 +338,17 @@ terminal-foreground = "#ddeeff"
         assert_eq!(theme.terminal_font_size, 16.0);
         assert_eq!(theme.terminal_background, Some(Color::new(17, 34, 51, 255)));
         assert_eq!(theme.terminal_foreground, Some(Color::new(221, 238, 255, 255)));
+    }
+
+    #[test]
+    fn test_parse_toml_rejects_invalid_command_kind() {
+        let toml = r#"
+[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+kind = "terminl"
+"#;
+        let cfg: Config = toml::from_str(toml).unwrap();
+        assert!(validate_config(&cfg).is_err());
     }
 }

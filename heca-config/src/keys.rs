@@ -59,6 +59,17 @@ fn default_command_kind() -> String {
     "terminal".to_string()
 }
 
+impl CommandKeybindConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        match self.kind.as_str() {
+            "terminal" | "app" | "plugin" => Ok(()),
+            other => Err(format!(
+                "invalid [[keys.command]].kind '{other}' (expected one of: terminal, app, plugin)"
+            )),
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ModeBindingConfig
 // ═══════════════════════════════════════════════════════════════════════════════
