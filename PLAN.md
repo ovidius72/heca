@@ -33,8 +33,11 @@
 (#116–#120) · ~~F4.4 pane pick overlay~~ ✅ (#123).
 
 **Near-term (active):**
-1. **SharedChromeState consumer migration** (P0 detail below) — the deep, foundational piece: move the
-   scattered chrome UI state into the one store + reconcile with the rebuild-on-signature / damage model.
+1. **Pane Runtime State + reactive chrome store + plugin event bus** — the active initiative (design locked
+   2026-06-18). Full plan: **`pane-runtime-state-plan.md`**; orchestration board: **`pane-runtime-tasks.md`**
+   (separate from `shared-tasks.md`). Its **Phase 0 IS** the SharedChromeState consumer migration + the new
+   typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
+   process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.
 2. **niri parity audits** (niri section below) — catalog every animation vs niri; test for real whether
    adding/removing a column resizes the others; re-audit the still-unverified compat items.
 3. **render.rs split** — partly done by #121/#122; reassess the remainder.
@@ -285,6 +288,8 @@ WASM runtime → Phase 10 multi-region proof → Phase 11 config/keybinding/pale
   reference; heca is a tmux-like host (all bindings via prefix).
 
 ## Design references (kept in root — rationale, not task lists)
+- `pane-runtime-state-plan.md` — **active initiative**: pane runtime state + reactive chrome store +
+  plugin event bus (detailed phased plan); board in `pane-runtime-tasks.md`.
 - `pluggable-chrome-plugin-plan.md` — chrome-plugin architecture north star.
 - `grid-ui-chrome-plan.md` — chrome widget vocabulary + shared-state strategy (§4).
 - `dnd-framework-refactor-plan.md` — generic DnD framework design (Phase 1+2 shipped).
