@@ -69,10 +69,13 @@ Notes:
 Verification: `cargo test -p heca-core -p heca` 204+40 green; `cargo clippy -p heca-core -p heca --all-targets --all-features` — 0 new lints (same 8 pre-existing).
 Note: the 6 per-field setters carry a documented `#[allow(dead_code)]` — they are the Phase 2 process-monitor write API, exercised by tests today; not removable dead code.
 
-## Phase 2 — Process detection (OS-native foreground + exit; event-first)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §4 Phase 2
-**One-liner:** exit+code (event), foreground program + running/idle (OS shim: macOS libproc / Linux /proc),
-cwd OS-fallback, process-monitor service; poll foreground only as fallback.
+## Phase 2 — Process detection (OS-native foreground + exit; event-first, NO polling timer)
+**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §4 Phase 2 (see also §0.2, §0.6)
+**One-liner:** exit+code captured from `try_wait` (event, reader EOF wake) + `pane.exited{code}`; foreground
+program + running/idle via `tcgetpgrp` vs `process_group_leader()` (macOS libproc / Linux /proc, basename);
+cwd OS-fallback (**Linux `/proc/<pid>/cwd` ✓; macOS OS-cwd deferred → Phase 3 OSC 7**, fragile FFI); **event-driven on output/EOF wakes + 250 ms debounce — NO periodic poll timer** (deferred);
+auto-close stays (only fires on shell death — §0.6); **remove `ProcessStatus::Exit`** (dead pane closes);
+`PaneBackend::runtime()` + per-wake monitor → `Pane.runtime` (Phase 1) → store. FakeBackend tests.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
@@ -90,10 +93,11 @@ optional `.git` fs-watch; cache per repo.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
-## Phase 5 — Process catalog (extensible raw→{name, icon})
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §4 Phase 5
-**One-liner:** built-in defaults + config-extensible map; new `Glyph`s (+ showcase/docs); resolver with raw
-always available.
+## Phase 5 — Process catalog (`[programs.<raw>]` → {name, icon, description, color})
+**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5
+**One-liner:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`); seeded shell
+defaults + user `[programs.<raw>]` overrides; free-form glyph-string icons (no new `Glyph` enum); optional
+`color` pane tint; resolver with raw always available.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 

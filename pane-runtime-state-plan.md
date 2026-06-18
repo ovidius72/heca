@@ -30,25 +30,37 @@
   `pane.status.changed`, `pane.exited`, `chrome.region.changed`, `selection.changed`) and exposed to
   plugins as **string names** with a **catch-all** (`app.on('*' | 'updated', …)`).
 
-### 0.2 Detection model — **event-first, poll only as fallback**
+### 0.2 Detection model — **event-first, no polling timer (poll deferred)**
 - **Exit** → PTY child-wait / reader EOF = event (`child.try_wait()` already exists). No poll.
 - **Command success/error + cwd** → arrive as **escape sequences** in the output stream
   (**OSC 133** semantic prompts, **OSC 7** cwd) → parsed as output flows = event. For a **spawned single
   command** the exit code comes straight from the child (no shell hook needed); **OSC 133** is only for
   success/error of commands run *inside an interactive shell pane*.
-- **Foreground program + running/idle** → the only source with no clean OS event. Re-sampled **on OSC 133
-  command-start/-end markers** when shell integration is on (event-driven); **polled** (~250–500 ms) **only**
-  as the fallback when it isn't.
+- **Foreground program + running/idle** → the only source with no clean OS event. Re-sampled **on every
+  terminal-output wake** (event-driven — the reader thread already wakes the loop on output) and on **OSC 133
+  command-start/-end markers** when shell integration is on; **rate-limited by a 250 ms debounce** so heavy
+  output bursts don't hammer `tcgetpgrp`/`libproc`. **No periodic polling timer** — the ~250–500 ms poll
+  fallback is **DEFERRED** (signal-first per the user's decision); added later *only* if testing shows silent
+  foreground transitions (programs that start/exit with zero output) are missed. **Exit** is event-driven via
+  the reader's **EOF wake** → `try_wait` (no timer).
 - **Git** → re-checked on **cwd-change** (an OSC 7 event) + optional `.git` filesystem watch, slow-debounced;
   never per-tick.
 
 ### 0.3 Display + customization
-- **Fixed default pane-info display now**, built as **real `heca-grid-ui` widgets** (theme-driven):
-  `Icon(program)` · `Label("{name} ({raw})")` · `Badge(status)` · `Tag(git branch)` · `Badge(+a/-d/Δ)`.
-  Shown on the **sidebar pane card** and (optional) the **pane's top-left corner**.
-- **Process catalog** = user-extensible map `raw_program → { display_name, icon }`. Built-in defaults +
-  config extension. The **raw program name is always available** verbatim; the catalog only adds a friendly
-  name + icon (fallback = raw name + a default terminal icon).
+- **Fixed default pane-info display now**, built as **real `heca-grid-ui` widgets** (theme-driven). Two rows
+  on the **sidebar pane card** (optional **pane top-left corner** badge = compact row 1):
+  - **Row 1 — program:** `Icon` · `Name (raw)` · `Badge(status)`.
+    - **Idle (shell foreground):** terminal icon + the shell name (`zsh` / `bash` / …) — no app program.
+    - **Running a program:** the program's catalog icon + display name + `(raw)` + a status badge, e.g.
+      ` Neovim (nvim) [Running]`.
+  - **Row 2 — git (only if the cwd is in a git repo):** `Tag(branch)` (e.g. ` feature/my-feat` inside a
+    badge) + `Badge(+a/-d/Δ)` segments for added/new/deleted counts. Hidden entirely outside a repo.
+- **Status set = `Running` · `Idle` · `Success` · `Error`** (NO `Exit` — see §0.6). `Success`/`Error` land in
+  Phase 3 (OSC 133). Status→theme colour: Running=accent, Idle=muted, Success=success, Error=danger.
+- **Process catalog** = a user-extensible `[programs.<raw>]` map (see §0.7) → `{ name, icon, description,
+  color }`. Built-in defaults (shells seeded) + config extension. The **raw program name is always shown**
+  verbatim (in parens); the catalog adds a friendly name + icon (fallback = raw name + a default terminal
+  icon for shells / no icon for unknown). `color` (optional) tints the pane card/border.
 - **DEFERRED → future plan:** the **tmux-style token/segment customization** (`${token}` templates, user-
   authored segment lists). Agreed shape when built = the **hybrid** model (a list of widget-typed segments,
   each a `${token}` template) — record this in `pluggable-chrome-plugin-plan.md` §8.1/§8.2. The fixed
@@ -74,6 +86,36 @@
 ### 0.5 Git library
 - **`git2` (libgit2)** behind a small **`GitProvider` trait**, so swapping to `gix` later is one file.
   Rationale: mature, complete `statuses()` + branch/ahead-behind for the `+a/-d/Δ` badge.
+
+### 0.6 Pane persistence + close model (settled 2026-06-18)
+- **A pane's lifetime is tied to the terminal (the shell = the PTY child `portable_pty` spawned).** `try_wait`
+  waits on *that shell*, not on programs running inside it. So **auto-close only fires when the shell/terminal
+  dies** (you `exit` the shell, or it's killed). A foreground program *inside* the shell (nvim, lazygit, yazi)
+  exiting does **not** close the pane — the shell keeps running → `try_wait` says "alive" → no close. This is
+  already heca's behaviour and is **correct**; Phase 2 keeps auto-close as-is.
+- **Foreground program exit → `status = Idle`** (shell is foreground again), pane stays open. **No `Exit`
+  status variant** — a dead pane closes, it has nothing to display. The exit *code* is carried by the
+  `pane.exited{code}` event (observability + Phase 6 close-policy), not by a status.
+- **Close-policy (`keep_on_error`/`keep_on_success`) is Phase 6's concern**, applying only to **direct-spawn**
+  panes (`[[keys.command]]` run *as* the PTY child, no shell). In Phase 2 every pane is a shell pane.
+
+### 0.7 Process catalog config (`[programs.<raw>]`)
+A map keyed by the **raw foreground program name** (the binary basename, e.g. `nvim`). Value = `ProgramMeta`:
+```toml
+[programs.nvim]
+name        = "Neovim"         # display name (Row 1 "Name")
+icon        = "\uE7C4"        # nerd-font glyph (Row 1 icon)
+description = "modal editor"   # future usage (not rendered yet)
+color       = "#fafafa"        # OPTIONAL pane/card tint
+```
+- All fields optional; partial entries are valid. `name` falls back to the raw key; `icon` falls back to a
+  default terminal icon for known shells, none for unknown programs. Icons are **free-form glyph strings**
+  (nerd-font codepoints), not a fixed `Glyph` enum — the renderer draws them as text.
+- **Built-in defaults seeded** for common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon) so out-of-the-box
+  idle panes show a terminal icon + shell name. User entries **override** same-key defaults; users add their
+  own (`nvim`, `lazygit`, `yazi`, …) via config.
+- **Resolver:** `ProgramsConfig::resolve(raw) -> ProgramView { raw, name, icon, color }` — used by Phase 7
+  display; falls back gracefully (raw name, no icon, no colour) when no entry exists.
 
 ---
 
@@ -111,12 +153,12 @@ pieces it needs).
 
 ```rust
 // heca-core (canonical runtime truth, UI-free)
-pub enum ProcessStatus { Running, Idle, Success, Error, Exit }   // see Phase 2/3 for detection
+pub enum ProcessStatus { Running, Idle, Success, Error }   // NO Exit — a dead pane closes (§0.6)
 pub struct PaneRuntime {
     pub program: Option<String>,     // raw foreground program name ("nvim"), as-is
     pub status: ProcessStatus,
     pub cwd: Option<PathBuf>,
-    pub exit_code: Option<i32>,      // set on Exit/Success/Error
+    pub exit_code: Option<i32>,      // set on Success/Error; also carried by the pane.exited event
     pub git: Option<GitInfo>,
     pub kind: ContentKind,           // Terminal now; App/Plugin later
 }
@@ -200,21 +242,27 @@ can bind to them (proven by a throwaway/sidebar read).
 ### Phase 2 — Process detection (OS-native foreground + exit; event-first, poll-fallback)
 **Depends-on:** Phase 1.
 
-**Why:** fill `program` + running/idle + `Exit`/exit-code from the PTY. Event-first per §0.2.
+**Why:** fill `program` + running/idle + capture the child exit code (→ `pane.exited{code}`) from the PTY.
+Event-first per §0.2; **no `Exit` status variant** (§0.6 — a dead pane closes).
 
 **Key files:** `heca-core/src/backend/terminal/pty.rs` (already holds `child`, `master`, `try_wait`),
 `heca-core/src/backend/terminal.rs`, a new **process-monitor** service (app-side, e.g. `heca/src/app/process_monitor.rs`).
 
 **Tasks**
-- [ ] **Exit (event):** surface child exit + code from `pty.rs` (`try_wait`) as a `pane.exited`-driving signal; wire into the monitor → store (`status = Exit`, `exit_code`). No polling loop for exit.
-- [ ] **Foreground program + running/idle (OS-specific):** from the PTY master, get the foreground process group (`tcgetpgrp` on the master fd) → resolve to a program name. macOS: `libproc` (`proc_name`/`proc_pidpath`); Linux: `/proc/<pid>/comm`. `pgrp == shell` ⇒ `Idle`; else `Running` + that program. Put OS code behind a `#[cfg]` shim (`foreground_process(pty) -> Option<(pid, name)>`).
-- [ ] **cwd (OS fallback):** read the foreground pid's cwd (macOS `proc_pidinfo`/`PROC_PIDVNODEPATHINFO`; Linux `/proc/<pid>/cwd`). (OSC 7 in Phase 3 is preferred when available.)
-- [ ] **Monitor cadence:** event-first; **poll foreground only** on a ~250–500 ms timer **and** on terminal-output activity (we already wake on output). No busy-spin; skip panes with no output churn.
+- [ ] **Remove `ProcessStatus::Exit`** (shipped in Phase 1) — per §0.6 a dead pane closes, no Exit status. Update the Phase 1 enum + tests.
+- [ ] **Auto-close stays as-is** (§0.6): it only fires when the shell/terminal (PTY child) dies — correct persistence. Foreground program exit → `Idle`, **no close**. (Close-policy is Phase 6's concern for direct-spawn panes.)
+- [ ] **Exit + code (event):** in `TerminalBackend::update()` extend the existing `try_wait`/`reconcile_exit_state` to **capture the child exit code** (currently discarded — only `is_some()` is checked); emit `pane.exited{code}` through the Phase-0 chokepoint. The existing auto-close then fires for shell panes. **No polling loop for exit** — rides the reader's EOF wake.
+- [ ] **Foreground program + running/idle (OS-specific, event-driven):** from the PTY master, get the foreground process group (`tcgetpgrp` on `master.as_raw_fd()`) and compare to `master.process_group_leader()` (shell pgrp). `pgrp == shell` ⇒ `Idle` (program = shell name); else ⇒ `Running` + resolve the program name (macOS `libproc` `proc_name`/`proc_pidpath`; Linux `/proc/<pid>/comm`) — **basename only**. Put OS code behind a `#[cfg(unix)]` shim (`foreground_process(master) -> Option<(pid, name)>`); stub on Windows.
+- [ ] **cwd (OS fallback):** read the foreground pid's cwd on-demand when foreground changes. **Linux `/proc/<pid>/cwd` ✓ implemented.** **macOS OS-cwd deferred → Phase 3 OSC 7** — `proc_pidinfo`/`PROC_PIDVNODEPATHINFO` FFI has fragile struct layouts, and OSC 7 (Phase 3) is the preferred macOS cwd source anyway, so the OS fallback was deferred rather than ship risky FFI. **Tracked here + in `pane-runtime-tasks.md` Phase 2 one-liner.**
+- [ ] **Cadence — event-first, NO periodic timer (§0.2):** detection runs on the existing **output wake** (`BackendWake`) + the reader's **EOF wake**; the foreground re-sample is **debounced to 250 ms** so heavy output doesn't hammer `tcgetpgrp`/`libproc`. **Do NOT add a `ControlFlow::WaitUntil` periodic poll** — that fallback is deferred. No busy-spin; skip panes with no output churn.
+- [ ] **Architecture:** `TerminalBackend` caches the detected foreground + exit code internally (throttle detail); expose `PaneBackend::runtime() -> PaneRuntime` (default `default()` for non-terminal). A per-wake monitor (`sync_pane_runtime_from_backends`) copies `backend.runtime()` → the canonical `Pane.runtime` (Phase 1); the existing `sync_pane_runtime_state` then mirrors `Pane.runtime` → store + events (unchanged).
 - [ ] Feed all of the above through the Phase-0 chokepoint (store + events).
-- [ ] Tests: idle↔running transition from a fake foreground; exit sets code; name resolution (mock the OS shim).
+- [ ] **Tests (FakeBackend):** idle↔running transition (fake foreground pgrp); exit captures code; name resolution (mock the OS shim); debounce skips too-frequent re-samples.
 
-**Acceptance:** opening a shell shows `Idle`; running `nvim` flips to `Running` + program `nvim`; exiting a
-spawned command sets `Exit` + code; verified live on macOS (primary) with the Linux shim compiled.
+**Acceptance:** opening a shell shows `Idle` (terminal icon + shell name); running `nvim` flips to `Running`
++ program `nvim`; `:q` flips back to `Idle` (pane stays open — auto-close only on shell death); the shell
+exiting captures the code + emits `pane.exited{code}` then auto-closes (no `Exit` status variant). **No
+periodic polling timer.** **Verification = FakeBackend + TerminalBackend unit tests** (per §0.2 — no temporary debug log); macOS primary, Linux shim compiles. **macOS cwd OS-fallback deferred → Phase 3 (OSC 7)** — Linux `/proc/<pid>/cwd` works now.
 
 ---
 
@@ -237,7 +285,7 @@ a shipped shell snippet (e.g. `assets/shell-integration/{bash,zsh,fish}`), the P
 - [ ] Tests: feed synthetic OSC 133 D;0 / D;1 / OSC 7 byte streams → expected status/cwd.
 
 **Acceptance:** with the hook active, running `false` in a shell pane shows `Error`; `true` shows `Success`;
-`cd /tmp` updates cwd; without the hook, status falls back to running/idle/exit (no breakage).
+`cd /tmp` updates cwd; without the hook, status falls back to running/idle (no breakage; no `Exit` status — see §0.6).
 
 ---
 
@@ -263,17 +311,19 @@ subprocess (in-process via git2); clippy clean.
 ### Phase 5 — Process catalog (extensible raw→{name, icon} map)
 **Depends-on:** Phase 1 (program field). Parallel-friendly with 2–4.
 
-**Why:** show `Neovim` + an icon for `nvim`, user-extensible; raw name always available.
+**Why:** show `Neovim` + an icon for `nvim`, user-extensible via `[programs.<raw>]`; raw name always shown
+in parens. Also seeds shell icons so idle panes show a terminal icon + shell name out-of-the-box.
 
-**Key files:** new `heca-config` section (e.g. `heca-config/src/process_catalog.rs`),
-`heca-grid-ui/src/widgets/icon.rs` (add `Glyph`s), a resolver in `heca/src/chrome` or `heca-config`.
+**Key files:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`),
+`heca-config/src/lib.rs` + `loader.rs` (wire `programs` field), `keybindings.toml` + `README.md` (docs),
+resolver consumed by Phase 7.
 
 **Tasks**
-- [ ] Built-in **defaults** map (nvim→Neovim, vim→Vim, yazi→Yazi, lazygit→LazyGit, htop, git, ssh, python, node, cargo, … ) → `{ display_name, Glyph }`.
-- [ ] **Config extension** (`[[process]]` / `[process.catalog]` in `config.toml`): user adds/overrides `name` + `icon` (icon by `Glyph` name or codepoint). Merge defaults ← user overrides.
-- [ ] Add the needed **`Glyph`** variants (find Phosphor codepoints; verify by rendering — see the swap-glyph method used earlier) + showcase/icon-gallery + `docs/widgets.md`.
-- [ ] **Resolver:** `resolve(raw) -> { name: display_or_raw, icon: glyph_or_default }`. Raw always available separately.
-- [ ] Tests: default hit, user override, miss → raw + default icon.
+- [ ] New `heca-config/src/programs.rs`: `ProgramMeta { name, icon, description, color: Option<Color> }` + `ProgramsConfig` (map keyed by raw program name) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
+- [ ] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon). User entries override same-key defaults; users add `nvim`/`lazygit`/`yazi`/… via `[programs.<raw>]`.
+- [ ] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `keybindings.toml` + `README.md`.
+- [ ] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to default-terminal (shells) / none (unknown), `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are free-form glyph strings (no new `Glyph` enum variants needed).
+- [ ] Tests: default shell hit; user override wins; miss → raw name + no/default icon; `color` parse + pass-through.
 
 **Acceptance:** `nvim` resolves to "Neovim" + icon; an unknown program shows its raw name + default icon;
 a config override wins; new glyphs render in the showcase.
@@ -314,14 +364,17 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 `heca-renderer/examples/showcase.rs`, `docs/widgets.md`.
 
 **Tasks**
-- [ ] **Sidebar card:** compose `Icon(catalog.icon)` · `Label("{name} ({raw})")` · `Badge(status, severity-toned)` · `Tag(branch)` · `Badge("+a/-d/Δ")`, each bound to the store mirror (reactive; absent data hides its segment). Reuse `Row`/`Grid`. Status→theme color (Running=accent, Idle=muted, Success=success, Error=danger, Exit=muted).
-- [ ] **Optional pane top-left corner badge:** compact `Icon + name (program)` overlay, behind a config/appearance switch.
+- [ ] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label("{name} ({raw})")` · `Badge(status, severity-toned)`, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name (no app program); Running ⇒ program icon + Name + `(raw)`. Icons are free-form nerd-font glyph strings from the catalog (§0.7) — render via a glyph label or extend `Icon` to accept a string glyph. Status→theme colour: Running=accent, Idle=muted, Success=success, Error=danger (**no Exit** — a dead pane closes). Reuse `Row`/`Grid`.
+- [ ] **Sidebar card — Row 2 (git, only in a repo):** `Tag(branch)` (e.g. ` feature/my-feat` in a badge) + `Badge("+a/-d/Δ")` segments (added/new/deleted), bound to the store mirror. Hidden entirely outside a repo.
+- [ ] Optional `color` from the catalog → tint the card/border.
+- [ ] **Optional pane top-left corner badge:** compact Row 1 (`Icon + Name (raw)`) overlay, behind a config/appearance switch.
 - [ ] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
 - [ ] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
 - [ ] Tests where pure (segment build given a `PaneRuntimeView`); visual verify in the app + showcase.
 
-**Acceptance:** sidebar cards show icon/name/status/git live; corner badge toggentle on; absent sources hide
-cleanly; showcase + docs updated; only the changed card repaints.
+**Acceptance:** sidebar cards show Row 1 (icon/Name (raw)/status) + Row 2 (git branch + counts) live; Idle
+shows terminal icon + shell name; corner badge toggle on; absent sources hide cleanly (no repo ⇒ no Row 2);
+showcase + docs updated; only the changed card repaints.
 
 ---
 

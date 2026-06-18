@@ -35,9 +35,15 @@
 **Near-term (active):**
 1. **Pane Runtime State + reactive chrome store + plugin event bus** — the active initiative (design locked
    2026-06-18). Full plan: **`pane-runtime-state-plan.md`**; orchestration board: **`pane-runtime-tasks.md`**
-   (separate from `shared-tasks.md`). Its **Phase 0 IS** the SharedChromeState consumer migration + the new
+   (separate from `shared-tasks.md`). **Status: Phase 0 + Phase 1 merged (PRs #129/#130/#131); Phase 2
+   (process detection) next.** Its **Phase 0 IS** the SharedChromeState consumer migration + the new
    typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
    process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.
+   **Phase 2 locked decisions (2026-06-18):** pane lifetime = the terminal/shell (PTY child) — auto-close
+   only on shell death, foreground-program exit → `Idle` (no close); **event-first detection, NO polling
+   timer** (output/EOF wakes + 250 ms debounce; periodic poll deferred); **status = `Running`/`Idle`/
+   `Success`/`Error`** (no `Exit` — a dead pane closes); **`[programs.<raw>]`** config catalog
+   (`name`/`icon`/`description`/`color`) with seeded shell defaults. See plan §0.2/§0.6/§0.7.
 2. **niri parity audits** (niri section below) — catalog every animation vs niri; test for real whether
    adding/removing a column resizes the others; re-audit the still-unverified compat items.
 3. **render.rs split** — partly done by #121/#122; reassess the remainder.
