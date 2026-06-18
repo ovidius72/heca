@@ -13,6 +13,7 @@ use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
+use heca_grid_ui::install_frame_request;
 use heca_renderer::composite::Compositor;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::blur::Blur;
@@ -140,6 +141,11 @@ pub(crate) async fn init_state(
     event_loop: &ActiveEventLoop,
     event_proxy: EventLoopProxy<crate::app::events::AppEvent>,
 ) -> Box<AppState> {
+    let redraw_proxy = event_proxy.clone();
+    install_frame_request(move || {
+        let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
+    });
+
     let appearance = app_config.config.appearance;
     let window_attrs = Window::default_attributes()
         .with_title("heca")
@@ -305,7 +311,6 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         sidebar_tree,
         chrome_tree: None,
-        chrome_sinks: crate::chrome::ChromeSinks::new(),
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state: crate::chrome::SharedChromeState::new(
             crate::chrome::DEFAULT_SIDEBAR_WIDTH,

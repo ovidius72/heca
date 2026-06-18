@@ -5,7 +5,7 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::input::{KeyInputContext, handle_keyboard_input};
-use crate::app::interaction::{dispatch_action, InteractionSource};
+use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
 use crate::app::mutations::{after_mutation_change, MutationKind};
 use crate::app::render::{render_frame, update_session_viewport};
@@ -22,6 +22,11 @@ use winit::event_loop::ActiveEventLoop;
 #[derive(Clone, Debug)]
 pub enum AppEvent {
     BackendWake,
+    RequestRedraw,
+    ChromeIntent {
+        source: InteractionSource,
+        intent: InteractionIntent,
+    },
 }
 
 pub(crate) fn handle_window_event(

@@ -62,6 +62,7 @@ fn render_chrome(
     text: &mut TextRenderer,
     queue: &wgpu::Queue,
     scene: &heca_grid_ui::Scene,
+    damage: Option<heca_grid_ui::Rectangle>,
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
 ) {
@@ -75,8 +76,17 @@ fn render_chrome(
     // geometry clipped to their own scissor and showed nothing. One
     // `begin_frame()` per frame makes each `render()` append at a distinct offset
     // so all grid scenes render their own geometry.
-    grid.set_damage(None);
+    let damage = damage.map(|r| {
+        [
+            r.loc.x as f32,
+            r.loc.y as f32,
+            r.size.w as f32,
+            r.size.h as f32,
+        ]
+    });
+    grid.set_damage(damage);
     grid.set_clip(None);
+    text.set_damage(damage);
     heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer());
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);
@@ -111,6 +121,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
+    crate::chrome::sync_chrome_state(state);
     let scene_view = state.compositor.scene_view();
     // Stencil buffer paired with the scene texture: holds the rounded content-clip
     // mask written each frame so terminal content follows the pane's rounded border.
@@ -485,6 +496,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             &mut state.text_renderer,
             &state.queue,
             &pane_scene,
+            None,
             scene_view,
             &mut encoder,
         );
@@ -689,6 +701,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 &mut state.text_renderer,
                 &state.queue,
                 &float_scene,
+                None,
                 scene_view,
                 &mut encoder,
             );
@@ -923,6 +936,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
     crate::chrome::sync_chrome_signals(state);
+    let chrome_damage = heca_grid_ui::collect_damage(
+        &state.chrome_tree.as_ref().expect("chrome tree set above").root,
+    );
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene = crate::chrome::paint_chrome_root(
         &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
@@ -941,6 +957,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &mut state.text_renderer,
         &state.queue,
         &chrome_scene,
+        chrome_damage,
         scene_view,
         &mut encoder,
     );

@@ -4,6 +4,8 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod state;
+mod events;
+pub use events::{ChromeEvent, ChromeEventBus, ChromeRegion};
 pub use state::{SharedChromeState, WorkspacesContainerState};
 
 use heca_core::layout::types::{Point, Rectangle, Size};
@@ -98,52 +100,135 @@ use heca_grid_ui::widgets::{
 };
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
-use std::cell::Cell;
 use std::rc::Rc;
-
-/// Sink a pane card writes its id into when clicked. `Some(id)` = that card fired.
-pub(crate) type SidebarClickSink = Rc<Cell<Option<PaneId>>>;
-
-/// Host-owned sinks the chrome widgets write into when activated, so the app can read
-/// the result after dispatching a pointer event into the retained tree. Lives in
-/// `AppState` (survives tree rebuilds), cloned into widget callbacks. Grows as later
-/// slices add targeting (F4.4) / drag (F4.5).
-pub(crate) struct ChromeSinks {
-    /// `Some(pane_id)` = that pane card was clicked → focus it (F4.2).
-    pub click: SidebarClickSink,
-    /// `Some(ws_idx)` = that workspace header was toggled → flip its collapsed state (F4.3).
-    pub ws_toggle: Rc<Cell<Option<usize>>>,
-}
-
-impl ChromeSinks {
-    pub(crate) fn new() -> Self {
-        Self {
-            click: Rc::new(Cell::new(None)),
-            ws_toggle: Rc::new(Cell::new(None)),
-        }
-    }
-
-    fn clear(&self) {
-        self.click.set(None);
-        self.ws_toggle.set(None);
-    }
-}
-
-/// What a dispatched sidebar click resolved to.
-pub(crate) enum ChromeClick {
-    /// A pane card was clicked → focus this pane.
-    Pane(PaneId),
-    /// A workspace header was clicked → toggle this workspace's collapsed state.
-    WorkspaceToggle(usize),
-    /// Click landed on empty space / a non-interactive area.
-    None,
-}
-
 /// Leading glyph for a pane card. **Dynamic-ready seam:** today every pane hosts a
 /// terminal, so this is always [`Glyph::Terminal`]; later it becomes a function of
 /// the process/app running in the pane (editor, shell, browser, …).
 fn pane_glyph(_pane_name: &str) -> Glyph {
     Glyph::Terminal
+}
+
+type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
+
+fn bump_repaint(req: &Signal<u64>) {
+    req.update(|n| *n += 1);
+}
+
+/// Transparent wrapper that marks only its own bounds dirty when the host bumps
+/// `request`. This lets retained chrome updates damage the specific card/marker/label
+/// instead of the entire chrome root.
+struct RepaintWatch {
+    base: heca_grid_ui::Base,
+    request: Signal<u64>,
+    seen: u64,
+}
+
+impl RepaintWatch {
+    fn new(child: impl Component + 'static) -> (Self, Signal<u64>) {
+        let mut base = heca_grid_ui::Base::new();
+        base.style.width = Length::Auto;
+        base.style.height = Length::Auto;
+        base.style.direction = heca_grid_ui::Direction::Column;
+        base.children.push(Box::new(child));
+        let request = signal(0_u64);
+        (Self { base, request, seen: 0 }, request)
+    }
+}
+
+impl Component for RepaintWatch {
+    fn base(&self) -> &heca_grid_ui::Base {
+        &self.base
+    }
+
+    fn base_mut(&mut self) -> &mut heca_grid_ui::Base {
+        &mut self.base
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        for child in &self.base.children {
+            if child.base().style.hidden {
+                continue;
+            }
+            child.paint(cx);
+        }
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let next = self.request.get_untracked();
+        if next != self.seen {
+            self.seen = next;
+            self.base.mark_needs_paint();
+        }
+        let mut animating = false;
+        for child in self.base.children.iter_mut() {
+            animating |= child.tick(dt);
+        }
+        animating
+    }
+}
+
+/// Transparent wrapper that paints a theme-driven hover frame around its child when
+/// the host-owned `hovered` signal is true. This consumes `chrome_state`'s
+/// `hovered_pane` mirror directly instead of relying only on widget-local pointer
+/// hover, which keeps the retained tree aligned with the shared chrome store.
+struct HoverFrame {
+    base: heca_grid_ui::Base,
+    hovered: Signal<bool>,
+}
+
+impl HoverFrame {
+    fn new(child: impl Component + 'static) -> (Self, Signal<bool>) {
+        let mut base = heca_grid_ui::Base::new();
+        base.style.width = Length::Auto;
+        base.style.height = Length::Auto;
+        base.style.direction = heca_grid_ui::Direction::Column;
+        base.children.push(Box::new(child));
+        let hovered = signal(false);
+        (Self { base, hovered }, hovered)
+    }
+}
+
+impl Component for HoverFrame {
+    fn base(&self) -> &heca_grid_ui::Base {
+        &self.base
+    }
+
+    fn base_mut(&mut self) -> &mut heca_grid_ui::Base {
+        &mut self.base
+    }
+
+    fn paint(&self, cx: &mut PaintCx) {
+        if !self.base.visible.get_untracked() {
+            return;
+        }
+        for child in &self.base.children {
+            if child.base().style.hidden {
+                continue;
+            }
+            child.paint(cx);
+        }
+        if !self.hovered.get_untracked() {
+            return;
+        }
+        let rect = self.base.bounds;
+        let border = cx
+            .border(cx.theme().accent.with_alpha(160))
+            .map(|mut b| {
+                b.width = b.width.max(1.0);
+                b
+            });
+        let radius = cx.theme().control_radius();
+        cx.rect(
+            rect,
+            cx.theme().accent.with_alpha(18),
+            border,
+            radius,
+            None,
+        );
+    }
 }
 
 /// A single pane **card**, styled like the showcase PANES rows: a state-tinted
@@ -155,11 +240,11 @@ fn pane_glyph(_pane_name: &str) -> Glyph {
 fn pane_card(
     pane: &SidebarPaneEntry,
     theme: &GuiTheme,
-    sink: SidebarClickSink,
+    emit_intent: &ChromeIntentEmitter,
     active_pane: Option<PaneId>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-) -> KeyHint {
+) -> RepaintWatch {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
@@ -170,6 +255,7 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
+    let emit = emit_intent.clone();
     let card = Row::new()
         .background(theme.foreground.with_alpha(12))
         .highlight(theme.accent)
@@ -181,7 +267,9 @@ fn pane_card(
         .drop_target(drag_id)
         // On click/Enter the card records its pane id in the host sink; the app reads
         // it after dispatch and focuses that pane (read-via-signal / write-via-action).
-        .on_activate(move || sink.set(Some(pane_id)))
+        .on_activate(move || {
+            emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
+        })
         .child(
             Flex::row()
                 .align(Align::Center)
@@ -198,7 +286,12 @@ fn pane_card(
     // from the active `InputMode` candidates (keyboard logic stays the source of truth).
     let hint = signal(None);
     signals.pane_hint.push((pane_id, hint));
-    KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight)
+    let (hover_frame, hovered) =
+        HoverFrame::new(KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight));
+    signals.pane_hover.push((pane_id, hovered));
+    let (watch, repaint) = RepaintWatch::new(hover_frame);
+    signals.pane_repaint.push((pane_id, repaint));
+    watch
 }
 
 /// One **column**: a generic [`MarkerGroup`] (left marker bar + grip gutter) holding
@@ -212,11 +305,11 @@ fn column_view(
     c: &SidebarColEntry,
     ws_idx: usize,
     theme: &GuiTheme,
-    sink: &SidebarClickSink,
+    emit_intent: &ChromeIntentEmitter,
     active_pane: Option<PaneId>,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
-) -> MarkerGroup {
+) -> RepaintWatch {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
     // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
     // gutter is the only surface not covered by a child pane card, so innermost-first
@@ -228,12 +321,14 @@ fn column_view(
         .draggable(drag_id)
         .drop_target(drag_id);
     for pane in &c.panes {
-        col = col.child(pane_card(pane, theme, sink.clone(), active_pane, signals, drag));
+        col = col.child(pane_card(pane, theme, emit_intent, active_pane, signals, drag));
     }
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
     signals.col_active.push((pane_ids, col.state()));
-    col
+    let (watch, repaint) = RepaintWatch::new(col);
+    signals.col_repaint.push(repaint);
+    watch
 }
 
 /// Build the **WorkspacesContainer** content — the workspace tree mounted inside the
@@ -244,7 +339,7 @@ fn column_view(
 fn build_workspaces_container(
     tree: &SidebarTree,
     theme: &GuiTheme,
-    sinks: &ChromeSinks,
+    emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
@@ -273,12 +368,16 @@ fn build_workspaces_container(
         // its collapsed state (canonical, in `chrome_state.workspaces`) and the tree
         // rebuilds (F4.3). Collapse is read back from that same shared state.
         let ws_idx = ws.ws_idx;
-        let ws_sink = sinks.ws_toggle.clone();
+        let emit = emit_intent.clone();
         let mut dock = DockFrame::new(ws.name.clone())
             .frameless()
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!ws_state.is_ws_collapsed(ws_idx))
-            .on_toggle(move |_| ws_sink.set(Some(ws_idx)))
+            .on_toggle(move |_| {
+                emit(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed {
+                    ws_idx,
+                });
+            })
             .header(
                 Flex::row()
                     .align(Align::Center)
@@ -298,10 +397,10 @@ fn build_workspaces_container(
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, ws_idx, theme, &sinks.click, active_pane, signals, drag));
+            cols = cols.child(column_view(c, ws_idx, theme, emit_intent, active_pane, signals, drag));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, sinks.click.clone(), active_pane, signals, drag));
+            cols = cols.child(pane_card(float, theme, emit_intent, active_pane, signals, drag));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -314,12 +413,16 @@ fn build_workspaces_container(
 /// the chrome plan (F5, `pluggable-chrome-plugin-plan.md` §2.1) the sidebar is a
 /// *shell*; the [`build_workspaces_container`] tree is mounted into the body as the
 /// first container (display-only until the F4 shared-state layer wires interaction).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "chrome shell assembly still threads retained-tree state explicitly during the Phase 0 migration"
+)]
 fn build_sidebar_shell(
     tree: &SidebarTree,
     left_w: f32,
     sidebar_h: f32,
     theme: &GuiTheme,
-    sinks: &ChromeSinks,
+    emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
     signals: &mut ChromeSignals,
@@ -353,7 +456,7 @@ fn build_sidebar_shell(
                 .background(theme.surface)
                 .border(theme.border, theme.border_width)
                 .child(header)
-                .child(build_workspaces_container(tree, theme, sinks, ws_state, signals, drag)),
+                .child(build_workspaces_container(tree, theme, emit_intent, ws_state, signals, drag)),
         )
 }
 
@@ -420,7 +523,9 @@ fn chrome_root(
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
     // The status label's text is bound so mode/focus changes update it in place.
     let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
-    signals.status = Some(status_label.text_signal());
+    let status_signal = status_label.text_signal();
+    let (status_watch, status_repaint) = RepaintWatch::new(status_label);
+    signals.status = Some((status_signal, status_repaint));
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
@@ -454,7 +559,7 @@ fn chrome_root(
                 .radius(0.0)
                 .align(Align::Center)
                 .padding_xy(8.0, 0.0)
-                .child(status_label),
+                .child(status_watch),
         )
 }
 
@@ -661,9 +766,15 @@ impl DragItemRegistry {
 pub(crate) struct ChromeSignals {
     /// Each pane card's `active` signal, keyed by pane id.
     pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
+    /// Store-driven hover signals for pane cards, keyed by pane id.
+    pub(crate) pane_hover: Vec<(PaneId, Signal<bool>)>,
+    /// Repaint request handles for pane cards, keyed by pane id.
+    pub(crate) pane_repaint: Vec<(PaneId, Signal<u64>)>,
     /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
     /// iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// Repaint request handles for column wrappers.
+    pub(crate) col_repaint: Vec<Signal<u64>>,
     /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
     /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
     /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
@@ -672,7 +783,7 @@ pub(crate) struct ChromeSignals {
     /// only projects it into the retained Dock.
     pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
     /// The status-bar label's text signal.
-    pub(crate) status: Option<Signal<String>>,
+    pub(crate) status: Option<(Signal<String>, Signal<u64>)>,
 }
 
 /// The move/swap/take pick keycap for `pane` — `Some(letter)` while it is a pick
@@ -693,6 +804,23 @@ fn pick_keycap(
         .map(|(ch, _)| ch.to_string())
 }
 
+/// Mirror canonical app/runtime state into the shared chrome store before the
+/// retained tree reads it. `InputMode` remains the source of truth for keyboard
+/// pick flows; the store is the reactive UI mirror.
+pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
+    state.chrome_state.workspaces.set_active_pane(state.focused_pane);
+    let next_candidates = state
+        .input_mode
+        .candidates()
+        .map(|c| c.to_vec())
+        .unwrap_or_default();
+    if next_candidates.is_empty() {
+        state.chrome_state.workspaces.clear_pick_candidates();
+    } else {
+        state.chrome_state.workspaces.set_pick_candidates(next_candidates);
+    }
+}
+
 /// Push the chrome's value-state (selection + status text) into the retained tree's
 /// bound signals. Guarded — writes only on change, so unchanged frames cause no
 /// signal churn. Called each frame before paint; this is what lets focus changes
@@ -702,16 +830,45 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
         return;
     };
     let active = state.chrome_state.workspaces.active_pane();
+    let hovered = state.chrome_state.workspaces.hovered_pane();
     for (pid, sig) in &retained.signals.pane_active {
         let v = active == Some(*pid);
         if sig.get_untracked() != v {
             sig.set(v);
+            if let Some((_, repaint)) = retained
+                .signals
+                .pane_repaint
+                .iter()
+                .find(|(pane_id, _)| pane_id == pid)
+            {
+                bump_repaint(repaint);
+            }
         }
     }
-    for (pids, sig) in &retained.signals.col_active {
+    for (pid, sig) in &retained.signals.pane_hover {
+        let v = hovered == Some(*pid);
+        if sig.get_untracked() != v {
+            sig.set(v);
+            if let Some((_, repaint)) = retained
+                .signals
+                .pane_repaint
+                .iter()
+                .find(|(pane_id, _)| pane_id == pid)
+            {
+                bump_repaint(repaint);
+            }
+        }
+    }
+    for ((pids, sig), repaint) in retained
+        .signals
+        .col_active
+        .iter()
+        .zip(retained.signals.col_repaint.iter())
+    {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
+            bump_repaint(repaint);
         }
     }
     // Project the active move/swap/take pick candidates onto each pane's KeyHint
@@ -719,17 +876,26 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
     // live in the `InputMode` / action layer (`app/input.rs`); this only mirrors the
     // letters into the retained Dock. The currently focused pane is never a target,
     // so it shows no keycap (matches the legacy hand-drawn sidebar's behavior).
-    let candidates = state.input_mode.candidates();
+    let candidates = state.chrome_state.workspaces.with_pick_candidates(|c| c.to_vec());
     for (pid, sig) in &retained.signals.pane_hint {
-        let next = pick_keycap(*pid, active, candidates);
+        let next = pick_keycap(*pid, active, Some(&candidates));
         if sig.get_untracked() != next {
             sig.set(next);
+            if let Some((_, repaint)) = retained
+                .signals
+                .pane_repaint
+                .iter()
+                .find(|(pane_id, _)| pane_id == pid)
+            {
+                bump_repaint(repaint);
+            }
         }
     }
-    if let Some(status) = retained.signals.status {
+    if let Some((status, repaint)) = &retained.signals.status {
         let next = chrome_status(state);
         if status.get_untracked() != next {
             status.set(next);
+            bump_repaint(repaint);
         }
     }
 }
@@ -749,6 +915,13 @@ pub(crate) fn build_chrome_root(
     let status = chrome_status(state);
     let mut signals = ChromeSignals::default();
     let mut drag_items = DragItemRegistry::default();
+    let event_proxy = state.event_proxy.clone();
+    let emit_intent: ChromeIntentEmitter = Rc::new(move |intent| {
+        let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: crate::app::interaction::InteractionSource::MouseLeftSidebar,
+            intent,
+        });
+    });
 
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
@@ -758,7 +931,7 @@ pub(crate) fn build_chrome_root(
             left_w,
             sidebar_h,
             &theme,
-            &state.chrome_sinks,
+            &emit_intent,
             &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
             &mut signals,
@@ -797,40 +970,26 @@ pub(crate) fn build_chrome_root(
     (root, signals, drag_items)
 }
 
-/// Hit-test a sidebar click by dispatching a pointer-press into the **retained**
-/// chrome tree (whose widgets are laid out at their real on-screen bounds), then
-/// reading which widget recorded itself in a sink — a pane card ([`ChromeClick::Pane`])
-/// or a workspace header ([`ChromeClick::WorkspaceToggle`]). `pos` is in logical
-/// window coordinates (same space as the tree layout).
-///
-/// The dispatched tree is then discarded (rebuilt next frame) so any incidental
-/// internal widget state (e.g. a `DockFrame`'s own expanded flag) doesn't persist
-/// out of sync with canonical state — the app applies the change to the `SidebarTree`.
-pub(crate) fn chrome_dispatch_click(
+/// Feed a pointer-press into the retained chrome tree so widget callbacks can route
+/// sidebar intents through the app event loop. The tree is discarded afterwards so
+/// incidental local widget state cannot drift away from the canonical store.
+pub(crate) fn chrome_dispatch_press(
     state: &mut crate::app_state::AppState,
     pos: (f32, f32),
-) -> ChromeClick {
-    state.chrome_sinks.clear();
+) {
     if let Some(tree) = state.chrome_tree.as_mut() {
         tree.root.event(&Event::PointerPressed {
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
     state.chrome_tree = None;
-    if let Some(pane_id) = state.chrome_sinks.click.get() {
-        ChromeClick::Pane(pane_id)
-    } else if let Some(ws_idx) = state.chrome_sinks.ws_toggle.get() {
-        ChromeClick::WorkspaceToggle(ws_idx)
-    } else {
-        ChromeClick::None
-    }
 }
 
 /// Feed a pointer-move into the retained chrome tree so its **hover affordances**
 /// update in the real app — the `MarkerGroup` grip brightening (the column's "grab
 /// me" cue) and `Row` hover. The app otherwise only dispatches `PointerPressed`, so
 /// these were inert in the sidebar though they work in the showcase. Unlike
-/// [`chrome_dispatch_click`] this does **not** discard the tree — hover is transient
+/// [`chrome_dispatch_press`] this does **not** discard the tree — hover is transient
 /// and must persist across moves; the caller already requests a repaint.
 pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
@@ -838,6 +997,11 @@ pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: 
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
+    let hovered = match sidebar_drag_source(state, pos) {
+        Some(ChromeDragItem::Pane(pane_id)) => Some(pane_id),
+        _ => None,
+    };
+    state.chrome_state.workspaces.set_hovered_pane(hovered);
 }
 
 /// The pane a press at `pos` (logical window coords) would start dragging, found by
@@ -1082,7 +1246,7 @@ mod tests {
         });
 
         let theme = GuiTheme::grid_tron();
-        let sinks = super::ChromeSinks::new();
+        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         chrome.workspaces.set_active_pane(Some(heca_core::layout::PaneId(1)));
         // The shell wraps a bracketed Pane that holds [header, WorkspacesContainer];
@@ -1092,7 +1256,7 @@ mod tests {
             280.0,
             600.0,
             &theme,
-            &sinks,
+            &emit_intent,
             &chrome.workspaces,
             8.0,
             &mut super::ChromeSignals::default(),
@@ -1140,7 +1304,7 @@ mod tests {
         });
 
         let theme = GuiTheme::grid_tron();
-        let sinks = super::ChromeSinks::new();
+        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         let mut drag = super::DragItemRegistry::default();
         let _ = super::build_sidebar_shell(
@@ -1148,7 +1312,7 @@ mod tests {
             280.0,
             600.0,
             &theme,
-            &sinks,
+            &emit_intent,
             &chrome.workspaces,
             8.0,
             &mut super::ChromeSignals::default(),
