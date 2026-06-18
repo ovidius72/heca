@@ -1235,3 +1235,24 @@ The long-term goal should be:
 - dynamic action registration
 - code-based WASM plugins using a controlled host SDK
 - pane shells that can surface shared process/global metadata such as idle/running/error state, git branch/status, and AI-agent activity without coupling that UI to terminal rendering internals
+
+---
+
+## 9. Next initiative — AI Agent Integration (`agent-integration/agent-integration-plan.md`)
+
+**After this pluggable-chrome/plugin arc is complete**, the next program is **AI Agent
+Integration**, planned in [`agent-integration/agent-integration-plan.md`](agent-integration/agent-integration-plan.md)
+(orchestration board: [`agent-integration/agent-integration-tasks.md`](agent-integration/agent-integration-tasks.md)).
+
+It gives every heca pane that runs an AI agent (Claude Code, Codex, pi, …) a structured
+`AgentStatus` (Working / WaitingForInput / WaitingForPermission / Finished / Error / Compacting /
+SubagentRunning) sourced from each agent's own lifecycle hooks, carried over a per-driver transport
+(in-band OSC 9 — including Claude Code's `terminalSequence` and Codex's native emission — or an
+AF_UNIX side-channel socket for pi) into `PaneRuntime.agent`, mirrored reactively into the chrome
+store and emitted as the typed `pane.agent.changed` event on the bus this plan's Phase 2 / pane-runtime
+Phase 0 introduce — so plugins (`app.on('pane.agent.changed', data)`) and the pane-info widgets react,
+plus transition sounds (rodio). It is generic and pluggable: an `AgentDriver` trait + registry is the
+strategy-pattern seam — built-in Rust drivers (Claude Code / Codex / pi) ship as first-party providers,
+and the same contract becomes the WASM plugin host contract for third-party agents (Aider, Cursor,
+…) once this plan's Phase 9 runtime exists. Research is complete and the design is locked; the
+initiative is parked until this pluggable-chrome/plugin arc lands.
