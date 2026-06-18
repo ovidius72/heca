@@ -123,6 +123,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     let theme = &state.theme;
     let surface_alpha = state.terminal_surface_opacity();
+    let frost_opacity = state.appearance.terminal_frost_opacity();
+    // Floating panes use independent opacity/blur/border knobs so they can stay
+    // readable (opaque by default) while tiled panes are frosted.
+    let floating_surface_alpha = state.terminal_floating_surface_opacity();
+    let floating_frost_opacity = state.appearance.terminal_floating_frost_opacity();
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -225,59 +230,52 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder, None);
 
-    // ── In-app frosted backdrop blur (two-pass) ──
+    // ── Frosted terminal backdrop ──
     //
-    // Both tiled and floating panes receive frosted backdrop stamps, per the task
-    // spec ("apply the same surface policy to tiled and floating panes").
+    // heca cannot blur the desktop: macOS vibrancy composites it BEHIND the
+    // window, outside heca's render target, so blurring heca's own (mostly
+    // transparent) scene yields nothing visible — the original `terminal_blur`
+    // "no effect" bug. So the two pane types frost differently:
     //
-    // Two blur passes are needed so each pane type frosts the content actually
-    // behind it:
+    //   Tiled panes: a frosted-glass TINT (`terminal_frost_color` rect at
+    //     `terminal_frost_opacity()`, sqrt-curved from `terminal_blur`) stamped
+    //     behind the pane over the vibrancy, stencil-clipped to the rounded
+    //     shape. Drawn in Pass A below.
     //
-    //   Pass 1: blur the chrome/background (no pane content yet).
-    //     → Stamped behind tiled panes (frosts chrome/adjacent gaps).
+    //   Floating panes: a REAL blur pass (the scene then includes tiled content,
+    //     so there's actual content behind a floating pane to frost). One blur
+    //     per frame, stamped behind each floating pane.
     //
-    //   Pass 2: blur the scene including tiled pane content.
-    //     → Stamped behind floating panes (frosts the tiled content behind them).
+    // Policy: frost only when the terminal surface is translucent
+    // (`terminal_opacity() < 1.0`) AND `terminal_blur > 0` — otherwise this is
+    // a no-op. Frost strength is driven by `terminal_blur`
+    // (`terminal_frost_opacity()`, sqrt 0..1), independent of `surface_alpha`
+    // (which controls how see-through the terminal surface itself is).
     //
-    // This is O(2) blurs per frame (not per-pane), which satisfies the performance
-    // requirement ("avoid per-pane full-scene blur recomputation").
-    //
-    // Correct unit conversion: `appearance.terminal_blur_radius()` returns logical px,
-    // but `Blur::process` consumes source-texture pixels (physical px for the
+    // Correct unit conversion: `terminal_blur_radius()` returns logical px, but
+    // `Blur::process` consumes source-texture pixels (physical px for the
     // compositor scene texture). Scale by `scale_factor`.
-    //
-    // Policy: no visible pane frosting unless the pane surface actually has
-    // alpha to reveal it (`terminal_surface_opacity() < 1.0`). When blur is 0
-    // or the terminal surface stays opaque, this is a no-op.
     let needs_frosted_backdrop = surface_alpha < 1.0
         && state.appearance.terminal_blur_radius() > 0.0;
-    let mut tiled_blurred_view: Option<&wgpu::TextureView> = None;
+    // Floating frost is gated independently (floating_surface_alpha + terminal_floating_blur).
+    let needs_floating_frost = floating_surface_alpha < 1.0
+        && state.appearance.terminal_floating_blur_radius() > 0.0;
     let mut float_blurred_view: Option<&wgpu::TextureView> = None;
-
-    // Blur pass 1: chrome/background only (before any pane content).
-    if needs_frosted_backdrop {
-        let radius_physical =
-            state.appearance.terminal_blur_radius() * state.scale_factor as f32;
-        tiled_blurred_view = Some(state.blur.process(
-            &state.device,
-            &state.queue,
-            &mut encoder,
-            scene_view,
-            radius_physical,
-        ));
-    }
 
     // ── Pane chrome from pane-specific config ──
     // These are separate from the global theme border/accent so panes can
     // have their own border width, radius, and color treatment.
     let pane_border_color = state.appearance.effective_pane_border_color(theme).to_f32x4();
     let pane_active_border_color = state.appearance.effective_pane_active_border_color(theme).to_f32x4();
+    let pane_floating_border_color = state.appearance.effective_pane_floating_border_color(theme).to_f32x4();
     let pane_border_width = state.appearance.effective_pane_border_width(theme);
     let pane_border_radius = state.appearance.effective_pane_border_radius(theme);
-    let pane_content_inset = state
-        .appearance
-        .effective_pane_padding(theme)
-        .max(pane_border_width + 1.0);
+    // Outer border: the border is drawn OUTSIDE the pane edge, so terminal
+    // content no longer needs to clear an inside border (the old
+    // `border_width + 1.0` inset). The inset is just the theme-driven pane
+    // padding; the frosted tint (Pass A) fills the full pane, so this padding
+    // reads as a frosted inner margin rather than an empty gap.
+    let pane_content_inset = state.appearance.effective_pane_padding(theme);
     let pane_positions = state
         .session
         .active_workspace()
@@ -330,9 +328,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     // ── Stencil-write: rounded content-clip mask for tiled panes ──
     //
-    // Mark each tiled pane's inner rounded rect in the stencil buffer so the
-    // content passes (backdrop + text + primitives) test against it and follow
-    // the pane's rounded border instead of poking past it at high corner radii.
+    // Mark each tiled pane's rounded rect (the full pane, radius =
+    // `pane_border_radius`) in the stencil buffer so the content passes
+    // (backdrop + text + primitives) test against it and fill to the pane edge,
+    // following the rounded border. The border is drawn OUTSIDE this rect, so
+    // content meets the border's inner edge with no gap (outer-border style).
     // One pass writes the union of masks; each pane's content is separately
     // scissored to its own content rect, so the union mask clips it to its own
     // rounded shape. The grid renderer appends this at its running frame offset
@@ -346,14 +346,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     if !tiled_panes.is_empty() {
         for pane in &tiled_panes {
             let inner = heca_renderer::grid::GlowRect {
-                x: pane.x + pane_border_width,
-                y: pane.y + pane_border_width,
-                w: (pane.w - 2.0 * pane_border_width).max(0.0),
-                h: (pane.h - 2.0 * pane_border_width).max(0.0),
+                x: pane.x,
+                y: pane.y,
+                w: pane.w,
+                h: pane.h,
                 fill: [0.0; 4],
                 border: [0.0; 4],
                 border_width: 0.0,
-                radius: (pane_border_radius - pane_border_width).max(0.0),
+                radius: pane_border_radius,
                 glow: [0.0; 4],
                 glow_radius: 0.0,
                 glow_intensity: 0.0,
@@ -368,41 +368,38 @@ pub(crate) fn render_frame(state: &mut AppState) {
             .render_stencil(&state.queue, stencil_view, &mut encoder);
     }
 
-    // ── Pass A: Frosted backdrop stamps (under borders) ──
+    // ── Pass A: Frosted tint behind tiled panes (under borders + content) ──
     //
-    // Stamp the blurred chrome/background behind each tiled pane rect FIRST
-    // so the border scene below sits on top of the frosted surface.
-    // This matches the float pane ordering: backdrop → border → content.
-    for pane in &tiled_panes {
-        if let Some(blurred) = tiled_blurred_view {
-            let scale = state.scale_factor as f32;
-            let vp_w = surface_physical_size.width as f32;
-            let vp_h = surface_physical_size.height as f32;
-            let (dst_x, dst_y, dst_w, dst_h) = pane
-                .content_rect
-                .map(|r| {
-                    (
-                        r.loc.x as f32,
-                        r.loc.y as f32,
-                        r.size.w as f32,
-                        r.size.h as f32,
-                    )
-                })
-                .unwrap_or((pane.x, pane.y, pane.w, pane.h));
-            let dst = (dst_x * scale, dst_y * scale, dst_w * scale, dst_h * scale);
-            state.backdrop.draw(
-                &state.device,
-                &state.queue,
-                &mut encoder,
-                scene_view,
-                blurred,
-                (vp_w, vp_h),
-                dst,
-                None,
-                surface_alpha,
-                Some(stencil_view),
+    // A frosted-glass tint (`terminal_frost_color` at `frost_opacity`) stamped
+    // behind each tiled pane over the vibrancy, stencil-clipped to the pane's
+    // rounded shape. Drawn first so borders (Pass 3) + terminal content (Pass 2)
+    // sit on top. heca can't blur the desktop (vibrancy composites it behind the
+    // window), so `terminal_blur` drives this tint's strength instead of a real
+    // blur of an empty scene. Floating panes keep the real blur (see below).
+    if needs_frosted_backdrop {
+        let frost_color = state
+            .appearance
+            .effective_terminal_frost_color(theme)
+            .to_f32x4();
+        // Frost the full pane rect (not the inset content rect) so the frosted
+        // tint fills the whole pane — the content padding reads as a frosted
+        // inner margin, not an empty gap. The stencil clips it to the rounded shape.
+        for pane in &tiled_panes {
+            state.primitive_renderer.draw_rect(
+                pane.x,
+                pane.y,
+                pane.w,
+                pane.h,
+                [frost_color[0], frost_color[1], frost_color[2], frost_opacity],
             );
         }
+        state.primitive_renderer.render_clipped(
+            &state.device,
+            scene_view,
+            &mut encoder,
+            None,
+            Some(stencil_view),
+        );
     }
 
     // ── Pass 2: Terminal content ──
@@ -498,9 +495,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Capture a second blur after tiled panes have been rendered into the scene.
     // This lets floating panes frost the actual tiled content behind them, not
     // just the chrome/background.
-    if needs_frosted_backdrop {
+    if needs_floating_frost {
         let radius_physical =
-            state.appearance.terminal_blur_radius() * state.scale_factor as f32;
+            state.appearance.terminal_floating_blur_radius() * state.scale_factor as f32;
         float_blurred_view = Some(state.blur.process(
             &state.device,
             &state.queue,
@@ -543,27 +540,68 @@ pub(crate) fn render_frame(state: &mut AppState) {
         }
     }
 
+    // ── Stencil-write: rounded content-clip mask for floating panes ──
+    //
+    // A second stencil-write pass (the tiled one above has already been consumed
+    // by the tiled content passes) that clears the stencil and marks the union
+    // of floating panes' rounded rects (full pane, radius = `pane_border_radius`).
+    // Each floating pane's backdrop + terminal content is scissored to its own
+    // rect, so the union mask clips it to its own rounded shape — matching the
+    // tiled clip, with no corner overflow and a filled (not transparent) margin.
+    if !floating_panes.is_empty() {
+        for pane in &floating_panes {
+            let inner = heca_renderer::grid::GlowRect {
+                x: pane.x,
+                y: pane.y,
+                w: pane.w,
+                h: pane.h,
+                fill: [0.0; 4],
+                border: [0.0; 4],
+                border_width: 0.0,
+                radius: pane_border_radius,
+                glow: [0.0; 4],
+                glow_radius: 0.0,
+                glow_intensity: 0.0,
+                shadow: [0.0; 4],
+                shadow_radius: 0.0,
+                shadow_offset: [0.0, 0.0],
+            };
+            state.grid_renderer.draw(inner);
+        }
+        state
+            .grid_renderer
+            .render_stencil(&state.queue, stencil_view, &mut encoder);
+    }
+
     for pane in &floating_panes {
-        let fborder = if pane.is_active {
-            pane_active_border_color
-        } else {
-            pane_border_color
-        };
-        if let Some(content_rect) = pane.content_rect {
-            // ── Frosted backdrop stamp for floating pane surfaces ──
+        // Floating panes use their own border color (distinct layer), independent
+        // of the tiled active/inactive border colors.
+        let fborder = pane_floating_border_color;
+        if pane.content_rect.is_some() {
+            // ── Floating pane backdrop (solid or frosted), rounded-clipped ──
             //
-            // Uses blur pass 2 (includes tiled content) so floating panes frost
-            // the actual tiled pane content behind them.
+            // Floating panes get their own rounded content-clip stencil (written
+            // once before this loop), so the backdrop + terminal content follow
+            // the rounded border (no corner overflow) and the pane_padding margin
+            // is filled, not a transparent ring. When frosted
+            // (`terminal_floating_blur` > 0 + translucent), stamp the blurred tiled
+            // content behind the pane. When solid (default — opaque, no frost),
+            // fill the full pane with the theme `float_background` so the pane is a
+            // readable solid window. Both are scissored to the pane's own rect and
+            // clipped to the floating union stencil (per-pane rounded shape).
+            let float_scissor = pane_scissor_rect(
+                pane.x,
+                pane.y,
+                pane.w,
+                pane.h,
+                state.scale_factor,
+                surface_physical_size,
+            );
             if let Some(blurred) = float_blurred_view {
                 let scale = state.scale_factor as f32;
                 let vp_w = surface_physical_size.width as f32;
                 let vp_h = surface_physical_size.height as f32;
-                let (dst_x, dst_y, dst_w, dst_h) = (
-                    content_rect.loc.x as f32,
-                    content_rect.loc.y as f32,
-                    content_rect.size.w as f32,
-                    content_rect.size.h as f32,
-                );
+                let (dst_x, dst_y, dst_w, dst_h) = (pane.x, pane.y, pane.w, pane.h);
                 let dst = (dst_x * scale, dst_y * scale, dst_w * scale, dst_h * scale);
                 state.backdrop.draw(
                     &state.device,
@@ -574,8 +612,24 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     (vp_w, vp_h),
                     dst,
                     None,
-                    surface_alpha,
-                    None,
+                    floating_frost_opacity,
+                    Some(stencil_view),
+                );
+            } else {
+                // Solid floating backdrop: fill the full pane with the theme
+                // `float_background` (theme-driven floating-window frame color) so
+                // the pane is opaque/readable and the inner padding margin is
+                // filled, not transparent. Rounded-clipped via the floating stencil.
+                let bg = theme.float_background.to_f32x4();
+                state
+                    .primitive_renderer
+                    .draw_rect(pane.x, pane.y, pane.w, pane.h, bg);
+                state.primitive_renderer.render_clipped(
+                    &state.device,
+                    scene_view,
+                    &mut encoder,
+                    float_scissor,
+                    Some(stencil_view),
                 );
             }
 
@@ -593,13 +647,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         scale_factor: state.scale_factor,
                         surface_physical_size,
                         content_clip: pane_area,
-                        stencil: None,
+                        stencil: Some(stencil_view),
                     },
                     TerminalStyle {
                         font_size: theme.terminal_font_size,
                         font_family: &theme.terminal_font_family,
                         italic_font_family: &theme.terminal_italic_font_family,
-                        surface_alpha,
+                        surface_alpha: floating_surface_alpha,
                     },
                     crate::app::terminal_host::TerminalMount {
                         content_rect: mount.content_rect,

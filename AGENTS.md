@@ -259,6 +259,44 @@ pub struct KeyCombo {
 - **macOS physical key fallback**: When `key_text` is empty (Ctrl produces control char), physical key maps back to printable key
 - **Named keys**: `Enter`, `Tab`, `Escape`, `ArrowLeft`, etc.
 
+### Interaction Policy (`heca/src/app/interaction.rs`)
+
+Every user-initiated action that changes WM state flows through `dispatch_action()` — the single chokepoint that decides **Allow vs Block** based on the active **focus domain** (`Tiled`/`Floating`), input mode, and **interaction source**. Handler-to-handler calls bypass the router (`registry.execute()` directly); only user-initiated actions are policy-routed.
+
+```
+User input → InteractionIntent → route_interaction() → RouteDecision
+                                                       ├─ Allow(intent) → registry.execute()
+                                                       └─ Block          → silently discarded (debug log)
+```
+
+**Rule: every `WmAction` variant MUST be classified in `action_policy()`.** The match is exhaustive (no wildcard) and verified by the `action_policy_covers_all_variants` test. Adding a `WmAction` without classifying it = compile error.
+
+**The 6 `ActionPolicy` variants** (and what they mean for the Floating domain):
+
+| Policy | Tiled | Floating | Examples |
+|--------|-------|----------|----------|
+| `Global` | Allow | **Allow** | `ReloadConfig` — true app-level, no layout impact, must work even when floating |
+| `AlwaysAllowed` | Allow | **Block** (current sources) | `CommandPalette`, `SpawnCommand`, `EnterMode` — app-level but layout-affecting |
+| `TiledOnly` | Allow | Block | `Focus*`, `Split*`, `ZoomColumn`, `Resize*`, `Swap*`, `Move*`, `Sidebar*`, `PaneSelect/Swap/Take`, `FloatAt`, `RenameColumn`, `DeleteColumn`, collapse/expand workspace+column |
+| `FocusedPaneLocal` | Allow | **Allow** | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `Selection*` (`EnterSelectionMode`, `Selection*`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint`) — operate on the focused pane in either domain |
+| `WorkspaceLevel` | Allow | Block | `WorkspaceNext/Prev`, `FocusWorkspace`, `CreateWorkspace`, `RenameWorkspace`, `DeleteWorkspace` |
+| `SourceDependent` | Allow | depends | `FocusPane` — allowed only if it targets the active floating pane |
+
+**Floating-domain policy:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `Global` actions pass from `Keyboard`/`MouseContent`/`MouseLeftSidebar`. Everything else is blocked. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
+
+**`Global` vs `AlwaysAllowed` — do NOT conflate.** `AlwaysAllowed` is a misnomer: the router *blocks* it when floating. `Global` is the only policy that is truly always allowed. Use `Global` for app-level actions with **zero layout impact** that must stay reachable while floating (e.g. `ReloadConfig`). The hot-reload bug (config/style only applied on full restart, not on `prefix+Shift+r`, whenever a floating pane was active) was exactly `ReloadConfig` being mis-classified as `AlwaysAllowed` — fixed 2026-06-18 by moving it to `Global`.
+
+**Interaction sources:** `Keyboard`, `MouseContent`, `MouseLeftSidebar` (future: `MouseRightSidebar`, `MouseTopMenu`, `MouseStatusBar`, `Rpc`). Source matters for `SourceDependent` actions and for future chrome sources that may allow `AlwaysAllowed` actions even while floating.
+
+**Adding a new action — policy step (in addition to the "Adding New Actions" checklist above):**
+1. Classify the variant in `action_policy()` under the right policy arm — choose carefully using the table above. When in doubt, ask: "should this work while a floating pane is active?" → if yes and it has no layout impact, `Global`; if yes and it's pane-local, `FocusedPaneLocal`; if no, `TiledOnly`/`WorkspaceLevel`/`AlwaysAllowed`.
+2. If you introduce a **new `ActionPolicy` variant**, handle it in the exhaustive `match policy` in `route_action()`.
+3. Add a spot-check assertion (`assert_eq!(action_policy(&WmAction::X), ActionPolicy::Y)`) and routing tests (tiled allows it, floating blocks/allows it as appropriate).
+
+**Do NOT** conflate `ActionPolicy` (interaction.rs — Allow/Block per focus domain) with `action_priority()` (input.rs — keybinding resolution priority). They are unrelated systems.
+
+See `.planning/interaction-policy-plan.md` for the intent-routing roadmap (Phase B/C).
+
 ---
 
 ## Config System (`heca-config/src/theme.rs`)

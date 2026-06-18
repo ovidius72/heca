@@ -56,12 +56,20 @@ fn default_terminal_blur() -> u8 {
     0
 }
 
+fn default_terminal_floating_transparency() -> u8 {
+    0
+}
+
+fn default_terminal_floating_blur() -> u8 {
+    0
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
 
 /// Maximum in-app blur radius in logical px, at `blur = 100`.
-const MAX_BLUR_PX: f32 = 24.0;
+const MAX_BLUR_PX: f32 = 48.0;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  AppearanceConfig
@@ -105,6 +113,19 @@ pub struct AppearanceConfig {
     #[serde(default = "default_terminal_blur")]
     pub terminal_blur: u8,
 
+    /// Floating terminal pane transparency amount, `0..=100` (`0` opaque, `100`
+    /// see-through). Independent from the tiled `terminal_transparency` so
+    /// floating panes can stay readable (opaque) while tiled panes are frosted.
+    /// Default `0` (opaque) — floating panes are solid windows.
+    #[serde(default = "default_terminal_floating_transparency")]
+    pub terminal_floating_transparency: u8,
+
+    /// Floating terminal pane frosted-tint strength, `0..=100` (`0` = off).
+    /// Independent from the tiled `terminal_blur`. Default `0` (no frost —
+    /// floating panes are solid); set > 0 to frost floating panes too.
+    #[serde(default = "default_terminal_floating_blur")]
+    pub terminal_floating_blur: u8,
+
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
@@ -124,6 +145,11 @@ pub struct AppearanceConfig {
     /// Pane border color when focused/active. `None` → inherits `theme.accent`.
     #[serde(default)]
     pub pane_active_border_color: Option<Color>,
+    /// Pane border color for floating panes (applies to all floating panes,
+    /// active or inactive, so they read as a distinct layer). `None` → inherits
+    /// `theme.float_accent`. Set to distinguish floating panes from tiled ones.
+    #[serde(default)]
+    pub pane_floating_border_color: Option<Color>,
     /// Gap between panes (logical px). `None` → 8.0 (built-in layout default).
     #[serde(default)]
     pub pane_gap: Option<f32>,
@@ -133,6 +159,12 @@ pub struct AppearanceConfig {
     /// Gap between sidebar and content area (logical px). `None` → 12.0.
     #[serde(default)]
     pub sidebar_gap: Option<f32>,
+    /// Frosted tint color stamped behind translucent terminals (the
+    /// `terminal_blur` frost). `None` → inherits `theme.terminal_frost_color`,
+    /// then `theme.background`. Set in config.toml to customize the frosted-glass
+    /// tint (e.g. a lifted surface color for a lighter frost).
+    #[serde(default)]
+    pub terminal_frost_color: Option<Color>,
 }
 
 impl AppearanceConfig {
@@ -175,6 +207,42 @@ impl AppearanceConfig {
         (self.terminal_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
     }
 
+    /// Terminal-pane frosted-tint opacity (`0.0` = invisible, `1.0` = full
+    /// frost), driven by `terminal_blur` via a **perceptual sqrt curve**
+    /// (0..100 → 0..1) so low blur values show visible frost sooner (blur 10
+    /// → ~0.316, 50 → ~0.707, 100 → 1.0). This is the *strength* of the frosted
+    /// tint stamped behind a translucent terminal surface; it is **independent
+    /// of `terminal_transparency`** (which controls how see-through the terminal
+    /// surface itself is). The frost only draws when the surface is translucent
+    /// (`terminal_opacity() < 1.0`) AND `terminal_blur > 0` (see `render_frame`).
+    /// Decoupled so `terminal_blur` 0→100 produces a visibly monotonic frost
+    /// instead of being swamped by a fixed-low surface alpha (the previous bug:
+    /// the stamp used `surface_alpha`, so `terminal_transparency=85` pinned the
+    /// frost to 0.15 regardless of blur).
+    pub fn terminal_frost_opacity(&self) -> f32 {
+        ((self.terminal_blur.min(100) as f32) / 100.0).sqrt()
+    }
+
+    /// Floating terminal-pane surface opacity in `0.0..=1.0`
+    /// (`terminal_floating_transparency = 0` → `1.0` opaque). Independent from
+    /// the tiled `terminal_opacity()` so floating panes can stay readable.
+    pub fn terminal_floating_opacity(&self) -> f32 {
+        1.0 - (self.terminal_floating_transparency.min(100) as f32) / 100.0
+    }
+
+    /// Floating terminal-pane frosted-tint blur radius in logical px (`0.0` =
+    /// off). Independent from the tiled `terminal_blur_radius()`.
+    pub fn terminal_floating_blur_radius(&self) -> f32 {
+        (self.terminal_floating_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
+    }
+
+    /// Floating terminal-pane frosted-tint opacity (`0.0` = invisible, `1.0` =
+    /// full frost), driven by `terminal_floating_blur` via the same perceptual
+    /// sqrt curve as `terminal_frost_opacity()`. Independent of the tiled knob.
+    pub fn terminal_floating_frost_opacity(&self) -> f32 {
+        ((self.terminal_floating_blur.min(100) as f32) / 100.0).sqrt()
+    }
+
     /// The OS backdrop material to apply, or `None` when disabled.
     pub fn os_vibrancy(&self) -> Option<Vibrancy> {
         (self.vibrancy != Vibrancy::None).then_some(self.vibrancy)
@@ -214,6 +282,13 @@ impl AppearanceConfig {
         self.pane_active_border_color.unwrap_or(theme.accent)
     }
 
+    /// Effective floating pane border color (applies to all floating panes,
+    /// active or inactive, so they read as a distinct layer). Config override →
+    /// `theme.float_accent`.
+    pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
+        self.pane_floating_border_color.unwrap_or(theme.float_accent)
+    }
+
     /// Effective pane gap. Config override → 8.0 (built-in layout default).
     pub fn effective_pane_gap(&self, _theme: &Theme) -> f32 {
         self.pane_gap.unwrap_or(8.0)
@@ -231,6 +306,17 @@ impl AppearanceConfig {
     pub fn effective_sidebar_gap(&self, _theme: &Theme) -> f32 {
         self.sidebar_gap.unwrap_or(12.0)
     }
+
+    /// Effective frosted tint color stamped behind translucent terminals (the
+    /// `terminal_blur` frost). Config override → `theme.terminal_frost_color`
+    /// → `theme.background` (the app theme bg, so the default frost reads as a
+    /// frosted theme-bg glass). The stamp alpha is `terminal_frost_opacity()`,
+    /// separate from this color.
+    pub fn effective_terminal_frost_color(&self, theme: &Theme) -> Color {
+        self.terminal_frost_color
+            .or(theme.terminal_frost_color)
+            .unwrap_or(theme.background)
+    }
 }
 
 impl Default for AppearanceConfig {
@@ -240,14 +326,18 @@ impl Default for AppearanceConfig {
             blur: default_blur(),
             terminal_transparency: default_terminal_transparency(),
             terminal_blur: default_terminal_blur(),
+            terminal_floating_transparency: default_terminal_floating_transparency(),
+            terminal_floating_blur: default_terminal_floating_blur(),
             vibrancy: default_vibrancy(),
             pane_border_width: None,
             pane_border_color: None,
             pane_border_radius: None,
             pane_active_border_color: None,
+            pane_floating_border_color: None,
             pane_gap: None,
             pane_padding: None,
             sidebar_gap: None,
+            terminal_frost_color: None,
         }
     }
 }
@@ -267,12 +357,17 @@ mod tests {
         assert_eq!(cfg.blur, 0);
         assert_eq!(cfg.terminal_transparency, 0);
         assert_eq!(cfg.terminal_blur, 0);
+        assert_eq!(cfg.terminal_floating_transparency, 0);
+        assert_eq!(cfg.terminal_floating_blur, 0);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
         assert!(!cfg.is_transparent());
         assert!((cfg.opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.blur_radius()).abs() < f32::EPSILON);
         assert!((cfg.terminal_opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.terminal_blur_radius()).abs() < f32::EPSILON);
+        assert!((cfg.terminal_floating_opacity() - 1.0).abs() < f32::EPSILON);
+        assert!((cfg.terminal_floating_blur_radius()).abs() < f32::EPSILON);
+        assert!((cfg.terminal_floating_frost_opacity()).abs() < f32::EPSILON);
         assert_eq!(cfg.os_vibrancy(), None);
     }
 
@@ -288,10 +383,72 @@ mod tests {
         };
         assert!((cfg.opacity() - 0.75).abs() < 1e-6);
         assert!(cfg.is_transparent());
-        assert!((cfg.blur_radius() - 12.0).abs() < 1e-6); // 50% of 24px
+        assert!((cfg.blur_radius() - 24.0).abs() < 1e-6); // 50% of 48px
         assert!((cfg.terminal_opacity() - 0.6).abs() < 1e-6);
-        assert!((cfg.terminal_blur_radius() - 18.0).abs() < 1e-6);
+        assert!((cfg.terminal_blur_radius() - 36.0).abs() < 1e-6); // 75% of 48px
         assert_eq!(cfg.os_vibrancy(), Some(Vibrancy::Sidebar));
+    }
+
+    #[test]
+    fn terminal_frost_opacity_maps_blur_to_strength() {
+        // Frost tint opacity is driven by terminal_blur via a perceptual sqrt
+        // curve (0..100 → 0..1), decoupled from terminal_transparency so blur
+        // modulates the frost visibly (the bug it fixes: the stamp used
+        // surface_alpha, so a high terminal_transparency pinned the frost to a
+        // faint fixed alpha).
+        let off = AppearanceConfig { terminal_blur: 0, ..Default::default() };
+        assert!((off.terminal_frost_opacity() - 0.0).abs() < f32::EPSILON);
+
+        // Perceptual sqrt curve: blur 10 → ~0.316 (not 0.1).
+        let light = AppearanceConfig { terminal_blur: 10, ..Default::default() };
+        assert!((light.terminal_frost_opacity() - (0.10f32).sqrt()).abs() < 1e-6);
+
+        let half = AppearanceConfig { terminal_blur: 50, ..Default::default() };
+        assert!((half.terminal_frost_opacity() - (0.50f32).sqrt()).abs() < 1e-6);
+
+        let full = AppearanceConfig { terminal_blur: 100, ..Default::default() };
+        assert!((full.terminal_frost_opacity() - 1.0).abs() < 1e-6);
+
+        // Over-cap clamps to full frost.
+        let over = AppearanceConfig { terminal_blur: 200, ..Default::default() };
+        assert!((over.terminal_frost_opacity() - 1.0).abs() < 1e-6);
+
+        // Independence from terminal_transparency: high transparency must not
+        // change the frost strength.
+        let transparent = AppearanceConfig {
+            terminal_blur: 60,
+            terminal_transparency: 90,
+            ..Default::default()
+        };
+        assert!((transparent.terminal_frost_opacity() - (0.60f32).sqrt()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn terminal_frost_color_resolves_config_then_theme_then_background() {
+        let mocha = crate::theme::Theme::catppuccin_mocha();
+
+        // Default: no config override, bundled theme field is None → falls back
+        // to theme.background (the app theme bg).
+        let cfg = AppearanceConfig::default();
+        assert_eq!(cfg.effective_terminal_frost_color(&mocha), mocha.background);
+
+        // Theme field wins over background when config is unset.
+        let mut themed = mocha.clone();
+        themed.terminal_frost_color = Some(Color::new(10, 20, 30, 255));
+        assert_eq!(
+            cfg.effective_terminal_frost_color(&themed),
+            Color::new(10, 20, 30, 255)
+        );
+
+        // Config override wins over both.
+        let cfg = AppearanceConfig {
+            terminal_frost_color: Some(Color::new(1, 2, 3, 255)),
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.effective_terminal_frost_color(&themed),
+            Color::new(1, 2, 3, 255)
+        );
     }
 
     #[test]
@@ -333,6 +490,51 @@ theme = "mocha"
         .expect("config without [appearance] should parse");
 
         assert_eq!(cfg.appearance, AppearanceConfig::default());
+    }
+
+    #[test]
+    fn floating_terminal_knobs_are_independent_of_tiled() {
+        // Tiled frosted/translucent while floating defaults to opaque, no frost.
+        let cfg = AppearanceConfig {
+            terminal_transparency: 95,
+            terminal_blur: 100,
+            terminal_floating_transparency: 0,
+            terminal_floating_blur: 0,
+            ..Default::default()
+        };
+        assert!((cfg.terminal_opacity() - 0.05).abs() < 1e-6);
+        assert!((cfg.terminal_floating_opacity() - 1.0).abs() < f32::EPSILON);
+        assert!((cfg.terminal_frost_opacity() - 1.0).abs() < 1e-6);
+        assert!((cfg.terminal_floating_frost_opacity()).abs() < f32::EPSILON);
+        assert!((cfg.terminal_floating_blur_radius()).abs() < f32::EPSILON);
+
+        // Floating knobs can be set independently of the tiled ones.
+        let cfg = AppearanceConfig {
+            terminal_floating_transparency: 50,
+            terminal_floating_blur: 25,
+            ..Default::default()
+        };
+        assert!((cfg.terminal_floating_opacity() - 0.5).abs() < 1e-6);
+        assert!((cfg.terminal_floating_frost_opacity() - (0.25f32).sqrt()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn floating_border_color_resolves_config_then_float_accent() {
+        let mocha = crate::theme::Theme::catppuccin_mocha();
+
+        // Default: no config override -> theme.float_accent.
+        let cfg = AppearanceConfig::default();
+        assert_eq!(cfg.effective_pane_floating_border_color(&mocha), mocha.float_accent);
+
+        // Config override wins.
+        let cfg = AppearanceConfig {
+            pane_floating_border_color: Some(Color::new(1, 2, 3, 255)),
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.effective_pane_floating_border_color(&mocha),
+            Color::new(1, 2, 3, 255)
+        );
     }
 
     #[test]

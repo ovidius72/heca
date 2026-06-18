@@ -1,9 +1,17 @@
-// In-app separable Gaussian blur.
+// In-app Kawase blur.
 //
-// Two passes (horizontal then vertical) over a source texture produce a blurred
-// copy — the reusable backdrop for frosted chrome / translucent panes. A single
-// oversized triangle covers the screen (no vertex buffer). The blur direction and
-// strength come from a uniform so one pipeline serves both passes.
+// A single separable Gaussian undersamples a large radius (taps `span` px apart),
+// so narrow high-frequency content — a 2px cursor, fine text strokes — aliases
+// through as visible lines, and coarse features survive because the radius is too
+// small to smear them. The Kawase filter instead runs N passes with an increasing
+// offset: each pass is a weighted 9-tap (center ×4 + 4 cardinal ×2 + 4 diagonal
+// ×1, ÷16) at a single offset `d` texels, and `d` grows from small to the target
+// radius across passes. Early small-offset passes smooth fine detail so later
+// large-offset passes blur already-smoothed content (no aliasing), and the
+// compounding offsets yield a smooth strong blur (σ ≈ √Σdᵢ²) — the standard
+// frosted-glass technique. A single oversized triangle covers the screen (no
+// vertex buffer); the offset comes from a uniform so one pipeline serves all
+// passes.
 
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
@@ -21,10 +29,10 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 }
 
 struct BlurParams {
-    // Per-texel step along the blur axis: (1/width, 0) for horizontal,
-    // (0, 1/height) for vertical. Magnitude already scaled by the radius.
+    // Kawase offset in UV units: (offset/width, offset/height). 0 = passthrough.
     step: vec2<f32>,
-    // Blur radius in source pixels (0 = passthrough).
+    // Blur radius in source pixels (0 = passthrough gate; the offset drives the
+    // actual spread — radius only selects pass vs. passthrough).
     radius: f32,
     _pad: f32,
 };
@@ -33,28 +41,23 @@ struct BlurParams {
 @group(0) @binding(1) var src_samp: sampler;
 @group(0) @binding(2) var<uniform> params: BlurParams;
 
-// 9-tap Gaussian (sigma ≈ 2.0), symmetric — center + 4 each side. Linear
-// sampling could halve the taps; kept explicit here for clarity/correctness.
-const W0: f32 = 0.2270270270;
-const W1: f32 = 0.1945945946;
-const W2: f32 = 0.1216216216;
-const W3: f32 = 0.0540540541;
-const W4: f32 = 0.0162162162;
-
+// Kawase 9-tap weights: center ×4, 4 cardinal ×2, 4 diagonal ×1 → total 16.
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (params.radius <= 0.0) {
         return textureSample(src_tex, src_samp, in.uv);
     }
-    let s = params.step;
-    var acc: vec4<f32> = textureSample(src_tex, src_samp, in.uv) * W0;
-    acc += textureSample(src_tex, src_samp, in.uv + s * 1.0) * W1;
-    acc += textureSample(src_tex, src_samp, in.uv - s * 1.0) * W1;
-    acc += textureSample(src_tex, src_samp, in.uv + s * 2.0) * W2;
-    acc += textureSample(src_tex, src_samp, in.uv - s * 2.0) * W2;
-    acc += textureSample(src_tex, src_samp, in.uv + s * 3.0) * W3;
-    acc += textureSample(src_tex, src_samp, in.uv - s * 3.0) * W3;
-    acc += textureSample(src_tex, src_samp, in.uv + s * 4.0) * W4;
-    acc += textureSample(src_tex, src_samp, in.uv - s * 4.0) * W4;
-    return acc;
+    let o = params.step;
+    var acc: vec4<f32> = textureSample(src_tex, src_samp, in.uv) * 4.0;
+    // 4 cardinal taps (±offset along one axis).
+    acc += textureSample(src_tex, src_samp, in.uv + vec2<f32>(o.x, 0.0)) * 2.0;
+    acc += textureSample(src_tex, src_samp, in.uv - vec2<f32>(o.x, 0.0)) * 2.0;
+    acc += textureSample(src_tex, src_samp, in.uv + vec2<f32>(0.0, o.y)) * 2.0;
+    acc += textureSample(src_tex, src_samp, in.uv - vec2<f32>(0.0, o.y)) * 2.0;
+    // 4 diagonal taps (±offset along both axes).
+    acc += textureSample(src_tex, src_samp, in.uv + o);
+    acc += textureSample(src_tex, src_samp, in.uv + vec2<f32>(o.x, -o.y));
+    acc += textureSample(src_tex, src_samp, in.uv - o);
+    acc += textureSample(src_tex, src_samp, in.uv + vec2<f32>(-o.x, o.y));
+    return acc / 16.0;
 }

@@ -1,33 +1,45 @@
-//! In-app separable Gaussian blur — a reusable post-process primitive.
+//! In-app Kawase blur — a reusable post-process primitive.
 //!
 //! Given **any** source texture view, [`Blur::process`] produces a blurred copy
-//! via two passes (horizontal then vertical) through internal ping-pong targets,
-//! and returns the blurred view. It is **content-agnostic and host/compositor-
-//! owned** (see `pluggable-chrome-plugin-plan.md` Phase 7.5 — blur is a compositor
-//! concern, not terminal-owned): the intended app use is to frost chrome over the
-//! scene, and a terminal/pane host can reuse it on its own offscreen content.
+//! via N compounding passes through internal ping-pong targets, and returns the
+//! blurred view. It is **content-agnostic and host/compositor-owned** (see
+//! `pluggable-chrome-plugin-plan.md` Phase 7.5 — blur is a compositor concern, not
+//! terminal-owned): the intended app use is to frost chrome over the scene, and a
+//! terminal/pane host can reuse it on its own offscreen content.
+//!
+//! **Why Kawase, not a separable Gaussian:** a single 9-tap separable Gaussian
+//! undersamples a large radius — its taps sit `span = radius/4` px apart, so narrow
+//! high-frequency content (a 2px-wide cursor, or fine text strokes) aliases through
+//! as visible vertical/horizontal lines, and coarse features (text rows) survive
+//! because the radius is too small to smear them. The Kawase filter instead runs N
+//! passes with an *increasing* offset: each pass is a weighted 9-tap (center ×4 +
+//! 4 cardinal ×2 + 4 diagonal ×1, ÷16) at a single offset `d` texels, and `d` grows
+//! from small to the target radius across passes. Early small-offset passes smooth
+//! fine detail so later large-offset passes blur already-smoothed content (no
+//! aliasing), and the compounding offsets yield a smooth strong blur (σ ≈ √Σdᵢ²/3).
+//! This is the standard frosted-glass technique. `BLUR_PASSES` passes (even, so the
+//! final pass lands on the returned `view_b`); effective σ ≈ 1.0·radius at N=8.
+//!
+//! **wgpu uniform-update hazard (why `params` is a `Vec<Buffer>`):** `queue::write_buffer`
+//! is a *queued* operation, while the render passes are encoded into the caller's
+//! `CommandEncoder` (submitted only after `process` returns). All `write_buffer`
+//! calls therefore execute *before* any pass runs — writing the *same* buffer N
+//! times would leave it holding only the last offset, so every pass would read the
+//! final value (no compounding, plus banding from a single large offset). Using one
+//! *distinct* buffer per pass (each written once) sidesteps the hazard entirely:
+//! each pass reads its own buffer's value regardless of queue order.
 //!
 //! **Status:** wired into the app — `Blur` and `Backdrop` are owned by `AppState`
 //! and called from `render_frame()` in `heca/src/app/render.rs`. When
-//! `appearance.transparency > 0` and `appearance.blur > 0`, two blur passes are
-//! performed per frame so both tiled and floating panes receive frosted backdrop:
-//!
-//! - **Pass 1** (after chrome/background, before tiled panes): blur source is
-//!   chrome/background only. Stamped behind tiled panes, frosting the chrome
-//!   and gaps visible through their translucent surfaces.
-//! - **Pass 2** (after tiled panes render, before floating panes): blur source
-//!   includes tiled pane content. Stamped behind floating panes, frosting the
-//!   actual tiled content behind them.
-//!
-//! Both pane types use `surface_alpha` (from `terminal_surface_opacity()`) for
-//! their translucent surface fill, and both receive `Backdrop::draw` stamps.
-//! This is O(2) blurs per frame (not per-pane), satisfying the performance
-//! requirement.
+//! `appearance.terminal_floating_blur > 0` (with translucent floating panes), a blur
+//! is performed after tiled panes render and stamped behind the floating panes,
+//! frosting the actual tiled content behind them.
 //!
 //! **Units:** `radius` is in the **source texture's own pixel space** — i.e.
 //! *physical* pixels for the compositor scene texture (created at framebuffer size).
-//! `heca-config`'s `appearance.blur_radius()` is in **logical** px, so a caller must
-//! convert before calling: `radius_physical = blur_radius() * scale_factor`.
+//! `heca-config`'s `appearance.terminal_floating_blur_radius()` is in **logical**
+//! px, so a caller must convert before calling:
+//! `radius_physical = terminal_floating_blur_radius() * scale_factor`.
 //!
 //! Contract for reuse:
 //! ```ignore
@@ -42,7 +54,17 @@
 
 use wgpu::util::DeviceExt;
 
-/// Per-pass uniform: the per-tap UV step along the blur axis + the radius.
+/// Number of compounding Kawase passes per `process` call (when `radius > 0`).
+/// Must be **even** so the final pass writes `view_b` (the returned view). Eight
+/// passes gives σ ≈ 1.0·radius — strong enough to frost coarse text rows while
+/// keeping per-pass offsets small enough to avoid aliasing (early passes sample
+/// densely). Each pass is a single 9-tap draw (not separable H+V), so cost is
+/// `BLUR_PASSES` fullscreen passes per `process` call — cheap on modern GPUs and
+/// only run while floating frost is active.
+const BLUR_PASSES: u32 = 8;
+
+/// Per-pass uniform: the Kawase offset in UV units `(offset/width, offset/height)`
+/// plus the radius (used only as a passthrough gate; the offset drives the spread).
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct BlurParams {
@@ -51,18 +73,21 @@ struct BlurParams {
     _pad: f32,
 }
 
-/// Reusable separable-Gaussian blur over offscreen textures.
+/// Reusable Kawase blur over offscreen ping-pong textures.
 pub struct Blur {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
-    // Ping-pong targets: pass 1 (H) → `a`, pass 2 (V) → `b` (returned).
+    // Ping-pong targets. Pass 1 writes `view_a` (from the external src); even
+    // passes write `view_b`, odd passes (>1) write `view_a`. With `BLUR_PASSES`
+    // even, the final pass writes `view_b` (returned).
     view_a: wgpu::TextureView,
     view_b: wgpu::TextureView,
-    params_h: wgpu::Buffer,
-    params_v: wgpu::Buffer,
-    // Persistent bind group for the vertical pass (samples the internal `a`).
-    bg_v: wgpu::BindGroup,
+    // One params uniform *per pass* (see the wgpu hazard doc above): each is
+    // written once with that pass's offset, so every pass reads its own value
+    // regardless of the queue's write-before-submit ordering. Bind groups are
+    // built per pass (cheap, descriptor-only) binding the matching buffer.
+    params: Vec<wgpu::Buffer>,
     size: (u32, u32),
     format: wgpu::TextureFormat,
 }
@@ -151,19 +176,18 @@ impl Blur {
             cache: None,
         });
 
-        let params_h = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("blur_params_h"),
-            contents: bytemuck::cast_slice(&[BlurParams { step: [0.0, 0.0], radius: 0.0, _pad: 0.0 }]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-        let params_v = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("blur_params_v"),
-            contents: bytemuck::cast_slice(&[BlurParams { step: [0.0, 0.0], radius: 0.0, _pad: 0.0 }]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        // One params buffer per pass (see the `params` field doc + module hazard note).
+        let params: Vec<wgpu::Buffer> = (0..BLUR_PASSES)
+            .map(|_| {
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("blur_params"),
+                    contents: bytemuck::cast_slice(&[BlurParams { step: [0.0, 0.0], radius: 0.0, _pad: 0.0 }]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                })
+            })
+            .collect();
 
-        let (view_a, view_b, bg_v) =
-            Self::make_targets(device, &layout, &sampler, &params_v, format, width, height);
+        let (view_a, view_b) = Self::make_targets(device, format, width, height);
 
         Self {
             pipeline,
@@ -171,24 +195,19 @@ impl Blur {
             sampler,
             view_a,
             view_b,
-            params_h,
-            params_v,
-            bg_v,
+            params,
             size: (width.max(1), height.max(1)),
             format,
         }
     }
 
-    /// (Re)create the two ping-pong targets + the persistent vertical-pass bind group.
+    /// (Re)create the two ping-pong targets.
     fn make_targets(
         device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        sampler: &wgpu::Sampler,
-        params_v: &wgpu::Buffer,
         format: wgpu::TextureFormat,
         width: u32,
         height: u32,
-    ) -> (wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup) {
+    ) -> (wgpu::TextureView, wgpu::TextureView) {
         let make = |label: &str| {
             device
                 .create_texture(&wgpu::TextureDescriptor {
@@ -208,45 +227,27 @@ impl Blur {
                 })
                 .create_view(&wgpu::TextureViewDescriptor::default())
         };
-        let view_a = make("blur_target_a");
-        let view_b = make("blur_target_b");
-        let bg_v = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("blur_bg_v"),
-            layout,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view_a) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: params_v.as_entire_binding() },
-            ],
-        });
-        (view_a, view_b, bg_v)
+        (make("blur_target_a"), make("blur_target_b"))
     }
 
     /// Resize the internal targets to match the source. No-op if unchanged.
+    /// (The per-pass params buffers are fixed-size uniforms — no resize needed.)
     pub fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
         if (width.max(1), height.max(1)) == self.size {
             return;
         }
-        let (view_a, view_b, bg_v) = Self::make_targets(
-            device,
-            &self.layout,
-            &self.sampler,
-            &self.params_v,
-            self.format,
-            width,
-            height,
-        );
+        let (view_a, view_b) = Self::make_targets(device, self.format, width, height);
         self.view_a = view_a;
         self.view_b = view_b;
-        self.bg_v = bg_v;
         self.size = (width.max(1), height.max(1));
     }
 
     /// Blur `src_view` (must match the current size) by `radius` in **source-texture
     /// pixels** (physical px for the compositor scene texture — convert from logical
-    /// `appearance.blur_radius()` via `* scale_factor`; see module Units note) and
-    /// return the blurred view. `radius <= 0` still copies (passthrough). The
-    /// returned view is owned by `self` and valid until the next `process`/`resize`.
+    /// `appearance.terminal_floating_blur_radius()` via `* scale_factor`; see module
+    /// Units note) and return the blurred view. `radius <= 0` still copies
+    /// (passthrough via two zero-offset passes). The returned view is owned by
+    /// `self` and valid until the next `process`/`resize`.
     pub fn process(
         &self,
         device: &wgpu::Device,
@@ -256,42 +257,85 @@ impl Blur {
         radius: f32,
     ) -> &wgpu::TextureView {
         let (w, h) = self.size;
-        // Spread the 4-tap-per-side kernel across `radius` source pixels.
-        let span = (radius.max(0.0)) / 4.0;
-        queue.write_buffer(
-            &self.params_h,
-            0,
-            bytemuck::cast_slice(&[BlurParams {
-                step: [span / w as f32, 0.0],
-                radius,
-                _pad: 0.0,
-            }]),
-        );
-        queue.write_buffer(
-            &self.params_v,
-            0,
-            bytemuck::cast_slice(&[BlurParams {
-                step: [0.0, span / h as f32],
-                radius,
-                _pad: 0.0,
-            }]),
+        // Two zero-offset passes when radius <= 0 so `view_b` ends up holding a
+        // plain copy of the source (the shader returns the raw sample at radius 0).
+        let passes: u32 = if radius <= 0.0 { 2 } else { BLUR_PASSES };
+        debug_assert!(
+            (self.params.len() as u32) >= passes,
+            "need {} params buffers, have {}",
+            passes,
+            self.params.len()
         );
 
-        // Horizontal pass: external src → internal `a`. Bind group is built per
-        // call because the source view is caller-owned and may change each frame.
-        let bg_h = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("blur_bg_h"),
+        // Write each pass's offset to its own buffer (distinct buffers → no
+        // last-write-wins hazard; each is read by exactly one pass).
+        let zero = [0.0f32; 2];
+        for i in 0..passes as usize {
+            let offset = Self::offset_for(radius, (i + 1) as u32, passes);
+            queue.write_buffer(
+                &self.params[i],
+                0,
+                bytemuck::cast_slice(&[BlurParams {
+                    step: if radius <= 0.0 {
+                        zero
+                    } else {
+                        [offset / w.max(1) as f32, offset / h.max(1) as f32]
+                    },
+                    radius,
+                    _pad: 0.0,
+                }]),
+            );
+        }
+
+        // Pass 1: external src → `view_a`.
+        let bg = self.make_bg(device, src_view, &self.params[0]);
+        self.pass(encoder, &bg, &self.view_a, "blur_pass_1");
+
+        // Passes 2..N: ping-pong view_a ↔ view_b. Even passes → view_b; odd passes
+        // (>1) → view_a. The encoder tracks render-pass resource usage and inserts
+        // the read-after-write barriers between passes automatically.
+        for p in 2..=passes {
+            let (src, target) = if p % 2 == 0 {
+                (&self.view_a, &self.view_b)
+            } else {
+                (&self.view_b, &self.view_a)
+            };
+            let bg = self.make_bg(device, src, &self.params[(p - 1) as usize]);
+            self.pass(encoder, &bg, target, &format!("blur_pass_{}", p));
+        }
+
+        // `BLUR_PASSES` is even, so the final pass wrote `view_b`.
+        &self.view_b
+    }
+
+    /// Kawase offset (in source-texture pixels) for pass `i` of `passes`: grows
+    /// linearly from `radius/passes` (pass 1) to `radius` (pass N), so early passes
+    /// sample densely (smooth fine detail) and later passes spread widely.
+    /// Zero when `radius <= 0` (passthrough).
+    fn offset_for(radius: f32, i: u32, passes: u32) -> f32 {
+        if radius <= 0.0 || passes == 0 {
+            0.0
+        } else {
+            radius * i as f32 / passes as f32
+        }
+    }
+
+    /// Build a per-pass bind group binding `src` + this pass's `params` buffer.
+    fn make_bg(
+        &self,
+        device: &wgpu::Device,
+        src: &wgpu::TextureView,
+        params: &wgpu::Buffer,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("blur_bg"),
             layout: &self.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src_view) },
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src) },
                 wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: self.params_h.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: params.as_entire_binding() },
             ],
-        });
-        self.pass(encoder, &bg_h, &self.view_a, "blur_pass_h");
-        // Vertical pass: internal `a` → internal `b` (returned).
-        self.pass(encoder, &self.bg_v, &self.view_b, "blur_pass_v");
-        &self.view_b
+        })
     }
 
     fn pass(
