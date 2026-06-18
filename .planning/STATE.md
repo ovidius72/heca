@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 4 of 4 (The Platform)
 status: in_progress
-last_updated: "2026-06-17T00:00:00.000Z"
+last_updated: "2026-06-18T12:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
@@ -17,7 +17,7 @@ progress:
 
 **Current Phase:** Phase 4 — The Platform
 **Status:** In progress
-**Last Action:** Phase 13 pane-shell visual blocker 1 (border/radius rendering) fixed in PR #121; blocker 2 (terminal_blur) remains. Stencil rounded content-clip + snug padding + chrome value clamps + theme-driven `pane_padding` landed; pre-existing clippy lints deferred to pre-PR cleanup.
+**Last Action:** Pane Runtime State initiative — Phase 0 (chrome event bus + SharedChromeState migration) merged in PR #129; Phase 1 (`PaneRuntime` core model + reactive store mirror + event-emitting setters) merged in PR #130 + review fixes in PR #131; **Phase 2 (process detection) implemented 2026-06-18** (pending user acceptance) — `ProcessStatus::Exit` removed; `try_wait` captures exit code → `pane.exited{code}`; foreground via `tcgetpgrp` vs `process_group_leader()` (macOS `proc_pidpath` + Linux `/proc`, basename); `PaneBackend::runtime()` + per-wake monitor → `Pane.runtime`; event-first on output/EOF wakes + 250 ms debounce (no periodic timer). **macOS cwd OS-fallback deferred → Phase 3 OSC 7** (Linux `/proc/<pid>/cwd` works now). Verified via FakeBackend + TerminalBackend unit tests; clippy-clean (0 new warnings). Phase 2 design: pane lifetime = terminal/shell, status = `Running`/`Idle`/`Success`/`Error`, `[programs.<raw>]` catalog. Earlier: Phase 13 border/radius blocker fixed in PR #121; the `terminal_blur` blocker is superseded by the merged `compositor-blur-refactor-plan.md` z-layer model (PR #128) — a post-pane-runtime track.
 
 ## Product Phase Progress
 
@@ -92,10 +92,10 @@ progress:
 
 ### Sequencing (revised 2026-06-17)
 
-1. **Now — Phase 13 blocker 2: `terminal_blur`** visual response (= PLAN.md priority #2 in-app blur app-wiring). `terminal_blur` 0→100 must be visibly monotonic. Diagnose `heca-renderer/src/backdrop.rs` + `backdrop.wgsl` (0.15-alpha stamp + 24px cap hypothesis); wire real modulation through the `[appearance]` plumbing.
+1. **Now — Pane Runtime State initiative, Phase 2 (process detection)** — the active near-term item. Phases 0 + 1 merged (PRs #129/#130/#131); Phase 2 design locked 2026-06-18. Full plan: `pane-runtime-state-plan.md`; board: `pane-runtime-tasks.md`. Phase 2 = OS-native foreground detection (`tcgetpgrp` vs `process_group_leader()`, macOS libproc / Linux `/proc`, basename) + capture child exit code (`try_wait` → `pane.exited{code}`), event-driven on output/EOF wakes + 250 ms debounce (**no polling timer** — periodic poll deferred), keep auto-close (only on shell death), remove `ProcessStatus::Exit`. Locked decisions in plan §0.2/§0.6/§0.7 (persistence model, no-poll, `[programs.<raw>]` catalog).
 2. **Post-merge terminal backlog** (we have worked on this; additions marked **NEW**): Phase 9 shared selection → Phase 10 clipboard/paste → Phase 11 UX/attention (**NEW: terminal contextual menu**, mouse-triggered) → Phase 12 graphics/**image rendering** (Yazi + tools; wezterm supports Sixel/iTerm2/Kitty — see Phase 12 entry).
 3. **At the end — Phase 13 wrap-up**: rust-skill phase-end review + pre-existing clippy-lint cleanup (8 Phase-9 `selection_model` dead_code → annotate with reason; `too_many_arguments` pre-existing on main).
-4. **External (separate branch, not this effort)**: SharedChromeState (P0) consumer migration, F4.4 marker/rail + targeting, pane numbering, appearance/zoom/font controls. F4.5 (DnD/grab-cursor) landed on main via PR #120. Do not re-plan these here.
+4. **External / done / future tracks**: ~~SharedChromeState (P0) consumer migration~~ ✅ done as pane-runtime Phase 0 (PR #129). F4.5 (DnD/grab-cursor) landed via PR #120. **Compositor blur refactor** (z-layer model, `compositor-blur-refactor-plan.md`, plan merged via PR #128) = a **post-pane-runtime** track — not started. Pane numbering + appearance/zoom/font controls remain parked (deferred). Do not re-plan these here.
 
 > **UI rule:** all new UI elements/components/widgets introduced by this backlog (e.g. the Phase 11 context menu, any image-preview chrome) MUST be proper `heca-grid-ui` widgets per PLAN.md locked rules (embed `Base`, read ALL styling from `Theme`, domain-neutral, no hardcoded sizes/colors/alphas, behavior via `ActionRegistry`/`KeymapRegistry`). Low-level image *texture* rendering (Phase 12) is `heca-renderer` (wgpu) — a different altitude, not a grid-ui widget.
 
