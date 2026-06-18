@@ -2,6 +2,7 @@
 //! `wezterm-term` for terminal emulation.
 
 mod engine;
+mod osc;
 mod process;
 mod pty;
 
@@ -11,11 +12,42 @@ use super::{
 };
 use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
 use engine::TerminalEngine;
+use osc::{OscEvent, OscSnooper};
 pub use pty::PtyError;
 use pty::{PtyHandle, PtyRead};
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Materialized shell-integration assets used to wrap interactive shells with
+/// OSC 133 / OSC 7 hooks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShellIntegrationAssets {
+    /// Bash init file passed via `--init-file`.
+    pub bash_init: PathBuf,
+    /// Fish init snippet sourced via `fish -C`.
+    pub fish_init: PathBuf,
+    /// Zsh `ZDOTDIR` containing the injected `.zshrc`.
+    pub zsh_zdotdir: PathBuf,
+}
+
+struct ShellLaunch<'a> {
+    integration: Option<ShellIntegrationAssets>,
+    override_path: Option<&'a str>,
+}
+
+/// Optional terminal-backend spawn behavior layered on top of the required
+/// grid size and cell metrics.
+#[derive(Default)]
+pub struct TerminalBackendOptions {
+    /// Terminal palette defaults injected into the emulation engine.
+    pub palette_defaults: Option<TerminalPaletteDefaults>,
+    /// Wake callback fired when PTY output arrives.
+    pub wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Optional shell wrapper assets that inject OSC shell integration.
+    pub shell_integration: Option<ShellIntegrationAssets>,
+}
 
 /// A backend that runs a real shell inside a PTY and models its state via
 /// `wezterm-term`.
@@ -38,6 +70,11 @@ pub struct TerminalBackend {
     pending_exit: Option<i32>,
     /// Timestamp of the last foreground re-sample (debounce on the output-wake path).
     last_fg_check: Instant,
+    /// Passive pre-parse OSC snooper for semantic prompt / cwd sequences.
+    osc: OscSnooper,
+    /// When true, semantic OSC status (`Success`/`Error`) is active and must not
+    /// be immediately overwritten by shell-foreground `Idle` refreshes.
+    semantic_status_active: bool,
 }
 
 impl TerminalBackend {
@@ -68,14 +105,37 @@ impl TerminalBackend {
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     ) -> Result<Self, PtyError> {
+        Self::with_options(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            TerminalBackendOptions {
+                palette_defaults,
+                wake_on_output,
+                shell_integration: None,
+            },
+        )
+    }
+
+    pub fn with_options(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+        options: TerminalBackendOptions,
+    ) -> Result<Self, PtyError> {
         Self::with_test_shell(
             cols,
             rows,
             cell_w,
             cell_h,
-            palette_defaults,
-            wake_on_output,
-            None,
+            options.palette_defaults,
+            options.wake_on_output,
+            ShellLaunch {
+                integration: options.shell_integration,
+                override_path: None,
+            },
         )
     }
 
@@ -86,11 +146,19 @@ impl TerminalBackend {
         cell_h: f32,
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
-        shell_override: Option<&str>,
+        shell: ShellLaunch<'_>,
     ) -> Result<Self, PtyError> {
-        let pty = match shell_override {
-            Some(shell) => PtyHandle::new_with_shell(cols, rows, wake_on_output, Some(shell))?,
-            None => PtyHandle::new(cols, rows, wake_on_output)?,
+        let pty = match shell.override_path {
+            Some(shell_path) => {
+                PtyHandle::new_with_shell(
+                    cols,
+                    rows,
+                    wake_on_output,
+                    shell.integration,
+                    Some(shell_path),
+                )?
+            }
+            None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
         };
         let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults)?;
 
@@ -116,6 +184,8 @@ impl TerminalBackend {
             },
             pending_exit: None,
             last_fg_check,
+            osc: OscSnooper::default(),
+            semantic_status_active: false,
         })
     }
 
@@ -136,13 +206,17 @@ impl TerminalBackend {
             let shell_basename = std::path::Path::new(self.pty.shell_path())
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned());
-            self.runtime.status = if info.program.is_some() {
-                ProcessStatus::Running
-            } else {
-                ProcessStatus::Idle
-            };
+            if !self.semantic_status_active {
+                self.runtime.status = if info.program.is_some() {
+                    ProcessStatus::Running
+                } else {
+                    ProcessStatus::Idle
+                };
+            }
             self.runtime.program = info.program.or(shell_basename);
-            self.runtime.cwd = info.cwd;
+            if let Some(cwd) = info.cwd {
+                self.runtime.cwd = Some(cwd);
+            }
         }
         // Non-Unix: no foreground detection (stub); runtime stays at its default.
         #[cfg(not(unix))]
@@ -150,6 +224,32 @@ impl TerminalBackend {
             let _ = &mut self.runtime;
         }
     }
+
+    fn apply_osc_event(&mut self, event: OscEvent) -> bool {
+        match event {
+            OscEvent::PromptStart => true,
+            OscEvent::CommandStart | OscEvent::PreExec => {
+                self.semantic_status_active = false;
+                self.runtime.exit_code = None;
+                true
+            }
+            OscEvent::CommandFinished(code) => {
+                self.runtime.status = if code == 0 {
+                    ProcessStatus::Success
+                } else {
+                    ProcessStatus::Error
+                };
+                self.runtime.exit_code = Some(code);
+                self.semantic_status_active = true;
+                false
+            }
+            OscEvent::Cwd(cwd) => {
+                self.runtime.cwd = Some(cwd);
+                false
+            }
+        }
+    }
+
     #[cfg(test)]
     fn new_for_test_with_shell(cols: usize, rows: usize, shell: &str) -> Result<Self, PtyError> {
         Self::with_test_shell(
@@ -159,7 +259,10 @@ impl TerminalBackend {
             14.0,
             None,
             None,
-            Some(shell),
+            ShellLaunch {
+                integration: None,
+                override_path: Some(shell),
+            },
         )
     }
 }
@@ -224,7 +327,15 @@ impl PaneBackend for TerminalBackend {
         loop {
             match self.pty.try_read() {
                 PtyRead::Data(bytes) => {
+                    let mut force_fg_refresh = false;
+                    for event in self.osc.observe(&bytes) {
+                        force_fg_refresh |= self.apply_osc_event(event);
+                    }
                     self.engine.advance_bytes(&bytes);
+                    if force_fg_refresh && !self.exited {
+                        self.last_fg_check = Instant::now();
+                        self.refresh_foreground();
+                    }
                     had_data = true;
                 }
                 PtyRead::Empty => break,
@@ -351,6 +462,8 @@ fn reconcile_exit_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -545,6 +658,56 @@ mod tests {
         );
     }
 
+    #[test]
+    fn terminal_backend_bash_integration_reports_success_error_and_cwd() {
+        let bash = PathBuf::from("/bin/bash");
+        if !bash.exists() {
+            return;
+        }
+
+        let integration = write_shell_integration_assets_for_test();
+        let mut backend = TerminalBackend::with_test_shell(
+            80,
+            24,
+            8.4,
+            14.0,
+            None,
+            None,
+            ShellLaunch {
+                integration: Some(integration),
+                override_path: Some(bash.to_str().expect("bash path should be valid utf-8")),
+            },
+        )
+        .expect("terminal backend should initialize");
+
+        warm_shell(&mut backend);
+        backend.process_input(b"false\r");
+        assert!(
+            pump_backend_until(&mut backend, |backend| {
+                backend.runtime().status == ProcessStatus::Error
+                    && backend.runtime().exit_code == Some(1)
+            }),
+            "bash shell integration should report `false` as Error with exit code 1"
+        );
+
+        backend.process_input(b"true\r");
+        assert!(
+            pump_backend_until(&mut backend, |backend| {
+                backend.runtime().status == ProcessStatus::Success
+                    && backend.runtime().exit_code == Some(0)
+            }),
+            "bash shell integration should report `true` as Success with exit code 0"
+        );
+
+        backend.process_input(b"cd /tmp\r");
+        assert!(
+            pump_backend_until(&mut backend, |backend| {
+                backend.runtime().cwd.as_deref() == Some(std::path::Path::new("/tmp"))
+            }),
+            "bash shell integration should update cwd via OSC 7 after `cd /tmp`"
+        );
+    }
+
     fn warm_shell(backend: &mut TerminalBackend) {
         let deadline = Instant::now() + Duration::from_millis(200);
         while Instant::now() < deadline {
@@ -609,5 +772,74 @@ mod tests {
 
     fn shell_exit_command() -> &'static str {
         "exit\r"
+    }
+
+    fn write_shell_integration_assets_for_test() -> ShellIntegrationAssets {
+        let root = std::env::temp_dir().join(format!(
+            "heca-shell-integration-test-{}",
+            std::process::id()
+        ));
+        let zsh_dir = root.join("zsh");
+        fs::create_dir_all(&zsh_dir).expect("temp shell integration dir");
+
+        let bash_init = root.join("bash_init.sh");
+        let fish_init = root.join("fish_init.fish");
+        let zsh_rc = zsh_dir.join(".zshrc");
+
+        fs::write(
+            &bash_init,
+            r#"heca__osc() {
+  printf '\033]%s\a' "$1"
+}
+
+heca__emit_cwd() {
+  local host="${HOSTNAME:-localhost}"
+  heca__osc "7;file://$host${PWD:-/}"
+}
+
+heca__prompt_command() {
+  local exit_status="${1:-0}"
+  if [ "${HECA_HAVE_PREEXEC:-0}" -eq 1 ] 2>/dev/null; then
+    heca__osc "133;D;$exit_status"
+  fi
+  heca__osc "133;A"
+  heca__emit_cwd
+  HECA_HAVE_PREEXEC=0
+  HECA_LAST_COMMAND=""
+  return "$exit_status"
+}
+
+heca__preexec() {
+  [ "${HECA_IN_PROMPT_COMMAND:-0}" -eq 1 ] 2>/dev/null && return
+  local cmd="${BASH_COMMAND:-}"
+  [ -z "$cmd" ] && return
+  [ "$cmd" = "${HECA_LAST_COMMAND:-}" ] && return
+  HECA_LAST_COMMAND="$cmd"
+  HECA_HAVE_PREEXEC=1
+  heca__osc "133;B"
+  heca__osc "133;C"
+}
+
+trap 'heca__preexec' DEBUG
+PROMPT_COMMAND='__heca_status=$?; HECA_IN_PROMPT_COMMAND=1; heca__prompt_command "$__heca_status"; HECA_IN_PROMPT_COMMAND=0'
+"#,
+        )
+        .expect("write bash init");
+        fs::write(
+            &fish_init,
+            include_str!("../../../heca/assets/shell-integration/fish_init.fish"),
+        )
+        .expect("write fish init");
+        fs::write(
+            &zsh_rc,
+            include_str!("../../../heca/assets/shell-integration/zsh/.zshrc"),
+        )
+        .expect("write zsh rc");
+
+        ShellIntegrationAssets {
+            bash_init,
+            fish_init,
+            zsh_zdotdir: zsh_dir,
+        }
     }
 }

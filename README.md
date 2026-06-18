@@ -250,6 +250,7 @@ theme = "mocha"
 window_width = 1280
 window_height = 800
 mouse = true
+shell_integration = true
 
 # Keybindings — prefix+ syntax for prefix bindings, direct for global
 [keys]
@@ -475,7 +476,10 @@ mouse = true                  # Enable mouse interactions
 focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
+shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 ```
+
+When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 
 ---
 

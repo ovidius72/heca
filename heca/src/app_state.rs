@@ -285,6 +285,8 @@ pub struct AppState {
     pub mouse_enabled: bool,
     /// Whether auto edge scroll is enabled.
     pub auto_scroll_edge: bool,
+    /// Whether newly spawned terminal panes should auto-inject shell integration.
+    pub shell_integration_enabled: bool,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

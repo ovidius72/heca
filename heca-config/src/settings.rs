@@ -50,6 +50,10 @@ fn default_always_center_single_column() -> bool {
     false
 }
 
+fn default_shell_integration() -> bool {
+    true
+}
+
 fn deserialize_terminal_font_size<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
 where
     D: Deserializer<'de>,
@@ -127,6 +131,9 @@ pub struct SettingsConfig {
     /// Center a single column even when it fits within the viewport.
     #[serde(default = "default_always_center_single_column")]
     pub always_center_single_column: bool,
+    /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
+    #[serde(default = "default_shell_integration")]
+    pub shell_integration: bool,
 }
 
 impl Default for SettingsConfig {
@@ -151,6 +158,7 @@ impl Default for SettingsConfig {
             auto_scroll_edge: default_auto_scroll_edge(),
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
+            shell_integration: default_shell_integration(),
         }
     }
 }
@@ -181,6 +189,7 @@ mod tests {
         assert!(s.auto_scroll_edge);
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
         assert!(!s.always_center_single_column);
+        assert!(s.shell_integration);
     }
 
     #[test]
