@@ -9,46 +9,49 @@
 
 ---
 
-## Status snapshot (updated 2026-06-17)
+## Status snapshot (updated 2026-06-18)
 
-> **This is the single planning file.** The separate `RESUME.md` handoff was folded in and removed —
-> PLAN.md now carries both the prioritized plan **and** the "where we are now" resume point. (The
-> architecture *rationale* docs at the bottom stay as references, not task lists.)
+> **This is the single planning file.** It carries both the prioritized plan **and** the "where we are
+> now" resume point. (The architecture *rationale* docs at the bottom stay as references, not task lists.)
 
-- **`origin/main` @ #122** has the full **WS-A** workstream (**PR #102**): `[appearance]` config +
-  transparency/vibrancy + render-through-`Compositor`; grid-ui **chrome shell**; **retained chrome
-  tree** (click-select + workspace collapse); **generic DnD framework** (Phase 1+2); plus F4.5 sidebar
-  DnD (#116/#117/#119/#120) and the terminal pane-shell work (#121/#122 → `app/terminal_render.rs`).
-- **In flight (open / pending PRs):**
-  - **PR #123** (`fix/f4.4-keyhint-dock-pick`) — F4.4 KeyHint move/swap/take pick overlay **restored** in
-    the grid-ui Dock (+ new `KeyHint::CenterRight` + transparent-stretch). **Open, not merged.**
-  - `feature/f4.5-grip-widen` — grip gutter 12→20px + swap-arrows (⇄) cue. **Committed locally, no PR yet.**
-- Build + full test suite green; warning-clean **bar** the transitive `block v0.1.6` note **and**
-  pre-existing dead-code warnings in `app/selection_model.rs` / `terminal_render.rs` (from #121/#122 — not
-  yet cleaned).
+- **`origin/main` @ #125.** Landed since the last snapshot:
+  - **#123** — F4.4 KeyHint move/swap/take **pick overlay restored** in the Dock (+ `KeyHint::CenterRight`).
+  - **#124** — planning docs **consolidated into this file** (stale handoff/review docs removed).
+  - **#125** — **terminal-blur** (other dev): outer border, frosted tint, floating knobs, stencil clip — blur rework still WIP.
+  - *(earlier: WS-A appearance/transparency #102; in-app blur primitive #105/#107; SharedChromeState foundation #107; F4.5 sidebar DnD #116–#120; terminal pane-shell #121/#122 → `app/terminal_render.rs`.)*
+- **In flight (local-only):** `feature/f4.5-grip-widen` — grip gutter 12→20px + swap-arrows (⇄) cue.
+  Committed, **not pushed/PR'd**.
+- Build + tests green; warning-clean **bar** the transitive `block v0.1.6` note **and** pre-existing
+  dead-code warnings in `app/selection_model.rs` / `terminal_render.rs`.
 
 ---
 
-## Priority sequence (this file is authoritative; updated 2026-06-17)
+## Priority sequence (this file is authoritative; updated 2026-06-18)
 
-**Done foundations** (don't re-plan): ~~consolidate docs~~ ✅ · in-app blur **primitive** ✅
-(`Blur`+`Backdrop`, PR #105/#107 — app-wiring still open, folded into P4) · SharedChromeState
-**foundation** ✅ (PR #107) · ~~F4.5 sidebar DnD~~ ✅ (PRs #116/#117/#119/#120).
+**Done foundations** (don't re-plan): ~~consolidate docs~~ ✅ (#124) · in-app blur **primitive** ✅
+(`Blur`+`Backdrop`, #105/#107) · SharedChromeState **foundation** ✅ (#107) · ~~F4.5 sidebar DnD~~ ✅
+(#116–#120) · ~~F4.4 pane pick overlay~~ ✅ (#123).
 
-**Near-term order:**
-1. **F4.5 leftovers** — ✅ grip-widen + swap-arrows (⇄) cue done (`feature/f4.5-grip-widen`, PR pending);
-   **remaining:** workspace drag-to-reorder, Onto-third semantics (see the F4.5 note below).
-2. **F4.4 KeyHint-in-Dock — ✅ pane pick overlay RESTORED** (PR #123). **Remaining:** column-level pick
-   keycaps (needs column-pick candidate infra = new keyboard logic) + the P1 widget-migration leftover.
-3. **P3 — Pane numbering** feature.
-4. **P4 — Appearance & sizing (rest)** — app-wide zoom, app/terminal font-size in/dec, finish in-app blur app-wiring.
-5. **P0 — SharedChromeState consumer migration** (+ the F4.4 widget migration it unblocks) — the deep,
-   foundational piece; deliberately sequenced last in the near-term run.
-6. **render.rs split** — partly done by #121/#122 (terminal pass → `app/terminal_render.rs`); reassess the remainder.
-7. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
+**Near-term (active):**
+1. **SharedChromeState consumer migration** (P0 detail below) — the deep, foundational piece: move the
+   scattered chrome UI state into the one store + reconcile with the rebuild-on-signature / damage model.
+2. **niri parity audits** (niri section below) — catalog every animation vs niri; test for real whether
+   adding/removing a column resizes the others; re-audit the still-unverified compat items.
+3. **render.rs split** — partly done by #121/#122; reassess the remainder.
+4. **Small leftovers, opportunistic** — F4.4 column-level pick keycaps (needs column-pick candidates) +
+   the F4.4 widget-migration; F4.5 Onto-third drop semantics.
 
-> The `P0–P4` labels on the sections below are **stable anchors, not priority rank** — follow this list
-> for order. (P0 SharedChromeState is foundational but deliberately sequenced last near-term.)
+**Deferred — future implementation** (parked on purpose 2026-06-18; revisit after the foundation work):
+- **Appearance & sizing** — app-wide zoom + separate app/terminal font-size controls + finish the in-app
+  blur app-wiring. *(terminal-blur partly landed via #125 — revisit blur scope against that first.)*
+- **Pane numbering** — `prefix + workspace# + pane#` jump-to-pane + numbers on the sidebar cards.
+- **Finish sidebar drag-and-drop** — workspace drag-to-reorder (panes + columns already drag).
+
+5. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
+
+> The `P0–P4` labels on the detailed sections below are **stable anchors, not priority rank** — follow
+> this list for order. The detailed write-ups for the three **deferred** items still live below
+> (marked DEFERRED) so they're ready when revisited.
 
 ---
 
@@ -115,9 +118,9 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 
 ### P2 — F4.5 ≡ DnD Phase 3 — sidebar DnD — ✅ DONE (#116/#117/#119/#120)
 > Panes + columns drag/move/swap, source-aware targeting, grab cursor, swap visual, RPC,
-> docs + showcase all shipped. Remaining polish (own follow-ups): grip-widen, workspace
-> drag-to-reorder, Onto-third semantics. (Grip-widen + swap cue shipped on `feature/f4.5-grip-widen`.)
-> Original plan kept below for reference.
+> docs + showcase all shipped. Grip-widen + swap cue shipped on `feature/f4.5-grip-widen`.
+> Remaining: **workspace drag-to-reorder — ⏸ DEFERRED (2026-06-18)**; Onto-third drop semantics (tiny,
+> still opportunistic). Original plan kept below for reference.
 - Framework ready (DnD Phase 1+2 merged): `drag::source_at`/`resolve_at` over the retained tree
   (kills `sidebar_hit_test` for DnD); paint `PaintCx::drag_ghost`/`drop_indicator`. Restore the
   drag-start block disabled in `45143b5`. Design: `dnd-framework-refactor-plan.md`.
@@ -140,13 +143,13 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
   drag light up together (a hover "grab me" cue is meaningless until drag works). The widget is
   already correct — this is app interaction wiring only.
 
-### P3 — Pane numbering feature (agreed, spec'd — memory `heca-pane-numbering-spec`)
+### P3 — Pane numbering feature — ⏸ DEFERRED (2026-06-18) (agreed, spec'd — memory `heca-pane-numbering-spec`)
 - `prefix+<ws 1-9>+<pane 1-9>` → focus that pane (deterministic cross-ws chord; ws-switch is
   `prefix+w`+digit; `prefix+q` peek stays). Per-workspace pane numbers on cards. Touches card
   display (`chrome.rs`), new `WmAction` (input.rs/actions.rs), default keybindings, handler.
   Follow AGENTS.md "Adding New Actions" 11-step checklist.
 
-### P4 — Appearance & sizing (user-facing; memory `appearance-blur-zoom-font`)
+### P4 — Appearance & sizing — ⏸ DEFERRED (2026-06-18) (user-facing; memory `appearance-blur-zoom-font`)
 > **Do NOT keep deferring these** — blur was postponed and got forgotten; that violates
 > never-defer / no-half-measures (memory `build-future-proof-no-half-measures`).
 - **In-app blur (F3)** — finish the separable-Gaussian in-app blur (currently wired but inert).
