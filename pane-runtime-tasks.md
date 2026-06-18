@@ -70,14 +70,14 @@ Verification: `cargo test -p heca-core -p heca` 204+40 green; `cargo clippy -p h
 Note: the 6 per-field setters carry a documented `#[allow(dead_code)]` — they are the Phase 2 process-monitor write API, exercised by tests today; not removable dead code.
 
 ## Phase 2 — Process detection (OS-native foreground + exit; event-first, NO polling timer)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §4 Phase 2 (see also §0.2, §0.6)
+**Status:** Completed by Agent · **Accepted** (merged) · **Assigned:** agent · **Depends-on:** Phase 1 · **Plan:** §4 Phase 2 (see also §0.2, §0.6)
 **One-liner:** exit+code captured from `try_wait` (event, reader EOF wake) + `pane.exited{code}`; foreground
 program + running/idle via `tcgetpgrp` vs `process_group_leader()` (macOS libproc / Linux /proc, basename);
 cwd OS-fallback (**Linux `/proc/<pid>/cwd` ✓; macOS OS-cwd deferred → Phase 3 OSC 7**, fragile FFI); **event-driven on output/EOF wakes + 250 ms debounce — NO periodic poll timer** (deferred);
 auto-close stays (only fires on shell death — §0.6); **remove `ProcessStatus::Exit`** (dead pane closes);
 `PaneBackend::runtime()` + per-wake monitor → `Pane.runtime` (Phase 1) → store. FakeBackend tests.
-**Agent Completion:** —
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Agent Completion:** PR #133 (commit `e8ac856`) — merged 2026-06-18. Code: `feat/phase2-process-detection`; design/deferral docs: PR #132.
+**Reviewer Decision:** Accepted by merge · **Reviewer Notes:** FakeBackend + TerminalBackend unit tests (idle/running, exit-captures-code, debounce, monitor); clippy 0 new warnings. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked in plan §4 + one-liner).
 
 ## Phase 3 — Shell integration (OSC 133 / OSC 7)
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
@@ -131,3 +131,4 @@ then 3→4 and 6 alongside.
 ## Activity log
 - 2026-06-18 — board created; plan locked (`pane-runtime-state-plan.md`); all phases `Open`.
 - 2026-06-18 — docs landed (PR #127); **Phase 0 dispatched** to an agent (foundation).
+- 2026-06-18 — **Phase 2 implemented + merged**: code PR #133 (`e8ac856`), design/deferral docs PR #132. Accepted by merge. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked).

@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: Phase 4 of 4 (The Platform)
 status: in_progress
-last_updated: "2026-06-18T12:00:00.000Z"
+last_updated: "2026-06-18T18:00:00.000Z"
 progress:
   total_phases: 4
   completed_phases: 3
@@ -17,7 +17,7 @@ progress:
 
 **Current Phase:** Phase 4 — The Platform
 **Status:** In progress
-**Last Action:** Pane Runtime State initiative — Phase 0 (chrome event bus + SharedChromeState migration) merged in PR #129; Phase 1 (`PaneRuntime` core model + reactive store mirror + event-emitting setters) merged in PR #130 + review fixes in PR #131; **Phase 2 (process detection) implemented 2026-06-18** (pending user acceptance) — `ProcessStatus::Exit` removed; `try_wait` captures exit code → `pane.exited{code}`; foreground via `tcgetpgrp` vs `process_group_leader()` (macOS `proc_pidpath` + Linux `/proc`, basename); `PaneBackend::runtime()` + per-wake monitor → `Pane.runtime`; event-first on output/EOF wakes + 250 ms debounce (no periodic timer). **macOS cwd OS-fallback deferred → Phase 3 OSC 7** (Linux `/proc/<pid>/cwd` works now). Verified via FakeBackend + TerminalBackend unit tests; clippy-clean (0 new warnings). Phase 2 design: pane lifetime = terminal/shell, status = `Running`/`Idle`/`Success`/`Error`, `[programs.<raw>]` catalog. Earlier: Phase 13 border/radius blocker fixed in PR #121; the `terminal_blur` blocker is superseded by the merged `compositor-blur-refactor-plan.md` z-layer model (PR #128) — a post-pane-runtime track.
+**Last Action:** Pane Runtime State initiative — Phase 0 (chrome event bus + SharedChromeState migration) merged in PR #129; Phase 1 (`PaneRuntime` core model + reactive store mirror + event-emitting setters) merged in PR #130 + review fixes in PR #131; **Phase 2 (process detection) implemented + merged 2026-06-18** (PR #133 code + PR #132 docs; accepted by merge) — `ProcessStatus::Exit` removed; `try_wait` captures exit code → `pane.exited{code}`; foreground via `tcgetpgrp` vs `process_group_leader()` (macOS `proc_pidpath` + Linux `/proc`, basename); `PaneBackend::runtime()` + per-wake monitor → `Pane.runtime`; event-first on output/EOF wakes + 250 ms debounce (no periodic timer). **macOS cwd OS-fallback deferred → Phase 3 OSC 7** (Linux `/proc/<pid>/cwd` works now). Verified via FakeBackend + TerminalBackend unit tests; clippy-clean (0 new warnings). Phase 2 design: pane lifetime = terminal/shell, status = `Running`/`Idle`/`Success`/`Error`, `[programs.<raw>]` catalog. Earlier: Phase 13 border/radius blocker fixed in PR #121; the `terminal_blur` blocker is superseded by the merged `compositor-blur-refactor-plan.md` z-layer model (PR #128) — a post-pane-runtime track.
 
 ## Product Phase Progress
 
