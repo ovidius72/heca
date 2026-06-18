@@ -182,6 +182,33 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 
 ---
 
+## niri parity — audit + improvements (from the 2026-06-17/18 compat re-check)
+
+> Context: `niri-compatibility-review.md` was re-verified against current heca. The keybinding
+> complaints are mostly fixed (registry rewrite). These three remain. **Lesson learned:** one claim
+> ("focus-up jumps workspaces") was tested and proved false — so verify behavior by *running it*, not
+> just by reading a code path.
+
+- **Catalog every animation (for a future animation overhaul).** Write down the full set of motions niri
+  animates and how (open, close, move, resize, workspace-switch, view-scroll, overview — niri gives each
+  its own spring/easing config and an off switch), then map each to what heca does today. Right now heca
+  appears to use one simple easing for everything, with no spring physics, no per-motion config, and no way
+  to turn animations off. Goal of this task = the catalog/gap-list; the actual improvement is a later effort.
+- **Confirm whether adding/removing a column actually resizes the other columns.** heca recomputes all
+  column widths on every layout change (`update_all_column_widths()` runs on every mutation in
+  `heca-core/src/layout/scrolling.rs`). niri never resizes existing columns when you open a new one. The
+  open question is whether heca's recompute *actually* changes existing widths at runtime or just re-derives
+  the same numbers. **Test it live** (resize a column, then add/remove another, then resize the window —
+  does the first column keep its size?). If it reflows, switch to storing each column's width and only
+  recomputing the changed one.
+- **Re-audit the compat items not yet checked deeply.** Several rows in the compat review are still marked
+  "unverified": prefix-mode timeout, whether modifiers are read from the event vs a cache, sending a literal
+  prefix key through to the terminal, the viewport/chrome coordinate math, the single-animation model, and
+  the column-width double-caching. Go through each against current code (and run it where behavior matters)
+  and update the review's status table.
+
+---
+
 ## Done — verified in code (don't re-plan these)
 - **Appearance/transparency**: `[appearance]` config (`heca-config/src/appearance.rs`); render via
   `Compositor`; window/surface transparency; macOS vibrancy. *(grid-ui-integration F1, F2a–c)*

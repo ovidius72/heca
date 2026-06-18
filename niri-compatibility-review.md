@@ -28,17 +28,18 @@
 | K8 | **✅ Addressed** — `action_priority` now uses explicit arms (no `_ => 4` catch-all) | `heca/src/input.rs:511` |
 | L1/L2 | **⚠️ Still present** — `update_all_column_widths()` is still called on every mutation | `heca-core/src/layout/scrolling.rs` (many call sites) |
 | L3 | **Unverified this pass** — re-audit viewport/chrome coordinate math | — |
-| L4 | **⚠️ Still present** — `focus_up()` falls through to `switch_workspace_up()` | `heca-core/src/layout/session.rs:304→310` |
+| L4 | **✅ Corrected 2026-06-18 — NOT a real divergence.** The focus-up *binding* (`handle_focus_up` → workspace-level `ws.focus_up()`) stays inside the workspace: move within the column, wrap to the previous column's last pane, or stop at the top. It does **not** switch workspaces. The session-level `Session::focus_up()` that falls through to `switch_workspace_up()` exists but is **not** the binding path. Confirmed by runtime test (focus-up at top of ws 2 did nothing). | `heca/src/handlers.rs:37`, `heca-core/src/layout/workspace.rs:193` |
 | L5 | **Unverified this pass** — likely still a single easing anim model; re-audit | — |
 | L6 | **Changed** — `ColumnDisplay::Tabbed` no longer found; re-audit which features remain dead | grep: no `Tabbed` in `heca-core`/render |
 | L7 | **Unverified this pass** — re-audit the `computed_width` / `column_widths` double-cache | — |
 | L8 | **✅ Obsolete** — `view_offset_to_restore` field removed | grep: gone from `heca-core` |
 
 **Net:** keep this doc as the **heca-vs-niri reference** (per PLAN.md). The keybinding bugs are largely
-resolved by the registry rewrite; the live design work is layout (L1/L2 no-reflow, L4 focus-vs-workspace
-separation) — both still diverge from niri principle 1 ("opening a window must not resize others") and
-niri's separation of pane-focus from workspace-switch. The "Unverified this pass" rows need a code re-audit
-before they're trusted either way.
+resolved by the registry rewrite. The one still-open layout question is the **column-width recompute on
+every mutation** — it *might* diverge from niri's "opening a window must not resize others," but whether it
+**actually reflows at runtime** is unconfirmed and needs a real test (the focus-up "teleport" above turned
+out to be a false alarm once tested, so the recompute claim deserves the same scrutiny). The "Unverified
+this pass" rows still need a code re-audit before they're trusted.
 
 ---
 
