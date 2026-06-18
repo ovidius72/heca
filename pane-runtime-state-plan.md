@@ -318,12 +318,12 @@ exposes `title`; find the OSC dispatch in the underlying lib), `heca-core/src/ba
 a shipped shell snippet (e.g. `assets/shell-integration/{bash,zsh,fish}`), the PTY env injection in `pty.rs`.
 
 **Tasks**
-- [ ] **OSC snooper** (§0.8): implement the passive pre-parse extractor in heca-core before `engine.advance_bytes()` — forward all bytes unchanged to wezterm-term; handle `BEL` + `ST` (+ C1 `ST`) terminators + fragmentation across reads. Parse **OSC 133** `A`/`B`/`C`/`D;<exit>` (prompt-start / command-start / pre-exec / command-end+code); map `D;0` ⇒ `Success`, `D;!=0` ⇒ `Error` + code.
-- [ ] Parse **OSC 7** `file://host/path` ⇒ `cwd` (same snooper; macOS preferred cwd source — closes the Phase 2 macOS cwd deferral).
-- [ ] On **command-start/-end** markers, **trigger a foreground re-sample** (makes Phase 2 event-driven when integration is on).
-- [ ] **Ship a shell hook** (§0.8): bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`, snippets under `assets/shell-integration/` that source the user real RC + emit OSC 133/7; `pty.rs` picks per shell. **Auto-enable** gated by `settings.shell_integration` (bool, default true); document the manual install path.
-- [ ] Emit `pane.status.changed` / `pane.cwd.changed` through the chokepoint.
-- [ ] Tests: feed synthetic OSC 133 D;0 / D;1 / OSC 7 byte streams → expected status/cwd.
+- [x] **OSC snooper** (§0.8): implement the passive pre-parse extractor in heca-core before `engine.advance_bytes()` — forward all bytes unchanged to wezterm-term; handle `BEL` + `ST` (+ C1 `ST`) terminators + fragmentation across reads. Parse **OSC 133** `A`/`B`/`C`/`D;<exit>` (prompt-start / command-start / pre-exec / command-end+code); map `D;0` ⇒ `Success`, `D;!=0` ⇒ `Error` + code.
+- [x] Parse **OSC 7** `file://host/path` ⇒ `cwd` (same snooper; macOS preferred cwd source — closes the Phase 2 macOS cwd deferral).
+- [x] On **command-start/-end** markers, **trigger a foreground re-sample** (makes Phase 2 event-driven when integration is on).
+- [x] **Ship a shell hook** (§0.8): bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`, snippets under `assets/shell-integration/` that source the user real RC + emit OSC 133/7; `pty.rs` picks per shell. **Auto-enable** gated by `settings.shell_integration` (bool, default true); document the manual install path.
+- [x] Emit `pane.status.changed` / `pane.cwd.changed` through the chokepoint.
+- [x] Tests: feed synthetic OSC 133 D;0 / D;1 / OSC 7 byte streams → expected status/cwd.
 
 **Acceptance:** with the hook active, running `false` in a shell pane shows `Error`; `true` shows `Success`;
 `cd /tmp` updates cwd; without the hook, status falls back to running/idle (no breakage; no `Exit` status — see §0.6).
