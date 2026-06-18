@@ -31,13 +31,50 @@
 
 // Foundation phase: selection/targeting/scroll aren't read yet (collapse + regions
 // are). `expect` self-cleans once all are consumed. Remove then.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use heca_core::layout::PaneId;
+use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate, SignalWith};
 use heca_grid_ui::widgets::RegionMode;
 
 use super::{ChromeEvent, ChromeEventBus, ChromeRegion};
+
+#[derive(Clone, Debug)]
+pub(crate) struct PaneRuntimeSignals {
+    pub(crate) program: Signal<Option<String>>,
+    pub(crate) status: Signal<ProcessStatus>,
+    pub(crate) cwd: Signal<Option<PathBuf>>,
+    pub(crate) exit_code: Signal<Option<i32>>,
+    pub(crate) git: Signal<Option<GitInfo>>,
+    pub(crate) kind: Signal<ContentKind>,
+}
+
+impl PaneRuntimeSignals {
+    fn new(runtime: &PaneRuntime) -> Self {
+        Self {
+            program: signal(runtime.program.clone()),
+            status: signal(runtime.status.clone()),
+            cwd: signal(runtime.cwd.clone()),
+            exit_code: signal(runtime.exit_code),
+            git: signal(runtime.git.clone()),
+            kind: signal(runtime.kind.clone()),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn snapshot(&self) -> PaneRuntime {
+        PaneRuntime {
+            program: self.program.get_untracked(),
+            status: self.status.get_untracked(),
+            cwd: self.cwd.get_untracked(),
+            exit_code: self.exit_code.get_untracked(),
+            git: self.git.get_untracked(),
+            kind: self.kind.get_untracked(),
+        }
+    }
+}
 
 /// A chrome region's display mode + size (vertical sidebars / horizontal bars).
 /// Container-agnostic shell state. Not `Copy` (aliasing signal handles).
@@ -79,6 +116,8 @@ pub struct WorkspacesContainerState {
     /// Targeting pick candidates (letter → pane) for move/swap/take overlays, driving
     /// the universal `KeyHint`s. **Empty = no pick active.** Read via `with_pick_candidates`.
     pub(crate) pick_candidates: Signal<Vec<(char, PaneId)>>,
+    /// Per-pane reactive mirror of canonical runtime metadata.
+    pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
     /// This container's **content** scroll offset (logical px) — scrolls when the
     /// container has too many items. (The shell's dock-list scroll is separate.)
     #[allow(dead_code)]
@@ -92,6 +131,7 @@ impl WorkspacesContainerState {
             collapsed_ws: signal(HashSet::new()),
             selection: ChromeSelection::new(),
             pick_candidates: signal(Vec::new()),
+            panes: signal(HashMap::new()),
             scroll: signal(0.0),
         }
     }
@@ -118,6 +158,10 @@ impl WorkspacesContainerState {
     /// Borrow the pick candidates without cloning the Vec.
     pub fn with_pick_candidates<R>(&self, f: impl FnOnce(&[(char, PaneId)]) -> R) -> R {
         self.pick_candidates.with(|c| f(c))
+    }
+    #[allow(dead_code)]
+    pub fn with_pane_runtime<R>(&self, pane: PaneId, f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R) -> R {
+        self.panes.with(|panes| f(panes.get(&pane)))
     }
 
     // ── Writes ──
@@ -160,6 +204,97 @@ impl WorkspacesContainerState {
         self.events.emit(ChromeEvent::PanePickCandidatesChanged {
             candidates: Vec::new(),
         });
+    }
+    pub fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) {
+        self.set_pane_program(pane, runtime.program.clone());
+        self.set_pane_status(pane, runtime.status.clone());
+        self.set_pane_cwd(pane, runtime.cwd.clone());
+        self.set_pane_exit_code(pane, runtime.exit_code);
+        self.set_pane_git(pane, runtime.git.clone());
+        self.set_pane_kind(pane, runtime.kind.clone());
+    }
+    pub fn set_pane_program(&self, pane: PaneId, program: Option<String>) {
+        let mut changed = false;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.program.get_untracked() != program {
+                entry.program.set(program.clone());
+                changed = true;
+            }
+        });
+        if changed {
+            self.events.emit(ChromeEvent::PaneProcessChanged { pane });
+        }
+    }
+    pub fn set_pane_status(&self, pane: PaneId, status: ProcessStatus) {
+        let mut changed = false;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.status.get_untracked() != status {
+                entry.status.set(status.clone());
+                changed = true;
+            }
+        });
+        if changed {
+            self.events.emit(ChromeEvent::PaneStatusChanged { pane, status });
+        }
+    }
+    pub fn set_pane_cwd(&self, pane: PaneId, cwd: Option<PathBuf>) {
+        let mut changed = false;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.cwd.get_untracked() != cwd {
+                entry.cwd.set(cwd.clone());
+                changed = true;
+            }
+        });
+        if changed {
+            self.events.emit(ChromeEvent::PaneCwdChanged { pane });
+        }
+    }
+    pub fn set_pane_exit_code(&self, pane: PaneId, exit_code: Option<i32>) {
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.exit_code.get_untracked() != exit_code {
+                entry.exit_code.set(exit_code);
+            }
+        });
+    }
+    pub fn set_pane_git(&self, pane: PaneId, git: Option<GitInfo>) {
+        let mut changed = false;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.git.get_untracked() != git {
+                entry.git.set(git.clone());
+                changed = true;
+            }
+        });
+        if changed {
+            self.events.emit(ChromeEvent::PaneGitChanged { pane });
+        }
+    }
+    pub fn set_pane_kind(&self, pane: PaneId, kind: ContentKind) {
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            if entry.kind.get_untracked() != kind {
+                entry.kind.set(kind);
+            }
+        });
+    }
+    pub fn retain_panes(&self, keep: &HashSet<PaneId>) {
+        self.panes.update(|panes| panes.retain(|pane, _| keep.contains(pane)));
     }
     /// Set a workspace's collapsed state explicitly.
     pub fn set_ws_collapsed(&self, ws_idx: usize, collapsed: bool) {
@@ -277,7 +412,9 @@ impl SharedChromeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
+    use std::path::PathBuf;
     use std::rc::Rc;
 
     fn state() -> SharedChromeState {
@@ -380,6 +517,87 @@ mod tests {
                 "chrome.region.mode.changed",
                 "pane.pick.changed",
                 "pane.pick.changed",
+            ],
+        );
+    }
+
+    #[test]
+    fn pane_runtime_round_trips_through_signals() {
+        let s = state();
+        let pane = PaneId(42);
+        let runtime = PaneRuntime {
+            program: Some("nvim".into()),
+            status: ProcessStatus::Running,
+            cwd: Some(PathBuf::from("/tmp/project")),
+            exit_code: Some(7),
+            git: Some(GitInfo {
+                branch: Some("main".into()),
+                ahead: 1,
+                behind: 2,
+                added: 3,
+                modified: 4,
+                deleted: 5,
+                dirty: true,
+            }),
+            kind: ContentKind::Terminal,
+        };
+
+        s.workspaces.set_pane_runtime(pane, &runtime);
+
+        let mirrored = s
+            .workspaces
+            .with_pane_runtime(pane, |runtime| runtime.expect("pane runtime").snapshot());
+        assert_eq!(mirrored, runtime);
+    }
+
+    #[test]
+    fn pane_runtime_events_emit_only_on_change() {
+        let s = state();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let seen_events = seen.clone();
+        let _sub = s.events().subscribe("*", move |event| {
+            seen_events.borrow_mut().push(event.name().to_string());
+        });
+        let pane = PaneId(9);
+
+        s.workspaces.set_pane_program(pane, Some("bash".into()));
+        s.workspaces.set_pane_program(pane, Some("bash".into()));
+        s.workspaces.set_pane_status(pane, ProcessStatus::Running);
+        s.workspaces.set_pane_status(pane, ProcessStatus::Running);
+        s.workspaces.set_pane_cwd(pane, Some(PathBuf::from("/repo")));
+        s.workspaces.set_pane_cwd(pane, Some(PathBuf::from("/repo")));
+        s.workspaces.set_pane_git(
+            pane,
+            Some(GitInfo {
+                branch: Some("feat".into()),
+                ahead: 0,
+                behind: 0,
+                added: 1,
+                modified: 0,
+                deleted: 0,
+                dirty: true,
+            }),
+        );
+        s.workspaces.set_pane_git(
+            pane,
+            Some(GitInfo {
+                branch: Some("feat".into()),
+                ahead: 0,
+                behind: 0,
+                added: 1,
+                modified: 0,
+                deleted: 0,
+                dirty: true,
+            }),
+        );
+
+        assert_eq!(
+            seen.borrow().as_slice(),
+            [
+                "pane.process.changed",
+                "pane.status.changed",
+                "pane.cwd.changed",
+                "pane.git.changed",
             ],
         );
     }

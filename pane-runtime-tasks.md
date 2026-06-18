@@ -43,10 +43,21 @@ Notes:
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 1 — Pane runtime state model
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 0 · **Plan:** §3 + §4 Phase 1
+**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 0 · **Plan:** §3 + §4 Phase 1
 **One-liner:** `ProcessStatus`/`GitInfo`/`ContentKind`/`PaneRuntime` in core + reactive per-pane mirror in
 the store with event-emitting setters.
-**Agent Completion:** —
+**Agent Completion:** Completed on current branch.
+Built:
+- canonical pane runtime types in `heca-core` and attached `PaneRuntime` to core `Pane`
+- per-pane reactive runtime mirror in `SharedChromeState.workspaces` with guarded setters for program/status/cwd/git/kind
+- runtime event coverage for `pane.process.changed`, `pane.status.changed`, `pane.cwd.changed`, and `pane.git.changed`
+- session→store runtime projection in `sync_chrome_state`, including stale-pane pruning when panes disappear
+Verification:
+- `cargo test -p heca-core --quiet`
+- `cargo test -p heca --quiet`
+- `cargo clippy -p heca --all-targets --quiet` (existing warnings only in `selection_model.rs` and `terminal_render.rs`)
+Notes:
+- I extracted the runtime projection into a dedicated helper so Phase 1 has a direct acceptance test for canonical session state mirroring into the reactive store, rather than only store-local setter tests.
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 2 — Process detection (OS-native foreground + exit; event-first)
