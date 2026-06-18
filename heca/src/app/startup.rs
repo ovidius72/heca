@@ -280,6 +280,7 @@ pub(crate) async fn init_state(
             &app_config.theme,
             terminal_cell_size,
             Some(&event_proxy),
+            app_config.config.settings.shell_integration,
         ),
     );
 
@@ -326,6 +327,7 @@ pub(crate) async fn init_state(
         last_visited_pane_per_ws: vec![None; ws_count],
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
+        shell_integration_enabled: app_config.config.settings.shell_integration,
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),

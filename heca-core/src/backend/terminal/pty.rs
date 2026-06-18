@@ -1,7 +1,9 @@
 use super::engine::SharedWriter;
+use super::ShellIntegrationAssets;
 use anyhow::Error as AnyError;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::Read;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
@@ -87,14 +89,16 @@ impl PtyHandle {
         cols: usize,
         rows: usize,
         wake_on_output: Option<WakeCallback>,
+        shell_integration: Option<ShellIntegrationAssets>,
     ) -> Result<Self, PtyError> {
-        Self::new_with_shell(cols, rows, wake_on_output, None)
+        Self::new_with_shell(cols, rows, wake_on_output, shell_integration, None)
     }
 
     pub(super) fn new_with_shell(
         cols: usize,
         rows: usize,
         wake_on_output: Option<WakeCallback>,
+        shell_integration: Option<ShellIntegrationAssets>,
         shell_override: Option<&str>,
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
@@ -104,7 +108,7 @@ impl PtyHandle {
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
         let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
-        let mut cmd = CommandBuilder::new(shell.clone());
+        let mut cmd = command_for_shell(&shell, shell_integration.as_ref());
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
 
@@ -201,6 +205,51 @@ impl PtyHandle {
     }
 }
 
+fn command_for_shell(
+    shell: &str,
+    shell_integration: Option<&ShellIntegrationAssets>,
+) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(shell);
+    let Some(assets) = shell_integration else {
+        return cmd;
+    };
+
+    match shell_kind(shell) {
+        Some(ShellKind::Bash) => {
+            cmd.arg("--init-file");
+            cmd.arg(&assets.bash_init);
+        }
+        Some(ShellKind::Zsh) => {
+            let old_zdotdir = std::env::var("ZDOTDIR").unwrap_or_default();
+            cmd.env("OLD_ZDOTDIR", old_zdotdir);
+            cmd.env("ZDOTDIR", &assets.zsh_zdotdir);
+        }
+        Some(ShellKind::Fish) => {
+            cmd.arg("-C");
+            cmd.arg(format!("source {}", assets.fish_init.display()));
+        }
+        None => {}
+    }
+
+    cmd
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShellKind {
+    Bash,
+    Zsh,
+    Fish,
+}
+
+fn shell_kind(shell: &str) -> Option<ShellKind> {
+    match Path::new(shell).file_name()?.to_str()? {
+        name if name.starts_with("bash") => Some(ShellKind::Bash),
+        name if name.starts_with("zsh") => Some(ShellKind::Zsh),
+        name if name.starts_with("fish") => Some(ShellKind::Fish),
+        _ => None,
+    }
+}
+
 fn pty_size(cols: usize, rows: usize) -> PtySize {
     PtySize {
         rows: rows.max(1) as u16,
@@ -230,7 +279,7 @@ fn resolve_shell(shell: Option<String>, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{PtyError, PtyOperation, resolve_shell};
+    use super::{PtyError, PtyOperation, ShellKind, resolve_shell, shell_kind};
     use std::error::Error;
     use std::io;
 
@@ -247,6 +296,15 @@ mod tests {
             resolve_shell(Some("/bin/zsh".to_string()), "/bin/sh"),
             "/bin/zsh"
         );
+    }
+
+    #[test]
+    fn shell_kind_detects_supported_shell_wrappers() {
+        assert_eq!(shell_kind("/bin/bash"), Some(ShellKind::Bash));
+        assert_eq!(shell_kind("/usr/local/bin/bash-5.2"), Some(ShellKind::Bash));
+        assert_eq!(shell_kind("/opt/homebrew/bin/zsh"), Some(ShellKind::Zsh));
+        assert_eq!(shell_kind("/usr/bin/fish"), Some(ShellKind::Fish));
+        assert_eq!(shell_kind("/bin/sh"), None);
     }
 
     #[test]

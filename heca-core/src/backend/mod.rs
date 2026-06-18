@@ -11,7 +11,7 @@ pub use fake::FakeBackend;
 pub use snapshot::{
     TerminalCursor, TerminalCursorShape, TerminalDamage, TerminalRowRange, TerminalSnapshot,
 };
-pub use terminal::{PtyError, TerminalBackend};
+pub use terminal::{PtyError, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 
 use crate::runtime::PaneRuntime;
 

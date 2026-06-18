@@ -4,7 +4,7 @@
 //! session layout state, focus bookkeeping, backend lifecycle, and the shared
 //! post-mutation hooks introduced in Phase 2.
 
-use crate::app::backend_factory::{create_terminal_backend, terminal_grid_for_workspace};
+use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
 use crate::app::focus::sync_focus;
 use crate::app_state::AppState;
 use crate::chrome;
@@ -296,13 +296,7 @@ pub(crate) fn move_column_to_workspace(
             .backends
             .insert_for_pane(
                 PaneId(next_id),
-                create_terminal_backend(
-                    cols,
-                    rows,
-                    &state.theme,
-                    state.terminal_cell_size,
-                    Some(&state.event_proxy),
-                ),
+                create_terminal_backend_for_state(state, cols, rows),
             );
     }
 

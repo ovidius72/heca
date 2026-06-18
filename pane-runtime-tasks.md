@@ -80,10 +80,26 @@ auto-close stays (only fires on shell death — §0.6); **remove `ProcessStatus:
 **Reviewer Decision:** Accepted by merge · **Reviewer Notes:** FakeBackend + TerminalBackend unit tests (idle/running, exit-captures-code, debounce, monitor); clippy 0 new warnings. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked in plan §4 + one-liner).
 
 ## Phase 3 — Shell integration (OSC 133 / OSC 7)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
+**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
 **One-liner:** passive OSC snooper in heca-core before `advance_bytes` (§0.8) — parse OSC 133 (success/error+code) + OSC 7 (cwd, macOS preferred); re-sample foreground on markers; **hybrid shell wrap** (bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`) auto-enabled by `settings.shell_integration` (bool, default true). **Implementation-shape decisions locked in §0.8** after an agent flagged them as pre-coding blockers.
-**Agent Completion:** —
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Agent Completion:** Completed on current branch.
+Built:
+- passive OSC snooper in `heca-core` before `engine.advance_bytes()` with fragmentation handling and `BEL`/`ST` terminators
+- OSC 133 routing for `PromptStart` / `CommandStart` / `PreExec` / `CommandFinished(code)` into pane runtime status/exit-code updates
+- OSC 7 cwd parsing with percent-decoding and runtime cwd updates
+- semantic-status preservation so `Success`/`Error` is not immediately clobbered by a shell-foreground idle refresh
+- shell-integration asset materialization under `~/.config/heca/runtime/shell-integration/` and shell-specific PTY wrapping for bash/zsh/fish
+- new `[settings].shell_integration` bool plumbed through config reload/startup and centralized terminal-backend spawn helpers
+- review cleanup: replaced the long shell-integration constructor with `TerminalBackendOptions`, preallocated the hot-path OSC event vec, added public API field docs, and broadened shell wrapper detection for suffixed shell names
+Verification:
+- `cargo test -p heca-config --quiet`
+- `cargo test -p heca-core --quiet`
+- `cargo test -p heca --quiet`
+- `cargo clippy -p heca-core --all-targets --quiet`
+- `cargo clippy -p heca --all-targets --quiet` (existing warnings only in `selection_model.rs` and `terminal_render.rs`)
+Notes:
+- Added a deterministic end-to-end bash PTY test that verifies `false` → `Error`, `true` → `Success`, and `cd /tmp` → OSC 7 cwd update without depending on a user shell rc file.
+**Reviewer Decision:** — · **Reviewer Notes:** Review follow-ups addressed on branch: constructor naming/API cleanup, config-threading reduction at spawn call sites, OSC vec preallocation, public-field docs, and broader shell-kind matching.
 
 ## Phase 4 — Git integration (git2 behind a trait)
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 3 (or Phase 2 cwd) · **Plan:** §4 Phase 4

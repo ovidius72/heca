@@ -32,6 +32,14 @@
 # prefix = "ctrl+a"
 
 # -----------------------------------------------------------------------------
+# Settings ([settings] in config.toml — not under [keys])
+# -----------------------------------------------------------------------------
+# shell_integration = true    # Auto-inject shell hooks that emit OSC 133/OSC 7
+#                             # for per-command status and cwd updates. Disable
+#                             # to spawn a bare shell; the generated snippets
+#                             # live under ~/.config/heca/runtime/shell-integration/.
+
+# -----------------------------------------------------------------------------
 # Appearance settings  ([appearance] in config.toml — not under [keys])
 # -----------------------------------------------------------------------------
 # A config override takes precedence; `None` inherits from the theme. Three

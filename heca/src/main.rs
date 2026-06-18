@@ -121,6 +121,8 @@ impl HecaApp {
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
+            state.shell_integration_enabled =
+                self.app_config.config.settings.shell_integration;
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
             // Pane gap and chrome geometry changes must reflow the real viewport
