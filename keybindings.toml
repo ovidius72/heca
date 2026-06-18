@@ -43,9 +43,26 @@
 #   transparency           = 0    # Window background opacity  (0 = opaque, 100 = see-through)
 #   blur                   = 0    # Window backdrop blur (portable GPU pass; 0 = none)
 #
-# Terminal-pane transparency + blur (each 0..=100, default 0; independent of the window ones):
+# Terminal-pane transparency + frost (independent of the window ones):
 #   terminal_transparency = 0    # Terminal surface opacity   (0 = opaque, 100 = see-through)
-#   terminal_blur          = 0    # Terminal in-app frost      (0 = none)
+#   terminal_blur          = 0    # Frosted-glass tint strength behind the terminal (0 = none,
+#                                #   100 = full frost). Perceptual sqrt curve so low values show
+#                                #   visible frost sooner (10 → ~32%, 50 → ~71%). heca can't blur
+#                                #   the desktop (macOS vibrancy composites it behind the window),
+#                                #   so terminal_blur drives a frosted TINT over the vibrancy
+#                                #   instead of a real blur of an empty scene.
+#   terminal_frost_color   = "#1e1e2e"  # Optional. Frosted tint color. Default: theme
+#                                #   background (the app theme bg). Set to a lifted surface
+#                                #   (e.g. "#313244") for a lighter frosted-glass look.
+#
+# Floating-pane transparency + frost + border (independent of the tiled ones;
+# floating panes default to OPAQUE + no frost so they stay readable):
+#   terminal_floating_transparency = 0    # Floating terminal surface opacity (0 = opaque, 100 = see-through).
+#                                          #   Default 0 (opaque) — floating panes are solid, readable windows.
+#   terminal_floating_blur          = 0    # Floating frosted-tint strength (0 = none, 100 = full frost, sqrt curve).
+#                                          #   Default 0 (no frost). Set > 0 to frost floating panes too.
+#   pane_floating_border_color     = "#89b4fa"  # Optional. Floating pane border color (all floating panes).
+#                                          #   Default: theme.float_accent. Set to distinguish floating panes.
 #
 # OS backdrop material (platform-dependent; default "none"):
 #   vibrancy = "under_window_background"
@@ -59,6 +76,7 @@
 #   pane_padding             = 4.0       # CAP [0, 20]. Default: 4.0 (snug — the rounded clip handles corners).
 #   pane_border_color        = "#313244" # Default: theme.border at 50% alpha (inactive/unfocused panes).
 #   pane_active_border_color = "#89b4fa" # Default: theme.accent (focused pane).
+#   pane_floating_border_color = "#89b4fa" # Optional. Default: theme.float_accent (all floating panes).
 #   pane_gap                 = 8.0       # Default: 8.0 (gap between panes).
 #   sidebar_gap              = 12.0      # Default: 12.0 (gap between sidebar and content area).
 

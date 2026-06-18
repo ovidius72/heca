@@ -104,11 +104,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var rgb = srgb_to_linear(in.fill.rgb);
     var a = in.fill.a * inside;
 
-    // Border: a band of width `border_width` just inside the edge.
+    // Border: a band of width `border_width` just OUTSIDE the edge (outer border).
+    // The pane content fills to the edge; the border frames it from outside, so it
+    // reads as attached to the pane's outer boundary instead of eating into the
+    // content. `edge` = coverage just inside the pane edge; `outer_cov` =
+    // coverage of a boundary shifted outward by `border_width`; the band is the
+    // ring between them (d ∈ [0, +border_width]).
     if (in.border_width > 0.0 && in.border.a > 0.0) {
-        let outer = clamp(0.5 - d / fw, 0.0, 1.0);
-        let inner = clamp(0.5 - (d + in.border_width) / fw, 0.0, 1.0);
-        let band = clamp(outer - inner, 0.0, 1.0);
+        let edge = clamp(0.5 - d / fw, 0.0, 1.0);
+        let outer_cov = clamp(0.5 - (d - in.border_width) / fw, 0.0, 1.0);
+        let band = clamp(outer_cov - edge, 0.0, 1.0);
         rgb = mix(rgb, srgb_to_linear(in.border.rgb), band);
         a = max(a, in.border.a * band);
     }

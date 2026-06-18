@@ -137,6 +137,11 @@ pub(crate) enum RouteDecision {
 /// directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActionPolicy {
+    /// True global app action — always allowed in EVERY focus domain, including
+    /// Floating. Reserved for actions with no tiled/floating layout impact
+    /// (e.g. `ReloadConfig`). Distinct from [`AlwaysAllowed`](Self::AlwaysAllowed),
+    /// which the router blocks when floating.
+    Global,
     /// Always allowed regardless of focus domain.
     AlwaysAllowed,
     /// Only meaningful in Tiled domain — blocked when Floating.
@@ -245,11 +250,15 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::RenameWorkspace
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
 
-        // ── Always-allowed: work regardless of domain ──
+        // ── Always-allowed: work regardless of domain (but blocked when Floating) ──
         WmAction::CommandPalette
         | WmAction::SpawnCommand { .. }
-        | WmAction::EnterMode { .. }
-        | WmAction::ReloadConfig => ActionPolicy::AlwaysAllowed,
+        | WmAction::EnterMode { .. } => ActionPolicy::AlwaysAllowed,
+
+        // ── Global: true app-level action, allowed even when Floating ──
+        // ReloadConfig reloads config from disk — no tiled/floating layout impact,
+        // so it must stay reachable while a floating pane is active (hot-reload).
+        WmAction::ReloadConfig => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
@@ -342,8 +351,14 @@ fn route_action(
     let policy = action_policy(action);
 
     match policy {
+        ActionPolicy::Global => {
+            // True global app actions (ReloadConfig) — allowed in every focus
+            // domain, including Floating. They have no tiled/floating layout
+            // impact, so blocking them when floating only breaks hot-reload.
+            RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+        }
         ActionPolicy::AlwaysAllowed => {
-            // AlwaysAllowed actions (CommandPalette, SpawnCommand, ReloadConfig, EnterMode)
+            // AlwaysAllowed actions (CommandPalette, SpawnCommand, EnterMode)
             // are blocked when floating from current sources (Keyboard, MouseContent, MouseLeftSidebar).
             // Future chrome sources (MouseTopMenu, MouseStatusBar) may allow these even while floating.
             if floating {
@@ -765,6 +780,7 @@ mod tests {
         assert_eq!(action_policy(&WmAction::Float), ActionPolicy::FocusedPaneLocal);
         assert_eq!(action_policy(&WmAction::ClosePane), ActionPolicy::FocusedPaneLocal);
         assert_eq!(action_policy(&WmAction::CommandPalette), ActionPolicy::AlwaysAllowed);
+        assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
         assert_eq!(action_policy(&WmAction::WorkspaceNext), ActionPolicy::WorkspaceLevel);
         assert_eq!(action_policy(&WmAction::FocusPane { pane_id: PaneId(0) }), ActionPolicy::SourceDependent);
     }
@@ -1050,8 +1066,10 @@ mod tests {
         }
     }
 
-    /// When floating, AlwaysAllowed actions (CommandPalette, ReloadConfig) are blocked
-    /// from current UI sources. This confirms the current design decision.
+    /// When floating, AlwaysAllowed actions (CommandPalette, SpawnCommand) are
+    /// blocked from current UI sources. ReloadConfig is NOT in this group — it
+    /// is `Global` (always allowed, even when floating) because it has no layout
+    /// impact; see `floating_allows_global_reload`.
     #[test]
     fn floating_blocks_always_allowed_from_keyboard() {
         let mut session = test_session();
@@ -1059,7 +1077,6 @@ mod tests {
 
         let actions = [
             WmAction::CommandPalette,
-            WmAction::ReloadConfig,
             WmAction::SpawnCommand { command: String::new() },
         ];
         for action in &actions {
@@ -1075,6 +1092,30 @@ mod tests {
                 decision,
             );
         }
+    }
+
+    /// ReloadConfig is a `Global` action — allowed in every focus domain,
+    /// including Floating (it reloads config from disk with no layout impact).
+    /// Regression test for the bug where hot-reload silently failed whenever a
+    /// floating pane was active (style only applied on full restart).
+    #[test]
+    fn floating_allows_global_reload() {
+        let mut session = test_session();
+        session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
+
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::Keyboard,
+            InteractionIntent::ActivateAction(WmAction::ReloadConfig),
+        );
+        assert!(
+            matches!(
+                decision,
+                RouteDecision::Allow(InteractionIntent::ActivateAction(_))
+            ),
+            "Floating domain should allow ReloadConfig from Keyboard (Global action), got {:?}",
+            decision,
+        );
     }
 
     /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane, selection actions) are still allowed.

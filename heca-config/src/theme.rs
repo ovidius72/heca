@@ -57,6 +57,12 @@ pub struct Theme {
     pub terminal_ansi: Option<[Color; 8]>,
     #[serde(default)]
     pub terminal_brights: Option<[Color; 8]>,
+    /// Frosted tint color stamped behind translucent terminals (the
+    /// `terminal_blur` frost). `None` → falls back to `background` (app theme
+    /// bg). Per-theme override for the frost; config `[appearance]`
+    /// `terminal_frost_color` wins over this.
+    #[serde(default)]
+    pub terminal_frost_color: Option<Color>,
     #[serde(default = "crate::defaults::default_terminal_italic_font_family")]
     pub terminal_italic_font_family: String,
     #[serde(default = "crate::defaults::default_terminal_font_size")]
@@ -125,6 +131,7 @@ impl Theme {
             terminal_selection_background: None,
             terminal_ansi: None,
             terminal_brights: None,
+            terminal_frost_color: None,
             terminal_italic_font_family: crate::defaults::default_terminal_italic_font_family(),
             terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,
@@ -165,6 +172,7 @@ impl Theme {
             terminal_selection_background: None,
             terminal_ansi: None,
             terminal_brights: None,
+            terminal_frost_color: None,
             terminal_italic_font_family: crate::defaults::default_terminal_italic_font_family(),
             terminal_font_size: crate::defaults::default_terminal_font_size(),
             border_radius: 6.0,

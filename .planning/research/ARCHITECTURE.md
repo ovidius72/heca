@@ -122,6 +122,65 @@ pub enum BackendRenderData {
 - Click pane → focus it
 - Chrome clicks → tab switch, sidebar toggle
 
+#### Interaction Policy Layer (`heca/src/app/interaction.rs`)
+
+Every user-initiated WM action flows through a central policy chokepoint before it reaches the `ActionRegistry`:
+
+```
+User input → InteractionIntent → route_interaction() → RouteDecision
+                                                        ├─ Allow(intent) → registry.execute()
+                                                        └─ Block          → no-op (debug log under cfg(debug_assertions))
+```
+
+- **Keyboard:** `KeyCombo → WmAction → dispatch_action(state, Keyboard, &action)`
+- **Mouse/sidebar:** `Click/Drag → InteractionIntent::FocusPane{..} → dispatch_action(state, MouseContent, &WmAction)`
+- **Handler-to-handler** calls bypass the router and use `registry.execute()` directly (they're already inside an allowed interaction).
+
+**`InteractionSource`** (where the interaction came from): `Keyboard`, `MouseContent`, `MouseLeftSidebar` (future: `MouseRightSidebar`, `MouseTopMenu`, `MouseStatusBar`, `Rpc`).
+
+**`InteractionIntent`** (what the interaction is trying to do):
+- `ActivateAction(WmAction)` — keyboard shortcut resolved to an action.
+- `FocusPane { pane_id }` — focus a specific pane (sidebar click, content click, RPC).
+- `FocusWorkspace { ws_idx }` — focus a workspace (sidebar click).
+- `EnterSidebarNav` — enter sidebar navigation mode.
+- `StartSidebarDrag { pane_id }` — mouse-layer drag start (no registry dispatch; policy-routed only).
+
+**`RouteDecision`:** `Allow(intent)` (carries the intent forward for future retargeting) | `Block`.
+
+**`FocusDomain`** (`heca-core/src/layout/workspace.rs`): per-workspace `Tiled` (default) | `Floating`.
+
+**`ActionPolicy` enum** — classifies each `WmAction` variant; the router decides Allow/Block from it:
+
+| Policy | Tiled | Floating | Meaning | Examples |
+|--------|-------|----------|---------|----------|
+| `Global` | Allow | Allow | True app-level, no layout impact; must stay reachable while floating | `ReloadConfig` |
+| `AlwaysAllowed` | Allow | Block (current sources) | App-level but layout-affecting; blocked when floating from keyboard/mouse (future chrome sources may allow) | `CommandPalette`, `SpawnCommand`, `EnterMode` |
+| `TiledOnly` | Allow | Block | Only meaningful in the tiled scrolling layout | `Focus*`, `Split*`, `ZoomColumn`, `Resize*`, `Swap*`, `Move*`, `Sidebar*`, `PaneSelect/Swap/Take`, `FloatAt`, `RenameColumn`, `DeleteColumn`, collapse/expand workspace+column |
+| `FocusedPaneLocal` | Allow | Allow | Operates on the focused pane in either domain | `Float`, `ClosePane`, `ClosePaneById`, `RenamePane`, `RenameTarget`, `EnterSelectionMode`, `Selection*`, `ClearSelection`, `CopySelection`, `PasteClipboard`, `BeginSelection`, `ToggleSelectionEndpoint` |
+| `WorkspaceLevel` | Allow | Block | Affects workspace structure | `WorkspaceNext`, `WorkspacePrev`, `FocusWorkspace`, `CreateWorkspace`, `RenameWorkspace`, `DeleteWorkspace` |
+| `SourceDependent` | Allow | depends | Policy depends on source | `FocusPane` (allowed when floating only if it targets the active floating pane; else blocked) |
+
+**`route_action()` logic** (per policy):
+- `Global` → Allow always.
+- `AlwaysAllowed` → Block if floating, else Allow.
+- `TiledOnly` → Block if floating, else Allow.
+- `FocusedPaneLocal` → Allow always.
+- `WorkspaceLevel` → Block if floating, else Allow.
+- `SourceDependent` (`FocusPane`) → if floating: Allow only if `pane_id` == active floating pane; else Block. If tiled: Allow. (Other source-dependent actions: if floating, Block from `Keyboard`/`MouseContent`/`MouseLeftSidebar`; else Allow.)
+
+**Intent-level routing** (`route_interaction_for_session`): `ActivateAction` delegates to `route_action`; `FocusPane`/`FocusWorkspace`/`EnterSidebarNav`/`StartSidebarDrag` → Block if floating, else Allow.
+
+**Floating-domain summary:** when `FocusDomain::Floating` is active, only `FocusedPaneLocal` + `Global` actions pass from keyboard/mouse sources. The only escape from floating is `prefix+f` (Float toggle) or `ClosePane`.
+
+**`Global` vs `AlwaysAllowed`:** the name `AlwaysAllowed` is misleading — the router *blocks* it when floating. `Global` is the only truly always-allowed policy. Use `Global` for app-level actions with **zero layout impact** that must stay reachable while floating.
+
+**Hot-reload bug (fixed 2026-06-18):** `ReloadConfig` was classified `AlwaysAllowed`, so `prefix+Shift+r` was silently blocked whenever a floating pane was active — config/style only applied on full restart. Fix: `ReloadConfig` is now `Global` (always allowed, even when floating). Regression test: `floating_allows_global_reload`.
+
+**Invariants:**
+- Every `WmAction` variant MUST be classified in `action_policy()` (exhaustive match, no wildcard) — enforced by the `action_policy_covers_all_variants` test.
+- `ActionPolicy` (interaction.rs — Allow/Block per focus domain) is **unrelated** to `action_priority()` (input.rs — keybinding resolution priority). Do not conflate.
+- Blocked actions are silently discarded (debug `eprintln!` under `cfg(debug_assertions)`).
+
 ### 6. Session Persistence
 
 **What is saved:**

@@ -134,8 +134,32 @@ impl Workspace {
 
     /// Update working area (called on resize).
     pub fn update_working_area(&mut self, working_area: Rectangle) {
+        // Capture the old working area (as plain f64s, to avoid borrowing
+        // `self.scrolling.working_area` across the mutable call below).
+        let (old_x, old_y, old_w, old_h) = (
+            self.scrolling.working_area.loc.x,
+            self.scrolling.working_area.loc.y,
+            self.scrolling.working_area.size.w,
+            self.scrolling.working_area.size.h,
+        );
         self.scrolling.update_working_area(working_area);
-        // TODO: update floating pane bounds
+        // Scale floating panes proportionally so they keep their relative position
+        // + coverage when the working area changes (window resize, chrome toggle).
+        // Without this, a float spawned at 95% keeps its absolute pixel size while
+        // the window grows/shrinks around it — drifting off-screen or looking
+        // stranded. Position is stored relative to the working-area origin (see
+        // `handle_float` + the render path), so a pure scale by the size ratio is
+        // correct (plus an origin shift in case `loc` ever moves).
+        let sx = working_area.size.w / old_w.max(1.0);
+        let sy = working_area.size.h / old_h.max(1.0);
+        if (sx - 1.0).abs() > 1e-6 || (sy - 1.0).abs() > 1e-6 {
+            for float in &mut self.floating_panes {
+                float.position.x = working_area.loc.x + (float.position.x - old_x) * sx;
+                float.position.y = working_area.loc.y + (float.position.y - old_y) * sy;
+                float.size.w *= sx;
+                float.size.h *= sy;
+            }
+        }
     }
 
     /// Advance all animations in this workspace.
@@ -440,5 +464,48 @@ mod tests {
         assert!(!ws.has_panes(), "workspace should be empty after removing all panes");
         assert!(ws.scrolling.is_empty(), "scrolling should be empty");
         assert!(ws.floating_panes.is_empty(), "floating panes should be empty");
+    }
+
+    // ── Floating pane resize-follows-window ──
+
+    #[test]
+    fn update_working_area_scales_floating_pane_proportionally() {
+        // 800x600 working area, float at 95% centered (matches `handle_float`).
+        let mut ws = workspace_with_floating_pane(42);
+        // Reposition the float to a 95%-coverage centered rect, like handle_float.
+        let wa = ws.scrolling.working_area;
+        let fw = wa.size.w * 0.95;
+        let fh = wa.size.h * 0.95;
+        let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
+        let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
+        ws.floating_panes[0].position = Point::new(fx, fy);
+        ws.floating_panes[0].size = Size::new(fw, fh);
+
+        // Grow the working area to 1600x1200 (2x each axis).
+        let new_wa = Rectangle::new(Point::new(0.0, 0.0), Size::new(1600.0, 1200.0));
+        ws.update_working_area(new_wa);
+
+        let f = &ws.floating_panes[0];
+        // Size doubles (coverage preserved at 95%).
+        assert!((f.size.w - fw * 2.0).abs() < 0.01, "width should scale 2x: got {}", f.size.w);
+        assert!((f.size.h - fh * 2.0).abs() < 0.01, "height should scale 2x: got {}", f.size.h);
+        // Position stays centered (relative position preserved).
+        let new_w = new_wa.size.w;
+        let new_h = new_wa.size.h;
+        let expected_x = new_wa.loc.x + (new_w - f.size.w) / 2.0;
+        let expected_y = new_wa.loc.y + (new_h - f.size.h) / 2.0;
+        assert!((f.position.x - expected_x).abs() < 0.01, "x should stay centered: got {}", f.position.x);
+        assert!((f.position.y - expected_y).abs() < 0.01, "y should stay centered: got {}", f.position.y);
+    }
+
+    #[test]
+    fn update_working_area_noop_when_size_unchanged() {
+        let mut ws = workspace_with_floating_pane(42);
+        let before = ws.floating_panes[0].position;
+        let before_size = ws.floating_panes[0].size;
+        // Same size → no rescale (guards against drift from repeated no-op updates).
+        ws.update_working_area(ws.scrolling.working_area);
+        assert_eq!(ws.floating_panes[0].position, before, "position must not drift on no-op");
+        assert_eq!(ws.floating_panes[0].size, before_size, "size must not drift on no-op");
     }
 }

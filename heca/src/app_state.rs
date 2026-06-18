@@ -322,6 +322,18 @@ impl AppState {
             1.0
         }
     }
+
+    /// Floating terminal-pane surface opacity, mirroring
+    /// [`terminal_surface_opacity`](Self::terminal_surface_opacity) but driven by
+    /// `terminal_floating_transparency`. Default `0` -> `1.0` (opaque, readable)
+    /// so floating panes stay solid while tiled panes are frosted.
+    pub fn terminal_floating_surface_opacity(&self) -> f32 {
+        if self.appearance.terminal_floating_transparency > 0 {
+            self.appearance.terminal_floating_opacity()
+        } else {
+            1.0
+        }
+    }
 }
 
 #[cfg(test)]

@@ -549,6 +549,28 @@ registry.register(&WmAction::MyCustomAction, handle_my_custom_action);
 bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
 ```
 
+### Interaction Policy
+
+Not every action is allowed in every context. heca tracks a per-workspace **focus domain** — `Tiled` (the scrolling column layout) or `Floating` (a detached floating pane is active) — and an interaction policy layer decides whether each action is allowed before it runs.
+
+**When a floating pane is active**, most actions are blocked so the floating pane stays put and the tiled layout isn't disturbed. These still work while floating:
+
+- **Pane-local actions** — `float` (toggle back to tiled), `close`, `rename`, and text selection.
+- **Global app actions** — `reload_config` (hot-reload always works, even with a floating pane open).
+
+Blocked while floating: focus/split/resize/swap/move, sidebar navigation, workspace switching, command palette, spawn, and pane select/swap overlays. The only ways to leave the floating domain are `prefix+f` (toggle float) or closing the floating pane.
+
+**The action flow:**
+
+```
+Keyboard → KeyCombo → WmAction → dispatch_action() ──[policy]──► registry.execute() → handler
+                                          └─ blocked → no-op
+```
+
+This policy layer is why `prefix+Shift+r` (reload config) hot-applies appearance/keymap/theme changes without a restart — `reload_config` is a **global** action that stays reachable even when a floating pane is active. (This was a real bug: reload used to be silently blocked while floating, so style only applied on a full restart.)
+
+For the full policy table (all six policy categories) and how to classify a new action, see [`AGENTS.md`](./AGENTS.md) → "Interaction Policy".
+
 ---
 
 ## Keybindings

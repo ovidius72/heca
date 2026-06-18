@@ -334,7 +334,7 @@ impl GridRenderer {
         // the (offset) drop shadow's blur — so neither falloff is clipped.
         let shadow_reach = r.shadow_radius.max(0.0)
             + r.shadow_offset[0].abs().max(r.shadow_offset[1].abs());
-        let margin = r.glow_radius.max(0.0).max(shadow_reach) + 2.0;
+        let margin = r.glow_radius.max(0.0).max(shadow_reach).max(r.border_width) + 2.0;
         let (x0, y0) = (r.x - margin, r.y - margin);
         let (x1, y1) = (r.x + r.w + margin, r.y + r.h + margin);
         let center = [r.x + r.w * 0.5, r.y + r.h * 0.5];
