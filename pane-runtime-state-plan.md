@@ -117,8 +117,49 @@ color       = "#fafafa"        # OPTIONAL pane/card tint
 - **Resolver:** `ProgramsConfig::resolve(raw) -> ProgramView { raw, name, icon, color }` — used by Phase 7
   display; falls back gracefully (raw name, no icon, no colour) when no entry exists.
 
----
+### 0.8 Phase 3 implementation shape (settled 2026-06-18, prompted by an agent pre-coding review)
+**Note:** the high-level Phase 3 design above was locked earlier, but three implementation-shape decisions
+(shell-hook mechanism, config-switch name, OSC parsing ownership) were left open. An agent flagged them as
+blockers before coding — correctly; the lead should have locked them up-front. They are now settled here so
+no agent has to guess.
 
+- **Shell hook = hybrid, shell-specific invocation wrapping** (NOT a pure env-var hook). There is no uniform
+  env-var mechanism across bash/zsh/fish that sources a file for *interactive* shells. Auto-enable =
+  shell-specific wrapping that sources the user's real RC + a heca snippet, shipped under
+  `assets/shell-integration/`:
+  - **bash** → spawn with `--init-file <heca-snippet>`; snippet sources `~/.bashrc` first, then installs
+    `PROMPT_COMMAND` + `DEBUG`/`trap` hooks emitting OSC 133 A/B/C/D + OSC 7.
+  - **zsh** → set `ZDOTDIR=<heca-dir>`; ship a heca `.zshrc` there that sources the user's real
+    `${OLD_ZDOTDIR:-$HOME}/.zshrc`, then installs `precmd`/`preexec` hooks (preserve real ZDOTDIR).
+  - **fish** → spawn with `fish -C "source <heca-snippet>"` (no `--init-file`); snippet uses
+    `fish_prompt`/`fish_preexec` events.
+  - `pty.rs` picks the right flag/env per detected shell. Document the manual-install path for users who
+    can't use auto-enable (custom shells / restricted envs).
+- **Config switch = a single flat bool in `[settings]`** (matches `mouse`/`auto_scroll_edge`/
+  `always_center_single_column`):
+  ```toml
+  [settings]
+  shell_integration = true   # default true; false ⇒ spawn bare shell (no injection); user can still source manually
+  ```
+  Start with the single bool. If per-shell knobs or a `"manual"` mode are needed later, grow it into a
+  `[shell_integration]` table then — not now. Document in `keybindings.toml` + README.
+- **OSC parsing = a passive pre-parse snooper in heca-core** before `engine.advance_bytes()`.
+  wezterm-term at pinned rev `891bed31` exposes `AlertHandler`/`NotificationHandler` (bells) + `get_title()`
+  (OSC 0/2) but **no general OSC-dispatch callback**, so intercept in heca. Contract:
+  - **Passive observer**: scan the byte stream, extract OSC 133/7, then forward **all bytes unchanged** to
+    wezterm-term. Never strip/consume — wezterm-term stays the canonical renderer/parser.
+  - **Minimal correct VT state machine** for OSC: `ESC ]` (0x1B 0x5D) → collect params until terminator
+    `BEL` (0x07) **or** `ST` = `ESC \` (0x1B 0x5C); handle C1 `ST` (0x9C) if present. Other OSC passes
+    unobserved.
+  - **Handle fragmentation**: keep a small residual buffer for an in-progress OSC across `advance_bytes`
+    calls (OSC can span PTY reads).
+  - **Route**: OSC 133 `D;0` → `Success`, `D;!=0` → `Error` + code (§0.3); OSC 7 `file://host/path` →
+    `cwd`; OSC 133 `A`/`B`/`C` → trigger the Phase 2 foreground re-sample. Emit through the Phase-0
+    chokepoint (`pane.status.changed` / `pane.cwd.changed`).
+  - Rationale: no fork of wezterm's parser, one small unit-testable module (synthetic byte streams —
+    already in the Phase 3 test plan), same approach other embedders use. Risk contained to one new module.
+
+---
 ## 1. Goal & scope
 
 **In scope (this plan):** reactive chrome store completion + typed event bus; per-pane runtime state
@@ -277,10 +318,10 @@ exposes `title`; find the OSC dispatch in the underlying lib), `heca-core/src/ba
 a shipped shell snippet (e.g. `assets/shell-integration/{bash,zsh,fish}`), the PTY env injection in `pty.rs`.
 
 **Tasks**
-- [ ] Parse **OSC 133** `A`/`B`/`C`/`D;<exit>` (prompt-start / command-start / pre-exec / command-end+code) in the engine; map `D;0` ⇒ `Success`, `D;!=0` ⇒ `Error` + code.
-- [ ] Parse **OSC 7** `file://host/path` ⇒ `cwd`.
+- [ ] **OSC snooper** (§0.8): implement the passive pre-parse extractor in heca-core before `engine.advance_bytes()` — forward all bytes unchanged to wezterm-term; handle `BEL` + `ST` (+ C1 `ST`) terminators + fragmentation across reads. Parse **OSC 133** `A`/`B`/`C`/`D;<exit>` (prompt-start / command-start / pre-exec / command-end+code); map `D;0` ⇒ `Success`, `D;!=0` ⇒ `Error` + code.
+- [ ] Parse **OSC 7** `file://host/path` ⇒ `cwd` (same snooper; macOS preferred cwd source — closes the Phase 2 macOS cwd deferral).
 - [ ] On **command-start/-end** markers, **trigger a foreground re-sample** (makes Phase 2 event-driven when integration is on).
-- [ ] **Ship a shell hook** for bash/zsh/fish that emits OSC 133/7; **auto-enable** it via PTY env (e.g. source a snippet / set the integration env var), with a config switch to disable. Document the manual install path.
+- [ ] **Ship a shell hook** (§0.8): bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`, snippets under `assets/shell-integration/` that source the user real RC + emit OSC 133/7; `pty.rs` picks per shell. **Auto-enable** gated by `settings.shell_integration` (bool, default true); document the manual install path.
 - [ ] Emit `pane.status.changed` / `pane.cwd.changed` through the chokepoint.
 - [ ] Tests: feed synthetic OSC 133 D;0 / D;1 / OSC 7 byte streams → expected status/cwd.
 
