@@ -80,6 +80,7 @@ pub(crate) enum InteractionSource {
 /// - `FocusPane` → `WmAction::FocusPane`
 /// - `FocusWorkspace` → `WmAction::FocusWorkspace`
 /// - `EnterSidebarNav` → `WmAction::SidebarFocus`
+/// - `ToggleWorkspaceCollapsed` → `handlers::apply_ws_collapse`
 /// - `StartSidebarDrag` → mouse-layer drag (no registry dispatch)
 #[derive(Debug, Clone)]
 pub(crate) enum InteractionIntent {
@@ -100,6 +101,10 @@ pub(crate) enum InteractionIntent {
     /// Dispatched to `WmAction::SidebarFocus` in `dispatch_action`.
     #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     EnterSidebarNav,
+    /// Toggle a specific workspace header's collapsed state from the sidebar.
+    ToggleWorkspaceCollapsed {
+        ws_idx: usize,
+    },
     /// Start dragging a sidebar item (no WmAction equivalent).
     ///
     /// Policy-routed only — the drag itself is initiated in the mouse layer.
@@ -330,6 +335,13 @@ pub(crate) fn route_interaction_for_session(
                 RouteDecision::Allow(intent)
             }
         }
+        InteractionIntent::ToggleWorkspaceCollapsed { .. } => {
+            if is_floating_domain(session) {
+                RouteDecision::Block
+            } else {
+                RouteDecision::Allow(intent)
+            }
+        }
         InteractionIntent::StartSidebarDrag { .. } => {
             // Sidebar drag: blocked when floating.
             if is_floating_domain(session) {
@@ -508,13 +520,12 @@ pub(crate) fn pane_is_floating(session: &heca_core::layout::Session, pane_id: Pa
 /// Handler-to-handler calls should use `registry.execute()` directly —
 /// they bypass the router because they're inside an already-allowed
 /// interaction.
-pub(crate) fn dispatch_action(
+pub(crate) fn dispatch_intent(
     state: &mut AppState,
     registry: &ActionRegistry,
     source: InteractionSource,
-    action: &WmAction,
+    intent: InteractionIntent,
 ) {
-    let intent = InteractionIntent::ActivateAction(action.clone());
     let decision = route_interaction(state, source, intent);
 
     match decision {
@@ -530,10 +541,10 @@ pub(crate) fn dispatch_action(
         RouteDecision::Allow(InteractionIntent::EnterSidebarNav) => {
             registry.execute(&WmAction::SidebarFocus, state);
         }
+        RouteDecision::Allow(InteractionIntent::ToggleWorkspaceCollapsed { ws_idx }) => {
+            crate::handlers::apply_ws_collapse(state, ws_idx, None);
+        }
         RouteDecision::Allow(InteractionIntent::StartSidebarDrag { .. }) => {
-            // Sidebar drag start is mouse-only state, not a WM action.
-            // The drag is initiated directly in mouse.rs; this intent
-            // exists for policy routing only and doesn't need dispatch.
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] interaction: StartSidebarDrag intent allowed but not dispatched (drag initiated in mouse layer)"
@@ -541,9 +552,23 @@ pub(crate) fn dispatch_action(
         }
         RouteDecision::Block => {
             #[cfg(debug_assertions)]
-            eprintln!("[heca] interaction: blocked action {:?}", action);
+            eprintln!("[heca] interaction: blocked intent from {:?}", source);
         }
     }
+}
+
+pub(crate) fn dispatch_action(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+    action: &WmAction,
+) {
+    dispatch_intent(
+        state,
+        registry,
+        source,
+        InteractionIntent::ActivateAction(action.clone()),
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

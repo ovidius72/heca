@@ -7,6 +7,7 @@ use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::{AppState, InputMode};
 use heca_core::backend::BackendAlert;
+use heca_grid_ui::Component;
 use crate::mouse;
 use std::time::Instant;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
@@ -63,6 +64,11 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     }
 
     state.session.advance_animations();
+    let chrome_animating = if let Some(tree) = state.chrome_tree.as_mut() {
+        tree.root.tick(crate::chrome::FRAME_INTERVAL.as_secs_f32())
+    } else {
+        false
+    };
 
     let backend_poll = poll_backends(state);
     if backend_poll.bell_any && !state.window_focused {
@@ -75,12 +81,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state.needs_redraw
             || backend_poll.has_data
             || backend_poll.closed_any
-            || state.session.are_animations_ongoing();
+            || state.session.are_animations_ongoing()
+            || chrome_animating;
     if needs_frame {
         state.window.request_redraw();
     }
 
-    if state.session.are_animations_ongoing() {
+    if state.session.are_animations_ongoing() || chrome_animating {
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));

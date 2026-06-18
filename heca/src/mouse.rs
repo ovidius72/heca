@@ -95,11 +95,9 @@ pub fn on_mouse_input(
                 return None;
             }
 
-            // Resolve the drag source FIRST — `surface_click_action` dispatches into
-            // (and discards) the retained chrome tree, so it must run after this.
+            // Resolve the drag source FIRST. For draggable items we defer any click
+            // effect until release if the drag threshold is not crossed.
             let drag_source = crate::chrome::sidebar_drag_source(state, pos);
-            // Sidebar click.
-            let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
             // Sidebar pane press → start drag-detection, resolving the source pane
             // from the RETAINED chrome tree's real bounds (F4.5), not the legacy
@@ -114,9 +112,7 @@ pub fn on_mouse_input(
                     crate::chrome::ChromeDragItem::Pane(pane_id) => {
                         let origin_ws = match crate::find_pane_location(&state.session, pane_id) {
                             Some((ws_idx, _, _)) => ws_idx,
-                            None => {
-                                return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar))
-                            }
+                            None => return None,
                         };
                         (
                             AppDragPayload::Pane { pane_id, origin_ws, swap },
@@ -127,11 +123,15 @@ pub fn on_mouse_input(
                     crate::chrome::ChromeDragItem::Column { ws, col } => {
                         (AppDragPayload::Column { ws, col, swap }, None)
                     }
-                    crate::chrome::ChromeDragItem::Workspace { .. } => {
-                        return sidebar_action.map(|a| (a, InteractionSource::MouseLeftSidebar))
-                    }
+                    crate::chrome::ChromeDragItem::Workspace { .. } => return None,
                 };
-                state.mouse.pending_click_action = sidebar_action.clone();
+                state.mouse.pending_click_action = match item {
+                    crate::chrome::ChromeDragItem::Pane(pane_id) => {
+                        Some(WmAction::FocusPane { pane_id })
+                    }
+                    crate::chrome::ChromeDragItem::Column { .. } => None,
+                    crate::chrome::ChromeDragItem::Workspace { .. } => None,
+                };
                 if let Some(left) = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar) {
                     left.phase = DragPhase::Starting {
                         payload,
@@ -143,6 +143,9 @@ pub fn on_mouse_input(
                 state.mouse.drag_ctx.set_active(DragSurfaceId::LeftSidebar);
                 return None;
             }
+
+            // Sidebar click.
+            let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
             // Sidebar button clicks / non-pane item clicks dispatch immediately.
             if let Some(action) = sidebar_action {

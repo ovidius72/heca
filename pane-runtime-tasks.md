@@ -25,10 +25,21 @@
 ---
 
 ## Phase 0 — Chrome event bus + finish SharedChromeState migration  ⟶ FOUNDATION
-**Status:** In Progress · **Assigned:** agent (dispatched 2026-06-18) · **Depends-on:** none · **Plan:** §4 Phase 0
+**Status:** Completed by Agent · **Assigned:** agent (dispatched 2026-06-18) · **Depends-on:** none · **Plan:** §4 Phase 0
 **One-liner:** typed event bus + emit-on-mutation; consume the dead store fields; retire the `Rc<Cell>`
 click mailbox; feed signal changes into the damage/repaint path.
-**Agent Completion:** _(branch, PRs, what was built, how verified, deviations)_
+**Agent Completion:** Completed on current branch.
+Built:
+- typed chrome event bus + event-emitting store setters
+- expanded-sidebar interaction routing via `ChromeIntent` app events instead of the `Rc<Cell>` mailbox
+- `chrome_state` mirroring for pick candidates + hovered pane, with a real retained-tree hover consumer
+- retained chrome repaint invalidation narrowed from root-wide dirtying to per-widget repaint requests
+- actual chrome damage forwarding into `GridRenderer`/`TextRenderer`
+Verification:
+- `cargo test -p heca --quiet`
+- `cargo clippy -p heca --all-targets --quiet`
+Notes:
+- I intentionally extended Phase 0 slightly beyond the minimum wording to finish repaint granularity in the same slice; leaving damage collection wired but unused would have made the new invalidation path misleading and much less valuable.
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 1 — Pane runtime state model

@@ -11,6 +11,7 @@ mod sidebar;
 
 use app::events::handle_window_event;
 use app::events::AppEvent;
+use app::interaction::dispatch_intent;
 pub(crate) use app::focus::switch_workspace_tracked;
 use app::lifecycle::{handle_about_to_wait, poll_backends};
 use app::terminal_metrics::refresh_terminal_cell_size;
@@ -203,6 +204,15 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                     state.needs_redraw = true;
                     state.window.request_redraw();
                 }
+            }
+            AppEvent::RequestRedraw => {
+                state.needs_redraw = true;
+                state.window.request_redraw();
+            }
+            AppEvent::ChromeIntent { source, intent } => {
+                dispatch_intent(state, &self.registry, source, intent);
+                state.needs_redraw = true;
+                state.window.request_redraw();
             }
         }
     }

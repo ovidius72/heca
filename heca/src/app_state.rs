@@ -267,9 +267,6 @@ pub struct AppState {
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
-    /// Sinks the chrome widgets write into when clicked (pane focus, workspace
-    /// collapse, …), read after dispatching a pointer event into `chrome_tree` (F4.2+).
-    pub chrome_sinks: crate::chrome::ChromeSinks,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.
