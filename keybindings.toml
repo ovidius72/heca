@@ -310,10 +310,13 @@ toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: 
 # [[keys.command]]
 # keys = "prefix+g"
 # command = "lazygit"
+# float = true
+# close_pane = true
 #
 # [[keys.command]]
 # keys = "Alt+Enter"
 # command = "alacritty"
+# kind = "terminal"
 #
 # Planned richer parameterized bindings for normal mode:
 #

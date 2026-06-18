@@ -497,7 +497,7 @@ Every WM command in heca is an **action**. Actions are the core abstraction — 
 - `FocusWorkspace { ws_idx }` — Focus a workspace by index
 - `Swap { a_id, b_id }` — Swap two panes
 - `Resize { target, axis, amount }` — Resize column or pane
-- `SpawnCommand { command }` — Run an external command
+- `SpawnCommand { command, kind, float, close_policy }` — Run an external command in a new pane
 
 ### Registry Dispatch
 
@@ -689,23 +689,33 @@ heca checks bindings in this order:
 
 ## Spawning Applications
 
-Today, heca can launch simple command-bound panes using `[[keys.command]]`:
+heca can launch PTY-backed command panes using `[[keys.command]]`:
 
 ```toml
 [[keys.command]]
 keys = "prefix+g"
 command = "lazygit"
+float = true
+close_pane = true
 
 [[keys.command]]
 keys = "prefix+t"
 command = "btm"  # bottom system monitor
+close_pane = true
+keep_on_error = true
 
 [[keys.command]]
 keys = "Alt+Enter"
 command = "alacritty"
 ```
 
-This currently creates a new pane with the command as its title; real backend execution is still evolving.
+Supported options today:
+- `kind = "terminal"` (default). `app` and `plugin` are reserved and currently report "not yet implemented".
+- `float = true` to open as a centered floating pane.
+- `close_pane = true` to close the pane when the command exits.
+- `keep_on_error = true` or `keep_on_success = true` to override `close_pane` for that exit outcome.
+
+Commands run in a real PTY using the user's shell (`-ic` on Unix, `/C` on Windows), so existing shell-style command strings keep working while preserving interactive shell behavior.
 
 ### Planned `spawn_pane` action contract
 

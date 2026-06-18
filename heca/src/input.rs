@@ -1,4 +1,5 @@
 use heca_core::layout::PaneId;
+use heca_core::runtime::PaneClosePolicy;
 
 /// Target for resize actions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -32,6 +33,25 @@ impl std::str::FromStr for ResizeAxis {
             "x" | "horizontal" | "width" => Ok(ResizeAxis::X),
             "y" | "vertical" | "height" => Ok(ResizeAxis::Y),
             _ => Err(format!("unknown resize axis: {}", s)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SpawnKind {
+    Terminal,
+    App,
+    Plugin,
+}
+
+impl std::str::FromStr for SpawnKind {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "terminal" => Ok(SpawnKind::Terminal),
+            "app" => Ok(SpawnKind::App),
+            "plugin" => Ok(SpawnKind::Plugin),
+            _ => Err(format!("unknown spawn kind: {}", s)),
         }
     }
 }
@@ -197,6 +217,9 @@ pub enum WmAction {
     // ── External commands ──
     SpawnCommand {
         command: String,
+        kind: SpawnKind,
+        float: bool,
+        close_policy: PaneClosePolicy,
     },
 
     // ── Mode management ──
@@ -496,6 +519,25 @@ pub fn build_action(
         }),
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
+            kind: get_enum(args, "kind").unwrap_or(SpawnKind::Terminal),
+            float: args
+                .get("float")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(false),
+            close_policy: PaneClosePolicy {
+                close_pane: args
+                    .get("close_pane")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(false),
+                keep_on_error: args
+                    .get("keep_on_error")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(false),
+                keep_on_success: args
+                    .get("keep_on_success")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(false),
+            },
         }),
         _ => None,
     }
@@ -832,7 +874,12 @@ mod tests {
                 WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
                 WmAction::ClosePaneById { pane_id: PaneId(0) },
                 WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
-                WmAction::SpawnCommand { command: String::new() },
+                WmAction::SpawnCommand {
+                    command: String::new(),
+                    kind: SpawnKind::Terminal,
+                    float: false,
+                    close_policy: PaneClosePolicy::default(),
+                },
                 WmAction::EnterMode { name: String::new() },
                 WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
                 WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
@@ -895,6 +942,16 @@ mod tests {
             pane_id: PaneId(1),
             name: "test".to_string(),
         };
+        let _ = WmAction::SpawnCommand {
+            command: "lazygit".to_string(),
+            kind: SpawnKind::Terminal,
+            float: true,
+            close_policy: PaneClosePolicy {
+                close_pane: true,
+                keep_on_error: true,
+                keep_on_success: false,
+            },
+        };
         let _ = WmAction::AddPaneToColumn {
             ws_idx: 0,
             col_idx: 0,
@@ -935,5 +992,29 @@ mod tests {
         assert_eq!(action_from_name("focus_workspace_0"), None);
         assert_eq!(action_from_name("focus_workspace_"), None);
         assert_eq!(action_from_name("focus_workspace"), None);
+    }
+
+    #[test]
+    fn test_build_spawn_command_with_options() {
+        let args = std::collections::HashMap::from([
+            ("command".to_string(), "lazygit".to_string()),
+            ("kind".to_string(), "terminal".to_string()),
+            ("float".to_string(), "true".to_string()),
+            ("close_pane".to_string(), "true".to_string()),
+            ("keep_on_error".to_string(), "true".to_string()),
+        ]);
+        assert_eq!(
+            build_action("spawn_command", &args),
+            Some(WmAction::SpawnCommand {
+                command: "lazygit".to_string(),
+                kind: SpawnKind::Terminal,
+                float: true,
+                close_policy: PaneClosePolicy {
+                    close_pane: true,
+                    keep_on_error: true,
+                    keep_on_success: false,
+                },
+            })
+        );
     }
 }

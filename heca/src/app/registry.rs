@@ -5,8 +5,9 @@
 
 use crate::actions::ActionRegistry;
 use crate::handlers::*;
-use crate::input::{self, WmAction, action_from_name, build_action};
+use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
 use crate::keymap::{KeyCombo, KeymapRegistry};
+use heca_core::runtime::PaneClosePolicy;
 use heca_core::layout::PaneId;
 use std::collections::{BTreeMap, HashMap};
 
@@ -142,6 +143,13 @@ pub fn build_keymap(config: &heca_config::theme::Config) -> KeymapRegistry {
     for cmd_cfg in &config.keys.command {
         let action = WmAction::SpawnCommand {
             command: cmd_cfg.command.clone(),
+            kind: cmd_cfg.kind.parse().unwrap_or(SpawnKind::Terminal),
+            float: cmd_cfg.float,
+            close_policy: PaneClosePolicy {
+                close_pane: cmd_cfg.close_pane,
+                keep_on_error: cmd_cfg.keep_on_error,
+                keep_on_success: cmd_cfg.keep_on_success,
+            },
         };
         let trimmed = cmd_cfg.key.trim();
         if trimmed.starts_with("prefix+") {
@@ -439,6 +447,9 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         &WmAction::SpawnCommand {
             command: String::new(),
+            kind: SpawnKind::Terminal,
+            float: false,
+            close_policy: PaneClosePolicy::default(),
         },
         handle_spawn_command,
     );

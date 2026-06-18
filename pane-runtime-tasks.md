@@ -80,7 +80,7 @@ auto-close stays (only fires on shell death — §0.6); **remove `ProcessStatus:
 **Reviewer Decision:** Accepted by merge · **Reviewer Notes:** FakeBackend + TerminalBackend unit tests (idle/running, exit-captures-code, debounce, monitor); clippy 0 new warnings. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked in plan §4 + one-liner).
 
 ## Phase 3 — Shell integration (OSC 133 / OSC 7)
-**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
+**Status:** Accepted · **Assigned:** agent · **Depends-on:** Phase 2 · **Plan:** §4 Phase 3
 **One-liner:** passive OSC snooper in heca-core before `advance_bytes` (§0.8) — parse OSC 133 (success/error+code) + OSC 7 (cwd, macOS preferred); re-sample foreground on markers; **hybrid shell wrap** (bash `--init-file` / zsh `ZDOTDIR` / fish `-C source`) auto-enabled by `settings.shell_integration` (bool, default true). **Implementation-shape decisions locked in §0.8** after an agent flagged them as pre-coding blockers.
 **Agent Completion:** Completed on current branch.
 Built:
@@ -117,11 +117,24 @@ defaults + user `[programs.<raw>]` overrides; free-form glyph-string icons (no n
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 6 — Command spawn (run real programs + kind + float + close-policy)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 2 · **Plan:** §0.4 + §4 Phase 6
+**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 2 · **Plan:** §0.4 + §4 Phase 6
 **One-liner:** real `CommandBuilder` spawn; extend `[[keys.command]]` (`kind`/`float`/`close_pane`/
 `keep_on_error`/`keep_on_success`); close-policy on `pane.exited`; RPC parity; full action checklist.
-**Agent Completion:** —
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Agent Completion:** Completed on current branch.
+Built:
+- extended `[[keys.command]]` parsing with `kind`, `float`, `close_pane`, `keep_on_error`, and `keep_on_success` (default `kind = "terminal"`, plus `keys` alias support)
+- extended `WmAction::SpawnCommand` payloads and config/RPC mapping to carry spawn kind, float mode, and pane close-policy
+- added a real PTY command-spawn path in `TerminalBackend`/`PtyHandle`, using the user's shell as the command trampoline (`-ic` on Unix, `/C` on Windows) while keeping shell integration disabled for direct command spawns
+- implemented tiled and floating command-pane creation in `handle_spawn_command`, including pane-owned close-policy storage
+- applied close-policy exactly once from the drained exit-event path, while preserving shell-pane auto-close behavior
+- documented the current `[[keys.command]]` contract in `README.md` and `keybindings.toml`
+- review cleanup: documented `PaneClosePolicy` public fields, added config-load validation for invalid `[[keys.command]].kind`, clarified RPC `spawn-command` separator/empty-command errors, documented why shell integration stays off for direct command panes, and fixed the small process-monitor signature formatting artifact
+Verification:
+- `cargo test -p heca-core -p heca-config -p heca --quiet`
+- `cargo clippy -p heca-core -p heca-config -p heca --all-targets --quiet` (existing warnings only in `selection_model.rs` and `terminal_render.rs`)
+Notes:
+- `kind = "terminal"` is implemented today; `app` and `plugin` currently report a clear "not yet implemented" message without forking a second spawn path.
+**Reviewer Decision:** — · **Reviewer Notes:** Review follow-ups addressed on branch: interactive command shell mode (`-ic`), clearer RPC separator errors, documented public close-policy fields, config validation for invalid command kinds, explicit direct-command shell-integration rationale, and minor formatting cleanup.
 
 ## Phase 7 — Display: fixed default pane-info widgets
 **Status:** Open · **Assigned:** — · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7

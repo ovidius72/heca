@@ -40,14 +40,34 @@ pub type KeybindingMap = HashMap<String, BindingValue>;
 /// A keybinding that spawns an external command (rather than triggering a WM action).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CommandKeybindConfig {
+    #[serde(alias = "keys")]
     pub key: String,
     pub command: String,
-    #[serde(default = "default_command_type")]
-    pub command_type: String,
+    #[serde(default = "default_command_kind", alias = "command_type")]
+    pub kind: String,
+    #[serde(default)]
+    pub float: bool,
+    #[serde(default)]
+    pub close_pane: bool,
+    #[serde(default)]
+    pub keep_on_error: bool,
+    #[serde(default)]
+    pub keep_on_success: bool,
 }
 
-fn default_command_type() -> String {
-    "pane".to_string()
+fn default_command_kind() -> String {
+    "terminal".to_string()
+}
+
+impl CommandKeybindConfig {
+    pub fn validate(&self) -> Result<(), String> {
+        match self.kind.as_str() {
+            "terminal" | "app" | "plugin" => Ok(()),
+            other => Err(format!(
+                "invalid [[keys.command]].kind '{other}' (expected one of: terminal, app, plugin)"
+            )),
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

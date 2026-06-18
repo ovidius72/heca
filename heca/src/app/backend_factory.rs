@@ -45,14 +45,25 @@ pub(crate) fn create_terminal_backend_for_state(
     cols: usize,
     rows: usize,
 ) -> Box<dyn PaneBackend> {
-    create_terminal_backend(
-        cols,
-        rows,
+    let options = terminal_backend_options(
         &state.theme,
-        state.terminal_cell_size,
         Some(&state.event_proxy),
         state.shell_integration_enabled,
-    )
+    );
+    create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options)
+}
+
+pub(crate) fn create_command_backend_for_state(
+    state: &AppState,
+    cols: usize,
+    rows: usize,
+    command: &str,
+) -> Box<dyn PaneBackend> {
+    // Direct command panes spawn a concrete program inside the PTY; shell
+    // integration is intentionally disabled because OSC prompt/cwd hooks are a
+    // shell concern and would only add noise here.
+    let options = terminal_backend_options(&state.theme, Some(&state.event_proxy), false);
+    create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)
 }
 
 pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {
@@ -78,20 +89,26 @@ pub(crate) fn create_terminal_backend(
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
     shell_integration_enabled: bool,
 ) -> Box<dyn PaneBackend> {
-    let (cell_w, cell_h) = cell_size;
+    let options = terminal_backend_options(theme, event_proxy, shell_integration_enabled);
+    create_terminal_backend_with_options(cols, rows, cell_size, options)
+}
+
+fn terminal_backend_options(
+    theme: &Theme,
+    event_proxy: Option<&EventLoopProxy<AppEvent>>,
+    shell_integration_enabled: bool,
+) -> TerminalBackendOptions {
     let wake_on_output = event_proxy.map(|proxy| {
         let proxy = proxy.clone();
         Arc::new(move || {
             let _ = proxy.send_event(AppEvent::BackendWake);
         }) as Arc<dyn Fn() + Send + Sync>
     });
-    let shell_integration = shell_integration_assets().and_then(|assets| {
-        if shell_integration_enabled {
-            Some(assets)
-        } else {
-            None
-        }
-    });
+    let shell_integration = if shell_integration_enabled {
+        shell_integration_assets()
+    } else {
+        None
+    };
     let palette_defaults = TerminalPaletteDefaults {
         foreground: theme
             .terminal_foreground
@@ -119,35 +136,65 @@ pub(crate) fn create_terminal_backend(
             .terminal_brights
             .map(|colors| colors.map(|color| [color.r, color.g, color.b, color.a])),
     };
+    TerminalBackendOptions {
+        palette_defaults: if palette_defaults.foreground.is_some()
+            || palette_defaults.background.is_some()
+            || palette_defaults.cursor_fg.is_some()
+            || palette_defaults.cursor_bg.is_some()
+            || palette_defaults.cursor_border.is_some()
+            || palette_defaults.selection_fg.is_some()
+            || palette_defaults.selection_bg.is_some()
+            || palette_defaults.ansi.is_some()
+            || palette_defaults.brights.is_some()
+        {
+            Some(palette_defaults)
+        } else {
+            None
+        },
+        wake_on_output,
+        shell_integration,
+    }
+}
+
+fn create_terminal_backend_with_options(
+    cols: usize,
+    rows: usize,
+    cell_size: (f32, f32),
+    options: TerminalBackendOptions,
+) -> Box<dyn PaneBackend> {
+    let (cell_w, cell_h) = cell_size;
     match TerminalBackend::with_options(
         cols,
         rows,
         cell_w,
         cell_h,
-        TerminalBackendOptions {
-            palette_defaults: if palette_defaults.foreground.is_some()
-                || palette_defaults.background.is_some()
-                || palette_defaults.cursor_fg.is_some()
-                || palette_defaults.cursor_bg.is_some()
-                || palette_defaults.cursor_border.is_some()
-                || palette_defaults.selection_fg.is_some()
-                || palette_defaults.selection_bg.is_some()
-                || palette_defaults.ansi.is_some()
-                || palette_defaults.brights.is_some()
-            {
-                Some(palette_defaults)
-            } else {
-                None
-            },
-            wake_on_output,
-            shell_integration,
-        },
+        options,
     ) {
         Ok(backend) => Box::new(backend),
         Err(_err) => {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] warning: failed to create TerminalBackend ({_err}); falling back to FakeBackend"
+            );
+            Box::new(FakeBackend::with_cell_size(cols, rows, cell_w, cell_h))
+        }
+    }
+}
+
+fn create_command_backend_with_options(
+    cols: usize,
+    rows: usize,
+    cell_size: (f32, f32),
+    command: &str,
+    options: TerminalBackendOptions,
+) -> Box<dyn PaneBackend> {
+    let (cell_w, cell_h) = cell_size;
+    match TerminalBackend::with_command(cols, rows, cell_w, cell_h, command, options) {
+        Ok(backend) => Box::new(backend),
+        Err(_err) => {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] warning: failed to create command TerminalBackend ({_err}); falling back to FakeBackend"
             );
             Box::new(FakeBackend::with_cell_size(cols, rows, cell_w, cell_h))
         }

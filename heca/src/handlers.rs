@@ -4,14 +4,16 @@
 //! action.  Parameterized variants destructure their fields from the enum;
 //! unit variants ignore the `_action` parameter.
 
-use crate::app::backend_factory::{create_terminal_backend_for_state, terminal_grid_for_workspace};
+use crate::app::backend_factory::{
+    create_command_backend_for_state, create_terminal_backend_for_state, terminal_grid_for_workspace,
+};
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
 use crate::app::focus::{focus_pane_by_id, sync_focus};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app::terminal_host::{enter_selection_mode_for_focused_terminal, move_focused_terminal_selection};
 use crate::app_state::{AppState, InputMode, RenameTarget};
-use crate::input::WmAction;
+use crate::input::{SpawnKind, WmAction};
 use crate::sidebar;
 use crate::{
     collect_all_pane_candidates, destroy_empty_workspace, find_pane_location,
@@ -1479,21 +1481,56 @@ pub fn handle_command_palette(state: &mut AppState, _action: &WmAction) {
 // ── External commands ──
 
 pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
-    let WmAction::SpawnCommand { command } = action else {
+    let WmAction::SpawnCommand {
+        command,
+        kind,
+        float,
+        close_policy,
+    } = action
+    else {
         return;
     };
-    // Create a new pane with the command as its title.
-    // In the future this will spawn a real PTY via portable-pty.
+    match kind {
+        SpawnKind::Terminal => {}
+        SpawnKind::App | SpawnKind::Plugin => {
+            eprintln!("[heca] spawn kind '{kind:?}' not yet implemented");
+            return;
+        }
+    }
+
     let active_ws = state.session.active_workspace_idx;
     let (cols, rows) = terminal_grid_for_workspace(state, active_ws);
     let next_id = state.session.next_id();
-    let pane = LayoutPane::new(PaneId(next_id), command.clone());
-    state.session.add_pane(pane, None, true);
+    let mut pane = LayoutPane::new(PaneId(next_id), command.clone());
+    pane.close_policy = *close_policy;
+
+    if *float {
+        if let Some(ws) = state.session.active_workspace_mut() {
+            let wa = ws.scrolling.working_area;
+            let fw = wa.size.w * 0.95;
+            let fh = wa.size.h * 0.95;
+            let fx = wa.loc.x + (wa.size.w - fw) / 2.0;
+            let fy = wa.loc.y + (wa.size.h - fh) / 2.0;
+            ws.deactivate_floating_panes();
+            ws.floating_panes
+                .push(heca_core::layout::workspace::FloatingPane {
+                    pane,
+                    position: heca_core::layout::types::Point::new(fx, fy),
+                    size: heca_core::layout::types::Size::new(fw, fh),
+                    is_active: true,
+                    original_column_idx: None,
+                    original_pane_idx: None,
+                });
+            ws.focus_domain = FocusDomain::Floating;
+        }
+    } else {
+        state.session.add_pane(pane, None, true);
+    }
     state
         .backends
         .insert_for_pane(
             PaneId(next_id),
-            create_terminal_backend_for_state(state, cols, rows),
+            create_command_backend_for_state(state, cols, rows, command),
         );
     after_layout_change(state);
 }
