@@ -7,7 +7,8 @@ use crate::app::terminal_host::prepare_terminal_mount;
 use crate::app::terminal_render::{
     paint_terminal_pane_shell, pane_scissor_rect, render_terminal_mount,
     selection_overlay_for_pane, stable_floating_content_rect,
-    stable_tiled_content_rect, PaneRenderState, TerminalRenderPassContext,
+    stable_tiled_content_rect, PaneRenderState, TerminalPaneShell,
+    TerminalRenderPassContext,
 };
 use crate::app_state::{AppState, ChromeDamageMode, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
@@ -487,15 +488,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut pane_scene,
-                pane.x,
-                pane.y,
-                pane.w,
-                pane.h,
-                bcolor,
-                pane_border_width,
-                pane_border_radius,
-                pane_content_inset,
-                pane.is_active,
+                TerminalPaneShell {
+                    x: pane.x,
+                    y: pane.y,
+                    w: pane.w,
+                    h: pane.h,
+                    border_color: bcolor,
+                    border_width: pane_border_width,
+                    border_radius: pane_border_radius,
+                    content_inset: pane_content_inset,
+                    is_active: pane.is_active,
+                },
             );
         }
 
@@ -698,15 +701,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut float_scene,
-                pane.x,
-                pane.y,
-                pane.w,
-                pane.h,
-                fborder,
-                pane_border_width,
-                pane_border_radius,
-                pane_content_inset,
-                pane.is_active,
+                TerminalPaneShell {
+                    x: pane.x,
+                    y: pane.y,
+                    w: pane.w,
+                    h: pane.h,
+                    border_color: fborder,
+                    border_width: pane_border_width,
+                    border_radius: pane_border_radius,
+                    content_inset: pane_content_inset,
+                    is_active: pane.is_active,
+                },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
             render_chrome(

@@ -33,6 +33,19 @@ pub(crate) struct PaneRenderState {
     pub(crate) mount: Option<TerminalMount>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct TerminalPaneShell {
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) w: f32,
+    pub(crate) h: f32,
+    pub(crate) border_color: [f32; 4],
+    pub(crate) border_width: f32,
+    pub(crate) border_radius: f32,
+    pub(crate) content_inset: f32,
+    pub(crate) is_active: bool,
+}
+
 pub(crate) fn stable_tiled_content_rect(
     px: f32,
     py: f32,
@@ -92,23 +105,22 @@ pub(crate) fn pane_scissor_rect(
     Some((clipped_left, clipped_top, clipped_width, clipped_height))
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "terminal shell painting still takes decomposed geometry/theme values; not part of the phase-7 chrome review refactor"
-)]
 pub(crate) fn paint_terminal_pane_shell(
     state: &AppState,
     scene: &mut GuiScene,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    border_color: [f32; 4],
-    border_width: f32,
-    border_radius: f32,
-    content_inset: f32,
-    is_active: bool,
+    shell: TerminalPaneShell,
 ) {
+    let TerminalPaneShell {
+        x,
+        y,
+        w,
+        h,
+        border_color,
+        border_width,
+        border_radius,
+        content_inset,
+        is_active,
+    } = shell;
     let theme = terminal_pane_gui_theme(state, border_color, border_width, border_radius);
     let mut pane = UiPane::new()
         .bordered()
