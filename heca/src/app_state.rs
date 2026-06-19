@@ -251,6 +251,8 @@ pub struct AppState {
     /// Backdrop sampler (shared, stateless pipeline). Draws blurred scene regions
     /// into arbitrary on-screen rects with alpha blending.
     pub backdrop: Backdrop,
+    /// Host-owned git metadata cache keyed by repo root / pane cwd.
+    pub git_runtime_cache: crate::app::git_monitor::GitRuntimeCache,
     pub session: Session,
     /// Content backends for panes that have one.
     pub backends: BackendStore,

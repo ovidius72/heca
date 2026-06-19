@@ -102,11 +102,17 @@ Notes:
 **Reviewer Decision:** Accepted by merge (PR #136, commit `0879b3c`) · **Reviewer Notes:** Review follow-ups addressed on branch: constructor naming/API cleanup, config-threading reduction at spawn call sites, OSC vec preallocation, public-field docs, and broader shell-kind matching. **Lead §0.8 compliance verified post-merge:** passive snooper forwards all bytes unchanged to wezterm-term (`observe` immutable → `advance_bytes` full); BEL + ST (ESC \\) + C1-ST (0x9c) terminators + cross-read fragmentation; routes 133 D→Success/Error+code, 7→cwd (percent-decoded, closes the Phase 2 macOS cwd deferral), A/B/C→force foreground re-sample; `semantic_status_active` correctly defers to OS detection between commands. Shell wrap = bash `--init-file` / zsh `ZDOTDIR`+`OLD_ZDOTDIR` / fish `-C source`, snippets source user RC first. `settings.shell_integration` (bool, default true) gates `Some`/`None` + refreshed on reload. Event-first + 250 ms debounce, no periodic timer. 51 heca-core tests, clippy clean (0 new). **Process nit:** PR #136 head branch was misnamed `feat/phase1-pane-runtime-state` (carried Phase 3 code) — harmless but rename future branches to match their phase.
 
 ## Phase 4 — Git integration (git2 behind a trait)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 3 (or Phase 2 cwd) · **Plan:** §4 Phase 4
+**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 3 (or Phase 2 cwd) · **Plan:** §4 Phase 4
 **One-liner:** `GitProvider` trait + `git2` impl (branch, ahead/behind, +a/-d/Δ), debounced on cwd-change +
 optional `.git` fs-watch; cache per repo.
-**Agent Completion:** —
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Agent Completion:** Completed on current branch.
+Built:
+- added `app/git_monitor.rs`: a provider-trait seam plus `git2` implementation that resolves repo root, branch, ahead/behind, and dirty counts (`added` / `modified` / `deleted` / `dirty`)
+- added a host-owned `GitRuntimeCache` on `AppState`, keyed by pane cwd + shared repo root, so panes in the same repo reuse one cached snapshot
+- wired a debounced git sync into `sync_chrome_state`: canonical `Pane.runtime.cwd` now drives canonical `Pane.runtime.git` before the chrome-store mirror runs, so existing `set_pane_runtime` change-guards emit `pane.git.changed` on real change only
+- implemented non-repo behavior as `git = None`, with no per-frame churn for unchanged non-repo cwd values
+- added tests for runtime projection, shared repo-root cache reuse across panes, timed refresh after the debounce window, and a temp-repo `git2` integration check for branch + dirty counts
+**Reviewer Decision:** — · **Reviewer Notes:** Pending review / merge.
 
 ## Phase 5 — Process catalog (`[programs.<raw>]` → {name, icon, description, color})
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5

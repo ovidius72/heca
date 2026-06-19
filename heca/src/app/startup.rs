@@ -301,6 +301,7 @@ pub(crate) async fn init_state(
         compositor,
         blur,
         backdrop,
+        git_runtime_cache: crate::app::git_monitor::GitRuntimeCache::default(),
         session,
         backends,
         theme: app_config.theme.clone(),
