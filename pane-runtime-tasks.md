@@ -115,11 +115,20 @@ Built:
 **Reviewer Decision:** — · **Reviewer Notes:** Pending review / merge.
 
 ## Phase 5 — Process catalog (`[programs.<raw>]` → {name, icon, description, color})
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5
+**Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5
 **One-liner:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`); seeded shell
 defaults + user `[programs.<raw>]` overrides; free-form glyph-string icons (no new `Glyph` enum); optional
-`color` pane tint; resolver with raw always available.
-**Agent Completion:** —
+`color` pane tint; resolver with raw always available and terminal-icon fallback.
+**Agent Completion:** Completed on current branch.
+Built:
+- added `heca-config/src/programs.rs` with documented `ProgramMeta`, `ProgramsConfig`, `ProgramView`, and a shared `DEFAULT_TERMINAL_ICON`
+- seeded built-in shell defaults (`sh`, `bash`, `zsh`, `fish`) and implemented field-wise merge for partial same-key user overrides, so shell icons survive overrides like `[programs.zsh] name = "Z Shell"`
+- wired `programs` into top-level `Config` deserialization and added config/docs examples in `README.md` and `keybindings.toml`
+- implemented `ProgramsConfig::resolve(raw)` with `raw` always preserved, explicit names/colors passed through, and terminal-icon fallback for both shells and unknown programs per the locked Phase 5 rule
+- added tests for default shell resolution, partial override merging, unknown-program fallback, color parsing/pass-through, and top-level config parsing
+Verification:
+- `cargo test -p heca-config --quiet`
+- `cargo clippy -p heca-config --all-targets --quiet`
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 6 — Command spawn (run real programs + kind + float + close-policy)

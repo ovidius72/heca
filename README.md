@@ -717,6 +717,26 @@ Supported options today:
 
 Commands run in a real PTY using the user's shell (`-ic` on Unix, `/C` on Windows), so existing shell-style command strings keep working while preserving interactive shell behavior.
 
+## Process Catalog
+
+You can override how foreground programs are presented in pane chrome through `[programs.<raw>]`:
+
+```toml
+[programs.nvim]
+name = "Neovim"
+icon = "\uE7C4"
+description = "modal editor"
+color = "#89b4fa"
+```
+
+Rules:
+- `raw` is the detected foreground program basename, for example `nvim`, `lazygit`, or `zsh`.
+- All fields are optional. Partial overrides are merged over built-in defaults.
+- Common shells (`sh`, `bash`, `zsh`, `fish`) are seeded with the terminal icon by default.
+- Unknown programs fall back to their raw name and the same terminal icon used by pane cards today.
+- `icon` is a free-form glyph string, not a fixed enum entry.
+- `color` accepts `#rrggbb` or `#rrggbbaa`.
+
 ### Planned `spawn_pane` action contract
 
 The agreed future-ready action model is `spawn_pane`, designed for multiple pane kinds:

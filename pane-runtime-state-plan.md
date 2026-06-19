@@ -108,14 +108,14 @@ icon        = "\uE7C4"        # nerd-font glyph (Row 1 icon)
 description = "modal editor"   # future usage (not rendered yet)
 color       = "#fafafa"        # OPTIONAL pane/card tint
 ```
-- All fields optional; partial entries are valid. `name` falls back to the raw key; `icon` falls back to a
-  default terminal icon for known shells, none for unknown programs. Icons are **free-form glyph strings**
+- All fields optional; partial entries are valid. `name` falls back to the raw key; `icon` falls back to the
+  default terminal icon (including unknown programs). Icons are **free-form glyph strings**
   (nerd-font codepoints), not a fixed `Glyph` enum — the renderer draws them as text.
 - **Built-in defaults seeded** for common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon) so out-of-the-box
   idle panes show a terminal icon + shell name. User entries **override** same-key defaults; users add their
   own (`nvim`, `lazygit`, `yazi`, …) via config.
 - **Resolver:** `ProgramsConfig::resolve(raw) -> ProgramView { raw, name, icon, color }` — used by Phase 7
-  display; falls back gracefully (raw name, no icon, no colour) when no entry exists.
+  display; falls back gracefully (raw name, terminal icon, no colour) when no entry exists.
 
 ### 0.8 Phase 3 implementation shape (settled 2026-06-18, prompted by an agent pre-coding review)
 **Note:** the high-level Phase 3 design above was locked earlier, but three implementation-shape decisions
@@ -360,11 +360,11 @@ in parens. Also seeds shell icons so idle panes show a terminal icon + shell nam
 resolver consumed by Phase 7.
 
 **Tasks**
-- [ ] New `heca-config/src/programs.rs`: `ProgramMeta { name, icon, description, color: Option<Color> }` + `ProgramsConfig` (map keyed by raw program name) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
-- [ ] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon). User entries override same-key defaults; users add `nvim`/`lazygit`/`yazi`/… via `[programs.<raw>]`.
-- [ ] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `keybindings.toml` + `README.md`.
-- [ ] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to default-terminal (shells) / none (unknown), `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are free-form glyph strings (no new `Glyph` enum variants needed).
-- [ ] Tests: default shell hit; user override wins; miss → raw name + no/default icon; `color` parse + pass-through.
+- [x] New `heca-config/src/programs.rs`: `ProgramMeta { name, icon, description, color: Option<Color> }` + `ProgramsConfig` (map keyed by raw program name) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
+- [x] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon). User entries override same-key defaults; users add `nvim`/`lazygit`/`yazi`/… via `[programs.<raw>]`.
+- [x] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `keybindings.toml` + `README.md`.
+- [x] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to the default terminal icon when no explicit icon exists, `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are free-form glyph strings (no new `Glyph` enum variants needed).
+- [x] Tests: default shell hit; user override wins; miss → raw name + terminal icon; `color` parse + pass-through.
 
 **Acceptance:** `nvim` resolves to "Neovim" + icon; an unknown program shows its raw name + default icon;
 a config override wins; new glyphs render in the showcase.
