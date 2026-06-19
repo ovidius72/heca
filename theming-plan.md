@@ -61,8 +61,8 @@ heca-theme  ◄──  heca          (direct, for theme loading)
 
 - [x] 2.1 Add `heca-theme` dependency to `heca-renderer/Cargo.toml`
 - [x] 2.2 Update showcase: replace `Theme::grid_tron()` with `heca_theme::load_theme("grid_tron")`
-- [x] 2.3 Add theme cycling to showcase — on key press `T`, cycle through `["grid_tron", "mocha", "frappe"]`, store current theme name, repaint with new theme next frame
-- [x] 2.4 Add a small label in the showcase showing current theme name
+- [x] 2.3 Add theme cycling to showcase — button in the button row cycles `grid_tron → mocha → frappe`, rebuilds the showcase tree on change, and updates the window title with the active theme
+- [x] 2.4 Add a visible theme switcher button showing current theme name (`⇄ THEME: Grid Tron` / `⇄ THEME: Catppuccin Mocha` / `⇄ THEME: Catppuccin Frappe`)
 - [ ] 2.5 Verify all widgets react to theme change (colors, radius, border, glow, fonts)
 - [ ] 2.6 Verify light theme (frappe) renders correctly — glow/scanlines off, readable text
 - [x] 2.7 Run `cargo clippy --all-targets --all-features` — fix all warnings
