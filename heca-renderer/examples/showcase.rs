@@ -9,6 +9,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -109,6 +110,54 @@ const ZOOM_STEP: f32 = 0.25;
 
 const APP_TITLE: &str = "heca-grid-ui showcase";
 
+/// Theme names loadable via `heca_theme::load_theme`, in cycle order.
+const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "frappe"];
+
+/// Map a `heca_theme::Theme` onto a grid-ui `Theme`, bridging the two crates
+/// until Phase 3B migrates grid-ui to re-export from `heca-theme`.
+fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
+    let shadow_color = match heca_theme::Color::from_str(&ht.shadow.color) {
+        Ok(c) => Color::new(c.r, c.g, c.b, (ht.shadow.alpha * 255.0).min(255.0) as u8),
+        Err(_) => Color::TRANSPARENT,
+    };
+    Theme {
+        name: ht.name.clone(),
+        background: Color::new(ht.background.r, ht.background.g, ht.background.b, ht.background.a),
+        surface: Color::new(ht.surface.r, ht.surface.g, ht.surface.b, ht.surface.a),
+        foreground: Color::new(ht.foreground.r, ht.foreground.g, ht.foreground.b, ht.foreground.a),
+        muted: Color::new(ht.muted.r, ht.muted.g, ht.muted.b, ht.muted.a),
+        border: Color::new(ht.border.r, ht.border.g, ht.border.b, ht.border.a),
+        accent: Color::new(ht.accent.r, ht.accent.g, ht.accent.b, ht.accent.a),
+        glow: Color::new(ht.glow.r, ht.glow.g, ht.glow.b, ht.glow.a),
+        shadow: shadow_color,
+        danger: Color::new(ht.danger.r, ht.danger.g, ht.danger.b, ht.danger.a),
+        success: Color::new(ht.success.r, ht.success.g, ht.success.b, ht.success.a),
+        warning: Color::new(ht.warning.r, ht.warning.g, ht.warning.b, ht.warning.a),
+        font_family: ht.font_family.clone(),
+        font_size: ht.font_size,
+        radius: ht.border_radius,
+        border_width: ht.border_width,
+        glow_size: match ht.glow_size {
+            heca_theme::GlowLevel::None => GlowLevel::None,
+            heca_theme::GlowLevel::Thin => GlowLevel::Thin,
+            heca_theme::GlowLevel::Medium => GlowLevel::Medium,
+            heca_theme::GlowLevel::Large => GlowLevel::Large,
+        },
+        intensity: match ht.intensity {
+            heca_theme::Intensity::Off => Intensity::Off,
+            heca_theme::Intensity::Low => Intensity::Low,
+            heca_theme::Intensity::Medium => Intensity::Medium,
+            heca_theme::Intensity::Heavy => Intensity::Heavy,
+        },
+        show_focus_border: ht.show_focus_border,
+        icon_secondary_alpha: ht.icon_secondary_alpha,
+    }
+}
+
+fn load_grid_theme(name: &str) -> Theme {
+    heca_theme_to_grid_ui(&heca_theme::load_theme(name))
+}
+
 #[derive(Clone, Copy)]
 struct ThemeCtl {
     glow: Signal<GlowLevel>,
@@ -120,6 +169,8 @@ struct ThemeCtl {
     size: Signal<WidgetSize>,
     /// Global UI zoom level (continuous, `ZOOM_MIN..=ZOOM_MAX`).
     zoom: Signal<f32>,
+    /// Selected theme index into [`THEME_NAMES`].
+    theme_idx: Signal<usize>,
 }
 
 /// Recursively set the size variant on every widget, so a global control reflects
@@ -269,7 +320,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Button::outline("OUTLINE"))
                 .child(Button::ghost("GHOST"))
                 .child(Button::link("LINK"))
-                .child(Button::destructive("DESTRUCTIVE").on_click(click("DESTRUCTIVE"))),
+                .child(Button::destructive("DESTRUCTIVE").on_click(click("DESTRUCTIVE")))
+                // Theme switcher: click to cycle grid_tron → mocha → frappe → …
+                // The label shows the current theme name; the showcase tree is
+                // rebuilt on change so every widget picks up the new palette.
+                .child(
+                    Button::primary(format!("⇄ THEME: {}", theme.name))
+                        .on_click(move || {
+                            let next = (ctl.theme_idx.get_untracked() + 1) % THEME_NAMES.len();
+                            ctl.theme_idx.set(next);
+                        }),
+                ),
         )
         // Change widgets: Toggles across their states (on / off / disabled).
         .child(
@@ -1088,6 +1149,8 @@ struct GpuState {
     prefix_pending: bool,
     /// In the dedicated zoom mode (entered via `prefix +`); `j`/`k` zoom, Esc exits.
     zoom_mode: bool,
+    /// Last-applied theme index — when `ctl.theme_idx` differs, load a new theme.
+    current_theme_idx: usize,
     ctl: ThemeCtl,
     scroll_y: f32,
     cursor: Point,
@@ -1171,7 +1234,7 @@ impl GpuState {
         };
         surface.configure(&device, &config);
 
-        let theme = Theme::grid_tron();
+        let theme = load_grid_theme("grid_tron");
         let compositor =
             heca_renderer::composite::Compositor::new(&device, format, config.width, config.height);
         let mut grid = GridRenderer::new(&device, format);
@@ -1191,6 +1254,7 @@ impl GpuState {
             intensity: signal(theme.intensity),
             size: signal(WidgetSize::Normal),
             zoom: signal(ZOOM_DEFAULT),
+            theme_idx: signal(0),
         };
         let built = build_ui(&theme, ctl);
         let BuiltUi {
@@ -1230,6 +1294,7 @@ impl GpuState {
             meta: false,
             prefix_pending: false,
             zoom_mode: false,
+            current_theme_idx: 0,
             ctl,
             scroll_y: 0.0,
             cursor: Point::new(-1.0, -1.0),
@@ -1363,6 +1428,46 @@ impl GpuState {
 
         self.grid.set_screen_size(&self.queue, w, h);
         self.text.set_screen_size(&self.queue, w, h);
+
+        // Theme switching: when the theme selection changes, load the new theme
+        // and rebuild the showcase tree so every widget picks up the new palette.
+        let theme_idx = self.ctl.theme_idx.get_untracked();
+        if theme_idx != self.current_theme_idx {
+            self.current_theme_idx = theme_idx;
+            self.theme = load_grid_theme(THEME_NAMES[theme_idx]);
+            // Reset control signals to match the new theme's baked-in values.
+            self.ctl.glow.set(self.theme.glow_size);
+            self.ctl.radius.set(self.theme.radius);
+            self.ctl.border.set(self.theme.border_width);
+            self.ctl.font.set(self.theme.font_size);
+            self.ctl.intensity.set(self.theme.intensity);
+
+            let built = build_ui(&self.theme, self.ctl);
+            let BuiltUi {
+                ui,
+                sidebar_mode,
+                rail_hints,
+                rail_states,
+                rail_letters,
+                attention_req,
+                palette_open,
+                toasts,
+            } = built;
+            self.ui = ui;
+            self.sidebar_mode = sidebar_mode;
+            self.rail_hints = rail_hints;
+            self.rail_states = rail_states;
+            self.rail_letters = rail_letters;
+            self.attention_req = attention_req;
+            self.palette_open = palette_open;
+            self.toasts = toasts;
+            self.focus.clear(&mut self.ui);
+            self.scroll_y = 0.0;
+            self.applied_scroll = 0.0;
+            self.layout_dirty = true;
+            self.force_full = true;
+            self.window.set_title(&format!("{} — {}", APP_TITLE, self.theme.name));
+        }
 
         // Fold live theme controls in (paint-only except font, which reflows layout).
         self.theme.glow_size = self.ctl.glow.get_untracked();
