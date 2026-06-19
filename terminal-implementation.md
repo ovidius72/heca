@@ -1762,6 +1762,20 @@ Goal:
 
 ### Current Blocker — Terminal Pane Shell / Frosted Terminal Surface
 
+> **RECONCILE (2026-06-19) — this blocker is largely RESOLVED; everything below is historical.**
+> - **Pane shell border / radius: FIXED** (shipped PRs #121/#122). Verified in code:
+>   `heca/src/app/terminal_render.rs::paint_terminal_pane_shell` renders the `heca-grid-ui` `Pane`
+>   (`.border(color, width).radius(radius)`) with terminal content stencil-clipped to the inset content
+>   rect; pane **border width / radius / gap / padding** are config-driven in
+>   `heca-config/src/appearance.rs` (`pane_border_width`, `pane_border_radius`, `pane_gap`, `pane_padding`).
+>   Tracked as `shared-tasks.md` **Task 07 → Accepted**.
+> - **`terminal_blur`: partly addressed** by PR #125 (terminal-blur), but `PLAN.md` notes the blur rework is
+>   still WIP — verify before considering it closed. This is the only item from this section still open.
+> - Selection (Phase 9) is **partly built** — `EnterSelectionMode` / `SelectionLeft..Down` / `CopySelection`
+>   / `ToggleSelectionEndpoint` already exist as `WmAction`s in `heca/src/app/interaction.rs`.
+> - The phase checklists / Overall Acceptance below were **not** re-ticked box-by-box this pass (each needs
+>   its own code check). Do a fresh-session pass to mark Phase 8/13 + Overall Acceptance accurately.
+
 Current user-verified state:
 
 - terminal transparency amount now clearly responds to `terminal_transparency`
@@ -1893,9 +1907,11 @@ Uncommitted local files at pause point for this blocker:
 
 ### Blockers
 
-- Phase 13 terminal pane shell integration is currently blocked on two live runtime issues:
-  - terminal `Pane` shell border/radius still not visibly rendering as expected
-  - `terminal_blur` differences are still not visibly distinct enough in the tiled-pane runtime
+- **(2026-06-19) Reconciled:** the terminal `Pane` shell **border/radius blocker is FIXED** (#121/#122 —
+  see the RECONCILE note under "Current Blocker"; `shared-tasks.md` Task 07 → Accepted). Phase 13 pane-shell
+  hosting is **no longer blocked** on border/radius.
+- **Still open:** `terminal_blur` — partly addressed by #125 but the blur rework is WIP per `PLAN.md`; verify
+  whether values produce a clearly distinct visual response before closing.
 
 ### Verification State
 

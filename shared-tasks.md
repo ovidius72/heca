@@ -35,7 +35,7 @@ Status values:
 
 ## Task 07 — heca-grid-ui Pane Replacement and Pane Gap Config
 
-**Status:** Open
+**Status:** Accepted ✅ (verified against code 2026-06-19; shipped via merged PRs #121/#122)
 
 **Goal**
 
@@ -133,12 +133,22 @@ If practical, also live-check:
 
 **Agent Completion**
 
-- Pending.
+- Done via merged PRs **#121/#122**. Terminal pane chrome now uses the `heca-grid-ui` `Pane` widget:
+  `heca/src/app/terminal_render.rs::paint_terminal_pane_shell` builds `UiPane::new().border(color, width).radius(radius)`,
+  with terminal content rendered into the inset content rect (stencil-clipped to the rounded border).
+- Border width / radius / gap / padding are config-driven in `heca-config/src/appearance.rs`
+  (`pane_border_width`, `pane_border_radius`, `pane_gap`, `pane_padding` — each `Option`, falling back to
+  `theme.border_width` / `theme.pane_padding`), plus active/inactive/floating border colors.
 
 **Reviewer Decision**
 
-- Pending.
+- **Accepted.** Verified against current code (not completion notes alone).
 
 **Reviewer Notes**
 
-- Pending.
+- All acceptance criteria met: grid-ui `Pane` path used; border/radius/gap config-driven through theme/config
+  (not hardcoded render literals); terminal content renders inside the content rect; float/zoom clipping respected.
+- ⚠️ `terminal-implementation.md`'s "Current Blocker — Terminal Pane Shell / Frosted Surface" handoff is now
+  **stale** — the `Pane` border/radius rendering it lists as unresolved is exactly the work that shipped here
+  (and `terminal_blur` landed in #125). That doc's HANDOFF should be reconciled separately.
+- Per board rule 5, this Accepted task can now be removed from the file.

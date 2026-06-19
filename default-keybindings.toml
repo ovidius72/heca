@@ -1,7 +1,7 @@
 # heca Keybindings Reference
 # ===========================
 # This file documents ALL configurable keybindings in heca.
-# Copy sections into your ~/.config/heca/config.toml to customize.
+# This file is keybindings-only. Non-key settings live in `config.toml`.
 #
 # Syntax:
 #   action_name = "combo"                    # Single binding
@@ -30,63 +30,6 @@
 # The prefix key triggers prefix mode. All prefix bindings start with "prefix+".
 # Default: "ctrl+b"
 # prefix = "ctrl+a"
-
-# -----------------------------------------------------------------------------
-# Settings ([settings] in config.toml — not under [keys])
-# -----------------------------------------------------------------------------
-# shell_integration = true    # Auto-inject shell hooks that emit OSC 133/OSC 7
-#                             # for per-command status and cwd updates. Disable
-#                             # to spawn a bare shell; the generated snippets
-#                             # live under ~/.config/heca/runtime/shell-integration/.
-
-# -----------------------------------------------------------------------------
-# Appearance settings  ([appearance] in config.toml — not under [keys])
-# -----------------------------------------------------------------------------
-# A config override takes precedence; `None` inherits from the theme. Three
-# pane-chrome values are clamped to a safe range (marked CAP below) so the
-# rounded content-clip stays gentle and terminal content isn't cut off at the
-# borders.
-#
-# Window / chrome transparency + blur (each 0..=100, default 0):
-#   transparency           = 0    # Window background opacity  (0 = opaque, 100 = see-through)
-#   blur                   = 0    # Window backdrop blur (portable GPU pass; 0 = none)
-#
-# Terminal-pane transparency + frost (independent of the window ones):
-#   terminal_transparency = 0    # Terminal surface opacity   (0 = opaque, 100 = see-through)
-#   terminal_blur          = 0    # Frosted-glass tint strength behind the terminal (0 = none,
-#                                #   100 = full frost). Perceptual sqrt curve so low values show
-#                                #   visible frost sooner (10 → ~32%, 50 → ~71%). heca can't blur
-#                                #   the desktop (macOS vibrancy composites it behind the window),
-#                                #   so terminal_blur drives a frosted TINT over the vibrancy
-#                                #   instead of a real blur of an empty scene.
-#   terminal_frost_color   = "#1e1e2e"  # Optional. Frosted tint color. Default: theme
-#                                #   background (the app theme bg). Set to a lifted surface
-#                                #   (e.g. "#313244") for a lighter frosted-glass look.
-#
-# Floating-pane transparency + frost + border (independent of the tiled ones;
-# floating panes default to OPAQUE + no frost so they stay readable):
-#   terminal_floating_transparency = 0    # Floating terminal surface opacity (0 = opaque, 100 = see-through).
-#                                          #   Default 0 (opaque) — floating panes are solid, readable windows.
-#   terminal_floating_blur          = 0    # Floating frosted-tint strength (0 = none, 100 = full frost, sqrt curve).
-#                                          #   Default 0 (no frost). Set > 0 to frost floating panes too.
-#   pane_floating_border_color     = "#89b4fa"  # Optional. Floating pane border color (all floating panes).
-#                                          #   Default: theme.float_accent. Set to distinguish floating panes.
-#
-# OS backdrop material (platform-dependent; default "none"):
-#   vibrancy = "under_window_background"
-#     # one of: none | sidebar | hud_window | under_window_background |
-#     #         popover | menu | full_screen_ui | window_background
-#
-# Pane chrome (Option<f32> / Option<Color>; None → theme):
-#   pane_border_width        = 2.0       # CAP [0, 10]. Default: theme.border_width (mocha: 1.0).
-#   pane_border_radius       = 20.0      # CAP [0, 20]. Default: theme.border_radius (mocha: 6.0).
-#                                        # Capped at 20: higher radii carve into terminal cells at the corners.
-#   pane_padding             = 4.0       # CAP [0, 20]. Default: 4.0 (snug — the rounded clip handles corners).
-#   pane_border_color        = "#313244" # Default: theme.border at 50% alpha (inactive/unfocused panes).
-#   pane_active_border_color = "#89b4fa" # Default: theme.accent (focused pane).
-#   pane_floating_border_color = "#89b4fa" # Optional. Default: theme.float_accent (all floating panes).
-#   pane_gap                 = 8.0       # Default: 8.0 (gap between panes).
-#   sidebar_gap              = 12.0      # Default: 12.0 (gap between sidebar and content area).
 
 # -----------------------------------------------------------------------------
 # Navigation (within workspace)
@@ -140,7 +83,6 @@ sidebar_expand_toggle = "prefix+Tab" # Expand/collapse selected sidebar node
 # Global sidebar-tree UI collapse state (works even if sidebar is hidden)
 # These affect tree UI state only, not compositor/layout visibility.
 # The current workspace/column are taken from active main-view state.
-# These are also configurable from config.toml.
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
 
@@ -153,7 +95,7 @@ toggle_current_column_collapsed    = "prefix+("
 #
 # Sidebar navigation (only active IN sidebar mode):
 #   The defaults below come from [[keys.mode]] name = "sidebar".
-#   Override them in config.toml by redefining that mode's bindings.
+#   Override them by redefining that mode's bindings in your config.
 #   Use the real config shape:
 #   [[keys.mode]]
 #   name = "sidebar"
@@ -317,15 +259,6 @@ toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: 
 # keys = "Alt+Enter"
 # command = "alacritty"
 # kind = "terminal"
-#
-# Program presentation overrides used by pane chrome:
-#
-# [programs.nvim]
-# name = "Neovim"
-# icon = "\uE7C4"
-# color = "#89b4fa"
-#
-# Unknown programs fall back to their raw name and the default terminal icon.
 #
 # Planned richer parameterized bindings for normal mode:
 #

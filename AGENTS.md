@@ -558,7 +558,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 myvim/
 ├── AGENTS.md              ← This file
 ├── README.md              ← User-facing documentation
-├── keybindings.toml       ← Complete keybinding reference
+├── default-keybindings.toml  ← Complete keybinding reference
 ├── Cargo.toml             ← Workspace root
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
@@ -736,7 +736,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
 9. Add RPC parser support in `heca/src/rpc.rs`
 10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate.
-11. Document examples in `README.md` and `keybindings.toml`
+11. Document examples in `README.md` and `default-keybindings.toml`
 
 For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
 
@@ -952,7 +952,7 @@ Planning / rules:
 
 Default keybinding reference:
 
-- `keybindings.toml`
+- `default-keybindings.toml`
 - `README.md`
 
 Sidebar/action implementation files:

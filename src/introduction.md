@@ -374,7 +374,7 @@ bindings.insert("my_custom_action".to_string(), Single("prefix+y".to_string()));
 
 ### Default Keybindings
 
-See [`keybindings.toml`](keybindings.toml) for a complete reference of all default keybindings that can be customized.
+See [`default-keybindings.toml`](../default-keybindings.toml) for a complete reference of all default keybindings that can be customized.
 
 ### Customizing Keybindings
 
