@@ -1224,13 +1224,24 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "cosmic-text",
+ "csscolorparser",
  "heca-config",
  "heca-core",
  "heca-grid-ui",
+ "heca-theme",
  "naga",
  "pollster",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "heca-theme"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "serde",
+ "toml",
 ]
 
 [[package]]

@@ -13,6 +13,8 @@ cosmic-text = "0.14"
 bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+heca-theme = { path = "../heca-theme" }
+csscolorparser = "0.6"
 naga = { version = "25", features = ["wgsl-in"] }
 winit = { workspace = true }
 pollster = { workspace = true }
