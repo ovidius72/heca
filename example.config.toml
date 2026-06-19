@@ -1,0 +1,59 @@
+# heca Example Config
+# ===================
+# Copy this file to ~/.config/heca/config.toml (Linux/macOS) or
+# %APPDATA%\heca\config.toml (Windows) and then adjust only what you need.
+
+[settings]
+# Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status
+# and cwd updates. Disable to spawn a bare shell instead.
+shell_integration = true
+
+[appearance]
+# Window / chrome transparency + blur (each 0..=100, default 0)
+transparency = 0
+blur = 0
+
+# Terminal-pane transparency + frost
+terminal_transparency = 0
+terminal_blur = 0
+# terminal_frost_color = "#1e1e2e"
+
+# Floating panes default to opaque + no frost
+terminal_floating_transparency = 0
+terminal_floating_blur = 0
+# pane_floating_border_color = "#89b4fa"
+
+# Platform backdrop material
+# vibrancy = "under_window_background"
+
+# Pane chrome
+# pane_border_width = 2.0
+# pane_border_radius = 20.0
+# pane_padding = 4.0
+# pane_border_color = "#313244"
+# pane_active_border_color = "#89b4fa"
+# pane_gap = 8.0
+# sidebar_gap = 12.0
+
+[keys]
+# Prefix key triggers prefix mode for all `prefix+...` bindings.
+prefix = "ctrl+b"
+
+[[keys.command]]
+keys = "prefix+g"
+command = "lazygit"
+float = true
+close_pane = true
+
+[[keys.command]]
+keys = "Alt+Enter"
+command = "alacritty"
+kind = "terminal"
+
+[programs.nvim]
+name = "Neovim"
+icon = "\uE7C4"
+description = "modal editor"
+color = "#89b4fa"
+
+# Unknown programs fall back to their raw name and the default terminal icon.

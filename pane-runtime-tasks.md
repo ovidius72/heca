@@ -123,7 +123,7 @@ defaults + user `[programs.<raw>]` overrides; free-form glyph-string icons (no n
 Built:
 - added `heca-config/src/programs.rs` with documented `ProgramMeta`, `ProgramsConfig`, `ProgramView`, and a shared `DEFAULT_TERMINAL_ICON`
 - seeded built-in shell defaults (`sh`, `bash`, `zsh`, `fish`) and implemented field-wise merge for partial same-key user overrides, so shell icons survive overrides like `[programs.zsh] name = "Z Shell"`
-- wired `programs` into top-level `Config` deserialization and added config/docs examples in `README.md` and `keybindings.toml`
+- wired `programs` into top-level `Config` deserialization and added config/docs examples in `README.md`, `example.config.toml`, and `default-keybindings.toml`
 - implemented `ProgramsConfig::resolve(raw)` with `raw` always preserved, explicit names/colors passed through, and terminal-icon fallback for both shells and unknown programs per the locked Phase 5 rule
 - added tests for default shell resolution, partial override merging, unknown-program fallback, color parsing/pass-through, and top-level config parsing
 Verification:
@@ -142,7 +142,7 @@ Built:
 - added a real PTY command-spawn path in `TerminalBackend`/`PtyHandle`, using the user's shell as the command trampoline (`-ic` on Unix, `/C` on Windows) while keeping shell integration disabled for direct command spawns
 - implemented tiled and floating command-pane creation in `handle_spawn_command`, including pane-owned close-policy storage
 - applied close-policy exactly once from the drained exit-event path, while preserving shell-pane auto-close behavior
-- documented the current `[[keys.command]]` contract in `README.md` and `keybindings.toml`
+- documented the current `[[keys.command]]` contract in `README.md`, `example.config.toml`, and `default-keybindings.toml`
 - review cleanup: documented `PaneClosePolicy` public fields, added config-load validation for invalid `[[keys.command]].kind`, clarified RPC `spawn-command` separator/empty-command errors, documented why shell integration stays off for direct command panes, and fixed the small process-monitor signature formatting artifact
 Verification:
 - `cargo test -p heca-core -p heca-config -p heca --quiet`

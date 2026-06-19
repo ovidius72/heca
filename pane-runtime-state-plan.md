@@ -142,7 +142,7 @@ no agent has to guess.
   shell_integration = true   # default true; false ⇒ spawn bare shell (no injection); user can still source manually
   ```
   Start with the single bool. If per-shell knobs or a `"manual"` mode are needed later, grow it into a
-  `[shell_integration]` table then — not now. Document in `keybindings.toml` + README.
+  `[shell_integration]` table then — not now. Document in `example.config.toml` + README.
 - **OSC parsing = a passive pre-parse snooper in heca-core** before `engine.advance_bytes()`.
   wezterm-term at pinned rev `891bed31` exposes `AlertHandler`/`NotificationHandler` (bells) + `get_title()`
   (OSC 0/2) but **no general OSC-dispatch callback**, so intercept in heca. Contract:
@@ -356,13 +356,13 @@ subprocess (in-process via git2); clippy clean.
 in parens. Also seeds shell icons so idle panes show a terminal icon + shell name out-of-the-box.
 
 **Key files:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`),
-`heca-config/src/lib.rs` + `loader.rs` (wire `programs` field), `keybindings.toml` + `README.md` (docs),
+`heca-config/src/lib.rs` + `loader.rs` (wire `programs` field), `example.config.toml` + `default-keybindings.toml` + `README.md` (docs),
 resolver consumed by Phase 7.
 
 **Tasks**
 - [x] New `heca-config/src/programs.rs`: `ProgramMeta { name, icon, description, color: Option<Color> }` + `ProgramsConfig` (map keyed by raw program name) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
 - [x] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon). User entries override same-key defaults; users add `nvim`/`lazygit`/`yazi`/… via `[programs.<raw>]`.
-- [x] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `keybindings.toml` + `README.md`.
+- [x] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `example.config.toml`, `default-keybindings.toml`, and `README.md`.
 - [x] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to the default terminal icon when no explicit icon exists, `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are free-form glyph strings (no new `Glyph` enum variants needed).
 - [x] Tests: default shell hit; user override wins; miss → raw name + terminal icon; `color` parse + pass-through.
 
