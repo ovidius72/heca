@@ -25,9 +25,10 @@ struct VertexInput {
     @location(7) glow: vec4<f32>,
     @location(8) glow_radius: f32,
     @location(9) glow_intensity: f32,
-    @location(10) shadow: vec4<f32>,
-    @location(11) shadow_radius: f32,
-    @location(12) shadow_offset: vec2<f32>,
+    @location(10) glow_alpha_scale: f32,
+    @location(11) shadow: vec4<f32>,
+    @location(12) shadow_radius: f32,
+    @location(13) shadow_offset: vec2<f32>,
 };
 
 struct VertexOutput {
@@ -42,9 +43,10 @@ struct VertexOutput {
     @location(7) glow: vec4<f32>,
     @location(8) glow_radius: f32,
     @location(9) glow_intensity: f32,
-    @location(10) shadow: vec4<f32>,
-    @location(11) shadow_radius: f32,
-    @location(12) shadow_offset: vec2<f32>,
+    @location(10) glow_alpha_scale: f32,
+    @location(11) shadow: vec4<f32>,
+    @location(12) shadow_radius: f32,
+    @location(13) shadow_offset: vec2<f32>,
 };
 
 fn srgb_to_linear_channel(v: f32) -> f32 {
@@ -78,6 +80,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.glow = in.glow;
     out.glow_radius = in.glow_radius;
     out.glow_intensity = in.glow_intensity;
+    out.glow_alpha_scale = in.glow_alpha_scale;
     out.shadow = in.shadow;
     out.shadow_radius = in.shadow_radius;
     out.shadow_offset = in.shadow_offset;
@@ -137,14 +140,25 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         out_a = out_a + sa * inv;
     }
 
-    // Glow: additive light with a smooth compact falloff (0 by `glow_radius`,
-    // so it fully fades inside the expanded quad — no hard cutoff). It adds
-    // color but NOT alpha, so it brightens the background through itself like a
-    // real glow instead of painting a solid block.
+    // Glow: on dark themes keep the original additive light. On light themes,
+    // switch to a translucent tinted halo so the glow stays visible instead of
+    // washing out against near-white backgrounds.
     if (in.glow_radius > 0.0 && in.glow_intensity > 0.0 && d > 0.0) {
         let t = clamp(1.0 - d / in.glow_radius, 0.0, 1.0);
         let g = t * t * in.glow_intensity * in.glow.a;
-        out_rgb = out_rgb + srgb_to_linear(in.glow.rgb) * g;
+        let glow_rgb = srgb_to_linear(in.glow.rgb);
+        if (in.glow_alpha_scale > 0.0) {
+            // Light-theme path: softer, blurrier tinted halo with a narrower
+            // apparent spread than the additive dark-theme path.
+            let base = in.glow_intensity * in.glow.a;
+            let halo = t * t * (3.0 - 2.0 * t);
+            let ga = clamp(halo * sqrt(base) * in.glow_alpha_scale, 0.0, 1.0);
+            let inv = 1.0 - out_a;
+            out_rgb = out_rgb + glow_rgb * (ga * inv);
+            out_a = out_a + ga * inv;
+        } else {
+            out_rgb = out_rgb + glow_rgb * g;
+        }
     }
 
     return vec4<f32>(out_rgb, out_a);
