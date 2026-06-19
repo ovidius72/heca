@@ -153,7 +153,9 @@ enum ActionPolicy {
     TiledOnly,
     /// Operates on the focused pane regardless of domain (close, rename, float/unfloat).
     FocusedPaneLocal,
-    /// Affects workspace structure — blocked when Floating (for now).
+    /// Affects workspace structure — blocked when Floating by current policy.
+    /// If that product rule changes, update this classification together with
+    /// the routing tests; do not rely on an implicit future relaxation.
     WorkspaceLevel,
     /// Policy depends on the interaction source.
     SourceDependent,

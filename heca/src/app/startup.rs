@@ -308,6 +308,7 @@ pub(crate) async fn init_state(
         terminal_cell_size,
         scale_factor,
         needs_redraw: true,
+        chrome_damage_mode: app_state::ChromeDamageMode::Full,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
         sidebar_tree,

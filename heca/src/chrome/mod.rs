@@ -110,10 +110,6 @@ fn pane_glyph(_pane_name: &str) -> Glyph {
 
 type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
 
-fn bump_repaint(req: &Signal<u64>) {
-    req.update(|n| *n += 1);
-}
-
 /// Transparent wrapper that marks only its own bounds dirty when the host bumps
 /// `request`. This lets retained chrome updates damage the specific card/marker/label
 /// instead of the entire chrome root.
@@ -170,73 +166,13 @@ impl Component for RepaintWatch {
     }
 }
 
-/// Transparent wrapper that paints a theme-driven hover frame around its child when
-/// the host-owned `hovered` signal is true. This consumes `chrome_state`'s
-/// `hovered_pane` mirror directly instead of relying only on widget-local pointer
-/// hover, which keeps the retained tree aligned with the shared chrome store.
-struct HoverFrame {
-    base: heca_grid_ui::Base,
-    hovered: Signal<bool>,
-}
-
-impl HoverFrame {
-    fn new(child: impl Component + 'static) -> (Self, Signal<bool>) {
-        let mut base = heca_grid_ui::Base::new();
-        base.style.width = Length::Auto;
-        base.style.height = Length::Auto;
-        base.style.direction = heca_grid_ui::Direction::Column;
-        base.children.push(Box::new(child));
-        let hovered = signal(false);
-        (Self { base, hovered }, hovered)
-    }
-}
-
-impl Component for HoverFrame {
-    fn base(&self) -> &heca_grid_ui::Base {
-        &self.base
-    }
-
-    fn base_mut(&mut self) -> &mut heca_grid_ui::Base {
-        &mut self.base
-    }
-
-    fn paint(&self, cx: &mut PaintCx) {
-        if !self.base.visible.get_untracked() {
-            return;
-        }
-        for child in &self.base.children {
-            if child.base().style.hidden {
-                continue;
-            }
-            child.paint(cx);
-        }
-        if !self.hovered.get_untracked() {
-            return;
-        }
-        let rect = self.base.bounds;
-        let border = cx
-            .border(cx.theme().accent.with_alpha(160))
-            .map(|mut b| {
-                b.width = b.width.max(1.0);
-                b
-            });
-        let radius = cx.theme().control_radius();
-        cx.rect(
-            rect,
-            cx.theme().accent.with_alpha(18),
-            border,
-            radius,
-            None,
-        );
-    }
-}
-
 /// A single pane **card**, styled like the showcase PANES rows: a state-tinted
 /// background + radius, an active accent bar, a leading (dynamic) icon and the pane
 /// name. The showcase card's trailing status badge + multi-segment git-branch `Tag`
 /// are intentionally omitted — that data (process status / branch / change info)
-/// isn't on `SidebarPaneEntry` yet; this is the composition seam for it. Display-only
-/// for now — interaction is wired with the F4 shared-state layer.
+/// isn't on `SidebarPaneEntry` yet; this is the composition seam for it. Focus and
+/// drag/drop interaction are already wired through the F4 shared-state layer; the
+/// remaining seam here is richer trailing runtime/git metadata.
 fn pane_card(
     pane: &SidebarPaneEntry,
     theme: &GuiTheme,
@@ -286,11 +222,8 @@ fn pane_card(
     // from the active `InputMode` candidates (keyboard logic stays the source of truth).
     let hint = signal(None);
     signals.pane_hint.push((pane_id, hint));
-    let (hover_frame, hovered) =
-        HoverFrame::new(KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight));
-    signals.pane_hover.push((pane_id, hovered));
-    let (watch, repaint) = RepaintWatch::new(hover_frame);
-    signals.pane_repaint.push((pane_id, repaint));
+    let (watch, _repaint) =
+        RepaintWatch::new(KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight));
     watch
 }
 
@@ -326,8 +259,7 @@ fn column_view(
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
     signals.col_active.push((pane_ids, col.state()));
-    let (watch, repaint) = RepaintWatch::new(col);
-    signals.col_repaint.push(repaint);
+    let (watch, _repaint) = RepaintWatch::new(col);
     watch
 }
 
@@ -524,8 +456,8 @@ fn chrome_root(
     // The status label's text is bound so mode/focus changes update it in place.
     let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
     let status_signal = status_label.text_signal();
-    let (status_watch, status_repaint) = RepaintWatch::new(status_label);
-    signals.status = Some((status_signal, status_repaint));
+    let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
+    signals.status = Some(status_signal);
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
@@ -766,15 +698,9 @@ impl DragItemRegistry {
 pub(crate) struct ChromeSignals {
     /// Each pane card's `active` signal, keyed by pane id.
     pub(crate) pane_active: Vec<(PaneId, Signal<bool>)>,
-    /// Store-driven hover signals for pane cards, keyed by pane id.
-    pub(crate) pane_hover: Vec<(PaneId, Signal<bool>)>,
-    /// Repaint request handles for pane cards, keyed by pane id.
-    pub(crate) pane_repaint: Vec<(PaneId, Signal<u64>)>,
     /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
     /// iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
-    /// Repaint request handles for column wrappers.
-    pub(crate) col_repaint: Vec<Signal<u64>>,
     /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
     /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
     /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
@@ -783,7 +709,7 @@ pub(crate) struct ChromeSignals {
     /// only projects it into the retained Dock.
     pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
     /// The status-bar label's text signal.
-    pub(crate) status: Option<(Signal<String>, Signal<u64>)>,
+    pub(crate) status: Option<Signal<String>>,
 }
 
 /// The move/swap/take pick keycap for `pane` — `Some(letter)` while it is a pick
@@ -856,50 +782,24 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
 /// bound signals. Guarded — writes only on change, so unchanged frames cause no
 /// signal churn. Called each frame before paint; this is what lets focus changes
 /// update the highlight + status **without** rebuilding the tree.
-pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
+pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     let Some(retained) = state.chrome_tree.as_ref() else {
-        return;
+        return false;
     };
+    let mut changed = false;
     let active = state.chrome_state.workspaces.active_pane();
-    let hovered = state.chrome_state.workspaces.hovered_pane();
     for (pid, sig) in &retained.signals.pane_active {
         let v = active == Some(*pid);
         if sig.get_untracked() != v {
             sig.set(v);
-            if let Some((_, repaint)) = retained
-                .signals
-                .pane_repaint
-                .iter()
-                .find(|(pane_id, _)| pane_id == pid)
-            {
-                bump_repaint(repaint);
-            }
+            changed = true;
         }
     }
-    for (pid, sig) in &retained.signals.pane_hover {
-        let v = hovered == Some(*pid);
-        if sig.get_untracked() != v {
-            sig.set(v);
-            if let Some((_, repaint)) = retained
-                .signals
-                .pane_repaint
-                .iter()
-                .find(|(pane_id, _)| pane_id == pid)
-            {
-                bump_repaint(repaint);
-            }
-        }
-    }
-    for ((pids, sig), repaint) in retained
-        .signals
-        .col_active
-        .iter()
-        .zip(retained.signals.col_repaint.iter())
-    {
+    for (pids, sig) in &retained.signals.col_active {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
-            bump_repaint(repaint);
+            changed = true;
         }
     }
     // Project the active move/swap/take pick candidates onto each pane's KeyHint
@@ -912,23 +812,17 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) {
         let next = pick_keycap(*pid, active, Some(&candidates));
         if sig.get_untracked() != next {
             sig.set(next);
-            if let Some((_, repaint)) = retained
-                .signals
-                .pane_repaint
-                .iter()
-                .find(|(pane_id, _)| pane_id == pid)
-            {
-                bump_repaint(repaint);
-            }
+            changed = true;
         }
     }
-    if let Some((status, repaint)) = &retained.signals.status {
+    if let Some(status) = &retained.signals.status {
         let next = chrome_status(state);
         if status.get_untracked() != next {
             status.set(next);
-            bump_repaint(repaint);
+            changed = true;
         }
     }
+    changed
 }
 
 /// Build the chrome root tree from app state (the expensive part — creates the
@@ -1028,11 +922,6 @@ pub(crate) fn chrome_dispatch_move(state: &mut crate::app_state::AppState, pos: 
             pos: Point::new(pos.0 as f64, pos.1 as f64),
         });
     }
-    let hovered = match sidebar_drag_source(state, pos) {
-        Some(ChromeDragItem::Pane(pane_id)) => Some(pane_id),
-        _ => None,
-    };
-    state.chrome_state.workspaces.set_hovered_pane(hovered);
 }
 
 /// The pane a press at `pos` (logical window coords) would start dragging, found by

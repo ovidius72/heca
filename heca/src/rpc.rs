@@ -345,10 +345,10 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                 close_policy,
             })
         }
-        // Selection (host capability, Task 02). Reachable from RPC, keyboard
-        // bindings, and future mouse/UI dispatch. Phase 10 will own the
-        // real `copy-selection` and `paste-clipboard` behavior; today they
-        // are routed placeholders that set `needs_redraw`.
+        // Selection (host capability, Task 02). Reachable from RPC, keyboard,
+        // and mouse/UI dispatch. `copy-selection` is implemented via the shared
+        // host selection model; `paste-clipboard` remains the deferred Phase 10
+        // behavior.
         "enter-selection-mode" => Ok(WmAction::EnterSelectionMode),
         "selection-left" => Ok(WmAction::SelectionLeft),
         "selection-right" => Ok(WmAction::SelectionRight),

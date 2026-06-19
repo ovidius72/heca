@@ -19,9 +19,6 @@ pub enum ChromeEvent {
     PaneActiveChanged {
         pane: Option<PaneId>,
     },
-    PaneHoveredChanged {
-        pane: Option<PaneId>,
-    },
     PanePickCandidatesChanged {
         candidates: Vec<(char, PaneId)>,
     },
@@ -66,7 +63,6 @@ impl ChromeEvent {
     pub fn name(&self) -> &'static str {
         match self {
             ChromeEvent::PaneActiveChanged { .. } => "pane.active.changed",
-            ChromeEvent::PaneHoveredChanged { .. } => "pane.hovered.changed",
             ChromeEvent::PanePickCandidatesChanged { .. } => "pane.pick.changed",
             ChromeEvent::PaneProcessChanged { .. } => "pane.process.changed",
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",

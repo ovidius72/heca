@@ -5,7 +5,7 @@
 
 use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
-use crate::app_state::{AppState, InputMode};
+use crate::app_state::{AppState, ChromeDamageMode, InputMode};
 use heca_core::backend::BackendAlert;
 use heca_grid_ui::Component;
 use crate::mouse;
@@ -51,16 +51,17 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     if should_timeout {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
-        state.needs_redraw = true;
+        state.mark_full_redraw();
     }
 
     let edge_scrolled = mouse::process_edge_scroll(state);
     if edge_scrolled {
         after_config_change(state);
+        state.chrome_damage_mode = ChromeDamageMode::Full;
     }
 
     if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
-        state.needs_redraw = true;
+        state.mark_full_redraw();
     }
 
     state.session.advance_animations();
@@ -77,12 +78,22 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             .request_user_attention(Some(UserAttentionType::Informational));
     }
 
-    let needs_frame =
-        state.needs_redraw
-            || backend_poll.has_data
-            || backend_poll.closed_any
-            || state.session.are_animations_ongoing()
-            || chrome_animating;
+    let animation_only_redraw =
+        !state.needs_redraw
+            && !backend_poll.has_data
+            && !backend_poll.closed_any
+            && (state.session.are_animations_ongoing() || chrome_animating);
+    if animation_only_redraw {
+        state.chrome_damage_mode = ChromeDamageMode::Tracked;
+    } else if backend_poll.has_data || backend_poll.closed_any {
+        state.chrome_damage_mode = ChromeDamageMode::Full;
+    }
+
+    let needs_frame = state.needs_redraw
+        || backend_poll.has_data
+        || backend_poll.closed_any
+        || state.session.are_animations_ongoing()
+        || chrome_animating;
     if needs_frame {
         state.window.request_redraw();
     }

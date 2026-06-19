@@ -9,7 +9,7 @@ use crate::app::terminal_render::{
     selection_overlay_for_pane, stable_floating_content_rect,
     stable_tiled_content_rect, PaneRenderState, TerminalRenderPassContext,
 };
-use crate::app_state::{AppState, InputMode};
+use crate::app_state::{AppState, ChromeDamageMode, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_grid_ui::{
@@ -935,7 +935,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
-    crate::chrome::sync_chrome_signals(state);
+    let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
+    if matches!(state.chrome_damage_mode, ChromeDamageMode::Full) && chrome_signals_changed {
+        state.chrome_damage_mode = ChromeDamageMode::ForceFullOnNextRequest;
+    }
     let chrome_damage = heca_grid_ui::collect_damage(
         &state.chrome_tree.as_ref().expect("chrome tree set above").root,
     );
@@ -957,10 +960,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &mut state.text_renderer,
         &state.queue,
         &chrome_scene,
-        chrome_damage,
+        match state.chrome_damage_mode {
+            ChromeDamageMode::Full | ChromeDamageMode::ForceFullOnNextRequest => None,
+            ChromeDamageMode::Tracked => chrome_damage,
+        },
         scene_view,
         &mut encoder,
     );
+    if !matches!(state.chrome_damage_mode, ChromeDamageMode::ForceFullOnNextRequest) {
+        state.chrome_damage_mode = ChromeDamageMode::Full;
+    }
 
     state.compositor.blit(&view, &mut encoder);
     state.queue.submit(std::iter::once(encoder.finish()));
