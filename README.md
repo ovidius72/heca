@@ -235,7 +235,7 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 
 heca loads config from `~/.config/heca/config.toml` (Linux/macOS) or `%APPDATA%\heca\config.toml` (Windows).
 This repo now includes:
-- `default-config.toml` — example general config (`settings`, `appearance`, `programs`, `[[keys.command]]`, prefix)
+- `example.config.toml` — example general config (`settings`, `appearance`, `programs`, `[[keys.command]]`, prefix)
 - `default-keybindings.toml` — keybindings-only reference
 
 ### Minimal Config
