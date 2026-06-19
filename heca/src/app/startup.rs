@@ -305,6 +305,7 @@ pub(crate) async fn init_state(
         session,
         backends,
         theme: app_config.theme.clone(),
+        programs: app_config.config.programs.clone(),
         appearance,
         terminal_cell_size,
         scale_factor,

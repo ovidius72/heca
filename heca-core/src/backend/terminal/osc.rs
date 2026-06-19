@@ -5,6 +5,7 @@ pub(super) enum OscEvent {
     PromptStart,
     CommandStart,
     PreExec,
+    Program(String),
     CommandFinished(i32),
     Cwd(PathBuf),
 }
@@ -102,6 +103,8 @@ fn parse_osc_133(payload: &str) -> Option<OscEvent> {
         Some(OscEvent::CommandStart)
     } else if payload == "C" {
         Some(OscEvent::PreExec)
+    } else if let Some(program) = payload.strip_prefix("E;") {
+        Some(OscEvent::Program(percent_decode(program)?))
     } else if let Some(code) = payload.strip_prefix("D;") {
         Some(OscEvent::CommandFinished(code.parse().ok()?))
     } else {
@@ -168,10 +171,14 @@ mod tests {
     fn parses_st_terminated_and_fragmented_sequences() {
         let mut snooper = OscSnooper::default();
         assert!(snooper.observe(b"\x1b]133;").is_empty());
-        let events = snooper.observe(b"A\x1b\\\x1b]133;D;0\x1b\\");
+        let events = snooper.observe(b"A\x1b\\\x1b]133;E;nvim\x1b\\\x1b]133;D;0\x1b\\");
         assert_eq!(
             events,
-            vec![OscEvent::PromptStart, OscEvent::CommandFinished(0)]
+            vec![
+                OscEvent::PromptStart,
+                OscEvent::Program("nvim".into()),
+                OscEvent::CommandFinished(0),
+            ]
         );
     }
 

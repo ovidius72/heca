@@ -50,10 +50,19 @@ keys = "Alt+Enter"
 command = "alacritty"
 kind = "terminal"
 
-[programs.nvim]
+# Built-in catalog entries are seeded in code for common shells plus:
+# nvim, vim, helix, yazi, ranger, claude, codex, opencode, pi.
+# Use `[program.<id>]` to override one, add aliases, or disable it cleanly.
+
+[program.nvim]
 name = "Neovim"
-icon = "\uE7C4"
+processes = ["v", "nvim"]
+icon = "file_code"
 description = "modal editor"
 color = "#89b4fa"
+
+# Remove a built-in entry and fall back to raw process name + terminal icon.
+# [program.ranger]
+# disabled = true
 
 # Unknown programs fall back to their raw name and the default terminal icon.

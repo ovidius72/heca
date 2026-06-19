@@ -90,22 +90,96 @@ impl ChromeConfig {
 
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_core::layout::PaneId;
+use heca_core::runtime::{PaneRuntime, ProcessStatus};
+use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::style::{Align, Length, Track};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label,
-    MarkerGroup, Pane, Row, Surface,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, Grid, HintPlacement, Icon, IconButton,
+    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Visibility,
 };
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
-/// Leading glyph for a pane card. **Dynamic-ready seam:** today every pane hosts a
-/// terminal, so this is always [`Glyph::Terminal`]; later it becomes a function of
-/// the process/app running in the pane (editor, shell, browser, …).
-fn pane_glyph(_pane_name: &str) -> Glyph {
-    Glyph::Terminal
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PaneInfoView {
+    icon: Glyph,
+    title: String,
+    status: ProcessStatus,
+    git_branch: Option<String>,
+    git_added: Option<String>,
+    git_modified: Option<String>,
+    git_deleted: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PaneInfoSignals {
+    icon: Signal<Glyph>,
+    title: Signal<String>,
+    status_error: Signal<bool>,
+    git_visible: Signal<bool>,
+    git_branch: Signal<String>,
+    git_added_visible: Signal<bool>,
+    git_added: Signal<String>,
+    git_modified_visible: Signal<bool>,
+    git_modified: Signal<String>,
+    git_deleted_visible: Signal<bool>,
+    git_deleted: Signal<String>,
+}
+
+fn program_glyph(icon: ProgramIcon) -> Glyph {
+    match icon {
+        ProgramIcon::Terminal => Glyph::Terminal,
+        ProgramIcon::FileCode => Glyph::FileCode,
+        ProgramIcon::Folder => Glyph::Folder,
+        ProgramIcon::FolderOpen => Glyph::FolderOpen,
+        ProgramIcon::GitBranch => Glyph::GitBranch,
+        ProgramIcon::Gear => Glyph::Gear,
+        ProgramIcon::Search => Glyph::Search,
+    }
+}
+
+fn pane_info_view(
+    programs: &ProgramsConfig,
+    fallback_name: &str,
+    runtime: Option<&PaneRuntime>,
+) -> PaneInfoView {
+    let raw = runtime
+        .and_then(|pane| pane.program.as_deref())
+        .filter(|raw| !raw.is_empty())
+        .unwrap_or(fallback_name);
+    let program = programs.resolve(raw);
+    let git = runtime.and_then(|pane| pane.git.as_ref());
+    PaneInfoView {
+        icon: program_glyph(program.icon),
+        title: program.name.into_owned(),
+        status: runtime
+            .map(|pane| pane.status.clone())
+            .unwrap_or(ProcessStatus::Idle),
+        git_branch: git
+            .map(|info| info.branch.clone().unwrap_or_else(|| "detached".to_string())),
+        git_added: git.and_then(|info| (info.added > 0).then(|| format!("+{}", info.added))),
+        git_modified: git
+            .and_then(|info| (info.modified > 0).then(|| format!("~{}", info.modified))),
+        git_deleted: git
+            .and_then(|info| (info.deleted > 0).then(|| format!("-{}", info.deleted))),
+    }
+}
+
+fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
+    state.with_pane_runtime(pane_id, |runtime| {
+        runtime.map(|runtime| PaneRuntime {
+            program: runtime.program.get_untracked(),
+            status: runtime.status.get_untracked(),
+            cwd: runtime.cwd.get_untracked(),
+            exit_code: runtime.exit_code.get_untracked(),
+            git: runtime.git.get_untracked(),
+            kind: runtime.kind.get_untracked(),
+        })
+    })
 }
 
 type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
@@ -167,22 +241,26 @@ impl Component for RepaintWatch {
 }
 
 /// A single pane **card**, styled like the showcase PANES rows: a state-tinted
-/// background + radius, an active accent bar, a leading (dynamic) icon and the pane
-/// name. The showcase card's trailing status badge + multi-segment git-branch `Tag`
-/// are intentionally omitted — that data (process status / branch / change info)
-/// isn't on `SidebarPaneEntry` yet; this is the composition seam for it. Focus and
-/// drag/drop interaction are already wired through the F4 shared-state layer; the
-/// remaining seam here is richer trailing runtime/git metadata.
+/// background + radius, an active accent bar, a leading program icon, the display
+/// name, an optional exceptional-state indicator, and git metadata when present.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pane-card projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
+)]
 fn pane_card(
     pane: &SidebarPaneEntry,
+    programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     active_pane: Option<PaneId>,
+    ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> RepaintWatch {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
+    let runtime = runtime_snapshot(ws_state, pane_id);
+    let info = pane_info_view(programs, &pane.name, runtime.as_ref());
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
     // is drawn by `Row` from its `active` signal, not baked into the background. This
     // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
@@ -191,6 +269,38 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
+    let icon_widget = Icon::new(info.icon).size(16.0).color(theme.foreground);
+    let icon_signal = icon_widget.glyph_signal();
+    let title_label = Label::new(info.title.clone()).color(theme.foreground);
+    let title_signal = title_label.text_signal();
+    let error_badge =
+        Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
+    let error_signal = error_badge.visible_signal();
+    let branch_badge = Badge::outline(info.git_branch.clone().unwrap_or_default());
+    let branch_signal = branch_badge.label_signal();
+    let add_badge = Badge::success(info.git_added.clone().unwrap_or_default());
+    let add_label = add_badge.label_signal();
+    let add_visible = Visibility::new(add_badge, info.git_added.is_some());
+    let add_visible_signal = add_visible.visible_signal();
+    let modified_badge = Badge::warning(info.git_modified.clone().unwrap_or_default());
+    let modified_label = modified_badge.label_signal();
+    let modified_visible = Visibility::new(modified_badge, info.git_modified.is_some());
+    let modified_visible_signal = modified_visible.visible_signal();
+    let deleted_badge = Badge::danger(info.git_deleted.clone().unwrap_or_default());
+    let deleted_label = deleted_badge.label_signal();
+    let deleted_visible = Visibility::new(deleted_badge, info.git_deleted.is_some());
+    let deleted_visible_signal = deleted_visible.visible_signal();
+    let git_row = Visibility::new(
+        Flex::row()
+            .align(Align::Center)
+            .gap(6.0)
+            .child(branch_badge)
+            .child(add_visible)
+            .child(modified_visible)
+            .child(deleted_visible),
+        info.git_branch.is_some(),
+    );
+    let git_visible_signal = git_row.visible_signal();
     let emit = emit_intent.clone();
     let card = Row::new()
         .background(theme.foreground.with_alpha(12))
@@ -207,11 +317,15 @@ fn pane_card(
             emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
         })
         .child(
-            Flex::row()
-                .align(Align::Center)
-                .gap(8.0)
-                .child(Icon::new(pane_glyph(&pane.name)).size(16.0).color(theme.foreground))
-                .child(Label::new(pane.name.clone()).color(theme.foreground)),
+            Grid::new()
+                .columns([Track::Px(18.0), Track::Fr(1.0), Track::Auto])
+                .rows([Track::Auto, Track::Auto])
+                .areas(["icon title status", ". git git"])
+                .grow(1.0)
+                .area(Flex::row().align(Align::Center).child(icon_widget), "icon")
+                .area(title_label, "title")
+                .area(Flex::row().align(Align::Center).child(error_badge), "status")
+                .area(git_row, "git"),
         );
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
@@ -222,6 +336,22 @@ fn pane_card(
     // from the active `InputMode` candidates (keyboard logic stays the source of truth).
     let hint = signal(None);
     signals.pane_hint.push((pane_id, hint));
+    signals.pane_info.push((
+        pane_id,
+        PaneInfoSignals {
+            icon: icon_signal,
+            title: title_signal,
+            status_error: error_signal,
+            git_visible: git_visible_signal,
+            git_branch: branch_signal,
+            git_added_visible: add_visible_signal,
+            git_added: add_label,
+            git_modified_visible: modified_visible_signal,
+            git_modified: modified_label,
+            git_deleted_visible: deleted_visible_signal,
+            git_deleted: deleted_label,
+        },
+    ));
     let (watch, _repaint) =
         RepaintWatch::new(KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight));
     watch
@@ -234,12 +364,18 @@ fn pane_card(
 /// pane, and its grip gutter is the seam for the future move/swap [`KeyHint`] target
 /// and DnD drag handle (F4.4/F4.5) — applied by the host via `KeyHint`/`DragExt`, not
 /// baked into the widget.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "column projection still threads host/runtime context explicitly; phase-local fix before a larger ChromeCx refactor"
+)]
 fn column_view(
     c: &SidebarColEntry,
     ws_idx: usize,
+    programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     active_pane: Option<PaneId>,
+    ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> RepaintWatch {
@@ -254,7 +390,16 @@ fn column_view(
         .draggable(drag_id)
         .drop_target(drag_id);
     for pane in &c.panes {
-        col = col.child(pane_card(pane, theme, emit_intent, active_pane, signals, drag));
+        col = col.child(pane_card(
+            pane,
+            programs,
+            theme,
+            emit_intent,
+            active_pane,
+            ws_state,
+            signals,
+            drag,
+        ));
     }
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
@@ -270,6 +415,7 @@ fn column_view(
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
 fn build_workspaces_container(
     tree: &SidebarTree,
+    programs: &ProgramsConfig,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
@@ -329,10 +475,29 @@ fn build_workspaces_container(
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
         for c in &ws.columns {
-            cols = cols.child(column_view(c, ws_idx, theme, emit_intent, active_pane, signals, drag));
+            cols = cols.child(column_view(
+                c,
+                ws_idx,
+                programs,
+                theme,
+                emit_intent,
+                active_pane,
+                ws_state,
+                signals,
+                drag,
+            ));
         }
         for float in &ws.floating_panes {
-            cols = cols.child(pane_card(float, theme, emit_intent, active_pane, signals, drag));
+            cols = cols.child(pane_card(
+                float,
+                programs,
+                theme,
+                emit_intent,
+                active_pane,
+                ws_state,
+                signals,
+                drag,
+            ));
         }
         dock = dock.child(cols);
         col = col.child(dock);
@@ -351,6 +516,7 @@ fn build_workspaces_container(
 )]
 fn build_sidebar_shell(
     tree: &SidebarTree,
+    programs: &ProgramsConfig,
     left_w: f32,
     sidebar_h: f32,
     theme: &GuiTheme,
@@ -388,7 +554,15 @@ fn build_sidebar_shell(
                 .background(theme.surface)
                 .border(theme.border, theme.border_width)
                 .child(header)
-                .child(build_workspaces_container(tree, theme, emit_intent, ws_state, signals, drag)),
+                .child(build_workspaces_container(
+                    tree,
+                    programs,
+                    theme,
+                    emit_intent,
+                    ws_state,
+                    signals,
+                    drag,
+                )),
         )
 }
 
@@ -708,6 +882,8 @@ pub(crate) struct ChromeSignals {
     /// (candidates + key consumption) already lives in the action/input layer; this
     /// only projects it into the retained Dock.
     pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
+    /// Per-pane runtime display signals for the fixed pane-info rows.
+    pub(crate) pane_info: Vec<(PaneId, PaneInfoSignals)>,
     /// The status-bar label's text signal.
     pub(crate) status: Option<Signal<String>>,
 }
@@ -728,6 +904,20 @@ fn pick_keycap(
         .iter()
         .find(|(_, p)| *p == pane)
         .map(|(ch, _)| ch.to_string())
+}
+
+fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+    tree.workspaces
+        .iter()
+        .flat_map(|ws| {
+            ws.columns
+                .iter()
+                .flat_map(|col| col.panes.iter())
+                .chain(ws.floating_panes.iter())
+        })
+        .find(|pane| pane.pane_id == pane_id)
+        .map(|pane| pane.name.as_str())
+        .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
 }
 
 fn sync_pane_runtime_state(
@@ -816,6 +1006,53 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             changed = true;
         }
     }
+    for (pid, sigs) in &retained.signals.pane_info {
+        let runtime = runtime_snapshot(&state.chrome_state.workspaces, *pid);
+        let next = pane_info_view(
+            &state.programs,
+            pane_fallback_name(&state.sidebar_tree, *pid),
+            runtime.as_ref(),
+        );
+        if sigs.icon.get_untracked() != next.icon {
+            sigs.icon.set(next.icon);
+            changed = true;
+        }
+        if sigs.title.get_untracked() != next.title {
+            sigs.title.set(next.title.clone());
+            changed = true;
+        }
+        let status_error = next.status == ProcessStatus::Error;
+        if sigs.status_error.get_untracked() != status_error {
+            sigs.status_error.set(status_error);
+            changed = true;
+        }
+        let git_visible = next.git_branch.is_some();
+        if sigs.git_visible.get_untracked() != git_visible {
+            sigs.git_visible.set(git_visible);
+            changed = true;
+        }
+        let branch = next.git_branch.unwrap_or_default();
+        if sigs.git_branch.get_untracked() != branch {
+            sigs.git_branch.set(branch);
+            changed = true;
+        }
+        for (visible_signal, label_signal, value) in [
+            (sigs.git_added_visible, sigs.git_added, next.git_added),
+            (sigs.git_modified_visible, sigs.git_modified, next.git_modified),
+            (sigs.git_deleted_visible, sigs.git_deleted, next.git_deleted),
+        ] {
+            let visible = value.is_some();
+            if visible_signal.get_untracked() != visible {
+                visible_signal.set(visible);
+                changed = true;
+            }
+            let label = value.unwrap_or_default();
+            if label_signal.get_untracked() != label {
+                label_signal.set(label);
+                changed = true;
+            }
+        }
+    }
     if let Some(status) = &retained.signals.status {
         let next = chrome_status(state);
         if status.get_untracked() != next {
@@ -854,6 +1091,7 @@ pub(crate) fn build_chrome_root(
         let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
         Some(build_sidebar_shell(
             &state.sidebar_tree,
+            &state.programs,
             left_w,
             sidebar_h,
             &theme,
@@ -1041,6 +1279,7 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
 #[cfg(test)]
 mod tests {
     use super::*;
+    use heca_config::programs::ProgramsConfig;
     use heca_core::layout::{LayoutOptions, Session, SessionId};
     use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
     use std::path::PathBuf;
@@ -1177,6 +1416,7 @@ mod tests {
         // the container hosts a dock per workspace (so the tree's text is visible).
         let shell = super::build_sidebar_shell(
             &tree,
+            &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
             &theme,
@@ -1233,6 +1473,7 @@ mod tests {
         let mut drag = super::DragItemRegistry::default();
         let _ = super::build_sidebar_shell(
             &tree,
+            &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
             &theme,
@@ -1372,5 +1613,56 @@ mod tests {
                 .workspaces
                 .with_pane_runtime(PaneId(10), |runtime| runtime.is_some())
         );
+    }
+
+    #[test]
+    fn pane_info_view_resolves_program_status_and_git_segments() {
+        let programs = ProgramsConfig::default();
+        let runtime = PaneRuntime {
+            program: Some("v".into()),
+            status: ProcessStatus::Running,
+            cwd: None,
+            exit_code: None,
+            git: Some(GitInfo {
+                branch: Some("main".into()),
+                ahead: 0,
+                behind: 0,
+                added: 2,
+                modified: 3,
+                deleted: 1,
+                dirty: true,
+            }),
+            kind: ContentKind::Terminal,
+        };
+
+        let view = pane_info_view(&programs, "shell", Some(&runtime));
+
+        assert_eq!(view.icon, Glyph::FileCode);
+        assert_eq!(view.title, "Neovim");
+        assert_eq!(view.status, ProcessStatus::Running);
+        assert_eq!(view.git_branch.as_deref(), Some("main"));
+        assert_eq!(view.git_added.as_deref(), Some("+2"));
+        assert_eq!(view.git_modified.as_deref(), Some("~3"));
+        assert_eq!(view.git_deleted.as_deref(), Some("-1"));
+    }
+
+    #[test]
+    fn pane_info_view_uses_shell_fallbacks_without_git() {
+        let programs = ProgramsConfig::default();
+        let runtime = PaneRuntime {
+            program: Some("zsh".into()),
+            status: ProcessStatus::Idle,
+            ..PaneRuntime::default()
+        };
+
+        let view = pane_info_view(&programs, "pane", Some(&runtime));
+
+        assert_eq!(view.icon, Glyph::Terminal);
+        assert_eq!(view.title, "zsh");
+        assert_eq!(view.status, ProcessStatus::Idle);
+        assert_eq!(view.git_branch, None);
+        assert_eq!(view.git_added, None);
+        assert_eq!(view.git_modified, None);
+        assert_eq!(view.git_deleted, None);
     }
 }

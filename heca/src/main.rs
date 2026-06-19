@@ -108,6 +108,7 @@ impl HecaApp {
             self.mode_keymaps = new_mode_keymaps;
             self.mode_triggers = new_mode_triggers;
             state.theme = self.app_config.theme.clone();
+            state.programs = self.app_config.config.programs.clone();
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing

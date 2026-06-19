@@ -46,6 +46,7 @@ pub enum BadgeVariant {
 pub struct Badge {
     base: Base,
     label: Signal<String>,
+    seen_label: String,
     variant: BadgeVariant,
 }
 
@@ -57,8 +58,10 @@ impl Badge {
         let mut badge = Self {
             base,
             label: signal(label.into()),
+            seen_label: String::new(),
             variant: BadgeVariant::Accent,
         };
+        badge.seen_label = badge.label.get_untracked();
         badge.remeasure();
         badge
     }
@@ -89,6 +92,10 @@ impl Badge {
         self
     }
 
+    /// The reactive label signal, so hosts can update the badge text live.
+    pub fn label_signal(&self) -> Signal<String> {
+        self.label
+    }
 }
 
 impl Component for Badge {
@@ -101,7 +108,9 @@ impl Component for Badge {
 
     /// Pill size tracks the resolved font.
     fn remeasure(&mut self) {
-        let chars = self.label.get_untracked().chars().count() as f32;
+        let label = self.label.get_untracked();
+        self.seen_label = label.clone();
+        let chars = label.chars().count() as f32;
         let fs = self.base.font;
         let s = self.base.size_scale();
         self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO + 2.0 * PAD_H * s);
@@ -151,6 +160,16 @@ impl Component for Badge {
             TextAlign::Center,
             true,
         );
+    }
+
+    fn tick(&mut self, _dt: f32) -> bool {
+        let next = self.label.get_untracked();
+        if next != self.seen_label {
+            self.seen_label = next;
+            self.remeasure();
+            self.base.mark_needs_paint();
+        }
+        false
     }
 }
 

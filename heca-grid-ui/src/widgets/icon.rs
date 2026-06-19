@@ -15,7 +15,7 @@
 
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
-use crate::reactive::SignalGet;
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::style::Length;
 
 /// Offset from a duotone glyph's secondary (`:before`) codepoint to its primary
@@ -107,8 +107,8 @@ impl Glyph {
 /// explicit [`size`](Icon::size)); colors come from the theme unless overridden.
 pub struct Icon {
     base: Base,
-    /// The secondary-layer codepoint; primary = `secondary_cp + PRIMARY_OFFSET`.
-    secondary_cp: u32,
+    glyph: Signal<Glyph>,
+    seen_glyph: Glyph,
     /// Explicit glyph size (px); otherwise the inherited font size.
     size: Option<f32>,
     /// Primary-layer color override (default: theme foreground).
@@ -120,21 +120,27 @@ pub struct Icon {
 impl Icon {
     /// A new icon for a named [`Glyph`].
     pub fn new(glyph: Glyph) -> Self {
-        Self::from_codepoint(glyph.secondary())
-    }
-
-    /// A new icon from a raw **secondary** (`:before`) codepoint — for glyphs
-    /// outside the [`Glyph`] set. The primary layer is `secondary_cp + 1`.
-    pub fn from_codepoint(secondary_cp: u32) -> Self {
         let mut icon = Self {
             base: Base::new(),
-            secondary_cp,
+            glyph: signal(glyph),
+            seen_glyph: glyph,
             size: None,
             color: None,
             secondary: None,
         };
         icon.remeasure();
         icon
+    }
+
+    /// A new icon from a raw **secondary** (`:before`) codepoint — for glyphs
+    /// outside the [`Glyph`] set. The primary layer is `secondary_cp + 1`.
+    pub fn from_codepoint(secondary_cp: u32) -> Self {
+        Self::new(Glyph::from_secondary(secondary_cp))
+    }
+
+    /// Handle to the icon's glyph signal so hosts can update it live.
+    pub fn glyph_signal(&self) -> Signal<Glyph> {
+        self.glyph
     }
 
     /// Explicit glyph size in logical px (overrides the inherited font size).
@@ -195,13 +201,63 @@ impl Component for Icon {
             primary.with_alpha(a)
         });
         let rect = self.base.bounds;
+        let secondary_cp = self.glyph.get_untracked().secondary();
 
         // Secondary (background) layer first, then the primary layer on top.
-        if let Some(c) = char::from_u32(self.secondary_cp) {
+        if let Some(c) = char::from_u32(secondary_cp) {
             cx.icon(rect, &c.to_string(), secondary, size);
         }
-        if let Some(c) = char::from_u32(self.secondary_cp + PRIMARY_OFFSET) {
+        if let Some(c) = char::from_u32(secondary_cp + PRIMARY_OFFSET) {
             cx.icon(rect, &c.to_string(), primary, size);
+        }
+    }
+
+    fn tick(&mut self, _dt: f32) -> bool {
+        let next = self.glyph.get_untracked();
+        if next != self.seen_glyph {
+            self.seen_glyph = next;
+            self.base.mark_needs_paint();
+        }
+        false
+    }
+}
+
+impl Glyph {
+    /// Convert a raw Phosphor secondary codepoint into the matching [`Glyph`].
+    pub fn from_secondary(secondary_cp: u32) -> Self {
+        match secondary_cp {
+            0xe24a => Glyph::Folder,
+            0xe256 => Glyph::FolderOpen,
+            0xe230 => Glyph::File,
+            0xe914 => Glyph::FileCode,
+            0xe278 => Glyph::GitBranch,
+            0xe27a => Glyph::GitCommit,
+            0xe280 => Glyph::GitMerge,
+            0xe282 => Glyph::GitPullRequest,
+            0xeae8 => Glyph::Terminal,
+            0xe272 => Glyph::Gear,
+            0xe30c => Glyph::Search,
+            0xe4f6 => Glyph::Close,
+            0xe182 => Glyph::Check,
+            0xe13a => Glyph::CaretRight,
+            0xe136 => Glyph::CaretDown,
+            0xe3d0 => Glyph::Play,
+            0xe39e => Glyph::Pause,
+            0xe46c => Glyph::Stop,
+            0xe4e0 => Glyph::Warning,
+            0xe4e2 => Glyph::WarningCircle,
+            0xe2ce => Glyph::Info,
+            0xe18a => Glyph::Circle,
+            0xe2de => Glyph::Lightning,
+            0xe2f0 => Glyph::List,
+            0xec24 => Glyph::Sidebar,
+            0xe208 => Glyph::DotsThreeVertical,
+            0xe06c => Glyph::ArrowRight,
+            0xe3d4 => Glyph::Plus,
+            0xe32a => Glyph::Minus,
+            // Unknown Phosphor codepoints fall back to the generic terminal glyph so
+            // callers still get a stable icon instead of a missing-glyph square.
+            _ => Glyph::Terminal,
         }
     }
 }

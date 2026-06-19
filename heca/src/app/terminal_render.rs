@@ -92,6 +92,10 @@ pub(crate) fn pane_scissor_rect(
     Some((clipped_left, clipped_top, clipped_width, clipped_height))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "terminal shell painting still takes decomposed geometry/theme values; not part of the phase-7 chrome review refactor"
+)]
 pub(crate) fn paint_terminal_pane_shell(
     state: &AppState,
     scene: &mut GuiScene,

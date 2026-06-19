@@ -84,9 +84,20 @@ pub struct TerminalBackend {
     /// When true, semantic OSC status (`Success`/`Error`) is active and must not
     /// be immediately overwritten by shell-foreground `Idle` refreshes.
     semantic_status_active: bool,
+    /// Short event-first refresh window armed by shell preexec so the backend
+    /// re-samples foreground ownership again after the shell actually hands the
+    /// PTY to the child process. This avoids getting stuck on `shell/Idle` when
+    /// a program starts between the immediate preexec sample and the next prompt.
+    post_command_fg_refreshes: u8,
+    /// When shell integration told us the foreground command basename, treat it
+    /// as authoritative until the matching command finishes instead of letting
+    /// later fallback foreground samples clobber it back to the shell.
+    shell_reported_program_active: bool,
     /// Whether the pane should auto-close as soon as the PTY child exits.
     auto_close_on_exit: bool,
 }
+
+const POST_COMMAND_FG_REFRESHES: u8 = 2;
 
 impl TerminalBackend {
     /// Spawn a new terminal with the given grid size.
@@ -225,6 +236,8 @@ impl TerminalBackend {
             last_fg_check,
             osc: OscSnooper::default(),
             semantic_status_active: false,
+            post_command_fg_refreshes: 0,
+            shell_reported_program_active: false,
             auto_close_on_exit,
         })
     }
@@ -246,6 +259,12 @@ impl TerminalBackend {
             let shell_basename = std::path::Path::new(self.pty.shell_path())
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned());
+            if self.shell_reported_program_active {
+                if let Some(cwd) = info.cwd {
+                    self.runtime.cwd = Some(cwd);
+                }
+                return;
+            }
             if !self.semantic_status_active {
                 self.runtime.status = if info.program.is_some() {
                     ProcessStatus::Running
@@ -273,6 +292,16 @@ impl TerminalBackend {
                 self.runtime.exit_code = None;
                 true
             }
+            OscEvent::Program(program) => {
+                if !program.is_empty() {
+                    self.runtime.program = Some(program);
+                    self.runtime.status = ProcessStatus::Running;
+                    self.semantic_status_active = false;
+                    self.runtime.exit_code = None;
+                    self.shell_reported_program_active = true;
+                }
+                false
+            }
             OscEvent::CommandFinished(code) => {
                 self.runtime.status = if code == 0 {
                     ProcessStatus::Success
@@ -281,6 +310,7 @@ impl TerminalBackend {
                 };
                 self.runtime.exit_code = Some(code);
                 self.semantic_status_active = true;
+                self.shell_reported_program_active = false;
                 false
             }
             OscEvent::Cwd(cwd) => {
@@ -384,18 +414,23 @@ impl PaneBackend for TerminalBackend {
 
     fn update(&mut self) -> bool {
         let mut had_data = false;
+        let mut saw_program_event = false;
 
         loop {
             match self.pty.try_read() {
                 PtyRead::Data(bytes) => {
                     let mut force_fg_refresh = false;
                     for event in self.osc.observe(&bytes) {
+                        saw_program_event |= matches!(&event, OscEvent::Program(_));
                         force_fg_refresh |= self.apply_osc_event(event);
                     }
                     self.engine.advance_bytes(&bytes);
                     if force_fg_refresh && !self.exited {
-                        self.last_fg_check = Instant::now();
-                        self.refresh_foreground();
+                        self.post_command_fg_refreshes = POST_COMMAND_FG_REFRESHES;
+                        if !saw_program_event {
+                            self.last_fg_check = Instant::now();
+                            self.refresh_foreground();
+                        }
                     }
                     had_data = true;
                 }
@@ -440,6 +475,12 @@ impl PaneBackend for TerminalBackend {
             };
             self.runtime.exit_code = Some(code);
             self.pending_exit = Some(code);
+        }
+
+        if had_data && self.post_command_fg_refreshes > 0 && !self.exited && !saw_program_event {
+            self.last_fg_check = Instant::now();
+            self.refresh_foreground();
+            self.post_command_fg_refreshes -= 1;
         }
 
         // Foreground detection — event-first, debounced (NO periodic timer per
@@ -775,6 +816,62 @@ mod tests {
     }
 
     #[test]
+    fn terminal_backend_zsh_integration_detects_nvim_as_running_program() {
+        let zsh = PathBuf::from("/bin/zsh");
+        if !zsh.exists() || !command_exists("nvim") {
+            return;
+        }
+
+        let integration = write_shell_integration_assets_for_test();
+        let mut backend = TerminalBackend::with_test_shell(
+            80,
+            24,
+            8.4,
+            14.0,
+            None,
+            None,
+            ShellLaunch {
+                integration: Some(integration),
+                override_path: Some(zsh.to_str().expect("zsh path should be valid utf-8")),
+            },
+        )
+        .expect("terminal backend should initialize");
+
+        warm_shell(&mut backend);
+        backend.process_input(b"nvim --clean\r");
+
+        let saw_nvim = pump_backend_until(&mut backend, |backend| {
+            backend.runtime().program.as_deref() == Some("nvim")
+                && backend.runtime().status == ProcessStatus::Running
+        });
+        let runtime = backend.runtime();
+
+        assert!(
+            saw_nvim,
+            "zsh shell integration should report `nvim` as the running foreground program; got program={:?} status={:?} exit_code={:?}",
+            runtime.program,
+            runtime.status,
+            runtime.exit_code,
+        );
+
+        let stable_until = Instant::now() + Duration::from_millis(400);
+        let mut reverted = false;
+        while Instant::now() < stable_until {
+            let _ = backend.update();
+            let runtime = backend.runtime();
+            if runtime.program.as_deref() != Some("nvim") || runtime.status != ProcessStatus::Running {
+                reverted = true;
+                break;
+            }
+            thread::sleep(TEST_POLL_INTERVAL);
+        }
+        assert!(
+            !reverted,
+            "foreground program should remain `nvim / Running` while the command owns the PTY"
+        );
+    }
+
+    #[test]
     fn terminal_backend_command_spawn_runs_and_stays_open_for_policy() {
         let mut backend = TerminalBackend::with_command(
             80,
@@ -881,41 +978,7 @@ mod tests {
 
         fs::write(
             &bash_init,
-            r#"heca__osc() {
-  printf '\033]%s\a' "$1"
-}
-
-heca__emit_cwd() {
-  local host="${HOSTNAME:-localhost}"
-  heca__osc "7;file://$host${PWD:-/}"
-}
-
-heca__prompt_command() {
-  local exit_status="${1:-0}"
-  if [ "${HECA_HAVE_PREEXEC:-0}" -eq 1 ] 2>/dev/null; then
-    heca__osc "133;D;$exit_status"
-  fi
-  heca__osc "133;A"
-  heca__emit_cwd
-  HECA_HAVE_PREEXEC=0
-  HECA_LAST_COMMAND=""
-  return "$exit_status"
-}
-
-heca__preexec() {
-  [ "${HECA_IN_PROMPT_COMMAND:-0}" -eq 1 ] 2>/dev/null && return
-  local cmd="${BASH_COMMAND:-}"
-  [ -z "$cmd" ] && return
-  [ "$cmd" = "${HECA_LAST_COMMAND:-}" ] && return
-  HECA_LAST_COMMAND="$cmd"
-  HECA_HAVE_PREEXEC=1
-  heca__osc "133;B"
-  heca__osc "133;C"
-}
-
-trap 'heca__preexec' DEBUG
-PROMPT_COMMAND='__heca_status=$?; HECA_IN_PROMPT_COMMAND=1; heca__prompt_command "$__heca_status"; HECA_IN_PROMPT_COMMAND=0'
-"#,
+            include_str!("../../../heca/assets/shell-integration/bash_init.sh"),
         )
         .expect("write bash init");
         fs::write(

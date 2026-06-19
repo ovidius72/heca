@@ -4,6 +4,7 @@ pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::appearance::AppearanceConfig;
+use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
@@ -257,6 +258,8 @@ pub struct AppState {
     /// Content backends for panes that have one.
     pub backends: BackendStore,
     pub theme: Theme,
+    /// Resolved program catalog copied from config and refreshed on reload.
+    pub programs: ProgramsConfig,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
     pub terminal_cell_size: (f32, f32),

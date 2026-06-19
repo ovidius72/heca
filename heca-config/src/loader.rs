@@ -67,7 +67,7 @@ pub struct Config {
     pub settings: SettingsConfig,
     #[serde(default)]
     pub appearance: crate::appearance::AppearanceConfig,
-    #[serde(default)]
+    #[serde(default, alias = "program")]
     pub programs: ProgramsConfig,
     #[serde(default)]
     pub keys: KeysConfig,
@@ -286,9 +286,10 @@ trigger = "prefix+r"
 action = "resize_increase"
 keys = "="
 
-[programs.nvim]
+[program.nvim]
 name = "Neovim"
-icon = "\uE7C4"
+processes = ["v", "nvim", "nv"]
+icon = "file_code"
 color = "#112233"
 "##;
         let cfg: Config = toml::from_str(toml).unwrap();
@@ -306,10 +307,10 @@ color = "#112233"
         assert!(cfg.keys.command[0].float);
         assert!(cfg.keys.command[0].close_pane);
         assert!(cfg.keys.command[0].keep_on_error);
-        assert_eq!(cfg.programs.resolve("nvim").name, "Neovim");
-        assert_eq!(cfg.programs.resolve("nvim").icon.as_ref(), "\u{e7c4}");
+        assert_eq!(cfg.programs.resolve("nv").name, "Neovim");
+        assert_eq!(cfg.programs.resolve("nv").icon, crate::programs::ProgramIcon::FileCode);
         assert_eq!(
-            cfg.programs.resolve("nvim").color,
+            cfg.programs.resolve("nv").color,
             Some(Color::new(17, 34, 51, 255))
         );
         assert_eq!(cfg.keys.mode.len(), 1);
