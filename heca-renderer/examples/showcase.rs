@@ -1686,11 +1686,18 @@ impl GpuState {
         // append to the persistent buffers (no per-frame staging allocation).
         self.grid.begin_frame();
         self.text.begin_frame();
-        enqueue_scene(&mut self.grid, &mut self.text, &scene.base_layer());
+        let glow_alpha_scale =
+            heca_renderer::scene::glow_alpha_scale_for_background(self.theme.background.to_f32x4());
+        enqueue_scene(
+            &mut self.grid,
+            &mut self.text,
+            &scene.base_layer(),
+            glow_alpha_scale,
+        );
         self.grid.render(&self.queue, scene_view, &mut encoder);
         self.text.render(&self.queue, scene_view, &mut encoder, None);
         for overlay in scene.overlay_segments() {
-            enqueue_scene(&mut self.grid, &mut self.text, &overlay);
+            enqueue_scene(&mut self.grid, &mut self.text, &overlay, glow_alpha_scale);
             self.grid.render(&self.queue, scene_view, &mut encoder);
             self.text.render(&self.queue, scene_view, &mut encoder, None);
         }
