@@ -318,6 +318,15 @@ toggle_selection_endpoint = <selection-mode-only>  # Swap active endpoint (key: 
 # command = "alacritty"
 # kind = "terminal"
 #
+# Program presentation overrides used by pane chrome:
+#
+# [programs.nvim]
+# name = "Neovim"
+# icon = "\uE7C4"
+# color = "#89b4fa"
+#
+# Unknown programs fall back to their raw name and the default terminal icon.
+#
 # Planned richer parameterized bindings for normal mode:
 #
 # zoom toggle

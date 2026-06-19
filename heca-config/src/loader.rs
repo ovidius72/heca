@@ -1,4 +1,5 @@
 use crate::keys::KeysConfig;
+use crate::programs::ProgramsConfig;
 use crate::settings::SettingsConfig;
 use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,8 @@ pub struct Config {
     pub settings: SettingsConfig,
     #[serde(default)]
     pub appearance: crate::appearance::AppearanceConfig,
+    #[serde(default)]
+    pub programs: ProgramsConfig,
     #[serde(default)]
     pub keys: KeysConfig,
 }
@@ -258,7 +261,7 @@ mod tests {
 
     #[test]
     fn test_parse_toml_config() {
-        let toml = r#"
+        let toml = r##"
 [settings]
 theme = "mocha"
 mouse = true
@@ -282,7 +285,12 @@ trigger = "prefix+r"
 [[keys.mode.bindings]]
 action = "resize_increase"
 keys = "="
-"#;
+
+[programs.nvim]
+name = "Neovim"
+icon = "\uE7C4"
+color = "#112233"
+"##;
         let cfg: Config = toml::from_str(toml).unwrap();
         assert_eq!(cfg.keys.prefix, "ctrl+a");
         assert_eq!(
@@ -298,6 +306,12 @@ keys = "="
         assert!(cfg.keys.command[0].float);
         assert!(cfg.keys.command[0].close_pane);
         assert!(cfg.keys.command[0].keep_on_error);
+        assert_eq!(cfg.programs.resolve("nvim").name, "Neovim");
+        assert_eq!(cfg.programs.resolve("nvim").icon.as_ref(), "\u{e7c4}");
+        assert_eq!(
+            cfg.programs.resolve("nvim").color,
+            Some(Color::new(17, 34, 51, 255))
+        );
         assert_eq!(cfg.keys.mode.len(), 1);
         assert_eq!(cfg.keys.mode[0].name, "resize");
         assert_eq!(cfg.keys.mode[0].bindings.len(), 1);
