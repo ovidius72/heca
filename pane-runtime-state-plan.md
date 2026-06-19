@@ -338,11 +338,11 @@ a shipped shell snippet (e.g. `assets/shell-integration/{bash,zsh,fish}`), the P
 **Key files:** new `heca-core/src/git.rs` (or `heca/src/app/git.rs`), `Cargo.toml` (+`git2`).
 
 **Tasks**
-- [ ] Define a **`GitProvider` trait** (`status(cwd) -> Option<GitInfo>`); implement with **`git2`** (branch, ahead/behind via upstream, `statuses()` counts → added/modified/deleted/dirty).
-- [ ] **Debounce:** recompute on **cwd-change** + a slow timer; optional `notify` filesystem watch on `.git`. Cache per repo-root; share across panes in the same repo.
-- [ ] Non-repo cwd ⇒ `git = None` (display hides the git segments).
-- [ ] Feed `pane.git.changed` through the chokepoint.
-- [ ] Tests: a temp repo → branch + dirty counts via the trait (no UI).
+- [x] Define a **`GitProvider` trait** (`status(cwd) -> Option<GitInfo>`); implement with **`git2`** (branch, ahead/behind via upstream, `statuses()` counts → added/modified/deleted/dirty).
+- [x] **Debounce:** recompute on **cwd-change** + a slow timer; optional `notify` filesystem watch on `.git`. Cache per repo-root; share across panes in the same repo.
+- [x] Non-repo cwd ⇒ `git = None` (display hides the git segments).
+- [x] Feed `pane.git.changed` through the chokepoint.
+- [x] Tests: a temp repo → branch + dirty counts via the trait (no UI).
 
 **Acceptance:** a pane in a git repo shows branch + counts; leaving the repo clears them; no per-tick `git`
 subprocess (in-process via git2); clippy clean.
@@ -382,12 +382,12 @@ a config override wins; new glyphs render in the showcase.
 `heca/src/rpc.rs` (RPC parity).
 
 **Tasks**
-- [ ] Extend `CommandKeybindConfig`: `kind` (default `"terminal"`, replaces unused `command_type`), `float`, `close_pane`, `keep_on_error`, `keep_on_success` (all default false).
-- [ ] Extend `WmAction::SpawnCommand` to carry `{ command, kind, float, close_policy }`; update `action_from_name`, priority, `action_policy`, the config→action map, and **RPC** (`spawn-command` with the same options).
-- [ ] **Real spawn:** `handle_spawn_command` builds a backend that runs `command` via `CommandBuilder` (extend `pty.rs` with `new_with_command`), tiled or floating per `float`, and stores the **close-policy** on the pane.
-- [ ] **Close-policy on exit:** when `pane.exited{code}` fires, apply: `close_pane && !(keep_on_error && code!=0) && !(keep_on_success && code==0)` ⇒ close the pane (through the normal close action).
-- [ ] `kind` seam: only `"terminal"` implemented; `"app"/"plugin"` return a clear "not yet" (no fork).
-- [ ] Tests: option parsing; close-policy truth table; spawn runs the program (integration/live).
+- [x] Extend `CommandKeybindConfig`: `kind` (default `"terminal"`, replaces unused `command_type`), `float`, `close_pane`, `keep_on_error`, `keep_on_success` (all default false).
+- [x] Extend `WmAction::SpawnCommand` to carry `{ command, kind, float, close_policy }`; update `action_from_name`, priority, `action_policy`, the config→action map, and **RPC** (`spawn-command` with the same options).
+- [x] **Real spawn:** `handle_spawn_command` builds a backend that runs `command` via `CommandBuilder` (extend `pty.rs` with `new_with_command`), tiled or floating per `float`, and stores the **close-policy** on the pane.
+- [x] **Close-policy on exit:** when `pane.exited{code}` fires, apply: `close_pane && !(keep_on_error && code!=0) && !(keep_on_success && code==0)` ⇒ close the pane (through the normal close action).
+- [x] `kind` seam: only `"terminal"` implemented; `"app"/"plugin"` return a clear "not yet" (no fork).
+- [x] Tests: option parsing; close-policy truth table; spawn runs the program (integration/live).
 
 **Acceptance:** the example config runs lazygit in a floating pane; exiting closes it; with `keep_on_error`,
 a failing command stays open; reachable from keybind **and** RPC; follows the action checklist.
