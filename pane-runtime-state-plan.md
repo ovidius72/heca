@@ -52,8 +52,9 @@
   - **Row 1 — program:** `Icon` · `Name` · optional exceptional-state indicator.
     - **Idle (shell foreground):** terminal icon + the shell name (`zsh` / `bash` / …) — no app program.
     - **Running a program:** the program's catalog icon + display name, e.g. ` Neovim`.
-  - **Row 2 — git (only if the cwd is in a git repo):** `Tag(branch)` (e.g. ` feature/my-feat` inside a
-    badge) + `Badge(+a/-d/Δ)` segments for added/new/deleted counts. Hidden entirely outside a repo.
+  - **Row 2 — git (only if the cwd is in a git repo):** one segmented `Tag` whose main label is the branch
+    (e.g. `feature/my-feat`) and whose nested segments carry git metadata (counts with icons where useful),
+    matching the showcase's `~/repos/do-things` chip language. Hidden entirely outside a repo.
 - **Status set = `Running` · `Idle` · `Success` · `Error`** (NO `Exit` — see §0.6). `Success`/`Error` land in
   Phase 3 (OSC 133). `Idle` and `Running` are normal and do not render a token in the compact default row;
   only exceptional states should surface there.
@@ -400,7 +401,7 @@ a failing command stays open; reachable from keybind **and** RPC; follows the ac
 ### Phase 7 — Display: fixed default pane-info widgets
 **Depends-on:** Phases 1–6 data (degrades gracefully if a source is absent).
 
-**Why:** render the pane info (icon · name · exceptional-state indicator · git badges) on the sidebar card +
+**Why:** render the pane info (icon · name · exceptional-state indicator · segmented git tag) on the sidebar card +
 optional pane corner — real grid-ui widgets, theme-driven. The fixed default that customization later replaces.
 
 **Key files:** `heca/src/chrome/mod.rs` (`pane_card`), `heca-grid-ui` (reuse `Icon`/`Label`/`Badge`/`Tag`;
@@ -409,7 +410,7 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 
 **Tasks**
 - [x] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label(name)` · optional exceptional-state indicator, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name; Running ⇒ program icon + Name. Icons come from the catalog's semantic Phosphor names (§0.7) and render through the existing duotone `Icon` widget. Reuse `Row`/`Grid`.
-- [x] **Sidebar card — Row 2 (git, only in a repo):** `Tag(branch)` (e.g. ` feature/my-feat` in a badge) + `Badge("+a/-d/Δ")` segments (added/new/deleted), bound to the store mirror. Hidden entirely outside a repo.
+- [x] **Sidebar card — Row 2 (git, only in a repo):** one segmented `Tag(branch)` whose nested segments carry the git counts/metadata, bound to the store mirror. Hidden entirely outside a repo.
 - [ ] Optional `color` from the catalog → tint the card/border.
 - [ ] **Optional pane top-left corner badge:** compact Row 1 (`Icon + Name`) overlay, behind a config/appearance switch.
 - [ ] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.

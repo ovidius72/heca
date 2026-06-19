@@ -16,6 +16,7 @@ pub struct Label {
     seen_text: String,
     align: TextAlign,
     color: Option<Color>,
+    bold: bool,
 }
 
 impl Label {
@@ -30,6 +31,7 @@ impl Label {
             seen_text,
             align: TextAlign::Start,
             color: None,
+            bold: false,
         };
         label.remeasure();
         label
@@ -44,6 +46,12 @@ impl Label {
     /// Explicit text color (defaults to the theme foreground).
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
+        self
+    }
+
+    /// Render the label with bold weight.
+    pub fn bold(mut self, bold: bool) -> Self {
+        self.bold = bold;
         self
     }
 
@@ -98,7 +106,7 @@ impl Component for Label {
             color,
             self.base.font,
             self.align,
-            false,
+            self.bold,
         );
     }
 

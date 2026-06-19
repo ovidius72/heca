@@ -12,6 +12,7 @@ use crate::app::terminal_render::{
 use crate::app_state::{AppState, ChromeDamageMode, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
+use heca_grid_ui::Component;
 use heca_grid_ui::{
     Point as GuiPoint,
     Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
@@ -121,7 +122,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let view = surface_texture
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
-    crate::chrome::sync_chrome_state(state);
+    let _ = crate::chrome::sync_chrome_state(state);
     let scene_view = state.compositor.scene_view();
     // Stencil buffer paired with the scene texture: holds the rounded content-clip
     // mask written each frame so terminal content follows the pane's rounded border.
@@ -936,6 +937,16 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
     let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
+    if chrome_signals_changed
+        && let Some(tree) = state.chrome_tree.as_mut()
+    {
+        // Runtime/git signal writes happen during render, but wrappers like
+        // `Visibility` apply their `style.hidden` flip in `tick()`. Advance the
+        // retained chrome tree immediately so new branch/count rows participate in
+        // this frame's layout + damage pass instead of waiting for a later focus/input
+        // event to flush the signal-backed structure.
+        tree.root.tick(0.0);
+    }
     if matches!(state.chrome_damage_mode, ChromeDamageMode::Full) && chrome_signals_changed {
         state.chrome_damage_mode = ChromeDamageMode::ForceFullOnNextRequest;
     }

@@ -72,16 +72,21 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     };
 
     let backend_poll = poll_backends(state);
+    let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
     if backend_poll.bell_any && !state.window_focused {
         state
             .window
             .request_user_attention(Some(UserAttentionType::Informational));
+    }
+    if chrome_runtime_changed {
+        state.chrome_damage_mode = ChromeDamageMode::Full;
     }
 
     let animation_only_redraw =
         !state.needs_redraw
             && !backend_poll.has_data
             && !backend_poll.closed_any
+            && !chrome_runtime_changed
             && (state.session.are_animations_ongoing() || chrome_animating);
     if animation_only_redraw {
         state.chrome_damage_mode = ChromeDamageMode::Tracked;
@@ -92,6 +97,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let needs_frame = state.needs_redraw
         || backend_poll.has_data
         || backend_poll.closed_any
+        || chrome_runtime_changed
         || state.session.are_animations_ongoing()
         || chrome_animating;
     if needs_frame {

@@ -12,7 +12,7 @@
 use crate::builders::{LayoutExt, Parent};
 use crate::color::Color;
 use crate::component::{Base, Component, PaintCx};
-use crate::reactive::SignalGet;
+use crate::reactive::{Signal, SignalGet};
 use crate::scene::Border;
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::{Flex, Label};
@@ -44,6 +44,7 @@ pub struct Tag {
     base: Base,
     /// Pill hue for the fill, border and dividers (default: theme muted).
     color: Option<Color>,
+    label: Signal<String>,
 }
 
 /// Build an empty segment container (a centered row of slots).
@@ -62,8 +63,10 @@ impl Tag {
         base.style.padding_x = Some(PAD_X);
         base.style.padding_y = Some(PAD_Y);
         base.style.gap = SEG_GAP;
-        base.children.push(Box::new(segment().child(Label::new(label).font_scale(FONT_SCALE))));
-        Self { base, color: None }
+        let label = Label::new(label).font_scale(FONT_SCALE);
+        let label_signal = label.text_signal();
+        base.children.push(Box::new(segment().child(label)));
+        Self { base, color: None, label: label_signal }
     }
 
     /// Set the leading slot of the **first** segment — typically an
@@ -94,6 +97,11 @@ impl Tag {
     pub fn color(mut self, c: Color) -> Self {
         self.color = Some(c);
         self
+    }
+
+    /// The reactive signal for the first segment's text label.
+    pub fn label_signal(&self) -> Signal<String> {
+        self.label
     }
 }
 

@@ -21,7 +21,7 @@ pub const DEFAULT_STATUS_BAR_HEIGHT: f32 = 24.0;
 /// Default collapsed sidebar width in logical pixels.
 pub const DEFAULT_COLLAPSED_SIDEBAR_WIDTH: f32 = 40.0;
 /// Default expanded sidebar width in logical pixels.
-pub const DEFAULT_SIDEBAR_WIDTH: f32 = 200.0;
+pub const DEFAULT_SIDEBAR_WIDTH: f32 = 240.0;
 /// Minimum sidebar width to be considered expanded (for rendering decisions).
 pub const SIDEBAR_EXPANDED_THRESHOLD: f32 = 80.0;
 
@@ -94,11 +94,12 @@ use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
-use heca_grid_ui::style::{Align, Length, Track};
+use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, Grid, HintPlacement, Icon, IconButton,
-    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Visibility,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
+    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Tooltip, TooltipSide,
+    Visibility,
 };
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
@@ -118,10 +119,17 @@ struct PaneInfoView {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct PaneInfoSignals {
     icon: Signal<Glyph>,
-    title: Signal<String>,
-    status_error: Signal<bool>,
+    title_active: Signal<String>,
+    title_inactive: Signal<String>,
+    title_active_visible: Signal<bool>,
+    title_inactive_visible: Signal<bool>,
+    status_idle_visible: Signal<bool>,
+    status_running_visible: Signal<bool>,
+    status_success_visible: Signal<bool>,
+    status_error_visible: Signal<bool>,
     git_visible: Signal<bool>,
     git_branch: Signal<String>,
+    git_branch_display: Signal<String>,
     git_added_visible: Signal<bool>,
     git_added: Signal<String>,
     git_modified_visible: Signal<bool>,
@@ -180,6 +188,19 @@ fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option
             kind: runtime.kind.get_untracked(),
         })
     })
+}
+
+const SIDEBAR_GIT_BRANCH_MAX_CHARS: usize = 28;
+
+fn truncate_sidebar_git_branch(branch: &str) -> String {
+    let len = branch.chars().count();
+    if len <= SIDEBAR_GIT_BRANCH_MAX_CHARS {
+        return branch.to_string();
+    }
+    let keep = SIDEBAR_GIT_BRANCH_MAX_CHARS.saturating_sub(3);
+    let mut truncated = branch.chars().take(keep).collect::<String>();
+    truncated.push_str("...");
+    truncated
 }
 
 type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;
@@ -269,41 +290,138 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    let icon_widget = Icon::new(info.icon).size(16.0).color(theme.foreground);
+    let icon_widget = Icon::new(info.icon).size(14.0).color(theme.foreground);
     let icon_signal = icon_widget.glyph_signal();
-    let title_label = Label::new(info.title.clone()).color(theme.foreground);
-    let title_signal = title_label.text_signal();
-    let error_badge =
-        Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
-    let error_signal = error_badge.visible_signal();
-    let branch_badge = Badge::outline(info.git_branch.clone().unwrap_or_default());
-    let branch_signal = branch_badge.label_signal();
-    let add_badge = Badge::success(info.git_added.clone().unwrap_or_default());
-    let add_label = add_badge.label_signal();
-    let add_visible = Visibility::new(add_badge, info.git_added.is_some());
-    let add_visible_signal = add_visible.visible_signal();
-    let modified_badge = Badge::warning(info.git_modified.clone().unwrap_or_default());
-    let modified_label = modified_badge.label_signal();
-    let modified_visible = Visibility::new(modified_badge, info.git_modified.is_some());
-    let modified_visible_signal = modified_visible.visible_signal();
-    let deleted_badge = Badge::danger(info.git_deleted.clone().unwrap_or_default());
-    let deleted_label = deleted_badge.label_signal();
-    let deleted_visible = Visibility::new(deleted_badge, info.git_deleted.is_some());
-    let deleted_visible_signal = deleted_visible.visible_signal();
+    let active_title_label = Label::new(info.title.clone()).color(theme.accent).bold(true);
+    let active_title_signal = active_title_label.text_signal();
+    let active_title = Visibility::new(active_title_label, active);
+    let active_title_visible = active_title.visible_signal();
+    let inactive_title_label =
+        Label::new(info.title.clone()).color(theme.foreground).bold(true);
+    let inactive_title_signal = inactive_title_label.text_signal();
+    let inactive_title = Visibility::new(inactive_title_label, !active);
+    let inactive_title_visible = inactive_title.visible_signal();
+    let idle_dot = Visibility::new(StatusDot::offline(), info.status == ProcessStatus::Idle);
+    let idle_dot_visible = idle_dot.visible_signal();
+    let running_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Running);
+    let running_dot_visible = running_dot.visible_signal();
+    let success_dot = Visibility::new(StatusDot::online(), info.status == ProcessStatus::Success);
+    let success_dot_visible = success_dot.visible_signal();
+    let error_dot = Visibility::new(StatusDot::error(), info.status == ProcessStatus::Error);
+    let error_dot_visible = error_dot.visible_signal();
+    let branch_label_widget = Label::new(truncate_sidebar_git_branch(
+        info.git_branch.as_deref().unwrap_or_default(),
+    ))
+    .color(theme.foreground)
+    .font_scale(0.8);
+    let branch_display_signal = branch_label_widget.text_signal();
+    let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
+    let add_label_widget =
+        Label::new(info.git_added.clone().unwrap_or_default()).color(theme.success).font_scale(0.8);
+    let add_label = add_label_widget.text_signal();
+    let add_segment = Visibility::new(
+        Flex::row()
+            .align(Align::Center)
+            .gap(4.0)
+            .child(Icon::new(Glyph::Plus).size(12.0).color(theme.success))
+            .child(add_label_widget),
+        info.git_added.is_some(),
+    );
+    let add_text_visible_signal = add_segment.visible_signal();
+    let modified_label_widget = Label::new(info.git_modified.clone().unwrap_or_default())
+        .color(theme.warning)
+        .font_scale(0.8);
+    let modified_label = modified_label_widget.text_signal();
+    let modified_segment = Visibility::new(
+        Flex::row()
+            .align(Align::Center)
+            .gap(4.0)
+            .child(Icon::new(Glyph::Warning).size(12.0).color(theme.warning))
+            .child(modified_label_widget),
+        info.git_modified.is_some(),
+    );
+    let modified_text_visible_signal = modified_segment.visible_signal();
+    let deleted_label_widget =
+        Label::new(info.git_deleted.clone().unwrap_or_default()).color(theme.danger).font_scale(0.8);
+    let deleted_label = deleted_label_widget.text_signal();
+    let deleted_segment = Visibility::new(
+        Flex::row()
+            .align(Align::Center)
+            .gap(4.0)
+            .child(Icon::new(Glyph::Minus).size(12.0).color(theme.danger))
+            .child(deleted_label_widget),
+        info.git_deleted.is_some(),
+    );
+    let deleted_text_visible_signal = deleted_segment.visible_signal();
     let git_row = Visibility::new(
         Flex::row()
             .align(Align::Center)
             .gap(6.0)
-            .child(branch_badge)
-            .child(add_visible)
-            .child(modified_visible)
-            .child(deleted_visible),
+            .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.warning))
+            .child(
+                Tooltip::new_signal(branch_label_widget, branch_signal)
+                    .side(TooltipSide::Bottom)
+                    .delay(0.25),
+            )
+            .child(add_segment)
+            .child(modified_segment)
+            .child(deleted_segment),
         info.git_branch.is_some(),
     );
     let git_visible_signal = git_row.visible_signal();
     let emit = emit_intent.clone();
+    let content = if info.git_branch.is_some() {
+        Flex::column()
+            .gap(4.0)
+            .grow(1.0)
+            .child(
+                Flex::row()
+                    .align(Align::Center)
+                    .gap(8.0)
+                    .child(
+                        Flex::row()
+                            .align(Align::Center)
+                            .width(Length::Px(12.0))
+                            .child(idle_dot)
+                            .child(running_dot)
+                            .child(success_dot)
+                            .child(error_dot),
+                    )
+                    .child(Flex::row().align(Align::Center).child(icon_widget))
+                    .child(
+                        Flex::row()
+                            .align(Align::Center)
+                            .child(Flex::column().child(active_title).child(inactive_title)),
+                    ),
+            )
+            .child(
+                Flex::row()
+                    .child(Flex::row().width(Length::Px(2.0)))
+                    .child(git_row),
+            )
+    } else {
+        Flex::row()
+            .align(Align::Center)
+            .grow(1.0)
+            .gap(8.0)
+            .child(
+                Flex::row()
+                    .align(Align::Center)
+                    .width(Length::Px(12.0))
+                    .child(idle_dot)
+                    .child(running_dot)
+                    .child(success_dot)
+                    .child(error_dot),
+            )
+            .child(Flex::row().align(Align::Center).child(icon_widget))
+            .child(
+                Flex::row()
+                    .align(Align::Center)
+                    .child(Flex::column().child(active_title).child(inactive_title)),
+            )
+    };
     let card = Row::new()
-        .background(theme.foreground.with_alpha(12))
+        .background(theme.foreground.with_alpha(5))
         .highlight(theme.accent)
         .radius(theme.control_radius())
         .padding(6.0)
@@ -316,17 +434,7 @@ fn pane_card(
         .on_activate(move || {
             emit(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
         })
-        .child(
-            Grid::new()
-                .columns([Track::Px(18.0), Track::Fr(1.0), Track::Auto])
-                .rows([Track::Auto, Track::Auto])
-                .areas(["icon title status", ". git git"])
-                .grow(1.0)
-                .area(Flex::row().align(Align::Center).child(icon_widget), "icon")
-                .area(title_label, "title")
-                .area(Flex::row().align(Align::Center).child(error_badge), "status")
-                .area(git_row, "git"),
-        );
+        .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
     // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
@@ -340,15 +448,22 @@ fn pane_card(
         pane_id,
         PaneInfoSignals {
             icon: icon_signal,
-            title: title_signal,
-            status_error: error_signal,
+            title_active: active_title_signal,
+            title_inactive: inactive_title_signal,
+            title_active_visible: active_title_visible,
+            title_inactive_visible: inactive_title_visible,
+            status_idle_visible: idle_dot_visible,
+            status_running_visible: running_dot_visible,
+            status_success_visible: success_dot_visible,
+            status_error_visible: error_dot_visible,
             git_visible: git_visible_signal,
             git_branch: branch_signal,
-            git_added_visible: add_visible_signal,
+            git_branch_display: branch_display_signal,
+            git_added_visible: add_text_visible_signal,
             git_added: add_label,
-            git_modified_visible: modified_visible_signal,
+            git_modified_visible: modified_text_visible_signal,
             git_modified: modified_label,
-            git_deleted_visible: deleted_visible_signal,
+            git_deleted_visible: deleted_text_visible_signal,
             git_deleted: deleted_label,
         },
     ));
@@ -923,7 +1038,7 @@ fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
 fn sync_pane_runtime_state(
     session: &heca_core::layout::Session,
     workspaces: &WorkspacesContainerState,
-) {
+) -> bool {
     use std::collections::HashSet;
     // TODO(reactivity): this is a per-frame full-sync push of every pane's runtime
     // state into the store — the same push model Phase 0 is moving away from. It
@@ -932,25 +1047,27 @@ fn sync_pane_runtime_state(
     // pane per frame. Fold this into the reactive damage-path work (Phase 0's last
     // task) so runtime changes flow core→signal→paint without a per-frame scan.
     let mut live_panes = HashSet::new();
+    let mut changed = false;
     for ws in &session.workspaces {
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
                 live_panes.insert(pane.id);
-                workspaces.set_pane_runtime(pane.id, &pane.runtime);
+                changed |= workspaces.set_pane_runtime(pane.id, &pane.runtime);
             }
         }
         for float in &ws.floating_panes {
             live_panes.insert(float.pane.id);
-            workspaces.set_pane_runtime(float.pane.id, &float.pane.runtime);
+            changed |= workspaces.set_pane_runtime(float.pane.id, &float.pane.runtime);
         }
     }
     workspaces.retain_panes(&live_panes);
+    changed
 }
 
 /// Mirror canonical app/runtime state into the shared chrome store before the
 /// retained tree reads it. `InputMode` remains the source of truth for keyboard
 /// pick flows; the store is the reactive UI mirror.
-pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
+pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool {
     state.chrome_state.workspaces.set_active_pane(state.focused_pane);
     let next_candidates = state
         .input_mode
@@ -966,7 +1083,7 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) {
     // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
     crate::app::process_monitor::sync_pane_runtime_from_backends(state);
     crate::app::git_monitor::sync_pane_git_from_cwds(state);
-    sync_pane_runtime_state(&state.session, &state.chrome_state.workspaces);
+    sync_pane_runtime_state(&state.session, &state.chrome_state.workspaces)
 }
 
 /// Push the chrome's value-state (selection + status text) into the retained tree's
@@ -1013,18 +1130,31 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             pane_fallback_name(&state.sidebar_tree, *pid),
             runtime.as_ref(),
         );
+        let pane_active = active == Some(*pid);
         if sigs.icon.get_untracked() != next.icon {
             sigs.icon.set(next.icon);
             changed = true;
         }
-        if sigs.title.get_untracked() != next.title {
-            sigs.title.set(next.title.clone());
+        if sigs.title_active.get_untracked() != next.title {
+            sigs.title_active.set(next.title.clone());
             changed = true;
         }
-        let status_error = next.status == ProcessStatus::Error;
-        if sigs.status_error.get_untracked() != status_error {
-            sigs.status_error.set(status_error);
+        if sigs.title_inactive.get_untracked() != next.title {
+            sigs.title_inactive.set(next.title.clone());
             changed = true;
+        }
+        for (signal, visible) in [
+            (sigs.title_active_visible, pane_active),
+            (sigs.title_inactive_visible, !pane_active),
+            (sigs.status_idle_visible, next.status == ProcessStatus::Idle),
+            (sigs.status_running_visible, next.status == ProcessStatus::Running),
+            (sigs.status_success_visible, next.status == ProcessStatus::Success),
+            (sigs.status_error_visible, next.status == ProcessStatus::Error),
+        ] {
+            if signal.get_untracked() != visible {
+                signal.set(visible);
+                changed = true;
+            }
         }
         let git_visible = next.git_branch.is_some();
         if sigs.git_visible.get_untracked() != git_visible {
@@ -1033,7 +1163,12 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         }
         let branch = next.git_branch.unwrap_or_default();
         if sigs.git_branch.get_untracked() != branch {
-            sigs.git_branch.set(branch);
+            sigs.git_branch.set(branch.clone());
+            changed = true;
+        }
+        let branch_display = truncate_sidebar_git_branch(&branch);
+        if sigs.git_branch_display.get_untracked() != branch_display {
+            sigs.git_branch_display.set(branch_display);
             changed = true;
         }
         for (visible_signal, label_signal, value) in [
@@ -1264,12 +1399,26 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
             for p in &c.panes {
                 p.pane_id.0.hash(&mut hsh);
                 p.name.hash(&mut hsh);
+                state
+                    .chrome_state
+                    .workspaces
+                    .with_pane_runtime(p.pane_id, |runtime| {
+                        runtime.and_then(|rt| rt.git.get_untracked()).is_some()
+                    })
+                    .hash(&mut hsh);
             }
             u8::MAX.hash(&mut hsh); // column separator in the hash stream
         }
         for p in &ws.floating_panes {
             p.pane_id.0.hash(&mut hsh);
             p.name.hash(&mut hsh);
+            state
+                .chrome_state
+                .workspaces
+                .with_pane_runtime(p.pane_id, |runtime| {
+                    runtime.and_then(|rt| rt.git.get_untracked()).is_some()
+                })
+                .hash(&mut hsh);
         }
         u64::MAX.hash(&mut hsh); // workspace separator
     }

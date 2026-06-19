@@ -447,7 +447,8 @@ A single text run bound to a `Signal<String>`.
 
 - **Construct**: `Label::new(text)`.
 - **Builders**: `.align(TextAlign)`, `.color(Color)`, `.font_size(f32)` (pin a size),
-  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy).
+  `.font_scale(f32)` (multiplier vs the inherited base font — prefer this for hierarchy),
+  `.bold(bool)`.
 - **Accessor**: `.text_signal() -> Signal<String>` (set it to update reactively).
 
 ```rust
@@ -791,6 +792,20 @@ Tag::new("main").leading(Icon::new(Glyph::GitBranch).size(13.0))
     .segment_text("5 +152 -12", None).color(theme.warning);
 ```
 
+### Visibility
+
+A signal-driven wrapper that hides or shows exactly one child without rebuilding the tree.
+Use it for optional metadata rows and exceptional-state indicators that should collapse
+cleanly when absent.
+
+- **Construct**: `Visibility::new(child, visible)`.
+- **Live update**: `.visible_signal() -> Signal<bool>`.
+
+```rust
+let error = Visibility::new(StatusDot::error(), false);
+error.visible_signal().set(true);
+```
+
 ### ItemGroup
 
 A collapsible group: a header `Item` (label + chevron) over a set of rows. Collapsing folds the
@@ -1050,6 +1065,38 @@ Order follows `tab_index` (ascending) then tree position.
 
 `.disabled(true)` on any widget dims it (`PaintCx::dim` scrim), makes `event` inert, and
 drops it from focus traversal — one shared `Base` property, consistent across widgets.
+
+### Pane Info Rows
+
+The Phase 7 pane chrome recipe is a two-row `Grid`: row 1 is `Icon + Label +
+status dot`; row 2 reuses the segmented `Tag` language already used in
+the showcase for git state: one chip whose main label is the branch and whose
+nested segments carry counts/metadata with icons where helpful. Hide the full row
+outside repos with `Visibility`.
+
+```rust
+Grid::new()
+    .columns([Track::Px(10.0), Track::Px(18.0), Track::Fr(1.0)])
+    .rows([Track::Auto, Track::Auto])
+    .areas(["dot icon title", "git git git"])
+    .area(StatusDot::online(), "dot")
+    .area(Icon::new(Glyph::FileCode).size(16.0), "icon")
+    .area(Label::new("Neovim").bold(true), "title")
+    .area(
+        Visibility::new(
+            Flex::row()
+                .child(
+                    Tag::new("feature/pane-runtime")
+                        .leading(Icon::new(Glyph::GitBranch).size(13.0))
+                        .segment_text("+2", Some(Icon::new(Glyph::Plus).size(13.0)))
+                        .segment_text("~3", Some(Icon::new(Glyph::Warning).size(13.0)))
+                        .segment_text("-1", Some(Icon::new(Glyph::Minus).size(13.0))),
+                ),
+            true,
+        ),
+        "git",
+    );
+```
 
 ### Building a custom widget
 

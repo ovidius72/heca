@@ -203,7 +203,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         match event {
             AppEvent::BackendWake => {
                 let backend_poll = poll_backends(state);
-                if backend_poll.has_data || backend_poll.closed_any {
+                let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
+                if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
+                    if chrome_runtime_changed {
+                        state.chrome_damage_mode = ChromeDamageMode::Full;
+                    }
                     state.mark_full_redraw();
                     state.window.request_redraw();
                 }

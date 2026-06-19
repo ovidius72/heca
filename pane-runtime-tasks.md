@@ -153,12 +153,12 @@ Notes:
 
 ## Phase 7 — Display: fixed default pane-info widgets
 **Status:** In Progress · **Assigned:** agent · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
-**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · git badges)
+**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · segmented git tag)
 as theme-driven grid-ui widgets, reactive; showcase + docs.
 **Agent Completion:** Partially implemented on current branch.
 Built:
 - sidebar card Row 1 now resolves the catalog icon/name through `pane_info_view` and renders `Icon + Label + error-only indicator`
-- sidebar card Row 2 now renders git branch/count badges reactively from `Pane.runtime.git`, hidden outside repos
+- sidebar card Row 2 now renders a segmented git chip reactively from `Pane.runtime.git`, hidden outside repos
 - pure projection tests cover program/icon resolution and git-segment shaping for the sidebar card
 Remaining:
 - optional catalog `color` tint on the card/border
