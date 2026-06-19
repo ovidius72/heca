@@ -211,7 +211,7 @@ impl WorkspacesContainerState {
             candidates: Vec::new(),
         });
     }
-    pub(crate) fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) {
+    pub(crate) fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) -> bool {
         // Bulk path (per-frame from `sync_pane_runtime_state`): ONE `panes.update`
         // to ensure the entry + read the per-field signal handles (Copy) and the
         // current values into outer locals. The `.set()`s + emits run OUTSIDE the
@@ -236,29 +236,37 @@ impl WorkspacesContainerState {
         });
         let sigs = sigs.expect("entry ensured above");
         let cur = cur.expect("entry ensured above");
+        let mut changed = false;
         if cur.program != runtime.program {
             sigs.program.set(runtime.program.clone());
             self.events.emit(ChromeEvent::PaneProcessChanged { pane });
+            changed = true;
         }
         if cur.status != runtime.status {
             sigs.status.set(runtime.status.clone());
             self.events
                 .emit(ChromeEvent::PaneStatusChanged { pane, status: runtime.status.clone() });
+            changed = true;
         }
         if cur.cwd != runtime.cwd {
             sigs.cwd.set(runtime.cwd.clone());
             self.events.emit(ChromeEvent::PaneCwdChanged { pane });
+            changed = true;
         }
         if cur.exit_code != runtime.exit_code {
             sigs.exit_code.set(runtime.exit_code);
+            changed = true;
         }
         if cur.git != runtime.git {
             sigs.git.set(runtime.git.clone());
             self.events.emit(ChromeEvent::PaneGitChanged { pane });
+            changed = true;
         }
         if cur.kind != runtime.kind {
             sigs.kind.set(runtime.kind.clone());
+            changed = true;
         }
+        changed
     }
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will

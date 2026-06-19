@@ -29,6 +29,15 @@ heca__emit_cwd() {
   heca__osc "7;file://$host$(heca__urlencode "$PWD")"
 }
 
+heca__command_name() {
+  emulate -L zsh
+  local -a words
+  words=(${(z)1})
+  local cmd="${words[1]:-}"
+  cmd="${cmd##*/}"
+  print -rn -- "$cmd"
+}
+
 typeset -g HECA_HAVE_PREEXEC=0
 
 heca_precmd() {
@@ -46,8 +55,12 @@ heca_preexec() {
   HECA_HAVE_PREEXEC=1
   heca__osc "133;B"
   heca__osc "133;C"
+  local prog
+  prog="$(heca__command_name "$1")"
+  [[ -n "$prog" ]] && heca__osc "133;E;$(heca__urlencode "$prog")"
 }
 
-autoload -Uz add-zsh-hook
-add-zsh-hook precmd heca_precmd
-add-zsh-hook preexec heca_preexec
+typeset -ga precmd_functions
+typeset -ga preexec_functions
+precmd_functions+=(heca_precmd)
+preexec_functions+=(heca_preexec)

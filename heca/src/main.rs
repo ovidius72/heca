@@ -108,6 +108,7 @@ impl HecaApp {
             self.mode_keymaps = new_mode_keymaps;
             self.mode_triggers = new_mode_triggers;
             state.theme = self.app_config.theme.clone();
+            state.programs = self.app_config.config.programs.clone();
             // Appearance: opacity re-reads every frame, so updating the snapshot
             // makes `transparency` (the amount) live-reload. The OS vibrancy
             // material is applied once at startup and NOT re-applied here — doing
@@ -202,7 +203,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
         match event {
             AppEvent::BackendWake => {
                 let backend_poll = poll_backends(state);
-                if backend_poll.has_data || backend_poll.closed_any {
+                let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
+                if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
+                    if chrome_runtime_changed {
+                        state.chrome_damage_mode = ChromeDamageMode::Full;
+                    }
                     state.mark_full_redraw();
                     state.window.request_redraw();
                 }

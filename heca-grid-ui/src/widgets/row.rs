@@ -189,14 +189,18 @@ impl Component for Row {
             ),
         );
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
-        // Highlight in the row's own color (a stronger same-hue tint) when it has
-        // a background or an explicit override — so a state-tinted row never gets a
-        // clashing accent overlay. Plain rows fall back to accent/foreground.
+        // Without an explicit override, derive the highlight from the row's own fill
+        // so state-tinted rows stay in-family. With an explicit `highlight`, use the
+        // lighter Item-style accent wash instead of a heavy same-hue tint.
         let highlight_base = self.highlight.or(self.base.style.fill);
         if active {
-            let fill = highlight_base
-                .map(|h| h.with_alpha(ACTIVE_TINT_ALPHA))
-                .unwrap_or(accent.with_alpha(ACTIVE_FILL_ALPHA));
+            let fill = if let Some(highlight) = self.highlight {
+                highlight.with_alpha(ACTIVE_FILL_ALPHA)
+            } else {
+                highlight_base
+                    .map(|h| h.with_alpha(ACTIVE_TINT_ALPHA))
+                    .unwrap_or(accent.with_alpha(ACTIVE_FILL_ALPHA))
+            };
             // A crisp same-hue border is the clearest "selected" cue — a tinted
             // fill alone is hard to tell apart from the row's background.
             let edge = highlight_base.unwrap_or(accent).with_alpha(ACTIVE_BORDER_ALPHA);
@@ -208,9 +212,13 @@ impl Component for Row {
                 None,
             );
         } else if self.hovered.get_untracked() {
-            let c = highlight_base
-                .map(|h| h.with_alpha(HOVER_TINT_ALPHA))
-                .unwrap_or(foreground.with_alpha(HOVER_FILL_ALPHA));
+            let c = if let Some(highlight) = self.highlight {
+                highlight.with_alpha(HOVER_FILL_ALPHA)
+            } else {
+                highlight_base
+                    .map(|h| h.with_alpha(HOVER_TINT_ALPHA))
+                    .unwrap_or(foreground.with_alpha(HOVER_FILL_ALPHA))
+            };
             cx.rect(sel, c, None, sel_radius, None);
         }
 

@@ -19,7 +19,7 @@ use crate::component::{
     paint_child, route_event, soonest_redraw, Base, Component, Event, Handled, PaintCx,
 };
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::SignalGet;
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -57,7 +57,8 @@ const PAD_Y: f64 = 5.0;
 /// A transparent wrapper that reveals a floating label on hover.
 pub struct Tooltip {
     base: Base,
-    text: String,
+    text: Signal<String>,
+    seen_text: String,
     side: TooltipSide,
     delay: f32,
     /// When the pointer entered the child (`None` = not hovering). The bubble shows
@@ -79,9 +80,29 @@ impl Tooltip {
         base.style.width = Length::Auto;
         base.style.height = Length::Auto;
         base.children.push(Box::new(child));
+        let text = signal(text.into());
         Self {
             base,
-            text: text.into(),
+            seen_text: text.get_untracked(),
+            text,
+            side: TooltipSide::default(),
+            delay: DEFAULT_DELAY,
+            hover_since: None,
+            viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
+            last_shown: Cell::new(false),
+        }
+    }
+
+    /// Wrap `child`, showing reactive `text` on hover.
+    pub fn new_signal(child: impl Component + 'static, text: Signal<String>) -> Self {
+        let mut base = Base::new();
+        base.style.width = Length::Auto;
+        base.style.height = Length::Auto;
+        base.children.push(Box::new(child));
+        Self {
+            base,
+            seen_text: text.get_untracked(),
+            text,
             side: TooltipSide::default(),
             delay: DEFAULT_DELAY,
             hover_since: None,
@@ -110,7 +131,7 @@ impl Tooltip {
     /// The bubble's text size (logical px) from the resolved font + label length.
     fn bubble_size(&self) -> (f64, f64) {
         let font = self.base.font;
-        let chars = self.text.chars().count() as f64;
+        let chars = self.text.get_untracked().chars().count() as f64;
         let w = chars * (font * MONO_ADVANCE_RATIO) as f64 + 2.0 * PAD_X;
         let h = (font * MONO_LINE_RATIO) as f64 + 2.0 * PAD_Y;
         (w, h)
@@ -120,7 +141,7 @@ impl Tooltip {
     /// Used to damage the right region on show/hide — the bubble sits off our own
     /// bounds, on the overlay layer.
     fn current_bubble_rect(&self) -> Option<Rectangle> {
-        if self.text.is_empty() {
+        if self.text.get_untracked().is_empty() {
             return None;
         }
         let (w, h) = self.bubble_size();
@@ -193,7 +214,8 @@ impl Component for Tooltip {
         for child in &self.base.children {
             paint_child(child.as_ref(), cx);
         }
-        if !self.shown() || self.text.is_empty() {
+        let text = self.text.get_untracked();
+        if !self.shown() || text.is_empty() {
             return;
         }
 
@@ -216,7 +238,7 @@ impl Component for Tooltip {
                 radius,
                 Some(Glow { color: glow_c, radius: 5.0, intensity: 0.2 }),
             );
-            cx.text(rect, &self.text, foreground, font, TextAlign::Center, false);
+            cx.text(rect, &text, foreground, font, TextAlign::Center, false);
         });
     }
 
@@ -234,6 +256,11 @@ impl Component for Tooltip {
     }
 
     fn tick(&mut self, dt: f32) -> bool {
+        let next_text = self.text.get_untracked();
+        if next_text != self.seen_text {
+            self.seen_text = next_text;
+            self.base.mark_needs_paint();
+        }
         // The bubble's reveal is timed (wall-clock), not a continuous animation:
         // repaint only when it crosses the show/hide boundary, and damage just the
         // bubble (via `damage_bounds`) instead of forcing a full frame.

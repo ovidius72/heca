@@ -29,6 +29,14 @@ heca__emit_cwd() {
   heca__osc "7;file://$host$(heca__urlencode "${PWD:-/}")"
 }
 
+heca__command_name() {
+  local cmd="$1"
+  cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+  cmd="${cmd%%[[:space:];|&]*}"
+  cmd="${cmd##*/}"
+  printf '%s' "$cmd"
+}
+
 heca__prompt_command() {
   local exit_status="${1:-0}"
   if [ "${HECA_HAVE_PREEXEC:-0}" -eq 1 ] 2>/dev/null; then
@@ -50,6 +58,9 @@ heca__preexec() {
   HECA_HAVE_PREEXEC=1
   heca__osc "133;B"
   heca__osc "133;C"
+  local prog
+  prog="$(heca__command_name "$cmd")"
+  [ -n "$prog" ] && heca__osc "133;E;$(heca__urlencode "$prog")"
 }
 
 HECA_OLD_PROMPT_COMMAND="${PROMPT_COMMAND:-}"

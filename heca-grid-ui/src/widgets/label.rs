@@ -13,8 +13,10 @@ use crate::style::Length;
 pub struct Label {
     base: Base,
     text: Signal<String>,
+    seen_text: String,
     align: TextAlign,
     color: Option<Color>,
+    bold: bool,
 }
 
 impl Label {
@@ -22,11 +24,14 @@ impl Label {
     pub fn new(text: impl Into<String>) -> Self {
         let base = Base::new();
         let text = signal(text.into());
+        let seen_text = text.get_untracked();
         let mut label = Self {
             base,
             text,
+            seen_text,
             align: TextAlign::Start,
             color: None,
+            bold: false,
         };
         label.remeasure();
         label
@@ -41,6 +46,12 @@ impl Label {
     /// Explicit text color (defaults to the theme foreground).
     pub fn color(mut self, color: Color) -> Self {
         self.color = Some(color);
+        self
+    }
+
+    /// Render the label with bold weight.
+    pub fn bold(mut self, bold: bool) -> Self {
+        self.bold = bold;
         self
     }
 
@@ -75,7 +86,9 @@ impl Component for Label {
 
     /// Naive monospace measure from the resolved font ([`Base::font`]).
     fn remeasure(&mut self) {
-        let chars = self.text.get_untracked().chars().count() as f32;
+        let text = self.text.get_untracked();
+        self.seen_text = text.clone();
+        let chars = text.chars().count() as f32;
         let fs = self.base.font;
         self.base.style.width = Length::Px(chars * fs * MONO_ADVANCE_RATIO);
         self.base.style.height = Length::Px(fs * MONO_LINE_RATIO);
@@ -93,8 +106,18 @@ impl Component for Label {
             color,
             self.base.font,
             self.align,
-            false,
+            self.bold,
         );
+    }
+
+    fn tick(&mut self, _dt: f32) -> bool {
+        let next = self.text.get_untracked();
+        if next != self.seen_text {
+            self.seen_text = next;
+            self.remeasure();
+            self.base.mark_needs_paint();
+        }
+        false
     }
 }
 

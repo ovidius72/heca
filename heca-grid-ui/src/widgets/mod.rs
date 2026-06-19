@@ -40,6 +40,7 @@ mod toast;
 mod toast_stack;
 mod toggle;
 mod tooltip;
+mod visibility;
 
 pub use alert::{Alert, AlertVariant};
 pub use badge::{Badge, BadgeVariant};
@@ -76,3 +77,4 @@ pub use toast::{Toast, ToastSeverity};
 pub use toast_stack::{ToastCorner, ToastSpec, ToastStack};
 pub use toggle::Toggle;
 pub use tooltip::{Tooltip, TooltipSide};
+pub use visibility::Visibility;

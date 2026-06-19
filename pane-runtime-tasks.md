@@ -114,15 +114,15 @@ Built:
 - added tests for runtime projection, shared repo-root cache reuse across panes, timed refresh after the debounce window, and a temp-repo `git2` integration check for branch + dirty counts
 **Reviewer Decision:** — · **Reviewer Notes:** Pending review / merge.
 
-## Phase 5 — Process catalog (`[programs.<raw>]` → {name, icon, description, color})
+## Phase 5 — Process catalog (`[program.<id>]` + `processes[]` aliases → {name, icon, description, color})
 **Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5
 **One-liner:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`); seeded shell
-defaults + user `[programs.<raw>]` overrides; free-form glyph-string icons (no new `Glyph` enum); optional
+defaults + user canonical app entries with raw-process aliases; semantic Phosphor icon names resolved through the existing `Icon` widget; optional
 `color` pane tint; resolver with raw always available and terminal-icon fallback.
 **Agent Completion:** Completed on current branch.
 Built:
-- added `heca-config/src/programs.rs` with documented `ProgramMeta`, `ProgramsConfig`, `ProgramView`, and a shared `DEFAULT_TERMINAL_ICON`
-- seeded built-in shell defaults (`sh`, `bash`, `zsh`, `fish`) and implemented field-wise merge for partial same-key user overrides, so shell icons survive overrides like `[programs.zsh] name = "Z Shell"`
+- added `heca-config/src/programs.rs` with documented `ProgramMeta`, `ProgramsConfig`, `ProgramView`, and a shared default terminal icon
+- seeded built-in shell defaults (`sh`, `bash`, `zsh`, `fish`) and well-known app defaults, plus field-wise merge for partial same-key user overrides and `disabled = true`
 - wired `programs` into top-level `Config` deserialization and added config/docs examples in `README.md`, `example.config.toml`, and `default-keybindings.toml`
 - implemented `ProgramsConfig::resolve(raw)` with `raw` always preserved, explicit names/colors passed through, and terminal-icon fallback for both shells and unknown programs per the locked Phase 5 rule
 - added tests for default shell resolution, partial override merging, unknown-program fallback, color parsing/pass-through, and top-level config parsing
@@ -152,10 +152,19 @@ Notes:
 **Reviewer Decision:** — · **Reviewer Notes:** Review follow-ups addressed on branch: interactive command shell mode (`-ic`), clearer RPC separator errors, documented public close-policy fields, config validation for invalid command kinds, explicit direct-command shell-integration rationale, and minor formatting cleanup.
 
 ## Phase 7 — Display: fixed default pane-info widgets
-**Status:** Open · **Assigned:** — · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
-**One-liner:** sidebar card + optional pane-corner badge (icon · name · `(raw)` · status badge · git badges)
+**Status:** In Progress · **Assigned:** agent · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
+**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · segmented git tag)
 as theme-driven grid-ui widgets, reactive; showcase + docs.
-**Agent Completion:** —
+**Agent Completion:** Partially implemented on current branch.
+Built:
+- sidebar card Row 1 now resolves the catalog icon/name through `pane_info_view` and renders `Icon + Label + error-only indicator`
+- sidebar card Row 2 now renders a segmented git chip reactively from `Pane.runtime.git`, hidden outside repos
+- pure projection tests cover program/icon resolution and git-segment shaping for the sidebar card
+Remaining:
+- optional catalog `color` tint on the card/border
+- optional pane top-left compact badge toggle
+- showcase + `docs/widgets.md` pane-info demo/update
+- explicit end-to-end visual/reactivity verification for the final Phase 7 acceptance
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 8 — Plugin event exposure + plan/docs updates

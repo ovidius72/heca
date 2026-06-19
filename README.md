@@ -722,23 +722,44 @@ Commands run in a real PTY using the user's shell (`-ic` on Unix, `/C` on Window
 
 ## Process Catalog
 
-You can override how foreground programs are presented in pane chrome through `[programs.<raw>]`:
+You can override how foreground programs are presented in pane chrome through a
+canonical `[program.<id>]` entry with optional raw-process aliases:
 
 ```toml
-[programs.nvim]
+[program.nvim]
 name = "Neovim"
-icon = "\uE7C4"
+processes = ["v", "nvim", "nv"]
+icon = "file_code"
 description = "modal editor"
 color = "#89b4fa"
 ```
 
 Rules:
-- `raw` is the detected foreground program basename, for example `nvim`, `lazygit`, or `zsh`.
+- `id` is your canonical app entry name; it does not need to match the detected process exactly.
+- `processes` lists raw foreground process names that should resolve to that entry.
 - All fields are optional. Partial overrides are merged over built-in defaults.
-- Common shells (`sh`, `bash`, `zsh`, `fish`) are seeded with the terminal icon by default.
+- Built-in defaults are seeded in code for common shells and a small well-known catalog:
+  `nvim`, `vim`, `helix`, `yazi`, `ranger`, `claude`, `codex`, `opencode`, `pi`.
 - Unknown programs fall back to their raw name and the same terminal icon used by pane cards today.
-- `icon` is a free-form glyph string, not a fixed enum entry.
+- `icon` is a semantic Phosphor icon name. Canonical spellings are snake_case
+  such as `terminal`, `file_code`, `folder`, `folder_open`, `git_branch`,
+  `gear`, and `search`. `kebab-case` aliases also parse.
+- `[programs.<id>]` still parses for backward compatibility.
+- `disabled = true` removes a built-in entry cleanly and restores raw-name + terminal-icon fallback.
 - `color` accepts `#rrggbb` or `#rrggbbaa`.
+
+Example override / removal:
+
+```toml
+[program.nvim]
+name = "Neovim"
+processes = ["v", "nvim"]
+icon = "file_code"
+color = "#89b4fa"
+
+[program.ranger]
+disabled = true
+```
 
 ### Planned `spawn_pane` action contract
 

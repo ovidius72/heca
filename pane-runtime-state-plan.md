@@ -49,18 +49,18 @@
 ### 0.3 Display + customization
 - **Fixed default pane-info display now**, built as **real `heca-grid-ui` widgets** (theme-driven). Two rows
   on the **sidebar pane card** (optional **pane top-left corner** badge = compact row 1):
-  - **Row 1 — program:** `Icon` · `Name (raw)` · `Badge(status)`.
+  - **Row 1 — program:** `Icon` · `Name` · optional exceptional-state indicator.
     - **Idle (shell foreground):** terminal icon + the shell name (`zsh` / `bash` / …) — no app program.
-    - **Running a program:** the program's catalog icon + display name + `(raw)` + a status badge, e.g.
-      ` Neovim (nvim) [Running]`.
-  - **Row 2 — git (only if the cwd is in a git repo):** `Tag(branch)` (e.g. ` feature/my-feat` inside a
-    badge) + `Badge(+a/-d/Δ)` segments for added/new/deleted counts. Hidden entirely outside a repo.
+    - **Running a program:** the program's catalog icon + display name, e.g. ` Neovim`.
+  - **Row 2 — git (only if the cwd is in a git repo):** one segmented `Tag` whose main label is the branch
+    (e.g. `feature/my-feat`) and whose nested segments carry git metadata (counts with icons where useful),
+    matching the showcase's `~/repos/do-things` chip language. Hidden entirely outside a repo.
 - **Status set = `Running` · `Idle` · `Success` · `Error`** (NO `Exit` — see §0.6). `Success`/`Error` land in
-  Phase 3 (OSC 133). Status→theme colour: Running=accent, Idle=muted, Success=success, Error=danger.
-- **Process catalog** = a user-extensible `[programs.<raw>]` map (see §0.7) → `{ name, icon, description,
-  color }`. Built-in defaults (shells seeded) + config extension. The **raw program name is always shown**
-  verbatim (in parens); the catalog adds a friendly name + icon (fallback = raw name + a default terminal
-  icon for shells / no icon for unknown). `color` (optional) tints the pane card/border.
+  Phase 3 (OSC 133). `Idle` and `Running` are normal and do not render a token in the compact default row;
+  only exceptional states should surface there.
+- **Process catalog** = a user-extensible canonical `[program.<id>]` map (see §0.7) → `{ name, icon, description,
+  color }`. Built-in defaults (shells seeded) + config extension. The catalog adds a friendly name + semantic
+  Phosphor icon (fallback = raw name + a default terminal icon). `color` (optional) tints the pane card/border.
 - **DEFERRED → future plan:** the **tmux-style token/segment customization** (`${token}` templates, user-
   authored segment lists). Agreed shape when built = the **hybrid** model (a list of widget-typed segments,
   each a `${token}` template) — record this in `pluggable-chrome-plugin-plan.md` §8.1/§8.2. The fixed
@@ -99,18 +99,21 @@
 - **Close-policy (`keep_on_error`/`keep_on_success`) is Phase 6's concern**, applying only to **direct-spawn**
   panes (`[[keys.command]]` run *as* the PTY child, no shell). In Phase 2 every pane is a shell pane.
 
-### 0.7 Process catalog config (`[programs.<raw>]`)
-A map keyed by the **raw foreground program name** (the binary basename, e.g. `nvim`). Value = `ProgramMeta`:
+### 0.7 Process catalog config (`[program.<id>]`)
+A map keyed by a **canonical app id** whose entry can match one or more raw foreground process names. Value = `ProgramMeta`:
 ```toml
-[programs.nvim]
+[program.nvim]
 name        = "Neovim"         # display name (Row 1 "Name")
-icon        = "\uE7C4"        # nerd-font glyph (Row 1 icon)
+processes   = ["v", "nvim", "nv"] # raw process aliases
+icon        = "file_code"     # semantic Phosphor icon name (Row 1 icon)
 description = "modal editor"   # future usage (not rendered yet)
 color       = "#fafafa"        # OPTIONAL pane/card tint
 ```
-- All fields optional; partial entries are valid. `name` falls back to the raw key; `icon` falls back to the
-  default terminal icon (including unknown programs). Icons are **free-form glyph strings**
-  (nerd-font codepoints), not a fixed `Glyph` enum — the renderer draws them as text.
+- All fields optional; partial entries are valid. `name` falls back to the raw process name; `icon` falls back to the
+  default terminal icon (including unknown programs). Icons are semantic Phosphor names parsed permissively
+  from snake_case / kebab-case aliases into the existing duotone `Icon` widget.
+- `processes` declares which detected raw process names resolve to the canonical entry. `[programs.<id>]`
+  remains accepted as a compatibility alias.
 - **Built-in defaults seeded** for common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon) so out-of-the-box
   idle panes show a terminal icon + shell name. User entries **override** same-key defaults; users add their
   own (`nvim`, `lazygit`, `yazi`, …) via config.
@@ -352,22 +355,23 @@ subprocess (in-process via git2); clippy clean.
 ### Phase 5 — Process catalog (extensible raw→{name, icon} map)
 **Depends-on:** Phase 1 (program field). Parallel-friendly with 2–4.
 
-**Why:** show `Neovim` + an icon for `nvim`, user-extensible via `[programs.<raw>]`; raw name always shown
-in parens. Also seeds shell icons so idle panes show a terminal icon + shell name out-of-the-box.
+**Why:** show `Neovim` + an icon for `nvim`, user-extensible via `[program.<id>]` + `processes[]`; semantic
+Phosphor icons keep pane chrome on the existing `Icon` widget. Also seeds shell icons so idle panes show a
+terminal icon + shell name out-of-the-box.
 
 **Key files:** new `heca-config/src/programs.rs` (`ProgramMeta`/`ProgramsConfig`/`ProgramView`),
 `heca-config/src/lib.rs` + `loader.rs` (wire `programs` field), `example.config.toml` + `default-keybindings.toml` + `README.md` (docs),
 resolver consumed by Phase 7.
 
 **Tasks**
-- [x] New `heca-config/src/programs.rs`: `ProgramMeta { name, icon, description, color: Option<Color> }` + `ProgramsConfig` (map keyed by raw program name) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
-- [x] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon). User entries override same-key defaults; users add `nvim`/`lazygit`/`yazi`/… via `[programs.<raw>]`.
+- [x] New `heca-config/src/programs.rs`: `ProgramMeta { disabled, name, processes, icon, description, color: Option<Color> }` + `ProgramsConfig` (canonical map keyed by app id) + `ProgramView { raw, name, icon, color }` resolver (per §0.7). `Color` deserialises from hex (`#rrggbb`/`#rrggbbaa`).
+- [x] **Built-in defaults seeded** in `ProgramsConfig::default()`: common shells (`zsh`/`bash`/`fish`/`sh` → terminal icon) plus well-known apps. User entries override same-key defaults; users add or disable entries via `[program.<id>]`.
 - [x] **Config plumbing:** add `pub programs: ProgramsConfig` (serde default) to `Config`; `pub mod programs;` in `heca-config/src/lib.rs`. Document in `example.config.toml`, `default-keybindings.toml`, and `README.md`.
-- [x] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to the default terminal icon when no explicit icon exists, `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are free-form glyph strings (no new `Glyph` enum variants needed).
+- [x] **Resolver:** `resolve(raw) -> ProgramView` — `name` falls back to raw, `icon` to the default terminal icon when no explicit icon exists, `color` passes through. Used by Phase 7; raw always available in `ProgramView.raw`. Icons are semantic Phosphor names resolved into the existing duotone `Icon` widget.
 - [x] Tests: default shell hit; user override wins; miss → raw name + terminal icon; `color` parse + pass-through.
 
 **Acceptance:** `nvim` resolves to "Neovim" + icon; an unknown program shows its raw name + default icon;
-a config override wins; new glyphs render in the showcase.
+a config override wins; pane chrome uses the existing duotone `Icon` widget.
 
 ---
 
@@ -397,7 +401,7 @@ a failing command stays open; reachable from keybind **and** RPC; follows the ac
 ### Phase 7 — Display: fixed default pane-info widgets
 **Depends-on:** Phases 1–6 data (degrades gracefully if a source is absent).
 
-**Why:** render the pane info (icon · name · `(raw)` · status badge · git badges) on the sidebar card +
+**Why:** render the pane info (icon · name · exceptional-state indicator · segmented git tag) on the sidebar card +
 optional pane corner — real grid-ui widgets, theme-driven. The fixed default that customization later replaces.
 
 **Key files:** `heca/src/chrome/mod.rs` (`pane_card`), `heca-grid-ui` (reuse `Icon`/`Label`/`Badge`/`Tag`;
@@ -405,15 +409,15 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 `heca-renderer/examples/showcase.rs`, `docs/widgets.md`.
 
 **Tasks**
-- [ ] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label("{name} ({raw})")` · `Badge(status, severity-toned)`, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name (no app program); Running ⇒ program icon + Name + `(raw)`. Icons are free-form nerd-font glyph strings from the catalog (§0.7) — render via a glyph label or extend `Icon` to accept a string glyph. Status→theme colour: Running=accent, Idle=muted, Success=success, Error=danger (**no Exit** — a dead pane closes). Reuse `Row`/`Grid`.
-- [ ] **Sidebar card — Row 2 (git, only in a repo):** `Tag(branch)` (e.g. ` feature/my-feat` in a badge) + `Badge("+a/-d/Δ")` segments (added/new/deleted), bound to the store mirror. Hidden entirely outside a repo.
+- [x] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label(name)` · optional exceptional-state indicator, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name; Running ⇒ program icon + Name. Icons come from the catalog's semantic Phosphor names (§0.7) and render through the existing duotone `Icon` widget. Reuse `Row`/`Grid`.
+- [x] **Sidebar card — Row 2 (git, only in a repo):** one segmented `Tag(branch)` whose nested segments carry the git counts/metadata, bound to the store mirror. Hidden entirely outside a repo.
 - [ ] Optional `color` from the catalog → tint the card/border.
-- [ ] **Optional pane top-left corner badge:** compact Row 1 (`Icon + Name (raw)`) overlay, behind a config/appearance switch.
+- [ ] **Optional pane top-left corner badge:** compact Row 1 (`Icon + Name`) overlay, behind a config/appearance switch.
 - [ ] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
 - [ ] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
-- [ ] Tests where pure (segment build given a `PaneRuntimeView`); visual verify in the app + showcase.
+- [x] Tests where pure (segment build given a `PaneRuntimeView`); visual verify in the app + showcase.
 
-**Acceptance:** sidebar cards show Row 1 (icon/Name (raw)/status) + Row 2 (git branch + counts) live; Idle
+**Acceptance:** sidebar cards show Row 1 (icon/Name/exception-only status) + Row 2 (git branch + counts) live; Idle
 shows terminal icon + shell name; corner badge toggle on; absent sources hide cleanly (no repo ⇒ no Row 2);
 showcase + docs updated; only the changed card repaints.
 

@@ -357,6 +357,17 @@ keys = "h"
 args = { target = "column", axis = "x", amount = "-50" }
 ```
 
+### Program Catalog
+
+- Foreground-program presentation uses canonical `[program.<id>]` entries with
+  optional raw-process aliases via `processes = [...]`.
+- `icon` values in the program catalog are semantic Phosphor icon names
+  (`terminal`, `file_code`, `folder_open`, `git_branch`, …), not raw glyph strings.
+- Built-in catalog defaults live in `ProgramsConfig::default()`; if you change
+  them, update `README.md` and `example.config.toml` in the same patch.
+- Users remove a built-in program mapping with `disabled = true`. Do not invent
+  empty-string semantics for inherited defaults.
+
 ### Planned parameterized binding contract
 
 When implementing richer spawning / geometry-aware bindings, keep these rules:
