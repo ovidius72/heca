@@ -177,6 +177,18 @@ fn pane_info_view(
     }
 }
 
+/// Resolve a pane's title `(icon, name)` through the same program-catalog path
+/// the sidebar card uses, so the on-pane title and the sidebar stay consistent.
+/// Used by the terminal pane shell (`app::terminal_render`).
+pub(crate) fn pane_title_info(
+    programs: &ProgramsConfig,
+    fallback_name: &str,
+    runtime: Option<&PaneRuntime>,
+) -> (Glyph, String) {
+    let view = pane_info_view(programs, fallback_name, runtime);
+    (view.icon, view.title)
+}
+
 fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
     state.with_pane_runtime(pane_id, |runtime| {
         runtime.map(|runtime| PaneRuntime {

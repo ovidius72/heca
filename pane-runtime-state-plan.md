@@ -52,9 +52,9 @@
   - **Row 1 — program:** `Icon` · `Name` · optional exceptional-state indicator.
     - **Idle (shell foreground):** terminal icon + the shell name (`zsh` / `bash` / …) — no app program.
     - **Running a program:** the program's catalog icon + display name, e.g. ` Neovim`.
-  - **Row 2 — git (only if the cwd is in a git repo):** one segmented `Tag` whose main label is the branch
-    (e.g. `feature/my-feat`) and whose nested segments carry git metadata (counts with icons where useful),
-    matching the showcase's `~/repos/do-things` chip language. Hidden entirely outside a repo.
+  - **Row 2 — git (only if the cwd is in a git repo):** one flat metadata row whose main label is the branch
+    (e.g. `feature/my-feat`) followed by optional `+N / ~N / -N` counters with icons where useful. Hidden
+    entirely outside a repo.
 - **Status set = `Running` · `Idle` · `Success` · `Error`** (NO `Exit` — see §0.6). `Success`/`Error` land in
   Phase 3 (OSC 133). `Idle` and `Running` are normal and do not render a token in the compact default row;
   only exceptional states should surface there.
@@ -410,11 +410,10 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 
 **Tasks**
 - [x] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label(name)` · optional exceptional-state indicator, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name; Running ⇒ program icon + Name. Icons come from the catalog's semantic Phosphor names (§0.7) and render through the existing duotone `Icon` widget. Reuse `Row`/`Grid`.
-- [x] **Sidebar card — Row 2 (git, only in a repo):** one segmented `Tag(branch)` whose nested segments carry the git counts/metadata, bound to the store mirror. Hidden entirely outside a repo.
-- [ ] Optional `color` from the catalog → tint the card/border.
-- [ ] **Optional pane top-left corner badge:** compact Row 1 (`Icon + Name`) overlay, behind a config/appearance switch.
-- [ ] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
-- [ ] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
+- [x] **Sidebar card — Row 2 (git, only in a repo):** a flat metadata row (`branch + optional +N / ~N / -N`), bound to the store mirror. Hidden entirely outside a repo.
+- [x] **On-pane title (realizes the optional corner badge):** `icon + name` on the pane's top border via a new `heca-grid-ui` `Pane.title` + `PaneTitleStyle` widget variant (`Cut`/`Filled`/`Boxed`), gated by `[appearance] pane_show_title` (default true) + `pane_title_style` (default "cut"); interior color = terminal `default_bg`; resolved through the shared `pane_info_view` catalog path.
+- [x] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
+- [x] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
 - [x] Tests where pure (segment build given a `PaneRuntimeView`); visual verify in the app + showcase.
 
 **Acceptance:** sidebar cards show Row 1 (icon/Name/exception-only status) + Row 2 (git branch + counts) live; Idle

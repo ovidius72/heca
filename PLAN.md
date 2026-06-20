@@ -256,7 +256,25 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 7. **Docs**: theme-token reference + config.toml configurability; demote `docs/the-grid-ui.md` to
    reference-only; end-user docs (after everything ships).
 8. **B-series renderer**: physical-pixel 1px alignment on fractional scale; dedicated scanline shader.
-9. **`heca-grid-ui` crate-review debt** (from the two crate reviews, both ~8/10; docs removed):
+9. **`NfIcon` — Nerd-Font icon widget** (planned 2026-06-20; enhances pane title + sidebar program
+   icons + the Phase 5 process catalog). Phosphor has almost no brand/app/language logos (no rust,
+   docker, nvim, node, python marks); Nerd Fonts (devicons/seti/font-awesome) do — exactly what a
+   per-program title wants. **Resolved design (do it this way):**
+   - **Embed the symbols-only font** ("Symbols Nerd Font Mono"), *not* a full patched font — just the
+     glyph ranges (~1–2 MB), so it won't fight the text/mono fonts. **Verify + record the license**
+     before embedding (NF symbols are redistributable; confirm OFL/MIT and note it).
+   - **Separate flat widget, shared pipeline.** Keep `Icon` as the Phosphor **duotone** widget; add
+     `NfIcon` as a **single-layer (flat)** widget (NF glyphs are monochrome). Reuse the existing
+     glyph-atlas/text path — add an NF icon **font family/role** (the renderer already carries a
+     per-command font family + an icon role; extend, don't fork).
+   - **Reference by codepoint + a small curated enum.** Mirror `Icon::from_codepoint` (NF glyphs live
+     at fixed PUA codepoints) plus a curated `NfGlyph` for the ones actually used.
+   - **Wire into the catalog.** Let `[program.<id>].icon` optionally name an NF glyph so
+     `nvim`/`lazygit`/`docker`/language panes get real logos; the pane title + sidebar card pick it up
+     through the shared `pane_info_view` path. Showcase + `docs/widgets.md` updated (grid-ui rule).
+   - Scope: its own task/PR (font asset + renderer family + widget + catalog resolver + showcase/docs);
+     not bundled with the pane-title work (which already ships with Phosphor icons).
+10. **`heca-grid-ui` crate-review debt** (from the two crate reviews, both ~8/10; docs removed):
    `badge.rs` `unreachable!()` in a reachable match arm; add `[workspace.lints]`/package lints;
    `#[allow]`→`#[expect]` in `component.rs`; `#![deny(missing_docs)]`; `#[non_exhaustive]` on public
    enums; hot-path allocs (`Input::chars_vec`, `CommandPalette::results`, scene `to_vec`/`clone`);

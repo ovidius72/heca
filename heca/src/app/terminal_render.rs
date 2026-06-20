@@ -99,6 +99,7 @@ pub(crate) fn pane_scissor_rect(
 pub(crate) fn paint_terminal_pane_shell(
     state: &AppState,
     scene: &mut GuiScene,
+    pane_id: PaneId,
     x: f32,
     y: f32,
     w: f32,
@@ -108,6 +109,7 @@ pub(crate) fn paint_terminal_pane_shell(
     border_radius: f32,
     content_inset: f32,
     is_active: bool,
+    terminal_bg: Option<[f32; 4]>,
 ) {
     let theme = terminal_pane_gui_theme(state, border_color, border_width, border_radius);
     let mut pane = UiPane::new()
@@ -120,6 +122,34 @@ pub(crate) fn paint_terminal_pane_shell(
     if is_active {
         pane = pane.glow_with(to_gui_color(border_color), 10.0, 0.55);
     }
+
+    // Title (icon + program name) on the top border, resolved through the same
+    // program-catalog path as the sidebar card so the two stay consistent.
+    // Defaults: frame color = the pane border (the widget's own default); interior
+    // color = the terminal's resolved background. Both overridable via config.
+    if let Some(style) = gui_title_style(state.appearance.pane_title_style)
+        && let Some(core_pane) =
+            state.session.active_workspace().and_then(|ws| ws.find_pane(pane_id))
+    {
+        let (glyph, title) = crate::chrome::pane_title_info(
+            &state.programs,
+            &core_pane.title,
+            Some(&core_pane.runtime),
+        );
+        pane = pane.title(glyph, title).title_style(style);
+        if let Some(color) = state.appearance.pane_title_color {
+            pane = pane.title_color(to_gui_color(color.to_f32x4()));
+        }
+        let title_bg = state
+            .appearance
+            .pane_title_background
+            .map(|color| to_gui_color(color.to_f32x4()))
+            .or_else(|| terminal_bg.map(|bg| to_gui_color([bg[0], bg[1], bg[2], 1.0])));
+        if let Some(bg) = title_bg {
+            pane = pane.title_background(bg);
+        }
+    }
+
     LayoutEngine::new().compute(&mut pane, GuiSize::new(w as f64, h as f64));
     pane.base_mut().bounds = GuiRectangle::new(
         GuiPoint::new(x as f64, y as f64),
@@ -233,6 +263,21 @@ fn to_gui_color(color: [f32; 4]) -> GuiColor {
         (color[2].clamp(0.0, 1.0) * 255.0) as u8,
         (color[3].clamp(0.0, 1.0) * 255.0) as u8,
     )
+}
+
+/// Map the config-side pane-title style onto the `heca-grid-ui` widget variant.
+/// `None` (config "none") returns `None` — the app then draws no title.
+fn gui_title_style(
+    style: heca_config::appearance::PaneTitleStyle,
+) -> Option<heca_grid_ui::PaneTitleStyle> {
+    use heca_config::appearance::PaneTitleStyle as Cfg;
+    use heca_grid_ui::PaneTitleStyle as Gui;
+    match style {
+        Cfg::None => None,
+        Cfg::Cut => Some(Gui::Cut),
+        Cfg::Filled => Some(Gui::Filled),
+        Cfg::Boxed => Some(Gui::Boxed),
+    }
 }
 
 fn terminal_pane_gui_theme(

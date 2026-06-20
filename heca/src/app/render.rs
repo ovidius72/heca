@@ -479,6 +479,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut pane_scene,
+                pane.pane_id,
                 pane.x,
                 pane.y,
                 pane.w,
@@ -488,6 +489,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 pane_border_radius,
                 pane_content_inset,
                 pane.is_active,
+                pane.mount.as_ref().map(|m| m.snapshot.default_bg),
             );
         }
 
@@ -686,6 +688,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut float_scene,
+                pane.pane_id,
                 pane.x,
                 pane.y,
                 pane.w,
@@ -695,6 +698,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 pane_border_radius,
                 pane_content_inset,
                 pane.is_active,
+                pane.mount.as_ref().map(|m| m.snapshot.default_bg),
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
             render_chrome(

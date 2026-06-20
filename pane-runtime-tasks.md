@@ -153,18 +153,20 @@ Notes:
 
 ## Phase 7 — Display: fixed default pane-info widgets
 **Status:** In Progress · **Assigned:** agent · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
-**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · segmented git tag)
+**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · flat git metadata row)
 as theme-driven grid-ui widgets, reactive; showcase + docs.
 **Agent Completion:** Partially implemented on current branch.
 Built:
 - sidebar card Row 1 now resolves the catalog icon/name through `pane_info_view` and renders `Icon + Label + error-only indicator`
-- sidebar card Row 2 now renders a segmented git chip reactively from `Pane.runtime.git`, hidden outside repos
+- sidebar card Row 2 now renders a flat git metadata row reactively from `Pane.runtime.git`, hidden outside repos
 - pure projection tests cover program/icon resolution and git-segment shaping for the sidebar card
-Remaining:
-- optional catalog `color` tint on the card/border
-- optional pane top-left compact badge toggle
-- showcase + `docs/widgets.md` pane-info demo/update
-- explicit end-to-end visual/reactivity verification for the final Phase 7 acceptance
+- showcase + `docs/widgets.md` now demonstrate the final pane-info row shape
+- end-to-end visual/reactivity verification was completed in the real app
+- **on-pane title (realizes the optional top-corner badge):** added a `title` to the `heca-grid-ui` `Pane` widget — `icon + name` straddling the top border, with a `PaneTitleStyle` variant (`Cut` / `Filled` / `Boxed`), label truncation, and duotone icon; theme-driven, showcase + docs updated, `truncate_to_width` unit-tested
+- wired into the terminal pane shell (`app::terminal_render`): resolves through the same `pane_info_view` catalog path as the sidebar (so they stay consistent), uses the terminal's resolved `default_bg` as the title interior color
+- config: single `[appearance] pane_title_style = "none"|"cut"|"filled"|"boxed"` (default "cut"; dropped the redundant `pane_show_title` bool) + optional `pane_title_color` (frame) / `pane_title_background` (interior) overrides — all in `example.config.toml`
+- NFIcon (Nerd-Font icon widget, for real app/language program logos) planned as a follow-up in `PLAN.md` (grid-ui backlog)
+- top-row clip handled: title overhang above the border is bounded (`TITLE_OVERHANG_MAX`) so it stays within the first-pane gap regardless of font size — no clip against the content area / tab bar
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 8 — Plugin event exposure + plan/docs updates

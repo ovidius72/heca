@@ -23,6 +23,9 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, StartCause, WindowEvent};
 use winit::keyboard::{Key, NamedKey};
 
+/// Paired `(active, error)` state signals for a showcase pane-info card.
+type PaneTitleSignals = (Signal<bool>, Signal<bool>);
+
 /// A static swatch that paints a drag drop-indicator over its bounds so the
 /// catalog can *show* the visual without a live drag loop: `swap=false` → the
 /// **move** insertion line (`drop_indicator`, `After`); `swap=true` → the
@@ -718,6 +721,59 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
                 )
         })
+        // Pane title: an `icon + label` straddling the top border (the pane-info
+        // header terminal panes use). The three `PaneTitleStyle` looks side by
+        // side — `Cut` (gap in the frame), `Filled` (chip in the frame color),
+        // `Boxed` (bordered box) — all theme-driven; the last also shows long-title
+        // ellipsis truncation.
+        .child(
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(
+                    Pane::new()
+                        .bordered()
+                        .width(Length::Px(170.0))
+                        .height(Length::Px(90.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 2.0)
+                        .title(Glyph::Terminal, "codex")
+                        .title_style(PaneTitleStyle::Cut),
+                )
+                .child(
+                    Pane::new()
+                        .bordered()
+                        .width(Length::Px(170.0))
+                        .height(Length::Px(90.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 2.0)
+                        .title(Glyph::Terminal, "codex")
+                        .title_style(PaneTitleStyle::Filled),
+                )
+                .child(
+                    Pane::new()
+                        .bordered()
+                        .width(Length::Px(170.0))
+                        .height(Length::Px(90.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 2.0)
+                        .title(Glyph::FileCode, "nvim")
+                        .title_style(PaneTitleStyle::Boxed),
+                )
+                // Narrow pane + long title → ellipsis truncation so the label never
+                // runs into the opposite corner.
+                .child(
+                    Pane::new()
+                        .bordered()
+                        .width(Length::Px(150.0))
+                        .height(Length::Px(90.0))
+                        .background(theme.surface)
+                        .border(theme.border, 1.5)
+                        .title(Glyph::Folder, "~/projects/heca-workspace")
+                        .title_color(theme.foreground)
+                        .title_style(PaneTitleStyle::Filled),
+                )
+        )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
@@ -740,13 +796,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 })
             };
 
-            // A pane "card" — the Phase 7 pane-info shape: row 1 is
-            // `icon + title + error-only indicator`; row 2 reuses the showcase's
-            // segmented Tag vocabulary for git state (`branch + nested segments`),
-            // hidden entirely outside repos.
+            // A pane "card" — the final Phase 7 pane-info shape: row 1 is a
+            // centered inline `status dot + icon + title`; row 2 is a flat git
+            // metadata line (`branch + optional counts`), hidden outside repos.
             let pane_sel = signal(0usize);
             let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
-            let pane_titles: Rc<RefCell<Vec<(Signal<bool>, Signal<bool>)>>> =
+            let pane_titles: Rc<RefCell<Vec<PaneTitleSignals>>> =
                 Rc::new(RefCell::new(Vec::new()));
             let pane = move |
                 icon: Glyph,
@@ -757,47 +812,54 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 git_deleted: Option<&str>,
                 status: DotStatus,
             | -> Row {
-                let mut git_tag = Tag::new(git_branch.unwrap_or_default())
-                    .leading(Icon::new(Glyph::GitBranch).size(13.0).color(theme.warning))
-                    .color(theme.accent);
-                if git_added.is_some() || git_modified.is_some() || git_deleted.is_some() {
-                    git_tag = git_tag.segment(
-                        Flex::row()
-                            .align(Align::Center)
-                            .gap(6.0)
-                            .child(Visibility::new(
-                                Icon::new(Glyph::Plus).size(13.0).color(theme.success),
-                                git_added.is_some(),
-                            ))
-                            .child(Visibility::new(
-                                Label::new(git_added.unwrap_or_default())
-                                    .color(theme.success)
-                                    .font_scale(0.8),
-                                git_added.is_some(),
-                            ))
-                            .child(Visibility::new(
-                                Icon::new(Glyph::Warning).size(13.0).color(theme.warning),
-                                git_modified.is_some(),
-                            ))
-                            .child(Visibility::new(
-                                Label::new(git_modified.unwrap_or_default())
-                                    .color(theme.warning)
-                                    .font_scale(0.8),
-                                git_modified.is_some(),
-                            ))
-                            .child(Visibility::new(
-                                Icon::new(Glyph::Minus).size(13.0).color(theme.danger),
-                                git_deleted.is_some(),
-                            ))
-                            .child(Visibility::new(
-                                Label::new(git_deleted.unwrap_or_default())
-                                    .color(theme.danger)
-                                    .font_scale(0.8),
-                                git_deleted.is_some(),
-                            )),
-                    );
-                }
-                let git_row = Visibility::new(Flex::row().child(git_tag), git_branch.is_some());
+                let git_row = Visibility::new(
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(6.0)
+                        .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.warning))
+                        .child(
+                            Label::new(git_branch.unwrap_or_default())
+                                .color(theme.foreground)
+                                .font_scale(0.8),
+                        )
+                        .child(Visibility::new(
+                            Flex::row()
+                                .align(Align::Center)
+                                .gap(4.0)
+                                .child(Icon::new(Glyph::Plus).size(12.0).color(theme.success))
+                                .child(
+                                    Label::new(git_added.unwrap_or_default())
+                                        .color(theme.success)
+                                        .font_scale(0.8),
+                                ),
+                            git_added.is_some(),
+                        ))
+                        .child(Visibility::new(
+                            Flex::row()
+                                .align(Align::Center)
+                                .gap(4.0)
+                                .child(Icon::new(Glyph::Warning).size(12.0).color(theme.warning))
+                                .child(
+                                    Label::new(git_modified.unwrap_or_default())
+                                        .color(theme.warning)
+                                        .font_scale(0.8),
+                                ),
+                            git_modified.is_some(),
+                        ))
+                        .child(Visibility::new(
+                            Flex::row()
+                                .align(Align::Center)
+                                .gap(4.0)
+                                .child(Icon::new(Glyph::Minus).size(12.0).color(theme.danger))
+                                .child(
+                                    Label::new(git_deleted.unwrap_or_default())
+                                        .color(theme.danger)
+                                        .font_scale(0.8),
+                                ),
+                            git_deleted.is_some(),
+                        )),
+                    git_branch.is_some(),
+                );
                 let row = Row::new()
                     .background(theme.foreground.with_alpha(5))
                     .highlight(theme.accent)
@@ -817,64 +879,43 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         pane_titles
                             .borrow_mut()
                             .push((active_title_signal, inactive_title_signal));
-                        if git_branch.is_some() {
-                            Grid::new()
-                                .grow(1.0)
-                                .columns([Track::Px(10.0), Track::Px(22.0), Track::Fr(1.0)])
-                                .rows([Track::Auto, Track::Auto])
-                                .areas(["dot icon title", "git git git"])
-                                .gap(4.0)
-                                .area(
-                                    Flex::row()
-                                        .align(Align::Center)
-                                        .child(StatusDot::new(status)),
-                                    "dot",
-                                )
-                                .area(
-                                    Flex::row()
-                                        .align(Align::Center)
-                                        .child(Icon::new(icon).color(theme.foreground).size(18.0)),
-                                    "icon",
-                                )
-                                .area(
-                                    Flex::column()
-                                        .child(active_title)
-                                        .child(inactive_title),
-                                    "title",
-                                )
-                                .area(
-                                    Flex::column()
-                                        .gap(2.0)
-                                        .child(Flex::row().height(Length::Px(2.0)))
-                                        .child(git_row),
-                                    "git",
-                                )
-                        } else {
-                            Grid::new()
-                                .grow(1.0)
-                                .columns([Track::Px(10.0), Track::Px(22.0), Track::Fr(1.0)])
-                                .rows([Track::Auto])
-                                .areas(["dot icon title"])
-                                .gap(4.0)
-                                .area(
-                                    Flex::row()
-                                        .align(Align::Center)
-                                        .child(StatusDot::new(status)),
-                                    "dot",
-                                )
-                                .area(
-                                    Flex::row()
-                                        .align(Align::Center)
-                                        .child(Icon::new(icon).color(theme.foreground).size(18.0)),
-                                    "icon",
-                                )
-                                .area(
-                                    Flex::column()
-                                        .child(active_title)
-                                        .child(inactive_title),
-                                    "title",
-                                )
-                        }
+                        Flex::column()
+                            .gap(4.0)
+                            .grow(1.0)
+                            .child(
+                                Flex::row()
+                                    .align(Align::Center)
+                                    .gap(8.0)
+                                    .child(
+                                        Flex::row()
+                                            .align(Align::Center)
+                                            .width(Length::Px(12.0))
+                                            .child(StatusDot::new(status)),
+                                    )
+                                    .child(
+                                        Flex::row()
+                                            .align(Align::Center)
+                                            .child(
+                                                Icon::new(icon)
+                                                    .color(theme.foreground)
+                                                    .size(14.0),
+                                            ),
+                                    )
+                                    .child(
+                                        Flex::row()
+                                            .align(Align::Center)
+                                            .child(
+                                                Flex::column()
+                                                    .child(active_title)
+                                                    .child(inactive_title),
+                                            ),
+                                    ),
+                            )
+                            .child(
+                                Flex::row()
+                                    .child(Flex::row().width(Length::Px(2.0)))
+                                    .child(git_row),
+                            )
                     });
                 let i = pane_states.borrow().len();
                 pane_states.borrow_mut().push(row.state());
@@ -951,9 +992,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .dock(explorer)
                 .dock(source_control);
 
-            // PANES: Phase 7 sidebar-style pane cards. Normal running/idle panes
-            // show no status token; only exceptional state surfaces in the compact
-            // row. Row 2 reuses the showcase segmented Tag recipe for git state.
+            // PANES: Phase 7 sidebar-style pane cards. Row 1 is a centered inline
+            // `status dot + icon + name`; row 2 is a flat git metadata line that
+            // hides outside repos.
             // The dock is a DnD drop target (universal `DragExt`) — its cards drop here.
             let panes = DockFrame::new("PANES")
                 .drop_target(DragItemId::new(usize::MAX))

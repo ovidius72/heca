@@ -36,6 +36,23 @@ pub enum Vibrancy {
     WindowBackground,
 }
 
+/// How a pane's top-border title (icon + program name) is drawn. Serialised
+/// `snake_case` in TOML (e.g. `pane_title_style = "filled"`). Mirrors the
+/// `heca-grid-ui` `PaneTitleStyle` widget variant; mapped to it in the app.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneTitleStyle {
+    /// No pane title at all.
+    None,
+    /// Float the title in a gap cut into the frame line — no visible box (default).
+    #[default]
+    Cut,
+    /// A solid chip filled with the frame color; title text flips to the interior.
+    Filled,
+    /// A small bordered box (interior fill + frame-colored border) on the line.
+    Boxed,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Default-value helpers (used by serde attributes on AppearanceConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -66,6 +83,10 @@ fn default_terminal_floating_blur() -> u8 {
 
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
+}
+
+fn default_pane_title_style() -> PaneTitleStyle {
+    PaneTitleStyle::Cut
 }
 
 /// Maximum in-app blur radius in logical px, at `blur = 100`.
@@ -165,6 +186,20 @@ pub struct AppearanceConfig {
     /// tint (e.g. a lifted surface color for a lighter frost).
     #[serde(default)]
     pub terminal_frost_color: Option<Color>,
+
+    // ── Pane title (program icon + name on the top border) ──
+    /// How the pane title is drawn: `"none"`, `"cut"` (default), `"filled"`, or
+    /// `"boxed"`. `"none"` hides the title entirely.
+    #[serde(default = "default_pane_title_style")]
+    pub pane_title_style: PaneTitleStyle,
+    /// Title **frame** color (the `cut`/`boxed` icon+text, the `filled` chip).
+    /// `None` → inherits the pane border color.
+    #[serde(default)]
+    pub pane_title_color: Option<Color>,
+    /// Title **interior** color (the `cut` below-edge half, the `boxed` fill, the
+    /// `filled` icon+text). `None` → inherits the terminal's resolved background.
+    #[serde(default)]
+    pub pane_title_background: Option<Color>,
 }
 
 impl AppearanceConfig {
@@ -338,6 +373,9 @@ impl Default for AppearanceConfig {
             pane_padding: None,
             sidebar_gap: None,
             terminal_frost_color: None,
+            pane_title_style: default_pane_title_style(),
+            pane_title_color: None,
+            pane_title_background: None,
         }
     }
 }
@@ -369,6 +407,28 @@ mod tests {
         assert!((cfg.terminal_floating_blur_radius()).abs() < f32::EPSILON);
         assert!((cfg.terminal_floating_frost_opacity()).abs() < f32::EPSILON);
         assert_eq!(cfg.os_vibrancy(), None);
+    }
+
+    #[test]
+    fn pane_title_defaults_to_cut_with_inherited_colors() {
+        let cfg = AppearanceConfig::default();
+        assert_eq!(cfg.pane_title_style, PaneTitleStyle::Cut);
+        assert!(cfg.pane_title_color.is_none());
+        assert!(cfg.pane_title_background.is_none());
+    }
+
+    #[test]
+    fn pane_title_style_parses_snake_case() {
+        let none: AppearanceConfig = toml::from_str("pane_title_style = \"none\"").unwrap();
+        assert_eq!(none.pane_title_style, PaneTitleStyle::None);
+
+        let filled: AppearanceConfig = toml::from_str(
+            "pane_title_style = \"filled\"\npane_title_color = \"#89b4fa\"\npane_title_background = \"#1e1e2e\"",
+        )
+        .unwrap();
+        assert_eq!(filled.pane_title_style, PaneTitleStyle::Filled);
+        assert!(filled.pane_title_color.is_some());
+        assert!(filled.pane_title_background.is_some());
     }
 
     #[test]

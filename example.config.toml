@@ -35,6 +35,11 @@ terminal_floating_blur = 0
 # pane_gap = 8.0
 # sidebar_gap = 12.0
 
+# Pane title (program icon + name on the top border)
+# pane_title_style      = "cut"      # "none" | "cut" (default) | "filled" | "boxed"
+# pane_title_color      = "#89b4fa"  # frame color (cut/boxed icon+text, filled chip); default = pane border color
+# pane_title_background = "#1e1e2e"  # interior color (cut lower half, boxed fill, filled icon+text); default = terminal background
+
 [keys]
 # Prefix key triggers prefix mode for all `prefix+...` bindings.
 prefix = "ctrl+b"

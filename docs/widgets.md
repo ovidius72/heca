@@ -406,15 +406,33 @@ dimmed, so the corners share the border's radius exactly. Reads `theme.radius` /
 `theme.border_width`.
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
+- **Title** (optional): `.title(Glyph, label)` adds an `icon + label` straddling the **top
+  border**, left-aligned with a small inset. It is pure decoration — it does not participate in
+  child layout, so it never shifts the pane's content. The label ellipsizes when it would reach the
+  opposite corner. `.title_style(PaneTitleStyle::…)` picks the look:
+  - **`Cut`** (default) — floats in a gap cut into the frame line; no visible box (the footprint is
+    overpainted to match its surroundings, so only the border vanishes under it). Text in the frame color.
+  - **`Filled`** — a solid chip in the frame color; text flips to the interior color for contrast.
+  - **`Boxed`** — a small bordered box (interior fill + frame-colored border) on the line.
+
+  `.title_color(c)` sets the **frame** color (the `Cut`/`Boxed` text, the `Filled` chip; default:
+  the border color, else theme accent); `.title_background(c)` sets the **interior** color (the
+  `Cut` below-edge half, the `Boxed` fill, the `Filled` text; default: the pane's own fill, then
+  `theme.background`) — set it to the pane's actual inside color, e.g. a terminal's resolved
+  background, when the fill doesn't carry it.
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
 
 ```rust
 Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
     .child(Item::new("DASHBOARD").marker(ActiveMarker::Bar).active(true))
     .child(Item::new("SETTINGS").marker(ActiveMarker::Bar));
+
+// Titled pane: the pane-info header terminal panes use — icon + name on the top border.
+Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0)
+    .title(Glyph::Terminal, "codex");
 ```
 
-> Today `Pane` is a framed container only — the HUD header (title + status) and tab bar from
+> The HUD **title** now ships (top-border `icon + label`, above); the status row + tab bar from
 > the design vision are still pending (see `grid-ui-plan.md` → Phase C7).
 
 ### Grid
@@ -1068,33 +1086,53 @@ drops it from focus traversal — one shared `Base` property, consistent across 
 
 ### Pane Info Rows
 
-The Phase 7 pane chrome recipe is a two-row `Grid`: row 1 is `Icon + Label +
-status dot`; row 2 reuses the segmented `Tag` language already used in
-the showcase for git state: one chip whose main label is the branch and whose
-nested segments carry counts/metadata with icons where helpful. Hide the full row
-outside repos with `Visibility`.
+The final Phase 7 pane chrome recipe is a two-row composition:
+
+- row 1 is a centered inline `status dot + icon + name`
+- row 2 is a flat git metadata line: `branch + optional +N / ~N / -N`
+
+Hide the full second row outside repos with `Visibility`. This matches the app
+sidebar more closely than the earlier segmented-`Tag` experiment.
 
 ```rust
-Grid::new()
-    .columns([Track::Px(10.0), Track::Px(18.0), Track::Fr(1.0)])
-    .rows([Track::Auto, Track::Auto])
-    .areas(["dot icon title", "git git git"])
-    .area(StatusDot::online(), "dot")
-    .area(Icon::new(Glyph::FileCode).size(16.0), "icon")
-    .area(Label::new("Neovim").bold(true), "title")
-    .area(
+Flex::column()
+    .gap(4.0)
+    .child(
+        Flex::row()
+            .align(Align::Center)
+            .gap(8.0)
+            .child(
+                Flex::row()
+                    .align(Align::Center)
+                    .width(Length::Px(12.0))
+                    .child(StatusDot::online()),
+            )
+            .child(Icon::new(Glyph::FileCode).size(14.0))
+            .child(Label::new("Neovim").bold(true)),
+    )
+    .child(
         Visibility::new(
             Flex::row()
+                .align(Align::Center)
+                .gap(6.0)
+                .child(Icon::new(Glyph::GitBranch).size(12.0))
+                .child(Label::new("feature/pane-runtime").font_scale(0.8))
                 .child(
-                    Tag::new("feature/pane-runtime")
-                        .leading(Icon::new(Glyph::GitBranch).size(13.0))
-                        .segment_text("+2", Some(Icon::new(Glyph::Plus).size(13.0)))
-                        .segment_text("~3", Some(Icon::new(Glyph::Warning).size(13.0)))
-                        .segment_text("-1", Some(Icon::new(Glyph::Minus).size(13.0))),
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(4.0)
+                        .child(Icon::new(Glyph::Plus).size(12.0))
+                        .child(Label::new("+2").font_scale(0.8)),
+                )
+                .child(
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(4.0)
+                        .child(Icon::new(Glyph::Warning).size(12.0))
+                        .child(Label::new("~3").font_scale(0.8)),
                 ),
             true,
         ),
-        "git",
     );
 ```
 
