@@ -277,8 +277,8 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SwapRight, handle_swap_right);
     registry.register(&WmAction::SwapUp, handle_swap_up);
     registry.register(&WmAction::SwapDown, handle_swap_down);
-    registry.register(&WmAction::MovePaneLeft, handle_move_pane_left);
-    registry.register(&WmAction::MovePaneRight, handle_move_pane_right);
+    registry.register(&WmAction::MovePaneLeft { pane_id: None }, handle_move_pane_left);
+    registry.register(&WmAction::MovePaneRight { pane_id: None }, handle_move_pane_right);
     registry.register(&WmAction::MoveColumnUp, handle_move_column_up);
     registry.register(&WmAction::MoveColumnDown, handle_move_column_down);
     registry.register(&WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) }, handle_swap_param);

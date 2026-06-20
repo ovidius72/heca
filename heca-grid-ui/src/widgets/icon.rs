@@ -54,8 +54,12 @@ pub enum Glyph {
     Sidebar,
     DotsThreeVertical,
     ArrowRight,
+    ArrowLineLeft,
+    ArrowLineRight,
     Plus,
     Minus,
+    SquareSplitVertical,
+    XSquare,
 }
 
 impl Glyph {
@@ -89,8 +93,12 @@ impl Glyph {
             Glyph::Sidebar => 0xec24,
             Glyph::DotsThreeVertical => 0xe208,
             Glyph::ArrowRight => 0xe06c,
+            Glyph::ArrowLineLeft => 0xe062,
+            Glyph::ArrowLineRight => 0xe064,
             Glyph::Plus => 0xe3d4,
             Glyph::Minus => 0xe32a,
+            Glyph::SquareSplitVertical => 0xe874,
+            Glyph::XSquare => 0xe4fa,
         }
     }
 

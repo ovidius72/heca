@@ -102,8 +102,16 @@ pub enum WmAction {
     SwapRight,
     SwapUp,
     SwapDown,
-    MovePaneLeft,
-    MovePaneRight,
+    /// Move a pane one slot left within its column. `pane_id = None` operates on
+    /// the active pane (keyboard); `Some(id)` targets a specific pane (pane-header
+    /// button / RPC).
+    MovePaneLeft {
+        pane_id: Option<PaneId>,
+    },
+    /// Move a pane one slot right within its column (see [`MovePaneLeft`] re: `pane_id`).
+    MovePaneRight {
+        pane_id: Option<PaneId>,
+    },
     MoveColumnUp,
     MoveColumnDown,
 
@@ -321,8 +329,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "swap_right" => Some(WmAction::SwapRight),
         "swap_up" => Some(WmAction::SwapUp),
         "swap_down" => Some(WmAction::SwapDown),
-        "move_pane_left" => Some(WmAction::MovePaneLeft),
-        "move_pane_right" => Some(WmAction::MovePaneRight),
+        "move_pane_left" => Some(WmAction::MovePaneLeft { pane_id: None }),
+        "move_pane_right" => Some(WmAction::MovePaneRight { pane_id: None }),
         "move_column_up" => Some(WmAction::MoveColumnUp),
         "move_column_down" => Some(WmAction::MoveColumnDown),
         "move_pane_to_workspace" => Some(WmAction::MovePaneToWorkspace {
@@ -600,8 +608,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::SwapRight
         | WmAction::SwapUp
         | WmAction::SwapDown
-        | WmAction::MovePaneLeft
-        | WmAction::MovePaneRight
+        | WmAction::MovePaneLeft { .. }
+        | WmAction::MovePaneRight { .. }
         | WmAction::MoveColumnUp
         | WmAction::MoveColumnDown => 2,
         // Resize (lowest priority — checked last)
@@ -823,7 +831,7 @@ mod tests {
                 // Swap
                 WmAction::SwapLeft, WmAction::SwapRight,
                 WmAction::SwapUp, WmAction::SwapDown,
-                WmAction::MovePaneLeft, WmAction::MovePaneRight,
+                WmAction::MovePaneLeft { pane_id: None }, WmAction::MovePaneRight { pane_id: None },
                 WmAction::MoveColumnUp, WmAction::MoveColumnDown,
                 // Resize
                 WmAction::ResizeIncrease, WmAction::ResizeDecrease,

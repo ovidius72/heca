@@ -252,14 +252,22 @@ pub fn handle_swap_down(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
-pub fn handle_move_pane_left(state: &mut AppState, _action: &WmAction) {
+pub fn handle_move_pane_left(state: &mut AppState, action: &WmAction) {
+    // `Some(id)` (pane-header button / RPC) targets a specific pane; focus it first
+    // so the active-pane move below operates on it. `None` (keyboard) = active pane.
+    if let WmAction::MovePaneLeft { pane_id: Some(id) } = action {
+        focus_pane_by_id(state, *id);
+    }
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_active_pane_left();
     }
     after_layout_change(state);
 }
 
-pub fn handle_move_pane_right(state: &mut AppState, _action: &WmAction) {
+pub fn handle_move_pane_right(state: &mut AppState, action: &WmAction) {
+    if let WmAction::MovePaneRight { pane_id: Some(id) } = action {
+        focus_pane_by_id(state, *id);
+    }
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.move_active_pane_right();
     }
