@@ -483,7 +483,6 @@ impl SharedChromeState {
             mode,
         });
     }
-    #[expect(dead_code, reason = "right-region resizing is not yet wired through the current shell interactions")]
     pub fn set_right_size(&self, size: f32) {
         if (self.right.size.get_untracked() - size).abs() <= f32::EPSILON {
             return;

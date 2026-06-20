@@ -34,6 +34,16 @@ terminal_floating_blur = 0
 # pane_active_border_color = "#89b4fa"
 # pane_gap = 8.0
 # sidebar_gap = 12.0
+# sidebar_width = 300       # logical px; clamped to 160..=560 (default 300)
+
+# Pane info bar (segmented pill inside the pane top + action buttons)
+# Left side — segments, in order ([] hides them):
+#   "location" | "app_name" | "git_branch" | "git_status"
+# pane_title_segments = ["location", "app_name"]
+# Right side — action buttons, in order ([] hides them):
+#   "split" | "move_left" | "move_right" | "close"
+# pane_title_actions  = ["split", "move_left", "move_right", "close"]
+# Both empty ⇒ no bar and no reserved top padding.
 
 [keys]
 # Prefix key triggers prefix mode for all `prefix+...` bindings.

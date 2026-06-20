@@ -146,7 +146,7 @@ pub(crate) async fn init_state(
         let _ = redraw_proxy.send_event(crate::app::events::AppEvent::RequestRedraw);
     });
 
-    let appearance = app_config.config.appearance;
+    let appearance = app_config.config.appearance.clone();
     let window_attrs = Window::default_attributes()
         .with_title("heca")
         .with_inner_size(winit::dpi::LogicalSize::new(
@@ -317,9 +317,9 @@ pub(crate) async fn init_state(
         chrome_tree: None,
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state: crate::chrome::SharedChromeState::new(
-            crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+            app_config.config.appearance.effective_sidebar_width(),
             true,
-            crate::chrome::DEFAULT_SIDEBAR_WIDTH,
+            app_config.config.appearance.effective_sidebar_width(),
             true,
         ),
         mouse: app_state::MouseState::new(),

@@ -62,7 +62,7 @@ pub use key_hint::{HintPlacement, KeyHint};
 pub use label::Label;
 pub use marker_group::MarkerGroup;
 pub use modal::Modal;
-pub use pane::{Pane, PaneFrame};
+pub use pane::{title_reserved_height, Pane, PaneFrame, PaneTitleStyle};
 pub use progress::ProgressBar;
 pub use rail_cell::RailCell;
 pub use row::Row;

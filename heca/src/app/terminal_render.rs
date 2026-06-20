@@ -35,6 +35,7 @@ pub(crate) struct PaneRenderState {
 
 #[derive(Clone, Copy)]
 pub(crate) struct TerminalPaneShell {
+    pub(crate) pane_id: PaneId,
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) w: f32,
@@ -46,14 +47,60 @@ pub(crate) struct TerminalPaneShell {
     pub(crate) is_active: bool,
 }
 
+/// Horizontal margin (logical px) from the pane edge to the info bar.
+const TITLE_BAR_MARGIN: f64 = 6.0;
+/// Approx `Tag` internal vertical padding (each side) — for bar height/centering.
+const BAR_TAG_VPAD: f32 = 5.0;
+/// Vertical margin above + below the bar within its reserved strip.
+const BAR_VMARGIN: f32 = 5.0;
+/// Monospace line-height ratio (matches `heca-grid-ui`'s `MONO_LINE_RATIO`).
+const BAR_LINE_RATIO: f32 = 1.4;
+
+/// The info bar's content height for the given `font`.
+fn title_bar_height(font: f32) -> f32 {
+    font * BAR_LINE_RATIO + 2.0 * BAR_TAG_VPAD
+}
+
+/// Total vertical strip the info bar reserves at the pane top.
+fn title_bar_reserve(font: f32) -> f32 {
+    title_bar_height(font) + 2.0 * BAR_VMARGIN
+}
+
+/// The info bar font — the chrome theme's base font, the same size the sidebar
+/// tree lays out with (`paint_chrome_root`), so the two read identically.
+fn bar_font(state: &AppState) -> f32 {
+    crate::chrome::chrome_gui_theme(state).font_size
+}
+
+/// Whether the pane info bar renders anything right now. Currently driven by the
+/// **segments** only — the action buttons aren't implemented yet, so an
+/// actions-only config must NOT reserve space for an empty band. Once the buttons
+/// land this becomes `pane_info_bar_visible()` (segments OR actions).
+fn pane_info_bar_shown(state: &AppState) -> bool {
+    !state.appearance.pane_title_segments.is_empty()
+}
+
+/// Extra **top** content padding (logical px) reserved for the pane info bar, so
+/// terminal content starts below it. Zero when the bar is hidden. Shared by the
+/// render path and the mouse→cell mapping so the rendered grid and pointer
+/// hit-testing use identical geometry.
+pub(crate) fn pane_title_top_inset(state: &AppState) -> f32 {
+    if pane_info_bar_shown(state) {
+        title_bar_reserve(bar_font(state))
+    } else {
+        0.0
+    }
+}
+
 pub(crate) fn stable_tiled_content_rect(
     px: f32,
     py: f32,
     pw: f32,
     ph: f32,
     content_inset: f32,
+    extra_top: f32,
 ) -> Option<Rectangle> {
-    pane_content_rect(px, py, pw, ph, content_inset).map(|(x, y, w, h)| {
+    pane_content_rect(px, py, pw, ph, content_inset, extra_top).map(|(x, y, w, h)| {
         Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
     })
 }
@@ -64,8 +111,9 @@ pub(crate) fn stable_floating_content_rect(
     w: f32,
     h: f32,
     content_inset: f32,
+    extra_top: f32,
 ) -> Option<Rectangle> {
-    pane_content_rect(x, y, w, h, content_inset).map(|(cx, cy, cw, ch)| {
+    pane_content_rect(x, y, w, h, content_inset, extra_top).map(|(cx, cy, cw, ch)| {
         Rectangle::new(
             Point::new(cx as f64, cy as f64),
             Size::new(cw as f64, ch as f64),
@@ -111,6 +159,7 @@ pub(crate) fn paint_terminal_pane_shell(
     shell: TerminalPaneShell,
 ) {
     let TerminalPaneShell {
+        pane_id,
         x,
         y,
         w,
@@ -132,13 +181,85 @@ pub(crate) fn paint_terminal_pane_shell(
     if is_active {
         pane = pane.glow_with(to_gui_color(border_color), 10.0, 0.55);
     }
+
     LayoutEngine::new().compute(&mut pane, GuiSize::new(w as f64, h as f64));
     pane.base_mut().bounds = GuiRectangle::new(
         GuiPoint::new(x as f64, y as f64),
         GuiSize::new(w as f64, h as f64),
     );
-    let mut cx = PaintCx::new(scene, &theme);
-    pane.paint(&mut cx);
+
+    let show_bar = pane_info_bar_shown(state);
+    let bar_theme = crate::chrome::chrome_gui_theme(state);
+    let font = bar_theme.font_size;
+
+    {
+        let mut cx = PaintCx::new(scene, &theme);
+        // Distinguishable header band behind the title, drawn *before* the frame so
+        // the rounded border traces over it. Same surface as the Tag pill, so the
+        // header reads as one cohesive strip.
+        if show_bar {
+            cx.rect(
+                GuiRectangle::new(
+                    GuiPoint::new(x as f64, y as f64),
+                    GuiSize::new(w as f64, title_bar_reserve(font) as f64),
+                ),
+                bar_theme.surface,
+                None,
+                border_radius,
+                None,
+            );
+        }
+        pane.paint(&mut cx);
+    }
+
+    // Pane info bar: a segmented pill (configurable via `[appearance]
+    // pane_title_segments`), reusing the same catalog projection as the sidebar
+    // card, centered vertically in the header band. The terminal content is
+    // reserved below it (see `pane_title_top_inset`).
+    if show_bar
+        && let Some(core_pane) =
+            state.session.active_workspace().and_then(|ws| ws.find_pane(pane_id))
+    {
+        let avail_w = (w - 2.0 * TITLE_BAR_MARGIN as f32).max(0.0);
+        if let Some(mut bar) = crate::chrome::build_pane_info_bar(
+            &state.programs,
+            &core_pane.title,
+            Some(&core_pane.runtime),
+            &state.appearance.pane_title_segments,
+            &bar_theme,
+            avail_w,
+            font,
+        ) {
+            LayoutEngine::new()
+                .base_font(font)
+                .compute(&mut bar, GuiSize::new(w as f64, h as f64));
+            // Center the bar vertically in the reserved header strip.
+            let bar_h = bar.base().bounds.size.h as f32;
+            let bar_y = y as f64 + f64::from(((title_bar_reserve(font) - bar_h) / 2.0).max(0.0));
+            translate_bounds(&mut bar, x as f64 + TITLE_BAR_MARGIN, bar_y);
+            // Clip to the pane so a wide bar can never spill into a neighbor.
+            let clip = GuiRectangle::new(
+                GuiPoint::new(x as f64, y as f64),
+                GuiSize::new(w as f64, h as f64),
+            );
+            let mut cx = PaintCx::new(scene, &bar_theme);
+            cx.with_clip(clip, |cx| bar.paint(cx));
+        }
+    }
+}
+
+/// Translate a freshly-laid-out widget subtree (positioned from the origin by
+/// [`LayoutEngine::compute`]) to an absolute `(dx, dy)` — used to place a
+/// standalone widget (the pane info bar) at its pane's position.
+fn translate_bounds(c: &mut dyn Component, dx: f64, dy: f64) {
+    let b = c.base().bounds;
+    c.base_mut().bounds = GuiRectangle::new(
+        GuiPoint::new(b.loc.x + dx, b.loc.y + dy),
+        b.size,
+    );
+    for child in c.base_mut().children.iter_mut() {
+        translate_bounds(child.as_mut(), dx, dy);
+    }
 }
 
 pub(crate) struct TerminalRenderPassContext<'a> {
@@ -229,13 +350,14 @@ fn pane_content_rect(
     pw: f32,
     ph: f32,
     inset: f32,
+    extra_top: f32,
 ) -> Option<(f32, f32, f32, f32)> {
     let content_w = (pw - inset * 2.0).max(0.0);
-    let content_h = (ph - inset * 2.0).max(0.0);
+    let content_h = (ph - inset * 2.0 - extra_top).max(0.0);
     if content_w <= 0.0 || content_h <= 0.0 {
         return None;
     }
-    Some((px + inset, py + inset, content_w, content_h))
+    Some((px + inset, py + inset + extra_top, content_w, content_h))
 }
 
 fn to_gui_color(color: [f32; 4]) -> GuiColor {
@@ -258,6 +380,10 @@ fn terminal_pane_gui_theme(
     theme.border = to_gui_color(border_color);
     theme.radius = border_radius;
     theme.border_width = border_width;
+    // The title's `Cut` style matches its surroundings against `theme.background`;
+    // for a pane that means the real app/window background sitting behind it (the
+    // reserved title strip shows the window backdrop, not the chrome grey).
+    theme.background = to_gui_color(state.theme.background.to_f32x4());
     theme
 }
 

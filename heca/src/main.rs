@@ -114,7 +114,12 @@ impl HecaApp {
             // material is applied once at startup and NOT re-applied here — doing
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
-            state.appearance = self.app_config.config.appearance;
+            state.appearance = self.app_config.config.appearance.clone();
+            // Sidebar width is config-driven; re-apply on reload (resets any runtime
+            // drag-resize to the configured/clamped value).
+            let sidebar_width = self.app_config.config.appearance.effective_sidebar_width();
+            state.chrome_state.set_left_size(sidebar_width);
+            state.chrome_state.set_right_size(sidebar_width);
             state
                 .text_renderer
                 .set_font_family(&self.app_config.theme.font_family);

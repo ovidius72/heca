@@ -607,7 +607,8 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
             let w = float.size.w as f32;
             let h = float.size.h as f32;
             let inset = pane_content_inset(state);
-            return inset_content_rect(x, y, w, h, inset);
+            let extra_top = crate::app::terminal_render::pane_title_top_inset(state);
+            return inset_content_rect(x, y, w, h, inset, extra_top);
         }
     }
 
@@ -625,22 +626,30 @@ fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle>
         let w = rect.size.w as f32;
         let h = rect.size.h as f32;
         let inset = pane_content_inset(state);
-        return inset_content_rect(x, y, w, h, inset);
+        let extra_top = crate::app::terminal_render::pane_title_top_inset(state);
+        return inset_content_rect(x, y, w, h, inset, extra_top);
     }
 
     None
 }
 
-fn inset_content_rect(x: f32, y: f32, w: f32, h: f32, border_width: f32) -> Option<Rectangle> {
+fn inset_content_rect(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    border_width: f32,
+    extra_top: f32,
+) -> Option<Rectangle> {
     let inset = border_width.max(1.0);
     let content_w = (w - inset * 2.0).max(0.0);
-    let content_h = (h - inset * 2.0).max(0.0);
+    let content_h = (h - inset * 2.0 - extra_top).max(0.0);
     if content_w <= 0.0 || content_h <= 0.0 {
         return None;
     }
 
     Some(Rectangle::new(
-        Point::new((x + inset) as f64, (y + inset) as f64),
+        Point::new((x + inset) as f64, (y + inset + extra_top) as f64),
         Size::new(content_w as f64, content_h as f64),
     ))
 }
