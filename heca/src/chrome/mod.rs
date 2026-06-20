@@ -1016,6 +1016,12 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
         Color::new(c.r, c.g, c.b, c.a)
     };
     theme.radius = state.theme.border_radius;
+    // UI font size from config (decoupled from the color preset; `[settings]
+    // font_size` overrides it). `state.theme.font_size` defaults to the real UI
+    // size (~15) so this maps 1:1 instead of ballooning to the old dead 32.0.
+    // The font *family* reaches the renderer via `set_font_family` and isn't read
+    // off `GuiTheme`, so only the size needs mapping here.
+    theme.font_size = state.theme.font_size;
     theme
 }
 

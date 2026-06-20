@@ -92,7 +92,7 @@ impl AppConfig {
             eprintln!("[heca] config load: {e}, using defaults");
             let config = Config::default();
             let mut theme = Theme::load(&config.settings.theme);
-            apply_terminal_overrides(&mut theme, &config.settings);
+            apply_overrides(&mut theme, &config.settings);
             Self { config, theme }
         })
     }
@@ -105,7 +105,7 @@ impl AppConfig {
     pub fn try_load() -> Result<Self, ConfigError> {
         let config = Self::load_config_file()?;
         let mut theme = Theme::load(&config.settings.theme);
-        apply_terminal_overrides(&mut theme, &config.settings);
+        apply_overrides(&mut theme, &config.settings);
         Ok(Self { config, theme })
     }
 
@@ -146,7 +146,16 @@ impl AppConfig {
     }
 }
 
-fn apply_terminal_overrides(theme: &mut Theme, settings: &SettingsConfig) {
+/// Apply `[settings]` overrides onto the loaded color `theme`. Covers the UI
+/// font (decoupled from the color preset) and all terminal overrides.
+fn apply_overrides(theme: &mut Theme, settings: &SettingsConfig) {
+    // UI/chrome font — decoupled from the color theme (§ Phase 7 B).
+    if let Some(family) = &settings.font_family {
+        theme.font_family = family.clone();
+    }
+    if let Some(size) = settings.font_size {
+        theme.font_size = size;
+    }
     if let Some(family) = &settings.terminal_font_family {
         theme.terminal_font_family = family.clone();
     }
@@ -325,7 +334,7 @@ color = "#112233"
         let original_italic_family = theme.terminal_italic_font_family.clone();
         let original_size = theme.terminal_font_size;
 
-        apply_terminal_overrides(&mut theme, &SettingsConfig::default());
+        apply_overrides(&mut theme, &SettingsConfig::default());
 
         assert_eq!(theme.terminal_font_family, original_family);
         assert_eq!(theme.terminal_italic_font_family, original_italic_family);
@@ -346,13 +355,39 @@ terminal-foreground = "#ddeeff"
         )
         .expect("settings should parse");
 
-        apply_terminal_overrides(&mut theme, &settings);
+        apply_overrides(&mut theme, &settings);
 
         assert_eq!(theme.terminal_font_family, "Iosevka Term");
         assert_eq!(theme.terminal_italic_font_family, "Iosevka Term Italic");
         assert_eq!(theme.terminal_font_size, 16.0);
         assert_eq!(theme.terminal_background, Some(Color::new(17, 34, 51, 255)));
         assert_eq!(theme.terminal_foreground, Some(Color::new(221, 238, 255, 255)));
+    }
+
+    #[test]
+    fn ui_font_decoupled_from_color_preset_uses_defaults() {
+        // Color presets no longer carry the UI font — it falls back to the
+        // struct default (Geist Mono / 15.0), not the dead 32.0 of old.
+        let theme = Theme::load("mocha");
+        assert_eq!(theme.font_family, crate::defaults::default_font_family());
+        assert_eq!(theme.font_size, crate::defaults::default_font_size());
+    }
+
+    #[test]
+    fn settings_override_ui_font() {
+        let mut theme = Theme::load("mocha");
+        let settings: SettingsConfig = toml::from_str(
+            r##"
+font-family = "Iosevka"
+font-size = 18.0
+"##,
+        )
+        .expect("settings should parse");
+
+        apply_overrides(&mut theme, &settings);
+
+        assert_eq!(theme.font_family, "Iosevka");
+        assert_eq!(theme.font_size, 18.0);
     }
 
     #[test]

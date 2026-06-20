@@ -8,6 +8,16 @@
 # and cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
+# UI/chrome font (sidebar, pane info bar, status bar) — decoupled from the color
+# theme, so switching theme keeps your font. Omit to use the built-in default
+# (Geist Mono / 15.0). The terminal font is configured separately below.
+# font_family = "Geist Mono"
+# font_size   = 15.0
+
+# Terminal font (independent of the UI font above).
+# terminal_font_family = "Maple Mono Normal NF"
+# terminal_font_size   = 14.0
+
 [appearance]
 # Window / chrome transparency + blur (each 0..=100, default 0)
 transparency = 0

@@ -35,7 +35,14 @@ pub struct Theme {
     pub foreground: Color,
     pub border: Color,
     pub accent: Color,
+    /// UI/chrome font family. Decoupled from the color preset — supplied by the
+    /// struct default or a `[settings] font_family` override, so color `.toml`s
+    /// stay colors-only.
+    #[serde(default = "crate::defaults::default_font_family")]
     pub font_family: String,
+    /// UI/chrome font size (the grid-ui base font). Decoupled from the color
+    /// preset; overridable via `[settings] font_size`.
+    #[serde(default = "crate::defaults::default_font_size")]
     pub font_size: f32,
     #[serde(default = "crate::defaults::default_terminal_font_family")]
     pub terminal_font_family: String,
@@ -119,8 +126,8 @@ impl Theme {
             foreground: Color::new(205, 214, 244, 255),
             border: Color::new(49, 50, 68, 255),
             accent: Color::new(137, 180, 250, 255),
-            font_family: "Geist Mono".to_string(),
-            font_size: 32.0,
+            font_family: crate::defaults::default_font_family(),
+            font_size: crate::defaults::default_font_size(),
             terminal_font_family: crate::defaults::default_terminal_font_family(),
             terminal_foreground: None,
             terminal_background: None,
@@ -160,8 +167,8 @@ impl Theme {
             foreground: Color::new(76, 79, 105, 255),
             border: Color::new(204, 208, 218, 255),
             accent: Color::new(30, 102, 245, 255),
-            font_family: "Geist Mono".to_string(),
-            font_size: 32.0,
+            font_family: crate::defaults::default_font_family(),
+            font_size: crate::defaults::default_font_size(),
             terminal_font_family: crate::defaults::default_terminal_font_family(),
             terminal_foreground: None,
             terminal_background: None,

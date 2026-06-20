@@ -52,6 +52,20 @@ pub(crate) fn default_sidebar_button_font_size() -> f32 {
     11.0
 }
 
+/// Default **UI/chrome** font family (sidebar, pane info bar, status bar). Kept
+/// independent of the color theme — color presets carry colors only; the family
+/// comes from here (or a `[settings] font_family` override).
+pub(crate) fn default_font_family() -> String {
+    "Geist Mono".to_string()
+}
+
+/// Default **UI/chrome** font size — the real size the chrome renders at (the
+/// grid-ui `GuiTheme` base font). Decoupled from the color theme; overridable via
+/// `[settings] font_size`.
+pub(crate) fn default_font_size() -> f32 {
+    15.0
+}
+
 pub(crate) fn default_terminal_font_family() -> String {
     "Maple Mono Normal NF".to_string()
 }
