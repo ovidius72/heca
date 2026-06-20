@@ -166,10 +166,11 @@ Built (in-pane info bar — the chosen design):
 - **`[appearance] sidebar_width`** — configurable, clamped `160..=560` (default 300, wider); applied at startup + reload (left + right panels).
 - empty segments+actions ⇒ **no bar, no reserved padding/margin** (gated on segments-only until buttons land).
 Superseded (built then replaced): the `heca-grid-ui` `Pane.title` + `PaneTitleStyle` (`Cut`/`Filled`/`Boxed`) border-straddle widget — the in-pane `Tag` bar replaced it (border-matching fought the transparent pane over the terminal). Cleanup: remove the unused straddle widget + its showcase/docs in a later slice.
+Done since the merge (committed on `feature/phase-7`, 2026-06-20):
+- ✅ **Removed the superseded straddle title** (`6a5d3d6`): dropped `Pane.title`/`PaneTitleStyle`/`paint_title`/`paint_title_backing`/`title_reserved_height`/`truncate_to_width`(+tests)/`TITLE_*` consts + `Glyph::secondary_char`; replaced the showcase straddle demo with an in-pane-bar demo; updated `docs/widgets.md`. Dissolves review M1.
+- ✅ **Decoupled the UI font from the color theme** (`344df73`): `[settings] font_family`/`font_size` (+ validator) → loader `apply_overrides` maps onto `Theme`; theme font fields made optional + stripped from color `.toml`s; `Theme.font_size` default normalized **32→15**; `chrome_gui_theme` now maps `state.theme.font_size` (landmine fixed). README + example.config.toml updated. (font_family reaches the renderer via `set_font_family`, so only size needed mapping.)
 Remaining (full detail + file:line in **`phase7-pane-info-bar-RESUME.md`**):
-- **Slice 2 — action buttons** (right side): interactive `IconButton`s wired to existing WM actions (split / move_left / move_right / close, registry+keymap+RPC parity) via a **retained per-pane header + event dispatch** (the sidebar's pattern; pane chrome is imperative today → must route pointer events). Then widen the bar gate to "segments **or** actions" (`pane_info_bar_visible`). Need close keybind confirmed.
-- **Decouple fonts from color themes → `[settings]`** (user-requested, NOT started): add `[settings] font_family` + `font_size` (mirror `terminal_font_*`); loader `apply_overrides` maps them onto the theme. **LANDMINE:** `chrome_gui_theme` never maps the config font size and `heca-config Theme.font_size` default = **32.0** (dead — UI renders at `grid_tron` 15). So you must **normalize that default to ~15** before mapping `gui_theme.font_size = state.theme.font_size`, or the whole UI balloons. Multiplier confirmed: `base_font * font_scale * WidgetSize.font_scale()`.
-- **Remove the superseded straddle title** (`Pane.title`/`PaneTitleStyle`/`paint_title`/`title_reserved_height`/`truncate_to_width`) — showcase-only now; dissolves review M1. Update showcase + docs.
+- **Slice 2 — action buttons** (right side): interactive `IconButton`s wrapped in `Tooltip` (built-in; showcase L650-670) via a **retained per-pane header + pointer dispatch** (the sidebar's pattern; pane chrome is imperative today → sync-step builds/positions, render paints read-only, `mouse.rs` dispatches before the content/terminal paths and consumes on hit). **Design locked 2026-06-20:** focus-then-act; source `MouseContent`; icons `square-split-vertical`/`arrow-line-left`/`arrow-line-right`/`x-square` (add the 3 new `Glyph`s + showcase/docs). **Action mapping (RPC-parameterized):** split→existing `AddPaneToColumn { ws_idx, col_idx }`; move_left/right→**parameterize** `MovePaneLeft`/`MovePaneRight` to carry `pane_id: Option<PaneId>` (None=active keybind, Some=button/RPC); close→`Close` (prefix+x) on the focused pane. Then widen the bar gate to "segments **or** actions" (`pane_info_bar_visible`).
 - commit the bar work to PR #147; bottom placement + full token/segment templates stay deferred. (deferred) `NfIcon` — `PLAN.md` backlog.
 **Reviewer Decision:** — · **Reviewer Notes:** review M1–M7 triaged in the RESUME doc (M7 fixed; M2/M3/M4 leave; M5/M6 minor; M1 moot after straddle removal).
 
@@ -177,6 +178,31 @@ Remaining (full detail + file:line in **`phase7-pane-info-bar-RESUME.md`**):
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 0 · **Plan:** §4 Phase 8
 **One-liner:** first-party `app.on` + `app.state` selectors over the bus/store; document state access + event
 model + the deferred token customization in `pluggable-chrome-plugin-plan.md`; point `PLAN.md` here.
+**Agent Completion:** —
+**Reviewer Decision:** — · **Reviewer Notes:** —
+
+## Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ NEW (spun out of Phase 7 discussion)
+**Status:** Open · **Assigned:** — · **Depends-on:** niri-parity question #2 (column-width persistence) · **Plan:** §4 Phase 9
+**One-liner:** drag the gap between **columns** (vertical divider) → resize that column; drag the gap between
+**panes** in a column (horizontal divider) → resize pane height. **Fallback** if the thin `pane_gap` (~8px)
+hit-zone fights the terminal: **hold right-button on a border to resize**.
+**Why standalone (not folded into Phase 7):** Phase 7 is the *display* slice; resize is a *layout/interaction*
+feature overlapping the deferred DnD/cursor work and an open niri-parity question — bigger scope + different risk.
+**Tasks (order matters):**
+- [ ] **FIRST — settle the persistence landmine:** heca calls `update_all_column_widths()` on *every* layout
+      mutation; it is **unverified** whether a manual resize persists or is recomputed away (PLAN.md niri item
+      #2). Resolve before building the gesture, or divider-drag will feel broken. If it reflows, store per-column
+      width and only recompute the changed one.
+- [ ] **Parameterized core resize:** add `resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)` —
+      today's `resize_active_column`/`resize_active_pane_height` are active-only; a divider drag targets a
+      *specific* column/pane (also gives RPC parity).
+- [ ] **Resize-drag gesture in `mouse.rs`:** a path distinct from the DnD item-move surfaces; press on a
+      divider → drag with incremental deltas → parameterized resize; release commits. (Plus the right-button
+      fallback.)
+- [ ] **Divider hit-testing:** column gaps + intra-column pane gaps from the laid-out pane rects.
+- [ ] **Resize cursor:** horizontal/vertical resize `CursorIcon` via the **P2 cursor-policy helper** (the app
+      sets no OS cursor today — build/extend that helper).
+- [ ] RPC parity for the parameterized resize actions; tests for the pure resize math.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
@@ -193,3 +219,5 @@ then 3→4 and 6 alongside.
 - 2026-06-18 — **Phase 3 implementation-shape locked (§0.8)**: shell-hook mechanism (hybrid bash/zsh/fish wrap), config switch (`settings.shell_integration` bool), OSC parsing ownership (passive pre-parse snooper before `advance_bytes`). **Lesson:** an agent raised these as pre-coding blockers — they were implementation-shape decisions the lead left open after locking only the high-level Phase 3 design. The lead should lock implementation-shape up-front, not just design intent. Gaps now recorded so no agent has to guess.
 - 2026-06-18 — **Phase 3 implemented + merged**: PR #136 (`0879b3c` — OSC snooper `osc.rs`, shell assets, `settings.shell_integration`, routing). Lead verified §0.8 compliance post-merge (no drift); Reviewer Decision = Accepted. Plan §4 Phase 3 tasks ticked.
 - 2026-06-20 — **Phase 7 redesign (interactive, with the user) on `feature/phase-7`/PR #147**: started as a border-straddle `Pane.title` (Cut/Filled/Boxed), then **pivoted to an in-pane segmented info bar** (`Tag`) after the straddle's border-matching fought the transparent pane over the terminal. Landed: config segments/actions (replaced straddle config), distinguishable centered header band, width truncation + per-pane clip, UI font → **Geist Mono** (terminal stays Maple), configurable clamped `sidebar_width`, sidebar git branch left-ellipsis. **Remaining = Slice 2 action buttons** (interactive). Bar work uncommitted past the merge.
+- 2026-06-20 — **Phase 7 cleanup + font decoupling landed** (`feature/phase-7`): removed the superseded straddle title widget (`6a5d3d6`, dissolves M1) and **decoupled the UI font from the color theme** into `[settings] font_family`/`font_size` (`344df73`, landmine fixed: default 32→15, mapped in `chrome_gui_theme`). **Slice 2 (action buttons) design locked** with the user: focus-then-act, `MouseContent` source, icons `square-split-vertical`/`arrow-line-left`/`arrow-line-right`/`x-square`, actions split→`AddPaneToColumn` + parameterized `MovePane*{pane_id: Option}` + `Close`, `IconButton`+`Tooltip`.
+- 2026-06-20 — **Phase 9 created** (mouse pane/column resize) — spun out of the Phase 7 pane-action discussion; standalone because it's layout/interaction (not display) and gated on the niri column-width-persistence question. Recorded in `PLAN.md` + plan §4 Phase 9.

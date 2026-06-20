@@ -449,11 +449,53 @@ a selector; the architecture docs reflect events + state access; PLAN.md points 
 
 ---
 
+### Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ spun out of Phase 7
+**Depends-on:** the niri-parity **column-width-persistence** question (must be settled first). Independent of
+Phases 1–8 data.
+
+**Why:** keyboard resize exists (`ResizeIncrease`/`Decrease`, `PaneHeightIncrease`/`Decrease` →
+`resize_active_column`/`resize_active_pane_height`), but there is no **mouse** resize. This adds drag-the-divider
+resizing. Spun out of the Phase 7 pane-action discussion (2026-06-20): it's a **layout/interaction** feature
+(not display), overlapping the deferred DnD/cursor work + an open niri question, so it gets its own phase.
+
+**Design:**
+- Drag the **vertical gap between columns** → resize that column; drag the **horizontal gap between panes** in a
+  column → resize pane height. The gap is `pane_gap` (~8px) — thin, so add a **fallback: hold right-button on a
+  border to resize** if the gap hit-zone proves finicky over the terminal.
+- **Landmine (do first):** heca runs `update_all_column_widths()` on **every** layout mutation; it is
+  *unverified* whether a manual resize persists or is recomputed away (PLAN.md niri item #2). Settle this before
+  building the gesture — if it reflows, store per-column width and recompute only the changed one.
+
+**Key files:** `heca-core/src/layout/scrolling.rs` (`resize_active_column`, `column_widths`,
+`update_all_column_widths`), `heca-core/src/layout/column.rs` (`resize_active_pane_height`), `heca/src/mouse.rs`
+(new resize-drag path, divider hit-testing, cursor policy), `heca/src/input.rs` + `heca/src/rpc.rs` (parameterized
+resize actions), `heca/src/app/terminal_host.rs` (pane-rect geometry for hit-testing).
+
+**Tasks**
+- [ ] **Resolve persistence** (niri #2) — test whether manual resize survives subsequent layout mutations; fix
+      the recompute model if not.
+- [ ] **Parameterized core resize:** `resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)` (active-only
+      today). RPC parity for the new actions.
+- [ ] **Resize-drag gesture** in `mouse.rs` — distinct from the DnD item-move surfaces; press-on-divider →
+      incremental-delta drag → release commits. Plus the right-button-hold fallback.
+- [ ] **Divider hit-testing** — column gaps + intra-column pane gaps from laid-out pane rects.
+- [ ] **Resize cursor** — horizontal/vertical `CursorIcon` via the P2 cursor-policy helper (no OS cursor set
+      today).
+- [ ] Tests: pure resize math (column width + pane height) given a layout.
+
+**Acceptance:** dragging a column divider resizes that column (and the change persists); dragging a pane gap
+resizes pane height; right-button-hold fallback works; resize cursor shows on the dividers; reachable from
+keyboard **and** RPC; clippy clean.
+
+---
+
 ## 5. Sequencing & parallelism
 - **0 first, alone** (foundation). Then **1**.
 - After 1: **2, 5** can start in parallel; **3** after 2; **4** after 3 (or 2's cwd fallback); **6** after 2.
 - **7** after the data phases land (degrades gracefully meanwhile). **8** finalizes last.
-- Suggested order if single-threaded: 0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8.
+- **9** (mouse resize) is independent of the runtime-data phases but **gated on the niri column-width-persistence
+  question**; schedule it after Phase 7 (or anytime that question is resolved).
+- Suggested order if single-threaded: 0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8 (→ 9 when unblocked).
 
 ## 6. Risks / watch-items
 - OS foreground-process + cwd code is platform-specific — keep it behind a tested shim; macOS is primary.

@@ -37,11 +37,13 @@
    2026-06-18). Full plan: **`pane-runtime-state-plan.md`**; orchestration board: **`pane-runtime-tasks.md`**
    (separate from `shared-tasks.md`). **Status (2026-06-20): Phases 0–6 merged; Phase 7 (pane-info display)
    in progress on `feature/phase-7` (PR #147) — sidebar card done + an in-pane segmented info bar (config
-   `[appearance] pane_title_segments`/`pane_title_actions`, Geist Mono UI font, configurable `sidebar_width`);
-   remaining = the bar's action buttons (interactive) + decoupling fonts from color themes into `[settings]`
-   (⚠ landmine: `heca-config Theme.font_size` default 32.0 is dead; UI renders at `grid_tron` 15 — normalize
-   before mapping). **Full resume detail in `phase7-pane-info-bar-RESUME.md`.** Phase 8 (plugin
-   `app.on`/`app.state`) is last.**
+   `[appearance] pane_title_segments`/`pane_title_actions`, Geist Mono UI font, configurable `sidebar_width`).
+   ✅ Superseded straddle title widget removed; ✅ UI font decoupled from the color theme into `[settings]
+   font_family`/`font_size` (landmine fixed: `Theme.font_size` default normalized 32→15, mapped into
+   `chrome_gui_theme`). **Remaining = Slice 2: the bar's interactive action buttons** (retained per-pane
+   header + pointer dispatch; `IconButton`+`Tooltip`; split→`AddPaneToColumn`, move_left/right→parameterized
+   `MovePane*{pane_id}`, close→`Close`). **Full resume detail in `phase7-pane-info-bar-RESUME.md`.** Phase 8
+   (plugin `app.on`/`app.state`) is last.**
    Its **Phase 0 IS** the SharedChromeState consumer migration + the new
    typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
    process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.
@@ -55,6 +57,17 @@
 3. **render.rs split** — partly done by #121/#122; reassess the remainder.
 4. **Small leftovers, opportunistic** — F4.4 column-level pick keycaps (needs column-pick candidates) +
    the F4.4 widget-migration; F4.5 Onto-third drop semantics.
+5. **Mouse pane/column resize (drag dividers)** — spun out of the Phase 7 pane-action discussion
+   (2026-06-20). Drag the gap between columns (vertical divider) → resize that column; drag the gap between
+   panes in a column (horizontal divider) → resize pane height. Fallback if thin-gap hit-testing fights the
+   terminal: **hold right-button on a border to resize**. **Must do first:** resolve the niri-parity open
+   question #2 below — heca runs `update_all_column_widths()` on every layout mutation, and it's *unverified*
+   whether a manual resize persists or gets recomputed away (settle this or divider-drag feels broken). Then:
+   parameterized core resize (`resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)`; today's
+   `resize_active_*` are active-only), a **resize-drag gesture** in `mouse.rs` (distinct from the DnD
+   item-move surfaces; incremental deltas), divider hit-testing (`pane_gap` ~8px), and a **resize cursor**
+   (needs the P2 cursor-policy helper — app sets no OS cursor today). Full task detail on the board
+   (`pane-runtime-tasks.md`) + plan (`pane-runtime-state-plan.md`).
 
 **Deferred — future implementation** (parked on purpose 2026-06-18; revisit after the foundation work):
 - **Appearance & sizing** — app-wide zoom + separate app/terminal font-size controls + finish the in-app
@@ -62,7 +75,7 @@
 - **Pane numbering** — `prefix + workspace# + pane#` jump-to-pane + numbers on the sidebar cards.
 - **Finish sidebar drag-and-drop** — workspace drag-to-reorder (panes + columns already drag).
 
-5. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
+6. grid-ui maturity backlog (scroll, Pane shell, app-integration, bloom) — see bottom.
 
 > The `P0–P4` labels on the detailed sections below are **stable anchors, not priority rank** — follow
 > this list for order. The detailed write-ups for the three **deferred** items still live below
