@@ -406,20 +406,10 @@ dimmed, so the corners share the border's radius exactly. Reads `theme.radius` /
 `theme.border_width`.
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
-- **Title** (optional): `.title(Glyph, label)` adds an `icon + label` straddling the **top
-  border**, left-aligned with a small inset. It is pure decoration — it does not participate in
-  child layout, so it never shifts the pane's content. The label ellipsizes when it would reach the
-  opposite corner. `.title_style(PaneTitleStyle::…)` picks the look:
-  - **`Cut`** (default) — floats in a gap cut into the frame line; no visible box (the footprint is
-    overpainted to match its surroundings, so only the border vanishes under it). Text in the frame color.
-  - **`Filled`** — a solid chip in the frame color; text flips to the interior color for contrast.
-  - **`Boxed`** — a small bordered box (interior fill + frame-colored border) on the line.
-
-  `.title_color(c)` sets the **frame** color (the `Cut`/`Boxed` text, the `Filled` chip; default:
-  the border color, else theme accent); `.title_background(c)` sets the **interior** color (the
-  `Cut` below-edge half, the `Boxed` fill, the `Filled` text; default: the pane's own fill, then
-  `theme.background`) — set it to the pane's actual inside color, e.g. a terminal's resolved
-  background, when the fill doesn't carry it.
+- **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
+  is a separate [`Tag`](#tag) chip composed *inside* the pane top (see the showcase's in-pane info
+  bar demo), so frame decoration and the header stay independent — composing a widget beats a
+  bespoke border-straddling title that fought the transparent terminal pane.
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
 
 ```rust
@@ -427,13 +417,14 @@ Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
     .child(Item::new("DASHBOARD").marker(ActiveMarker::Bar).active(true))
     .child(Item::new("SETTINGS").marker(ActiveMarker::Bar));
 
-// Titled pane: the pane-info header terminal panes use — icon + name on the top border.
-Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0)
-    .title(Glyph::Terminal, "codex");
+// In-pane info bar: a Tag chip inside the pane top (the pane-info header).
+Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).padding(8.0)
+    .child(
+        Tag::new("Neovim")
+            .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
+            .segment(/* branch · diff-stat … */),
+    );
 ```
-
-> The HUD **title** now ships (top-border `icon + label`, above); the status row + tab bar from
-> the design vision are still pending (see `grid-ui-plan.md` → Phase C7).
 
 ### Grid
 

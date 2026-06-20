@@ -101,14 +101,6 @@ impl Glyph {
     pub fn primary_char(self) -> Option<char> {
         char::from_u32(self.secondary() + PRIMARY_OFFSET)
     }
-
-    /// The **secondary-layer** (`:before`) character — the dimmed background layer
-    /// of the duotone pair — for callers that draw both layers manually (mirror of
-    /// [`primary_char`](Self::primary_char), drawn *under* it at the theme's
-    /// [`icon_secondary_alpha`](crate::theme::Theme::icon_secondary_alpha)).
-    pub fn secondary_char(self) -> Option<char> {
-        char::from_u32(self.secondary())
-    }
 }
 
 /// A duotone icon glyph. Sizes to a square of the resolved font size (or an
