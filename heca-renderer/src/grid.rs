@@ -19,6 +19,9 @@ struct GridVertex {
     glow: [f32; 4],
     glow_radius: f32,
     glow_intensity: f32,
+    /// On light backgrounds, emit glow as a translucent tinted halo instead of
+    /// pure additive light. `0.0` keeps the original additive-only behavior.
+    glow_alpha_scale: f32,
     shadow: [f32; 4],
     shadow_radius: f32,
     shadow_offset: [f32; 2],
@@ -45,6 +48,9 @@ pub struct GlowRect {
     pub glow: [f32; 4],
     pub glow_radius: f32,
     pub glow_intensity: f32,
+    /// On light backgrounds, emit glow as a translucent tinted halo instead of
+    /// pure additive light. `0.0` = additive only.
+    pub glow_alpha_scale: f32,
     /// Drop-shadow color (premultiply-friendly straight color + alpha).
     pub shadow: [f32; 4],
     /// Shadow blur/falloff radius (logical px); `0` = no shadow.
@@ -133,7 +139,6 @@ impl GridRenderer {
             push_constant_ranges: &[],
         });
 
-        // Float32x2 ×3, Float32, Float32x4 ×2, Float32, Float32x4, Float32 ×2.
         let attributes = wgpu::vertex_attr_array![
             0 => Float32x2, // position
             1 => Float32x2, // center
@@ -145,9 +150,10 @@ impl GridRenderer {
             7 => Float32x4, // glow
             8 => Float32,   // glow_radius
             9 => Float32,   // glow_intensity
-            10 => Float32x4, // shadow
-            11 => Float32,   // shadow_radius
-            12 => Float32x2, // shadow_offset
+            10 => Float32,  // glow_alpha_scale
+            11 => Float32x4, // shadow
+            12 => Float32,   // shadow_radius
+            13 => Float32x2, // shadow_offset
         ];
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -351,6 +357,7 @@ impl GridRenderer {
             glow: r.glow,
             glow_radius: r.glow_radius,
             glow_intensity: r.glow_intensity,
+            glow_alpha_scale: r.glow_alpha_scale,
             shadow: r.shadow,
             shadow_radius: r.shadow_radius,
             shadow_offset: r.shadow_offset,

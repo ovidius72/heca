@@ -7,7 +7,8 @@ use crate::app::terminal_host::prepare_terminal_mount;
 use crate::app::terminal_render::{
     paint_terminal_pane_shell, pane_scissor_rect, render_terminal_mount,
     selection_overlay_for_pane, stable_floating_content_rect,
-    stable_tiled_content_rect, PaneRenderState, TerminalRenderPassContext,
+    stable_tiled_content_rect, PaneRenderState, TerminalPaneShell,
+    TerminalRenderPassContext,
 };
 use crate::app_state::{AppState, ChromeDamageMode, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
@@ -58,12 +59,17 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
 ///
 /// Takes the renderer fields individually (not `&mut AppState`) because
 /// `render_frame` holds `let theme = &state.theme;` across its body.
+struct ChromePassOpts {
+    damage: Option<heca_grid_ui::Rectangle>,
+    glow_alpha_scale: f32,
+}
+
 fn render_chrome(
     grid: &mut GridRenderer,
     text: &mut TextRenderer,
     queue: &wgpu::Queue,
     scene: &heca_grid_ui::Scene,
-    damage: Option<heca_grid_ui::Rectangle>,
+    opts: ChromePassOpts,
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
 ) {
@@ -77,7 +83,7 @@ fn render_chrome(
     // geometry clipped to their own scissor and showed nothing. One
     // `begin_frame()` per frame makes each `render()` append at a distinct offset
     // so all grid scenes render their own geometry.
-    let damage = damage.map(|r| {
+    let damage = opts.damage.map(|r| {
         [
             r.loc.x as f32,
             r.loc.y as f32,
@@ -88,11 +94,11 @@ fn render_chrome(
     grid.set_damage(damage);
     grid.set_clip(None);
     text.set_damage(damage);
-    heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer());
+    heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer(), opts.glow_alpha_scale);
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);
     for overlay in scene.overlay_segments() {
-        heca_renderer::scene::enqueue_scene(grid, text, &overlay);
+        heca_renderer::scene::enqueue_scene(grid, text, &overlay, opts.glow_alpha_scale);
         grid.render(queue, view, encoder);
         text.render(queue, view, encoder, None);
     }
@@ -134,6 +140,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let h = phys_size.height as f32 / scale;
 
     let theme = &state.theme;
+    let glow_alpha_scale =
+        heca_renderer::scene::glow_alpha_scale_for_background(theme.background.to_f32x4());
     let surface_alpha = state.terminal_surface_opacity();
     let frost_opacity = state.appearance.terminal_frost_opacity();
     // Floating panes use independent opacity/blur/border knobs so they can stay
@@ -369,6 +377,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 glow: [0.0; 4],
                 glow_radius: 0.0,
                 glow_intensity: 0.0,
+                glow_alpha_scale: 0.0,
                 shadow: [0.0; 4],
                 shadow_radius: 0.0,
                 shadow_offset: [0.0, 0.0],
@@ -479,17 +488,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut pane_scene,
-                pane.pane_id,
-                pane.x,
-                pane.y,
-                pane.w,
-                pane.h,
-                bcolor,
-                pane_border_width,
-                pane_border_radius,
-                pane_content_inset,
-                pane.is_active,
-                pane.mount.as_ref().map(|m| m.snapshot.default_bg),
+                TerminalPaneShell {
+                    pane_id: pane.pane_id,
+                    x: pane.x,
+                    y: pane.y,
+                    w: pane.w,
+                    h: pane.h,
+                    border_color: bcolor,
+                    border_width: pane_border_width,
+                    border_radius: pane_border_radius,
+                    content_inset: pane_content_inset,
+                    is_active: pane.is_active,
+                    terminal_bg: pane.mount.as_ref().map(|m| m.snapshot.default_bg),
+                },
             );
         }
 
@@ -499,7 +510,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
             &mut state.text_renderer,
             &state.queue,
             &pane_scene,
-            None,
+            ChromePassOpts {
+                damage: None,
+                glow_alpha_scale,
+            },
             scene_view,
             &mut encoder,
         );
@@ -577,6 +591,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 glow: [0.0; 4],
                 glow_radius: 0.0,
                 glow_intensity: 0.0,
+                glow_alpha_scale: 0.0,
                 shadow: [0.0; 4],
                 shadow_radius: 0.0,
                 shadow_offset: [0.0, 0.0],
@@ -688,17 +703,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
             paint_terminal_pane_shell(
                 state,
                 &mut float_scene,
-                pane.pane_id,
-                pane.x,
-                pane.y,
-                pane.w,
-                pane.h,
-                fborder,
-                pane_border_width,
-                pane_border_radius,
-                pane_content_inset,
-                pane.is_active,
-                pane.mount.as_ref().map(|m| m.snapshot.default_bg),
+                TerminalPaneShell {
+                    pane_id: pane.pane_id,
+                    x: pane.x,
+                    y: pane.y,
+                    w: pane.w,
+                    h: pane.h,
+                    border_color: fborder,
+                    border_width: pane_border_width,
+                    border_radius: pane_border_radius,
+                    content_inset: pane_content_inset,
+                    is_active: pane.is_active,
+                    terminal_bg: pane.mount.as_ref().map(|m| m.snapshot.default_bg),
+                },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
             render_chrome(
@@ -706,7 +723,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 &mut state.text_renderer,
                 &state.queue,
                 &float_scene,
-                None,
+                ChromePassOpts {
+                    damage: None,
+                    glow_alpha_scale,
+                },
                 scene_view,
                 &mut encoder,
             );
@@ -975,9 +995,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &mut state.text_renderer,
         &state.queue,
         &chrome_scene,
-        match state.chrome_damage_mode {
-            ChromeDamageMode::Full | ChromeDamageMode::ForceFullOnNextRequest => None,
-            ChromeDamageMode::Tracked => chrome_damage,
+        ChromePassOpts {
+            damage: match state.chrome_damage_mode {
+                ChromeDamageMode::Full | ChromeDamageMode::ForceFullOnNextRequest => None,
+                ChromeDamageMode::Tracked => chrome_damage,
+            },
+            glow_alpha_scale,
         },
         scene_view,
         &mut encoder,

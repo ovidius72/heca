@@ -12,6 +12,9 @@ use heca_grid_ui::{Rectangle, Scene};
 const NO_BORDER: [f32; 4] = [0.0; 4];
 const NO_GLOW: [f32; 4] = [0.0; 4];
 const NO_SHADOW: [f32; 4] = [0.0; 4];
+const LIGHT_BG_GLOW_ALPHA_SCALE: f32 = 0.62;
+const LIGHT_BG_GLOW_RADIUS_SCALE: f32 = 1.25;
+const LIGHT_BG_LUMA_THRESHOLD: f32 = 0.60;
 
 /// Translate a logical `Rectangle` to `(x, y, w, h)` f32 tuple.
 fn xywh(rect: &Rectangle) -> (f32, f32, f32, f32) {
@@ -37,9 +40,38 @@ fn solid(x: f32, y: f32, w: f32, h: f32, fill: [f32; 4]) -> GlowRect {
         glow: NO_GLOW,
         glow_radius: 0.0,
         glow_intensity: 0.0,
+        glow_alpha_scale: 0.0,
         shadow: NO_SHADOW,
         shadow_radius: 0.0,
         shadow_offset: [0.0, 0.0],
+    }
+}
+
+fn srgb_channel_to_linear(v: f32) -> f32 {
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn relative_luminance(color: [f32; 4]) -> f32 {
+    let r = srgb_channel_to_linear(color[0]);
+    let g = srgb_channel_to_linear(color[1]);
+    let b = srgb_channel_to_linear(color[2]);
+    0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/// Choose the glow compositing mode for a scene background.
+///
+/// Dark backgrounds keep the original additive neon. Light backgrounds switch
+/// to a translucent tinted halo so the glow remains visible instead of washing
+/// out against near-white surfaces.
+pub fn glow_alpha_scale_for_background(background: [f32; 4]) -> f32 {
+    if relative_luminance(background) >= LIGHT_BG_LUMA_THRESHOLD {
+        LIGHT_BG_GLOW_ALPHA_SCALE
+    } else {
+        0.0
     }
 }
 
@@ -53,7 +85,16 @@ fn intersect_clip(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
 }
 
 /// Walk `scene` and enqueue its commands into the renderers.
-pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &Scene) {
+///
+/// `glow_alpha_scale` selects the glow compositing strategy for this scene:
+/// `0.0` keeps additive-only glow (best on dark themes); non-zero emits glows
+/// as translucent tinted halos so they remain visible on light backgrounds.
+pub fn enqueue_scene(
+    grid: &mut GridRenderer,
+    text: &mut TextRenderer,
+    scene: &Scene,
+    glow_alpha_scale: f32,
+) {
     // Active clip rects (each already intersected with its parent), so nested
     // `PushClip`s clip to their intersection. Both renderers scissor to the top.
     let mut clip_stack: Vec<[f32; 4]> = Vec::new();
@@ -65,10 +106,13 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     Some(b) => (b.color.to_f32x4(), b.width),
                     None => (NO_BORDER, 0.0),
                 };
-                let (glow, glow_radius, glow_intensity) = match r.glow {
+                let (glow, mut glow_radius, glow_intensity) = match r.glow {
                     Some(g) => (g.color.to_f32x4(), g.radius, g.intensity),
                     None => (NO_GLOW, 0.0, 0.0),
                 };
+                if glow_alpha_scale > 0.0 {
+                    glow_radius *= LIGHT_BG_GLOW_RADIUS_SCALE;
+                }
                 let (shadow, shadow_radius, shadow_offset) = match r.shadow {
                     Some(s) => (s.color.to_f32x4(), s.radius, [s.dx, s.dy]),
                     None => (NO_SHADOW, 0.0, [0.0, 0.0]),
@@ -85,12 +129,13 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
                     glow,
                     glow_radius,
                     glow_intensity,
+                    glow_alpha_scale,
                     shadow,
                     shadow_radius,
                     shadow_offset,
                 });
             }
-            DrawCommand::Brackets(b) => draw_brackets(grid, b),
+            DrawCommand::Brackets(b) => draw_brackets(grid, b, glow_alpha_scale),
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
                 let (x, y, w, h) = xywh(&t.rect);
@@ -132,13 +177,16 @@ pub fn enqueue_scene(grid: &mut GridRenderer, text: &mut TextRenderer, scene: &S
 }
 
 /// Eight thin arms framing the rect's corners (Tron reticle).
-fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd) {
+fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd, glow_alpha_scale: f32) {
     let (x, y, w, h) = xywh(&b.rect);
     let color = b.color.to_f32x4();
-    let (gc, gr, gi) = match b.glow {
+    let (gc, mut gr, gi) = match b.glow {
         Some(g) => (g.color.to_f32x4(), g.radius, g.intensity),
         None => (NO_GLOW, 0.0, 0.0),
     };
+    if glow_alpha_scale > 0.0 {
+        gr *= LIGHT_BG_GLOW_RADIUS_SCALE;
+    }
     let t = b.thickness;
     let l = b.len;
 
@@ -154,6 +202,7 @@ fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd) {
         glow: gc,
         glow_radius: gr,
         glow_intensity: gi,
+        glow_alpha_scale,
         shadow: NO_SHADOW,
         shadow_radius: 0.0,
         shadow_offset: [0.0, 0.0],
@@ -194,7 +243,7 @@ fn draw_scanlines(grid: &mut GridRenderer, s: &ScanlineCmd) {
 
 #[cfg(test)]
 mod tests {
-    use super::intersect_clip;
+    use super::{glow_alpha_scale_for_background, intersect_clip, LIGHT_BG_GLOW_ALPHA_SCALE};
 
     #[test]
     fn intersect_clip_returns_the_overlapping_region() {
@@ -215,5 +264,22 @@ mod tests {
         let b = [50.0, 50.0, 10.0, 10.0];
         let r = intersect_clip(a, b);
         assert_eq!((r[2], r[3]), (0.0, 0.0), "disjoint clips intersect to nothing");
+    }
+
+    #[test]
+    fn dark_backgrounds_keep_additive_glow() {
+        assert!(
+            glow_alpha_scale_for_background([0.02, 0.03, 0.05, 1.0]).abs() < f32::EPSILON,
+            "dark scenes should keep additive-only glow"
+        );
+    }
+
+    #[test]
+    fn light_backgrounds_switch_to_tinted_glow() {
+        assert_eq!(
+            glow_alpha_scale_for_background([0.94, 0.95, 0.97, 1.0]),
+            LIGHT_BG_GLOW_ALPHA_SCALE,
+            "light scenes should use the tinted halo glow path"
+        );
     }
 }
