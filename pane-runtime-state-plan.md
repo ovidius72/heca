@@ -65,6 +65,10 @@
   authored segment lists). Agreed shape when built = the **hybrid** model (a list of widget-typed segments,
   each a `${token}` template) — record this in `pluggable-chrome-plugin-plan.md` §8.1/§8.2. The fixed
   default above *becomes* the default segment config when customization ships.
+- **UPDATE (2026-06-20, Phase 7):** the design landed as an **in-pane segmented info bar** (a `Tag` inside the
+  pane top), not a sidebar-corner badge. The **segment-list selection** was pulled forward as plain config
+  (`[appearance] pane_title_segments` / `pane_title_actions`, ordered lists of known kinds); only the **`${token}`
+  templating** remains deferred. Bottom placement is a future flag.
 
 ### 0.4 Command spawn
 - `WmAction::SpawnCommand` (today a **stub** that only titles the pane) becomes a real launch: run the
@@ -411,7 +415,10 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 **Tasks**
 - [x] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label(name)` · optional exceptional-state indicator, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name; Running ⇒ program icon + Name. Icons come from the catalog's semantic Phosphor names (§0.7) and render through the existing duotone `Icon` widget. Reuse `Row`/`Grid`.
 - [x] **Sidebar card — Row 2 (git, only in a repo):** a flat metadata row (`branch + optional +N / ~N / -N`), bound to the store mirror. Hidden entirely outside a repo.
-- [x] **On-pane title (realizes the optional corner badge):** `icon + name` on the pane's top border via a new `heca-grid-ui` `Pane.title` + `PaneTitleStyle` widget variant (`Cut`/`Filled`/`Boxed`), gated by `[appearance] pane_show_title` (default true) + `pane_title_style` (default "cut"); interior color = terminal `default_bg`; resolved through the shared `pane_info_view` catalog path.
+- [x] **In-pane info bar** (chosen over the border-straddle title — that fought the transparent pane over the terminal): a self-contained segmented `Tag` *inside* the pane top, with **config-driven segments** `[appearance] pane_title_segments` (`location`/`app_name`/`git_branch`/`git_status`) and a distinguishable header band (theme `surface`) + vertical centering + width truncation + per-pane clip; resolved through the shared `pane_info_view` path; UI font Geist Mono at sidebar size; `[]` ⇒ no bar/padding. (Built-then-superseded: the `Pane.title` + `PaneTitleStyle` Cut/Filled/Boxed straddle widget; cleanup pending.)
+- [ ] **In-pane action buttons** (right of the bar): `pane_title_actions` (`split`/`move_left`/`move_right`/`close`) as `IconButton`s wired to existing WM actions (registry+keymap+RPC), via a retained per-pane header + event dispatch. *(Slice 2 — pending; full plan in `phase7-pane-info-bar-RESUME.md`.)*
+- [ ] **Decouple fonts from color themes → `[settings]`** (user-requested; NOT started): add `[settings] font_family`/`font_size` (mirror `terminal_font_*`); map onto the theme in the loader. **LANDMINE:** `heca-config Theme.font_size` default = `32.0` is dead (UI renders at `grid_tron` 15 because `chrome_gui_theme` never maps it) — normalize that default to ~15 before mapping `gui_theme.font_size`. See RESUME doc §B.
+- [x] **Configurable sidebar width:** `[appearance] sidebar_width` (clamped 160..=560, default 300), applied at startup + reload (left + right).
 - [x] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
 - [x] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
 - [x] Tests where pure (segment build given a `PaneRuntimeView`); visual verify in the app + showcase.

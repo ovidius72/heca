@@ -98,7 +98,7 @@ use heca_grid_ui::style::{Align, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
-    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Tooltip, TooltipSide,
+    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Tag, Tooltip, TooltipSide,
     Visibility,
 };
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
@@ -177,16 +177,124 @@ fn pane_info_view(
     }
 }
 
-/// Resolve a pane's title `(icon, name)` through the same program-catalog path
-/// the sidebar card uses, so the on-pane title and the sidebar stay consistent.
-/// Used by the terminal pane shell (`app::terminal_render`).
-pub(crate) fn pane_title_info(
+/// Left-truncate `text` to `max_chars`, keeping the **tail** with a leading
+/// ellipsis (`…/HypeSupport`) — paths read most usefully from the end.
+fn truncate_path_left(text: &str, max_chars: usize) -> String {
+    let len = text.chars().count();
+    if len <= max_chars {
+        return text.to_string();
+    }
+    match max_chars {
+        0 => String::new(),
+        1 => "…".to_string(),
+        n => {
+            let tail: String = text.chars().skip(len - (n - 1)).collect();
+            format!("…{tail}")
+        }
+    }
+}
+
+/// A path shown home-relative (`/Users/x/proj` → `~/proj`).
+fn home_relative_path(path: &std::path::Path) -> String {
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = std::path::Path::new(&home);
+        if let Ok(rest) = path.strip_prefix(home) {
+            if rest.as_os_str().is_empty() {
+                return "~".to_string();
+            }
+            return format!("~/{}", rest.display());
+        }
+    }
+    path.display().to_string()
+}
+
+/// Build the pane info bar's segmented [`Tag`] from the configured `segments` and
+/// the pane's runtime, reusing the same catalog projection as the sidebar card.
+/// Segments with no data (e.g. git outside a repo) are skipped; returns `None`
+/// when nothing is produced. Used by the terminal pane shell (`app::terminal_render`).
+pub(crate) fn build_pane_info_bar(
     programs: &ProgramsConfig,
     fallback_name: &str,
     runtime: Option<&PaneRuntime>,
-) -> (Glyph, String) {
+    segments: &[heca_config::appearance::PaneSegment],
+    theme: &GuiTheme,
+    max_width: f32,
+    font: f32,
+) -> Option<Tag> {
+    use heca_config::appearance::PaneSegment;
+
     let view = pane_info_view(programs, fallback_name, runtime);
-    (view.icon, view.title)
+    let git = runtime.and_then(|pane| pane.git.as_ref());
+
+    // Collect the produced (icon, text) segments, noting the location (the long,
+    // truncatable one), so we can fit the bar to `max_width` before building it.
+    let mut items: Vec<(Glyph, String)> = Vec::new();
+    let mut location_idx: Option<usize> = None;
+    for seg in segments {
+        let item = match seg {
+            PaneSegment::Location => match runtime.and_then(|pane| pane.cwd.as_ref()) {
+                Some(cwd) => {
+                    location_idx = Some(items.len());
+                    (Glyph::Folder, home_relative_path(cwd))
+                }
+                None => continue,
+            },
+            PaneSegment::AppName => (view.icon, view.title.clone()),
+            PaneSegment::GitBranch => match git.and_then(|info| info.branch.clone()) {
+                Some(branch) => (Glyph::GitBranch, branch),
+                None => continue,
+            },
+            PaneSegment::GitStatus => {
+                let Some(info) = git else { continue };
+                let mut parts = Vec::new();
+                if info.added > 0 {
+                    parts.push(format!("+{}", info.added));
+                }
+                if info.modified > 0 {
+                    parts.push(format!("~{}", info.modified));
+                }
+                if info.deleted > 0 {
+                    parts.push(format!("-{}", info.deleted));
+                }
+                if parts.is_empty() {
+                    continue;
+                }
+                (Glyph::GitCommit, parts.join(" "))
+            }
+        };
+        items.push(item);
+    }
+    if items.is_empty() {
+        return None;
+    }
+
+    // Fit to width: if the bar would overflow the pane, shrink the location
+    // segment (left-ellipsised) by the overflow. The per-pane render clip is the
+    // hard backstop; this keeps it readable instead of a hard cut.
+    let char_w = (font * 0.6).max(1.0);
+    let per_segment_overhead = font * 2.5; // icon + gaps + segment padding + divider
+    let text_chars: usize = items.iter().map(|(_, text)| text.chars().count()).sum();
+    let estimated = text_chars as f32 * char_w + items.len() as f32 * per_segment_overhead;
+    if estimated > max_width
+        && let Some(idx) = location_idx
+    {
+        let overflow_chars = ((estimated - max_width) / char_w).ceil() as usize;
+        let loc_chars = items[idx].1.chars().count();
+        let keep = loc_chars.saturating_sub(overflow_chars).max(1);
+        items[idx].1 = truncate_path_left(&items[idx].1, keep);
+    }
+
+    let mut tag: Option<Tag> = None;
+    for (glyph, text) in items {
+        // No explicit size → the icon inherits the bar's base font, so glyph and
+        // label stay balanced when the bar font changes.
+        let leading = Icon::new(glyph).color(theme.foreground);
+        tag = Some(match tag.take() {
+            None => Tag::new(text).leading(leading),
+            Some(existing) => existing.segment_text(text, Some(Box::new(leading))),
+        });
+    }
+    tag
 }
 
 fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
@@ -202,17 +310,14 @@ fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option
     })
 }
 
-const SIDEBAR_GIT_BRANCH_MAX_CHARS: usize = 28;
+// Kept short so the branch + git counts fit the sidebar card width without
+// overflowing (the row isn't width-clipped). The full branch is on hover.
+const SIDEBAR_GIT_BRANCH_MAX_CHARS: usize = 22;
 
+/// Truncate a branch for the sidebar, keeping the **tail** (the meaningful end,
+/// e.g. `…security-upgrade`) rather than the boilerplate `feature/` prefix.
 fn truncate_sidebar_git_branch(branch: &str) -> String {
-    let len = branch.chars().count();
-    if len <= SIDEBAR_GIT_BRANCH_MAX_CHARS {
-        return branch.to_string();
-    }
-    let keep = SIDEBAR_GIT_BRANCH_MAX_CHARS.saturating_sub(3);
-    let mut truncated = branch.chars().take(keep).collect::<String>();
-    truncated.push_str("...");
-    truncated
+    truncate_path_left(branch, SIDEBAR_GIT_BRANCH_MAX_CHARS)
 }
 
 type ChromeIntentEmitter = Rc<dyn Fn(crate::app::interaction::InteractionIntent)>;

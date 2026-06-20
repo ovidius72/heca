@@ -380,6 +380,18 @@ impl LayoutExt for Pane {}
 impl StyleExt for Pane {}
 impl Parent for Pane {}
 
+/// Vertical space (logical px) a top-border title occupies **below** the pane's
+/// top edge, at the default inherited font (the size a `Pane` resolves to when the
+/// host doesn't override the layout base font). A host that paints its own content
+/// inside a titled pane (e.g. a terminal grid) adds this to the pane's **top**
+/// content padding so a shown title never overlaps the content. Matches the
+/// geometry in [`Pane::paint_title`] (`chip_h - overhang`).
+pub fn title_reserved_height() -> f32 {
+    let chip_h = crate::layout::DEFAULT_BASE_FONT * TITLE_FONT_SCALE * MONO_LINE_RATIO;
+    let overhang = (chip_h / 2.0).min(TITLE_OVERHANG_MAX as f32);
+    chip_h - overhang
+}
+
 /// Truncate `text` to fit `max_w` (logical px) at the given per-char `advance`,
 /// appending an ellipsis when it overflows. Char-based to match the naive
 /// monospace measure used across this crate.

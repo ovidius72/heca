@@ -151,23 +151,27 @@ Notes:
 - `kind = "terminal"` is implemented today; `app` and `plugin` currently report a clear "not yet implemented" message without forking a second spawn path.
 **Reviewer Decision:** — · **Reviewer Notes:** Review follow-ups addressed on branch: interactive command shell mode (`-ic`), clearer RPC separator errors, documented public close-policy fields, config validation for invalid command kinds, explicit direct-command shell-integration rationale, and minor formatting cleanup.
 
-## Phase 7 — Display: fixed default pane-info widgets
-**Status:** In Progress · **Assigned:** agent · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
-**One-liner:** sidebar card + optional pane-corner badge (icon · name · exception-only status · flat git metadata row)
-as theme-driven grid-ui widgets, reactive; showcase + docs.
-**Agent Completion:** Partially implemented on current branch.
-Built:
-- sidebar card Row 1 now resolves the catalog icon/name through `pane_info_view` and renders `Icon + Label + error-only indicator`
-- sidebar card Row 2 now renders a flat git metadata row reactively from `Pane.runtime.git`, hidden outside repos
-- pure projection tests cover program/icon resolution and git-segment shaping for the sidebar card
-- showcase + `docs/widgets.md` now demonstrate the final pane-info row shape
-- end-to-end visual/reactivity verification was completed in the real app
-- **on-pane title (realizes the optional top-corner badge):** added a `title` to the `heca-grid-ui` `Pane` widget — `icon + name` straddling the top border, with a `PaneTitleStyle` variant (`Cut` / `Filled` / `Boxed`), label truncation, and duotone icon; theme-driven, showcase + docs updated, `truncate_to_width` unit-tested
-- wired into the terminal pane shell (`app::terminal_render`): resolves through the same `pane_info_view` catalog path as the sidebar (so they stay consistent), uses the terminal's resolved `default_bg` as the title interior color
-- config: single `[appearance] pane_title_style = "none"|"cut"|"filled"|"boxed"` (default "cut"; dropped the redundant `pane_show_title` bool) + optional `pane_title_color` (frame) / `pane_title_background` (interior) overrides — all in `example.config.toml`
-- NFIcon (Nerd-Font icon widget, for real app/language program logos) planned as a follow-up in `PLAN.md` (grid-ui backlog)
-- top-row clip handled: title overhang above the border is bounded (`TITLE_OVERHANG_MAX`) so it stays within the first-pane gap regardless of font size — no clip against the content area / tab bar
-**Reviewer Decision:** — · **Reviewer Notes:** —
+## Phase 7 — Display: pane-info widgets (sidebar card + in-pane info bar)
+**Status:** In Progress · **Assigned:** lead+user (interactive, branch `feature/phase-7`, PR #147) · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
+**One-liner:** sidebar card (icon · name · status · flat git row) **+ an in-pane segmented info bar** — a `Tag` pill inside the pane top with **config-driven segments** (left) and **action buttons** (right), theme-driven grid-ui widgets, reactive; **configurable sidebar width**; showcase + docs.
+**Agent Completion:** Partially implemented on `feature/phase-7` (uncommitted past the merge; not yet on PR).
+Built (sidebar card):
+- Row 1 resolves the catalog icon/name through `pane_info_view` → `Icon + Label + error-only indicator`; Row 2 a flat git row from `Pane.runtime.git`, hidden outside repos; pure projection tests; showcase + `docs/widgets.md`.
+- git branch now **left-ellipsised** (keeps the meaningful tail, e.g. `…security-upgrade`); cap 22; full branch on hover.
+Built (in-pane info bar — the chosen design):
+- a self-contained **segmented `Tag`** rendered *inside* the pane top (`app::terminal_render` + `chrome::build_pane_info_bar`), reusing the sidebar's `pane_info_view` projection — no border-matching.
+- **config (`[appearance]`):** `pane_title_segments = ["location","app_name","git_branch","git_status"]` (ordered; `[]` hides) + `pane_title_actions = ["split","move_left","move_right","close"]` (ordered; `[]` hides). Replaced the straddle config (`pane_title_style`/`color`/`background`, `pane_show_title` — all removed).
+- distinguishable **header band** (theme `surface`) under the rounded frame; title **vertically centered**; width-aware **location truncation** (left-ellipsis) + **per-pane clip** so it never spills into a neighbor.
+- **font:** UI = **Geist Mono** (configurable `[theme] font_family`; removed all `JetBrainsMono Nerd Font`); terminal stays **Maple Mono**; bar size = `theme.font_size` (matches the sidebar).
+- **`[appearance] sidebar_width`** — configurable, clamped `160..=560` (default 300, wider); applied at startup + reload (left + right panels).
+- empty segments+actions ⇒ **no bar, no reserved padding/margin** (gated on segments-only until buttons land).
+Superseded (built then replaced): the `heca-grid-ui` `Pane.title` + `PaneTitleStyle` (`Cut`/`Filled`/`Boxed`) border-straddle widget — the in-pane `Tag` bar replaced it (border-matching fought the transparent pane over the terminal). Cleanup: remove the unused straddle widget + its showcase/docs in a later slice.
+Remaining (full detail + file:line in **`phase7-pane-info-bar-RESUME.md`**):
+- **Slice 2 — action buttons** (right side): interactive `IconButton`s wired to existing WM actions (split / move_left / move_right / close, registry+keymap+RPC parity) via a **retained per-pane header + event dispatch** (the sidebar's pattern; pane chrome is imperative today → must route pointer events). Then widen the bar gate to "segments **or** actions" (`pane_info_bar_visible`). Need close keybind confirmed.
+- **Decouple fonts from color themes → `[settings]`** (user-requested, NOT started): add `[settings] font_family` + `font_size` (mirror `terminal_font_*`); loader `apply_overrides` maps them onto the theme. **LANDMINE:** `chrome_gui_theme` never maps the config font size and `heca-config Theme.font_size` default = **32.0** (dead — UI renders at `grid_tron` 15). So you must **normalize that default to ~15** before mapping `gui_theme.font_size = state.theme.font_size`, or the whole UI balloons. Multiplier confirmed: `base_font * font_scale * WidgetSize.font_scale()`.
+- **Remove the superseded straddle title** (`Pane.title`/`PaneTitleStyle`/`paint_title`/`title_reserved_height`/`truncate_to_width`) — showcase-only now; dissolves review M1. Update showcase + docs.
+- commit the bar work to PR #147; bottom placement + full token/segment templates stay deferred. (deferred) `NfIcon` — `PLAN.md` backlog.
+**Reviewer Decision:** — · **Reviewer Notes:** review M1–M7 triaged in the RESUME doc (M7 fixed; M2/M3/M4 leave; M5/M6 minor; M1 moot after straddle removal).
 
 ## Phase 8 — Plugin event exposure + plan/docs updates
 **Status:** Open · **Assigned:** — · **Depends-on:** Phase 0 · **Plan:** §4 Phase 8
@@ -188,3 +192,4 @@ then 3→4 and 6 alongside.
 - 2026-06-18 — **Phase 2 implemented + merged**: code PR #133 (`e8ac856`), design/deferral docs PR #132. Accepted by merge. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked).
 - 2026-06-18 — **Phase 3 implementation-shape locked (§0.8)**: shell-hook mechanism (hybrid bash/zsh/fish wrap), config switch (`settings.shell_integration` bool), OSC parsing ownership (passive pre-parse snooper before `advance_bytes`). **Lesson:** an agent raised these as pre-coding blockers — they were implementation-shape decisions the lead left open after locking only the high-level Phase 3 design. The lead should lock implementation-shape up-front, not just design intent. Gaps now recorded so no agent has to guess.
 - 2026-06-18 — **Phase 3 implemented + merged**: PR #136 (`0879b3c` — OSC snooper `osc.rs`, shell assets, `settings.shell_integration`, routing). Lead verified §0.8 compliance post-merge (no drift); Reviewer Decision = Accepted. Plan §4 Phase 3 tasks ticked.
+- 2026-06-20 — **Phase 7 redesign (interactive, with the user) on `feature/phase-7`/PR #147**: started as a border-straddle `Pane.title` (Cut/Filled/Boxed), then **pivoted to an in-pane segmented info bar** (`Tag`) after the straddle's border-matching fought the transparent pane over the terminal. Landed: config segments/actions (replaced straddle config), distinguishable centered header band, width truncation + per-pane clip, UI font → **Geist Mono** (terminal stays Maple), configurable clamped `sidebar_width`, sidebar git branch left-ellipsis. **Remaining = Slice 2 action buttons** (interactive). Bar work uncommitted past the merge.

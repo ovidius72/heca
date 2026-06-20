@@ -14,7 +14,7 @@ use taffy::prelude::*;
 
 /// Default base font (logical px) when the host doesn't set one — matches the
 /// default theme's `font_size`.
-const DEFAULT_BASE_FONT: f32 = 15.0;
+pub(crate) const DEFAULT_BASE_FONT: f32 = 15.0;
 
 /// Computes layout for a component tree using `taffy`.
 pub struct LayoutEngine {

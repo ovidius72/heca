@@ -36,21 +36,36 @@ pub enum Vibrancy {
     WindowBackground,
 }
 
-/// How a pane's top-border title (icon + program name) is drawn. Serialised
-/// `snake_case` in TOML (e.g. `pane_title_style = "filled"`). Mirrors the
-/// `heca-grid-ui` `PaneTitleStyle` widget variant; mapped to it in the app.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// A segment shown in the pane info bar (left side), in config order. Serialised
+/// `snake_case` in TOML (e.g. `pane_title_segments = ["location", "app_name"]`).
+/// A segment with no data for a pane (e.g. git outside a repo) is skipped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum PaneTitleStyle {
-    /// No pane title at all.
-    None,
-    /// Float the title in a gap cut into the frame line — no visible box (default).
-    #[default]
-    Cut,
-    /// A solid chip filled with the frame color; title text flips to the interior.
-    Filled,
-    /// A small bordered box (interior fill + frame-colored border) on the line.
-    Boxed,
+pub enum PaneSegment {
+    /// Working directory (home-relative path).
+    Location,
+    /// Resolved program/app name (process catalog).
+    AppName,
+    /// Git branch (hidden outside a repo).
+    GitBranch,
+    /// Git change counts `+A ~M -D` (hidden when clean / outside a repo).
+    GitStatus,
+}
+
+/// An action button shown in the pane info bar (right side), in config order.
+/// Serialised `snake_case` (e.g. `pane_title_actions = ["split", "close"]`). Each
+/// maps to an existing window-manager action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneAction {
+    /// Split the pane.
+    Split,
+    /// Move the pane left.
+    MoveLeft,
+    /// Move the pane right.
+    MoveRight,
+    /// Close the pane.
+    Close,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -85,12 +100,27 @@ fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
 
-fn default_pane_title_style() -> PaneTitleStyle {
-    PaneTitleStyle::Cut
+fn default_pane_title_segments() -> Vec<PaneSegment> {
+    vec![PaneSegment::Location, PaneSegment::AppName]
+}
+
+fn default_pane_title_actions() -> Vec<PaneAction> {
+    vec![
+        PaneAction::Split,
+        PaneAction::MoveLeft,
+        PaneAction::MoveRight,
+        PaneAction::Close,
+    ]
 }
 
 /// Maximum in-app blur radius in logical px, at `blur = 100`.
 const MAX_BLUR_PX: f32 = 48.0;
+
+/// Sidebar width bounds (logical px); the configured `sidebar_width` is clamped to
+/// this range. Default when unset.
+pub const MIN_SIDEBAR_WIDTH: f32 = 160.0;
+pub const MAX_SIDEBAR_WIDTH: f32 = 560.0;
+const DEFAULT_SIDEBAR_WIDTH: f32 = 300.0;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  AppearanceConfig
@@ -113,7 +143,7 @@ const MAX_BLUR_PX: f32 = 48.0;
 ///
 /// All fields are `Copy`. Missing `[appearance]` sections fall back to these
 /// defaults (everything off → identical to an opaque app).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceConfig {
     /// Window/app transparency amount, `0..=100` (`0` opaque, `100` see-through).
     #[serde(default = "default_transparency")]
@@ -180,6 +210,10 @@ pub struct AppearanceConfig {
     /// Gap between sidebar and content area (logical px). `None` → 12.0.
     #[serde(default)]
     pub sidebar_gap: Option<f32>,
+    /// Sidebar (left + right panel) width in logical px. `None` → 300; clamped to
+    /// `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`.
+    #[serde(default)]
+    pub sidebar_width: Option<f32>,
     /// Frosted tint color stamped behind translucent terminals (the
     /// `terminal_blur` frost). `None` → inherits `theme.terminal_frost_color`,
     /// then `theme.background`. Set in config.toml to customize the frosted-glass
@@ -187,19 +221,23 @@ pub struct AppearanceConfig {
     #[serde(default)]
     pub terminal_frost_color: Option<Color>,
 
-    // ── Pane title (program icon + name on the top border) ──
-    /// How the pane title is drawn: `"none"`, `"cut"` (default), `"filled"`, or
-    /// `"boxed"`. `"none"` hides the title entirely.
-    #[serde(default = "default_pane_title_style")]
-    pub pane_title_style: PaneTitleStyle,
-    /// Title **frame** color (the `cut`/`boxed` icon+text, the `filled` chip).
-    /// `None` → inherits the pane border color.
-    #[serde(default)]
-    pub pane_title_color: Option<Color>,
-    /// Title **interior** color (the `cut` below-edge half, the `boxed` fill, the
-    /// `filled` icon+text). `None` → inherits the terminal's resolved background.
-    #[serde(default)]
-    pub pane_title_background: Option<Color>,
+    // ── Pane info bar (segmented pill inside the pane, with action buttons) ──
+    /// Segments shown on the left of the pane info bar, in order. Empty hides the
+    /// left side. See [`PaneSegment`].
+    #[serde(default = "default_pane_title_segments")]
+    pub pane_title_segments: Vec<PaneSegment>,
+    /// Action buttons shown on the right of the pane info bar, in order. Empty
+    /// hides the right side. See [`PaneAction`].
+    #[serde(default = "default_pane_title_actions")]
+    pub pane_title_actions: Vec<PaneAction>,
+}
+
+impl AppearanceConfig {
+    /// Whether the pane info bar shows at all (any segment or action configured).
+    /// When false, the pane reserves no extra top padding for it.
+    pub fn pane_info_bar_visible(&self) -> bool {
+        !self.pane_title_segments.is_empty() || !self.pane_title_actions.is_empty()
+    }
 }
 
 impl AppearanceConfig {
@@ -342,6 +380,14 @@ impl AppearanceConfig {
         self.sidebar_gap.unwrap_or(12.0)
     }
 
+    /// Effective sidebar width (logical px), clamped to
+    /// `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`. Config override → 300.
+    pub fn effective_sidebar_width(&self) -> f32 {
+        self.sidebar_width
+            .unwrap_or(DEFAULT_SIDEBAR_WIDTH)
+            .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH)
+    }
+
     /// Effective frosted tint color stamped behind translucent terminals (the
     /// `terminal_blur` frost). Config override → `theme.terminal_frost_color`
     /// → `theme.background` (the app theme bg, so the default frost reads as a
@@ -372,10 +418,10 @@ impl Default for AppearanceConfig {
             pane_gap: None,
             pane_padding: None,
             sidebar_gap: None,
+            sidebar_width: None,
             terminal_frost_color: None,
-            pane_title_style: default_pane_title_style(),
-            pane_title_color: None,
-            pane_title_background: None,
+            pane_title_segments: default_pane_title_segments(),
+            pane_title_actions: default_pane_title_actions(),
         }
     }
 }
@@ -410,25 +456,47 @@ mod tests {
     }
 
     #[test]
-    fn pane_title_defaults_to_cut_with_inherited_colors() {
+    fn pane_info_bar_defaults_to_location_and_app_with_all_actions() {
         let cfg = AppearanceConfig::default();
-        assert_eq!(cfg.pane_title_style, PaneTitleStyle::Cut);
-        assert!(cfg.pane_title_color.is_none());
-        assert!(cfg.pane_title_background.is_none());
+        assert_eq!(
+            cfg.pane_title_segments,
+            vec![PaneSegment::Location, PaneSegment::AppName]
+        );
+        assert_eq!(
+            cfg.pane_title_actions,
+            vec![
+                PaneAction::Split,
+                PaneAction::MoveLeft,
+                PaneAction::MoveRight,
+                PaneAction::Close
+            ]
+        );
+        assert!(cfg.pane_info_bar_visible());
     }
 
     #[test]
-    fn pane_title_style_parses_snake_case() {
-        let none: AppearanceConfig = toml::from_str("pane_title_style = \"none\"").unwrap();
-        assert_eq!(none.pane_title_style, PaneTitleStyle::None);
-
-        let filled: AppearanceConfig = toml::from_str(
-            "pane_title_style = \"filled\"\npane_title_color = \"#89b4fa\"\npane_title_background = \"#1e1e2e\"",
+    fn pane_info_segments_and_actions_parse_snake_case() {
+        let cfg: AppearanceConfig = toml::from_str(
+            "pane_title_segments = [\"location\", \"app_name\", \"git_branch\", \"git_status\"]\npane_title_actions = [\"split\", \"close\"]",
         )
         .unwrap();
-        assert_eq!(filled.pane_title_style, PaneTitleStyle::Filled);
-        assert!(filled.pane_title_color.is_some());
-        assert!(filled.pane_title_background.is_some());
+        assert_eq!(
+            cfg.pane_title_segments,
+            vec![
+                PaneSegment::Location,
+                PaneSegment::AppName,
+                PaneSegment::GitBranch,
+                PaneSegment::GitStatus
+            ]
+        );
+        assert_eq!(cfg.pane_title_actions, vec![PaneAction::Split, PaneAction::Close]);
+    }
+
+    #[test]
+    fn empty_pane_info_bar_is_not_visible() {
+        let cfg: AppearanceConfig =
+            toml::from_str("pane_title_segments = []\npane_title_actions = []").unwrap();
+        assert!(!cfg.pane_info_bar_visible());
     }
 
     #[test]

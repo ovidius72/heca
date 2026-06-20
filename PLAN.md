@@ -35,8 +35,14 @@
 **Near-term (active):**
 1. **Pane Runtime State + reactive chrome store + plugin event bus** — the active initiative (design locked
    2026-06-18). Full plan: **`pane-runtime-state-plan.md`**; orchestration board: **`pane-runtime-tasks.md`**
-   (separate from `shared-tasks.md`). **Status: Phase 0 + Phase 1 merged (PRs #129/#130/#131); Phase 2
-   (process detection) next.** Its **Phase 0 IS** the SharedChromeState consumer migration + the new
+   (separate from `shared-tasks.md`). **Status (2026-06-20): Phases 0–6 merged; Phase 7 (pane-info display)
+   in progress on `feature/phase-7` (PR #147) — sidebar card done + an in-pane segmented info bar (config
+   `[appearance] pane_title_segments`/`pane_title_actions`, Geist Mono UI font, configurable `sidebar_width`);
+   remaining = the bar's action buttons (interactive) + decoupling fonts from color themes into `[settings]`
+   (⚠ landmine: `heca-config Theme.font_size` default 32.0 is dead; UI renders at `grid_tron` 15 — normalize
+   before mapping). **Full resume detail in `phase7-pane-info-bar-RESUME.md`.** Phase 8 (plugin
+   `app.on`/`app.state`) is last.**
+   Its **Phase 0 IS** the SharedChromeState consumer migration + the new
    typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
    process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.
    **Phase 2 locked decisions (2026-06-18):** pane lifetime = the terminal/shell (PTY child) — auto-close

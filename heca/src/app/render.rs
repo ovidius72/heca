@@ -296,6 +296,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // padding; the frosted tint (Pass A) fills the full pane, so this padding
     // reads as a frosted inner margin rather than an empty gap.
     let pane_content_inset = state.appearance.effective_pane_padding(theme);
+    // Reserve extra top padding for a shown pane title so terminal content starts
+    // below it (the title straddles the top border and dips into the pane).
+    let pane_title_top_inset = crate::app::terminal_render::pane_title_top_inset(state);
     let pane_positions = state
         .session
         .active_workspace()
@@ -325,7 +328,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
-        let content_rect = stable_tiled_content_rect(px, py, pw, ph, pane_content_inset);
+        let content_rect =
+            stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
         let mount = content_rect.and_then(|content_rect| {
             prepare_terminal_mount(
                 &mut state.backends,
@@ -499,7 +503,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_radius: pane_border_radius,
                     content_inset: pane_content_inset,
                     is_active: pane.is_active,
-                    terminal_bg: pane.mount.as_ref().map(|m| m.snapshot.default_bg),
                 },
             );
         }
@@ -547,7 +550,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
-            let content_rect = stable_floating_content_rect(fx, fy, fw, fh, pane_content_inset);
+            let content_rect =
+                stable_floating_content_rect(fx, fy, fw, fh, pane_content_inset, pane_title_top_inset);
             let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
                     &mut state.backends,
@@ -714,7 +718,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     border_radius: pane_border_radius,
                     content_inset: pane_content_inset,
                     is_active: pane.is_active,
-                    terminal_bg: pane.mount.as_ref().map(|m| m.snapshot.default_bg),
                 },
             );
             float_scene.push(heca_grid_ui::scene::DrawCommand::PopClip);
