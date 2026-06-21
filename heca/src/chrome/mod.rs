@@ -5,7 +5,7 @@
 
 mod state;
 mod events;
-pub use events::{ChromeEvent, ChromeEventBus, ChromeRegion};
+pub use events::{ChromeEvent, ChromeEventBus, ChromeRegion, ChromeSubscription};
 pub use state::{SharedChromeState, WorkspacesContainerState};
 
 use heca_core::layout::types::{Point, Rectangle, Size};
@@ -767,16 +767,7 @@ fn rect_contains(r: Rectangle, p: Point) -> bool {
 }
 
 fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
-    state.with_pane_runtime(pane_id, |runtime| {
-        runtime.map(|runtime| PaneRuntime {
-            program: runtime.program.get_untracked(),
-            status: runtime.status.get_untracked(),
-            cwd: runtime.cwd.get_untracked(),
-            exit_code: runtime.exit_code.get_untracked(),
-            git: runtime.git.get_untracked(),
-            kind: runtime.kind.get_untracked(),
-        })
-    })
+    state.pane_runtime(pane_id)
 }
 
 // Kept short so the branch + git counts fit the sidebar card width without

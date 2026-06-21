@@ -439,10 +439,10 @@ and record the deferred token customization + the event/state model in the archi
 `pluggable-chrome-plugin-plan.md`, `PLAN.md`.
 
 **Tasks**
-- [ ] First-party **`app.on(name, handler)`** + **`app.state.*`** read selectors over the event bus + store (no WASM yet; the seam the WASM bridge will reuse).
-- [ ] `pluggable-chrome-plugin-plan.md`: document **state access for plugins** (read via selectors, react via events) and mark **§5.4 event bus** + **§3.3 shared state** as *foundation landed*; record the **deferred token/segment customization** shape (hybrid segment list + `${token}` templates) under **§8.1/§8.2**.
-- [ ] `PLAN.md`: make this initiative the active near-term entry; link this doc; refresh status.
-- [ ] Tests: a first-party subscriber drives a trivial provider end-to-end.
+- [x] First-party **`app.on(name, handler)`** + **`app.state.*`** read selectors over the event bus + store (no WASM yet; the seam the WASM bridge will reuse).
+- [x] `pluggable-chrome-plugin-plan.md`: document **state access for plugins** (read via selectors, react via events) and mark **§5.4 event bus** + **§3.3 shared state** as *foundation landed*; record the **deferred token/segment customization** shape (hybrid segment list + `${token}` templates) under **§8.1/§8.2**.
+- [x] `PLAN.md`: make this initiative the active near-term entry; link this doc; refresh status.
+- [x] Tests: a first-party subscriber drives a trivial provider end-to-end.
 
 **Acceptance:** a first-party "provider" subscribes via `app.on('pane.status.changed', …)` and reads state via
 a selector; the architecture docs reflect events + state access; PLAN.md points here.

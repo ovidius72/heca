@@ -177,6 +177,22 @@ impl WorkspacesContainerState {
         self.panes.with(|panes| f(panes.get(&pane)))
     }
 
+    /// Snapshot a pane's reactive runtime into a plain [`PaneRuntime`] (the public
+    /// read selector behind the host API's `app.state.pane_runtime`). `None` if the
+    /// pane has no mirrored runtime.
+    pub fn pane_runtime(&self, pane: PaneId) -> Option<PaneRuntime> {
+        self.with_pane_runtime(pane, |runtime| {
+            runtime.map(|r| PaneRuntime {
+                program: r.program.get_untracked(),
+                status: r.status.get_untracked(),
+                cwd: r.cwd.get_untracked(),
+                exit_code: r.exit_code.get_untracked(),
+                git: r.git.get_untracked(),
+                kind: r.kind.get_untracked(),
+            })
+        })
+    }
+
     // ── Writes ──
     pub fn set_active_pane(&self, pane: Option<PaneId>) {
         if self.selection.active_pane.get_untracked() == pane {
