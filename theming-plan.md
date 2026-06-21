@@ -18,8 +18,8 @@ So **"default = grid_tron" and "default = mocha" are both true at different laye
 **Status recap:** Phase 1 ✅ (`heca-theme` crate: grid_tron/mocha/latte + `load_theme`). Phase 2 ✅ except 2.5/2.6 visual verify (showcase cycles themes live, works). **Phase 3 ⏳ is next** (migrate `heca-config` + `heca-grid-ui` to re-export `heca-theme`; wire `[appearance].theme` default `grid_tron`; make `chrome_gui_theme()` a pass-through). Phase 4 deferred.
 
 **Audit reconciliation (external agent, 2026-06-21) — corrections to apply during Phase 3:**
-1. **Default theme:** Decisions Log says `grid_tron`; live default is `mocha` (`heca-config` `default_theme()` + `Theme::default()`). This is an *unimplemented decision*, not a wrong one — `grid_tron` becomes real once 3C.7 wires it. **Open question for the user: keep `grid_tron` as the target default, or accept `mocha`?** Until answered, flipping it is just changing `default_theme()` `"mocha"`→`"grid_tron"`.
-2. **3A.8 is wrong as written:** the theme field **already exists** as `SettingsConfig.theme` (`pub theme: String`, `[settings] theme`), NOT `AppearanceConfig`. So there is **no new field to add** — either keep `[settings].theme` (simplest; just change its default) or *deliberately move* it to `[appearance].theme` (the plan's original intent). Decide, then rewrite 3A.8 + 3C.7 + the Decisions Log "Config field" row accordingly.
+1. **Default theme — RESOLVED (2026-06-21):** default is **`grid_tron`**, overridable via `[settings].theme`; shipped alternatives are **mocha + latte**. Implementation: current code still defaults to `mocha` and `heca-config` only bundles mocha/latte (not grid_tron), so the default flips to grid_tron in **Phase 3** once the app loads from `heca-theme` (which bundles grid_tron) + `default_theme()` is changed. Decisions Log + 3A.8 below rewritten to match.
+2. **3A.8 — RESOLVED:** the theme field already exists as `SettingsConfig.theme` (`[settings] theme`) and **stays there** (the `[appearance].theme` idea is dropped). No new field; only the default value changes in Phase 3. 3A.8 below rewritten.
 3. **Light-theme glow assumption is stale:** the renderer now has explicit light-theme glow support (`heca-renderer/src/scene.rs` + `grid.wgsl`), so "Tron effects don't work on light backgrounds / latte must have glow off" is no longer a hard constraint — latte's glow/scanline values are a palette choice, not forced off. (Verify in 2.6.)
 4. Phase 3 (consumer migration) is still **largely undone** and remains the active phase — `heca-config`/`heca-grid-ui` have no `heca-theme` dep yet; duplicate `color.rs`/`theme.rs` still exist in both. 3C hardcoded branches (`if theme.name == "Catppuccin Mocha"`, `chrome_colors()`, `Color::new(17,17,27,255)`) are all still present and valid targets.
 
@@ -128,11 +128,7 @@ heca-theme  ◄──  heca          (direct, for theme loading)
   - `apply_terminal_overrides()` stays here (app-specific terminal overrides)
 - [ ] 3A.6 Update `heca-config/src/appearance.rs` — replace `use crate::color::Color` with `use heca_theme::Color`
 - [ ] 3A.7 Update all other `heca-config` files that import `Color` or `Theme`
-- [ ] 3A.8 ⚠ **STALE — see Audit reconciliation #2.** The theme field **already exists** as `SettingsConfig.theme` (`[settings] theme`). Do NOT add a new `AppearanceConfig.theme`. Either keep `[settings].theme` (just change its default) or deliberately move it to `[appearance].theme`; then update 3C.7 + the Decisions Log to match. Original (now-wrong) text:
-  ```rust
-  #[serde(default = "default_theme_name")]
-  pub theme: String,  // default: "grid_tron"
-  ```
+- [ ] 3A.8 Theme selection **already exists** as `SettingsConfig.theme` (`[settings] theme`) — do **NOT** add an `AppearanceConfig.theme` field, and do **not** move it. Keep it in `[settings]`. The only change: once the app loads themes from `heca-theme` (3A.4/3A.5 + 3C.7), flip `default_theme()` from `"mocha"` to `"grid_tron"` so the default is grid_tron unless the user sets `[settings].theme`.
 - [ ] 3A.9 Update `heca-config/src/lib.rs` exports
 - [ ] 3A.10 Run `cargo check -p heca-config` and `cargo test -p heca-config`
 - [ ] 3A.11 Run `cargo clippy -p heca-config --all-targets --all-features`
@@ -196,9 +192,9 @@ Areas to migrate:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Default theme | `grid_tron` (target; live=`mocha` until 3C.7 wires it — see Audit reconciliation #1, confirm with user) | User preference — Tron identity is the default |
+| Default theme | `grid_tron` — overridable via `[settings].theme`. Bundled: **grid_tron (default) · mocha · latte**. (Current code still defaults to `mocha`; flips to `grid_tron` in Phase 3 once the app loads from `heca-theme`, which bundles grid_tron — `heca-config` does not.) | User decision (2026-06-21) — Tron identity is the default; mocha/latte are the shipped alternatives |
 | Theme crate | Separate `heca-theme` | Keeps grid-ui lean, avoids pulling in config/filesystem deps |
 | Light theme | Latte — glow now OPTIONAL (renderer supports light-theme glow; see Audit reconciliation #3) | ~~Tron effects don't work on light backgrounds~~ stale |
 | `grid_ares()` | Deferred to Phase 4 | Only used in tests; decide after migration |
-| Config field | `[settings].theme` (already exists; was planned as `[appearance].theme` — see reconciliation #2) | Lives in settings today; move to appearance only if deliberately decided |
+| Config field | `[settings].theme` (already exists) — **stays in `[settings]`** (decided 2026-06-21; the earlier `[appearance].theme` idea is dropped) | One theme key; settings already owns it |
 | Fallback chain | user dir → bundled → grid_tron | Never fails, always has a valid theme |
