@@ -164,7 +164,7 @@ heca-theme  ◄──  heca          (direct, for theme loading)
 - [ ] 3C.4 Fix `heca/src/app/terminal_render.rs` — update `terminal_pane_gui_theme()` to use `heca_theme::Theme`
 - [ ] 3C.5 Fix `heca/src/sidebar/render.rs` — `RenderColors` should derive from theme, not hardcoded arrays
 - [ ] 3C.6 Fix `heca/src/mouse/render.rs` — replace hardcoded `[0.118, 0.118, 0.180, 0.7]` with theme colors
-- [ ] 3C.7 Wire `[appearance].theme` into config loading — `AppearanceConfig.theme` drives which theme is loaded
+- [ ] 3C.7 Wire `[settings].theme` (the existing `SettingsConfig.theme`) into config loading — it drives which theme `heca_theme::load_theme` resolves; change `default_theme()` to `"grid_tron"` so that's the default unless the user overrides. (NOT `[appearance].theme` — decided 2026-06-21.)
 - [ ] 3C.8 Run `cargo check -p heca` and `cargo test -p heca`
 - [ ] 3C.9 Run `cargo clippy --workspace --all-targets --all-features` — fix ALL warnings
 - [ ] Load `rust-skills` and review before marking complete
