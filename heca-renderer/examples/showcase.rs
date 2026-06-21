@@ -669,6 +669,14 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .on_click(|| println!("[showcase] add")),
                     "New pane",
                 ))
+                // `.active(true)`: held-on (toggled) status — a persistent tone-tinted
+                // frame, like the in-pane zoom/float buttons when engaged.
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::FrameCorners).color(theme.foreground).size(20.0))
+                        .active(true)
+                        .on_click(|| println!("[showcase] unzoom")),
+                    "Zoom (active)",
+                ))
                 .child(Tooltip::new(
                     IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
                         .tone(theme.danger)

@@ -509,8 +509,22 @@ pub(crate) struct PaneHeaderContent<'a> {
     /// the rebuild key so the header re-bakes when the pane changes column.
     pub(crate) ws_idx: usize,
     pub(crate) col_idx: usize,
+    /// The pane's column is zoomed or full-width → the `zoom` button shows active.
+    pub(crate) zoomed: bool,
+    /// The pane is in the floating domain → the `float` button shows active and
+    /// non-floating buttons (split/zoom/move) are hidden (per the action policy).
+    pub(crate) floating: bool,
     /// Tooltip keybind hints (tracked in the key so a config reload rebuilds tips).
     pub(crate) hints: &'a PaneActionHints,
+}
+
+/// Whether a pane-action button stays visible when its pane is **floating**, driven
+/// by the shared [`action_policy`](crate::app::interaction) classification (split /
+/// zoom / move are tiled-only ⇒ hidden; float / close are focused-pane-local ⇒ kept).
+fn pane_action_visible_when_floating(action: heca_config::appearance::PaneAction) -> bool {
+    // Policy ignores the concrete ids, so dummy ids are fine here.
+    let (_, wm, _, _) = pane_action_spec(action, PaneId(0), 0, 0);
+    crate::app::interaction::action_allowed_when_floating(&wm)
 }
 
 /// A content key identifying everything the header *renders* — used to decide when
@@ -532,7 +546,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         .map(|&a| content.hints.for_action(a))
         .collect();
     format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{:?}",
+        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
         view.icon,
         view.title,
         view.status,
@@ -545,6 +559,8 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         content.actions,
         content.ws_idx,
         content.col_idx,
+        content.zoomed,
+        content.floating,
         font.to_bits(),
         w_bucket,
         hints,
@@ -562,7 +578,16 @@ pub(crate) fn build_pane_header(
     avail_w: f32,
     ctx: PaneHeaderCtx,
 ) -> Option<Flex> {
-    let buttons_w = header_buttons_width(content.actions, font);
+    // When the pane is floating, only buttons whose action is allowed in the
+    // floating domain stay (split/zoom/move are tiled-only → dropped; float/close
+    // remain) — driven by the shared action policy, not a hardcoded list.
+    let visible_actions: Vec<heca_config::appearance::PaneAction> = content
+        .actions
+        .iter()
+        .copied()
+        .filter(|&a| !content.floating || pane_action_visible_when_floating(a))
+        .collect();
+    let buttons_w = header_buttons_width(&visible_actions, font);
     // The bar yields width to the button cluster first.
     let bar_max = (avail_w - buttons_w - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 }).max(0.0);
     let bar = build_pane_info_bar(
@@ -575,14 +600,25 @@ pub(crate) fn build_pane_header(
         font,
     );
 
-    let buttons = if content.actions.is_empty() {
+    let buttons = if visible_actions.is_empty() {
         None
     } else {
         let cell = header_button_cell(font);
         let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
-        for &action in content.actions {
+        for &action in &visible_actions {
             let (glyph, wm_action, label, needs_focus) =
                 pane_action_spec(action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
+            // Held-on status: zoom is active while the column is zoomed/full-width,
+            // float while the pane is floating (so the icon reads as toggled-on).
+            let is_active = match action {
+                heca_config::appearance::PaneAction::Zoom => content.zoomed,
+                heca_config::appearance::PaneAction::Float => content.floating,
+                _ => false,
+            };
+            // Don't focus-first when floating: the floating pane is already the active
+            // one, and a `FocusPane` from MouseContent is blocked in the floating domain
+            // (logs a spurious "blocked intent"). Unfloat/close act on it directly.
+            let needs_focus = needs_focus && !content.floating;
             // Tooltip = label + the user's configured keybind (prefix symbolized).
             let key = content.hints.for_action(action);
             let tip = if key.is_empty() {
@@ -605,6 +641,7 @@ pub(crate) fn build_pane_header(
             let button = IconButton::new(Icon::new(glyph).color(icon_color).size(header_icon_size(font)))
                 .cell(cell)
                 .tone(tone)
+                .active(is_active)
                 .on_click(move || {
                     use crate::app::interaction::{InteractionIntent, InteractionSource};
                     // Active-targeted actions (zoom/float) act on the focused pane, so
@@ -660,6 +697,8 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
         col_idx: usize,
         name: String,
         runtime: Option<PaneRuntime>,
+        zoomed: bool,
+        floating: bool,
         x: f32,
         y: f32,
         avail_w: f32,
@@ -677,12 +716,28 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             .and_then(|ws| ws.find_pane(pane_id))
             .map(|p| (p.title.clone(), Some(p.runtime.clone())))
             .unwrap_or_else(|| (String::new(), None));
+        // Floating panes aren't in any column (`find_pane_location` returns None);
+        // detect them directly so the bar hides tiled-only buttons + flags float active.
+        let floating = state
+            .session
+            .active_workspace()
+            .map(|ws| ws.floating_panes.iter().any(|f| f.pane.id == pane_id))
+            .unwrap_or(false);
+        let zoomed = !floating
+            && state
+                .session
+                .active_workspace()
+                .and_then(|ws| ws.scrolling.columns.get(col_idx))
+                .map(|c| c.is_zoomed() || c.is_full_width)
+                .unwrap_or(false);
         inputs.push(Input {
             pane_id,
             ws_idx,
             col_idx,
             name,
             runtime,
+            zoomed,
+            floating,
             x,
             y,
             avail_w: (w - 2.0 * HEADER_MARGIN).max(0.0),
@@ -701,6 +756,8 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             actions: &actions,
             ws_idx: input.ws_idx,
             col_idx: input.col_idx,
+            zoomed: input.zoomed,
+            floating: input.floating,
             hints: &state.pane_action_hints,
         };
         let key = pane_header_key(&content, font, input.avail_w);
@@ -2638,6 +2695,19 @@ mod tests {
     }
 
     #[test]
+    fn floating_pane_keeps_only_float_and_close() {
+        use heca_config::appearance::PaneAction;
+        // Driven by the action policy: float/close are focused-pane-local (kept),
+        // split/zoom/move are tiled-only (hidden when floating).
+        assert!(super::pane_action_visible_when_floating(PaneAction::Float));
+        assert!(super::pane_action_visible_when_floating(PaneAction::Close));
+        assert!(!super::pane_action_visible_when_floating(PaneAction::Split));
+        assert!(!super::pane_action_visible_when_floating(PaneAction::Zoom));
+        assert!(!super::pane_action_visible_when_floating(PaneAction::MoveLeft));
+        assert!(!super::pane_action_visible_when_floating(PaneAction::MoveRight));
+    }
+
+    #[test]
     fn pane_header_key_changes_on_content_and_width() {
         use heca_config::appearance::{PaneAction, PaneSegment};
         let programs = ProgramsConfig::default();
@@ -2670,6 +2740,8 @@ mod tests {
                 actions,
                 ws_idx: 0,
                 col_idx,
+                zoomed: false,
+                floating: false,
                 hints,
             }
         }

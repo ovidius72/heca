@@ -27,6 +27,11 @@ const BORDER_W: f32 = 1.3;
 /// Peak alpha of the hover fill (tone-tinted) and border.
 const HOVER_FILL_ALPHA: f32 = 28.0;
 const HOVER_BORDER_ALPHA: f32 = 190.0;
+/// Held-on ("active"/toggled) fill + border alpha — a persistent tone wash with a
+/// firm border, mirroring the [`Toggle`](super::Toggle) on-state. Stronger than the
+/// hover fill so an engaged button reads as a *status*, not a transient hover.
+const ACTIVE_FILL_ALPHA: f32 = 64.0;
+const ACTIVE_BORDER_ALPHA: f32 = 215.0;
 /// Hover glow spread + peak intensity (scaled by the theme `glow_size` + hover).
 const GLOW_RADIUS: f32 = 10.0;
 const GLOW_INTENSITY: f32 = 0.18;
@@ -38,6 +43,9 @@ pub struct IconButton {
     cell: Option<f32>,
     /// Hover/press hue (default: theme accent).
     tone: Option<Color>,
+    /// Held-on visual: a persistent tone-tinted frame marking the button as a
+    /// toggled-on status (e.g. a zoomed column / floating pane). Independent of hover.
+    active: bool,
     show_glow: bool,
     /// Animated hover amount, 0.0 (rest) → 1.0 (hovered).
     progress: f32,
@@ -60,6 +68,7 @@ impl IconButton {
             base,
             cell: None,
             tone: None,
+            active: false,
             show_glow: true,
             progress: 0.0,
             flash: Flash::new(),
@@ -86,6 +95,15 @@ impl IconButton {
     /// Enable or disable the hover glow (default: enabled).
     pub fn glow(mut self, enabled: bool) -> Self {
         self.show_glow = enabled;
+        self
+    }
+
+    /// Mark the button as **held on** (toggled). When `true` it paints a persistent
+    /// tone-tinted fill + firm border (the held version of its hover frame, matching
+    /// the [`Toggle`](super::Toggle) on-state) so it reads as an active *status*
+    /// rather than a passive icon. Hover/press still layer on top.
+    pub fn active(mut self, on: bool) -> Self {
+        self.active = on;
         self
     }
 
@@ -148,17 +166,28 @@ impl Component for IconButton {
         let b = self.base.bounds;
         let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
 
-        // Hover frame: tone-tinted fill + border (+ optional glow), fading in by `p`.
-        if p > 0.0 {
+        // Tone-tinted frame: a persistent wash when `active` (held-on status), the
+        // hover frame fading in by `p`, whichever is stronger. Hover layers on top of
+        // active so an engaged button still brightens under the cursor.
+        let (active_fill, active_border) = if self.active {
+            (ACTIVE_FILL_ALPHA, ACTIVE_BORDER_ALPHA)
+        } else {
+            (0.0, 0.0)
+        };
+        let fill_a = (HOVER_FILL_ALPHA * p).max(active_fill);
+        let border_a = (HOVER_BORDER_ALPHA * p).max(active_border);
+        if fill_a > 0.0 || border_a > 0.0 {
+            // Glow holds steady while active, otherwise tracks the hover amount.
+            let glow_amt = if self.active { 1.0 } else { p };
             let g = (self.show_glow).then_some(Glow {
                 color: glow_c,
                 radius: GLOW_RADIUS,
-                intensity: GLOW_INTENSITY * p,
+                intensity: GLOW_INTENSITY * glow_amt,
             });
             cx.rect(
                 b,
-                tone.with_alpha((HOVER_FILL_ALPHA * p) as u8),
-                Some(Border { color: tone.with_alpha((HOVER_BORDER_ALPHA * p) as u8), width: BORDER_W }),
+                tone.with_alpha(fill_a as u8),
+                Some(Border { color: tone.with_alpha(border_a as u8), width: BORDER_W }),
                 radius,
                 g,
             );
