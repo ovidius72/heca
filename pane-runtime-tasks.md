@@ -251,8 +251,14 @@ phase lands. The user's recalled `pane_actions: ["close","zoom","float","split"]
 - `heca-grid-ui` `Glyph` += `FrameCorners` (Phosphor `frame-corners`, `\e626`) + `Cards` (`cards`, `\e0f8`) — codepoints cross-checked against the embedded Phosphor-Duotone v2.1 font (all 4 existing anchors matched the official CSS) and confirmed present in the font cmap.
 - `chrome/mod.rs` `pane_action_spec`: `zoom → (FrameCorners, WmAction::ZoomColumn)`, `float → (Cards, WmAction::Float)`. These are **active-targeted** so the button does **focus-then-act** (sends `FocusPane{pane_id}` then `ActivateAction` — queued in order) so they land on the clicked pane, not whatever's active. Routed through the **ActionRegistry** like the others. Tooltips show the real keybind via `PaneActionHints` (`zoom_column`/`float` already bound to `prefix+z`/`prefix+f`). RPC parity already existed (`zoom-column`/`float`).
 - Showcase icon strip + `docs/widgets.md` glyph list updated (grid-ui rule); README actions table + `example.config.toml` updated; mapping unit test added.
-- Verification: heca 235 + grid-ui + showcase build green, clippy 0 warnings. (Pre-existing unrelated `heca-config loader::test_fallback_when_config_missing` theme default `latte`/`mocha` mismatch — from the in-progress theming migration, fails with our changes stashed too.)
-**Remaining:** live-verify the two buttons; commit done, push pending OK.
+- Verification: heca 235 + grid-ui + showcase build green, clippy 0 warnings. (Pre-existing unrelated `heca-config loader::test_fallback_when_config_missing` theme default `latte`/`mocha` mismatch — resolved after syncing main / PR #156.)
+**Toggled state + floating filter (2026-06-21, follow-up):**
+- `IconButton::active(bool)` — persistent tone-tinted fill + firm border + held glow, mirroring the `Toggle` on-state (showcase strip + `docs/widgets.md` updated). The zoom button is active while its column is zoomed/full-width; float is active while the pane is floating.
+- **Floating panes show only float + close**, driven by the **action policy** (not a hardcoded list): new `pub(crate) action_allowed_when_floating(&WmAction)` in `interaction.rs` (`FocusedPaneLocal | Global`); the header filters tiled-only buttons (split/zoom/move) when floating. Pane `zoomed`/`floating` state threaded into `PaneHeaderContent` + rebuild key + computed in `sync_pane_headers`.
+- Tests: `pane_action_spec` mapping, `floating_pane_keeps_only_float_and_close`. heca 241 green, clippy 0, showcase builds.
+- **Unfloat log fix:** float button no longer focus-firsts when the pane is floating (`needs_focus && !content.floating`) — a `FocusPane` from MouseContent is blocked in the floating domain and logged a spurious "blocked intent"; unfloat acts on the already-active floating pane directly.
+- **Live-verified by the user (2026-06-21):** active toggled look + floating shows only float/close + clean unfloat (no log).
+**Remaining:** commit + push pending OK (folds into PR #157).
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ---

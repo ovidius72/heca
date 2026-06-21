@@ -503,7 +503,11 @@ with `.size(px)`. Focusable once `.on_click(...)` is set.
 
 - **Construct**: `IconButton::new(Icon)`.
 - **Builders**: `.size(px)` (pin a square), `.tone(Color)` (hover/press hue, default accent),
-  `.glow(bool)`, `.on_click(impl Fn() + 'static)`.
+  `.glow(bool)`, `.active(bool)`, `.on_click(impl Fn() + 'static)`.
+- **`.active(true)`**: held-on (toggled) status — a persistent tone-tinted fill + firm border
+  (the held version of the hover frame, matching the `Toggle` on-state), so the button reads as
+  an active *status* not a passive icon. Hover/press still layer on top. Used by the in-pane
+  zoom/float buttons when their column is zoomed / the pane is floating.
 - **Accessor**: `.hovered() -> Signal<bool>`.
 
 ```rust
