@@ -643,6 +643,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(34.0))
                 .child(Icon::new(Glyph::ArrowLineLeft).color(theme.foreground).size(34.0))
                 .child(Icon::new(Glyph::ArrowLineRight).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::FrameCorners).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::Cards).color(theme.foreground).size(34.0))
                 .child(Icon::new(Glyph::XSquare).color(theme.danger).size(34.0)),
         )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —

@@ -6,6 +6,10 @@ use super::view_offset::{ViewOffset, compute_new_view_offset};
 // Re-export PaneInsertTarget for convenience.
 pub use super::types::PaneInsertTarget;
 
+/// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
+/// column never becomes a thin line.
+pub const MIN_COLUMN_WIDTH: f64 = 150.0;
+
 /// Direction for creating a new column when moving a pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Direction {
@@ -534,15 +538,38 @@ impl ScrollingSpace {
     /// NIRI behavior: only the active column changes. Other columns keep their widths.
     /// If the total exceeds the viewport, the view scrolls horizontally.
     pub fn resize_active_column(&mut self, delta: f64) {
-        if self.active_column_idx >= self.columns.len() {
+        self.resize_column(self.active_column_idx, delta);
+    }
+
+    /// Resize column `idx` by `delta` (a proportion delta for `Proportion` widths,
+    /// or a fraction of the working width for `Fixed`). Mutates the column's
+    /// **canonical** [`ColumnWidth`] — so the change persists through later
+    /// `update_all_column_widths` recomputes — and preserves the view position. Used
+    /// by the keyboard resize (active column), the mouse divider drag (any column),
+    /// and RPC.
+    pub fn resize_column(&mut self, idx: usize, delta: f64) {
+        if idx >= self.columns.len() {
             return;
         }
 
-        let old_xs = self.capture_column_positions();
-        let old_view_pos = self.view_pos();
-        let available_width = (self.working_area.size.w - self.options.gaps * 2.0).max(50.0);
+        let working_w = self.working_area.size.w;
+        let gaps = self.options.gaps;
+        // A column may grow to fill the full visible width and shrink no smaller
+        // than MIN_COLUMN_WIDTH (so it never becomes a thin line).
+        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
+        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`:
+        // width = (working_w - gaps) * p - gaps), and the proportion that fills the
+        // visible width (p = 1.0 ⇒ width = working_w - 2·gaps = available_width).
+        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
 
-        if let Some(col) = self.columns.get_mut(self.active_column_idx) {
+        // Anchor on the **resized** column's left edge (its on-screen offset from
+        // the view) so its right edge — the divider being dragged — tracks the
+        // cursor, regardless of which column is active. Anchoring on the *active*
+        // column (the old `finish_active_column_width_change`) made a left column
+        // grow leftward when the right column was focused (the "wrong side" bug).
+        let old_rel = self.column_x(idx) - self.view_pos();
+
+        if let Some(col) = self.columns.get_mut(idx) {
             let base_width = if col.is_zoomed() {
                 ColumnWidth::Fixed(available_width)
             } else {
@@ -550,10 +577,10 @@ impl ScrollingSpace {
             };
             let new_width = match base_width {
                 ColumnWidth::Proportion(p) => {
-                    ColumnWidth::Proportion((p + delta).clamp(0.05, 0.95))
+                    ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0))
                 }
                 ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
-                    (w + delta * self.working_area.size.w).clamp(50.0, available_width),
+                    (w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width),
                 ),
             };
             col.width = new_width;
@@ -561,7 +588,22 @@ impl ScrollingSpace {
             col.is_full_width = false;
         }
 
-        self.finish_active_column_width_change(&old_xs, old_view_pos);
+        self.update_all_column_widths();
+        // Restore the resized column's on-screen left edge by shifting the view by
+        // the amount it moved. No active-column recenter / per-move animation —
+        // those fight a smooth per-pixel drag.
+        let new_rel = self.column_x(idx) - self.view_pos();
+        self.view_offset.offset(new_rel - old_rel);
+    }
+
+    /// Resize the height of pane `pane_idx` within column `col_idx` by `delta`
+    /// logical px (mouse divider drag / RPC). No-op for single-pane columns or
+    /// out-of-range indices. Mirrors the keyboard `resize_active_pane_height`.
+    pub fn resize_pane_height(&mut self, col_idx: usize, pane_idx: usize, delta: f64) {
+        let (working_h, gaps) = (self.working_area.size.h, self.options.gaps);
+        if let Some(col) = self.columns.get_mut(col_idx) {
+            col.resize_pane_height(pane_idx, delta, working_h, gaps);
+        }
     }
 
     /// Move the active pane to the previous column (left).
@@ -1120,6 +1162,55 @@ mod tests {
         assert!(space.toggle_active_column_zoom());
         assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
         assert!(!space.columns[0].is_zoomed());
+    }
+
+    #[test]
+    fn resize_column_persists_through_recompute_and_add() {
+        let mut space = space_with_columns(2); // [1,2] each Proportion(0.5)
+        space.resize_column(0, 0.2);
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
+        let w0 = space.column_widths[0];
+        // A later layout mutation recomputes the width cache from the canonical
+        // `col.width` — the resize must NOT be recomputed away (the niri landmine).
+        space.update_all_column_widths();
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
+        assert_eq!(space.column_widths[0], w0, "recompute preserves the manual resize");
+        // Adding a column must not reflow column 0 (independent proportions).
+        space.add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7), "resize survives add");
+    }
+
+    #[test]
+    fn resize_column_clamps_and_ignores_out_of_range() {
+        let mut space = space_with_columns(2);
+        space.resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0)
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(1.0));
+        // A huge negative delta clamps to the min-width proportion (small, non-zero).
+        space.resize_column(1, -10.0);
+        match space.columns[1].width {
+            ColumnWidth::Proportion(p) => {
+                assert!(p > 0.0 && p < 0.5, "clamped to a small but non-zero min, got {p}");
+            }
+            other => panic!("expected a proportion, got {other:?}"),
+        }
+        space.resize_column(99, 0.1); // out of range → no-op, no panic
+        assert_eq!(space.columns.len(), 2);
+    }
+
+    #[test]
+    fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+        // Single-pane column → no-op (the lone pane fills the column).
+        space.resize_pane_height(0, 0, 30.0);
+        assert_eq!(space.columns[0].panes[0].preferred_height, None);
+        // Stack a second pane, then the resize takes effect.
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
+        space.resize_pane_height(0, 0, 30.0);
+        assert!(space.columns[0].panes[0].preferred_height.is_some());
+        // Out-of-range column / pane index → no panic.
+        space.resize_pane_height(9, 0, 30.0);
+        space.resize_pane_height(0, 9, 30.0);
     }
 
     #[test]

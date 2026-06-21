@@ -357,6 +357,8 @@ pub(crate) struct PaneActionHints {
     pub(crate) move_left: String,
     pub(crate) move_right: String,
     pub(crate) close: String,
+    pub(crate) zoom: String,
+    pub(crate) float: String,
 }
 
 impl PaneActionHints {
@@ -377,6 +379,8 @@ impl PaneActionHints {
             move_left: hint("move_pane_left"),
             move_right: hint("move_pane_right"),
             close: hint("close"),
+            zoom: hint("zoom_column"),
+            float: hint("float"),
         }
     }
 
@@ -387,6 +391,8 @@ impl PaneActionHints {
             PaneAction::MoveLeft => &self.move_left,
             PaneAction::MoveRight => &self.move_right,
             PaneAction::Close => &self.close,
+            PaneAction::Zoom => &self.zoom,
+            PaneAction::Float => &self.float,
         }
     }
 }
@@ -447,34 +453,47 @@ fn format_binding(s: &str, prefix: &crate::keymap::KeyCombo) -> String {
     out.trim().to_string()
 }
 
-/// Map a configured [`PaneAction`] to its (icon, parameterized WM action, label).
+/// Map a configured [`PaneAction`] to its `(icon, WM action, label, needs_focus)`.
+///
+/// `needs_focus` is `true` for **active-targeted** unit actions (`ZoomColumn`/
+/// `Float`) — the button must focus its owning pane before dispatching so the
+/// action lands on the clicked pane, not whatever happened to be active. The other
+/// buttons carry the pane/column in the action itself, so they don't steal focus.
 fn pane_action_spec(
     action: heca_config::appearance::PaneAction,
-    ctx: &PaneHeaderCtx,
-) -> (Glyph, crate::input::WmAction, &'static str) {
+    pane_id: PaneId,
+    ws_idx: usize,
+    col_idx: usize,
+) -> (Glyph, crate::input::WmAction, &'static str, bool) {
     use crate::input::WmAction;
     use heca_config::appearance::PaneAction;
     match action {
         PaneAction::Split => (
             Glyph::SquareSplitVertical,
-            WmAction::AddPaneToColumn { ws_idx: ctx.ws_idx, col_idx: ctx.col_idx },
+            WmAction::AddPaneToColumn { ws_idx, col_idx },
             "Add pane",
+            false,
         ),
         PaneAction::MoveLeft => (
             Glyph::ArrowLineLeft,
-            WmAction::MovePaneLeft { pane_id: Some(ctx.pane_id) },
+            WmAction::MovePaneLeft { pane_id: Some(pane_id) },
             "Move left",
+            false,
         ),
         PaneAction::MoveRight => (
             Glyph::ArrowLineRight,
-            WmAction::MovePaneRight { pane_id: Some(ctx.pane_id) },
+            WmAction::MovePaneRight { pane_id: Some(pane_id) },
             "Move right",
+            false,
         ),
         PaneAction::Close => (
             Glyph::XSquare,
-            WmAction::ClosePaneById { pane_id: ctx.pane_id },
+            WmAction::ClosePaneById { pane_id },
             "Close",
+            false,
         ),
+        PaneAction::Zoom => (Glyph::FrameCorners, WmAction::ZoomColumn, "Zoom", true),
+        PaneAction::Float => (Glyph::Cards, WmAction::Float, "Float", true),
     }
 }
 
@@ -562,7 +581,8 @@ pub(crate) fn build_pane_header(
         let cell = header_button_cell(font);
         let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
         for &action in content.actions {
-            let (glyph, wm_action, label) = pane_action_spec(action, &ctx);
+            let (glyph, wm_action, label, needs_focus) =
+                pane_action_spec(action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
             // Tooltip = label + the user's configured keybind (prefix symbolized).
             let key = content.hints.for_action(action);
             let tip = if key.is_empty() {
@@ -581,15 +601,24 @@ pub(crate) fn build_pane_header(
                 (theme.foreground, theme.accent)
             };
             let proxy = ctx.event_proxy.clone();
+            let pane_id = ctx.pane_id;
             let button = IconButton::new(Icon::new(glyph).color(icon_color).size(header_icon_size(font)))
                 .cell(cell)
                 .tone(tone)
                 .on_click(move || {
+                    use crate::app::interaction::{InteractionIntent, InteractionSource};
+                    // Active-targeted actions (zoom/float) act on the focused pane, so
+                    // focus this pane first — the events are queued and processed in
+                    // order on the UI thread, so the action lands on this pane.
+                    if needs_focus {
+                        let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                            source: InteractionSource::MouseContent,
+                            intent: InteractionIntent::FocusPane { pane_id },
+                        });
+                    }
                     let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                        source: crate::app::interaction::InteractionSource::MouseContent,
-                        intent: crate::app::interaction::InteractionIntent::ActivateAction(
-                            wm_action.clone(),
-                        ),
+                        source: InteractionSource::MouseContent,
+                        intent: InteractionIntent::ActivateAction(wm_action.clone()),
                     });
                 });
             row = row.child(Tooltip::new(button, tip).side(TooltipSide::Bottom));
@@ -2577,6 +2606,35 @@ mod tests {
         );
         assert!(one > 0.0);
         assert!(three > one, "more buttons ⇒ wider cluster");
+    }
+
+    #[test]
+    fn pane_action_spec_maps_kinds_to_actions() {
+        use crate::input::WmAction;
+        use heca_config::appearance::PaneAction;
+        let pid = PaneId(7);
+
+        // Pane-parameterized actions carry the pane/column and don't need focus.
+        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Close, pid, 2, 3);
+        assert_eq!(g, Glyph::XSquare);
+        assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
+        assert!(!focus);
+
+        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Split, pid, 2, 3);
+        assert_eq!(g, Glyph::SquareSplitVertical);
+        assert_eq!(a, WmAction::AddPaneToColumn { ws_idx: 2, col_idx: 3 });
+        assert!(!focus);
+
+        // Active-targeted actions use the requested icons + need focus-first.
+        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Zoom, pid, 0, 0);
+        assert_eq!(g, Glyph::FrameCorners);
+        assert_eq!(a, WmAction::ZoomColumn);
+        assert!(focus);
+
+        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Float, pid, 0, 0);
+        assert_eq!(g, Glyph::Cards);
+        assert_eq!(a, WmAction::Float);
+        assert!(focus);
     }
 
     #[test]

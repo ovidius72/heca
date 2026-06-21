@@ -11,6 +11,7 @@ mod hit_test;
 mod interactive;
 mod release;
 mod render;
+pub(crate) mod resize;
 mod surface_left;
 mod target;
 
@@ -26,8 +27,19 @@ use winit::event::{ElementState, MouseButton};
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
 /// (e.g. focus-follows-mouse triggered), or `None` for internal state updates.
 pub fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) -> Option<WmAction> {
+    // A divider resize-drag takes priority over DnD/focus-follow: it emits a
+    // parameterized resize action for the caller to dispatch through the registry.
+    if state.mouse.resize.is_some() {
+        return resize::on_drag_move(state, pos);
+    }
     drag::on_cursor_moved(state, pos);
     None
+}
+
+/// Whether a divider resize-drag is currently in flight. Callers gate the normal
+/// hover/forward paths on this (mirrors the `drag_ctx.is_dragging()` guard).
+pub(crate) fn is_resizing(state: &AppState) -> bool {
+    state.mouse.resize.is_some()
 }
 
 /// Cursor policy: pick the OS cursor for the current state and apply it to the
@@ -43,6 +55,9 @@ pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
     // move-vs-swap distinction lives on the drag ghost + the on-target indicator.
     let icon = if state.mouse.drag_ctx.is_dragging() {
         CursorIcon::Grabbing
+    } else if let Some(resize_icon) = resize::cursor_for(state, pos) {
+        // Active resize-drag → the drag axis; otherwise the divider under the cursor.
+        resize_icon
     } else if crate::chrome::sidebar_drag_source(state, pos).is_some() {
         CursorIcon::Grab
     } else {
@@ -158,6 +173,10 @@ pub fn on_mouse_input(
             }
         }
         (MouseButton::Left, ElementState::Released) => {
+            // End a divider resize-drag first (left-button gap drag).
+            if resize::on_release(state) {
+                return None;
+            }
             // Check for interactive move release first.
             if let Some(InteractiveMovePhase::Starting { .. }) = state.mouse.interactive_move {
                 interactive::cancel_interactive_move(state);
@@ -189,6 +208,18 @@ pub fn on_mouse_input(
                         }
                     }
                 }
+            }
+        }
+        // Right-button fallback for divider resize: hold right-button on a pane to
+        // resize along the nearer axis (for when the thin gap fights the terminal).
+        (MouseButton::Right, ElementState::Pressed) => {
+            if resize::on_right_press(state, pos) {
+                return None;
+            }
+        }
+        (MouseButton::Right, ElementState::Released) => {
+            if resize::on_release(state) {
+                return None;
             }
         }
         _ => {}

@@ -2,6 +2,10 @@ use super::animation::{Animated, Animation, AnimationConfig};
 use super::types::*;
 use crate::runtime::{PaneClosePolicy, PaneRuntime};
 
+/// Minimum height (logical px) a pane may be shrunk to by a manual resize, so a
+/// pane never collapses to a thin sliver.
+pub const MIN_PANE_HEIGHT: f64 = 100.0;
+
 /// A column of panes arranged according to a layout mode.
 ///
 /// In NIRI terms, this is a `Column<W>` that contains `Vec<Tile<W>>`.
@@ -215,13 +219,30 @@ impl Column {
     /// Resize the active pane's height by a delta (pixels).
     /// Only affects panes with preferred_height; others remain auto.
     pub fn resize_active_pane_height(&mut self, delta: f64, working_height: f64, gaps: f64) {
-        if self.panes.len() <= 1 {
-            return; // No resize when only one pane
+        self.resize_pane_height(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Resize pane `pane_idx`'s height by `delta` logical px. No-op for single-pane
+    /// columns or an out-of-range index. Used by the keyboard resize (active pane),
+    /// the mouse divider drag (any pane), and RPC.
+    pub fn resize_pane_height(&mut self, pane_idx: usize, delta: f64, working_height: f64, gaps: f64) {
+        if self.panes.len() <= 1 || pane_idx >= self.panes.len() {
+            return;
         }
-        let idx = self.active_pane_idx;
-        let current = self.panes[idx].preferred_height.unwrap_or(200.0);
-        let new_h = (current + delta).clamp(50.0, working_height - gaps * 2.0);
-        self.panes[idx].preferred_height = Some(new_h);
+        // Base the new height on the pane's **actual current** height, not a fixed
+        // 200px default: a pane that was still auto-sized (even split) would jump to
+        // ~200px on the first drag delta otherwise. Falls back to 200px only when no
+        // layout has been computed yet (e.g. a pure unit test).
+        let current = self.panes[pane_idx].preferred_height.unwrap_or_else(|| {
+            self.pane_sizes
+                .get(pane_idx)
+                .map(|s| s.h)
+                .filter(|h| *h > 0.0)
+                .unwrap_or(200.0)
+        });
+        let max_h = (working_height - gaps * 2.0).max(MIN_PANE_HEIGHT);
+        let new_h = (current + delta).clamp(MIN_PANE_HEIGHT, max_h);
+        self.panes[pane_idx].preferred_height = Some(new_h);
         self.compute_pane_sizes(working_height, gaps);
     }
 

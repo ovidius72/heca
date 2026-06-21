@@ -66,6 +66,10 @@ pub enum PaneAction {
     MoveRight,
     /// Close the pane.
     Close,
+    /// Toggle zoom (maximise) for the pane's column.
+    Zoom,
+    /// Toggle floating for the pane.
+    Float,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

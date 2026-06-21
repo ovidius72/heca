@@ -180,12 +180,38 @@ pub struct DetachedPane {
     pub original_pane: usize,
 }
 
+/// Which layout divider a mouse resize-drag is acting on.
+///
+/// Indices are into the **active workspace's** `scrolling.columns` (the same
+/// indices [`crate::find_pane_location`] returns), so they map straight onto
+/// [`heca_core::layout::scrolling::ScrollingSpace::resize_column`] /
+/// `resize_pane_height`. A resize-drag never leaves the active workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResizeDivider {
+    /// The vertical gap to the right of column `col` → resize that column's width.
+    Column { col: usize },
+    /// The horizontal gap below pane `pane` in column `col` → resize that pane's height.
+    Pane { col: usize, pane: usize },
+}
+
+/// An in-flight mouse resize-drag (drag a column/pane divider). Distinct from the
+/// DnD item-move surfaces: this mutates layout sizes, not pane positions.
+#[derive(Clone, Copy, Debug)]
+pub struct ResizeDrag {
+    pub divider: ResizeDivider,
+    /// Cursor position at the last applied delta; the next move resizes by the
+    /// incremental difference so the divider tracks the pointer.
+    pub last_pos: (f32, f32),
+}
+
 /// All mouse-related runtime state.
 #[derive(Clone, Debug)]
 pub struct MouseState {
     pub pos: (f32, f32),
     /// Surface drag coordinator (sidebar, inspector, etc.).
     pub drag_ctx: DragContext<AppDragPayload>,
+    /// In-flight column/pane divider resize-drag (`None` when not resizing).
+    pub resize: Option<ResizeDrag>,
     /// Content-area interactive move state (separate from surface drags).
     pub interactive_move: Option<InteractiveMovePhase>,
     /// Pane being dragged (detached from layout).
@@ -207,6 +233,7 @@ impl MouseState {
         Self {
             pos: (0.0, 0.0),
             drag_ctx: DragContext::new(),
+            resize: None,
             interactive_move: None,
             detached_pane: None,
             insert_hint: None,

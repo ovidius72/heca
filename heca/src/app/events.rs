@@ -142,13 +142,17 @@ pub(crate) fn handle_window_event(
             // only sends presses. NOT during a drag: otherwise pane rows would light
             // their hover as if droppable, contradicting the source-aware drop
             // indicator (a column drag targets columns, not the panes inside them).
-            if !state.mouse.drag_ctx.is_dragging() {
+            if !state.mouse.drag_ctx.is_dragging() && !mouse::is_resizing(state) {
                 crate::chrome::chrome_dispatch_move(state, pos);
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
                 crate::chrome::dispatch_pane_header_move(state, pos);
             }
-            forward_mouse_move(state, pos);
+            // Don't forward moves to the terminal while resizing a divider — the
+            // gesture owns the pointer until release.
+            if !mouse::is_resizing(state) {
+                forward_mouse_move(state, pos);
+            }
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
             mouse::update_cursor(state, pos);
             state.mark_full_redraw();
@@ -174,12 +178,31 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
+            // Divider resize: a plain left-press on a column/pane divider starts a
+            // resize-drag. Only an actual divider hit consumes — a miss falls
+            // through to the normal content/drag paths. A modifier-held press
+            // (meta-drag) falls through. Checked after the header-button block
+            // because the lower pane's header band sits on top of the divider.
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Pressed
+                && !mouse::interactive_move_modifier_held(state)
+                && mouse::resize::on_press(state, state.mouse.pos)
+            {
+                mouse::update_cursor(state, state.mouse.pos);
+                state.mark_full_redraw();
+                return;
+            }
             let interactive_before = state.mouse.interactive_move.is_some();
+            let resize_before = mouse::is_resizing(state);
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
             }
             let started_interactive_move = !interactive_before && state.mouse.interactive_move.is_some();
-            if !started_interactive_move {
+            // A button event that started, drove, or ended a divider resize (e.g.
+            // the right-button fallback press, or a release) must not also reach the
+            // terminal — the gesture consumed it.
+            let resize_consumed = resize_before || mouse::is_resizing(state);
+            if !started_interactive_move && !resize_consumed {
                 forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)

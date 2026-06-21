@@ -472,16 +472,20 @@ resizing. Spun out of the Phase 7 pane-action discussion (2026-06-20): it's a **
 resize actions), `heca/src/app/terminal_host.rs` (pane-rect geometry for hit-testing).
 
 **Tasks**
-- [ ] **Resolve persistence** (niri #2) — test whether manual resize survives subsequent layout mutations; fix
-      the recompute model if not.
-- [ ] **Parameterized core resize:** `resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)` (active-only
-      today). RPC parity for the new actions.
-- [ ] **Resize-drag gesture** in `mouse.rs` — distinct from the DnD item-move surfaces; press-on-divider →
-      incremental-delta drag → release commits. Plus the right-button-hold fallback.
-- [ ] **Divider hit-testing** — column gaps + intra-column pane gaps from laid-out pane rects.
-- [ ] **Resize cursor** — horizontal/vertical `CursorIcon` via the P2 cursor-policy helper (no OS cursor set
-      today).
-- [ ] Tests: pure resize math (column width + pane height) given a layout.
+- [x] **Resolve persistence** (niri #2) — RESOLVED in the foundation commit: `resize_*` mutate the canonical
+      `ColumnWidth`/pane `preferred_height`; `update_all_column_widths` only recomputes the derived cache from it,
+      so a manual resize persists through later mutations. Covered by `resize_column_persists_through_recompute_and_add`.
+- [x] **Parameterized core resize:** `ScrollingSpace::resize_column(col_idx, delta)` /
+      `resize_pane_height(col_idx, pane_idx, delta)` (foundation). RPC parity = new `WmAction::ResizeColumnBy` /
+      `ResizePaneHeightBy` + RPC `resize-column <col> <delta>` / `resize-pane-height <col> <pane> <delta>`.
+- [x] **Resize-drag gesture** in `heca/src/mouse/resize.rs` — distinct from the DnD item-move surfaces; left-press
+      on a divider → incremental-delta drag (each move emits a parameterized resize action) → release commits.
+      Plus the **right-button-hold fallback** (resize the pane under the cursor along the nearer axis).
+- [x] **Divider hit-testing** — pure `divider_at()` over `pane_outer_frames` + `find_pane_location`: pane gaps
+      first (RowResize), column gaps (ColResize), ~6px grab; floats excluded.
+- [x] **Resize cursor** — `ColResize`/`RowResize` via `mouse::update_cursor` (the P2 cursor-policy helper): drag
+      axis while resizing, divider axis on hover.
+- [x] Tests: pure resize math (foundation) + `divider_at`/`fallback_divider` hit-test geometry + RPC parse tests.
 
 **Acceptance:** dragging a column divider resizes that column (and the change persists); dragging a pane gap
 resizes pane height; right-button-hold fallback works; resize cursor shows on the dividers; reachable from

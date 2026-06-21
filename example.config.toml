@@ -51,10 +51,11 @@ terminal_floating_blur = 0
 #   "location" | "app_name" | "git_branch" | "git_status"
 # pane_title_segments = ["location", "app_name"]
 # Right side — action buttons, in order ([] hides them):
-#   "split" | "move_left" | "move_right" | "close"
+#   "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
 # Default is split + close (panes are already movable by mouse drag); add
-# "move_left"/"move_right" here if you want move buttons in the bar too.
-# pane_title_actions  = ["split", "close"]
+# "zoom"/"float"/"move_left"/"move_right" here for more buttons. Each button's
+# tooltip shows its real configured keybinding.
+# pane_title_actions  = ["split", "zoom", "float", "close"]
 # Both empty ⇒ no bar and no reserved top padding.
 
 [keys]
