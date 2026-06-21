@@ -6,6 +6,10 @@ use super::view_offset::{ViewOffset, compute_new_view_offset};
 // Re-export PaneInsertTarget for convenience.
 pub use super::types::PaneInsertTarget;
 
+/// Minimum width (logical px) a column may be shrunk to by a manual resize, so a
+/// column never becomes a thin line.
+pub const MIN_COLUMN_WIDTH: f64 = 150.0;
+
 /// Direction for creating a new column when moving a pane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Direction {
@@ -548,9 +552,22 @@ impl ScrollingSpace {
             return;
         }
 
-        let old_xs = self.capture_column_positions();
-        let old_view_pos = self.view_pos();
-        let available_width = (self.working_area.size.w - self.options.gaps * 2.0).max(50.0);
+        let working_w = self.working_area.size.w;
+        let gaps = self.options.gaps;
+        // A column may grow to fill the full visible width and shrink no smaller
+        // than MIN_COLUMN_WIDTH (so it never becomes a thin line).
+        let available_width = (working_w - gaps * 2.0).max(MIN_COLUMN_WIDTH);
+        // The proportion that resolves to MIN_COLUMN_WIDTH (see `Column::resolve_width`:
+        // width = (working_w - gaps) * p - gaps), and the proportion that fills the
+        // visible width (p = 1.0 ⇒ width = working_w - 2·gaps = available_width).
+        let min_prop = ((MIN_COLUMN_WIDTH + gaps) / (working_w - gaps)).clamp(0.01, 1.0);
+
+        // Anchor on the **resized** column's left edge (its on-screen offset from
+        // the view) so its right edge — the divider being dragged — tracks the
+        // cursor, regardless of which column is active. Anchoring on the *active*
+        // column (the old `finish_active_column_width_change`) made a left column
+        // grow leftward when the right column was focused (the "wrong side" bug).
+        let old_rel = self.column_x(idx) - self.view_pos();
 
         if let Some(col) = self.columns.get_mut(idx) {
             let base_width = if col.is_zoomed() {
@@ -560,10 +577,10 @@ impl ScrollingSpace {
             };
             let new_width = match base_width {
                 ColumnWidth::Proportion(p) => {
-                    ColumnWidth::Proportion((p + delta).clamp(0.05, 0.95))
+                    ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0))
                 }
                 ColumnWidth::Fixed(w) => ColumnWidth::Fixed(
-                    (w + delta * self.working_area.size.w).clamp(50.0, available_width),
+                    (w + delta * working_w).clamp(MIN_COLUMN_WIDTH, available_width),
                 ),
             };
             col.width = new_width;
@@ -571,7 +588,12 @@ impl ScrollingSpace {
             col.is_full_width = false;
         }
 
-        self.finish_active_column_width_change(&old_xs, old_view_pos);
+        self.update_all_column_widths();
+        // Restore the resized column's on-screen left edge by shifting the view by
+        // the amount it moved. No active-column recenter / per-move animation —
+        // those fight a smooth per-pixel drag.
+        let new_rel = self.column_x(idx) - self.view_pos();
+        self.view_offset.offset(new_rel - old_rel);
     }
 
     /// Resize the height of pane `pane_idx` within column `col_idx` by `delta`
@@ -1161,8 +1183,16 @@ mod tests {
     #[test]
     fn resize_column_clamps_and_ignores_out_of_range() {
         let mut space = space_with_columns(2);
-        space.resize_column(0, 10.0); // huge delta clamps to the 0.95 cap
-        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.95));
+        space.resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0)
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(1.0));
+        // A huge negative delta clamps to the min-width proportion (small, non-zero).
+        space.resize_column(1, -10.0);
+        match space.columns[1].width {
+            ColumnWidth::Proportion(p) => {
+                assert!(p > 0.0 && p < 0.5, "clamped to a small but non-zero min, got {p}");
+            }
+            other => panic!("expected a proportion, got {other:?}"),
+        }
         space.resize_column(99, 0.1); // out of range → no-op, no panic
         assert_eq!(space.columns.len(), 2);
     }
