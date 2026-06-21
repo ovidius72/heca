@@ -192,15 +192,16 @@ pub(crate) fn paint_terminal_pane_shell(
     {
         let mut cx = PaintCx::new(scene, &theme);
         // Distinguishable header band behind the title, drawn *before* the frame so
-        // the rounded border traces over it. Same surface as the Tag pill, so the
-        // header reads as one cohesive strip.
+        // the rounded border traces over it. Theme-driven from the dedicated
+        // `top_bottom_pane_background` token rather than the generic sidebar/card
+        // surface.
         if show_bar {
             cx.rect(
                 GuiRectangle::new(
                     GuiPoint::new(x as f64, y as f64),
                     GuiSize::new(w as f64, title_bar_reserve(font) as f64),
                 ),
-                bar_theme.surface,
+                to_gui_color(state.theme.effective_top_bottom_pane_background().to_f32x4()),
                 None,
                 border_radius,
                 None,

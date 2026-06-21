@@ -354,7 +354,11 @@ fn queue_cursor_overlay(
 
     let cursor_x = px + cursor.col as f32 * cell_w;
     let cursor_y = py + cursor.row as f32 * cell_h;
-    let cursor_color = [1.0, 1.0, 1.0, 0.85];
+    let mut cursor_color = snapshot.cursor_color;
+    if cursor_color[3] <= f32::EPSILON {
+        cursor_color = snapshot.default_fg;
+        cursor_color[3] = 0.85;
+    }
     match cursor.shape {
         TerminalCursorShape::Block => {
             primitive_renderer.draw_rect(cursor_x, cursor_y, cell_w, cell_h, cursor_color);

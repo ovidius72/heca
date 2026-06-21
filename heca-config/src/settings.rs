@@ -27,7 +27,7 @@ pub enum ModifierKey {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn default_theme() -> String {
-    "mocha".to_string()
+    "grid_tron".to_string()
 }
 
 fn default_mouse() -> bool {
@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn test_settings_config_default_values() {
         let s = SettingsConfig::default();
-        assert_eq!(s.theme, "mocha");
+        assert_eq!(s.theme, "grid_tron");
         assert!(s.mouse);
         assert_eq!(s.window_width, 1280);
         assert_eq!(s.window_height, 800);

@@ -182,6 +182,7 @@ impl TerminalEngine {
             cell_h,
             default_fg: to_rgba(palette.resolve_fg(ColorAttribute::Default)),
             default_bg: to_rgba(palette.resolve_bg(ColorAttribute::Default)),
+            cursor_color: to_rgba(palette.cursor_bg),
             cursor: TerminalCursor {
                 col: cursor.x.min(cols.saturating_sub(1)),
                 row: (cursor.y.max(0) as usize).min(rows.saturating_sub(1)),

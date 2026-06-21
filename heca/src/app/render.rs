@@ -23,6 +23,17 @@ use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::TextRenderer;
 
+fn content_canvas_fill(
+    theme: &heca_config::theme::Theme,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) -> Option<[f32; 4]> {
+    appearance.is_transparent().then(|| {
+        let mut bg = theme.background.to_f32x4();
+        bg[3] = appearance.opacity();
+        bg
+    })
+}
+
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
     match input_mode {
@@ -215,29 +226,29 @@ pub(crate) fn render_frame(state: &mut AppState) {
 
     let chrome_text = crate::chrome::CHROME_TEXT_SIZE;
     let tb = &chrome;
-    let side_bg = if theme.name == "Catppuccin Mocha" {
-        [0.067, 0.067, 0.106, 1.0]
-    } else {
-        [0.953, 0.957, 0.973, 1.0]
-    };
-    // Frosted chrome: when transparent, draw chrome backgrounds (tab bar,
-    // sidebars, status bar) translucent so the vibrancy shows through. Panes and
-    // text stay opaque. (Per-pane translucency comes later, driven by a protocol.)
-    let chrome_alpha = state.appearance.chrome_opacity();
-    let side_bg = [side_bg[0], side_bg[1], side_bg[2], chrome_alpha];
-    let collapsed_sidebar_bg = [
-        side_bg[0],
-        side_bg[1],
-        side_bg[2],
-        (0.5 + 0.5 * state.appearance.opacity()).clamp(0.0, 1.0),
-    ];
+    // Frosted chrome colors come from the loaded theme's surface tone, with
+    // alpha derived from the current appearance settings.
+    let (side_bg, collapsed_sidebar_bg, _) = crate::chrome::chrome_colors(state);
+    let side_bg = side_bg.to_f32x4();
+    let collapsed_sidebar_bg = collapsed_sidebar_bg.to_f32x4();
     state
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
-    // The scrolling content area is left TRANSPARENT (no canvas fill) so empty
-    // (pane-less) space shows the frosted vibrancy, per design. Panes are still
-    // clipped to `pane_area` below so they don't bleed under the chrome.
+    // When the window is transparent, tint the scrolling content canvas with the
+    // loaded theme background at the configured app opacity. This keeps light
+    // themes coherent instead of showing a dark desktop hole in pane-less space,
+    // while still honoring transparency. Panes are still clipped to `pane_area`
+    // below so they don't bleed under the chrome.
+    if let Some(content_bg) = content_canvas_fill(theme, &state.appearance) {
+        state.primitive_renderer.draw_rect(
+            pane_area.loc.x as f32,
+            pane_area.loc.y as f32,
+            pane_area.size.w as f32,
+            pane_area.size.h as f32,
+            content_bg,
+        );
+    }
 
     let active_pane_id = state
         .session
@@ -1048,10 +1059,31 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 
 #[cfg(test)]
 mod tests {
-    use super::status_mode_parts;
+    use super::{content_canvas_fill, status_mode_parts};
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;
     use heca_core::layout::PaneId;
+
+    #[test]
+    fn content_canvas_fill_is_none_when_window_is_opaque() {
+        let theme = heca_config::theme::load("latte");
+        let appearance = heca_config::appearance::AppearanceConfig::default();
+        assert_eq!(content_canvas_fill(&theme, &appearance), None);
+    }
+
+    #[test]
+    fn content_canvas_fill_uses_theme_background_and_app_opacity() {
+        let theme = heca_config::theme::load("latte");
+        let appearance = heca_config::appearance::AppearanceConfig {
+            transparency: 30,
+            ..Default::default()
+        };
+        let fill = content_canvas_fill(&theme, &appearance).expect("transparent window should tint content canvas");
+        assert_eq!(fill[0], theme.background.r as f32 / 255.0);
+        assert_eq!(fill[1], theme.background.g as f32 / 255.0);
+        assert_eq!(fill[2], theme.background.b as f32 / 255.0);
+        assert!((fill[3] - 0.7).abs() < 1e-6);
+    }
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {
