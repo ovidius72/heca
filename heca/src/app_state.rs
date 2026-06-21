@@ -282,6 +282,9 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: std::collections::HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
+    /// Tooltip keybind hints for the pane-action buttons, resolved from config at
+    /// load/reload (so the tooltips show the user's real, rebindable keys).
+    pub pane_action_hints: crate::chrome::PaneActionHints,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

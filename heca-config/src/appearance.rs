@@ -105,12 +105,10 @@ fn default_pane_title_segments() -> Vec<PaneSegment> {
 }
 
 fn default_pane_title_actions() -> Vec<PaneAction> {
-    vec![
-        PaneAction::Split,
-        PaneAction::MoveLeft,
-        PaneAction::MoveRight,
-        PaneAction::Close,
-    ]
+    // Move-left/right are intentionally omitted from the default bar — panes are
+    // already movable with the mouse (drag). `MoveLeft`/`MoveRight` remain valid
+    // config values for users who want them. Default = split + close.
+    vec![PaneAction::Split, PaneAction::Close]
 }
 
 /// Maximum in-app blur radius in logical px, at `blur = 100`.
@@ -456,20 +454,16 @@ mod tests {
     }
 
     #[test]
-    fn pane_info_bar_defaults_to_location_and_app_with_all_actions() {
+    fn pane_info_bar_defaults_to_location_and_app_with_split_close() {
         let cfg = AppearanceConfig::default();
         assert_eq!(
             cfg.pane_title_segments,
             vec![PaneSegment::Location, PaneSegment::AppName]
         );
+        // Move-left/right are omitted by default (mouse drag already moves panes).
         assert_eq!(
             cfg.pane_title_actions,
-            vec![
-                PaneAction::Split,
-                PaneAction::MoveLeft,
-                PaneAction::MoveRight,
-                PaneAction::Close
-            ]
+            vec![PaneAction::Split, PaneAction::Close]
         );
         assert!(cfg.pane_info_bar_visible());
     }

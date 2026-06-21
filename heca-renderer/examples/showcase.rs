@@ -760,8 +760,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )
                 // Running pane: full header = segments (left) + action buttons
                 // (right). The app's pane info bar is exactly this — a segment `Tag`
-                // and an `IconButton` cluster (split / move-left / move-right / close,
-                // each a tooltip'd action) laid out space-between inside the pane top.
+                // and an `IconButton` cluster (default split + close, each a tooltip'd
+                // action with its keybind) laid out space-between inside the pane top.
                 .child(
                     Pane::new()
                         .bordered()
@@ -794,19 +794,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                         .gap(2.0)
                                         .child(Tooltip::new(
                                             IconButton::new(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(15.0)).cell(24.0),
-                                            "Add pane",
-                                        ).side(TooltipSide::Bottom))
-                                        .child(Tooltip::new(
-                                            IconButton::new(Icon::new(Glyph::ArrowLineLeft).color(theme.foreground).size(15.0)).cell(24.0),
-                                            "Move left",
-                                        ).side(TooltipSide::Bottom))
-                                        .child(Tooltip::new(
-                                            IconButton::new(Icon::new(Glyph::ArrowLineRight).color(theme.foreground).size(15.0)).cell(24.0),
-                                            "Move right",
+                                            "Add pane  ⌃B V",
                                         ).side(TooltipSide::Bottom))
                                         .child(Tooltip::new(
                                             IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger).size(15.0)).cell(24.0).tone(theme.danger),
-                                            "Close",
+                                            "Close  ⌃B X",
                                         ).side(TooltipSide::Bottom)),
                                 ),
                         )

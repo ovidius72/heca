@@ -339,7 +339,107 @@ pub(crate) struct RetainedPaneHeader {
     pub(crate) key: String,
 }
 
-/// Map a configured [`PaneAction`] to its (icon, parameterized WM action, tooltip).
+/// Tooltip keybind hints for the pane-action buttons, formatted from the user's
+/// config (so they track rebinds) with the leader shown as the symbolized prefix
+/// combo. Empty string ⇒ unbound (tooltip then shows the label only). Built at
+/// config load/reload (`PaneActionHints::from_keys`), stored on `AppState`.
+#[derive(Clone, Default, PartialEq)]
+pub(crate) struct PaneActionHints {
+    pub(crate) split: String,
+    pub(crate) move_left: String,
+    pub(crate) move_right: String,
+    pub(crate) close: String,
+}
+
+impl PaneActionHints {
+    /// Resolve each button's display keybind from the config bindings.
+    pub(crate) fn from_keys(
+        keys: &heca_config::keys::KeysConfig,
+        prefix: &crate::keymap::KeyCombo,
+    ) -> Self {
+        let hint = |action: &str| {
+            keys.bindings
+                .get(action)
+                .and_then(|b| b.keys().first().copied())
+                .map(|s| format_binding(s, prefix))
+                .unwrap_or_default()
+        };
+        Self {
+            split: hint("split_vertical"),
+            move_left: hint("move_pane_left"),
+            move_right: hint("move_pane_right"),
+            close: hint("close"),
+        }
+    }
+
+    fn for_action(&self, action: heca_config::appearance::PaneAction) -> &str {
+        use heca_config::appearance::PaneAction;
+        match action {
+            PaneAction::Split => &self.split,
+            PaneAction::MoveLeft => &self.move_left,
+            PaneAction::MoveRight => &self.move_right,
+            PaneAction::Close => &self.close,
+        }
+    }
+}
+
+/// macOS-style symbols for a [`KeyCombo`] (the prefix): `⌃⌥⇧⌘` + the key.
+fn symbolize_combo(c: &crate::keymap::KeyCombo) -> String {
+    let mut s = String::new();
+    if c.ctrl {
+        s.push('⌃');
+    }
+    if c.alt {
+        s.push('⌥');
+    }
+    if c.shift {
+        s.push('⇧');
+    }
+    if c.super_ {
+        s.push('⌘');
+    }
+    s.push_str(&symbolize_key(&c.key));
+    s
+}
+
+/// A single key token, prettified (named keys → glyphs; letters upper-cased).
+fn symbolize_key(k: &str) -> String {
+    match k.to_ascii_lowercase().as_str() {
+        "enter" | "return" => "↩".into(),
+        "space" => "␣".into(),
+        "arrowleft" | "left" => "←".into(),
+        "arrowright" | "right" => "→".into(),
+        "arrowup" | "up" => "↑".into(),
+        "arrowdown" | "down" => "↓".into(),
+        "escape" | "esc" => "⎋".into(),
+        "tab" => "⇥".into(),
+        _ if k.chars().count() == 1 => k.to_uppercase(),
+        _ => k.to_string(),
+    }
+}
+
+/// Format a config binding string (`"prefix+v"`, `"Alt+Enter"`) for a tooltip: the
+/// leading `prefix` token becomes the symbolized prefix combo, modifiers become
+/// symbols. Empty input ⇒ empty output.
+fn format_binding(s: &str, prefix: &crate::keymap::KeyCombo) -> String {
+    let mut out = String::new();
+    for tok in s.split('+').map(str::trim).filter(|t| !t.is_empty()) {
+        match tok.to_ascii_lowercase().as_str() {
+            "prefix" => {
+                out.push_str(&symbolize_combo(prefix));
+                out.push(' ');
+            }
+            "ctrl" | "control" => out.push('⌃'),
+            "shift" => out.push('⇧'),
+            "alt" | "option" => out.push('⌥'),
+            "super" | "cmd" | "command" | "meta" => out.push('⌘'),
+            _ => out.push_str(&symbolize_key(tok)),
+        }
+    }
+    out.trim().to_string()
+}
+
+/// Map a configured [`PaneAction`] to its (icon, parameterized WM action, label).
 fn pane_action_spec(
     action: heca_config::appearance::PaneAction,
     ctx: &PaneHeaderCtx,
@@ -350,22 +450,22 @@ fn pane_action_spec(
         PaneAction::Split => (
             Glyph::SquareSplitVertical,
             WmAction::AddPaneToColumn { ws_idx: ctx.ws_idx, col_idx: ctx.col_idx },
-            "Add pane  (prefix v)",
+            "Add pane",
         ),
         PaneAction::MoveLeft => (
             Glyph::ArrowLineLeft,
             WmAction::MovePaneLeft { pane_id: Some(ctx.pane_id) },
-            "Move left  (prefix ⌃[)",
+            "Move left",
         ),
         PaneAction::MoveRight => (
             Glyph::ArrowLineRight,
             WmAction::MovePaneRight { pane_id: Some(ctx.pane_id) },
-            "Move right  (prefix ⌃])",
+            "Move right",
         ),
         PaneAction::Close => (
             Glyph::XSquare,
             WmAction::ClosePaneById { pane_id: ctx.pane_id },
-            "Close  (prefix x)",
+            "Close",
         ),
     }
 }
@@ -378,6 +478,12 @@ pub(crate) struct PaneHeaderContent<'a> {
     pub(crate) runtime: Option<&'a PaneRuntime>,
     pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
     pub(crate) actions: &'a [heca_config::appearance::PaneAction],
+    /// The pane's workspace + column — baked into the split action and tracked in
+    /// the rebuild key so the header re-bakes when the pane changes column.
+    pub(crate) ws_idx: usize,
+    pub(crate) col_idx: usize,
+    /// Tooltip keybind hints (tracked in the key so a config reload rebuilds tips).
+    pub(crate) hints: &'a PaneActionHints,
 }
 
 /// A content key identifying everything the header *renders* — used to decide when
@@ -392,8 +498,14 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     // Bucket width so layout jitter doesn't thrash the rebuild, but real resizes
     // re-truncate the location segment.
     let w_bucket = (avail_w / 16.0) as i32;
+    // Tooltip hints for the configured actions (so a rebind rebuilds the tips).
+    let hints: Vec<&str> = content
+        .actions
+        .iter()
+        .map(|&a| content.hints.for_action(a))
+        .collect();
     format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{:?}",
         view.icon,
         view.title,
         view.status,
@@ -404,8 +516,11 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         cwd,
         content.segments,
         content.actions,
+        content.ws_idx,
+        content.col_idx,
         font.to_bits(),
         w_bucket,
+        hints,
     )
 }
 
@@ -439,7 +554,14 @@ pub(crate) fn build_pane_header(
         let cell = header_button_cell(font);
         let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
         for &action in content.actions {
-            let (glyph, wm_action, tip) = pane_action_spec(action, &ctx);
+            let (glyph, wm_action, label) = pane_action_spec(action, &ctx);
+            // Tooltip = label + the user's configured keybind (prefix symbolized).
+            let key = content.hints.for_action(action);
+            let tip = if key.is_empty() {
+                label.to_string()
+            } else {
+                format!("{label}  {key}")
+            };
             let tone = if matches!(action, heca_config::appearance::PaneAction::Close) {
                 theme.danger
             } else {
@@ -535,6 +657,9 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             runtime: input.runtime.as_ref(),
             segments: &segments,
             actions: &actions,
+            ws_idx: input.ws_idx,
+            col_idx: input.col_idx,
+            hints: &state.pane_action_hints,
         };
         let key = pane_header_key(&content, font, input.avail_w);
         let needs_build = state
@@ -2297,11 +2422,15 @@ mod tests {
             }),
             ..PaneRuntime::default()
         };
+        let hints = PaneActionHints::default();
+        #[allow(clippy::too_many_arguments)]
         fn content<'a>(
             programs: &'a ProgramsConfig,
             segments: &'a [heca_config::appearance::PaneSegment],
             actions: &'a [heca_config::appearance::PaneAction],
             rt: &'a PaneRuntime,
+            hints: &'a PaneActionHints,
+            col_idx: usize,
         ) -> PaneHeaderContent<'a> {
             PaneHeaderContent {
                 programs,
@@ -2309,29 +2438,49 @@ mod tests {
                 runtime: Some(rt),
                 segments,
                 actions,
+                ws_idx: 0,
+                col_idx,
+                hints,
             }
         }
-        let base = pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 300.0);
+        let base = pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 300.0);
         // Same inputs ⇒ same key (no needless rebuild).
         assert_eq!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 300.0)
+            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 300.0)
+        );
+        // A different column ⇒ different key (re-bakes the split action's col_idx).
+        assert_ne!(
+            base,
+            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 1), 15.0, 300.0)
         );
         // A different branch ⇒ different key (rebuild).
         let mut other = runtime.clone();
         other.git = Some(GitInfo { branch: Some("dev".into()), ..GitInfo::default() });
         assert_ne!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &other), 15.0, 300.0)
+            pane_header_key(&content(&programs, &segments, &actions, &other, &hints, 0), 15.0, 300.0)
         );
         // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
         assert_ne!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 120.0)
+            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 120.0)
         );
         assert_eq!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 295.0)
+            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 295.0)
         );
+    }
+
+    #[test]
+    fn format_binding_symbolizes_prefix_and_modifiers() {
+        let prefix = crate::keymap::KeyCombo::parse("Ctrl+b");
+        // The `prefix` token becomes the symbolized prefix combo; the key upper-cases.
+        assert_eq!(super::format_binding("prefix+v", &prefix), "⌃B V");
+        assert_eq!(super::format_binding("prefix+x", &prefix), "⌃B X");
+        // Modifiers within a chord symbolize; named keys map to glyphs.
+        assert_eq!(super::format_binding("Alt+Enter", &prefix), "⌥↩");
+        assert_eq!(super::format_binding("prefix+Shift+g", &prefix), "⌃B ⇧G");
+        assert_eq!(super::format_binding("", &prefix), "");
     }
 }

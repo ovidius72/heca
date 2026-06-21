@@ -211,17 +211,15 @@ pub(crate) fn paint_terminal_pane_shell(
 
     // Pane info-bar header (segments + action buttons): painted from the retained
     // per-pane tree that `chrome::sync_pane_headers` built + positioned earlier this
-    // frame (before the GPU borrow). Clipped to the pane so a wide bar can't spill
-    // into a neighbor. Interactivity (button clicks/hover) is routed in `mouse.rs`.
+    // frame (before the GPU borrow). NOT clipped to the pane: the bar is already
+    // width-truncated to fit, and a per-pane clip would also clip a button's
+    // hover Tooltip (which draws on the overlay layer and must escape the pane to
+    // sit above neighbors). Interactivity (clicks/hover) is routed in `mouse.rs`.
     if show_bar
         && let Some(header) = state.pane_headers.get(&pane_id)
     {
-        let clip = GuiRectangle::new(
-            GuiPoint::new(x as f64, y as f64),
-            GuiSize::new(w as f64, h as f64),
-        );
         let mut cx = PaintCx::new(scene, &bar_theme);
-        cx.with_clip(clip, |cx| header.root.paint(cx));
+        header.root.paint(&mut cx);
     }
 }
 
