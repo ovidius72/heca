@@ -1211,6 +1211,7 @@ fn build_sidebar_shell(
     programs: &ProgramsConfig,
     left_w: f32,
     sidebar_h: f32,
+    shell_bg: Color,
     theme: &GuiTheme,
     emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
@@ -1243,7 +1244,7 @@ fn build_sidebar_shell(
                 .height(Length::Px(inner_h))
                 .padding(10.0)
                 .gap(8.0)
-                .background(theme.surface)
+                .background(shell_bg)
                 .border(theme.border, theme.border_width)
                 .child(header)
                 .child(build_workspaces_container(
@@ -1261,6 +1262,7 @@ fn build_sidebar_shell(
 fn build_right_sidebar_shell(
     right_w: f32,
     sidebar_h: f32,
+    shell_bg: Color,
     theme: &GuiTheme,
     sidebar_gap: f32,
 ) -> Flex {
@@ -1287,7 +1289,7 @@ fn build_right_sidebar_shell(
                 .height(Length::Px(inner_h))
                 .padding(10.0)
                 .gap(8.0)
-                .background(theme.surface)
+                .background(shell_bg)
                 .border(theme.border, theme.border_width)
                 .child(header),
         )
@@ -1439,49 +1441,147 @@ fn chrome_scene(
     paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
-/// `(status-bar bg, sidebar-shell bg, foreground)` for the chrome, honoring the
-/// transparency setting: the sidebar shell is deliberately *less* frosted than the
-/// rest of the chrome (the main scrolling area stays fully transparent).
-fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
-    // Mirror render.rs's hand-drawn chrome base color exactly.
-    let base = if state.theme.name == "Catppuccin Mocha" {
-        Color::new(17, 17, 27, 255)
-    } else {
-        Color::new(243, 244, 248, 255)
-    };
-    let side_bg = base.with_alpha((state.appearance.chrome_opacity() * 255.0).round() as u8);
-    let sidebar_alpha = (0.5 + 0.5 * state.appearance.opacity()).clamp(0.0, 1.0);
-    let sidebar_bg = base.with_alpha((sidebar_alpha * 255.0).round() as u8);
-    let fg = {
-        let c = state.theme.foreground;
-        Color::new(c.r, c.g, c.b, c.a)
-    };
-    (side_bg, sidebar_bg, fg)
+/// Converts an app theme color token into the grid-ui color type.
+fn app_color_to_gui(color: heca_config::theme::Color) -> Color {
+    Color::new(color.r, color.g, color.b, color.a)
 }
 
-/// Bridge the app theme into a GuiTheme for the chrome (frosted sidebar surface +
-/// app accent/border/radius). Cheap (no signals) — rebuilt each frame to paint the
-/// retained tree.
+/// Converts a serialized app shadow token into the grid-ui shadow color.
+///
+/// The grid-ui theme stores shadow as a concrete RGBA color, while the app
+/// config/theme model stores the base color string and alpha separately.
+fn shadow_to_gui(shadow: &heca_config::theme::Shadow) -> Color {
+    match shadow.color.parse::<heca_config::theme::Color>() {
+        Ok(color) => Color::new(
+            color.r,
+            color.g,
+            color.b,
+            (shadow.alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+        ),
+        Err(_) => Color::TRANSPARENT,
+    }
+}
+
+fn glow_level_to_gui(level: heca_config::theme::GlowLevel) -> heca_grid_ui::theme::GlowLevel {
+    match level {
+        heca_config::theme::GlowLevel::None => heca_grid_ui::theme::GlowLevel::None,
+        heca_config::theme::GlowLevel::Thin => heca_grid_ui::theme::GlowLevel::Thin,
+        heca_config::theme::GlowLevel::Medium => heca_grid_ui::theme::GlowLevel::Medium,
+        heca_config::theme::GlowLevel::Large => heca_grid_ui::theme::GlowLevel::Large,
+    }
+}
+
+fn intensity_to_gui(level: heca_config::theme::Intensity) -> heca_grid_ui::theme::Intensity {
+    match level {
+        heca_config::theme::Intensity::Off => heca_grid_ui::theme::Intensity::Off,
+        heca_config::theme::Intensity::Low => heca_grid_ui::theme::Intensity::Low,
+        heca_config::theme::Intensity::Medium => heca_grid_ui::theme::Intensity::Medium,
+        heca_config::theme::Intensity::Heavy => heca_grid_ui::theme::Intensity::Heavy,
+    }
+}
+
+/// Projects the loaded app theme into the grid-ui widget theme contract.
+///
+/// This keeps chrome widgets visually aligned with the runtime app palette and
+/// effect tokens until the theme model is fully unified across crates.
+fn app_theme_to_gui_theme(theme: &heca_config::theme::Theme) -> GuiTheme {
+    GuiTheme {
+        name: theme.name.clone(),
+        background: app_color_to_gui(theme.background),
+        surface: app_color_to_gui(theme.surface),
+        foreground: app_color_to_gui(theme.foreground),
+        muted: app_color_to_gui(theme.muted),
+        border: app_color_to_gui(theme.border),
+        accent: app_color_to_gui(theme.accent),
+        glow: app_color_to_gui(theme.glow),
+        shadow: shadow_to_gui(&theme.shadow),
+        danger: app_color_to_gui(theme.danger),
+        success: app_color_to_gui(theme.success),
+        warning: app_color_to_gui(theme.warning),
+        font_family: theme.font_family.clone(),
+        font_size: theme.font_size,
+        radius: theme.border_radius,
+        border_width: theme.border_width,
+        glow_size: glow_level_to_gui(theme.glow_size),
+        intensity: intensity_to_gui(theme.intensity),
+        show_focus_border: theme.show_focus_border,
+        icon_secondary_alpha: theme.icon_secondary_alpha,
+    }
+}
+
+fn chrome_surface_color(theme: &heca_config::theme::Theme) -> Color {
+    app_color_to_gui(theme.surface)
+}
+
+fn top_bottom_pane_background_color(theme: &heca_config::theme::Theme) -> Color {
+    app_color_to_gui(theme.effective_top_bottom_pane_background())
+}
+
+fn left_sidebar_background_color(theme: &heca_config::theme::Theme) -> Color {
+    app_color_to_gui(theme.effective_left_sidebar_background())
+}
+
+fn right_sidebar_background_color(theme: &heca_config::theme::Theme) -> Color {
+    app_color_to_gui(theme.effective_right_sidebar_background())
+}
+
+fn chrome_bar_color_for(
+    theme: &heca_config::theme::Theme,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) -> Color {
+    top_bottom_pane_background_color(theme)
+        .with_alpha((appearance.chrome_opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+fn sidebar_shell_background_color_for(
+    sidebar_bg: Color,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) -> Color {
+    sidebar_bg.with_alpha((appearance.opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+fn chrome_shell_surface_color_for(
+    theme: &heca_config::theme::Theme,
+    appearance: &heca_config::appearance::AppearanceConfig,
+) -> Color {
+    chrome_surface_color(theme)
+        .with_alpha((appearance.opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
+    chrome_bar_color_for(&state.theme, &state.appearance)
+}
+
+fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
+    sidebar_shell_background_color_for(left_sidebar_background_color(&state.theme), &state.appearance)
+}
+
+fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
+    sidebar_shell_background_color_for(right_sidebar_background_color(&state.theme), &state.appearance)
+}
+
+fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
+    chrome_shell_surface_color_for(&state.theme, &state.appearance)
+}
+
+/// Returns the shared chrome bar background, sidebar inner-surface background,
+/// and foreground text color for the current app state.
+///
+/// Sidebar shell backgrounds are driven separately so left/right sidebars can
+/// use distinct theme tokens without changing the inner chrome surface color.
+pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
+    let bar_bg = chrome_bar_color(state);
+    let sidebar_bg = chrome_shell_surface_color(state);
+    let fg = app_color_to_gui(state.theme.foreground);
+    (bar_bg, sidebar_bg, fg)
+}
+
+/// Bridge the loaded app theme into a GuiTheme for chrome widgets.
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
-    let (_, sidebar_bg, fg) = chrome_colors(state);
-    let mut theme = GuiTheme::grid_tron();
-    theme.foreground = fg;
+    let (_, sidebar_bg, _) = chrome_colors(state);
+    let mut theme = app_theme_to_gui_theme(&state.theme);
+    theme.background = app_color_to_gui(state.theme.background);
     theme.surface = sidebar_bg;
-    theme.accent = {
-        let c = state.theme.accent;
-        Color::new(c.r, c.g, c.b, c.a)
-    };
-    theme.border = {
-        let c = state.theme.border;
-        Color::new(c.r, c.g, c.b, c.a)
-    };
-    theme.radius = state.theme.border_radius;
-    // UI font size from config (decoupled from the color preset; `[settings]
-    // font_size` overrides it). `state.theme.font_size` defaults to the real UI
-    // size (~15) so this maps 1:1 instead of ballooning to the old dead 32.0.
-    // The font *family* reaches the renderer via `set_font_family` and isn't read
-    // off `GuiTheme`, so only the size needs mapping here.
-    theme.font_size = state.theme.font_size;
     theme
 }
 
@@ -1812,6 +1912,7 @@ pub(crate) fn build_chrome_root(
             &state.programs,
             left_w,
             sidebar_h,
+            left_sidebar_shell_background_color(state),
             &theme,
             &emit_intent,
             &state.chrome_state.workspaces,
@@ -1828,6 +1929,7 @@ pub(crate) fn build_chrome_root(
         Some(build_right_sidebar_shell(
             right_w,
             sidebar_h,
+            right_sidebar_shell_background_color(state),
             &theme,
             state.appearance.effective_sidebar_gap(&state.theme),
         ))
@@ -2091,6 +2193,70 @@ mod tests {
     }
 
     #[test]
+    fn app_theme_to_gui_theme_preserves_loaded_palette_tokens() {
+        let theme = heca_config::theme::load("mocha");
+        let gui = app_theme_to_gui_theme(&theme);
+
+        assert_eq!(gui.name, theme.name);
+        assert_eq!(gui.background, app_color_to_gui(theme.background));
+        assert_eq!(gui.surface, app_color_to_gui(theme.surface));
+        assert_eq!(gui.muted, app_color_to_gui(theme.muted));
+        assert_eq!(gui.border, app_color_to_gui(theme.border));
+        assert_eq!(gui.accent, app_color_to_gui(theme.accent));
+        assert_eq!(gui.glow, app_color_to_gui(theme.glow));
+        assert_eq!(gui.danger, app_color_to_gui(theme.danger));
+        assert_eq!(gui.success, app_color_to_gui(theme.success));
+        assert_eq!(gui.warning, app_color_to_gui(theme.warning));
+        assert_eq!(gui.font_family, theme.font_family);
+        assert_eq!(gui.font_size, theme.font_size);
+        assert_eq!(gui.radius, theme.border_radius);
+        assert_eq!(gui.border_width, theme.border_width);
+        assert_eq!(gui.glow_size, heca_grid_ui::theme::GlowLevel::None);
+        assert_eq!(gui.intensity, heca_grid_ui::theme::Intensity::Off);
+        assert!(gui.show_focus_border);
+    }
+
+    #[test]
+    fn chrome_background_and_surface_colors_come_from_theme_tokens() {
+        let tron = heca_config::theme::load("grid_tron");
+        let latte = heca_config::theme::load("latte");
+
+        assert_eq!(
+            top_bottom_pane_background_color(&tron),
+            app_color_to_gui(tron.effective_top_bottom_pane_background())
+        );
+        assert_eq!(chrome_surface_color(&tron), app_color_to_gui(tron.surface));
+        assert_eq!(
+            left_sidebar_background_color(&latte),
+            app_color_to_gui(latte.effective_left_sidebar_background())
+        );
+        assert_eq!(
+            right_sidebar_background_color(&latte),
+            app_color_to_gui(latte.effective_right_sidebar_background())
+        );
+        assert_eq!(chrome_surface_color(&latte), app_color_to_gui(latte.surface));
+        assert_ne!(left_sidebar_background_color(&latte), chrome_surface_color(&latte));
+    }
+
+    #[test]
+    fn sidebar_shell_background_stays_distinct_from_bar_tint_when_transparent() {
+        let theme = heca_config::theme::load("latte");
+        let appearance = heca_config::appearance::AppearanceConfig {
+            transparency: 10,
+            ..Default::default()
+        };
+
+        assert_ne!(
+            chrome_bar_color_for(&theme, &appearance),
+            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance)
+        );
+        assert_eq!(
+            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance).r,
+            theme.effective_left_sidebar_background().r
+        );
+    }
+
+    #[test]
     fn chrome_scene_emits_status_text() {
         use heca_grid_ui::{Color, DrawCommand};
         let theme = GuiTheme::grid_tron();
@@ -2151,6 +2317,7 @@ mod tests {
             &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
+            theme.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
@@ -2208,6 +2375,7 @@ mod tests {
             &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
+            theme.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,

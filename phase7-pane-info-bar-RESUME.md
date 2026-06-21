@@ -26,8 +26,8 @@ title (`Pane.title` + `PaneTitleStyle` Cut/Filled/Boxed) that fought the transpa
   `None` if empty; **width-adaptive location truncation** (`truncate_path_left`, left-ellipsis keeps the tail).
 - **Config:** `heca-config/src/appearance.rs` — `PaneSegment` + `PaneAction` enums; `pane_title_segments:
   Vec<PaneSegment>` (default `[Location, AppName]`) + `pane_title_actions: Vec<PaneAction>` (default all 4);
-  `pane_info_bar_visible()` helper. **Removed** the old straddle config (`pane_title_style`/`pane_title_color`/
-  `pane_title_background`, `pane_show_title`). `AppearanceConfig` is now `Clone` (not `Copy`) — fixed the two
+  `pane_info_bar_visible()` helper. **Removed** the old straddle config and `pane_show_title`. `AppearanceConfig`
+  is now `Clone` (not `Copy`) — fixed the two
   move sites (`main.rs:117`, `startup.rs:149` → `.clone()`).
 - **Reserved space:** `pane_title_top_inset(state)` (terminal_render.rs) reserves a top strip for the bar so
   terminal content starts below; **gated on `pane_info_bar_shown(state)` = segments-only for now** (actions

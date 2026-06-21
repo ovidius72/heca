@@ -1,9 +1,8 @@
 use crate::keys::KeysConfig;
 use crate::programs::ProgramsConfig;
 use crate::settings::SettingsConfig;
-use crate::theme::Theme;
+use crate::theme::{self, Theme};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Errors that can occur when loading the configuration file.
@@ -91,7 +90,7 @@ impl AppConfig {
         Self::try_load().unwrap_or_else(|e| {
             eprintln!("[heca] config load: {e}, using defaults");
             let config = Config::default();
-            let mut theme = Theme::load(&config.settings.theme);
+            let mut theme = theme::load(&config.settings.theme);
             apply_overrides(&mut theme, &config.settings);
             Self { config, theme }
         })
@@ -104,7 +103,7 @@ impl AppConfig {
     /// overwrite the current working config.
     pub fn try_load() -> Result<Self, ConfigError> {
         let config = Self::load_config_file()?;
-        let mut theme = Theme::load(&config.settings.theme);
+        let mut theme = theme::load(&config.settings.theme);
         apply_overrides(&mut theme, &config.settings);
         Ok(Self { config, theme })
     }
@@ -211,29 +210,10 @@ pub fn config_dir() -> PathBuf {
 //  Theme loading
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Try loading a theme from the user's theme directory, then fall back to a
-/// bundled theme, then fall back to the default theme.
+/// Transitional compatibility shim: preserve the `heca-config::loader::load_theme`
+/// entry point while delegating to the unified theme crate via `crate::theme::load`.
 pub fn load_theme(name: &str) -> Theme {
-    load_theme_from_disk(name)
-        .or_else(|| load_bundled_theme(name))
-        .unwrap_or_default()
-}
-
-fn load_theme_from_disk(name: &str) -> Option<Theme> {
-    let path = config_dir().join("themes").join(format!("{}.toml", name));
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|c| toml::from_str(&c).ok())
-}
-
-fn load_bundled_theme(name: &str) -> Option<Theme> {
-    let bundled: HashMap<&str, &str> = [
-        ("mocha", include_str!("themes/mocha.toml")),
-        ("latte", include_str!("themes/latte.toml")),
-    ]
-    .into_iter()
-    .collect();
-    toml::from_str(bundled.get(name)?).ok()
+    theme::load(name)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -246,10 +226,13 @@ mod tests {
     use crate::color::Color;
 
     #[test]
-    fn test_fallback_when_config_missing() {
-        let app = AppConfig::load();
-        assert_eq!(app.config.settings.theme, "mocha");
-        assert_eq!(app.theme.name, "Catppuccin Mocha");
+    fn test_default_app_config_uses_grid_tron() {
+        let config = Config::default();
+        let mut theme = theme::load(&config.settings.theme);
+        apply_overrides(&mut theme, &config.settings);
+
+        assert_eq!(config.settings.theme, "grid_tron");
+        assert_eq!(theme.name, "Grid Tron");
     }
 
     #[test]
@@ -329,7 +312,7 @@ color = "#112233"
 
     #[test]
     fn terminal_theme_values_survive_when_settings_do_not_override_them() {
-        let mut theme = Theme::load("mocha");
+        let mut theme = theme::load("mocha");
         let original_family = theme.terminal_font_family.clone();
         let original_italic_family = theme.terminal_italic_font_family.clone();
         let original_size = theme.terminal_font_size;
@@ -343,7 +326,7 @@ color = "#112233"
 
     #[test]
     fn settings_override_bundled_terminal_theme_values() {
-        let mut theme = Theme::load("mocha");
+        let mut theme = theme::load("mocha");
         let settings: SettingsConfig = toml::from_str(
             r##"
 terminal-font-family = "Iosevka Term"
@@ -365,17 +348,15 @@ terminal-foreground = "#ddeeff"
     }
 
     #[test]
-    fn ui_font_decoupled_from_color_preset_uses_defaults() {
-        // Color presets no longer carry the UI font — it falls back to the
-        // struct default (Geist Mono / 15.0), not the dead 32.0 of old.
-        let theme = Theme::load("mocha");
-        assert_eq!(theme.font_family, crate::defaults::default_font_family());
-        assert_eq!(theme.font_size, crate::defaults::default_font_size());
+    fn ui_font_values_come_from_the_unified_theme_when_not_overridden() {
+        let theme = theme::load("mocha");
+        assert_eq!(theme.font_family, "Geist Mono");
+        assert_eq!(theme.font_size, 15.0);
     }
 
     #[test]
     fn settings_override_ui_font() {
-        let mut theme = Theme::load("mocha");
+        let mut theme = theme::load("mocha");
         let settings: SettingsConfig = toml::from_str(
             r##"
 font-family = "Iosevka"

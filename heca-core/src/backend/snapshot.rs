@@ -66,6 +66,7 @@ pub struct TerminalSnapshot {
     pub cell_h: f32,
     pub default_fg: [f32; 4],
     pub default_bg: [f32; 4],
+    pub cursor_color: [f32; 4],
     pub cursor: TerminalCursor,
     pub lines: Vec<TerminalLine>,
 }

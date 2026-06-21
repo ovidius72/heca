@@ -36,9 +36,11 @@ Concrete steps:
 (The `[x]` on 1.6/2.x above now say "latte" but reflect the *target*, not current code — the swap is the task here.)
 
 **Hard requirement (user, 2026-06-21): eliminate ALL hardcoded color/style values — everything must be theme-driven.** No literal colors/alphas/effect constants anywhere; every visual value reads from the `heca-theme::Theme` (adding a token if one is missing). This is the acceptance bar for Phases 3–4, covering at least:
-- **App/chrome** (Phase 3C): the `if theme.name == "Catppuccin Mocha"` branch (`render.rs`), `chrome_colors()` + `Color::new(17,17,27,255)` (`chrome/mod.rs`), `RenderColors` arrays (`sidebar/render.rs`), `[0.118,0.118,0.180,0.7]` (`mouse/render.rs`), and `chrome_gui_theme()`'s manual patching → pass-through.
-- **grid-ui widgets** (the "partly theme-driven" finding above): `IconButton` `HOVER_FILL_ALPHA`/`HOVER_BORDER_ALPHA` + the **white press flash** (`cx.flash` = `rgb(255,255,255)`), `Tag` `FILL_ALPHA`/`BORDER_ALPHA`/divider alphas, and any "muted danger"-type derived shade (currently a hand-`lerp`). Promote each to a `Theme` token.
-- Grep gate before sign-off: no remaining `Color::new(`/`Color::rgb(`/`[0.` literal colors or `*_ALPHA` consts in render/widget paths that aren't theme-sourced.
+- **App/chrome** (Phase 3C): remove all remaining hardcoded or semi-hardcoded color logic in active render paths. Earlier examples (`if theme.name == "Catppuccin Mocha"`, `chrome_colors()` + `Color::new(17,17,27,255)`, `chrome_gui_theme()` patching) were real and have started to be addressed, but the requirement is broader: `RenderColors` arrays (`sidebar/render.rs`), `[0.118,0.118,0.180,0.7]` + white text in `mouse/render.rs`, pane-select overlay `label_color = [1.0, 0.9, 0.3, 0.9]` in `app/render.rs`, and any fixed alpha/mix math in chrome/sidebar paint must be replaced by theme tokens.
+- **Transparency / compositor stopgaps:** `app/render.rs::content_canvas_fill()` is an acceptable short-term coherence fix for light themes, but it is still a stopgap and should be folded into the proper z=0 background model from `compositor-blur-refactor-plan.md`. Do not let temporary background-tint logic become a permanent ad hoc theming layer.
+- **grid-ui widgets** (the "partly theme-driven" finding above): `IconButton` `HOVER_FILL_ALPHA`/`HOVER_BORDER_ALPHA` + the **white press flash** (`cx.flash` = `rgb(255,255,255)` in `component.rs`), `Tag` `FILL_ALPHA`/`BORDER_ALPHA`/divider alphas, `Badge`/`Button` white highlight assumptions, and any "muted danger"-type derived shade (currently a hand-`lerp`). Promote each to a `Theme` token.
+- **Renderer / terminal overlays:** audit remaining literal overlay colors in `heca-renderer/src/terminal.rs` (cursor/selection fallback colors) and decide whether they are true protocol defaults or theme debt. If they are visual policy, move them into theme/config.
+- Grep gate before sign-off: no remaining `Color::new(`/`Color::rgb(`/`[0.` literal colors or `*_ALPHA` consts in active render/widget paths that aren't theme-sourced; if a literal remains intentionally for tests or protocol fallbacks, document why.
 
 **Two cross-cutting findings to fold into Phase 3/4:**
 - **font landmine:** pane-runtime Phase 8 put a `state.theme.font_size` mapping inside `chrome_gui_theme()`, and the in-pane info bar reads `chrome_gui_theme().font_size`. Phase 3C.2 turns that fn into a pass-through — **fold the font handling into the unified `Theme`**, don't keep the patch. (Also note `[settings] font_family`/`font_size` now override the theme font via `loader::apply_overrides` — preserve that.)
@@ -164,11 +166,12 @@ heca-theme  ◄──  heca          (direct, for theme loading)
   - `chrome_colors()` → replace hardcoded `Color::new(17, 17, 27, 255)` with `theme.background`
   - Remove `use heca_grid_ui::theme::Theme as GuiTheme` — use `heca_theme::Theme` directly
 - [ ] 3C.3 Fix `heca/src/app/render.rs`:
-  - Replace `if theme.name == "Catppuccin Mocha" { [0.067, ...] }` with `theme.background.to_f32x4()`
-  - All `primitive_renderer.draw_rect()` calls that use hardcoded colors → read from theme
+  - Replace `if theme.name == "Catppuccin Mocha" { [0.067, ...] }` with theme tokens (DONE in code; keep auditing follow-on drift)
+  - `content_canvas_fill()` is a temporary coherence fix only; fold it into the proper compositor/z=0 background model later
+  - `pane-select` / overlay colors (e.g. `label_color = [1.0, 0.9, 0.3, 0.9]`) and any remaining `primitive_renderer.draw_rect()`/`queue_text()` literal colors → read from theme
 - [ ] 3C.4 Fix `heca/src/app/terminal_render.rs` — update `terminal_pane_gui_theme()` to use `heca_theme::Theme`
 - [ ] 3C.5 Fix `heca/src/sidebar/render.rs` — `RenderColors` should derive from theme, not hardcoded arrays
-- [ ] 3C.6 Fix `heca/src/mouse/render.rs` — replace hardcoded `[0.118, 0.118, 0.180, 0.7]` with theme colors
+- [ ] 3C.6 Fix `heca/src/mouse/render.rs` — replace hardcoded `[0.118, 0.118, 0.180, 0.7]`, white overlay text, and any other literal hover/preview colors with theme tokens
 - [ ] 3C.7 Wire `[settings].theme` (the existing `SettingsConfig.theme`) into config loading — it drives which theme `heca_theme::load_theme` resolves; change `default_theme()` to `"grid_tron"` so that's the default unless the user overrides. (NOT `[appearance].theme` — decided 2026-06-21.)
 - [ ] 3C.8 Run `cargo check -p heca` and `cargo test -p heca`
 - [ ] 3C.9 Run `cargo clippy --workspace --all-targets --all-features` — fix ALL warnings
