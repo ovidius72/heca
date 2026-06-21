@@ -65,11 +65,18 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     }
 
     state.session.advance_animations();
-    let chrome_animating = if let Some(tree) = state.chrome_tree.as_mut() {
-        tree.root.tick(crate::chrome::FRAME_INTERVAL.as_secs_f32())
+    let dt = crate::chrome::FRAME_INTERVAL.as_secs_f32();
+    let mut chrome_animating = if let Some(tree) = state.chrome_tree.as_mut() {
+        tree.root.tick(dt)
     } else {
         false
     };
+    // Tick the retained pane-info-bar headers too, so their action buttons' press
+    // flash / hover animation and tooltip reveal advance (and a redraw is requested
+    // while they animate) instead of getting stuck.
+    for header in state.pane_headers.values_mut() {
+        chrome_animating |= header.root.tick(dt);
+    }
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);

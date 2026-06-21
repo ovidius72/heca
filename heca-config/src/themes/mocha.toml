@@ -6,8 +6,8 @@ accent = "#89b4fa"
 float_background = "#313244"
 float_accent = "#89b4fa"
 float_focus = "#fab387"
-font_family = "Geist Mono"
-font_size = 32.0
+# UI font (font_family / font_size) is decoupled from the color preset — it comes
+# from the struct default or a `[settings] font_family`/`font_size` override.
 terminal_font_family = "Maple Mono Normal NF"
 terminal_font_size = 14.0
 border_radius = 6.0

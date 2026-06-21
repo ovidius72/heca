@@ -10,6 +10,8 @@
 //!   move-pane <pane_id> <target_col>
 //!   move-pane-to-workspace <pane_id> <ws_idx>
 //!   move-pane-to-column <pane_id> <ws_idx> <col_idx>
+//!   move-pane-left [pane_id]
+//!   move-pane-right [pane_id]
 //!   swap <a_id> <b_id>
 //!   move-column <src_ws> <src_col> <dst_ws> <dst_idx>
 //!   swap-columns <a_ws> <a_col> <b_ws> <b_col>
@@ -237,6 +239,21 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                 ws_idx,
                 col_idx,
             })
+        }
+        "move-pane-left" => {
+            // Optional pane_id: omitted ⇒ active pane (mirrors the keybind).
+            let pane_id = match parts.next() {
+                Some(arg) => Some(PaneId(parse_u64!(arg, "pane_id"))),
+                None => None,
+            };
+            Ok(WmAction::MovePaneLeft { pane_id })
+        }
+        "move-pane-right" => {
+            let pane_id = match parts.next() {
+                Some(arg) => Some(PaneId(parse_u64!(arg, "pane_id"))),
+                None => None,
+            };
+            Ok(WmAction::MovePaneRight { pane_id })
         }
         "swap" => {
             let a_arg = expect_arg!("a_id");
@@ -511,6 +528,28 @@ use heca_core::layout::PaneId;
                 pane_id: PaneId(5),
                 target_col: 2,
             }),
+        );
+    }
+
+    #[test]
+    fn test_move_pane_left_right() {
+        // With an explicit pane id (pane-header button / RPC).
+        assert_eq!(
+            parse_rpc_command("move-pane-left 7"),
+            Ok(WmAction::MovePaneLeft { pane_id: Some(PaneId(7)) }),
+        );
+        assert_eq!(
+            parse_rpc_command("move-pane-right 7"),
+            Ok(WmAction::MovePaneRight { pane_id: Some(PaneId(7)) }),
+        );
+        // Without an id ⇒ active pane (mirrors the keybind).
+        assert_eq!(
+            parse_rpc_command("move-pane-left"),
+            Ok(WmAction::MovePaneLeft { pane_id: None }),
+        );
+        assert_eq!(
+            parse_rpc_command("move-pane-right"),
+            Ok(WmAction::MovePaneRight { pane_id: None }),
         );
     }
 

@@ -8,6 +8,16 @@
 # and cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
+# UI/chrome font (sidebar, pane info bar, status bar) — decoupled from the color
+# theme, so switching theme keeps your font. Omit to use the built-in default
+# (Geist Mono / 15.0). The terminal font is configured separately below.
+# font_family = "Geist Mono"
+# font_size   = 15.0
+
+# Terminal font (independent of the UI font above).
+# terminal_font_family = "Maple Mono Normal NF"
+# terminal_font_size   = 14.0
+
 [appearance]
 # Window / chrome transparency + blur (each 0..=100, default 0)
 transparency = 0
@@ -42,7 +52,9 @@ terminal_floating_blur = 0
 # pane_title_segments = ["location", "app_name"]
 # Right side — action buttons, in order ([] hides them):
 #   "split" | "move_left" | "move_right" | "close"
-# pane_title_actions  = ["split", "move_left", "move_right", "close"]
+# Default is split + close (panes are already movable by mouse drag); add
+# "move_left"/"move_right" here if you want move buttons in the bar too.
+# pane_title_actions  = ["split", "close"]
 # Both empty ⇒ no bar and no reserved top padding.
 
 [keys]

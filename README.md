@@ -448,8 +448,9 @@ background = "#1e1e2e"
 foreground = "#cdd6f4"
 border = "#313244"
 accent = "#89b4fa"
-font_family = "JetBrainsMono Nerd Font"
-font_size = 32.0
+# UI font is decoupled from the color theme — set it under [settings] (see below),
+# not here. `font_family` / `font_size` are still accepted here but optional and
+# overridden by [settings].
 border_radius = 6.0
 border_width = 1.0
 
@@ -480,7 +481,15 @@ focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
+font_family = "Geist Mono"    # UI/chrome font (decoupled from color theme; default Geist Mono)
+font_size = 15.0              # UI/chrome font size (default 15.0)
+terminal_font_family = "Maple Mono Normal NF"  # Terminal font (independent of UI font)
+terminal_font_size = 14.0     # Terminal font size
 ```
+
+The **UI font** (`font_family` / `font_size`) and the **terminal font**
+(`terminal_font_family` / `terminal_font_size`) are configured here under
+`[settings]`, independently of the color theme — switching theme keeps your fonts.
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 

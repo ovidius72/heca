@@ -638,7 +638,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Icon::new(Glyph::Terminal).color(theme.foreground).size(34.0))
                 .child(Icon::new(Glyph::Gear).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::Lightning).color(theme.accent).size(34.0))
-                .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0)),
+                .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0))
+                // Pane-action glyphs (the in-pane info bar buttons).
+                .child(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::ArrowLineLeft).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::ArrowLineRight).color(theme.foreground).size(34.0))
+                .child(Icon::new(Glyph::XSquare).color(theme.danger).size(34.0)),
         )
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
@@ -721,57 +726,83 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
                 )
         })
-        // Pane title: an `icon + label` straddling the top border (the pane-info
-        // header terminal panes use). The three `PaneTitleStyle` looks side by
-        // side — `Cut` (gap in the frame), `Filled` (chip in the frame color),
-        // `Boxed` (bordered box) — all theme-driven; the last also shows long-title
-        // ellipsis truncation.
+        // In-pane info bar: a `Tag` chip composed *inside* the pane top (the app's
+        // pane-info header). The `Pane` carries no built-in title — the bar is a
+        // separate widget, so frame decoration and header stay independent. Left =
+        // metadata segments (location · app · branch · diff-stat); the app adds the
+        // action-button cluster on the right.
         .child(
             Flex::row()
                 .gap(12.0)
-                .align(Align::Center)
+                .align(Align::Start)
+                // Idle terminal pane: location · shell name.
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(170.0))
+                        .width(Length::Px(220.0))
                         .height(Length::Px(90.0))
+                        .padding(8.0)
+                        .gap(8.0)
                         .background(theme.surface)
                         .border(theme.accent, 2.0)
-                        .title(Glyph::Terminal, "codex")
-                        .title_style(PaneTitleStyle::Cut),
+                        .child(
+                            Tag::new("~/projects/heca")
+                                .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.muted))
+                                .segment(
+                                    Flex::row()
+                                        .align(Align::Center)
+                                        .gap(6.0)
+                                        .child(Icon::new(Glyph::Terminal).size(13.0).color(theme.muted))
+                                        .child(Label::new("zsh").color(theme.foreground).font_scale(0.8)),
+                                ),
+                        )
+                        .child(Label::new("idle").font_size(12.0).color(theme.muted)),
                 )
+                // Running pane: full header = segments (left) + action buttons
+                // (right). The app's pane info bar is exactly this — a segment `Tag`
+                // and an `IconButton` cluster (default split + close, each a tooltip'd
+                // action with its keybind) laid out space-between inside the pane top.
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(170.0))
+                        .width(Length::Px(360.0))
                         .height(Length::Px(90.0))
+                        .padding(8.0)
+                        .gap(8.0)
                         .background(theme.surface)
                         .border(theme.accent, 2.0)
-                        .title(Glyph::Terminal, "codex")
-                        .title_style(PaneTitleStyle::Filled),
-                )
-                .child(
-                    Pane::new()
-                        .bordered()
-                        .width(Length::Px(170.0))
-                        .height(Length::Px(90.0))
-                        .background(theme.surface)
-                        .border(theme.accent, 2.0)
-                        .title(Glyph::FileCode, "nvim")
-                        .title_style(PaneTitleStyle::Boxed),
-                )
-                // Narrow pane + long title → ellipsis truncation so the label never
-                // runs into the opposite corner.
-                .child(
-                    Pane::new()
-                        .bordered()
-                        .width(Length::Px(150.0))
-                        .height(Length::Px(90.0))
-                        .background(theme.surface)
-                        .border(theme.border, 1.5)
-                        .title(Glyph::Folder, "~/projects/heca-workspace")
-                        .title_color(theme.foreground)
-                        .title_style(PaneTitleStyle::Filled),
+                        .child(
+                            Flex::row()
+                                .width(Length::Px(344.0))
+                                .align(Align::Center)
+                                .justify(Justify::SpaceBetween)
+                                .child(
+                                    Tag::new("Neovim")
+                                        .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
+                                        .segment(
+                                            Flex::row()
+                                                .align(Align::Center)
+                                                .gap(6.0)
+                                                .child(Icon::new(Glyph::GitBranch).size(13.0).color(theme.muted))
+                                                .child(Label::new("…phase-7").color(theme.foreground).font_scale(0.8)),
+                                        )
+                                        .color(theme.accent),
+                                )
+                                .child(
+                                    Flex::row()
+                                        .align(Align::Center)
+                                        .gap(2.0)
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(15.0)).cell(24.0),
+                                            "Add pane  ⌃B V",
+                                        ).side(TooltipSide::Bottom))
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger).size(15.0)).cell(24.0).tone(theme.danger),
+                                            "Close  ⌃B X",
+                                        ).side(TooltipSide::Bottom)),
+                                ),
+                        )
+                        .child(Label::new("running").font_size(12.0).color(theme.muted)),
                 )
         )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5

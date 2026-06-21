@@ -315,6 +315,11 @@ pub(crate) async fn init_state(
         input_mode: InputMode::Normal,
         sidebar_tree,
         chrome_tree: None,
+        pane_headers: std::collections::HashMap::new(),
+        pane_action_hints: crate::chrome::PaneActionHints::from_keys(
+            &app_config.config.keys,
+            &keymap::KeyCombo::parse(&app_config.config.keys.prefix),
+        ),
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state: crate::chrome::SharedChromeState::new(
             app_config.config.appearance.effective_sidebar_width(),

@@ -125,6 +125,10 @@ impl HecaApp {
                 .set_font_family(&self.app_config.theme.font_family);
             refresh_terminal_cell_size(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
+            state.pane_action_hints = crate::chrome::PaneActionHints::from_keys(
+                &self.app_config.config.keys,
+                &state.prefix_combo,
+            );
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled =

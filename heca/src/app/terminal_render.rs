@@ -47,8 +47,6 @@ pub(crate) struct TerminalPaneShell {
     pub(crate) is_active: bool,
 }
 
-/// Horizontal margin (logical px) from the pane edge to the info bar.
-const TITLE_BAR_MARGIN: f64 = 6.0;
 /// Approx `Tag` internal vertical padding (each side) — for bar height/centering.
 const BAR_TAG_VPAD: f32 = 5.0;
 /// Vertical margin above + below the bar within its reserved strip.
@@ -62,7 +60,7 @@ fn title_bar_height(font: f32) -> f32 {
 }
 
 /// Total vertical strip the info bar reserves at the pane top.
-fn title_bar_reserve(font: f32) -> f32 {
+pub(crate) fn title_bar_reserve(font: f32) -> f32 {
     title_bar_height(font) + 2.0 * BAR_VMARGIN
 }
 
@@ -72,12 +70,11 @@ fn bar_font(state: &AppState) -> f32 {
     crate::chrome::chrome_gui_theme(state).font_size
 }
 
-/// Whether the pane info bar renders anything right now. Currently driven by the
-/// **segments** only — the action buttons aren't implemented yet, so an
-/// actions-only config must NOT reserve space for an empty band. Once the buttons
-/// land this becomes `pane_info_bar_visible()` (segments OR actions).
+/// Whether the pane info bar renders anything right now — segments **or** action
+/// buttons. Drives both the reserved top strip and the header band/paint.
 fn pane_info_bar_shown(state: &AppState) -> bool {
     !state.appearance.pane_title_segments.is_empty()
+        || !state.appearance.pane_title_actions.is_empty()
 }
 
 /// Extra **top** content padding (logical px) reserved for the pane info bar, so
@@ -212,53 +209,22 @@ pub(crate) fn paint_terminal_pane_shell(
         pane.paint(&mut cx);
     }
 
-    // Pane info bar: a segmented pill (configurable via `[appearance]
-    // pane_title_segments`), reusing the same catalog projection as the sidebar
-    // card, centered vertically in the header band. The terminal content is
-    // reserved below it (see `pane_title_top_inset`).
+    // Pane info-bar header (segments + action buttons): painted from the retained
+    // per-pane tree that `chrome::sync_pane_headers` built + positioned earlier this
+    // frame (before the GPU borrow). Clipped to the pane so the bar/buttons can't
+    // spill into a neighbor when the pane is narrow (e.g. after a resize). The clip
+    // is a *base-layer* scissor; a button's hover Tooltip draws on the **overlay**
+    // layer (rendered after the base PopClip in `render_chrome`), so it still escapes
+    // the pane and sits above neighbors. Interactivity is routed in `mouse.rs`.
     if show_bar
-        && let Some(core_pane) =
-            state.session.active_workspace().and_then(|ws| ws.find_pane(pane_id))
+        && let Some(header) = state.pane_headers.get(&pane_id)
     {
-        let avail_w = (w - 2.0 * TITLE_BAR_MARGIN as f32).max(0.0);
-        if let Some(mut bar) = crate::chrome::build_pane_info_bar(
-            &state.programs,
-            &core_pane.title,
-            Some(&core_pane.runtime),
-            &state.appearance.pane_title_segments,
-            &bar_theme,
-            avail_w,
-            font,
-        ) {
-            LayoutEngine::new()
-                .base_font(font)
-                .compute(&mut bar, GuiSize::new(w as f64, h as f64));
-            // Center the bar vertically in the reserved header strip.
-            let bar_h = bar.base().bounds.size.h as f32;
-            let bar_y = y as f64 + f64::from(((title_bar_reserve(font) - bar_h) / 2.0).max(0.0));
-            translate_bounds(&mut bar, x as f64 + TITLE_BAR_MARGIN, bar_y);
-            // Clip to the pane so a wide bar can never spill into a neighbor.
-            let clip = GuiRectangle::new(
-                GuiPoint::new(x as f64, y as f64),
-                GuiSize::new(w as f64, h as f64),
-            );
-            let mut cx = PaintCx::new(scene, &bar_theme);
-            cx.with_clip(clip, |cx| bar.paint(cx));
-        }
-    }
-}
-
-/// Translate a freshly-laid-out widget subtree (positioned from the origin by
-/// [`LayoutEngine::compute`]) to an absolute `(dx, dy)` — used to place a
-/// standalone widget (the pane info bar) at its pane's position.
-fn translate_bounds(c: &mut dyn Component, dx: f64, dy: f64) {
-    let b = c.base().bounds;
-    c.base_mut().bounds = GuiRectangle::new(
-        GuiPoint::new(b.loc.x + dx, b.loc.y + dy),
-        b.size,
-    );
-    for child in c.base_mut().children.iter_mut() {
-        translate_bounds(child.as_mut(), dx, dy);
+        let clip = GuiRectangle::new(
+            GuiPoint::new(x as f64, y as f64),
+            GuiSize::new(w as f64, h as f64),
+        );
+        let mut cx = PaintCx::new(scene, &bar_theme);
+        cx.with_clip(clip, |cx| header.root.paint(cx));
     }
 }
 

@@ -416,8 +416,8 @@ add a small composed widget if warranted), the pane-corner overlay in `heca/src/
 - [x] **Sidebar card — Row 1 (program):** `Icon(catalog.icon)` · `Label(name)` · optional exceptional-state indicator, bound to the store mirror (reactive). Idle ⇒ terminal icon + shell name; Running ⇒ program icon + Name. Icons come from the catalog's semantic Phosphor names (§0.7) and render through the existing duotone `Icon` widget. Reuse `Row`/`Grid`.
 - [x] **Sidebar card — Row 2 (git, only in a repo):** a flat metadata row (`branch + optional +N / ~N / -N`), bound to the store mirror. Hidden entirely outside a repo.
 - [x] **In-pane info bar** (chosen over the border-straddle title — that fought the transparent pane over the terminal): a self-contained segmented `Tag` *inside* the pane top, with **config-driven segments** `[appearance] pane_title_segments` (`location`/`app_name`/`git_branch`/`git_status`) and a distinguishable header band (theme `surface`) + vertical centering + width truncation + per-pane clip; resolved through the shared `pane_info_view` path; UI font Geist Mono at sidebar size; `[]` ⇒ no bar/padding. (Built-then-superseded: the `Pane.title` + `PaneTitleStyle` Cut/Filled/Boxed straddle widget; cleanup pending.)
-- [ ] **In-pane action buttons** (right of the bar): `pane_title_actions` (`split`/`move_left`/`move_right`/`close`) as `IconButton`s wired to existing WM actions (registry+keymap+RPC), via a retained per-pane header + event dispatch. *(Slice 2 — pending; full plan in `phase7-pane-info-bar-RESUME.md`.)*
-- [ ] **Decouple fonts from color themes → `[settings]`** (user-requested; NOT started): add `[settings] font_family`/`font_size` (mirror `terminal_font_*`); map onto the theme in the loader. **LANDMINE:** `heca-config Theme.font_size` default = `32.0` is dead (UI renders at `grid_tron` 15 because `chrome_gui_theme` never maps it) — normalize that default to ~15 before mapping `gui_theme.font_size`. See RESUME doc §B.
+- [x] **In-pane action buttons** (right of the bar): `pane_title_actions` as `IconButton`+`Tooltip` wired to existing WM actions (registry+keymap+RPC), via a **retained per-pane header + pointer dispatch** (built/positioned in `chrome::sync_pane_headers` before the GPU borrow, painted read-only, dispatched in `events.rs`; ticked each frame). Default bar = **split + close** (move dropped — mouse drag already moves panes; still config-available). Tooltips show the **real configured keybind** with the prefix symbolized. Verified live.
+- [x] **Decouple fonts from color themes → `[settings]`**: `[settings] font_family`/`font_size` → loader `apply_overrides` maps onto `Theme`; theme font fields made optional + stripped from color `.toml`s; `Theme.font_size` default normalized 32→15; `chrome_gui_theme` maps it. (LANDMINE handled.)
 - [x] **Configurable sidebar width:** `[appearance] sidebar_width` (clamped 160..=560, default 300), applied at startup + reload (left + right).
 - [x] **Showcase + `docs/widgets.md`:** demo the pane-info row (all status/git states) — required by the grid-ui rule.
 - [x] Verify reactivity: changing a pane's program/status/git updates only that card (damage), and emits the event.
@@ -449,11 +449,53 @@ a selector; the architecture docs reflect events + state access; PLAN.md points 
 
 ---
 
+### Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ spun out of Phase 7
+**Depends-on:** the niri-parity **column-width-persistence** question (must be settled first). Independent of
+Phases 1–8 data.
+
+**Why:** keyboard resize exists (`ResizeIncrease`/`Decrease`, `PaneHeightIncrease`/`Decrease` →
+`resize_active_column`/`resize_active_pane_height`), but there is no **mouse** resize. This adds drag-the-divider
+resizing. Spun out of the Phase 7 pane-action discussion (2026-06-20): it's a **layout/interaction** feature
+(not display), overlapping the deferred DnD/cursor work + an open niri question, so it gets its own phase.
+
+**Design:**
+- Drag the **vertical gap between columns** → resize that column; drag the **horizontal gap between panes** in a
+  column → resize pane height. The gap is `pane_gap` (~8px) — thin, so add a **fallback: hold right-button on a
+  border to resize** if the gap hit-zone proves finicky over the terminal.
+- **Landmine (do first):** heca runs `update_all_column_widths()` on **every** layout mutation; it is
+  *unverified* whether a manual resize persists or is recomputed away (PLAN.md niri item #2). Settle this before
+  building the gesture — if it reflows, store per-column width and recompute only the changed one.
+
+**Key files:** `heca-core/src/layout/scrolling.rs` (`resize_active_column`, `column_widths`,
+`update_all_column_widths`), `heca-core/src/layout/column.rs` (`resize_active_pane_height`), `heca/src/mouse.rs`
+(new resize-drag path, divider hit-testing, cursor policy), `heca/src/input.rs` + `heca/src/rpc.rs` (parameterized
+resize actions), `heca/src/app/terminal_host.rs` (pane-rect geometry for hit-testing).
+
+**Tasks**
+- [ ] **Resolve persistence** (niri #2) — test whether manual resize survives subsequent layout mutations; fix
+      the recompute model if not.
+- [ ] **Parameterized core resize:** `resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)` (active-only
+      today). RPC parity for the new actions.
+- [ ] **Resize-drag gesture** in `mouse.rs` — distinct from the DnD item-move surfaces; press-on-divider →
+      incremental-delta drag → release commits. Plus the right-button-hold fallback.
+- [ ] **Divider hit-testing** — column gaps + intra-column pane gaps from laid-out pane rects.
+- [ ] **Resize cursor** — horizontal/vertical `CursorIcon` via the P2 cursor-policy helper (no OS cursor set
+      today).
+- [ ] Tests: pure resize math (column width + pane height) given a layout.
+
+**Acceptance:** dragging a column divider resizes that column (and the change persists); dragging a pane gap
+resizes pane height; right-button-hold fallback works; resize cursor shows on the dividers; reachable from
+keyboard **and** RPC; clippy clean.
+
+---
+
 ## 5. Sequencing & parallelism
 - **0 first, alone** (foundation). Then **1**.
 - After 1: **2, 5** can start in parallel; **3** after 2; **4** after 3 (or 2's cwd fallback); **6** after 2.
 - **7** after the data phases land (degrades gracefully meanwhile). **8** finalizes last.
-- Suggested order if single-threaded: 0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8.
+- **9** (mouse resize) is independent of the runtime-data phases but **gated on the niri column-width-persistence
+  question**; schedule it after Phase 7 (or anytime that question is resolved).
+- Suggested order if single-threaded: 0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8 (→ 9 when unblocked).
 
 ## 6. Risks / watch-items
 - OS foreground-process + cwd code is platform-specific — keep it behind a tested shim; macOS is primary.

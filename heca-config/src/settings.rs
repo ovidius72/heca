@@ -67,6 +67,19 @@ where
     }
 }
 
+fn deserialize_font_size<'de, D>(deserializer: D) -> Result<Option<f32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let size = Option::<f32>::deserialize(deserializer)?;
+    match size {
+        Some(value) if !value.is_finite() || value <= 0.0 => {
+            Err(de::Error::custom("font_size must be a finite positive number"))
+        }
+        other => Ok(other),
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -82,6 +95,14 @@ pub struct SettingsConfig {
     pub window_width: u32,
     #[serde(default = "default_window_height")]
     pub window_height: u32,
+    /// Optional UI/chrome font family override from `config.toml` — decouples the
+    /// UI font from the color theme. Maps onto `Theme.font_family`.
+    #[serde(default, alias = "font-family")]
+    pub font_family: Option<String>,
+    /// Optional UI/chrome font size override from `config.toml` — decouples the UI
+    /// font size from the color theme. Maps onto `Theme.font_size`.
+    #[serde(default, alias = "font-size", deserialize_with = "deserialize_font_size")]
+    pub font_size: Option<f32>,
     /// Optional terminal font family override from `config.toml`.
     #[serde(default, alias = "terminal-font-family")]
     pub terminal_font_family: Option<String>,
@@ -143,6 +164,8 @@ impl Default for SettingsConfig {
             mouse: default_mouse(),
             window_width: default_window_width(),
             window_height: default_window_height(),
+            font_family: None,
+            font_size: None,
             terminal_font_family: None,
             terminal_foreground: None,
             terminal_background: None,
@@ -174,6 +197,8 @@ mod tests {
         assert!(s.mouse);
         assert_eq!(s.window_width, 1280);
         assert_eq!(s.window_height, 800);
+        assert_eq!(s.font_family, None);
+        assert_eq!(s.font_size, None);
         assert_eq!(s.terminal_font_family, None);
         assert_eq!(s.terminal_foreground, None);
         assert_eq!(s.terminal_background, None);
@@ -227,5 +252,25 @@ mod tests {
     fn test_terminal_font_size_rejects_invalid_values() {
         assert!(toml::from_str::<SettingsConfig>("terminal-font-size = 0.0").is_err());
         assert!(toml::from_str::<SettingsConfig>("terminal-font-size = -1.0").is_err());
+    }
+
+    #[test]
+    fn test_ui_font_overrides_parse() {
+        let s: SettingsConfig =
+            toml::from_str("font_family = \"Iosevka\"\nfont_size = 16.0").unwrap();
+        assert_eq!(s.font_family.as_deref(), Some("Iosevka"));
+        assert_eq!(s.font_size, Some(16.0));
+
+        // kebab-case aliases parse too.
+        let s: SettingsConfig =
+            toml::from_str("font-family = \"Iosevka\"\nfont-size = 16.0").unwrap();
+        assert_eq!(s.font_family.as_deref(), Some("Iosevka"));
+        assert_eq!(s.font_size, Some(16.0));
+    }
+
+    #[test]
+    fn test_ui_font_size_rejects_invalid_values() {
+        assert!(toml::from_str::<SettingsConfig>("font-size = 0.0").is_err());
+        assert!(toml::from_str::<SettingsConfig>("font-size = -1.0").is_err());
     }
 }

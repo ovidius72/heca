@@ -354,7 +354,7 @@ fn find_pane_in_workspace(
 }
 
 /// Check if the configured interactive move modifier is currently held.
-fn interactive_move_modifier_held(state: &AppState) -> bool {
+pub(crate) fn interactive_move_modifier_held(state: &AppState) -> bool {
     let modifiers = state.modifiers;
     match state.interactive_move_modifier {
         heca_config::theme::ModifierKey::Super => modifiers.super_key(),

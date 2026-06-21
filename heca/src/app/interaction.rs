@@ -184,8 +184,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SwapRight
         | WmAction::SwapUp
         | WmAction::SwapDown
-        | WmAction::MovePaneLeft
-        | WmAction::MovePaneRight
+        | WmAction::MovePaneLeft { .. }
+        | WmAction::MovePaneRight { .. }
         | WmAction::MoveColumnUp
         | WmAction::MoveColumnDown
         | WmAction::Swap { .. }
@@ -750,7 +750,7 @@ mod tests {
             WmAction::ResizeIncrease, WmAction::ResizeDecrease,
             WmAction::PaneHeightIncrease, WmAction::PaneHeightDecrease,
             WmAction::SwapLeft, WmAction::SwapRight, WmAction::SwapUp, WmAction::SwapDown,
-            WmAction::MovePaneLeft, WmAction::MovePaneRight, WmAction::MoveColumnUp, WmAction::MoveColumnDown,
+            WmAction::MovePaneLeft { pane_id: None }, WmAction::MovePaneRight { pane_id: None }, WmAction::MoveColumnUp, WmAction::MoveColumnDown,
             WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
             WmAction::PaneTake, WmAction::PaneTakeAndFocus,
             WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::RenameColumn,

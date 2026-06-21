@@ -144,6 +144,9 @@ pub(crate) fn handle_window_event(
             // indicator (a column drag targets columns, not the panes inside them).
             if !state.mouse.drag_ctx.is_dragging() {
                 crate::chrome::chrome_dispatch_move(state, pos);
+                // Feed the move into the retained pane-info-bar headers so the action
+                // buttons' hover affordance lights up (repaint via mark_full_redraw below).
+                crate::chrome::dispatch_pane_header_move(state, pos);
             }
             forward_mouse_move(state, pos);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
@@ -155,6 +158,22 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
+            // Pane info-bar action **buttons** intercept a plain left-press so a click
+            // hits the button (not the terminal). Only an actual button hit is
+            // consumed — a press on the empty header band falls through to the normal
+            // content/drag/resize paths (the lower pane's band sits on the divider, so
+            // consuming it would break divider/resize gestures). A modifier-held press
+            // also falls through (meta-drag).
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Pressed
+                && !mouse::interactive_move_modifier_held(state)
+                && let Some((_pane_id, true)) =
+                    crate::chrome::dispatch_pane_header_press(state, state.mouse.pos)
+            {
+                mouse::update_cursor(state, state.mouse.pos);
+                state.mark_full_redraw();
+                return;
+            }
             let interactive_before = state.mouse.interactive_move.is_some();
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
