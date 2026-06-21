@@ -188,27 +188,64 @@ model + the deferred token customization in `pluggable-chrome-plugin-plan.md`; p
 **Reviewer Decision:** — · **Reviewer Notes:** pending review (PR → main).
 
 ## Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ NEW (spun out of Phase 7 discussion)
-**Status:** Open · **Assigned:** — · **Depends-on:** niri-parity question #2 (column-width persistence) · **Plan:** §4 Phase 9
+**Status:** Completed by Lead (LIVE-VERIFIED 2026-06-21; commit/PR pending OK) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** niri-parity question #2 (RESOLVED) · **Plan:** §4 Phase 9
 **One-liner:** drag the gap between **columns** (vertical divider) → resize that column; drag the gap between
-**panes** in a column (horizontal divider) → resize pane height. **Fallback** if the thin `pane_gap` (~8px)
-hit-zone fights the terminal: **hold right-button on a border to resize**.
+**panes** in a column (horizontal divider) → resize pane height. **Fallback**: **hold right-button on a pane to
+resize** along the nearer axis (for when the thin ~8px gap fights the terminal).
 **Why standalone (not folded into Phase 7):** Phase 7 is the *display* slice; resize is a *layout/interaction*
 feature overlapping the deferred DnD/cursor work and an open niri-parity question — bigger scope + different risk.
 **Tasks (order matters):**
-- [ ] **FIRST — settle the persistence landmine:** heca calls `update_all_column_widths()` on *every* layout
-      mutation; it is **unverified** whether a manual resize persists or is recomputed away (PLAN.md niri item
-      #2). Resolve before building the gesture, or divider-drag will feel broken. If it reflows, store per-column
-      width and only recompute the changed one.
-- [ ] **Parameterized core resize:** add `resize_column(col_idx, …)` / `resize_pane_height(pane_id, …)` —
-      today's `resize_active_column`/`resize_active_pane_height` are active-only; a divider drag targets a
-      *specific* column/pane (also gives RPC parity).
-- [ ] **Resize-drag gesture in `mouse.rs`:** a path distinct from the DnD item-move surfaces; press on a
-      divider → drag with incremental deltas → parameterized resize; release commits. (Plus the right-button
-      fallback.)
-- [ ] **Divider hit-testing:** column gaps + intra-column pane gaps from the laid-out pane rects.
-- [ ] **Resize cursor:** horizontal/vertical resize `CursorIcon` via the **P2 cursor-policy helper** (the app
-      sets no OS cursor today — build/extend that helper).
-- [ ] RPC parity for the parameterized resize actions; tests for the pure resize math.
+- [x] **Persistence landmine SETTLED** (foundation commit `e1f9e71`): `resize_*` mutate the canonical
+      `ColumnWidth`/pane `preferred_height`; `update_all_column_widths` only recomputes the derived cache from it,
+      so a manual resize persists. Test: `resize_column_persists_through_recompute_and_add`.
+- [x] **Parameterized core resize** (foundation): `resize_column(col_idx, delta)` / `resize_pane_height(col_idx,
+      pane_idx, delta)`; the active-only keyboard fns delegate. RPC parity = `WmAction::ResizeColumnBy` /
+      `ResizePaneHeightBy` + RPC `resize-column` / `resize-pane-height`.
+- [x] **Resize-drag gesture** — `heca/src/mouse/resize.rs`: left-press on a divider starts the drag (intercepted
+      in `app/events.rs` after the header-button check, only an actual hit consumes), each cursor-move emits a
+      parameterized resize action, release clears. Right-button fallback resizes the pane under the cursor.
+- [x] **Divider hit-testing** — pure `divider_at()` over `pane_outer_frames` + `find_pane_location` (pane gaps
+      first, then column gaps, ~6px grab; floats excluded).
+- [x] **Resize cursor** — `ColResize`/`RowResize` via `mouse::update_cursor` (drag axis while resizing, divider
+      axis on hover).
+- [x] RPC parity + tests: `divider_at`/`fallback_divider` geometry tests, RPC parse tests, foundation resize-math tests.
+**Agent Completion (Lead, `feature/phase-9`, uncommitted):**
+Built:
+- `app_state.rs`: `ResizeDivider{Column{col}|Pane{col,pane}}` + `ResizeDrag{divider,last_pos}`; `MouseState.resize`.
+- `input.rs`: `WmAction::ResizeColumnBy{col_idx,delta}` + `ResizePaneHeightBy{col_idx,pane_idx,delta}` (priority + policy + exhaustiveness tests).
+- `handlers.rs` + `registry.rs`: handlers calling the core resize methods, registered.
+- `interaction.rs`: both actions `TiledOnly`.
+- `mouse/resize.rs`: hit-test (`divider_at`), `fallback_divider`, `on_press`/`on_right_press`/`on_drag_move`/`on_release`/`cursor_for`; 6 unit tests.
+- `mouse.rs`: wired into `on_cursor_moved` (resize takes priority), `on_mouse_input` (release + right-button), `update_cursor`; `is_resizing` helper.
+- `app/events.rs`: left-press divider interception (after header-button block); guards chrome-hover + terminal move/button forwarding while resizing.
+- `rpc.rs`: `resize-column <col> <delta>` / `resize-pane-height <col> <pane> <delta>` + parse tests.
+- **Live-feedback fixes round 1 (2026-06-21):** (1) columns can now grow to the **full visible width** — `resize_column` cap raised `Proportion 0.95 → 1.0`; (2) **min sizes** so a pane can't become a thin line — `MIN_COLUMN_WIDTH = 150px` (scrolling.rs) + `MIN_PANE_HEIGHT = 100px` (column.rs), replacing the old 50px floors; (3) **vertical first-drag jump fixed** — `resize_pane_height` now bases the new height on the pane's actual current `pane_sizes[idx].h` instead of a hardcoded 200px, so a still-auto pane no longer snaps on the first delta. Keyboard resize benefits too (shared core).
+- **Live-feedback fixes round 2 (2026-06-21):** (4) **single / rightmost column now resizable** — divider hit-test is edge-based: a column's RIGHT edge is its handle (between two columns it spans the gap; for the last/single column it's a band around the right edge); (5) **"resizes on the wrong side" fixed** — `resize_column` now anchors the view on the **resized** column's left edge (not the active column), so the dragged divider tracks the cursor; dropped the active-column recenter + per-move animation that fought a smooth drag.
+Verification: `cargo check/test/clippy -p heca-core -p heca` — heca 233 + heca-core resize tests green, clippy 0 warnings (incl. changed files). (Pre-existing `terminal_backend_bash_integration_*` flake unrelated.)
+**Live-verified by the user (2026-06-21):** divider drag, full-width growth, min sizes, no vertical jump, single/rightmost-column resize, and correct drag side all confirmed good. **Remaining: commit + PR (no commit/merge yet — awaiting OK).**
+**Reviewer Decision:** — · **Reviewer Notes:** —
+
+## Phase 10 — Pane action buttons: float + zoom  ⟶ NEW (requested 2026-06-21, after Phase 9)
+**Status:** Open · **Assigned:** — · **Depends-on:** Phase 7 (in-pane action bar; DONE) · **Plan:** TBD (small extension)
+**One-liner:** add **float** and **zoom** as pane info-bar action buttons, alongside the existing split/close,
+each wired to its existing WM action + keybinding (`float` = `prefix+f`, `zoom_column` = `prefix+z`, both
+already configured).
+**Tasks:**
+- [ ] Extend `heca-config` `PaneAction` enum (`heca-config/src/appearance.rs`) with `Zoom` + `Float` (snake_case
+      `zoom`/`float`); they join the existing `split`/`move_left`/`move_right`/`close`.
+- [ ] Map them in the pane-header builder (`heca/src/chrome/mod.rs` `build_pane_info_bar` / `sync_pane_headers`):
+      `float → WmAction::Float`, `zoom → WmAction::ZoomColumn`; pick Phosphor icons; tooltips auto-show the real
+      keybind via the existing `PaneActionHints`/`format_binding` path (bindings already exist — no new keymap).
+- [ ] Per the action checklist: reachable from keyboard (already), mouse/UI (these buttons), and RPC (Float/
+      ZoomColumn RPC parity — confirm/add).
+- [ ] Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule), and `example.config.toml`/README
+      docs for the new `pane_title_actions` values.
+- [ ] Tests where pure (action-kind → WmAction mapping).
+**Config note (confirmed 2026-06-21):** the pane action config IS implemented like segments, but the key is
+**`pane_title_actions`** (NOT `pane_actions`) — parallel to `pane_title_segments`. Current valid values:
+`split`/`move_left`/`move_right`/`close` (default `["split","close"]`). `zoom`/`float` become valid once this
+phase lands. The user's recalled `pane_actions: ["close","zoom","float","split"]` should be written as
+`pane_title_actions = ["close", "zoom", "float", "split"]`.
 **Agent Completion:** —
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
@@ -218,7 +255,16 @@ feature overlapping the deferred DnD/cursor work and an open niri-parity questio
 `0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8` (single-threaded). Parallel once Phase 1 is Accepted: **2 & 5** together,
 then 3→4 and 6 alongside.
 
+## Known issues (open, not yet scheduled)
+- **Split-via-action-button flash (2026-06-21, reported):** splitting a pane with the in-pane action button
+  produces a brief full-window chrome flash (both sidebars + scrolling area). Traced to: the button press calls
+  `mark_full_redraw` (→ `ChromeDamageMode::Full`) and the new pane changes the chrome signature, so `render.rs`
+  rebuilds the entire retained chrome tree AND full-repaints in the same frame. Exact flashing layer (rebuilt-tree
+  default state vs. blur backdrop vs. opacity) needs live reproduction. **Independent of Phase 9** (pre-existing
+  split + chrome-rebuild path); does not block the Phase 9 commit. Likely also reproducible via keyboard split.
+
 ## Activity log
+- 2026-06-21 — **Phase 10 added** (pane action buttons: float + zoom, `prefix+f`/`prefix+z`) per user request, after Phase 9. Confirmed the pane-action config key is `pane_title_actions` (like `pane_title_segments`), currently `split`/`move_left`/`move_right`/`close`; `zoom`/`float` land in Phase 10. Logged the split-via-button chrome flash as a known issue.
 - 2026-06-18 — board created; plan locked (`pane-runtime-state-plan.md`); all phases `Open`.
 - 2026-06-18 — docs landed (PR #127); **Phase 0 dispatched** to an agent (foundation).
 - 2026-06-18 — **Phase 2 implemented + merged**: code PR #133 (`e8ac856`), design/deferral docs PR #132. Accepted by merge. macOS cwd OS-fallback deferred → Phase 3 OSC 7 (tracked).
@@ -229,3 +275,4 @@ then 3→4 and 6 alongside.
 - 2026-06-20 — **Phase 9 created** (mouse pane/column resize) — spun out of the Phase 7 pane-action discussion; standalone because it's layout/interaction (not display) and gated on the niri column-width-persistence question. Recorded in `PLAN.md` + plan §4 Phase 9.
 - 2026-06-21 — **Phase 7 Slice 2 (action buttons) landed + verified live**, then polished over two feedback rounds (default split+close, real keybind tooltips with symbolized prefix, per-frame tick fixing stuck press/tooltip, split column re-bake, softened-red close, bigger buttons, per-pane clip restored so the bar can't spill on resize while the Tooltip escapes via the overlay). **Phase 7 complete.** Slice 1 merged via #147; the rest opens as a **fresh PR → main** (#148).
 - 2026-06-21 — **Phase 8 done** (`feature/phase-8`): first-party host API `app.on`/`app.state` (`heca/src/host.rs`) over the Phase 0 bus + store, end-to-end tests, plugin-plan docs (foundation-landed + deferred `${token}` shape). **The pane-runtime initiative (Phases 0–8) is complete.** Only the standalone Phase 9 (mouse resize) remains as a follow-up.
+- 2026-06-21 — **Phase 9 gesture built** (`feature/phase-9`, lead, uncommitted): on top of the foundation (`e1f9e71` parameterized core resize + persistence landmine resolved), added the mouse divider-drag gesture — `mouse/resize.rs` hit-test (pane gaps first → RowResize, column gaps → ColResize, ~6px grab, floats excluded) + right-button fallback; left-press start intercepted in `app/events.rs` (after header-button, only a real hit consumes); each move emits parameterized `ResizeColumnBy`/`ResizePaneHeightBy` (registry + RPC `resize-column`/`resize-pane-height`); release clears; resize cursor on hover/drag; chrome-hover + terminal forwarding gated while resizing. 233 heca tests green, clippy clean. **Phase 9 = unit-complete; live-verify + commit/PR pending OK.**

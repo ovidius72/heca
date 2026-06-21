@@ -368,6 +368,38 @@ args = { target = "column", axis = "x", amount = "-50" }
 - Users remove a built-in program mapping with `disabled = true`. Do not invent
   empty-string semantics for inherited defaults.
 
+### Pane Info Bar (segments + action buttons)
+
+Each pane renders an in-pane **info bar**: ordered **segments** (left, "what the
+pane is") and **action buttons** (right). Both are driven by config lists under
+`[appearance]` — `pane_title_segments` and `pane_title_actions` (NOT `pane_segments`
+/ `pane_actions`). Order in the list = render order. Empty list hides that side;
+both empty ⇒ no bar and no reserved space. User-facing list of supported values
+lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
+
+Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "snake_case")]`:
+- `PaneSegment` — `Location`, `AppName`, `GitBranch`, `GitStatus`.
+- `PaneAction` — `Split`, `MoveLeft`, `MoveRight`, `Close`.
+
+**To add a new segment kind:**
+1. Add the variant to `PaneSegment` (`heca-config/src/appearance.rs`); document the doc-comment.
+2. Render it in the segment match in `heca/src/chrome/mod.rs` (around the
+   `PaneSegment::Location =>` arm) — pull from the pane's `PaneRuntime` projection;
+   a segment with no data must be **skipped** (no empty pill).
+3. Update `README.md` (supported-segments table) + `example.config.toml`.
+
+**To add a new action kind:**
+1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
+2. Map it in `pane_action_spec()` (`heca/src/chrome/mod.rs`) → `(Glyph icon,
+   WmAction, label)`. Reuse an **existing** `WmAction` (e.g. `Float` → `WmAction::Float`,
+   `zoom` → `WmAction::ZoomColumn`); do not invent a parallel code path. Tooltips
+   pick up the real keybinding automatically via `PaneActionHints`/`format_binding`
+   — no new keymap entry needed if the action already has a binding.
+3. Per the action checklist, the action must already be reachable from keyboard +
+   RPC; the button just adds the mouse/UI path.
+4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),
+   `README.md` (supported-actions table), and `example.config.toml`.
+
 ### Planned parameterized binding contract
 
 When implementing richer spawning / geometry-aware bindings, keep these rules:

@@ -493,6 +493,51 @@ The **UI font** (`font_family` / `font_size`) and the **terminal font**
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 
+### Pane Info Bar
+
+Each pane shows a small **info bar** along its top: configurable **segments** on the
+left (what the pane is) and **action buttons** on the right. Both are configured
+under `[appearance]` as ordered lists — order in the list is the order shown
+(left → right). An empty list hides that side; if **both** are empty the bar (and
+its reserved space) disappears entirely.
+
+```toml
+[appearance]
+# Left side — what to show, in order. A segment with no data for a pane is skipped
+# (e.g. git segments outside a repo).
+pane_title_segments = ["location", "app_name", "git_branch", "git_status"]
+
+# Right side — action buttons, in order. Each button's tooltip shows its real
+# configured keybinding.
+pane_title_actions = ["split", "close"]
+
+sidebar_width = 300           # Sidebar width in px (clamped 160..=560)
+```
+
+**Supported segments** (`pane_title_segments`):
+
+| Value         | Shows                                                        |
+|---------------|-------------------------------------------------------------|
+| `location`    | Working directory (home-relative path)                      |
+| `app_name`    | Resolved program / app name (from the [Process Catalog](#process-catalog)) |
+| `git_branch`  | Git branch — hidden outside a repo                          |
+| `git_status`  | Git change counts `+A ~M -D` — hidden when clean / no repo  |
+
+Default: `["location", "app_name"]`.
+
+**Supported actions** (`pane_title_actions`):
+
+| Value        | Button does              |
+|--------------|--------------------------|
+| `split`      | Add a pane to the column |
+| `close`      | Close the pane           |
+| `move_left`  | Move the pane left       |
+| `move_right` | Move the pane right      |
+
+Default: `["split", "close"]` (move actions are omitted by default since panes are
+already movable by mouse-dragging, but they remain valid config values). Each
+button's tooltip shows the **real configured keybinding** for that action.
+
 ---
 
 ## Actions System
