@@ -534,7 +534,17 @@ impl ScrollingSpace {
     /// NIRI behavior: only the active column changes. Other columns keep their widths.
     /// If the total exceeds the viewport, the view scrolls horizontally.
     pub fn resize_active_column(&mut self, delta: f64) {
-        if self.active_column_idx >= self.columns.len() {
+        self.resize_column(self.active_column_idx, delta);
+    }
+
+    /// Resize column `idx` by `delta` (a proportion delta for `Proportion` widths,
+    /// or a fraction of the working width for `Fixed`). Mutates the column's
+    /// **canonical** [`ColumnWidth`] — so the change persists through later
+    /// `update_all_column_widths` recomputes — and preserves the view position. Used
+    /// by the keyboard resize (active column), the mouse divider drag (any column),
+    /// and RPC.
+    pub fn resize_column(&mut self, idx: usize, delta: f64) {
+        if idx >= self.columns.len() {
             return;
         }
 
@@ -542,7 +552,7 @@ impl ScrollingSpace {
         let old_view_pos = self.view_pos();
         let available_width = (self.working_area.size.w - self.options.gaps * 2.0).max(50.0);
 
-        if let Some(col) = self.columns.get_mut(self.active_column_idx) {
+        if let Some(col) = self.columns.get_mut(idx) {
             let base_width = if col.is_zoomed() {
                 ColumnWidth::Fixed(available_width)
             } else {
@@ -562,6 +572,16 @@ impl ScrollingSpace {
         }
 
         self.finish_active_column_width_change(&old_xs, old_view_pos);
+    }
+
+    /// Resize the height of pane `pane_idx` within column `col_idx` by `delta`
+    /// logical px (mouse divider drag / RPC). No-op for single-pane columns or
+    /// out-of-range indices. Mirrors the keyboard `resize_active_pane_height`.
+    pub fn resize_pane_height(&mut self, col_idx: usize, pane_idx: usize, delta: f64) {
+        let (working_h, gaps) = (self.working_area.size.h, self.options.gaps);
+        if let Some(col) = self.columns.get_mut(col_idx) {
+            col.resize_pane_height(pane_idx, delta, working_h, gaps);
+        }
     }
 
     /// Move the active pane to the previous column (left).
@@ -1120,6 +1140,47 @@ mod tests {
         assert!(space.toggle_active_column_zoom());
         assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.5));
         assert!(!space.columns[0].is_zoomed());
+    }
+
+    #[test]
+    fn resize_column_persists_through_recompute_and_add() {
+        let mut space = space_with_columns(2); // [1,2] each Proportion(0.5)
+        space.resize_column(0, 0.2);
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
+        let w0 = space.column_widths[0];
+        // A later layout mutation recomputes the width cache from the canonical
+        // `col.width` — the resize must NOT be recomputed away (the niri landmine).
+        space.update_all_column_widths();
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
+        assert_eq!(space.column_widths[0], w0, "recompute preserves the manual resize");
+        // Adding a column must not reflow column 0 (independent proportions).
+        space.add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7), "resize survives add");
+    }
+
+    #[test]
+    fn resize_column_clamps_and_ignores_out_of_range() {
+        let mut space = space_with_columns(2);
+        space.resize_column(0, 10.0); // huge delta clamps to the 0.95 cap
+        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.95));
+        space.resize_column(99, 0.1); // out of range → no-op, no panic
+        assert_eq!(space.columns.len(), 2);
+    }
+
+    #[test]
+    fn resize_pane_height_sets_preferred_and_no_ops_single_pane() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+        // Single-pane column → no-op (the lone pane fills the column).
+        space.resize_pane_height(0, 0, 30.0);
+        assert_eq!(space.columns[0].panes[0].preferred_height, None);
+        // Stack a second pane, then the resize takes effect.
+        space.add_pane_to_column(0, None, Pane::new(PaneId(2), "p2".to_string()), true);
+        space.resize_pane_height(0, 0, 30.0);
+        assert!(space.columns[0].panes[0].preferred_height.is_some());
+        // Out-of-range column / pane index → no panic.
+        space.resize_pane_height(9, 0, 30.0);
+        space.resize_pane_height(0, 9, 30.0);
     }
 
     #[test]

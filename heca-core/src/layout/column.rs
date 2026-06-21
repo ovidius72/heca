@@ -215,13 +215,19 @@ impl Column {
     /// Resize the active pane's height by a delta (pixels).
     /// Only affects panes with preferred_height; others remain auto.
     pub fn resize_active_pane_height(&mut self, delta: f64, working_height: f64, gaps: f64) {
-        if self.panes.len() <= 1 {
-            return; // No resize when only one pane
+        self.resize_pane_height(self.active_pane_idx, delta, working_height, gaps);
+    }
+
+    /// Resize pane `pane_idx`'s height by `delta` logical px. No-op for single-pane
+    /// columns or an out-of-range index. Used by the keyboard resize (active pane),
+    /// the mouse divider drag (any pane), and RPC.
+    pub fn resize_pane_height(&mut self, pane_idx: usize, delta: f64, working_height: f64, gaps: f64) {
+        if self.panes.len() <= 1 || pane_idx >= self.panes.len() {
+            return;
         }
-        let idx = self.active_pane_idx;
-        let current = self.panes[idx].preferred_height.unwrap_or(200.0);
+        let current = self.panes[pane_idx].preferred_height.unwrap_or(200.0);
         let new_h = (current + delta).clamp(50.0, working_height - gaps * 2.0);
-        self.panes[idx].preferred_height = Some(new_h);
+        self.panes[pane_idx].preferred_height = Some(new_h);
         self.compute_pane_sizes(working_height, gaps);
     }
 
