@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn terminal_frost_color_resolves_config_then_theme_then_background() {
-        let mocha = crate::theme::Theme::catppuccin_mocha();
+        let mocha = crate::theme::catppuccin_mocha();
 
         // Default: no config override, bundled theme field is None → falls back
         // to theme.background (the app theme bg).
@@ -646,7 +646,7 @@ theme = "mocha"
 
     #[test]
     fn floating_border_color_resolves_config_then_float_accent() {
-        let mocha = crate::theme::Theme::catppuccin_mocha();
+        let mocha = crate::theme::catppuccin_mocha();
 
         // Default: no config override -> theme.float_accent.
         let cfg = AppearanceConfig::default();

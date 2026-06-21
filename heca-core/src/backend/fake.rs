@@ -135,6 +135,7 @@ impl PaneBackend for FakeBackend {
             cell_h,
             default_fg: [0.9, 0.9, 0.9, 1.0],
             default_bg: [0.05, 0.05, 0.08, 1.0],
+            cursor_color: [0.9, 0.9, 0.9, 0.85],
             cursor: TerminalCursor {
                 col: 0,
                 row: 0,

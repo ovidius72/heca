@@ -144,6 +144,8 @@ impl Default for Shadow {
 /// Small controls (inputs, selects, checkboxes, chips) round at this fraction of
 /// the base [`Theme::radius`], so one global radius scales every widget together.
 const CONTROL_RADIUS_FRAC: f32 = 0.5;
+const SIDEBAR_BG_DARKEN_FACTOR: f32 = 0.05;
+const TOP_BOTTOM_PANE_BG_DARKEN_FACTOR: f32 = 0.10;
 
 /// Palette + effect tokens for the entire application.
 ///
@@ -183,6 +185,14 @@ pub struct Theme {
     pub border_width: f32,
     #[serde(default = "default_pane_padding")]
     pub pane_padding: f32,
+
+    // ── Chrome background tokens ──
+    #[serde(default)]
+    pub left_sidebar_background: Option<Color>,
+    #[serde(default)]
+    pub right_sidebar_background: Option<Color>,
+    #[serde(default)]
+    pub top_bottom_pane_background: Option<Color>,
 
     // ── Effect tokens ──
     #[serde(default)]
@@ -343,6 +353,25 @@ impl Theme {
         self.border_radius * CONTROL_RADIUS_FRAC
     }
 
+    fn derived_darker_background(&self, t: f32) -> Color {
+        self.background.lerp(Color::rgb(0, 0, 0), t.clamp(0.0, 1.0))
+    }
+
+    pub fn effective_left_sidebar_background(&self) -> Color {
+        self.left_sidebar_background
+            .unwrap_or_else(|| self.derived_darker_background(SIDEBAR_BG_DARKEN_FACTOR))
+    }
+
+    pub fn effective_right_sidebar_background(&self) -> Color {
+        self.right_sidebar_background
+            .unwrap_or_else(|| self.derived_darker_background(SIDEBAR_BG_DARKEN_FACTOR))
+    }
+
+    pub fn effective_top_bottom_pane_background(&self) -> Color {
+        self.top_bottom_pane_background
+            .unwrap_or_else(|| self.derived_darker_background(TOP_BOTTOM_PANE_BG_DARKEN_FACTOR))
+    }
+
     /// Approximate terminal cell metrics for the current terminal font size.
     pub fn terminal_cell_size(&self) -> (f32, f32) {
         const TERMINAL_CELL_WIDTH_RATIO: f32 = 0.58;
@@ -373,6 +402,9 @@ impl Theme {
             border_radius: 8.0,
             border_width: 1.0,
             pane_padding: 4.0,
+            left_sidebar_background: Some(Color::rgb(5, 9, 13)),
+            right_sidebar_background: Some(Color::rgb(5, 9, 13)),
+            top_bottom_pane_background: Some(Color::rgb(4, 8, 12)),
             glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
@@ -420,6 +452,18 @@ mod tests {
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
         assert!((theme.control_radius() - 4.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn chrome_background_tokens_derive_from_background_when_unset() {
+        let mut theme = Theme::grid_tron();
+        theme.left_sidebar_background = None;
+        theme.right_sidebar_background = None;
+        theme.top_bottom_pane_background = None;
+
+        assert_ne!(theme.effective_left_sidebar_background(), theme.background);
+        assert_ne!(theme.effective_right_sidebar_background(), theme.background);
+        assert_ne!(theme.effective_top_bottom_pane_background(), theme.background);
     }
 
     #[test]
