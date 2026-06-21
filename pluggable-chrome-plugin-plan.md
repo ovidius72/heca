@@ -391,6 +391,13 @@ Important convergence note with terminal work:
 
 ## 3.3 Shared UI / chrome state
 
+> **Foundation landed** (pane-runtime initiative Phases 0–1): `SharedChromeState`
+> (`heca/src/chrome/state.rs`) is the shared, signal-backed store — region
+> visibility/size, active/hovered pane, per-workspace collapse, pick candidates,
+> scroll, and the per-pane runtime mirror. Reads via selectors; writes via the
+> store's `set_*` chokepoint (which emits events). Providers read it through the
+> host API's `app.state.*` (§3.5), not directly.
+
 A new shared state layer will be required to coordinate:
 
 - scrolling area
@@ -459,6 +466,15 @@ The host should expose a controlled plugin API that supports:
 - `app.regions.moveContainer(containerId, targetRegion, options?)`
 
 This is the eventual developer-facing contract.
+
+> **Foundation landed (pane-runtime initiative Phase 8, 2026-06-21).** The first two
+> rows — `app.on(event, handler)` and `app.state.*` read selectors — are implemented
+> first-party in `heca/src/host.rs` (`App::on` / `App::state()`), over the Phase 0
+> event bus + reactive store. `App` is a cheap clone of `SharedChromeState`;
+> `state.host()` hands one out. Plugins/providers **react via events and read via
+> selectors — never the internal `floem_reactive` signals** — which is exactly the
+> boundary the WASM bridge (Phase 9) will marshal. `app.actions.*`, `app.overlay.*`,
+> and `app.regions.*` remain future phases.
 
 ---
 
@@ -925,6 +941,17 @@ This solves the problem that JSON-only or fire-and-forget triggers could not sol
 
 > TO BE ANALYZED LATER.
 
+> **Deferred customization shape (recorded by pane-runtime Phase 8).** The pane-info
+> bar customization was split: the **segment-list selection** already shipped as plain
+> config — `[appearance] pane_title_segments` / `pane_title_actions`, ordered lists of
+> known kinds (`location`/`app_name`/`git_branch`/`git_status`; `split`/`move_left`/
+> `move_right`/`close`). What remains deferred to **this** phase is the **`${token}`
+> templating** (the tmux-style placeholders below). Agreed model when built = the
+> **hybrid**: a user-authored list of **widget-typed segments**, each carrying a
+> `${token}` template string — so a segment is both a typed widget *and* a format
+> string, not one or the other. The Phase 7 fixed defaults become the default segment
+> list once templating ships.
+
 > ALLOWS EXTEND KEYBINDING WITH TOKENS LIKE $paneIndex and so on for propper RPC usage
 
 **Purpose**
@@ -1101,6 +1128,10 @@ This architecture implies future changes to at least these areas:
 ### 5.4 App/plugin event system
 
 - the app needs a formal event publication/subscription model
+- **DONE** (pane-runtime Phase 0 + 8): a typed `ChromeEvent` bus (`heca/src/chrome/events.rs`)
+  with string-named events + `"*"` catch-all and RAII subscriptions, emitted from the
+  store's mutation chokepoint; exposed first-party as `app.on(event, handler)` in
+  `heca/src/host.rs`. WASM bridging is Phase 9.
 
 ### 5.5 Overlay ownership
 

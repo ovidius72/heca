@@ -44,9 +44,11 @@
    as the symbolized combo; default bar = **split + close**; split→`AddPaneToColumn`, close→`ClosePaneById`,
    move_left/right→parameterized `MovePane*{pane_id}` (config-optional); all RPC-parameterized; softened-red
    close; per-pane clip (no resize spill) with the Tooltip escaping via the overlay layer). **Phase 7 complete**
-   — opening a fresh PR → main (Slice 1 already merged via #147). **Full detail in
-   `phase7-pane-info-bar-RESUME.md`.** Phase 8 (plugin `app.on`/`app.state`) is last; Phase 9 (mouse resize)
-   recorded as a standalone task.**
+   (PR #148 → main). ✅ **Phase 8 done** (`feature/phase-8`): first-party host API `app.on`/`app.state` in
+   `heca/src/host.rs` over the Phase 0 event bus + store (`state.host()`), with end-to-end tests + plugin-plan
+   docs marking the event-bus/shared-state foundation landed and the deferred `${token}` customization shape.
+   **The pane-runtime initiative is complete** (Phases 0–8); only the standalone Phase 9 (mouse resize)
+   remains as a follow-up. **Full detail in `phase7-pane-info-bar-RESUME.md`.**
    Its **Phase 0 IS** the SharedChromeState consumer migration + the new
    typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
    process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.

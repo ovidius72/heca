@@ -3,6 +3,7 @@ mod app;
 mod app_state;
 mod chrome;
 mod handlers;
+mod host;
 mod input;
 mod keymap;
 mod mouse;

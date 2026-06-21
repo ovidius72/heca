@@ -338,6 +338,14 @@ impl AppState {
         self.needs_redraw = true;
         self.chrome_damage_mode = ChromeDamageMode::Full;
     }
+
+    /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over
+    /// the shared chrome store. The seam first-party providers (and the future WASM
+    /// bridge) use to observe events + read state without touching internal signals.
+    #[allow(dead_code, reason = "host API seam — first-party providers land in a later phase")]
+    pub fn host(&self) -> crate::host::App {
+        crate::host::App::new(&self.chrome_state)
+    }
 }
 
 impl AppState {

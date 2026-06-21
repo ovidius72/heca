@@ -177,11 +177,15 @@ Done (Slice 2 — action buttons, committed `be12e46` on `feature/phase-7`, 2026
 **Reviewer Decision:** — · **Reviewer Notes:** review M1–M7 triaged in the RESUME doc (M7 fixed; M2/M3/M4 leave; M5/M6 minor; M1 moot after straddle removal).
 
 ## Phase 8 — Plugin event exposure + plan/docs updates
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 0 · **Plan:** §4 Phase 8
+**Status:** Completed by Lead · **Assigned:** lead (`feature/phase-8`) · **Depends-on:** Phase 0 · **Plan:** §4 Phase 8
 **One-liner:** first-party `app.on` + `app.state` selectors over the bus/store; document state access + event
 model + the deferred token customization in `pluggable-chrome-plugin-plan.md`; point `PLAN.md` here.
-**Agent Completion:** —
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Completion:**
+- `heca/src/host.rs`: `App` facade (cheap clone of `SharedChromeState`) — `App::on(event, handler)` over the event bus (RAII `ChromeSubscription`, `"*"` catch-all) + `App::state()` → `StateView` read selectors (`active_pane`, `pane_runtime`/`pane_status`, sidebar visibility, workspace collapsed). `AppState::host()` hands one out. New public `WorkspacesContainerState::pane_runtime` snapshot selector; `ChromeSubscription` exported. Methods/overlay/regions namespaces left to later phases (documented). Module-level `#![allow(dead_code)]` (seam, like the Phase 0 bus) until first-party providers consume it.
+- Tests: typed + catch-all delivery, unsubscribe-on-drop, and an end-to-end "provider subscribes to `pane.status.changed` then reads `pane_status`" round-trip.
+- Docs: `pluggable-chrome-plugin-plan.md` §3.3/§3.5/§5.4 marked foundation-landed; §8.1 records the deferred hybrid `${token}` customization shape (segment-list selection already shipped in Phase 7). `PLAN.md` refreshed.
+- Verification: clippy clean; heca 226 / config 51 tests green.
+**Reviewer Decision:** — · **Reviewer Notes:** pending review (PR → main).
 
 ## Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ NEW (spun out of Phase 7 discussion)
 **Status:** Open · **Assigned:** — · **Depends-on:** niri-parity question #2 (column-width persistence) · **Plan:** §4 Phase 9
@@ -223,4 +227,5 @@ then 3→4 and 6 alongside.
 - 2026-06-20 — **Phase 7 redesign (interactive, with the user) on `feature/phase-7`/PR #147**: started as a border-straddle `Pane.title` (Cut/Filled/Boxed), then **pivoted to an in-pane segmented info bar** (`Tag`) after the straddle's border-matching fought the transparent pane over the terminal. Landed: config segments/actions (replaced straddle config), distinguishable centered header band, width truncation + per-pane clip, UI font → **Geist Mono** (terminal stays Maple), configurable clamped `sidebar_width`, sidebar git branch left-ellipsis. **Remaining = Slice 2 action buttons** (interactive). Bar work uncommitted past the merge.
 - 2026-06-20 — **Phase 7 cleanup + font decoupling landed** (`feature/phase-7`): removed the superseded straddle title widget (`6a5d3d6`, dissolves M1) and **decoupled the UI font from the color theme** into `[settings] font_family`/`font_size` (`344df73`, landmine fixed: default 32→15, mapped in `chrome_gui_theme`). **Slice 2 (action buttons) design locked** with the user: focus-then-act, `MouseContent` source, icons `square-split-vertical`/`arrow-line-left`/`arrow-line-right`/`x-square`, actions split→`AddPaneToColumn` + parameterized `MovePane*{pane_id: Option}` + `Close`, `IconButton`+`Tooltip`.
 - 2026-06-20 — **Phase 9 created** (mouse pane/column resize) — spun out of the Phase 7 pane-action discussion; standalone because it's layout/interaction (not display) and gated on the niri column-width-persistence question. Recorded in `PLAN.md` + plan §4 Phase 9.
-- 2026-06-21 — **Phase 7 Slice 2 (action buttons) landed + verified live**, then polished over two feedback rounds (default split+close, real keybind tooltips with symbolized prefix, per-frame tick fixing stuck press/tooltip, split column re-bake, softened-red close, bigger buttons, per-pane clip restored so the bar can't spill on resize while the Tooltip escapes via the overlay). **Phase 7 complete.** Slice 1 merged via #147; the rest opens as a **fresh PR → main**.
+- 2026-06-21 — **Phase 7 Slice 2 (action buttons) landed + verified live**, then polished over two feedback rounds (default split+close, real keybind tooltips with symbolized prefix, per-frame tick fixing stuck press/tooltip, split column re-bake, softened-red close, bigger buttons, per-pane clip restored so the bar can't spill on resize while the Tooltip escapes via the overlay). **Phase 7 complete.** Slice 1 merged via #147; the rest opens as a **fresh PR → main** (#148).
+- 2026-06-21 — **Phase 8 done** (`feature/phase-8`): first-party host API `app.on`/`app.state` (`heca/src/host.rs`) over the Phase 0 bus + store, end-to-end tests, plugin-plan docs (foundation-landed + deferred `${token}` shape). **The pane-runtime initiative (Phases 0–8) is complete.** Only the standalone Phase 9 (mouse resize) remains as a follow-up.
