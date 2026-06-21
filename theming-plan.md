@@ -23,10 +23,15 @@ So **"default = grid_tron" and "default = mocha" are both true at different laye
 3. **Light-theme glow assumption is stale:** the renderer now has explicit light-theme glow support (`heca-renderer/src/scene.rs` + `grid.wgsl`), so "Tron effects don't work on light backgrounds / latte must have glow off" is no longer a hard constraint — latte's glow/scanline values are a palette choice, not forced off. (Verify in 2.6.)
 4. Phase 3 (consumer migration) is still **largely undone** and remains the active phase — `heca-config`/`heca-grid-ui` have no `heca-theme` dep yet; duplicate `color.rs`/`theme.rs` still exist in both. 3C hardcoded branches (`if theme.name == "Catppuccin Mocha"`, `chrome_colors()`, `Color::new(17,17,27,255)`) are all still present and valid targets.
 
-**Requirement change (user, 2026-06-21): replace `frappe` with `latte` as the light theme.** Rationale: **Frappé is a *dark* Catppuccin flavor — Latte is the actual light/white one**; the plan mislabeled frappe as "light". Latte is also already the app's (`heca-config`) light theme, so this unifies both systems on one light palette. **This is a code task NOT yet done** — the references above were updated to `latte`, but `heca-theme` still ships `heca-theme/src/themes/frappe.toml` and the showcase still cycles `frappe`. Concrete steps:
+**Requirement change (user, 2026-06-21): replace `frappe` with `latte` as the light theme.** Rationale: **Frappé is a *dark* Catppuccin flavor — Latte is the actual light/white one**; the plan mislabeled frappe as "light". Latte is also already the app's (`heca-config`) light theme, so this unifies both systems on one light palette. **This is a code task NOT yet done** — the references above were updated to `latte`, but `heca-theme` still ships `heca-theme/src/themes/frappe.toml` and the showcase still cycles `frappe`.
+
+**Scope of the swap:** this is a **global rename/replacement of the active third theme**, not a partial alias. When the task is done, every active occurrence of `frappe` in the theme crate, loader, showcase/theme switcher, user-visible labels, tests, and current docs should be replaced by `latte`. `frappe` should remain only in historical notes that explain the migration.
+
+Concrete steps:
 - `heca-theme/src/themes/latte.toml` — author the **real Catppuccin Latte** palette (base it on `heca-config/src/themes/latte.toml` + add the grid-ui fields: `surface`, `muted`, `glow`, `danger`, `success`, `warning`, `glow_size`, `intensity`, `show_focus_border`, `icon_secondary_alpha`). Light glow is now allowed (reconciliation #3) — tune, don't force off.
 - delete `heca-theme/src/themes/frappe.toml`; update `heca-theme/src/loader.rs` bundled list (`frappe`→`latte`).
 - `heca-renderer/examples/showcase.rs` — `THEMES` cycle + switcher label `frappe`→`latte` ("Catppuccin Latte").
+- update any remaining active docs/tests/config references so `latte` fully replaces `frappe` everywhere outside historical notes.
 - then visually verify (2.6) the light theme renders correctly.
 (The `[x]` on 1.6/2.x above now say "latte" but reflect the *target*, not current code — the swap is the task here.)
 
