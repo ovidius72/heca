@@ -39,11 +39,11 @@
    in progress on `feature/phase-7` (PR #147) — sidebar card done + an in-pane segmented info bar (config
    `[appearance] pane_title_segments`/`pane_title_actions`, Geist Mono UI font, configurable `sidebar_width`).
    ✅ Superseded straddle title widget removed; ✅ UI font decoupled from the color theme into `[settings]
-   font_family`/`font_size` (landmine fixed: `Theme.font_size` default normalized 32→15, mapped into
-   `chrome_gui_theme`). **Remaining = Slice 2: the bar's interactive action buttons** (retained per-pane
-   header + pointer dispatch; `IconButton`+`Tooltip`; split→`AddPaneToColumn`, move_left/right→parameterized
-   `MovePane*{pane_id}`, close→`Close`). **Full resume detail in `phase7-pane-info-bar-RESUME.md`.** Phase 8
-   (plugin `app.on`/`app.state`) is last.**
+   font_family`/`font_size`; ✅ **Slice 2 — interactive action buttons** done (retained per-pane header +
+   pointer dispatch; `IconButton`+`Tooltip`; split→`AddPaneToColumn`, move_left/right→parameterized
+   `MovePane*{pane_id}`, close→`ClosePaneById`; all RPC-parameterized). **Left: live mouse verification**
+   (button clicks fire + don't leak to the terminal; hover). **Full resume detail in
+   `phase7-pane-info-bar-RESUME.md`.** Phase 8 (plugin `app.on`/`app.state`) is last.**
    Its **Phase 0 IS** the SharedChromeState consumer migration + the new
    typed event bus (the old P0); later phases add per-pane process/status/cwd/git tracking, the
    process→icon catalog, real command-spawn (float + close-policy), and the default pane-info widgets.

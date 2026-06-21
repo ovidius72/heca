@@ -2,7 +2,12 @@
 
 > Detailed resume doc for the in-pane info bar work. Branch **`feature/phase-7`**, **PR #147 → main**.
 > Read this + `pane-runtime-tasks.md` (Phase 7) + `pane-runtime-state-plan.md` (§0.3 + §4 Phase 7).
-> Status as of 2026-06-20. **Slice 1 = DONE + committed. Slice 2 (action buttons) + font decoupling = PENDING.**
+> Status as of 2026-06-21. **Slice 1, Slice 2 (action buttons), font decoupling, and straddle-widget removal
+> = ALL DONE + committed on `feature/phase-7`** (`6a5d3d6` straddle removal, `344df73` font decouple,
+> `b219a51` glyphs+parameterized actions, `be12e46` Slice 2 buttons). **Only remaining: live mouse
+> verification** (button clicks fire their actions + don't leak to the terminal; hover highlight). Sections
+> A/B/C below are historical design notes — all implemented; see `pane-runtime-tasks.md` Phase 7 for the
+> as-built summary.
 
 ## What this feature is
 A pane gets an **in-pane segmented info bar** = a `Tag` pill inside the pane top:
