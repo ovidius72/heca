@@ -274,7 +274,14 @@ impl Component for Tooltip {
         for child in self.base.children.iter_mut() {
             animating |= child.tick(dt);
         }
-        animating
+        // Keep the host ticking through the reveal-delay window so the show boundary
+        // is reached on time. Otherwise, in a `WaitUntil`-driven host (where redraws
+        // only continue while something animates), the bubble wouldn't appear until
+        // the next unrelated event — e.g. the user nudging the mouse a second time.
+        // (`next_redraw` offers the precise wake; this keeps it correct even when the
+        // host schedules frames purely off `tick`'s animating flag.)
+        let pending_reveal = self.hover_since.is_some() && !now_shown;
+        animating || pending_reveal
     }
 
     fn next_redraw(&self) -> Option<f32> {
