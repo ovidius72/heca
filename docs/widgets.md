@@ -788,8 +788,9 @@ theme-driven (primary defaults to the foreground; secondary = primary at
 - **Builders**: `.size(px)`, `.color(Color)` (primary), `.secondary_color(Color)`.
 - **`Glyph`**: a curated enum — `Folder`, `FolderOpen`, `File`, `FileCode`, `GitBranch`,
   `GitCommit`, `GitMerge`, `GitPullRequest`, `Terminal`, `Gear`, `Search`, `Close`, `Check`,
-  `Play`, `Pause`, `Stop`, `Warning`, `Info`, `Lightning`, `List`, `Sidebar`, … (or use
-  `from_codepoint` for any glyph).
+  `Play`, `Pause`, `Stop`, `Warning`, `Info`, `Lightning`, `List`, `Sidebar`, the pane-action
+  set (`SquareSplitVertical`, `ArrowLineLeft`, `ArrowLineRight`, `FrameCorners`, `Cards`,
+  `XSquare`), … (or use `from_codepoint` for any glyph).
 
 ```rust
 Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0);

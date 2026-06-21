@@ -226,7 +226,7 @@ Verification: `cargo check/test/clippy -p heca-core -p heca` — heca 233 + heca
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ## Phase 10 — Pane action buttons: float + zoom  ⟶ NEW (requested 2026-06-21, after Phase 9)
-**Status:** Open · **Assigned:** — · **Depends-on:** Phase 7 (in-pane action bar; DONE) · **Plan:** TBD (small extension)
+**Status:** Completed by Lead (unit-verified; live-verify pending) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** Phase 7 (in-pane action bar; DONE) · **Plan:** §0.3 + this entry
 **One-liner:** add **float** and **zoom** as pane info-bar action buttons, alongside the existing split/close,
 each wired to its existing WM action + keybinding (`float` = `prefix+f`, `zoom_column` = `prefix+z`, both
 already configured).
@@ -246,7 +246,13 @@ already configured).
 `split`/`move_left`/`move_right`/`close` (default `["split","close"]`). `zoom`/`float` become valid once this
 phase lands. The user's recalled `pane_actions: ["close","zoom","float","split"]` should be written as
 `pane_title_actions = ["close", "zoom", "float", "split"]`.
-**Agent Completion:** —
+**Agent Completion (Lead, `feature/phase-9`):**
+- `heca-config` `PaneAction` += `Zoom` + `Float` (snake_case `zoom`/`float`).
+- `heca-grid-ui` `Glyph` += `FrameCorners` (Phosphor `frame-corners`, `\e626`) + `Cards` (`cards`, `\e0f8`) — codepoints cross-checked against the embedded Phosphor-Duotone v2.1 font (all 4 existing anchors matched the official CSS) and confirmed present in the font cmap.
+- `chrome/mod.rs` `pane_action_spec`: `zoom → (FrameCorners, WmAction::ZoomColumn)`, `float → (Cards, WmAction::Float)`. These are **active-targeted** so the button does **focus-then-act** (sends `FocusPane{pane_id}` then `ActivateAction` — queued in order) so they land on the clicked pane, not whatever's active. Routed through the **ActionRegistry** like the others. Tooltips show the real keybind via `PaneActionHints` (`zoom_column`/`float` already bound to `prefix+z`/`prefix+f`). RPC parity already existed (`zoom-column`/`float`).
+- Showcase icon strip + `docs/widgets.md` glyph list updated (grid-ui rule); README actions table + `example.config.toml` updated; mapping unit test added.
+- Verification: heca 235 + grid-ui + showcase build green, clippy 0 warnings. (Pre-existing unrelated `heca-config loader::test_fallback_when_config_missing` theme default `latte`/`mocha` mismatch — from the in-progress theming migration, fails with our changes stashed too.)
+**Remaining:** live-verify the two buttons; commit done, push pending OK.
 **Reviewer Decision:** — · **Reviewer Notes:** —
 
 ---

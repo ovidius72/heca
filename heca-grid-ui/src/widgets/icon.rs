@@ -60,6 +60,8 @@ pub enum Glyph {
     Minus,
     SquareSplitVertical,
     XSquare,
+    FrameCorners,
+    Cards,
 }
 
 impl Glyph {
@@ -99,6 +101,8 @@ impl Glyph {
             Glyph::Minus => 0xe32a,
             Glyph::SquareSplitVertical => 0xe874,
             Glyph::XSquare => 0xe4fa,
+            Glyph::FrameCorners => 0xe626,
+            Glyph::Cards => 0xe0f8,
         }
     }
 
@@ -263,6 +267,10 @@ impl Glyph {
             0xe06c => Glyph::ArrowRight,
             0xe3d4 => Glyph::Plus,
             0xe32a => Glyph::Minus,
+            0xe874 => Glyph::SquareSplitVertical,
+            0xe4fa => Glyph::XSquare,
+            0xe626 => Glyph::FrameCorners,
+            0xe0f8 => Glyph::Cards,
             // Unknown Phosphor codepoints fall back to the generic terminal glyph so
             // callers still get a stable icon instead of a missing-glyph square.
             _ => Glyph::Terminal,

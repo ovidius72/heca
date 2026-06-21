@@ -527,12 +527,14 @@ Default: `["location", "app_name"]`.
 
 **Supported actions** (`pane_title_actions`):
 
-| Value        | Button does              |
-|--------------|--------------------------|
-| `split`      | Add a pane to the column |
-| `close`      | Close the pane           |
-| `move_left`  | Move the pane left       |
-| `move_right` | Move the pane right      |
+| Value        | Button does                          |
+|--------------|--------------------------------------|
+| `split`      | Add a pane to the column             |
+| `close`      | Close the pane                       |
+| `zoom`       | Toggle zoom (maximise) the column    |
+| `float`      | Toggle floating for the pane         |
+| `move_left`  | Move the pane left                   |
+| `move_right` | Move the pane right                  |
 
 Default: `["split", "close"]` (move actions are omitted by default since panes are
 already movable by mouse-dragging, but they remain valid config values). Each
