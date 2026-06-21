@@ -15,7 +15,7 @@
 
 So **"default = grid_tron" and "default = mocha" are both true at different layers** — not a conflict. `grid_tron` **is the intended config default** (Decisions Log below); the live `mocha` default is simply the symptom that **Phase 3 (consumer migration) is not done**. `heca-theme` is the **target** crate (Phases 1–2 ✅), today only wired into the `heca-renderer` showcase (`heca_theme_to_grid_ui` in `showcase.rs`) — it is NOT dead.
 
-**Status recap:** Phase 1 ✅ (`heca-theme` crate: grid_tron/mocha/latte + `load_theme`). Phase 2 ✅ except 2.5/2.6 visual verify (showcase cycles themes live, works). **Phase 3 ⏳ is next** (migrate `heca-config` + `heca-grid-ui` to re-export `heca-theme`; wire `[appearance].theme` default `grid_tron`; make `chrome_gui_theme()` a pass-through). Phase 4 deferred.
+**Status recap:** Phase 1 ✅ (`heca-theme` crate: grid_tron/mocha/latte + `load_theme`). Phase 2 ✅ except 2.5/2.6 visual verify (showcase cycles themes live, works). **Phase 3 ⏳ is next** (migrate `heca-config` + `heca-grid-ui` to re-export `heca-theme`; wire `[settings].theme` + flip `default_theme()`→`grid_tron`; make `chrome_gui_theme()` a pass-through). Phase 4 deferred.
 
 **Audit reconciliation (external agent, 2026-06-21) — corrections to apply during Phase 3:**
 1. **Default theme — RESOLVED (2026-06-21):** default is **`grid_tron`**, overridable via `[settings].theme`; shipped alternatives are **mocha + latte**. Implementation: current code still defaults to `mocha` and `heca-config` only bundles mocha/latte (not grid_tron), so the default flips to grid_tron in **Phase 3** once the app loads from `heca-theme` (which bundles grid_tron) + `default_theme()` is changed. Decisions Log + 3A.8 below rewritten to match.
