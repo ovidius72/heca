@@ -302,12 +302,20 @@ pub(crate) fn build_pane_info_bar(
 /// Horizontal margin from the pane edge to the header content (matches the render
 /// side's `TITLE_BAR_MARGIN` in `terminal_render.rs`).
 const HEADER_MARGIN: f32 = 6.0;
-/// Gap between adjacent action buttons (logical px).
-const HEADER_BUTTON_GAP: f32 = 2.0;
+/// Gap between adjacent action buttons (logical px) — tight, so the cluster reads
+/// as one control group.
+const HEADER_BUTTON_GAP: f32 = 1.0;
 
-/// Square cell size of a header action button at the bar `font`.
+/// Glyph size of a header action button at the bar `font` — a touch larger than the
+/// body font so the icons are clearly legible/clickable.
+fn header_icon_size(font: f32) -> f32 {
+    (font * 1.25).max(15.0)
+}
+
+/// Square cell size of a header action button — the icon plus snug padding (keeps
+/// the inter-button spacing small while the buttons stay comfortably tappable).
 fn header_button_cell(font: f32) -> f32 {
-    (font + 9.0).max(18.0)
+    header_icon_size(font) + 6.0
 }
 
 /// Total width the action-button cluster occupies (0 when there are no actions).
@@ -562,13 +570,18 @@ pub(crate) fn build_pane_header(
             } else {
                 format!("{label}  {key}")
             };
-            let tone = if matches!(action, heca_config::appearance::PaneAction::Close) {
-                theme.danger
+            // Close is destructive → its glyph + hover/press use the theme danger
+            // hue; the rest use the foreground glyph with an accent hover. The danger
+            // glyph is softened toward the header surface so the red reads as a cue,
+            // not an alarm (full-intensity danger was too vibrant).
+            let is_close = matches!(action, heca_config::appearance::PaneAction::Close);
+            let (icon_color, tone) = if is_close {
+                (theme.danger.lerp(theme.surface, 0.25), theme.danger)
             } else {
-                theme.accent
+                (theme.foreground, theme.accent)
             };
             let proxy = ctx.event_proxy.clone();
-            let button = IconButton::new(Icon::new(glyph).color(theme.foreground).size(font))
+            let button = IconButton::new(Icon::new(glyph).color(icon_color).size(header_icon_size(font)))
                 .cell(cell)
                 .tone(tone)
                 .on_click(move || {

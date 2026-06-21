@@ -158,25 +158,18 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
-            // Pane info-bar action buttons intercept a plain left-press before the
-            // content/terminal paths, so a click hits the button (not the terminal).
-            // A modifier-held press falls through to the meta-drag gesture below.
+            // Pane info-bar action **buttons** intercept a plain left-press so a click
+            // hits the button (not the terminal). Only an actual button hit is
+            // consumed — a press on the empty header band falls through to the normal
+            // content/drag/resize paths (the lower pane's band sits on the divider, so
+            // consuming it would break divider/resize gestures). A modifier-held press
+            // also falls through (meta-drag).
             if button == winit::event::MouseButton::Left
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
-                && let Some((pane_id, consumed)) =
+                && let Some((_pane_id, true)) =
                     crate::chrome::dispatch_pane_header_press(state, state.mouse.pos)
             {
-                if !consumed {
-                    // Empty header band (not a button) → focus the pane; treat the band
-                    // as chrome, so no terminal text-selection starts here.
-                    dispatch_action(
-                        state,
-                        registry,
-                        InteractionSource::MouseContent,
-                        &crate::input::WmAction::FocusPane { pane_id },
-                    );
-                }
                 mouse::update_cursor(state, state.mouse.pos);
                 state.mark_full_redraw();
                 return;
