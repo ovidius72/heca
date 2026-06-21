@@ -94,7 +94,7 @@ use heca_core::runtime::{PaneRuntime, ProcessStatus};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
-use heca_grid_ui::style::{Align, Length};
+use heca_grid_ui::style::{Align, Justify, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
@@ -295,6 +295,337 @@ pub(crate) fn build_pane_info_bar(
         });
     }
     tag
+}
+
+// ── In-pane info-bar header: segments (left) + interactive action buttons (right) ──
+
+/// Horizontal margin from the pane edge to the header content (matches the render
+/// side's `TITLE_BAR_MARGIN` in `terminal_render.rs`).
+const HEADER_MARGIN: f32 = 6.0;
+/// Gap between adjacent action buttons (logical px).
+const HEADER_BUTTON_GAP: f32 = 2.0;
+
+/// Square cell size of a header action button at the bar `font`.
+fn header_button_cell(font: f32) -> f32 {
+    (font + 9.0).max(18.0)
+}
+
+/// Total width the action-button cluster occupies (0 when there are no actions).
+pub(crate) fn header_buttons_width(actions: &[heca_config::appearance::PaneAction], font: f32) -> f32 {
+    if actions.is_empty() {
+        return 0.0;
+    }
+    let n = actions.len() as f32;
+    n * header_button_cell(font) + (n - 1.0).max(0.0) * HEADER_BUTTON_GAP
+}
+
+/// Per-pane context the header buttons need to build their (parameterized) actions
+/// and emit them through the app event loop.
+pub(crate) struct PaneHeaderCtx {
+    pub(crate) pane_id: PaneId,
+    pub(crate) ws_idx: usize,
+    pub(crate) col_idx: usize,
+    pub(crate) event_proxy: winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+}
+
+/// A retained per-pane info-bar header (segment `Tag` + action `IconButton`s).
+/// Rebuilt only when [`pane_header_key`] changes (so button hover/press signals
+/// survive across frames); re-laid-out + positioned every frame by
+/// [`sync_pane_headers`]; painted read-only in `terminal_render` and dispatched
+/// pointer events by `mouse.rs`.
+pub(crate) struct RetainedPaneHeader {
+    pub(crate) root: Flex,
+    /// Content key (see [`pane_header_key`]) the tree was built from.
+    pub(crate) key: String,
+}
+
+/// Map a configured [`PaneAction`] to its (icon, parameterized WM action, tooltip).
+fn pane_action_spec(
+    action: heca_config::appearance::PaneAction,
+    ctx: &PaneHeaderCtx,
+) -> (Glyph, crate::input::WmAction, &'static str) {
+    use crate::input::WmAction;
+    use heca_config::appearance::PaneAction;
+    match action {
+        PaneAction::Split => (
+            Glyph::SquareSplitVertical,
+            WmAction::AddPaneToColumn { ws_idx: ctx.ws_idx, col_idx: ctx.col_idx },
+            "Add pane  (prefix v)",
+        ),
+        PaneAction::MoveLeft => (
+            Glyph::ArrowLineLeft,
+            WmAction::MovePaneLeft { pane_id: Some(ctx.pane_id) },
+            "Move left  (prefix ⌃[)",
+        ),
+        PaneAction::MoveRight => (
+            Glyph::ArrowLineRight,
+            WmAction::MovePaneRight { pane_id: Some(ctx.pane_id) },
+            "Move right  (prefix ⌃])",
+        ),
+        PaneAction::Close => (
+            Glyph::XSquare,
+            WmAction::ClosePaneById { pane_id: ctx.pane_id },
+            "Close  (prefix x)",
+        ),
+    }
+}
+
+/// What a pane header *renders* — the projection inputs shared by the rebuild key
+/// and the tree builder (groups args so neither fn explodes).
+pub(crate) struct PaneHeaderContent<'a> {
+    pub(crate) programs: &'a ProgramsConfig,
+    pub(crate) fallback_name: &'a str,
+    pub(crate) runtime: Option<&'a PaneRuntime>,
+    pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
+    pub(crate) actions: &'a [heca_config::appearance::PaneAction],
+}
+
+/// A content key identifying everything the header *renders* — used to decide when
+/// the retained tree must be rebuilt (vs. just re-laid-out). Cheap per-frame string
+/// build (≤20 panes); avoids deriving `Hash` on the projection enums.
+pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f32) -> String {
+    let view = pane_info_view(content.programs, content.fallback_name, content.runtime);
+    let cwd = content
+        .runtime
+        .and_then(|r| r.cwd.as_ref())
+        .map(|c| c.display().to_string());
+    // Bucket width so layout jitter doesn't thrash the rebuild, but real resizes
+    // re-truncate the location segment.
+    let w_bucket = (avail_w / 16.0) as i32;
+    format!(
+        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+        view.icon,
+        view.title,
+        view.status,
+        view.git_branch,
+        view.git_added,
+        view.git_modified,
+        view.git_deleted,
+        cwd,
+        content.segments,
+        content.actions,
+        font.to_bits(),
+        w_bucket,
+    )
+}
+
+/// Build the retained header tree: the segment `Tag` (left) + an `IconButton`
+/// cluster (right), each button wrapped in a `Tooltip` and wired to emit its
+/// (parameterized) WM action through `app.on`-style `ChromeIntent`. Returns `None`
+/// when there are neither segments-with-data nor actions.
+pub(crate) fn build_pane_header(
+    content: &PaneHeaderContent,
+    theme: &GuiTheme,
+    font: f32,
+    avail_w: f32,
+    ctx: PaneHeaderCtx,
+) -> Option<Flex> {
+    let buttons_w = header_buttons_width(content.actions, font);
+    // The bar yields width to the button cluster first.
+    let bar_max = (avail_w - buttons_w - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 }).max(0.0);
+    let bar = build_pane_info_bar(
+        content.programs,
+        content.fallback_name,
+        content.runtime,
+        content.segments,
+        theme,
+        bar_max,
+        font,
+    );
+
+    let buttons = if content.actions.is_empty() {
+        None
+    } else {
+        let cell = header_button_cell(font);
+        let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
+        for &action in content.actions {
+            let (glyph, wm_action, tip) = pane_action_spec(action, &ctx);
+            let tone = if matches!(action, heca_config::appearance::PaneAction::Close) {
+                theme.danger
+            } else {
+                theme.accent
+            };
+            let proxy = ctx.event_proxy.clone();
+            let button = IconButton::new(Icon::new(glyph).color(theme.foreground).size(font))
+                .cell(cell)
+                .tone(tone)
+                .on_click(move || {
+                    let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                        source: crate::app::interaction::InteractionSource::MouseContent,
+                        intent: crate::app::interaction::InteractionIntent::ActivateAction(
+                            wm_action.clone(),
+                        ),
+                    });
+                });
+            row = row.child(Tooltip::new(button, tip).side(TooltipSide::Bottom));
+        }
+        Some(row)
+    };
+
+    let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
+    let root = match (bar, buttons) {
+        (Some(bar), Some(buttons)) => root.justify(Justify::SpaceBetween).child(bar).child(buttons),
+        (Some(bar), None) => root.justify(Justify::Start).child(bar),
+        (None, Some(buttons)) => root.justify(Justify::End).child(buttons),
+        (None, None) => return None,
+    };
+    Some(root)
+}
+
+/// Build/position the retained per-pane info-bar headers for every visible pane.
+/// Runs at the **top** of `render_frame` (before the `scene_view` borrow of
+/// `state.compositor`) so it can mutate `state.pane_headers`; render then paints
+/// them read-only and `mouse.rs` dispatches pointer events into them. Rebuilds a
+/// pane's tree only when its content key changes; re-lays-out + repositions every
+/// frame; prunes panes that disappeared.
+pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
+    let segments = state.appearance.pane_title_segments.clone();
+    let actions = state.appearance.pane_title_actions.clone();
+    if segments.is_empty() && actions.is_empty() {
+        state.pane_headers.clear();
+        return;
+    }
+    let theme = chrome_gui_theme(state);
+    let font = theme.font_size;
+    let band = crate::app::terminal_render::title_bar_reserve(font);
+
+    // Phase 1: gather per-pane inputs with only immutable borrows of `state`.
+    struct Input {
+        pane_id: PaneId,
+        ws_idx: usize,
+        col_idx: usize,
+        name: String,
+        runtime: Option<PaneRuntime>,
+        x: f32,
+        y: f32,
+        avail_w: f32,
+    }
+    let frames = crate::app::terminal_host::pane_outer_frames(state);
+    let active_ws = state.session.active_workspace_idx;
+    let mut inputs = Vec::with_capacity(frames.len());
+    for (pane_id, x, y, w, _h) in frames {
+        let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
+            .map(|(ws, col, _)| (ws, col))
+            .unwrap_or((active_ws, 0));
+        let (name, runtime) = state
+            .session
+            .active_workspace()
+            .and_then(|ws| ws.find_pane(pane_id))
+            .map(|p| (p.title.clone(), Some(p.runtime.clone())))
+            .unwrap_or_else(|| (String::new(), None));
+        inputs.push(Input {
+            pane_id,
+            ws_idx,
+            col_idx,
+            name,
+            runtime,
+            x,
+            y,
+            avail_w: (w - 2.0 * HEADER_MARGIN).max(0.0),
+        });
+    }
+
+    // Phase 2: build (if changed) + position each header (mutates `state.pane_headers`).
+    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
+    for input in &inputs {
+        seen.insert(input.pane_id);
+        let content = PaneHeaderContent {
+            programs: &state.programs,
+            fallback_name: &input.name,
+            runtime: input.runtime.as_ref(),
+            segments: &segments,
+            actions: &actions,
+        };
+        let key = pane_header_key(&content, font, input.avail_w);
+        let needs_build = state
+            .pane_headers
+            .get(&input.pane_id)
+            .map(|h| h.key != key)
+            .unwrap_or(true);
+        if needs_build {
+            let ctx = PaneHeaderCtx {
+                pane_id: input.pane_id,
+                ws_idx: input.ws_idx,
+                col_idx: input.col_idx,
+                event_proxy: state.event_proxy.clone(),
+            };
+            match build_pane_header(&content, &theme, font, input.avail_w, ctx) {
+                Some(root) => {
+                    state
+                        .pane_headers
+                        .insert(input.pane_id, RetainedPaneHeader { root, key });
+                }
+                None => {
+                    state.pane_headers.remove(&input.pane_id);
+                    continue;
+                }
+            }
+        }
+        if let Some(header) = state.pane_headers.get_mut(&input.pane_id) {
+            LayoutEngine::new()
+                .base_font(font)
+                .compute(&mut header.root, Size::new(input.avail_w as f64, band as f64));
+            let bar_h = header.root.base().bounds.size.h as f32;
+            let bar_y = input.y + f64::from(((band - bar_h) / 2.0).max(0.0)) as f32;
+            translate_tree(&mut header.root, (input.x + HEADER_MARGIN) as f64, bar_y as f64);
+        }
+    }
+    state.pane_headers.retain(|id, _| seen.contains(id));
+}
+
+/// Translate a freshly-laid-out widget subtree (positioned from the origin by
+/// [`LayoutEngine::compute`]) to an absolute `(dx, dy)`. Mirrors the helper in
+/// `terminal_render` so the retained header can be placed at its pane.
+fn translate_tree(c: &mut dyn Component, dx: f64, dy: f64) {
+    let b = c.base().bounds;
+    c.base_mut().bounds = Rectangle::new(Point::new(b.loc.x + dx, b.loc.y + dy), b.size);
+    for child in c.base_mut().children.iter_mut() {
+        translate_tree(child.as_mut(), dx, dy);
+    }
+}
+
+/// Dispatch a pointer press at `pos` into the retained pane headers. Returns
+/// `Some((pane_id, consumed))` when the press lands inside a header's bounds:
+/// `consumed = true` if an action button handled it (caller must not forward to
+/// the terminal); `false` for the header band's empty area (caller focuses the
+/// pane, treating the band as chrome — no terminal selection). `None` off any header.
+pub(crate) fn dispatch_pane_header_press(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> Option<(PaneId, bool)> {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    // Collect candidate ids first (avoid holding the map borrow across the dispatch).
+    let hit = state
+        .pane_headers
+        .iter()
+        .find(|(_, h)| rect_contains(h.root.base().bounds, point))
+        .map(|(id, _)| *id)?;
+    let header = state.pane_headers.get_mut(&hit)?;
+    let consumed = header.root.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes;
+    Some((hit, consumed))
+}
+
+/// Dispatch a pointer move at `pos` into the retained pane headers so the action
+/// buttons' hover affordance updates. Returns `true` if the pointer is over any
+/// header (the caller requests a repaint). Does not discard the trees (hover is
+/// transient and must persist across moves).
+pub(crate) fn dispatch_pane_header_move(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> bool {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    let mut over = false;
+    for header in state.pane_headers.values_mut() {
+        let _ = header.root.event(&Event::PointerMoved { pos: point });
+        if rect_contains(header.root.base().bounds, point) {
+            over = true;
+        }
+    }
+    over
+}
+
+fn rect_contains(r: Rectangle, p: Point) -> bool {
+    p.x >= r.loc.x && p.x <= r.loc.x + r.size.w && p.y >= r.loc.y && p.y <= r.loc.y + r.size.h
 }
 
 fn runtime_snapshot(state: &WorkspacesContainerState, pane_id: PaneId) -> Option<PaneRuntime> {
@@ -1936,5 +2267,71 @@ mod tests {
         assert_eq!(view.git_added, None);
         assert_eq!(view.git_modified, None);
         assert_eq!(view.git_deleted, None);
+    }
+
+    #[test]
+    fn header_buttons_width_scales_with_action_count() {
+        use heca_config::appearance::PaneAction;
+        assert_eq!(super::header_buttons_width(&[], 15.0), 0.0);
+        let one = super::header_buttons_width(&[PaneAction::Close], 15.0);
+        let three = super::header_buttons_width(
+            &[PaneAction::Split, PaneAction::MoveLeft, PaneAction::Close],
+            15.0,
+        );
+        assert!(one > 0.0);
+        assert!(three > one, "more buttons ⇒ wider cluster");
+    }
+
+    #[test]
+    fn pane_header_key_changes_on_content_and_width() {
+        use heca_config::appearance::{PaneAction, PaneSegment};
+        let programs = ProgramsConfig::default();
+        let segments = [PaneSegment::AppName, PaneSegment::GitBranch];
+        let actions = [PaneAction::Split, PaneAction::Close];
+        let runtime = PaneRuntime {
+            program: Some("zsh".into()),
+            status: ProcessStatus::Idle,
+            git: Some(GitInfo {
+                branch: Some("main".into()),
+                ..GitInfo::default()
+            }),
+            ..PaneRuntime::default()
+        };
+        fn content<'a>(
+            programs: &'a ProgramsConfig,
+            segments: &'a [heca_config::appearance::PaneSegment],
+            actions: &'a [heca_config::appearance::PaneAction],
+            rt: &'a PaneRuntime,
+        ) -> PaneHeaderContent<'a> {
+            PaneHeaderContent {
+                programs,
+                fallback_name: "shell",
+                runtime: Some(rt),
+                segments,
+                actions,
+            }
+        }
+        let base = pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 300.0);
+        // Same inputs ⇒ same key (no needless rebuild).
+        assert_eq!(
+            base,
+            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 300.0)
+        );
+        // A different branch ⇒ different key (rebuild).
+        let mut other = runtime.clone();
+        other.git = Some(GitInfo { branch: Some("dev".into()), ..GitInfo::default() });
+        assert_ne!(
+            base,
+            pane_header_key(&content(&programs, &segments, &actions, &other), 15.0, 300.0)
+        );
+        // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
+        assert_ne!(
+            base,
+            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 120.0)
+        );
+        assert_eq!(
+            base,
+            pane_header_key(&content(&programs, &segments, &actions, &runtime), 15.0, 295.0)
+        );
     }
 }

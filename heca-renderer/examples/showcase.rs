@@ -758,34 +758,57 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         )
                         .child(Label::new("idle").font_size(12.0).color(theme.muted)),
                 )
-                // Running pane: app · branch · diff-stat (in a repo).
+                // Running pane: full header = segments (left) + action buttons
+                // (right). The app's pane info bar is exactly this — a segment `Tag`
+                // and an `IconButton` cluster (split / move-left / move-right / close,
+                // each a tooltip'd action) laid out space-between inside the pane top.
                 .child(
                     Pane::new()
                         .bordered()
-                        .width(Length::Px(300.0))
+                        .width(Length::Px(360.0))
                         .height(Length::Px(90.0))
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.surface)
                         .border(theme.accent, 2.0)
                         .child(
-                            Tag::new("Neovim")
-                                .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
-                                .segment(
+                            Flex::row()
+                                .width(Length::Px(344.0))
+                                .align(Align::Center)
+                                .justify(Justify::SpaceBetween)
+                                .child(
+                                    Tag::new("Neovim")
+                                        .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
+                                        .segment(
+                                            Flex::row()
+                                                .align(Align::Center)
+                                                .gap(6.0)
+                                                .child(Icon::new(Glyph::GitBranch).size(13.0).color(theme.muted))
+                                                .child(Label::new("…phase-7").color(theme.foreground).font_scale(0.8)),
+                                        )
+                                        .color(theme.accent),
+                                )
+                                .child(
                                     Flex::row()
                                         .align(Align::Center)
-                                        .gap(6.0)
-                                        .child(Icon::new(Glyph::GitBranch).size(13.0).color(theme.muted))
-                                        .child(Label::new("feature/phase-7").color(theme.foreground).font_scale(0.8)),
-                                )
-                                .segment(
-                                    Flex::row()
-                                        .align(Align::Center)
-                                        .gap(6.0)
-                                        .child(Label::new("+152").color(theme.success).font_scale(0.8))
-                                        .child(Label::new("-12").color(theme.danger).font_scale(0.8)),
-                                )
-                                .color(theme.accent),
+                                        .gap(2.0)
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(15.0)).cell(24.0),
+                                            "Add pane",
+                                        ).side(TooltipSide::Bottom))
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::ArrowLineLeft).color(theme.foreground).size(15.0)).cell(24.0),
+                                            "Move left",
+                                        ).side(TooltipSide::Bottom))
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::ArrowLineRight).color(theme.foreground).size(15.0)).cell(24.0),
+                                            "Move right",
+                                        ).side(TooltipSide::Bottom))
+                                        .child(Tooltip::new(
+                                            IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger).size(15.0)).cell(24.0).tone(theme.danger),
+                                            "Close",
+                                        ).side(TooltipSide::Bottom)),
+                                ),
                         )
                         .child(Label::new("running").font_size(12.0).color(theme.muted)),
                 )

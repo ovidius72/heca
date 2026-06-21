@@ -587,6 +587,38 @@ fn terminal_target_at_position(state: &AppState, pos: (f32, f32)) -> Option<Term
     })
 }
 
+/// The **outer** screen rect (full pane, before content inset) of every visible
+/// pane — tiled then floating — in the active workspace. Same geometry the render
+/// loop derives per pane (`render.rs`); kept here so the pane-header sync step can
+/// position the in-pane info bar without a GPU borrow (render's `scene_view` holds
+/// `state.compositor`). Returns `(pane_id, x, y, w, h)` in logical px.
+pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32, f32)> {
+    let (win_w, win_h) = window_logical_size(state);
+    let chrome = chrome_config(state);
+    let pane_area = chrome.content_rect(win_w, win_h);
+    let ws_offset = state
+        .session
+        .workspace_geometries()
+        .first()
+        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+        .unwrap_or((0.0, 0.0));
+    let mut frames = Vec::new();
+    let Some(ws) = state.session.active_workspace() else {
+        return frames;
+    };
+    for (pane_id, rect) in ws.scrolling.panes_with_positions() {
+        let x = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let y = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+        frames.push((pane_id, x, y, rect.size.w as f32, rect.size.h as f32));
+    }
+    for float in &ws.floating_panes {
+        let x = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
+        let y = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
+        frames.push((float.pane.id, x, y, float.size.w as f32, float.size.h as f32));
+    }
+    frames
+}
+
 fn content_rect_for_pane(state: &AppState, pane_id: PaneId) -> Option<Rectangle> {
     let (win_w, win_h) = window_logical_size(state);
     let chrome = chrome_config(state);

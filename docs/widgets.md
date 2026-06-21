@@ -407,9 +407,11 @@ dimmed, so the corners share the border's radius exactly. Reads `theme.radius` /
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
-  is a separate [`Tag`](#tag) chip composed *inside* the pane top (see the showcase's in-pane info
-  bar demo), so frame decoration and the header stay independent — composing a widget beats a
-  bespoke border-straddling title that fought the transparent terminal pane.
+  is composed *inside* the pane top (see the showcase's in-pane info bar demo), so frame decoration
+  and the header stay independent — composing widgets beats a bespoke border-straddling title that
+  fought the transparent terminal pane. The header is a space-between [`Row`](#flex)/[`Flex`](#flex)
+  of a segment [`Tag`](#tag) (left) and an [`IconButton`](#iconbutton) cluster (right) — each button a
+  tooltip'd pane action (add-pane / move-left / move-right / close).
 - **Traits**: `LayoutExt`, `StyleExt`, `Parent`.
 
 ```rust
@@ -417,12 +419,20 @@ Pane::new().width(Length::Px(320.0)).gap(2.0).background(theme.surface)
     .child(Item::new("DASHBOARD").marker(ActiveMarker::Bar).active(true))
     .child(Item::new("SETTINGS").marker(ActiveMarker::Bar));
 
-// In-pane info bar: a Tag chip inside the pane top (the pane-info header).
+// In-pane info bar: segments (left) + action buttons (right), inside the pane top.
 Pane::new().bordered().background(theme.surface).border(theme.accent, 2.0).padding(8.0)
     .child(
-        Tag::new("Neovim")
-            .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
-            .segment(/* branch · diff-stat … */),
+        Flex::row().justify(Justify::SpaceBetween).align(Align::Center)
+            .child(
+                Tag::new("Neovim")
+                    .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
+                    .segment(/* branch · diff-stat … */),
+            )
+            .child(
+                Flex::row().gap(2.0)
+                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::SquareSplitVertical)), "Add pane"))
+                    .child(Tooltip::new(IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger)), "Close")),
+            ),
     );
 ```
 

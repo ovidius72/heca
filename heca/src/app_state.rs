@@ -278,6 +278,10 @@ pub struct AppState {
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
     /// its content/size signature changes. See `chrome::RetainedChrome` (F4.1).
     pub chrome_tree: Option<crate::chrome::RetainedChrome>,
+    /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
+    /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
+    /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
+    pub pane_headers: std::collections::HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

@@ -129,6 +129,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
     let _ = crate::chrome::sync_chrome_state(state);
+    // Build/position the retained per-pane info-bar headers *before* the GPU borrow
+    // below (`scene_view` borrows `state.compositor`), so render can paint them
+    // read-only and `mouse.rs` can dispatch pointer events into them.
+    crate::chrome::sync_pane_headers(state);
     let scene_view = state.compositor.scene_view();
     // Stencil buffer paired with the scene texture: holds the rounded content-clip
     // mask written each frame so terminal content follows the pane's rounded border.

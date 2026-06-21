@@ -144,6 +144,9 @@ pub(crate) fn handle_window_event(
             // indicator (a column drag targets columns, not the panes inside them).
             if !state.mouse.drag_ctx.is_dragging() {
                 crate::chrome::chrome_dispatch_move(state, pos);
+                // Feed the move into the retained pane-info-bar headers so the action
+                // buttons' hover affordance lights up (repaint via mark_full_redraw below).
+                crate::chrome::dispatch_pane_header_move(state, pos);
             }
             forward_mouse_move(state, pos);
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
@@ -155,6 +158,29 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
+            // Pane info-bar action buttons intercept a plain left-press before the
+            // content/terminal paths, so a click hits the button (not the terminal).
+            // A modifier-held press falls through to the meta-drag gesture below.
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Pressed
+                && !mouse::interactive_move_modifier_held(state)
+                && let Some((pane_id, consumed)) =
+                    crate::chrome::dispatch_pane_header_press(state, state.mouse.pos)
+            {
+                if !consumed {
+                    // Empty header band (not a button) → focus the pane; treat the band
+                    // as chrome, so no terminal text-selection starts here.
+                    dispatch_action(
+                        state,
+                        registry,
+                        InteractionSource::MouseContent,
+                        &crate::input::WmAction::FocusPane { pane_id },
+                    );
+                }
+                mouse::update_cursor(state, state.mouse.pos);
+                state.mark_full_redraw();
+                return;
+            }
             let interactive_before = state.mouse.interactive_move.is_some();
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
