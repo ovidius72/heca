@@ -340,6 +340,18 @@ pub fn build_registry() -> ActionRegistry {
         handle_resize,
     );
     registry.register(
+        &WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
+        handle_resize_column_by,
+    );
+    registry.register(
+        &WmAction::ResizePaneHeightBy {
+            col_idx: 0,
+            pane_idx: 0,
+            delta: 0.0,
+        },
+        handle_resize_pane_height_by,
+    );
+    registry.register(
         &WmAction::ResizeTo {
             target: input::ResizeTarget::Column,
             width: 0.0,

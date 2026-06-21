@@ -499,6 +499,36 @@ pub fn handle_resize(state: &mut AppState, action: &WmAction) {
     state.needs_redraw = true;
 }
 
+/// Resize a specific column's width (mouse divider-drag / RPC). `delta` is a
+/// proportion delta (or fraction of the working width for fixed columns), so a
+/// pixel drag maps as `dx / working_area.width`.
+pub fn handle_resize_column_by(state: &mut AppState, action: &WmAction) {
+    let WmAction::ResizeColumnBy { col_idx, delta } = action else {
+        return;
+    };
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.resize_column(*col_idx, *delta);
+    }
+    after_layout_change(state);
+}
+
+/// Resize a specific stacked pane's height (mouse divider-drag / RPC). `delta`
+/// is logical px (drag down ⇒ taller).
+pub fn handle_resize_pane_height_by(state: &mut AppState, action: &WmAction) {
+    let WmAction::ResizePaneHeightBy {
+        col_idx,
+        pane_idx,
+        delta,
+    } = action
+    else {
+        return;
+    };
+    if let Some(ws) = state.session.active_workspace_mut() {
+        ws.scrolling.resize_pane_height(*col_idx, *pane_idx, *delta);
+    }
+    after_layout_change(state);
+}
+
 pub fn handle_resize_to(state: &mut AppState, action: &WmAction) {
     let WmAction::ResizeTo {
         target,

@@ -159,6 +159,20 @@ pub enum WmAction {
         axis: ResizeAxis,
         amount: f64,
     },
+    /// Resize a **specific** column's width by `delta` (a proportion delta /
+    /// fraction of the working width). Mouse divider-drag + RPC; the keyboard
+    /// `Resize`/`ResizeIncrease` act on the active column only.
+    ResizeColumnBy {
+        col_idx: usize,
+        delta: f64,
+    },
+    /// Resize a **specific** stacked pane's height by `delta` logical px. Mouse
+    /// divider-drag + RPC.
+    ResizePaneHeightBy {
+        col_idx: usize,
+        pane_idx: usize,
+        delta: f64,
+    },
     ResizeTo {
         target: ResizeTarget,
         width: f64,
@@ -645,6 +659,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::MoveColumn { .. }
         | WmAction::SwapColumns { .. }
         | WmAction::Resize { .. }
+        | WmAction::ResizeColumnBy { .. }
+        | WmAction::ResizePaneHeightBy { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::FloatAt { .. }
         | WmAction::ClosePaneById { .. }
@@ -878,6 +894,8 @@ mod tests {
                 WmAction::MoveColumn { src_ws: 0, src_col: 0, dst_ws: 0, dst_idx: 0, focus: false },
                 WmAction::SwapColumns { a_ws: 0, a_col: 0, b_ws: 0, b_col: 0 },
                 WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 0.0 },
+                WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
+                WmAction::ResizePaneHeightBy { col_idx: 0, pane_idx: 0, delta: 0.0 },
                 WmAction::ResizeTo { target: ResizeTarget::Column, width: 0.0, height: 0.0 },
                 WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
                 WmAction::ClosePaneById { pane_id: PaneId(0) },

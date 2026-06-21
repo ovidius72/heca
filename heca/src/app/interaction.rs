@@ -196,6 +196,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::MoveColumn { .. }
         | WmAction::SwapColumns { .. }
         | WmAction::Resize { .. }
+        | WmAction::ResizeColumnBy { .. }
+        | WmAction::ResizePaneHeightBy { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn
         | WmAction::DeleteColumn { .. }
@@ -787,6 +789,8 @@ mod tests {
             WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
             WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
             WmAction::Resize { target: crate::input::ResizeTarget::Column, axis: crate::input::ResizeAxis::X, amount: 0.0 },
+            WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
+            WmAction::ResizePaneHeightBy { col_idx: 0, pane_idx: 0, delta: 0.0 },
             WmAction::ResizeTo { target: crate::input::ResizeTarget::Column, width: 0.0, height: 0.0 },
             WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
             WmAction::ClosePaneById { pane_id: PaneId(0) },

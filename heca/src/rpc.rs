@@ -7,6 +7,8 @@
 //!   close-pane | close-pane-id <pane_id>
 //!   float | float-at <pane_id> <x> <y> <w> <h>
 //!   resize <column|pane> <axis> <amount>
+//!   resize-column <col_idx> <delta>
+//!   resize-pane-height <col_idx> <pane_idx> <delta>
 //!   move-pane <pane_id> <target_col>
 //!   move-pane-to-workspace <pane_id> <ws_idx>
 //!   move-pane-to-column <pane_id> <ws_idx> <col_idx>
@@ -208,6 +210,26 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
                 target,
                 axis,
                 amount,
+            })
+        }
+        "resize-column" => {
+            let col_arg = expect_arg!("col_idx");
+            let col_idx = parse_usize!(col_arg, "col_idx");
+            let delta_arg = expect_arg!("delta");
+            let delta = parse_f64!(delta_arg, "delta");
+            Ok(WmAction::ResizeColumnBy { col_idx, delta })
+        }
+        "resize-pane-height" => {
+            let col_arg = expect_arg!("col_idx");
+            let col_idx = parse_usize!(col_arg, "col_idx");
+            let pane_arg = expect_arg!("pane_idx");
+            let pane_idx = parse_usize!(pane_arg, "pane_idx");
+            let delta_arg = expect_arg!("delta");
+            let delta = parse_f64!(delta_arg, "delta");
+            Ok(WmAction::ResizePaneHeightBy {
+                col_idx,
+                pane_idx,
+                delta,
             })
         }
         "move-pane" => {
@@ -518,6 +540,28 @@ use heca_core::layout::PaneId;
                 amount: -25.0,
             }),
         );
+    }
+
+    #[test]
+    fn test_resize_column_and_pane_height() {
+        assert_eq!(
+            parse_rpc_command("resize-column 2 0.05"),
+            Ok(WmAction::ResizeColumnBy {
+                col_idx: 2,
+                delta: 0.05,
+            }),
+        );
+        assert_eq!(
+            parse_rpc_command("resize-pane-height 1 0 -40"),
+            Ok(WmAction::ResizePaneHeightBy {
+                col_idx: 1,
+                pane_idx: 0,
+                delta: -40.0,
+            }),
+        );
+        // Missing args are a parse error, not a panic.
+        assert!(parse_rpc_command("resize-column 2").is_err());
+        assert!(parse_rpc_command("resize-pane-height 1 0").is_err());
     }
 
     #[test]
