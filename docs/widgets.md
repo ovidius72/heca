@@ -19,7 +19,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
 - [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
@@ -461,6 +461,35 @@ Grid::new()
     .area(Icon::new(Glyph::Terminal), "dot")
     .area(Label::new("nvim"), "title")
     .area(Badge::success("RUN"), "tag");
+```
+
+### ScrollRegion
+
+An embeddable **vertical scroll viewport**: a column of children laid out at
+their natural height (the layout engine never shrinks them, so the column
+overflows), clipped to the region's own bounds. The visible window is the
+`ScrollRegion` itself; content beyond it is clipped (`PushClip`) and painted
+shifted by `-scroll_offset` (`Translate`).
+
+- **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
+- **Builders**: `LayoutExt` (give it a fixed `.height()` so content overflows).
+- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read/drive from the
+  host); `.scroll_to(f32) -> f32` (clamped set, returns the applied value).
+- **Interaction** (built-in): the wheel (`Event::Scroll`) advances the offset
+  (clamped to `[0, max_offset]`); the auto-shown scrollbar **thumb is draggable**.
+  Pointer coords are translated into content space before routing to children,
+  so buttons/items inside a scrolled list stay clickable at their visual spot.
+- **Traits**: `LayoutExt`, `Parent`.
+- **v1**: vertical-only; thumb colored from `theme.muted`. Horizontal scroll and
+  a dedicated scrollbar token are future work.
+
+```rust
+let mut list = ScrollRegion::new().height(Length::Px(180.0)).width(Length::Px(300.0));
+for name in ["alpha", "beta", "gamma", "delta", "epsilon"] {
+    list = list.child(Item::new(name));
+}
+// Drive from the host (e.g. a “jump to top” action):
+list.scroll_offset().set(0.0);
 ```
 
 ### Label

@@ -12,7 +12,7 @@
 //! boundary" rule.
 
 use crate::color::Color;
-use heca_core::layout::Rectangle;
+use heca_core::layout::{Point, Rectangle};
 
 /// A retained list of draw commands, rebuilt each repaint.
 ///
@@ -150,6 +150,14 @@ pub enum DrawCommand {
     PushClip(Rectangle),
     /// Pop the most recent clip rectangle.
     PopClip,
+    /// Push a translation applied to all subsequent coordinate-bearing commands
+    /// (`Rect`/`Text`/`Brackets`, and inner `PushClip` rects) until the matching
+    /// [`PopTranslate`]. Clip rects pushed *outside* a translate scope are in the
+    /// outer (untranslated) space, so a scrolled region clips to its viewport and
+    /// then shifts content inside it. Used by scroll regions / offset content.
+    Translate(Point),
+    /// Pop the most recent [`Translate`].
+    PopTranslate,
 }
 
 /// A filled/rounded rectangle.

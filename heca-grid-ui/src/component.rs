@@ -501,6 +501,18 @@ impl<'a> PaintCx<'a> {
         self.scene.push(DrawCommand::PopClip);
     }
 
+    /// Push a translation applied to all subsequent coordinate-bearing commands
+    /// emitted inside `f` (rects/text/brackets + inner clips), then pop it. Use to
+    /// paint scrolled/offset content inside a clip: `with_clip(viewport)` then
+    /// `with_offset((0.0, -offset))` then paint the children. Clip rects pushed
+    /// *before* this stay untranslated (the viewport), inner clips move with the
+    /// content. See [`crate::widgets::ScrollRegion`].
+    pub fn with_offset(&mut self, offset: Point, f: impl FnOnce(&mut PaintCx<'a>)) {
+        self.scene.push(DrawCommand::Translate(offset));
+        f(self);
+        self.scene.push(DrawCommand::PopTranslate);
+    }
+
     /// The active theme.
     pub fn theme(&self) -> &Theme {
         self.theme

@@ -606,15 +606,16 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 > Source: `grid-ui-chrome-plan.md`, `PLAN.md` grid-ui backlog
 > Core widget vocabulary is largely built. Remaining: scroll primitive, Pane shell header, more widgets, Nerd-Font icons, showcase coverage, bloom effects, crate debt.
 
-### [ ] Phase: Scroll / list primitive · `gridui-01`
+### [x] Phase: Scroll / list primitive · `gridui-01`
 An embeddable scroll region for sidebar docks and list views.
 Note: renderer `PushClip`/`PopClip` is ALREADY implemented in `heca-renderer/src/scene.rs` — this gate is closed.
+**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (pending PR). Added a companion renderer `Translate`/`PopTranslate` primitive (mirroring PushClip/PopClip) + `PaintCx::with_offset`, so scrolled content is clipped to the viewport and painted shifted by `-scroll_offset`. v1 is vertical-only, multi-child column, wheel + draggable thumb, offset exposed as `Signal<f32>`; pointer coords translated into content space so children stay clickable. Showcase demo + `docs/widgets.md` entry added.
 
-- [ ] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
-  Uses `PushClip`/`PopClip` for content clipping.
-  Exposes `scroll_offset: Signal<f32>` (vertical).
-  Optional theme-driven scrollbar visual.
-  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`
+- [x] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
+  Uses `PushClip`/`PopClip` for content clipping + `Translate`/`PopTranslate` for the offset.
+  Exposes `scroll_offset: Signal<f32>` (vertical) + `scroll_to(v)` clamp helper.
+  Wheel handling (`Event::Scroll`) + draggable theme-colored (`muted`) scrollbar thumb, auto-shown on overflow.
+  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`, `heca-grid-ui/src/lib.rs` (exports + prelude), `heca-grid-ui/src/scene.rs` (Translate/PopTranslate), `heca-grid-ui/src/component.rs` (`PaintCx::with_offset`), `heca-renderer/src/scene.rs` (translation stack), `heca-renderer/examples/showcase.rs` (demo).
   Update `docs/widgets.md` + add showcase demo section.
 
 ### [ ] Phase: Pane shell widget — header and tabs · `gridui-02`
