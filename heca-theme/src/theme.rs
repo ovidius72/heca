@@ -279,8 +279,6 @@ pub struct Theme {
     pub terminal_ansi: Option<[Color; 8]>,
     #[serde(default)]
     pub terminal_brights: Option<[Color; 8]>,
-    #[serde(default)]
-    pub terminal_frost_color: Option<Color>,
     #[serde(default = "default_terminal_italic_font_family")]
     pub terminal_italic_font_family: String,
     #[serde(default = "default_terminal_font_size")]

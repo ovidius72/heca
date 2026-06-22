@@ -65,6 +65,7 @@ pub(crate) fn handle_window_event(
                 .set_screen_size(&state.queue, log_w, log_h);
             state.compositor.resize(&state.device, phys.width, phys.height);
             state.blur.resize(&state.device, phys.width, phys.height);
+            state.background.resize(&state.device, phys.width, phys.height);
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
         }

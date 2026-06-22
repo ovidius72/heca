@@ -23,12 +23,12 @@ shell_integration = true
 transparency = 0
 blur = 0
 
-# Terminal-pane transparency + frost
+# Terminal-pane translucency (surface alpha over z=0).
+# The tiled frost is owned by the z=0 background layer (`background_blur` /
+# `background_transparency` below) — there is no per-terminal tiled blur knob.
 terminal_transparency = 0
-terminal_blur = 0
-# terminal_frost_color = "#1e1e2e"
 
-# Floating panes default to opaque + no frost
+# Floating panes default to opaque + no real blur.
 terminal_floating_transparency = 0
 terminal_floating_blur = 0
 # pane_floating_border_color = "#89b4fa"

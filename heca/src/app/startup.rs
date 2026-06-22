@@ -16,6 +16,7 @@ use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_grid_ui::install_frame_request;
 use heca_renderer::composite::Compositor;
 use heca_renderer::backdrop::Backdrop;
+use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
@@ -239,6 +240,8 @@ pub(crate) async fn init_state(
     let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
     let blur = Blur::new(&device, surface_format, physical.width, physical.height);
     let backdrop = Backdrop::new(&device, surface_format);
+    let background =
+        BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -301,6 +304,7 @@ pub(crate) async fn init_state(
         compositor,
         blur,
         backdrop,
+        background,
         git_runtime_cache: crate::app::git_monitor::GitRuntimeCache::default(),
         session,
         backends,

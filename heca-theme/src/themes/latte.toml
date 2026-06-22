@@ -38,12 +38,11 @@ sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
 terminal_font_family = "Maple Mono Normal NF"
 terminal_foreground = "#4c4f69"
-terminal_background = "#e6e9ef00"
+terminal_background = "#e6e9ef" # opaque (was #e6e9ef00 — a transparent-encoding bug; frost now comes from the z=0 background layer)
 terminal_cursor_foreground = "#eff1f5"
 terminal_cursor_background = "#4c4f69"
 terminal_cursor_border = "#1e66f5"
 terminal_selection_foreground = "#4c4f69"
 terminal_selection_background = "#bccfef"
-terminal_frost_color = "#e6e9ef"
 terminal_italic_font_family = "Maple Mono Normal NF"
 terminal_font_size = 14.0
