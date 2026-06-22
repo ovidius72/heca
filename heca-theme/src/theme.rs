@@ -146,6 +146,16 @@ impl Default for Shadow {
 const CONTROL_RADIUS_FRAC: f32 = 0.5;
 const SIDEBAR_BG_DARKEN_FACTOR: f32 = 0.05;
 const TOP_BOTTOM_PANE_BG_DARKEN_FACTOR: f32 = 0.10;
+/// How much the derived z=0 gradient *bottom* color darkens
+/// [`Theme::background`] toward black when `background_gradient_bottom` is unset
+/// (subtle vertical depth). Bundled themes set explicit gradient colors, so this
+/// is only a safety net for custom themes missing the field.
+///
+/// `0.08` is a visual sweet-spot: deep enough to give the blurred gradient
+/// visible vertical depth, shallow enough not to read as a separate color band
+/// (which the blur would smear awkwardly). Tuned to match the subtle depth of
+/// the existing chrome-token darkening factors.
+const GRADIENT_BOTTOM_DARKEN_FACTOR: f32 = 0.08;
 
 /// Palette + effect tokens for the entire application.
 ///
@@ -193,6 +203,17 @@ pub struct Theme {
     pub right_sidebar_background: Option<Color>,
     #[serde(default)]
     pub top_bottom_pane_background: Option<Color>,
+
+    // ── z=0 background gradient (compositor-blur refactor) ──
+    /// Optional top color of the z=0 vertical gradient. `None` → falls back to
+    /// [`Theme::background`] (see [`Theme::effective_background_gradient_top`]).
+    #[serde(default)]
+    pub background_gradient_top: Option<Color>,
+    /// Optional bottom color of the z=0 vertical gradient. `None` → falls back to
+    /// a slightly darkened [`Theme::background`] (see
+    /// [`Theme::effective_background_gradient_bottom`]).
+    #[serde(default)]
+    pub background_gradient_bottom: Option<Color>,
 
     // ── Effect tokens ──
     #[serde(default)]
@@ -372,6 +393,25 @@ impl Theme {
             .unwrap_or_else(|| self.derived_darker_background(TOP_BOTTOM_PANE_BG_DARKEN_FACTOR))
     }
 
+    /// Effective z=0 gradient *top* color: the theme field when set, else
+    /// [`Theme::background`] (an unset gradient is a flat bg-color fill — still a
+    /// valid frost source once blurred). The app's `[appearance]`
+    /// `background_gradient_top` override (if any) takes precedence over this —
+    /// see `heca_config::appearance::AppearanceConfig::effective_background_gradient_top`.
+    pub fn effective_background_gradient_top(&self) -> Color {
+        self.background_gradient_top.unwrap_or(self.background)
+    }
+
+    /// Effective z=0 gradient *bottom* color: the theme field when set, else a
+    /// slightly darkened [`Theme::background`] (subtle vertical depth). The app's
+    /// `[appearance]` `background_gradient_bottom` override (if any) takes
+    /// precedence — see
+    /// `heca_config::appearance::AppearanceConfig::effective_background_gradient_bottom`.
+    pub fn effective_background_gradient_bottom(&self) -> Color {
+        self.background_gradient_bottom
+            .unwrap_or_else(|| self.derived_darker_background(GRADIENT_BOTTOM_DARKEN_FACTOR))
+    }
+
     /// Approximate terminal cell metrics for the current terminal font size.
     pub fn terminal_cell_size(&self) -> (f32, f32) {
         const TERMINAL_CELL_WIDTH_RATIO: f32 = 0.58;
@@ -383,58 +423,15 @@ impl Theme {
     }
 
     /// The default dark, cyan-accented Tron theme.
+    ///
+    /// Sourced from the bundled `themes/grid_tron.toml` (embedded at compile
+    /// time via `include_str!`) so there is a **single source of truth** — no
+    /// parallel hand-maintained Rust color literals to drift from the TOML.
+    /// `Theme::default()` returns this. If the TOML ever fails to parse the
+    /// `Theme` shape, that is a compile-time-shippable bug and we panic eagerly.
     pub fn grid_tron() -> Self {
-        Self {
-            name: "Grid Tron".to_string(),
-            background: Color::rgb(6, 10, 14),
-            surface: Color::rgb(12, 18, 24),
-            foreground: Color::rgb(198, 240, 255),
-            muted: Color::rgb(96, 130, 146),
-            border: Color::rgb(20, 60, 76),
-            accent: Color::rgb(64, 224, 255),
-            glow: Color::rgb(64, 224, 255),
-            shadow: Shadow::default(),
-            danger: Color::rgb(255, 70, 84),
-            success: Color::rgb(80, 255, 170),
-            warning: Color::rgb(255, 190, 70),
-            font_family: "Geist Mono".to_string(),
-            font_size: 15.0,
-            border_radius: 8.0,
-            border_width: 1.0,
-            pane_padding: 4.0,
-            left_sidebar_background: Some(Color::rgb(5, 9, 13)),
-            right_sidebar_background: Some(Color::rgb(5, 9, 13)),
-            top_bottom_pane_background: Some(Color::rgb(4, 8, 12)),
-            glow_size: GlowLevel::Medium,
-            intensity: Intensity::Medium,
-            show_focus_border: true,
-            icon_secondary_alpha: 0.45,
-            float_background: Color::new(49, 50, 68, 255),
-            float_accent: Color::new(137, 180, 250, 255),
-            float_focus: Color::new(250, 179, 135, 255),
-            drag_ghost_bg: Color::new(137, 180, 250, 217),
-            drag_ghost_fg: Color::new(255, 255, 255, 255),
-            drag_source_bg: Color::new(137, 180, 250, 38),
-            drag_source_border: Color::new(137, 180, 250, 255),
-            drop_target_bg: Color::new(137, 180, 250, 45),
-            drop_target_border: Color::new(137, 180, 250, 255),
-            drop_insertion: Color::new(137, 180, 250, 255),
-            sidebar_label_font_size: 14.0,
-            sidebar_button_font_size: 11.0,
-            terminal_font_family: "Maple Mono Normal NF".to_string(),
-            terminal_foreground: None,
-            terminal_background: None,
-            terminal_cursor_foreground: None,
-            terminal_cursor_background: None,
-            terminal_cursor_border: None,
-            terminal_selection_foreground: None,
-            terminal_selection_background: None,
-            terminal_ansi: None,
-            terminal_brights: None,
-            terminal_frost_color: None,
-            terminal_italic_font_family: "Maple Mono Normal NF".to_string(),
-            terminal_font_size: 14.0,
-        }
+        toml::from_str(include_str!("themes/grid_tron.toml"))
+            .expect("bundled grid_tron.toml must parse into Theme")
     }
 }
 
@@ -493,5 +490,43 @@ mod tests {
         assert_eq!(Intensity::Low.next(), Intensity::Medium);
         assert_eq!(Intensity::Medium.next(), Intensity::Heavy);
         assert_eq!(Intensity::Heavy.next(), Intensity::Off);
+    }
+
+    #[test]
+    fn gradient_colors_derive_from_background_when_unset() {
+        let mut theme = Theme::grid_tron();
+        theme.background_gradient_top = None;
+        theme.background_gradient_bottom = None;
+        // Top falls back to the theme background.
+        assert_eq!(theme.effective_background_gradient_top(), theme.background);
+        // Bottom falls back to a slightly darkened background (not the raw
+        // background — subtle vertical depth).
+        assert_ne!(theme.effective_background_gradient_bottom(), theme.background);
+    }
+
+    /// Bundled themes ship explicit z=0 gradient colors in their TOMLs. This pins
+    /// that contract so a dropped key is caught (the resolver would silently fall
+    /// back to the derived single-color gradient otherwise). Iterates the loader's
+    /// bundled-theme map so a newly added bundled theme is covered automatically.
+    #[test]
+    fn bundled_themes_ship_explicit_gradient_colors() {
+        for name in crate::loader::bundled_themes().keys() {
+            let theme = crate::load_theme(name);
+            assert!(
+                theme.background_gradient_top.is_some(),
+                "{name} should set background_gradient_top in its TOML"
+            );
+            assert!(
+                theme.background_gradient_bottom.is_some(),
+                "{name} should set background_gradient_bottom in its TOML"
+            );
+            // Top and bottom differ so the gradient is actually a gradient
+            // (not a flat fill that hides the blur).
+            assert_ne!(
+                theme.effective_background_gradient_top(),
+                theme.effective_background_gradient_bottom(),
+                "{name} gradient top and bottom should differ"
+            );
+        }
     }
 }

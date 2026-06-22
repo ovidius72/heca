@@ -5,7 +5,7 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** planning
+- **Status:** in progress — Phases 0–2 complete (PR #165); Phase 3 next.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -235,11 +235,11 @@ instead of the OS, so it is **cross-platform and tunable**.
 
 ### Tasks
 
-- [ ] **0.1 Sync with main** — `git fetch origin && git checkout -b feature/compositor-blur-refactor origin/main`.
+- [x] **0.1 Sync with main** — `git fetch origin && git checkout -b feature/compositor-blur-refactor origin/main`.
   - Relations: none.
   - Check: `git log -1` shows the latest `origin/main` HEAD; branch is clean.
 
-- [ ] **0.2 Baseline green** — confirm the starting point builds, tests pass, clippy is at the known pre-existing baseline (9 lints — 8 selection `dead_code` + 2 `too_many_arguments`; see PR #125 notes).
+- [x] **0.2 Baseline green** — confirm the starting point builds, tests pass, clippy is at the known pre-existing baseline (9 lints — 8 selection `dead_code` + 2 `too_many_arguments`; see PR #125 notes).
   - Relations: 0.1.
   - Check (post-PR-#160):
     - [ ] `cargo build --workspace --all-targets` → green.
@@ -264,7 +264,9 @@ instead of the OS, so it is **cross-platform and tunable**.
       and must be fixed before Phase 1.
 
 ### Phase 0 exit
-- [ ] Tests + clippy baseline recorded. No review needed (no code changed). Proceed to Phase 1.
+- [x] Tests + clippy baseline recorded. No review needed (no code changed). Proceed to Phase 1.
+
+**Baseline recorded (2026-06-22):** clippy = 0 warnings; `cargo test --workspace` green except the pre-existing env-dependent `terminal_backend_bash_integration_reports_success_error_and_cwd` (verified failing on plain `origin/main` — excluded baseline failure, not introduced by this plan).
 
 ---
 
@@ -277,7 +279,7 @@ is headless and testable in isolation.
 
 ### Tasks
 
-- [ ] **1.1 `heca-renderer/src/gradient.rs` — gradient pipeline** — a `GradientRenderer` that fills a render-target texture view with a 2-color **vertical** gradient (top→bottom) via a fullscreen-triangle pipeline. Inline wgsl (vertex: fullscreen triangle; fragment: `mix(top, bottom, uv.y)`). Colors are linear f32x4 (match `primitive_renderer` convention). No app types.
+- [x] **1.1 `heca-renderer/src/gradient.rs` — gradient pipeline** — a `GradientRenderer` that fills a render-target texture view with a 2-color **vertical** gradient (top→bottom) via a fullscreen-triangle pipeline. Inline wgsl (vertex: fullscreen triangle; fragment: `mix(top, bottom, uv.y)`). Colors are linear f32x4 (match `primitive_renderer` convention). No app types.
   - API:
     ```rust,ignore
     impl GradientRenderer {
@@ -291,7 +293,7 @@ is headless and testable in isolation.
     - [ ] `cargo build -p heca-renderer` green.
     - [ ] Smoke unit test (existing renderer test harness / headless device if available): construct `GradientRenderer::new` without panic. If no headless device, a compile-only smoke is acceptable and GPU behavior is verified visually in Phase 5.
 
-- [ ] **1.2 `heca-renderer/src/background.rs` — `BackgroundLayer`** — a struct owning the z=0 layer state and a **static cached blur**:
+- [x] **1.2 `heca-renderer/src/background.rs` — `BackgroundLayer`** — a struct owning the z=0 layer state and a **static cached blur**:
   ```rust,ignore
   pub struct BackgroundLayer {
       z0_tex: Texture, z0_view: TextureView,      // gradient render target
@@ -317,15 +319,17 @@ is headless and testable in isolation.
     - [ ] `cargo build -p heca-renderer` green.
     - [ ] Unit test: `render()` twice with no `set_params`/`resize` between → asserts the blur path runs only once (dirty flag). If no headless device, assert via a pure helper `fn params_changed(&self, ...) -> bool` factored out to be unit-testable without a device.
 
-- [ ] **1.3 Export modules in `heca-renderer/src/lib.rs`** — `pub mod gradient; pub mod background;` + re-export `BackgroundLayer` and `GradientRenderer` from the crate root (or a renderer prelude) so the app can import them.
+- [x] **1.3 Export modules in `heca-renderer/src/lib.rs`** — `pub mod gradient; pub mod background;` + re-export `BackgroundLayer` and `GradientRenderer` from the crate root (or a renderer prelude) so the app can import them.
   - Relations: 1.1, 1.2.
   - Check:
     - [ ] `cargo build -p heca-renderer` green.
     - [ ] `cargo test -p heca-renderer` green.
 
 ### Phase 1 exit — tests + review
-- [ ] `cargo build -p heca-renderer` + `cargo test -p heca-renderer` green.
-- [ ] **Review together:** confirm both modules are headless (no `wgpu::Surface`, no app types), reuse `Blur`, and the dirty-cache logic is correct. No app coupling. Proceed to Phase 2.
+- [x] `cargo build -p heca-renderer` + `cargo test -p heca-renderer` green.
+- [x] **Review together:** confirm both modules are headless (no `wgpu::Surface`, no app types), reuse `Blur`, and the dirty-cache logic is correct. No app coupling. Proceed to Phase 2.
+
+**Done (2026-06-22):** 15 unit + 3 integration tests green; clippy 0 warnings. User-reviewed (PR #165). `GradientRenderer::render` drops the unused `_device` param; `gradient_params_layout_matches_wgsl_uniform` pins the `#[repr(C)]` uniform layout.
 
 ---
 
@@ -337,7 +341,7 @@ the render change, so there is no broken intermediate state.
 
 ### Tasks
 
-- [ ] **2.1 Add `Appearance` fields (`heca-config/src/appearance.rs`)** — add
+- [x] **2.1 Add `Appearance` fields (`heca-config/src/appearance.rs`)** — add
   ```rust,ignore
   pub background_gradient_top: Option<Color>,
   pub background_gradient_bottom: Option<Color>,
@@ -348,7 +352,7 @@ the render change, so there is no broken intermediate state.
   - Relations: none.
   - Check: `cargo build -p heca-config` green.
 
-- [ ] **2.2 Resolvers (`heca-config/src/appearance.rs`)** —
+- [x] **2.2 Resolvers (`heca-config/src/appearance.rs`)** —
   - `effective_background_gradient_top(&self, theme) -> Color`: config → `theme.background_gradient_top` → `theme.background` (fallback chain).
   - `effective_background_gradient_bottom(&self, theme) -> Color`: config → `theme.background_gradient_bottom` → a derived shifted variant → `theme.background`.
   - `background_blur_radius() -> f32`: `terminal_blur_radius()`-style mapping (`background_blur` 0..100 → 0..`MAX_BLUR_PX` logical px).
@@ -356,7 +360,7 @@ the render change, so there is no broken intermediate state.
   - Relations: 2.1.
   - Check: unit tests in `appearance.rs` — defaults, override, clamping, fallback chain; `cargo test -p heca-config` green.
 
-- [ ] **2.3 Theme defaults (relocated to `heca-theme` post-PR-#160)** — the `Theme` struct and bundled theme definitions moved out of `heca-config` in PR #160. `heca-config/src/defaults.rs` is **deleted** and `heca-config/src/theme.rs` is now a re-export shim, so this task targets `heca-theme` instead:
+- [x] **2.3 Theme defaults (relocated to `heca-theme` post-PR-#160)** — the `Theme` struct and bundled theme definitions moved out of `heca-config` in PR #160. `heca-config/src/defaults.rs` is **deleted** and `heca-config/src/theme.rs` is now a re-export shim, so this task targets `heca-theme` instead:
   - **Struct fields** — add to `pub struct Theme` in `heca-theme/src/theme.rs` (currently at line ~156), mirroring the existing `#[serde(default)]` style used by the merge-added chrome background tokens:
     ```rust,ignore
     #[serde(default)]
@@ -373,15 +377,17 @@ the render change, so there is no broken intermediate state.
     - [ ] Unit test in `heca-theme` asserting each bundled theme has gradient colors (or that the resolver falls back to `theme.background` when unset).
     - [ ] `cargo test -p heca-theme` green; `cargo test -p heca-config` green.
 
-- [ ] **2.4 Workspace still green (additive only)** — confirm no removals were made; the old tint fields still exist (removed in Phase 3).
+- [x] **2.4 Workspace still green (additive only)** — confirm no removals were made; the old tint fields still exist (removed in Phase 3).
   - Relations: 2.1–2.3.
   - Check:
     - [ ] `cargo build --workspace --all-targets` green.
     - [ ] `cargo test --workspace` green.
 
 ### Phase 2 exit — tests + review
-- [ ] `cargo test -p heca-config` green; `cargo build --workspace` green.
-- [ ] **Review together:** resolver fallback chains, default values (opaque z0), knob names. Proceed to Phase 3.
+- [x] `cargo test -p heca-config` green; `cargo build --workspace` green.
+- [x] **Review together:** resolver fallback chains, default values (opaque z0), knob names. Proceed to Phase 3.
+
+**Done (2026-06-22):** heca-theme 20 tests, heca-config 50 tests green; clippy 0 warnings. User-reviewed. Bonus (user directive): `Theme::grid_tron()` now parses `include_str!("themes/grid_tron.toml")` — single source of truth, all hardcoded `Color::rgb` removed from the Rust constructor. `bundled_themes()` made `pub(crate)` so the gradient-contract test iterates the loader's bundled map (no hardcoded theme-name list). Resolver test split into 3 focused tests.
 
 ---
 

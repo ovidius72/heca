@@ -104,6 +104,17 @@ fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
 
+/// Default z=0 background blur amount: `0` (off — gradient drawn un-blurred).
+fn default_background_blur() -> u8 {
+    0
+}
+
+/// Default z=0 background transparency: `0` (opaque z=0 — clean cross-platform
+/// frost out of the box; the user opts into translucency).
+fn default_background_transparency() -> u8 {
+    0
+}
+
 fn default_pane_title_segments() -> Vec<PaneSegment> {
     vec![PaneSegment::Location, PaneSegment::AppName]
 }
@@ -182,6 +193,28 @@ pub struct AppearanceConfig {
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
     pub vibrancy: Vibrancy,
+
+    // ── z=0 background layer (compositor-blur refactor) ──
+    /// z=0 background gradient *top* color override. `None` → inherits
+    /// `theme.background_gradient_top` (which itself falls back to
+    /// `theme.background`). Set in config.toml to override the theme.
+    #[serde(default)]
+    pub background_gradient_top: Option<Color>,
+    /// z=0 background gradient *bottom* color override. `None` → inherits
+    /// `theme.background_gradient_bottom` (which falls back to a slightly
+    /// darkened `theme.background`).
+    #[serde(default)]
+    pub background_gradient_bottom: Option<Color>,
+    /// z=0 background **blur** amount, `0..=100` (`0` = off, gradient drawn
+    /// un-blurred). Portable heca-owned wgpu blur (independent of OS
+    /// `vibrancy`). Drives `background_blur_radius()`.
+    #[serde(default = "default_background_blur")]
+    pub background_blur: u8,
+    /// z=0 background **transparency**, `0..=100` (`0` = opaque z=0 — the
+    /// default, for clean cross-platform frost; `100` = fully see-through,
+    /// showing the desktop behind the gradient). Drives `background_alpha()`.
+    #[serde(default = "default_background_transparency")]
+    pub background_transparency: u8,
 
     // ── Pane chrome ──
     // All default to `None` (= inherit from theme). Set explicitly in
@@ -323,6 +356,39 @@ impl AppearanceConfig {
         (self.vibrancy != Vibrancy::None).then_some(self.vibrancy)
     }
 
+    // ── z=0 background layer resolvers ──
+
+    /// Effective z=0 gradient *top* color: config override →
+    /// `theme.effective_background_gradient_top()` (theme field →
+    /// `theme.background`).
+    pub fn effective_background_gradient_top(&self, theme: &Theme) -> Color {
+        self.background_gradient_top
+            .unwrap_or_else(|| theme.effective_background_gradient_top())
+    }
+
+    /// Effective z=0 gradient *bottom* color: config override →
+    /// `theme.effective_background_gradient_bottom()` (theme field →
+    /// darkened `theme.background`).
+    pub fn effective_background_gradient_bottom(&self, theme: &Theme) -> Color {
+        self.background_gradient_bottom
+            .unwrap_or_else(|| theme.effective_background_gradient_bottom())
+    }
+
+    /// z=0 background blur radius in logical px (`0.0` = off). Scales
+    /// `background_blur` 0..100 to `0..=MAX_BLUR_PX`. The caller converts to
+    /// physical px (`* scale_factor`) before passing to the GPU blur (the
+    /// compositor scene texture is framebuffer-sized).
+    pub fn background_blur_radius(&self) -> f32 {
+        (self.background_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
+    }
+
+    /// z=0 background opacity in `0.0..=1.0` (`background_transparency = 0` →
+    /// `1.0` opaque; `100` → `0.0` fully transparent). The z=0 blit into the
+    /// scene uses this alpha.
+    pub fn background_alpha(&self) -> f32 {
+        (1.0 - (self.background_transparency.min(100) as f32) / 100.0).clamp(0.0, 1.0)
+    }
+
     // ── Pane chrome resolvers ──
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
@@ -412,6 +478,10 @@ impl Default for AppearanceConfig {
             terminal_floating_transparency: default_terminal_floating_transparency(),
             terminal_floating_blur: default_terminal_floating_blur(),
             vibrancy: default_vibrancy(),
+            background_gradient_top: None,
+            background_gradient_bottom: None,
+            background_blur: default_background_blur(),
+            background_transparency: default_background_transparency(),
             pane_border_width: None,
             pane_border_color: None,
             pane_border_radius: None,
@@ -446,6 +516,10 @@ mod tests {
         assert_eq!(cfg.terminal_floating_transparency, 0);
         assert_eq!(cfg.terminal_floating_blur, 0);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
+        assert_eq!(cfg.background_blur, 0);
+        assert_eq!(cfg.background_transparency, 0);
+        assert_eq!(cfg.background_gradient_top, None);
+        assert_eq!(cfg.background_gradient_bottom, None);
         assert!(!cfg.is_transparent());
         assert!((cfg.opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.blur_radius()).abs() < f32::EPSILON);
@@ -454,6 +528,9 @@ mod tests {
         assert!((cfg.terminal_floating_opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.terminal_floating_blur_radius()).abs() < f32::EPSILON);
         assert!((cfg.terminal_floating_frost_opacity()).abs() < f32::EPSILON);
+        // z=0 defaults to opaque (background_transparency = 0).
+        assert!((cfg.background_alpha() - 1.0).abs() < f32::EPSILON);
+        assert!((cfg.background_blur_radius()).abs() < f32::EPSILON);
         assert_eq!(cfg.os_vibrancy(), None);
     }
 
@@ -575,6 +652,65 @@ mod tests {
             cfg.effective_terminal_frost_color(&themed),
             Color::new(1, 2, 3, 255)
         );
+    }
+
+    #[test]
+    fn z0_background_knobs_map_to_derived_values() {
+        let cfg = AppearanceConfig {
+            background_blur: 50,
+            background_transparency: 25,
+            ..Default::default()
+        };
+        // blur 50 → 50% of MAX_BLUR_PX (24.0).
+        assert!((cfg.background_blur_radius() - 24.0).abs() < 1e-6);
+        // transparency 25 → alpha 0.75.
+        assert!((cfg.background_alpha() - 0.75).abs() < 1e-6);
+
+        // Over-cap clamps.
+        let over = AppearanceConfig {
+            background_blur: 200,
+            background_transparency: 200,
+            ..Default::default()
+        };
+        assert!((over.background_blur_radius() - MAX_BLUR_PX).abs() < 1e-6);
+        assert!((over.background_alpha() - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn z0_gradient_default_resolves_to_theme_colors() {
+        let mocha = crate::theme::catppuccin_mocha();
+        let cfg = AppearanceConfig::default();
+        // No config override → inherits the theme's explicit TOML gradient
+        // colors (mocha ships them).
+        let top = cfg.effective_background_gradient_top(&mocha);
+        let bottom = cfg.effective_background_gradient_bottom(&mocha);
+        assert_eq!(top, mocha.background_gradient_top.unwrap());
+        assert_eq!(bottom, mocha.background_gradient_bottom.unwrap());
+        assert_ne!(top, bottom);
+    }
+
+    #[test]
+    fn z0_gradient_config_override_wins_over_theme() {
+        let mocha = crate::theme::catppuccin_mocha();
+        let cfg = AppearanceConfig {
+            background_gradient_top: Some(Color::new(1, 2, 3, 255)),
+            background_gradient_bottom: Some(Color::new(4, 5, 6, 255)),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_background_gradient_top(&mocha), Color::new(1, 2, 3, 255));
+        assert_eq!(cfg.effective_background_gradient_bottom(&mocha), Color::new(4, 5, 6, 255));
+    }
+
+    #[test]
+    fn z0_gradient_unset_theme_fields_fall_back_to_derived() {
+        let mocha = crate::theme::catppuccin_mocha();
+        let mut bare = mocha.clone();
+        bare.background_gradient_top = None;
+        bare.background_gradient_bottom = None;
+        let cfg = AppearanceConfig::default();
+        // top = background; bottom = darker(background) (≠ background).
+        assert_eq!(cfg.effective_background_gradient_top(&bare), bare.background);
+        assert_ne!(cfg.effective_background_gradient_bottom(&bare), bare.background);
     }
 
     #[test]
