@@ -447,18 +447,22 @@ fn handle_workspace_pick_mode(
 
     let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
     if let Some(ch) = typed
-        && let Some((_, ws_idx)) = candidates.iter().find(|(c, _)| *c == ch)
+        && let Some((_, target_ws)) = candidates.iter().find(|(c, _)| *c == ch)
     {
+        let target_ws = *target_ws;
         let action = match target {
-            WorkspacePickTarget::Column(col_idx) => WmAction::MoveColumnToWorkspace {
-                col_idx,
-                ws_idx: *ws_idx,
-                focus: true,
-            },
-            WorkspacePickTarget::Pane(pane_id) => WmAction::MovePaneToWorkspace {
-                pane_id,
-                ws_idx: *ws_idx,
-            },
+            WorkspacePickTarget::Column { ws_idx: origin_ws, col_idx } => {
+                // `move_column_to_workspace` resolves the source column against the
+                // active workspace, so re-activate the captured origin first in case
+                // the active workspace drifted while the pick was open.
+                if state.session.active_workspace_idx != origin_ws {
+                    crate::app::focus::switch_workspace_tracked(state, origin_ws);
+                }
+                WmAction::MoveColumnToWorkspace { col_idx, ws_idx: target_ws, focus: true }
+            }
+            WorkspacePickTarget::Pane(pane_id) => {
+                WmAction::MovePaneToWorkspace { pane_id, ws_idx: target_ws }
+            }
         };
         dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }

@@ -77,16 +77,21 @@ pub(crate) fn collect_workspace_candidates(session: &Session) -> Vec<(char, usiz
 /// (letter → `(ws_idx, col_idx)`) for the "move pane to column" pick — a pane can be
 /// stacked into a column in any workspace. Capped at 52.
 pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, usize)> {
-    let mut candidates = Vec::new();
-    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
-        for (col_idx, _) in ws.scrolling.columns.iter().enumerate() {
-            if candidates.len() >= PANE_CANDIDATE_LIMIT {
-                return candidates;
-            }
-            candidates.push((CANDIDATE_ALPHABET[candidates.len()], ws_idx, col_idx));
-        }
-    }
-    candidates
+    session
+        .workspaces
+        .iter()
+        .enumerate()
+        .flat_map(|(ws_idx, ws)| {
+            ws.scrolling
+                .columns
+                .iter()
+                .enumerate()
+                .map(move |(col_idx, _)| (ws_idx, col_idx))
+        })
+        .take(PANE_CANDIDATE_LIMIT)
+        .enumerate()
+        .map(|(i, (ws_idx, col_idx))| (CANDIDATE_ALPHABET[i], ws_idx, col_idx))
+        .collect()
 }
 
 /// Find the (workspace_index, column_index, pane_index) containing a pane.

@@ -113,9 +113,11 @@ pub enum InputMode {
 /// What a [`InputMode::WorkspacePick`] moves into the picked workspace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorkspacePickTarget {
-    /// The active column (by index in its source workspace), for `MoveColumnToWorkspace`.
-    Column(usize),
-    /// A specific pane, for `MovePaneToWorkspace`.
+    /// A column, captured by its **full address** (`ws_idx` + `col_idx`) at pick entry,
+    /// so resolution is correct even if the active workspace drifts mid-pick. For
+    /// `MoveColumnToWorkspace`.
+    Column { ws_idx: usize, col_idx: usize },
+    /// A specific pane (by stable id), for `MovePaneToWorkspace`.
     Pane(PaneId),
 }
 
@@ -153,7 +155,7 @@ impl InputMode {
         // Map the active pick mode to its enter-mode action; the human prompt + label
         // come from that action's `ActionDescriptor` (the registry is the single source
         // of truth for action text — no duplicated strings here).
-        let (kind, action) = match self {
+        let (kind, action_name) = match self {
             InputMode::PaneSelect { .. } => (PickKind::SelectPane, "pane_select"),
             InputMode::PaneSwap { focus_after: true, .. } => {
                 (PickKind::SwapPane, "swap_and_focus_pane")
@@ -166,14 +168,14 @@ impl InputMode {
             InputMode::WorkspacePick { target: WorkspacePickTarget::Pane(_), .. } => {
                 (PickKind::MovePaneToWorkspace, "move_pane_to_workspace_pick")
             }
-            InputMode::WorkspacePick { target: WorkspacePickTarget::Column(_), .. } => {
+            InputMode::WorkspacePick { target: WorkspacePickTarget::Column { .. }, .. } => {
                 (PickKind::MoveColumnToWorkspace, "move_column_to_workspace_pick")
             }
             InputMode::ColumnPick { .. } => (PickKind::MovePaneToColumn, "move_pane_to_column_pick"),
             _ => return None,
         };
-        let desc = crate::actions::ActionRegistry::find(action)?;
-        Some(PendingPick { kind, action, label: desc.label, prompt: desc.description })
+        let desc = crate::actions::ActionRegistry::find(action_name)?;
+        Some(PendingPick { kind, action_name, label: desc.label, prompt: desc.description })
     }
 }
 
@@ -184,8 +186,9 @@ impl InputMode {
 pub struct PendingPick {
     /// Stable machine-readable kind (match on this in plugins).
     pub kind: PickKind,
-    /// The enter-mode action's config name (e.g. `"move_pane_to_column_pick"`).
-    pub action: &'static str,
+    /// The enter-mode action's **config name** string (e.g. `"move_pane_to_column_pick"`) —
+    /// not a `WmAction` value.
+    pub action_name: &'static str,
     /// The action's command-palette label (from its `ActionDescriptor`).
     pub label: &'static str,
     /// The action's description, used as the pick prompt (from its `ActionDescriptor`).

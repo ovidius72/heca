@@ -1890,7 +1890,8 @@ fn pick_keycap(
         .map(|(ch, _)| ch.to_string())
 }
 
-fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+/// Find a pane's sidebar entry across all workspaces (tiled + floating).
+fn find_pane_entry(tree: &SidebarTree, pane_id: PaneId) -> Option<&SidebarPaneEntry> {
     tree.workspaces
         .iter()
         .flat_map(|ws| {
@@ -1900,6 +1901,10 @@ fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
                 .chain(ws.floating_panes.iter())
         })
         .find(|pane| pane.pane_id == pane_id)
+}
+
+fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+    find_pane_entry(tree, pane_id)
         .map(|pane| pane.name.as_str())
         .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
 }
@@ -1907,16 +1912,7 @@ fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
 /// The pane's user-set override name (from rename), if any — wins over the process
 /// title. `None` while the pane tracks its process.
 fn pane_custom_name(tree: &SidebarTree, pane_id: PaneId) -> Option<&str> {
-    tree.workspaces
-        .iter()
-        .flat_map(|ws| {
-            ws.columns
-                .iter()
-                .flat_map(|col| col.panes.iter())
-                .chain(ws.floating_panes.iter())
-        })
-        .find(|pane| pane.pane_id == pane_id)
-        .and_then(|pane| pane.custom_name.as_deref())
+    find_pane_entry(tree, pane_id).and_then(|pane| pane.custom_name.as_deref())
 }
 
 fn sync_pane_runtime_state(

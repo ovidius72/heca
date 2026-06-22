@@ -795,6 +795,7 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
 /// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
 /// column into that workspace. No-ops if there are no workspaces.
 pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
+    let ws_idx = state.session.active_workspace_idx;
     let col_idx = state
         .session
         .active_workspace()
@@ -804,7 +805,7 @@ pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAc
     if !candidates.is_empty() {
         state.input_mode = InputMode::WorkspacePick {
             candidates,
-            target: WorkspacePickTarget::Column(col_idx),
+            target: WorkspacePickTarget::Column { ws_idx, col_idx },
         };
         state.needs_redraw = true;
     }

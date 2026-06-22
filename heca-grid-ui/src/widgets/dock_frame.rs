@@ -285,9 +285,8 @@ impl Component for DockFrame {
                 let t = cx.theme();
                 (t.accent, t.active_wash_alpha)
             };
-            let a = (wash_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-            if a > 0 {
-                cx.rect(b, accent.with_alpha(a), None, radius, None);
+            if wash_alpha > 0.0 {
+                cx.rect(b, accent.with_alpha_f32(wash_alpha), None, radius, None);
             }
         }
 

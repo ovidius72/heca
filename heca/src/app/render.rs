@@ -46,7 +46,7 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         }
         InputMode::WorkspacePick { target, .. } => {
             let label = match target {
-                crate::app_state::WorkspacePickTarget::Column(_) => "MOVE COL",
+                crate::app_state::WorkspacePickTarget::Column { .. } => "MOVE COL",
                 crate::app_state::WorkspacePickTarget::Pane(_) => "MOVE PANE",
             };
             (label, pick_suffix())
