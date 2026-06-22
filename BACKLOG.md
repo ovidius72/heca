@@ -263,43 +263,45 @@ Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
 > Replace the tiled-tint + OS-vibrancy approach with a heca-owned z=0 blurred gradient background layer.
 > Fixes cross-platform frost AND the floating-pane text collision defect (5% sharp-content leak).
 > Gate: run AFTER `theming-04` so the new `background_*` config knobs live in the unified theme system.
+> **Status:** Phases 1–2 done and merged (PR #165 = Phase 1, PR #167 = Phase 2). Phase 3 (`compositor-03`) is next.
 
-### [ ] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
+### [x] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
 New isolated GPU primitives in `heca-renderer`. No app wiring yet.
 Source: `compositor-blur-refactor-plan.md` Phase 1
 
-- [ ] **compositor-task-01** — Create `heca-renderer/src/gradient.rs` — `GradientRenderer` that fills a render-target texture with a 2-color vertical gradient via a fullscreen-triangle WGSL pipeline.
-  API: `new(device, format)` + `render(device, queue, encoder, target, top: [f32;4], bottom: [f32;4])`.
+- [x] **compositor-task-01** — Create `heca-renderer/src/gradient.rs` — `GradientRenderer` that fills a render-target texture with a 2-color vertical gradient via a fullscreen-triangle WGSL pipeline.
+  API: `new(device, format)` + `render(queue, encoder, target, top: [f32;4], bottom: [f32;4])` (the `device` param was dropped during review — `render` borrows `&self` only).
   Colors are linear f32x4 (match the existing primitive renderer convention).
   Files: `heca-renderer/src/gradient.rs`, `heca-renderer/src/lib.rs`
 
-- [ ] **compositor-task-02** — Create `heca-renderer/src/background.rs` — `BackgroundLayer` owning z=0 layer state with a static cached blur.
+- [x] **compositor-task-02** — Create `heca-renderer/src/background.rs` — `BackgroundLayer` owning z=0 layer state with a static cached blur.
   Fields: `z0_tex`/`z0_view` (gradient render target), `cache_tex`/`cache_view` (blurred result), `dirty: bool`, cached params (top/bottom/blur_radius/size/format).
   `render(&mut self, device, queue, encoder, blur: &Blur) -> &TextureView` — re-runs gradient+blur only when dirty; returns cached view when clean.
   CRITICAL: copy blurred view → cache (`encoder.copy_texture_to_texture`) BEFORE any subsequent `blur.process` call in the same frame.
   Files: `heca-renderer/src/background.rs`, `heca-renderer/src/lib.rs`
 
-- [ ] **compositor-task-03** — Unit test for the dirty-cache logic: call `render()` twice with no `set_params`/`resize` change between them; assert the blur path ran only once.
+- [x] **compositor-task-03** — Unit test for the dirty-cache logic: call `render()` twice with no `set_params`/`resize` change between them; assert the blur path ran only once.
   If no headless GPU device: factor out `fn params_changed(&self, ...) -> bool` and test that instead.
 
-### [ ] Phase: Config — new background knobs · `compositor-02`
+### [x] Phase: Config — new background knobs · `compositor-02`
 Add `background_gradient_top/bottom`, `background_blur`, `background_transparency` to config. Additive only — no removals yet.
 Source: `compositor-blur-refactor-plan.md` Phase 2
 
-- [ ] **compositor-task-04** — Add fields to `heca-config/src/appearance.rs`:
+- [x] **compositor-task-04** — Add fields to `heca-config/src/appearance.rs`:
   `background_gradient_top: Option<Color>`, `background_gradient_bottom: Option<Color>`,
   `background_blur: u8`, `background_transparency: u8`.
   Serde defaults: `background_blur = 0`, `background_transparency = 0` (opaque by default).
 
-- [ ] **compositor-task-05** — Add resolvers in `heca-config/src/appearance.rs`:
+- [x] **compositor-task-05** — Add resolvers in `heca-config/src/appearance.rs`:
   `effective_background_gradient_top(&self, theme) -> Color` (config → `theme.background_gradient_top` → `theme.background`).
   `effective_background_gradient_bottom(&self, theme) -> Color` (config → `theme.background_gradient_bottom` → shifted derivation → `theme.background`).
   `background_blur_radius() -> f32` (`background_blur` 0..100 → 0..`MAX_BLUR_PX`).
   `background_alpha() -> f32` (`(1.0 - background_transparency as f32 / 100.0).clamp(0.0, 1.0)`).
 
-- [ ] **compositor-task-06** — Add `background_gradient_top`/`background_gradient_bottom` fields to `grid_tron.toml`, `mocha.toml`, `latte.toml` in `heca-theme/src/themes/`.
+- [x] **compositor-task-06** — Add `background_gradient_top`/`background_gradient_bottom` fields to `grid_tron.toml`, `mocha.toml`, `latte.toml` in `heca-theme/src/themes/`.
+  Bonus: `Theme::grid_tron()` now parses `include_str!("themes/grid_tron.toml")` — single source of truth, all hardcoded `Color::rgb` removed from the Rust constructor.
 
-- [ ] **compositor-task-07** — Unit tests: defaults, config overrides, clamping, fallback chains. `cargo test -p heca-config` green.
+- [x] **compositor-task-07** — Unit tests: defaults, config overrides, clamping, fallback chains. `cargo test -p heca-config` green (50 tests).
 
 ### [ ] Phase: Pipeline integration — z=0 blit and tint removal · `compositor-03`
 Wire the background layer into the render pipeline, remove the old tiled tint, fix floating backdrop to 100%.
