@@ -5,7 +5,7 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs = this PR); Phase 5 (interactive visual tuning with the user) next.
+- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs). Two follow-on phases landed after Phase 4: **`compositor-04b`** (`intensity`/`glow_size` `[appearance]` override + glow/scanline separation, PR #172) and **`compositor-04c`** (extract fonts from `Theme` into a dedicated `[font]` config block, PR #175). Phase 5 (interactive visual tuning with the user) is next.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -515,6 +515,45 @@ build incrementally and review the diff carefully.
 
 ### Phase 4 exit — review together
 - [x] Docs consistent across all four files; no stale references to the tint approach in code-facing docs. Proceed to Phase 5. ✅ (gate verified: `rg "terminal_frost_color"` / `content_canvas_fill` outside the plan return only historical/migration notes; `theming-documentation.md` clean.)
+
+---
+
+## Phase 4b / 4c — Follow-on phases (landed)
+
+Two phases were discovered during Phase 4 and landed as follow-ons before
+Phase 5. They are tracked in `BACKLOG.md` as `compositor-04b` / `compositor-04c`;
+this section records them here so the plan reflects what actually shipped.
+
+### `compositor-04b` — `intensity` / `glow_size` `[appearance]` override + glow/scanline separation ✅
+- **Problem found on the fly:** the `intensity` token was leaking into glow
+  rendering (via `Intensity::glow_scale()`), and the two effect tokens
+  (`glow_size` = glow, `intensity` = scanlines/CRT overlay) had no `[appearance]`
+  override. `intensity` is tied to the compositor's z=0.5 CRT scanline overlay
+  pass (Q2-extra), so this is compositor-track work even though it touches
+  `Theme`/`AppearanceConfig`.
+- **Shipped:** `[appearance]` override fields `intensity`/`glow_size` with
+  resolvers; `Intensity::glow_scale()` removed from both `heca-theme` and
+  `heca-grid-ui`, replaced by `GlowLevel::strength_scale()` (curve preserved
+  exactly); override wired at the `chrome_gui_theme(state)` choke point; token
+  doc audit across `theming-documentation.md` / `README` / `AGENTS` /
+  `example.config.toml`.
+- **PR:** #172 (`feat(compositor): add intensity/glow appearance overrides`).
+- **Source:** `handoff-intensity-glow.md`, discussion 2026-06-22.
+
+### `compositor-04c` — Font settings separation (extract fonts from `Theme`) ✅
+- **Problem found during 04b:** fonts are system-local, not theme-portable — a
+  color theme that ships `font_family = "Maple Mono Normal NF"` breaks on a
+  system without that font.
+- **Shipped:** moved font family + size out of `heca_theme::Theme` into a
+  structured `[font]` block in `config.toml` (`heca-config/src/font.rs`, new)
+  with per-style family slots (normal/bold/italic/bold_italic) for both UI and
+  terminal surfaces; renderer gained a config-free `TerminalFontFamilies` with
+  per-style resolution; `normal` is optional and falls back to the
+  surface-correct embedded font (Geist Mono for UI, Maple Mono Normal NF for
+  terminal). Fonts removed from `Theme` + the 3 bundled TOMLs + `SettingsConfig`.
+- **PR:** #175 (`compositor-04c: extract fonts from Theme into a dedicated
+  [font] config block`).
+- **Source:** `handoff-compositor-04c-font-settings.md`, discussion 2026-06-22.
 
 ---
 
