@@ -15,6 +15,56 @@
 
 ---
 
+## 0. Reconciliation with the theme-unification merge (PR #160)
+
+> Added 2026-06-21 after PR #160 (`feat(theme): replace frappe with latte and
+> polish theme surfaces`) landed on `main`. The merge migrated `heca-config` to
+> re-export `heca-theme` types, deleted `defaults.rs`, replaced `frappe` with a
+> bundled `latte`, added chrome background theme tokens
+> (`left_sidebar_background` / `right_sidebar_background` /
+> `top_bottom_pane_background`), and introduced a `content_canvas_fill()`
+> stopgap in the render pipeline. Several tasks below were written against the
+> pre-merge layout and are updated here so the plan is executable verbatim off
+> the current `main`. Inline task edits are marked **(post-PR-#160)**.
+
+The merge introduced these changes that affect this plan (detailed inline in
+the tasks, summarized here):
+
+1. **`Theme` struct relocated.** `pub struct Theme` now lives in
+   `heca-theme/src/theme.rs:156`; `heca-config/src/theme.rs` is a re-export shim
+   (`heca_theme::{Color, GlowLevel, Intensity, Shadow, Theme}`).
+   `heca-config/src/defaults.rs` is **deleted**. → Task 2.3 rewritten.
+2. **Theme definitions are TOML.** Bundled themes are
+   `heca-theme/src/themes/{grid_tron,mocha,latte}.toml` (note: `latte` replaced
+   `frappe`; the active set is `grid_tron` / `mocha` / `latte`; `frappe` exists
+   only in historical notes). → Task 2.3 + Phase 4 TOML cleanup updated.
+3. **`content_canvas_fill()` stopgap.** `heca/src/app/render.rs` now paints a
+   theme-background fill over pane-less content area (helpers `FillRect` /
+   `subtract_fill_rect` / `uncovered_fill_rects` + tests) in the exact slot z=0
+   will occupy. `theming-plan.md` flags it as a stopgap to fold into z=0. This
+   plan did not reference it. → New Task 3.4b added to remove it alongside z=0.
+4. **Clippy baseline is now 0**, not 9 (the pre-merge "9 pre-existing lints"
+   from PR #125 are gone as of PR #160). → Phase 0.2 + 6.2 updated.
+5. **`cargo test -p heca-core` has a failing bash-integration test** on the
+   current baseline (`terminal_backend_bash_integration_reports_success_error_and_cwd`).
+   It is almost certainly env-dependent (shell-integration exit reporting), not
+   caused by the theme merge (the only `heca-core` change was adding
+   `cursor_color` to `TerminalSnapshot`). → Phase 0.2 now requires verifying it
+   is pre-existing before starting.
+6. **`latte` ships a transparent terminal background**
+   (`terminal_background = "#e6e9ef00"`, alpha 0). This bypasses the plan's
+   `terminal_transparency` → `surface_alpha` translucency channel and is the
+   prime suspect for the deferred "no blur/transparency" regression. → Phase 3
+   critical review + Phase 5.1 now require reconciling which channel owns pane
+   translucency.
+
+New theme tokens added by the merge (`left_sidebar_background`,
+`right_sidebar_background`, `top_bottom_pane_background` on `Theme`) do **not**
+conflict with this plan; `background_gradient_top/bottom` are additional fields
+on the same struct.
+
+---
+
 ## 1. Goal & motivation
 
 Give heca panes a **real frosted-glass blur** that:
@@ -118,10 +168,27 @@ instead of the OS, so it is **cross-platform and tunable**.
 
 - [ ] **0.2 Baseline green** — confirm the starting point builds, tests pass, clippy is at the known pre-existing baseline (9 lints — 8 selection `dead_code` + 2 `too_many_arguments`; see PR #125 notes).
   - Relations: 0.1.
-  - Check:
+  - Check (post-PR-#160):
     - [ ] `cargo build --workspace --all-targets` → green.
-    - [ ] `cargo test --workspace` → green.
-    - [ ] `cargo clippy --workspace --all-targets --all-features` → only the 9 known pre-existing warnings (record the exact count).
+    - [ ] **Baseline test verification (post-PR-#160):** `cargo test -p heca-core`
+      currently fails on `terminal_backend_bash_integration_reports_success_error_and_cwd`
+      (`heca-core/src/backend/terminal.rs:801`, "bash shell integration should
+      report `true` as Success with exit code 0"). Before proceeding, confirm
+      this failure is **pre-existing/env-dependent** on plain `origin/main` and
+      **not** caused by this plan's changes (the theme merge only added
+      `cursor_color` to `TerminalSnapshot`, which is unrelated to shell-integration
+      exit reporting). Record the verdict:
+      - [ ] If pre-existing/env: note it as an excluded baseline failure (do not
+        block the plan on it); record the exact failing test name.
+      - [ ] If introduced: fix it before Phase 1 (do not start on a red baseline
+        you don't own).
+    - [ ] `cargo test --workspace` → green **excluding** any pre-existing/env
+      failure recorded above (state the exclusion explicitly in the Phase 0
+      exit notes).
+    - [ ] `cargo clippy --workspace --all-targets --all-features` → **0 warnings**
+      (the pre-merge "9 pre-existing lints" baseline is gone as of PR #160;
+      record the actual count, expected 0). If any warning appears, it is **new**
+      and must be fixed before Phase 1.
 
 ### Phase 0 exit
 - [ ] Tests + clippy baseline recorded. No review needed (no code changed). Proceed to Phase 1.
@@ -216,9 +283,22 @@ the render change, so there is no broken intermediate state.
   - Relations: 2.1.
   - Check: unit tests in `appearance.rs` — defaults, override, clamping, fallback chain; `cargo test -p heca-config` green.
 
-- [ ] **2.3 Theme defaults (`heca-config/src/theme.rs` + `defaults.rs`)** — add `background_gradient_top` + `background_gradient_bottom` to the `Theme` struct and to the mocha + latte theme definitions (a tasteful top→bottom pair, e.g. mocha: a slightly lighter + the base bg). Defaults in `defaults.rs` for the new `Appearance` fields: `background_blur = 0`, `background_transparency = 0` (opaque by default, per the locked decision).
+- [ ] **2.3 Theme defaults (relocated to `heca-theme` post-PR-#160)** — the `Theme` struct and bundled theme definitions moved out of `heca-config` in PR #160. `heca-config/src/defaults.rs` is **deleted** and `heca-config/src/theme.rs` is now a re-export shim, so this task targets `heca-theme` instead:
+  - **Struct fields** — add to `pub struct Theme` in `heca-theme/src/theme.rs` (currently at line ~156), mirroring the existing `#[serde(default)]` style used by the merge-added chrome background tokens:
+    ```rust,ignore
+    #[serde(default)]
+    pub background_gradient_top: Option<Color>,
+    #[serde(default)]
+    pub background_gradient_bottom: Option<Color>,
+    ```
+    Place them near `left_sidebar_background` / `right_sidebar_background` / `top_bottom_pane_background`. Keep `Option<Color>` so the resolver fallback chain (2.2) can fall back to `theme.background` when unset.
+  - **Bundled theme TOMLs** — add a tasteful top→bottom pair to **all three** active themes: `heca-theme/src/themes/grid_tron.toml`, `heca-theme/src/themes/mocha.toml`, `heca-theme/src/themes/latte.toml` (e.g. mocha: a slightly lighter top + the base bg bottom). Do **not** add a `frappe.toml` — it was replaced by `latte`; `frappe` exists only in historical notes now.
+  - **`Appearance` defaults** (these stay in `heca-config`) — in `heca-config/src/appearance.rs`, set the new fields' serde defaults to `background_blur = 0`, `background_transparency = 0` (opaque z=0 by default, per the locked decision in §2). Do **not** recreate `defaults.rs`.
   - Relations: 2.1.
-  - Check: unit test asserting the default theme has gradient colors; `cargo test -p heca-config` green.
+  - Check:
+    - [ ] `cargo build -p heca-theme` green; `cargo build -p heca-config` green.
+    - [ ] Unit test in `heca-theme` asserting each bundled theme has gradient colors (or that the resolver falls back to `theme.background` when unset).
+    - [ ] `cargo test -p heca-theme` green; `cargo test -p heca-config` green.
 
 - [ ] **2.4 Workspace still green (additive only)** — confirm no removals were made; the old tint fields still exist (removed in Phase 3).
   - Relations: 2.1–2.3.
@@ -259,25 +339,54 @@ build incrementally and review the diff carefully.
   - Relations: 3.3 (z=0 must be in place first).
   - Check: `cargo build -p heca` green; **visual** in Phase 5 (tiled frost = z=0).
 
+- [ ] **3.4b Remove the `content_canvas_fill()` stopgap (new, post-PR-#160)** —
+  PR #160 added a tactical background-tint in `heca/src/app/render.rs` that
+  paints `theme.background` at `appearance.opacity()` over pane-less content
+  area, via `content_canvas_fill()` + `FillRect` / `subtract_fill_rect()` /
+  `uncovered_fill_rects()` (+ unit tests `content_canvas_fill_*` and
+  `uncovered_fill_rects_exclude_pane_rectangles`). `theming-plan.md` flags this
+  as a stopgap to fold into the z=0 model. It sits in the exact pre-stencil slot
+  z=0 now owns, so leaving it in place would produce **two competing background
+  layers**. Once 3.3 wires z=0:
+  - delete `content_canvas_fill`, `FillRect`, `subtract_fill_rect`,
+    `uncovered_fill_rects`, and the uncovered-region fill pass in `render_frame`;
+  - delete the associated unit tests in `heca/src/app/render.rs::tests`;
+  - confirm `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'`
+    returns no code references (only `theming-plan.md` historical mentions may
+    remain — update them in Phase 4).
+  - Relations: 3.3 (z=0 must replace it).
+  - Check: `cargo build -p heca` green; `cargo test -p heca` green; grep clean.
+
 - [ ] **3.5 Remove old tint config (`heca-config/src/appearance.rs`)** — delete `terminal_frost_color`, `terminal_frost_opacity()`, and `effective_terminal_frost_color()`. Update any remaining references (grep `terminal_frost` across the workspace).
   - Relations: 3.4 (render.rs no longer uses them).
-  - Check:
+  - Check (post-PR-#160):
     - [ ] `cargo build --workspace --all-targets` green.
     - [ ] `cargo test -p heca-config` green.
-    - [ ] `rg "terminal_frost" --glob '!*.md'` returns no code references (only docs, fixed in Phase 4).
+    - [ ] `rg "terminal_frost" --glob '!*.md'` returns no code references. Note
+      this now also catches **`heca-theme/src/themes/latte.toml`**
+      (`terminal_frost_color = "#e6e9ef"`) and **`example.config.toml`** — both
+      must have the key removed (not just docs). `Theme` uses per-field
+      `#[serde(default)]` with no `deny_unknown_fields`, so stale keys won't
+      break loading, but they must still be stripped to avoid shipping a dead
+      knob. Doc-only references (`theming-documentation.md` etc.) are fixed in
+      Phase 4.
 
 - [ ] **3.6 Floating backdrop-100% fix (`heca/src/app/render.rs`)** — in the floating-pane loop, change the `backdrop.draw` opacity argument from `floating_frost_opacity` → `1.0` (the blurred tiled content fully replaces the raw behind — no sharp leak). Drop `floating_frost_opacity` (and `terminal_floating_frost_opacity()` if it exists); floating frost visibility is now driven solely by `terminal_floating_transparency` (cell surface alpha).
   - Relations: 3.4.
   - Check: `cargo build -p heca` green; **visual** in Phase 5 (no text collision, frost visible at chosen transparency).
 
-- [ ] **3.7 Showcase + examples signature updates (`heca-renderer/examples/showcase.rs`)** — update any `backdrop.draw` / `primitive` / `text.render` calls whose signatures changed (e.g. if a new alpha-blit pipeline altered `Backdrop::draw`).
+- [ ] **3.7 Showcase + examples signature updates (`heca-renderer/examples/showcase.rs`)** — update any `backdrop.draw` / `primitive` / `text.render` calls whose signatures changed (e.g. if a new alpha-blit pipeline altered `Backdrop::draw`). **Note (post-PR-#160):** the showcase now integrates `heca-theme` directly and has a live theme switcher (`⇄ THEME: ...` button) that rebuilds the whole widget tree on theme change. `backdrop.draw` currently has **no** call site in the showcase (only in `heca/src/app/render.rs:747`), so signature changes there mostly affect the app, not the example — but re-verify the showcase still builds with whatever new pipeline 3.3 introduces, and that the theme switcher still rebuilds cleanly with z=0 in mind.
   - Relations: 3.3, 3.6.
-  - Check: `cargo build --workspace --all-targets` green (examples included).
+  - Check: `cargo build --workspace --all-targets` green (examples included); `cargo run -p heca-renderer --example showcase` launches and the theme switcher still cycles `grid_tron`/`mocha`/`latte`.
 
 ### Phase 3 exit — tests + review
 - [ ] `cargo build --workspace --all-targets` green.
 - [ ] `cargo test --workspace` green.
-- [ ] **Review together (the critical review):** walk the full pipeline order in `render.rs` — clear → z=0 blit → tiled stencil → tiled content (translucent over z=0) → chrome borders → floating blur capture → floating stencil → floating backdrop(100%) + content → grid-ui chrome → sidebar. Confirm no stencil state leaks between the tiled and floating passes, and the z=0 blit does **not** get clipped by the tiled stencil (z=0 is pre-stencil). Proceed to Phase 4.
+- [ ] **Review together (the critical review):** walk the full pipeline order in `render.rs` — clear → z=0 blit → tiled stencil → tiled content (translucent over z=0) → chrome borders → floating blur capture → floating stencil → floating backdrop(100%) + content → grid-ui chrome → sidebar. Confirm no stencil state leaks between the tiled and floating passes, and the z=0 blit does **not** get clipped by the tiled stencil (z=0 is pre-stencil).
+  - **Translucency-channel reconciliation (post-PR-#160, required):** the plan assumes tiled pane translucency is driven solely by the `terminal_transparency` knob → `surface_alpha` in `heca-renderer/src/terminal.rs` (`surface_bg[3] = default_bg[3] * style.surface_alpha`). PR #160's `latte` theme sets `terminal_background = "#e6e9ef00"` (alpha 0), which makes the terminal surface fully transparent **independent of the knob** — this is the prime suspect for the deferred "no blur/transparency" regression. Before Phase 5, decide and record **one** of:
+    1. **Theme owns opacity:** bundled theme `terminal_background` values are **opaque** (fix `latte.toml` `#e6e9ef00` → `#e6e9ef`), and `terminal_transparency` / `surface_alpha` is the only translucency channel (cleanest, matches this plan's model). **Recommended.**
+    2. **Theme owns translucency:** document that theme-bg alpha is a second channel and reconcile both in the resolver (more complex, risks re-introducing the regression).
+    If (1) is chosen, fold the `latte.toml` fix into Task 3.4b's cleanup or a dedicated 3.5 sub-step. Proceed to Phase 4.
 
 ---
 
@@ -290,6 +399,14 @@ build incrementally and review the diff carefully.
 - [ ] **4.1 `keybindings.toml`** — replace the tiled-tint appearance block with the z=0 knobs (`background_gradient_top/bottom`, `background_blur`, `background_transparency`) + a concise z-layer model explanation + a **migration note** that `terminal_blur` / `terminal_frost_color` are removed (use `background_blur`).
   - Relations: Phase 3.
   - Check: doc reads consistently; no references to removed knobs as valid.
+
+- [ ] **4.1b Strip removed knobs from theme TOMLs + config examples (new, post-PR-#160)** — Task 3.5 removes `terminal_frost_color` from code; the merge left stale references that must be cleaned in the same doc pass:
+  - `heca-theme/src/themes/latte.toml` — remove `terminal_frost_color = "#e6e9ef"` (line ~45).
+  - `example.config.toml` — remove the commented `# terminal_frost_color = "#1e1e2e"` block (~line 29).
+  - `theming-documentation.md` — remove/replace the `terminal_frost_color` entries in the bundled-theme value tables and the latte section (lines ~152, ~300, ~443, ~488).
+  - `theming-plan.md` — update the `content_canvas_fill()` stopgap note to point to this plan's Task 3.4b as the folding target (the note currently says "fold into z=0" without naming the task).
+  - Relations: 3.5.
+  - Check: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` returns no references outside historical/migration notes; `rg "content_canvas_fill"` only in `theming-plan.md` as a historical pointer to Task 3.4b.
 
 - [ ] **4.2 `README.md`** — update the appearance / blur section to the z-layer model.
   - Relations: 4.1.
@@ -316,6 +433,7 @@ determines success — the GPU work is deterministic, the *look* is not.
 ### Tasks
 
 - [ ] **5.1 Tiled frost baseline** — user sets `background_blur`, `background_transparency`, `background_gradient_top/bottom`, `terminal_transparency`; reload (`prefix+Shift+r`); report whether the tiled frost looks like real frosted glass.
+  - **Pre-check (post-PR-#160):** confirm the Phase 3 critical review's translucency-channel decision (option 1 vs 2) was applied. If option 1 was chosen, `latte.toml` `terminal_background` must be opaque (`#e6e9ef`, not `#e6e9ef00`) before this step — otherwise the knob-driven tuning below will not behave as the plan expects and the deferred "no blur/transparency" regression will likely persist.
   - Relations: Phase 3.
   - Check: user confirms "tiled frost looks good."
 
@@ -347,7 +465,7 @@ has tested, per AGENTS.md).
   - Relations: Phase 5.
   - Check: review notes addressed; no HIGH/MED findings open.
 
-- [ ] **6.2 Clippy clean** — `cargo clippy --workspace --all-targets --all-features`. Must be clean of **new** lints (the 9 pre-existing are allowed; add `#[allow(dead_code)]` + explanatory comments to the 8 `selection_model.rs` ones if not already done).
+- [ ] **6.2 Clippy clean** — `cargo clippy --workspace --all-targets --all-features`. Must be clean of **new** lints. **(Post-PR-#160: the pre-merge "9 pre-existing lints" baseline is gone — clippy is currently 0 warnings.)** Any warning that appears is new and must be fixed; the old allowance for the 8 `selection_model.rs` `dead_code` + 2 `too_many_arguments` lints no longer applies.
   - Relations: 6.1.
   - Check: clippy green (only known pre-existing, or zero).
 
@@ -378,6 +496,9 @@ has tested, per AGENTS.md).
 | Stencil state leaks between tiled/floating/z0 passes | z=0 blit is **pre-stencil**; Phase 3 critical review confirms | render.rs |
 | Shared `Blur` reused for z0 + floating in one dirty frame | Copy z0 blurred view → cache **before** the floating `blur.process` call; documented in `BackgroundLayer::render` | background.rs, render.rs |
 | Removing `terminal_blur` breaks user config | Migration note in keybindings.toml (Phase 4) | docs |
+| `content_canvas_fill()` stopgap left in place alongside z=0 (two competing background layers) | New Task 3.4b removes it once z=0 is wired | render.rs, Task 3.4b |
+| `latte` transparent `terminal_background` (`#e6e9ef00`) bypasses `terminal_transparency` → `surface_alpha`, re-introducing the "no blur/transparency" regression | Phase 3 critical review picks one translucency channel (recommended: opaque theme bg + knob-driven `surface_alpha`); 5.1 pre-check verifies | heca-theme/src/themes/latte.toml, render.rs, terminal.rs |
+| `defaults.rs` referenced by old Task 2.3 no longer exists | Task 2.3 rewritten to target `heca-theme/src/theme.rs` + TOMLs | heca-theme |
 
 ---
 
