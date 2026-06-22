@@ -5,7 +5,7 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** in progress — Phases 0–2 complete (PR #165); Phase 3 next.
+- **Status:** in progress — Phases 0–3 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3); Phase 4 next.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -399,26 +399,30 @@ build incrementally and review the diff carefully.
 
 ### Tasks
 
-- [ ] **3.1 Own `BackgroundLayer` in `AppState` (`heca/src/app_state.rs`)** — add a `pub background: heca_renderer::background::BackgroundLayer` field; construct it in the renderer-init path (where `blur` / `compositor` are created), sized to the physical framebuffer; add an accessor if needed.
+- [x] **3.1 Own `BackgroundLayer` in `AppState` (`heca/src/app_state.rs`)** — add a `pub background: heca_renderer::background::BackgroundLayer` field; construct it in the renderer-init path (where `blur` / `compositor` are created), sized to the physical framebuffer; add an accessor if needed.
+  - **Done (PR #169):** `pub background: BackgroundLayer` field added to `AppState`; constructed in `heca/src/app/startup.rs` alongside `blur`/`compositor`/`backdrop`, sized to `physical.width`/`physical.height`. Imports added to both `app_state.rs` and `startup.rs`.
   - Relations: Phase 1 (BackgroundLayer exists).
-  - Check: `cargo build -p heca` green.
+  - Check: `cargo build -p heca` green. ✅
 
-- [ ] **3.2 Resize hook (`heca/src/app/events.rs`)** — in `WindowEvent::Resized`, alongside `state.blur.resize(...)` and `state.compositor.resize(...)`, call `state.background.resize(&device, w, h)` (sets dirty → z=0 reblurs next frame).
+- [x] **3.2 Resize hook (`heca/src/app/events.rs`)** — in `WindowEvent::Resized`, alongside `state.blur.resize(...)` and `state.compositor.resize(...)`, call `state.background.resize(&device, w, h)` (sets dirty → z=0 reblurs next frame).
+  - **Done (PR #169):** `state.background.resize(&state.device, phys.width, phys.height)` inserted in `WindowEvent::Resized`, right after `state.blur.resize(...)`.
   - Relations: 3.1.
-  - Check: `cargo build -p heca` green; behavior verified in Phase 5 (resize test).
+  - Check: `cargo build -p heca` green; behavior verified in Phase 5 (resize test). ✅ (build; visual deferred to Phase 5)
 
-- [ ] **3.3 z=0 base blit (`heca/src/app/render.rs`)** — after the scene clear pass and **before** the pane stencil/content passes:
+- [x] **3.3 z=0 base blit (`heca/src/app/render.rs`)** — after the scene clear pass and **before** the pane stencil/content passes:
   1. `state.background.set_params(top, bottom, blur_radius)` from `appearance.effective_background_gradient_*` + `background_blur_radius() * scale_factor`.
   2. `let bg_view = state.background.render(&device, &state.queue, &mut encoder, &state.blur);`
   3. Blit `bg_view` into `scene_view` as a fullscreen textured quad at alpha = `appearance.background_alpha()`. Reuse the `Backdrop::draw` (full-screen dst) or the composite blit with an alpha uniform — pick whichever needs the least new pipeline; if a new alpha-blit pipeline is needed, add it to `backdrop.rs` or `composite.rs`.
+  - **Done (PR #169):** reused `Backdrop::draw` (full-screen dst, `src_uv = [0,0,1,1]`, `opacity = background_alpha()`, `stencil = None`) — **no new pipeline**. Reads `effective_background_gradient_top/bottom(theme)` + `background_blur_radius() * scale`. Drawn pre-stencil (before the tiled stencil-write). An `// Order invariant:` comment documents the shared-`state.blur` snapshot contract (z=0 must render before any other blur user this frame, since `BackgroundLayer` snapshots into its own cache inside `render()`).
   - Relations: 3.1, 3.2.
-  - Check: `cargo build -p heca` green; **visual** in Phase 5 (gradient frost visible behind translucent panes).
+  - Check: `cargo build -p heca` green; **visual** in Phase 5 (gradient frost visible behind translucent panes). ✅ (build; visual deferred to Phase 5)
 
-- [ ] **3.4 Remove tiled tint — Pass A (`heca/src/app/render.rs`)** — delete the `needs_frosted_backdrop` gate, the frosted-tint `draw_rect` block, and the "Frosted terminal backdrop" comment block. Tiled panes now render translucent (Pass 2, `surface_alpha`) **directly over z=0** — the frost is z=0 showing through, not a tint. Keep the stencil content-clip (Pass 2) intact.
+- [x] **3.4 Remove tiled tint — Pass A (`heca/src/app/render.rs`)** — delete the `needs_frosted_backdrop` gate, the frosted-tint `draw_rect` block, and the "Frosted terminal backdrop" comment block. Tiled panes now render translucent (Pass 2, `surface_alpha`) **directly over z=0** — the frost is z=0 showing through, not a tint. Keep the stencil content-clip (Pass 2) intact.
+  - **Done (PR #169):** removed the Pass A frosted-tint block, the `needs_frosted_backdrop` gate, the `frost_opacity` local, and the "Frosted terminal backdrop" comment block; replaced with a short "Floating-pane real blur" comment. Stencil content-clip (Pass 2) kept intact. Tiled frost is now z=0 showing through `surface_alpha`.
   - Relations: 3.3 (z=0 must be in place first).
-  - Check: `cargo build -p heca` green; **visual** in Phase 5 (tiled frost = z=0).
+  - Check: `cargo build -p heca` green; **visual** in Phase 5 (tiled frost = z=0). ✅ (build; visual deferred to Phase 5)
 
-- [ ] **3.4b Remove the `content_canvas_fill()` stopgap (new, post-PR-#160)** —
+- [x] **3.4b Remove the `content_canvas_fill()` stopgap (new, post-PR-#160)** —
   PR #160 added a tactical background-tint in `heca/src/app/render.rs` that
   paints `theme.background` at `appearance.opacity()` over pane-less content
   area, via `content_canvas_fill()` + `FillRect` / `subtract_fill_rect()` /
@@ -433,39 +437,44 @@ build incrementally and review the diff carefully.
   - confirm `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'`
     returns no code references (only `theming-plan.md` historical mentions may
     remain — update them in Phase 4).
+  - **Done (PR #169):** all four helpers + the uncovered-region fill pass + the 3 unit tests (`content_canvas_fill_is_none_when_window_is_opaque`, `content_canvas_fill_uses_theme_background_and_app_opacity`, `uncovered_fill_rects_exclude_pane_rectangles`) deleted; the `use super::{...}` import in the test module trimmed to `status_mode_parts`. Grep `rg "content_canvas_fill|FillRect|uncovered_fill_rects|subtract_fill_rect" --glob '!*.md'` → no code references (exit 1). `theming-plan.md` historical pointer update is Phase 4 (task 4.1b).
   - Relations: 3.3 (z=0 must replace it).
-  - Check: `cargo build -p heca` green; `cargo test -p heca` green; grep clean.
+  - Check: `cargo build -p heca` green; `cargo test -p heca` green; grep clean. ✅
 
-- [ ] **3.5 Remove old tint config (`heca-config/src/appearance.rs`)** — delete `terminal_frost_color`, `terminal_frost_opacity()`, and `effective_terminal_frost_color()`. Update any remaining references (grep `terminal_frost` across the workspace).
+- [x] **3.5 Remove old tint config (`heca-config/src/appearance.rs`)** — delete `terminal_frost_color`, `terminal_frost_opacity()`, and `effective_terminal_frost_color()`. Update any remaining references (grep `terminal_frost` across the workspace).
+  - **Done (PR #169):** removed `terminal_frost_color` (AppearanceConfig **and** `Theme` fields), `terminal_frost_opacity()`, `terminal_floating_frost_opacity()`, `effective_terminal_frost_color()`. Also removed `terminal_blur` / `terminal_blur_radius()` / `default_terminal_blur` — dead after Pass A removal; grill-me Q3 mandates dropping tiled `terminal_blur`, and leaving it would break the 0-warning baseline. Fixed `latte.toml` `terminal_background #e6e9ef00 → #e6e9ef` (grill-me Q1 opaque-theme fix, inline TOML comment added). Stripped `terminal_blur` + `terminal_frost_color` from `example.config.toml`. Updated the `terminal_floating_blur` doc comment (it still referenced the removed tiled `terminal_blur`). Doc-only references (`theming-documentation.md` etc.) are Phase 4 (task 4.1b).
   - Relations: 3.4 (render.rs no longer uses them).
   - Check (post-PR-#160):
-    - [ ] `cargo build --workspace --all-targets` green.
-    - [ ] `cargo test -p heca-config` green.
-    - [ ] `rg "terminal_frost" --glob '!*.md'` returns no code references. Note
+    - [x] `cargo build --workspace --all-targets` green.
+    - [x] `cargo test -p heca-config` green (48 tests).
+    - [x] `rg "terminal_frost" --glob '!*.md'` returns no code references. Note
       this now also catches **`heca-theme/src/themes/latte.toml`**
       (`terminal_frost_color = "#e6e9ef"`) and **`example.config.toml`** — both
       must have the key removed (not just docs). `Theme` uses per-field
       `#[serde(default)]` with no `deny_unknown_fields`, so stale keys won't
       break loading, but they must still be stripped to avoid shipping a dead
       knob. Doc-only references (`theming-documentation.md` etc.) are fixed in
-      Phase 4.
+      Phase 4. (Also `rg "terminal_blur"` clean in code.)
 
-- [ ] **3.6 Floating backdrop-100% fix (`heca/src/app/render.rs`)** — in the floating-pane loop, change the `backdrop.draw` opacity argument from `floating_frost_opacity` → `1.0` (the blurred tiled content fully replaces the raw behind — no sharp leak). Drop `floating_frost_opacity` (and `terminal_floating_frost_opacity()` if it exists); floating frost visibility is now driven solely by `terminal_floating_transparency` (cell surface alpha).
+- [x] **3.6 Floating backdrop-100% fix (`heca/src/app/render.rs`)** — in the floating-pane loop, change the `backdrop.draw` opacity argument from `floating_frost_opacity` → `1.0` (the blurred tiled content fully replaces the raw behind — no sharp leak). Drop `floating_frost_opacity` (and `terminal_floating_frost_opacity()` if it exists); floating frost visibility is now driven solely by `terminal_floating_transparency` (cell surface alpha).
+  - **Done (PR #169):** floating `backdrop.draw` opacity arg → `1.0`; removed the `floating_frost_opacity` local + `terminal_floating_frost_opacity()`.
   - Relations: 3.4.
-  - Check: `cargo build -p heca` green; **visual** in Phase 5 (no text collision, frost visible at chosen transparency).
+  - Check: `cargo build -p heca` green; **visual** in Phase 5 (no text collision, frost visible at chosen transparency). ✅ (build; visual deferred to Phase 5)
 
-- [ ] **3.7 Showcase + examples signature updates (`heca-renderer/examples/showcase.rs`)** — update any `backdrop.draw` / `primitive` / `text.render` calls whose signatures changed (e.g. if a new alpha-blit pipeline altered `Backdrop::draw`). **Note (post-PR-#160):** the showcase now integrates `heca-theme` directly and has a live theme switcher (`⇄ THEME: ...` button) that rebuilds the whole widget tree on theme change. `backdrop.draw` currently has **no** call site in the showcase (only in `heca/src/app/render.rs:747`), so signature changes there mostly affect the app, not the example — but re-verify the showcase still builds with whatever new pipeline 3.3 introduces, and that the theme switcher still rebuilds cleanly with z=0 in mind.
+- [x] **3.7 Showcase + examples signature updates (`heca-renderer/examples/showcase.rs`)** — update any `backdrop.draw` / `primitive` / `text.render` calls whose signatures changed (e.g. if a new alpha-blit pipeline altered `Backdrop::draw`). **Note (post-PR-#160):** the showcase now integrates `heca-theme` directly and has a live theme switcher (`⇄ THEME: ...` button) that rebuilds the whole widget tree on theme change. `backdrop.draw` currently has **no** call site in the showcase (only in `heca/src/app/render.rs:747`), so signature changes there mostly affect the app, not the example — but re-verify the showcase still builds with whatever new pipeline 3.3 introduces, and that the theme switcher still rebuilds cleanly with z=0 in mind.
+  - **Done (PR #169):** no `Backdrop::draw` signature changed (reused as-is), so no showcase call-site edits needed. `cargo build --workspace --all-targets` green — the showcase builds. The live theme switcher is unaffected (it only composes `heca-grid-ui` widgets + grid scene; z=0 is app-render-only).
   - Relations: 3.3, 3.6.
-  - Check: `cargo build --workspace --all-targets` green (examples included); `cargo run -p heca-renderer --example showcase` launches and the theme switcher still cycles `grid_tron`/`mocha`/`latte`.
+  - Check: `cargo build --workspace --all-targets` green (examples included); `cargo run -p heca-renderer --example showcase` launches and the theme switcher still cycles `grid_tron`/`mocha`/`latte`. ✅ (build verified; runtime launch deferred to Phase 5)
 
 ### Phase 3 exit — tests + review
-- [ ] `cargo build --workspace --all-targets` green.
-- [ ] `cargo test --workspace` green.
-- [ ] **Review together (the critical review):** walk the full pipeline order in `render.rs` — clear → z=0 blit → tiled stencil → tiled content (translucent over z=0) → chrome borders → floating blur capture → floating stencil → floating backdrop(100%) + content → grid-ui chrome → sidebar. Confirm no stencil state leaks between the tiled and floating passes, and the z=0 blit does **not** get clipped by the tiled stencil (z=0 is pre-stencil).
+- [x] `cargo build --workspace --all-targets` green. ✅
+- [x] `cargo test --workspace` green. ✅ (except the known pre-existing env-dependent `heca-core` `terminal_backend_bash_integration` test, which fails on plain `origin/main` too — excluded baseline.)
+- [x] **Review together (the critical review):** walk the full pipeline order in `render.rs` — clear → z=0 blit → tiled stencil → tiled content (translucent over z=0) → chrome borders → floating blur capture → floating stencil → floating backdrop(100%) + content → grid-ui chrome → sidebar. Confirm no stencil state leaks between the tiled and floating passes, and the z=0 blit does **not** get clipped by the tiled stencil (z=0 is pre-stencil). ✅ Walked in the PR #169 body + user review; z=0 is pre-stencil (`stencil = None`); floating pass uses its own stencil. User review passed (2 doc-only findings applied).
   - **Translucency-channel reconciliation (post-PR-#160, required):** the plan assumes tiled pane translucency is driven solely by the `terminal_transparency` knob → `surface_alpha` in `heca-renderer/src/terminal.rs` (`surface_bg[3] = default_bg[3] * style.surface_alpha`). PR #160's `latte` theme sets `terminal_background = "#e6e9ef00"` (alpha 0), which makes the terminal surface fully transparent **independent of the knob** — this is the prime suspect for the deferred "no blur/transparency" regression. Before Phase 5, decide and record **one** of:
     1. **Theme owns opacity:** bundled theme `terminal_background` values are **opaque** (fix `latte.toml` `#e6e9ef00` → `#e6e9ef`), and `terminal_transparency` / `surface_alpha` is the only translucency channel (cleanest, matches this plan's model). **Recommended.**
     2. **Theme owns translucency:** document that theme-bg alpha is a second channel and reconcile both in the resolver (more complex, risks re-introducing the regression).
     If (1) is chosen, fold the `latte.toml` fix into Task 3.4b's cleanup or a dedicated 3.5 sub-step. Proceed to Phase 4.
+  - **RESOLVED (grill-me Q1, applied in PR #169 Task 3.5):** Option **1** chosen — opaque theme `terminal_background` + knob-driven `surface_alpha` is the sole translucency channel. `latte.toml` `terminal_background` fixed to opaque `#e6e9ef` (with inline bug-fix comment). Proceeding to Phase 4.
 
 ---
 

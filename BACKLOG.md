@@ -263,7 +263,7 @@ Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
 > Replace the tiled-tint + OS-vibrancy approach with a heca-owned z=0 blurred gradient background layer.
 > Fixes cross-platform frost AND the floating-pane text collision defect (5% sharp-content leak).
 > Gate: run AFTER `theming-04` so the new `background_*` config knobs live in the unified theme system.
-> **Status:** Phases 1–2 done and merged (PR #165 = Phase 1, PR #167 = Phase 2). Phase 3 (`compositor-03`) is next.
+> **Status:** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) is next.
 
 ### [x] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
 New isolated GPU primitives in `heca-renderer`. No app wiring yet.
@@ -303,37 +303,46 @@ Source: `compositor-blur-refactor-plan.md` Phase 2
 
 - [x] **compositor-task-07** — Unit tests: defaults, config overrides, clamping, fallback chains. `cargo test -p heca-config` green (50 tests).
 
-### [ ] Phase: Pipeline integration — z=0 blit and tint removal · `compositor-03`
+### [x] Phase: Pipeline integration — z=0 blit and tint removal · `compositor-03`
 Wire the background layer into the render pipeline, remove the old tiled tint, fix floating backdrop to 100%.
 Source: `compositor-blur-refactor-plan.md` Phase 3
+Merged in PR #169.
 
-- [ ] **compositor-task-08** — Add `BackgroundLayer` field to `AppState` (`heca/src/app_state.rs`) — construct alongside `blur`/`compositor`.
+- [x] **compositor-task-08** — Add `BackgroundLayer` field to `AppState` (`heca/src/app_state.rs`) — construct alongside `blur`/`compositor`.
+  Done: `pub background: BackgroundLayer` field + constructed in `heca/src/app/startup.rs` sized to the physical framebuffer; import added to both `app_state.rs` and `startup.rs`.
 
-- [ ] **compositor-task-09** — Add resize hook in `heca/src/app/events.rs` — call `state.background.resize(...)` alongside the existing `blur.resize` and `compositor.resize` calls.
+- [x] **compositor-task-09** — Add resize hook in `heca/src/app/events.rs` — call `state.background.resize(...)` alongside the existing `blur.resize` and `compositor.resize` calls.
+  Done: `state.background.resize(&state.device, phys.width, phys.height)` in `WindowEvent::Resized`, right after `blur.resize`.
 
-- [ ] **compositor-task-10** — Add z=0 blit in `heca/src/app/render.rs` — AFTER the scene clear and BEFORE any pane stencil/content passes:
+- [x] **compositor-task-10** — Add z=0 blit in `heca/src/app/render.rs` — AFTER the scene clear and BEFORE any pane stencil/content passes:
   `state.background.set_params(top, bottom, blur_radius * scale_factor)` → `let bg_view = state.background.render(...)` → blit `bg_view` at `alpha = background_alpha()`.
   Reuse `Backdrop::draw` (fullscreen dst) or add a minimal alpha-blit pipeline to `backdrop.rs`.
+  Done: reused `Backdrop::draw` (fullscreen dst, `src_uv = [0,0,1,1]`, `opacity = background_alpha()`, `stencil = None`) — no new pipeline. Reads `effective_background_gradient_top/bottom(theme)` + `background_blur_radius() * scale`. Drawn pre-stencil. An `// Order invariant:` comment documents the shared-`state.blur` snapshot contract (z=0 must render before any other blur user this frame).
 
-- [ ] **compositor-task-11** — Remove the tiled frost tint (Pass A) in `heca/src/app/render.rs`:
+- [x] **compositor-task-11** — Remove the tiled frost tint (Pass A) in `heca/src/app/render.rs`:
   Delete the `needs_frosted_backdrop` gate and the frosted-tint `draw_rect` block.
   Tiled panes now reveal z=0 through their `surface_alpha` — the frost IS z=0 showing through.
   Keep the stencil content-clip (Pass 2) intact.
+  Done: removed the Pass A block, `needs_frosted_backdrop`, `frost_opacity`, and the "Frosted terminal backdrop" comment block. Stencil content-clip (Pass 2) kept intact. Also removed `content_canvas_fill()` + `FillRect`/`subtract_fill_rect`/`uncovered_fill_rects` + their pass + 3 unit tests (the PR #160 stopgap that sat in z=0's slot — folding it now avoids two competing background layers).
 
-- [ ] **compositor-task-12** — Remove old tint config in `heca-config/src/appearance.rs`:
+- [x] **compositor-task-12** — Remove old tint config in `heca-config/src/appearance.rs`:
   Delete `terminal_frost_color`, `terminal_frost_opacity()`, `effective_terminal_frost_color()`.
   Run `rg "terminal_frost" --glob '!*.md'` — confirm zero remaining code references.
+  Done: removed `terminal_frost_color` (AppearanceConfig **and** `Theme` fields), `terminal_frost_opacity()`, `terminal_floating_frost_opacity()`, `effective_terminal_frost_color()`. Also removed `terminal_blur` / `terminal_blur_radius()` / `default_terminal_blur` (dead after Pass A removal — grill-me Q3 mandates dropping tiled `terminal_blur`; leaving it would break the 0-warning baseline). Fixed `latte.toml` `terminal_background #e6e9ef00 → #e6e9ef` (Q1 opaque-theme fix). Stripped `example.config.toml`. `rg "terminal_frost|terminal_blur"` (code, excl docs) → clean.
 
-- [ ] **compositor-task-13** — Fix floating backdrop opacity in `heca/src/app/render.rs`:
+- [x] **compositor-task-13** — Fix floating backdrop opacity in `heca/src/app/render.rs`:
   Change floating-pane `backdrop.draw` opacity from `floating_frost_opacity` → `1.0`.
   Drop `floating_frost_opacity` accessor. Floating frost visibility is now driven by `terminal_floating_transparency` (cell surface alpha) only.
+  Done: floating `backdrop.draw` opacity arg → `1.0`; removed the `floating_frost_opacity` local + `terminal_floating_frost_opacity()`.
 
-- [ ] **compositor-task-14** — Update showcase/examples for any changed `Backdrop::draw` or compositor signatures.
+- [x] **compositor-task-14** — Update showcase/examples for any changed `Backdrop::draw` or compositor signatures.
   Files: `heca-renderer/examples/showcase.rs`
+  Done: no `Backdrop::draw` signature changed (reused as-is); `cargo build --workspace --all-targets` green (showcase builds). The showcase has no `backdrop.draw` call site, so nothing to update there.
 
-- [ ] **compositor-task-15** — Critical pipeline review: confirm the full render order is:
+- [x] **compositor-task-15** — Critical pipeline review: confirm the full render order is:
   clear → z=0 blit → tiled stencil → tiled content (translucent over z=0) → chrome borders → floating blur capture → floating stencil → floating backdrop(1.0) + content → grid-ui chrome → sidebar.
   The z=0 blit MUST be pre-stencil. Confirm no stencil state leaks between tiled and floating passes.
+  Done: pipeline order walked and confirmed in the PR #169 body; z=0 is pre-stencil (`stencil = None`) so the tiled content-clip never clips it; the floating pass uses its own stencil. User review passed — 2 doc-only findings applied (z=0 ordering comment; `latte.toml` bug-fix inline comment).
 
 ### [ ] Phase: Documentation update · `compositor-04`
 Source: `compositor-blur-refactor-plan.md` Phase 4
