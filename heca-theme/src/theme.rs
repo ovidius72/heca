@@ -238,6 +238,17 @@ pub struct Theme {
     pub show_focus_border: bool,
     #[serde(default = "default_icon_secondary_alpha")]
     pub icon_secondary_alpha: f32,
+    /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
+    /// overlay a `DockFrame` paints over itself when marked active (e.g. the
+    /// active workspace in the sidebar). Theme/config-driven, not baked into the
+    /// widget, so the active highlight flips in place via the bound signal.
+    #[serde(default = "default_active_wash_alpha")]
+    pub active_wash_alpha: f32,
+    /// Opacity (`0.0..=1.0`) of a sidebar/list **card's resting background** tint
+    /// (e.g. each pane card). Kept very low so a card reads as a subtle raised
+    /// surface rather than a filled block. Theme/config-driven.
+    #[serde(default = "default_card_background_alpha")]
+    pub card_background_alpha: f32,
 
     // ── Float pane colors ──
     #[serde(default = "default_float_bg")]
@@ -327,6 +338,12 @@ fn default_true() -> bool {
 }
 fn default_icon_secondary_alpha() -> f32 {
     0.45
+}
+fn default_active_wash_alpha() -> f32 {
+    0.11
+}
+fn default_card_background_alpha() -> f32 {
+    0.02
 }
 fn default_float_bg() -> Color {
     Color::new(49, 50, 68, 255)

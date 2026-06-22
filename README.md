@@ -468,6 +468,10 @@ sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
 intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
 
+# Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
+active_wash_alpha = 0.11          # Accent wash over the active workspace
+card_background_alpha = 0.02      # Resting background tint of each pane card
+
 [shadow]
 color = "#000000"
 alpha = 0.3

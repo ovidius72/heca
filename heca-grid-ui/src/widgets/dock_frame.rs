@@ -65,6 +65,11 @@ const CONTROLS: usize = 1;
 pub struct DockFrame {
     base: Base,
     expanded: Signal<bool>,
+    /// Active (current) state: when `true` the frame paints a faint accent
+    /// **wash** (`theme.active_wash_alpha`) over itself — e.g. the active
+    /// workspace in the sidebar. Signal-backed so a host can flip it in place via
+    /// [`active_state`](DockFrame::active_state) without rebuilding the tree.
+    active: Signal<bool>,
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
@@ -123,7 +128,15 @@ impl DockFrame {
             2,
             "DockFrame header children: [toggle, CONTROLS]"
         );
-        Self { base, expanded, chevron, on_toggle: None, rail_mode: None, frameless: false }
+        Self {
+            base,
+            expanded,
+            active: signal(false),
+            chevron,
+            on_toggle: None,
+            rail_mode: None,
+            frameless: false,
+        }
     }
 
     /// Drop the corner-bracket frame (and tighten the content inset). Use when the
@@ -165,6 +178,19 @@ impl DockFrame {
     /// The expanded-state signal — bind UI to it reactively.
     pub fn state(&self) -> Signal<bool> {
         self.expanded
+    }
+
+    /// Mark the frame **active** (the current one). An active frame paints a faint
+    /// accent wash (`theme.active_wash_alpha`) over itself. Defaults to inactive.
+    pub fn active(self, active: bool) -> Self {
+        self.active.set(active);
+        self
+    }
+
+    /// The active-state signal — bind it so the host can flip the wash in place
+    /// (via the chrome's per-frame signal sync) without rebuilding the tree.
+    pub fn active_state(&self) -> Signal<bool> {
+        self.active
     }
 
     /// Make the frame **rail-aware**: it observes the hosting region's
@@ -249,6 +275,20 @@ impl Component for DockFrame {
         // Background fill — rounded by theme radius.
         if let Some(f) = fill {
             cx.rect(b, f, None, radius, self.base.style.glow);
+        }
+
+        // Active-region wash — a faint accent overlay over the whole frame when
+        // this is the active one (e.g. the active workspace). Theme-driven alpha
+        // and signal-backed, so the host flips it in place (no tree rebuild).
+        if self.active.get_untracked() {
+            let (accent, wash_alpha) = {
+                let t = cx.theme();
+                (t.accent, t.active_wash_alpha)
+            };
+            let a = (wash_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+            if a > 0 {
+                cx.rect(b, accent.with_alpha(a), None, radius, None);
+            }
         }
 
         // Prominent flat corner-bracket frame (shared with Pane) — unless frameless

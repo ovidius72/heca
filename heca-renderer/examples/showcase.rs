@@ -154,6 +154,8 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         },
         show_focus_border: ht.show_focus_border,
         icon_secondary_alpha: ht.icon_secondary_alpha,
+        active_wash_alpha: ht.active_wash_alpha,
+        card_background_alpha: ht.card_background_alpha,
     }
 }
 
@@ -983,6 +985,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // collapses to its rail (G5) — bound to the host-owned mode signal.
             let explorer = DockFrame::new("EXPLORER")
                 .rail(sidebar_mode, Glyph::FolderOpen)
+                // `.active(true)` paints the faint accent **wash** over the whole
+                // frame (alpha = `theme.active_wash_alpha`) — the cue the app uses
+                // to mark the active workspace. Signal-backed, so a host flips it in
+                // place via `.active_state()` without rebuilding.
+                .active(true)
                 // Inset the header count badge by the Item rows' horizontal
                 // padding (~14px) so it lines up vertically with the rows'
                 // trailing badges instead of sitting flush at the frame edge.

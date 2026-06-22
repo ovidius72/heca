@@ -793,6 +793,32 @@ Benign but noisy — spam from vibrancy adding `NSVisualEffectView` to `NSThemeF
 
 ---
 
+### [~] Phase: Sidebar/chrome small leftovers (F4.4 / F4.5) · `app-10`
+Small remaining pieces from the old F4.4 (marker/rail widget) and F4.5 (sidebar drag-and-drop) work.
+The widgets and the drag framework already exist; these are the leftover hook-ups.
+
+- [x] **app-task-29** — F4.4 widget migration. DONE 2026-06-22. Most was already merged (`column_view`
+  is `MarkerGroup`; `pane_card` is a signal-driven `Row`). The remaining piece — the active-workspace
+  wash, still structural (rebuild-only) — is now signal-driven: `DockFrame` gained `.active(bool)` +
+  `.active_state()` and paints a theme-driven accent wash; `ChromeSignals.ws_active` is synced in
+  `sync_chrome_signals` like `col_active`. Also tokenized the two baked-in alphas into new theme tokens
+  `active_wash_alpha` (0.11) + `card_background_alpha` (0.02) across `heca-theme`, `heca-grid-ui` Theme,
+  and `app_theme_to_gui_theme`. Showcase + `docs/widgets.md` + `theming-documentation.md` + `README.md`
+  updated.
+  Files: `heca/src/chrome/mod.rs`, `heca-grid-ui` (`DockFrame`, `Theme`), `heca-theme`
+
+- [ ] **app-task-30** — F4.4 column-level pick keycaps: pane pick keycaps already work; columns have no
+  pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project
+  the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it
+  column-specific (memory `grid-ui-keyhint-universal`).
+  Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`
+
+- [ ] **app-task-31** — F4.5 "onto-third" drop semantics: sidebar drag/move/swap for panes + columns is
+  done; this adds the remaining drop case (dropping onto a third target). Small / opportunistic.
+  Files: `heca/src/mouse/surface_left.rs` (drag dispatch)
+
+---
+
 ## AI Agent Integration
 
 > Source: `agent-integration/agent-integration-plan.md`, `agent-integration/agent-integration-tasks.md`
@@ -843,6 +869,7 @@ gridui-03     (independent)
 app-01        (independent — just run the app)
 app-02        (independent — own PR)
 app-07        (do LAST — high risk, do after app is stable)
+app-10        (independent — F4.4/F4.5 leftovers; app-task-29 done, 30/31 open)
 
 agents-01     (gated on plugin-01 through plugin-05)
 ```

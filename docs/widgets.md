@@ -249,7 +249,8 @@ Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dar
 default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
 `font_family`, `font_size`, `radius`, `border_width`, `glow_size` (`GlowLevel`),
-`intensity`, `show_focus_border`.
+`intensity`, `show_focus_border`, `icon_secondary_alpha`, `active_wash_alpha`,
+`card_background_alpha`.
 
 | Token | Type | Drives |
 |-------|------|--------|
@@ -258,6 +259,8 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
+| `active_wash_alpha` | `f32` (0..1) | Opacity of the accent **wash** `DockFrame::active(true)` paints over an active frame (e.g. the active workspace). |
+| `card_background_alpha` | `f32` (0..1) | Opacity of a sidebar/list card's resting background tint (e.g. each pane card). |
 
 Helper: **`theme.control_radius()`** → `radius × 0.5` (corners for small controls).
 
@@ -877,8 +880,11 @@ away to a single centered `Icon` while the region is collapsed to a rail.
 - **Construct**: `DockFrame::new(title)`. Add body with `.child(...)`.
 - **Builders**: `.header(impl Component)` (fill the controls slot, e.g. a search field or count
   `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
-  `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`).
-- **Accessors**: `.state() -> Signal<bool>` (expanded).
+  `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
+  `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
+  `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace).
+- **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
+  wash flag — bind it to flip the active wash in place without rebuilding the tree).
 
 ```rust
 let sidebar = ChromeRegion::vertical();

@@ -119,6 +119,8 @@ glow_size = "medium"
 intensity = "medium"
 show_focus_border = true
 icon_secondary_alpha = 0.45
+active_wash_alpha = 0.11
+card_background_alpha = 0.02
 
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 
@@ -197,6 +199,8 @@ These have fallback behavior in `heca-theme/src/theme.rs`:
 - `intensity`
 - `show_focus_border`
 - `icon_secondary_alpha`
+- `active_wash_alpha`
+- `card_background_alpha`
 - `float_*`
 - `drag_*`
 - `drop_*`
@@ -263,6 +267,8 @@ This behavior lives in:
   CRT grille.
 - `show_focus_border` — keyboard focus ring enable/disable
 - `icon_secondary_alpha` — secondary alpha for duotone icons
+- `active_wash_alpha` — opacity (`0.0–1.0`) of the accent wash painted over the **active** dock/workspace (the active-workspace highlight in the sidebar). Default `0.11`.
+- `card_background_alpha` — opacity (`0.0–1.0`) of a sidebar/list card's resting background tint (each pane card). Default `0.02`.
 - `shadow` — elevated shadow token
 
 Both `glow_size` and `intensity` are also overridable at runtime via
@@ -336,6 +342,8 @@ glow_size = "medium"
 intensity = "medium"
 show_focus_border = true
 icon_secondary_alpha = 0.45
+active_wash_alpha = 0.11
+card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 float_background = "#313244"
 float_accent = "#89b4fa"
@@ -380,6 +388,8 @@ glow_size = "none"
 intensity = "off"
 show_focus_border = true
 icon_secondary_alpha = 0.45
+active_wash_alpha = 0.11
+card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }
 float_background = "#313244"
 float_accent = "#89b4fa"
@@ -424,6 +434,8 @@ glow_size = "none"
 intensity = "off"
 show_focus_border = false
 icon_secondary_alpha = 0.2
+active_wash_alpha = 0.11
+card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.15, blur = 8.0 }
 float_background = "#e6e9ef"
 float_accent = "#1e66f5"

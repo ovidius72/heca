@@ -1092,7 +1092,7 @@ fn pane_card(
             )
     };
     let card = Row::new()
-        .background(theme.foreground.with_alpha(5))
+        .background(theme.foreground.with_alpha(alpha_u8(theme.card_background_alpha)))
         .highlight(theme.accent)
         .radius(theme.control_radius())
         .padding(6.0)
@@ -1248,11 +1248,20 @@ fn build_workspaces_container(
                     .child(badge)
                     .child(Flex::row().width(Length::Px(6.0))),
             );
-        if active_ws {
-            // Light accent wash over the whole active workspace area (+ the accent
-            // count badge) makes the active workspace clearly prominent.
-            dock = dock.background(theme.accent.with_alpha(28));
-        }
+        // Light accent wash over the whole active workspace area (+ the accent
+        // count badge) makes the active workspace clearly prominent. Signal-driven
+        // (like the pane/column highlights) so it flips in place via
+        // `sync_chrome_signals` instead of forcing a tree rebuild; the alpha is the
+        // theme's `active_wash_alpha` token, not a baked-in literal.
+        dock = dock.active(active_ws);
+        let ws_pane_ids = ws
+            .columns
+            .iter()
+            .flat_map(|c| &c.panes)
+            .chain(&ws.floating_panes)
+            .map(|p| p.pane_id)
+            .collect::<Vec<_>>();
+        signals.ws_active.push((ws_pane_ids, dock.active_state()));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
@@ -1552,6 +1561,12 @@ fn app_color_to_gui(color: heca_config::theme::Color) -> Color {
     Color::new(color.r, color.g, color.b, color.a)
 }
 
+/// Convert a `0.0..=1.0` theme alpha token into an 8-bit channel value for
+/// [`Color::with_alpha`]. Clamped so out-of-range config values can't wrap.
+fn alpha_u8(a: f32) -> u8 {
+    (a.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
 /// Converts a serialized app shadow token into the grid-ui shadow color.
 ///
 /// The grid-ui theme stores shadow as a concrete RGBA color, while the app
@@ -1562,7 +1577,7 @@ fn shadow_to_gui(shadow: &heca_config::theme::Shadow) -> Color {
             color.r,
             color.g,
             color.b,
-            (shadow.alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+            alpha_u8(shadow.alpha),
         ),
         Err(_) => Color::TRANSPARENT,
     }
@@ -1612,6 +1627,8 @@ fn app_theme_to_gui_theme(theme: &heca_config::theme::Theme) -> GuiTheme {
         intensity: intensity_to_gui(theme.intensity),
         show_focus_border: theme.show_focus_border,
         icon_secondary_alpha: theme.icon_secondary_alpha,
+        active_wash_alpha: theme.active_wash_alpha,
+        card_background_alpha: theme.card_background_alpha,
     }
 }
 
@@ -1636,14 +1653,14 @@ fn chrome_bar_color_for(
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
     top_bottom_pane_background_color(theme)
-        .with_alpha((appearance.chrome_opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+        .with_alpha(alpha_u8(appearance.chrome_opacity()))
 }
 
 fn sidebar_shell_background_color_for(
     sidebar_bg: Color,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    sidebar_bg.with_alpha((appearance.opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+    sidebar_bg.with_alpha(alpha_u8(appearance.opacity()))
 }
 
 fn chrome_shell_surface_color_for(
@@ -1651,7 +1668,7 @@ fn chrome_shell_surface_color_for(
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
     chrome_surface_color(theme)
-        .with_alpha((appearance.opacity().clamp(0.0, 1.0) * 255.0).round() as u8)
+        .with_alpha(alpha_u8(appearance.opacity()))
 }
 
 fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
@@ -1785,6 +1802,10 @@ pub(crate) struct ChromeSignals {
     /// Each column [`MarkerGroup`]'s `active` signal + the pane ids it holds (active
     /// iff it contains the active pane).
     pub(crate) col_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// Each workspace [`DockFrame`]'s `active` signal + the pane ids it holds (active
+    /// iff it contains the active pane). Drives the active-workspace accent wash in
+    /// place, mirroring [`col_active`](ChromeSignals::col_active).
+    pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
     /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
     /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
     /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
@@ -1899,6 +1920,13 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         }
     }
     for (pids, sig) in &retained.signals.col_active {
+        let v = active.is_some_and(|a| pids.contains(&a));
+        if sig.get_untracked() != v {
+            sig.set(v);
+            changed = true;
+        }
+    }
+    for (pids, sig) in &retained.signals.ws_active {
         let v = active.is_some_and(|a| pids.contains(&a));
         if sig.get_untracked() != v {
             sig.set(v);
