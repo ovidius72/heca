@@ -33,9 +33,15 @@
 (#116–#120) · ~~F4.4 pane pick overlay~~ ✅ (#123).
 
 **Near-term (active):**
-1. **Pane Runtime State + reactive chrome store + plugin event bus** — the active initiative (design locked
-   2026-06-18). Full plan: **`pane-runtime-state-plan.md`**; orchestration board: **`pane-runtime-tasks.md`**
-   (separate from `shared-tasks.md`). **Status (2026-06-20): Phases 0–6 merged; Phase 7 (pane-info display)
+1. **Pane Runtime State + reactive chrome store + plugin event bus** — **✅ COMPLETE (all phases 0–10 merged
+   to `main`, archived 2026-06-22).** Plan + board archived under `.planning/archive/`
+   (`pane-runtime-state-plan.md` + `pane-runtime-tasks.md`). Delivered: reactive chrome store + typed event
+   bus, per-pane process/status/cwd/git runtime, OSC 133/7 shell integration, git2 integration, process→icon
+   catalog, real command-spawn (float + close-policy), the in-pane info bar + sidebar cards, first-party
+   `app.on`/`app.state` host API, mouse divider resize, and the zoom/float action buttons. Historical detail
+   below kept for the record.
+   <details><summary>Historical status notes (superseded)</summary>
+   **Status (2026-06-20): Phases 0–6 merged; Phase 7 (pane-info display)
    in progress on `feature/phase-7` (PR #147) — sidebar card done + an in-pane segmented info bar (config
    `[appearance] pane_title_segments`/`pane_title_actions`, Geist Mono UI font, configurable `sidebar_width`).
    ✅ Superseded straddle title widget removed; ✅ UI font decoupled from the color theme into `[settings]
@@ -57,6 +63,7 @@
    timer** (output/EOF wakes + 250 ms debounce; periodic poll deferred); **status = `Running`/`Idle`/
    `Success`/`Error`** (no `Exit` — a dead pane closes); **`[programs.<raw>]`** config catalog
    (`name`/`icon`/`description`/`color`) with seeded shell defaults. See plan §0.2/§0.6/§0.7.
+   </details>
 2. **niri parity audits** (niri section below) — catalog every animation vs niri; test for real whether
    adding/removing a column resizes the others; re-audit the still-unverified compat items.
 3. **render.rs split** — partly done by #121/#122; reassess the remainder.
@@ -72,7 +79,7 @@
    `resize_active_*` are active-only), a **resize-drag gesture** in `mouse.rs` (distinct from the DnD
    item-move surfaces; incremental deltas), divider hit-testing (`pane_gap` ~8px), and a **resize cursor**
    (needs the P2 cursor-policy helper — app sets no OS cursor today). Full task detail on the board
-   (`pane-runtime-tasks.md`) + plan (`pane-runtime-state-plan.md`).
+   (`.planning/archive/pane-runtime-tasks.md`) + plan (`.planning/archive/pane-runtime-state-plan.md`).
 
 **Deferred — future implementation** (parked on purpose 2026-06-18; revisit after the foundation work):
 - **Appearance & sizing** — app-wide zoom + separate app/terminal font-size controls + finish the in-app
@@ -363,8 +370,9 @@ design locked; pre-implementation (parked until the plugin arc above is done).
   reference; heca is a tmux-like host (all bindings via prefix).
 
 ## Design references (kept in root — rationale, not task lists)
-- `pane-runtime-state-plan.md` — **active initiative**: pane runtime state + reactive chrome store +
-  plugin event bus (detailed phased plan); board in `pane-runtime-tasks.md`.
+- `.planning/archive/pane-runtime-state-plan.md` — **✅ COMPLETE (archived 2026-06-22)**: pane runtime state +
+  reactive chrome store + plugin event bus (phases 0–10 all merged to `main`); board (also archived):
+  `.planning/archive/pane-runtime-tasks.md`. Kept for the record only.
 - `pluggable-chrome-plugin-plan.md` — chrome-plugin architecture north star.
 - `agent-integration/agent-integration-plan.md` — **post-plugin-plan initiative**: AI agent status
   tracking + sounds (board in `agent-integration/agent-integration-tasks.md`). Research complete;

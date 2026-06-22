@@ -3,7 +3,7 @@
 > Coordination board for the **agent-integration** initiative. **Full context + research + task
 > checklists live in `agent-integration/agent-integration-plan.md`** — read the referenced phase
 > section before starting; this board is only assignment + status + responses. (Separate from
-> `pane-runtime-tasks.md` and `shared-tasks.md` — do not mix them.)
+> `.planning/archive/pane-runtime-tasks.md` and `shared-tasks.md` — do not mix them.)
 >
 > **Starts only after** `pluggable-chrome-plugin-plan.md` is complete (ChromeHost + dynamic actions +
 > built-in providers + WASM runtime exist). Agent drivers are built-in providers now and WASM

@@ -1,12 +1,12 @@
 # Phase 7 — Pane Info Bar — RESUME / HANDOFF
 
 > Detailed resume doc for the in-pane info bar work. Branch **`feature/phase-7`**, **PR #147 → main**.
-> Read this + `pane-runtime-tasks.md` (Phase 7) + `pane-runtime-state-plan.md` (§0.3 + §4 Phase 7).
+> Read this + `.planning/archive/pane-runtime-tasks.md` (Phase 7) + `.planning/archive/pane-runtime-state-plan.md` (§0.3 + §4 Phase 7).
 > Status as of 2026-06-21. **Slice 1, Slice 2 (action buttons), font decoupling, and straddle-widget removal
 > = ALL DONE + committed on `feature/phase-7`** (`6a5d3d6` straddle removal, `344df73` font decouple,
 > `b219a51` glyphs+parameterized actions, `be12e46` Slice 2 buttons). **Only remaining: live mouse
 > verification** (button clicks fire their actions + don't leak to the terminal; hover highlight). Sections
-> A/B/C below are historical design notes — all implemented; see `pane-runtime-tasks.md` Phase 7 for the
+> A/B/C below are historical design notes — all implemented; see `.planning/archive/pane-runtime-tasks.md` Phase 7 for the
 > as-built summary.
 
 ## What this feature is
@@ -45,8 +45,8 @@ title (`Pane.title` + `PaneTitleStyle` Cut/Filled/Boxed) that fought the transpa
   `…security-upgrade`), cap `SIDEBAR_GIT_BRANCH_MAX_CHARS = 22`; full branch on hover (tooltip). Fixes the
   sidebar card overflow.
 - **example.config.toml:** documents `sidebar_width`, `pane_title_segments`, `pane_title_actions`.
-- **Docs updated:** `PLAN.md` (status line + NfIcon backlog), `pane-runtime-state-plan.md` (§0.3 + §4 Phase 7),
-  `pane-runtime-tasks.md` (Phase 7 board entry + activity log), `docs/widgets.md` (Pane/Tag).
+- **Docs updated:** `PLAN.md` (status line + NfIcon backlog), `.planning/archive/pane-runtime-state-plan.md` (§0.3 + §4 Phase 7),
+  `.planning/archive/pane-runtime-tasks.md` (Phase 7 board entry + activity log), `docs/widgets.md` (Pane/Tag).
 
 ## PENDING — pick up here
 
