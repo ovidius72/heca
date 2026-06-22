@@ -2151,12 +2151,17 @@ pub(crate) enum DragSourceKind {
 }
 
 /// Which drop-target kinds a given drag source may land on (F4.5 scope C). A pane
-/// drag targets panes; a column drag targets columns + workspaces — **never** the
-/// nested pane cards, or the deepest hit would always be a pane and a column could
-/// never be dropped on another column.
+/// drag targets panes **and workspaces** — a workspace is only the resolved target
+/// when the cursor is over its header/empty area (a pane card under the cursor is the
+/// deeper hit and wins), which is the one way to move a pane into an *empty* workspace
+/// (empty columns can't exist, so columns need no pane-drop target). A column drag
+/// targets columns + workspaces — **never** the nested pane cards, or the deepest hit
+/// would always be a pane and a column could never be dropped on another column.
 fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
     match source {
-        DragSourceKind::Pane => matches!(item, ChromeDragItem::Pane(_)),
+        DragSourceKind::Pane => {
+            matches!(item, ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. })
+        }
         DragSourceKind::Column => {
             matches!(item, ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. })
         }
