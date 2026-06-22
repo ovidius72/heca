@@ -54,6 +54,14 @@ terminal_floating_blur = 0
 # Platform backdrop material
 # vibrancy = "under_window_background"
 
+# Effect tokens (override the theme; unset → inherits the theme value).
+# `glow_size` owns glow: presence + halo radius + strength.
+#   none | thin | medium | large
+# glow_size = "medium"
+# `intensity` owns the scanline/CRT overlay opacity only; it does NOT affect glow.
+#   off | low | medium | heavy
+# intensity = "medium"
+
 # Pane chrome
 # pane_border_width = 2.0
 # pane_border_radius = 20.0

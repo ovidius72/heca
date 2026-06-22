@@ -422,6 +422,15 @@ Examples of likely shared UI state:
 - scroll offsets
 - active overlay stack
 
+> **Concrete bug this state must solve (2026-06-22):** today the expanded
+> sidebar / WorkspacesContainer highlights only `active_pane`, while sidebar
+> navigation mutates `AppState.sidebar_tree.cursor/current_item()`. Result:
+> `prefix+e` → `j/k` moves the nav model internally, but **nothing visibly
+> changes** in the expanded sidebar because the selected row/item is not
+> projected into shared chrome state. This is the canonical example of why
+> `selected row ids` / `focus-selection` must live in shared UI state rather
+> than inside ad hoc widget-local or module-local structures.
+
 ---
 
 ## 3.4 Provider model

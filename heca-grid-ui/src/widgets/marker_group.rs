@@ -148,12 +148,13 @@ impl Component for MarkerGroup {
         // grip is hovered; a dimmed accent at rest.
         let active = self.active.get_untracked();
         let hovered = self.hovered.get_untracked();
-        // All effect parameters come from the theme (→ config.toml): glow color, plus
-        // its strength via `intensity` (radius/enable are scaled in `cx.rect` by
-        // `glow_size`). Nothing about the *look* is fixed here.
+        // All effect parameters come from the theme (→ config.toml): glow color,
+        // plus its strength via `glow_size` — `GlowLevel` is the sole owner of
+        // glow (presence + radius + strength); `intensity` no longer feeds glow
+        // (it owns scanlines only). Nothing about the *look* is fixed here.
         let (accent, glow_c, glow_strength) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.intensity.glow_scale())
+            (t.accent, t.glow, t.glow_size.strength_scale())
         };
         let b = self.base.bounds;
         let bar_w = if hovered { BAR_W_HOVER } else { BAR_W };

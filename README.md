@@ -464,6 +464,10 @@ sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
 sidebar_label_font_size = 14.0    # Workspace/column/pane labels
 sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 
+# Effect tokens (also overridable under [appearance])
+glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
+intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
+
 [shadow]
 color = "#000000"
 alpha = 0.3
@@ -508,6 +512,21 @@ terminal_floating_blur          = 0    # 0..=100
 > the real cross-platform fix.)
 
 Reload any of these at runtime with `prefix+Shift+r`.
+
+#### Effect tokens (`glow_size` / `intensity`)
+
+The two effect tokens live on the theme but are also overridable under `[appearance]` (unset → inherits the theme):
+
+```toml
+[appearance]
+glow_size  = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
+intensity  = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only
+```
+
+They are **independent dimensions**: `glow_size` is the sole owner of glow
+(presence + radius + strength); `intensity` owns the scanline/CRT overlay
+opacity only and does **not** affect glow (the older docs that said `intensity`
+drove "glow + scanlines" were wrong). Reload at runtime with `prefix+Shift+r`.
 
 ### Settings
 

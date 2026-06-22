@@ -255,11 +255,18 @@ This behavior lives in:
 
 ### Effects
 
-- `glow_size` — `none | thin | medium | large`
-- `intensity` — `off | low | medium | heavy`
+- `glow_size` — `none | thin | medium | large`. Owns **glow**: presence, halo
+  radius, and strength. The sole owner of glow — `intensity` does not affect it.
+- `intensity` — `off | low | medium | heavy`. Owns **scanline / CRT overlay
+  opacity only**. It does **not** affect glow (the older docs that said it
+  drove "glow + scanlines" were wrong). `Off` = no scanlines; `Heavy` = strongest
+  CRT grille.
 - `show_focus_border` — keyboard focus ring enable/disable
 - `icon_secondary_alpha` — secondary alpha for duotone icons
 - `shadow` — elevated shadow token
+
+Both `glow_size` and `intensity` are also overridable at runtime via
+`[appearance]` (see [§9](#9-appearance-overrides-vs-theme-values)).
 
 ### Floating panes
 
@@ -520,7 +527,15 @@ Examples of active appearance overrides that still work:
 - `pane_border_width`
 - `pane_border_radius`
 - `pane_padding`
-- transparency / blur controls
+- `glow_size` — `none | thin | medium | large`; overrides `theme.glow_size`.
+  Owns glow (presence + radius + strength). Unset → inherits the theme.
+- `intensity` — `off | low | medium | heavy`; overrides `theme.intensity`.
+  Owns scanline/CRT overlay opacity only (does **not** affect glow). Unset →
+  inherits the theme.
+- transparency / blur controls (`transparency`, `blur`,
+  `terminal_transparency`, `terminal_floating_transparency`,
+  `terminal_floating_blur`, `background_blur`, `background_transparency`,
+  `background_gradient_top`, `background_gradient_bottom`, `vibrancy`)
 
 These appearance overrides take precedence where implemented.
 
@@ -600,4 +615,4 @@ If this document and code ever disagree, the source of truth is:
 - `heca-theme/src/theme.rs`
 - `heca-theme/src/loader.rs`
 - `heca-theme/src/themes/*.toml`
-- temporary `latte` compat behavior in `heca-config/src/theme.rs`
+- `heca-config/src/appearance.rs` (for `[appearance]` overrides + resolvers)

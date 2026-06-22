@@ -572,6 +572,27 @@ try z=0 without macOS vibrancy first).
   from `heca-theme::Theme` / config, responds to `prefix+Shift+r` reload, and has
   no `Color::new(...)` / `with_alpha(28)` magic numbers in the app.
 
+### Effect tokens — `glow_size` vs `intensity` (separate dimensions)
+
+The two effect tokens are **independent**; do not conflate them:
+
+- **`glow_size`** (`GlowLevel`: `none | thin | medium | large`) — the **sole
+  owner of glow**: presence + halo radius (`radius_scale()`) + strength
+  (`strength_scale()`, curve `0.0/0.5/1.0/1.6`). `MarkerGroup` reads
+  `t.glow_size.strength_scale()` for its glow alpha; `component.rs::scaled_glow`
+  reads `glow_size.radius_scale()` for the halo size.
+- **`intensity`** (`Intensity`: `off | low | medium | heavy`) — owns
+  **scanline/CRT overlay opacity only** (`scanline_opacity()`). It does **not**
+  affect glow. The older `Intensity::glow_scale()` was removed; the curve was
+  preserved exactly by moving it onto `GlowLevel::strength_scale()` so
+  MarkerGroup's glow strength is unchanged. `intensity` is tied to the
+  compositor's z=0.5 CRT scanline overlay pass (Q2-extra in
+  `compositor-blur-refactor-plan.md`).
+
+Both are `[appearance]`-overridable (`AppearanceConfig::effective_glow_size` /
+`effective_intensity`; unset → theme wins, set → overrides) and applied at the
+single choke point `chrome_gui_theme(state)` in `heca/src/chrome/mod.rs`.
+
 ---
 
 ## heca-grid-ui — Grid UI Component Library

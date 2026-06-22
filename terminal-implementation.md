@@ -8,6 +8,22 @@ At the end of each completed implementation phase, the Rust code for that phase 
 
 # Terminal Implementation
 
+> **RESOLVED (2026-06-22, compositor Phase 3 / PR #169):** `terminal_blur`,
+> `terminal_frost_color`, `terminal_frost_opacity()`, and
+> `effective_terminal_frost_color()` are **removed**. Tiled terminal frost is
+> now owned by the heca z=0 blurred-gradient background layer (`background_blur` +
+> `background_transparency`); floating panes keep `terminal_floating_blur` +
+> `terminal_floating_transparency`. All `terminal_blur` references in this file
+> (the Phase 8/9/13 checklists, the “no visible blur difference” findings, etc.)
+> are **historical** — they describe the pre-z=0 tiled-tint approach that the
+> compositor-blur refactor superseded. See `compositor-blur-refactor-plan.md`
+> and the “Appearance & Frost (z=0 background layer)” section in `README.md`.
+> The canonical list of terminal theme tokens actually consumed by the backend
+> + renderer lives in `theming-documentation.md` §8 (“How terminal theming works
+> today”) — `terminal_foreground`, `terminal_background`, `terminal_cursor_*`,
+> `terminal_selection_*`, `terminal_ansi`, `terminal_brights`, `terminal_font_family`,
+> `terminal_italic_font_family`, `terminal_font_size`.
+
 ## Purpose
 
 This document defines the target architecture and execution plan for heca's terminal subsystem.
