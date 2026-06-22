@@ -65,6 +65,67 @@ on the same struct.
 
 ---
 
+## 0.1 Decisions from the 2026-06-21 grill-me (locked)
+
+> The grill-me session before implementation resolved the open design questions
+> and locked the model below. These supersede any conflicting earlier wording in
+> §2/§3/risk-register; the inline edits there are kept consistent with these.
+
+**The user's architectural model (governs the whole plan):**
+
+1. **Terminal owns its translucency/blur** via config.toml knobs (`terminal_transparency`,
+   `terminal_floating_blur`). Already implemented.
+2. **Pane = border + padding only, no background fill.** Verified: `paint_terminal_pane_shell`
+   sets `.border()` + `.radius()` only (no `.background(...)`), and the `Pane` widget
+   paints a transparent fill + border when no background is set — so principle 2 is
+   **already satisfied** at the widget level. No change needed there.
+3. **App/window owns transparency + blur** (already implemented), and to give the
+   blur something to blur, the background is a **gradient** (not a solid color) —
+   this is the z=0 layer heca renders itself.
+
+**Decided (with the option letter from the grill):**
+
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Which channel owns pane translucency? | **Option A** — theme `terminal_background` is **opaque**; `terminal_transparency` → `surface_alpha` is the **only** translucency channel. **Action:** fix `heca-theme/src/themes/latte.toml` `terminal_background = "#e6e9ef00"` → `"#e6e9ef"` (the alpha-0 value was the prime suspect for the deferred "no blur/transparency" regression). |
+| Q2 | Where do the z=0 gradient colors come from? | **Option C** — explicit `background_gradient_top` / `background_gradient_bottom` `Option<Color>` fields on `Theme` (set per-theme in the TOMLs), with a **derived fallback** when unset: top = `theme.background`, bottom = a shifted variant. Zero-config default + full per-theme/user control. |
+| Q2-extra | CRT scanline placement (`intensity` theme value)? | **z=0.5** — scanlines render **over the blurred gradient, under panes** (they frost with the background, not across pane content). Add a scanline overlay pass at z=0.5 to the pipeline order. |
+| Q3 | Tiled terminal frost ownership | **Option A** — **drop** `terminal_blur` + `terminal_frost_color` for tiled panes; the tiled terminal's frost **is** the z=0 gradient blurred by `background_blur` showing through the translucent surface. One blur source (app z=0). Keep `terminal_transparency` (translucency) and `terminal_floating_blur` (floating real blur). **Action:** update docs + `example.config.toml` removing `terminal_blur` references. |
+| Q4 | z=0 default opacity | **Option A** — opaque by default (`background_transparency = 0`). Clean cross-platform frost out of the box (no sharp desktop on Linux/Windows); user opts into translucency. macOS-vs-others rationale: macOS has native window vibrancy (OS blurs the desktop behind a translucent window); Linux/Windows have no reliable cross-platform OS-vibrancy, so a translucent window there shows a **sharp** desktop — hence z=0 must own the frost and default opaque. |
+| Q5 | Start execution | Merge state already resolved — **#163 and #164 were merged** (not awaiting approval, as an earlier stale note claimed). Branch off `origin/main` (`351d857`), run Phase 0, begin Phase 1. |
+| Q6 | macOS vibrancy theme-matching | **DEFERRED pending z=0 visual evaluation** — see §3 vibrancy note. |
+
+### Q6 / macOS vibrancy — try WITHOUT it first
+
+The user's directive: **implement our own heca-owned blur/transparency (z=0)
+that looks like the macOS vibrancy frosted-glass effect, WITHOUT using OS
+vibrancy. Try z=0 + our opacity + our blur, and see how it comes.**
+
+- **Why this is the right first step:** vibrancy is an OS-foreign layer whose color
+  heca does not control — it follows the macOS system Light/Dark appearance and is
+  tinted by the desktop wallpaper, so it **cannot match the heca theme** (e.g. light
+  `latte` theme + macOS Dark mode → dark vibrancy behind a light theme = clash), and
+  it does not reload on `prefix+Shift+r`. Since heca defines its own theme regardless
+  of the system theme, vibrancy-follows-OS is a real mismatch, not a cosmetic one.
+- **The plan's z=0 model already makes vibrancy optional** (§3 lists it as an
+  optional macOS bonus). The grill-me confirmed: **try z=0 alone first.** If the
+  heca-owned gradient+blur frost looks good cross-platform, vibrancy may be
+  unnecessary.
+- **Parked work (only revisit if z=0 frost is insufficient on macOS):** adding a
+  light/dark detection on `Theme` (explicit `appearance: Option<Light|Dark>` field
+  + luminance-of-`theme.background` fallback) and calling
+  `NSVisualEffectView::setAppearance(vibrancyLight/vibrancyDark)` so vibrancy
+  tracks the heca theme — **plus live-reload** by retaining the effect-view handle
+  and updating `setAppearance`/`setMaterial` on `prefix+Shift+r` (currently
+  vibrancy is apply-once with the handle dropped; the reload path explicitly does
+  not re-apply to avoid stacking effect views). This is **not** part of Phases 1–5.
+  If needed, it becomes a follow-up task after Phase 5 user sign-off.
+- **Do not wire vibrancy in Phases 1–5.** The success criterion "cross-platform:
+  tiled + floating frost render identically via wgpu (no OS-vibrancy dependency)"
+  is the goal; vibrancy stays `Vibrancy::None` by default throughout this work.
+
+---
+
 ## 1. Goal & motivation
 
 Give heca panes a **real frosted-glass blur** that:
@@ -116,6 +177,11 @@ instead of the OS, so it is **cross-platform and tunable**.
 | z=0 blur | **Static + cached** (recompute only when dirty: resize / gradient / blur change) | Gradient is static → blur once, cheap |
 | Floating backdrop | **100% opacity** when blur active (drop `floating_frost_opacity` coupling) | Kills the 5% sharp-text leak → no collision; frost visibility = `terminal_floating_transparency` |
 | Float blur reuse | Reuse the shared `state.blur` for the (rare) dirty-frame z=0 blur; copy `view_b` → cache before the floating blur runs | Minimal new GPU resources (only z0 render target + cache texture) |
+| Translucency channel (Q1, grill-me 2026-06-21) | **Option A** — opaque theme `terminal_background`; `terminal_transparency`/`surface_alpha` is the only translucency channel | Theme bg alpha was baking a second translucency channel (latte `#e6e9ef00`); fix to opaque `#e6e9ef` |
+| Gradient color source (Q2) | **Option C** — explicit `background_gradient_top/bottom` theme fields with derived fallback (top=bg, bottom=shifted) | Zero-config default + full per-theme/user control |
+| CRT scanlines (Q2-extra) | **z=0.5** — over the blurred gradient, under panes | Scanlines frost with the background, not across pane content |
+| Tiled frost ownership (Q3) | **Option A** — drop `terminal_blur`/`terminal_frost_color` for tiled; tiled frost = z=0 (`background_blur`) | One blur source; kills the "two names for one thing" confusion |
+| macOS vibrancy (Q6) | **Try z=0 WITHOUT vibrancy first**; vibrancy deferred pending z=0 visual evaluation; do not wire in Phases 1–5 | heca owns its theme; vibrancy follows the OS and cannot match the theme |
 
 ---
 
@@ -132,8 +198,15 @@ instead of the OS, so it is **cross-platform and tunable**.
 - Horizontal/diagonal/radial gradients, multi-stop gradients (v1 = 2-color vertical).
 - Background **image** support (wallpaper). The design leaves room for it later
   (z=0 source is content-agnostic), but v1 is gradient-only.
-- OS blur (vibrancy/Acrylic/compositor) as a *fallback* — documented as an optional
-  macOS bonus, not wired.
+- OS blur (vibrancy/Acrylic/compositor) — **deferred pending z=0 visual
+  evaluation** (grill-me Q6). The directive is to **try z=0 (heca-owned blur +
+  transparency) WITHOUT macOS vibrancy first** and see how it looks. If z=0 alone
+  gives an acceptable cross-platform frosted-glass look, vibrancy may be
+  unnecessary. The vibrancy-theme-matching work (light/dark detection on `Theme` +
+  `NSVisualEffectView::setAppearance` + live-reload via a retained effect-view
+  handle) is **parked** — revisit only if z=0 frost is insufficient on macOS, as a
+  follow-up after Phase 5. Do not wire vibrancy in Phases 1–5; it stays
+  `Vibrancy::None` by default throughout this work.
 - Per-pane *individual* blur radius (one z=0 blur for all tiled panes; floating has
   its own dynamic blur).
 
@@ -497,7 +570,7 @@ has tested, per AGENTS.md).
 | Shared `Blur` reused for z0 + floating in one dirty frame | Copy z0 blurred view → cache **before** the floating `blur.process` call; documented in `BackgroundLayer::render` | background.rs, render.rs |
 | Removing `terminal_blur` breaks user config | Migration note in keybindings.toml (Phase 4) | docs |
 | `content_canvas_fill()` stopgap left in place alongside z=0 (two competing background layers) | New Task 3.4b removes it once z=0 is wired | render.rs, Task 3.4b |
-| `latte` transparent `terminal_background` (`#e6e9ef00`) bypasses `terminal_transparency` → `surface_alpha`, re-introducing the "no blur/transparency" regression | Phase 3 critical review picks one translucency channel (recommended: opaque theme bg + knob-driven `surface_alpha`); 5.1 pre-check verifies | heca-theme/src/themes/latte.toml, render.rs, terminal.rs |
+| `latte` transparent `terminal_background` (`#e6e9ef00`) bypasses `terminal_transparency` → `surface_alpha`, re-introducing the "no blur/transparency" regression | **DECIDED (grill-me Q1, Option A):** opaque theme `terminal_background` + knob-driven `surface_alpha` is the only translucency channel; fix `latte.toml` `#e6e9ef00` → `#e6e9ef` (fold into Task 3.4b/3.5); 5.1 pre-check verifies | heca-theme/src/themes/latte.toml, render.rs, terminal.rs |
 | `defaults.rs` referenced by old Task 2.3 no longer exists | Task 2.3 rewritten to target `heca-theme/src/theme.rs` + TOMLs | heca-theme |
 
 ---
