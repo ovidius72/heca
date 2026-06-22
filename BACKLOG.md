@@ -813,9 +813,15 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   column-specific (memory `grid-ui-keyhint-universal`).
   Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`
 
-- [ ] **app-task-31** — F4.5 "onto-third" drop semantics: sidebar drag/move/swap for panes + columns is
-  done; this adds the remaining drop case (dropping onto a third target). Small / opportunistic.
-  Files: `heca/src/mouse/surface_left.rs` (drag dispatch)
+- [x] **app-task-31** — F4.5 drop-onto-workspace. DONE 2026-06-22. Scope narrowed with the user: the only
+  real gap was **dropping a pane onto a workspace → move it into that workspace** (the one way to reach an
+  *empty* workspace, since empty columns can't exist and pane-on-pane already covers column moves).
+  `target_accepted_by` now lets a pane drag accept `Workspace` targets, and `accept_drop` routes a workspace
+  target through `place_pane_at_sidebar_target`'s `Workspace` arm, which creates a **new column** at the end
+  of the workspace (a pane dropped on a workspace starts its own column; appending into an existing column
+  is what dropping on a column/pane card is for). The drop indicator already handled workspace targets
+  (column-drag path), so it lights up for pane drags too.
+  Files: `heca/src/mouse/surface_left.rs`, `heca/src/chrome/mod.rs`
 
 ---
 
