@@ -5,7 +5,7 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** in progress — Phases 0–3 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3); Phase 4 next.
+- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs = this PR); Phase 5 (interactive visual tuning with the user) next.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -484,32 +484,37 @@ build incrementally and review the diff carefully.
 
 ### Tasks
 
-- [ ] **4.1 `keybindings.toml`** — replace the tiled-tint appearance block with the z=0 knobs (`background_gradient_top/bottom`, `background_blur`, `background_transparency`) + a concise z-layer model explanation + a **migration note** that `terminal_blur` / `terminal_frost_color` are removed (use `background_blur`).
+- [x] **4.1 `keybindings.toml`** — replace the tiled-tint appearance block with the z=0 knobs (`background_gradient_top/bottom`, `background_blur`, `background_transparency`) + a concise z-layer model explanation + a **migration note** that `terminal_blur` / `terminal_frost_color` are removed (use `background_blur`).
+  - **Done (this PR):** the canonical config example is `example.config.toml` (there is no `keybindings.toml` appearance block) — added the z=0 block (`background_blur`, `background_transparency`, optional `background_gradient_top/bottom` with the unset → theme/derived fallback noted) + a migration note that `terminal_blur`/`terminal_frost_color` are removed (use `background_blur`).
   - Relations: Phase 3.
-  - Check: doc reads consistently; no references to removed knobs as valid.
+  - Check: doc reads consistently; no references to removed knobs as valid. ✅
 
-- [ ] **4.1b Strip removed knobs from theme TOMLs + config examples (new, post-PR-#160)** — Task 3.5 removes `terminal_frost_color` from code; the merge left stale references that must be cleaned in the same doc pass:
+- [x] **4.1b Strip removed knobs from theme TOMLs + config examples (new, post-PR-#160)** — Task 3.5 removes `terminal_frost_color` from code; the merge left stale references that must be cleaned in the same doc pass:
   - `heca-theme/src/themes/latte.toml` — remove `terminal_frost_color = "#e6e9ef"` (line ~45).
   - `example.config.toml` — remove the commented `# terminal_frost_color = "#1e1e2e"` block (~line 29).
   - `theming-documentation.md` — remove/replace the `terminal_frost_color` entries in the bundled-theme value tables and the latte section (lines ~152, ~300, ~443, ~488).
   - `theming-plan.md` — update the `content_canvas_fill()` stopgap note to point to this plan's Task 3.4b as the folding target (the note currently says "fold into z=0" without naming the task).
+  - **Done (this PR):** `latte.toml` `terminal_frost_color` was already stripped in Phase 3 (3.5); `example.config.toml` commented block was already stripped in Phase 3 and is now replaced by the z=0 block (4.1). `theming-documentation.md` — removed all 4 `terminal_frost_color` entries (grid_tron example, field list, latte block, latte field list) AND fixed the stale `terminal_background = "#e6e9ef00"` → opaque `#e6e9ef` in the latte block. `theming-plan.md` — both `content_canvas_fill` notes (§ stopgaps + 3C.3) now point to Phase 3 Task 3.4b as the folding target and marked done (PR #169).
   - Relations: 3.5.
-  - Check: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` returns no references outside historical/migration notes; `rg "content_canvas_fill"` only in `theming-plan.md` as a historical pointer to Task 3.4b.
+  - Check: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` returns no references outside historical/migration notes; `rg "content_canvas_fill"` only in `theming-plan.md` as a historical pointer to Task 3.4b. ✅ (verified — remaining hits are README/AGENTS/example.config migration notes + BACKLOG/resume-handoff historical; `theming-documentation.md` clean.)
 
-- [ ] **4.2 `README.md`** — update the appearance / blur section to the z-layer model.
+- [x] **4.2 `README.md`** — update the appearance / blur section to the z-layer model.
+  - **Done (this PR):** added a new `### Appearance & Frost (z=0 background layer)` section after the Theme section — documents the heca-owned z=0 gradient, the `background_blur`/`background_transparency`/gradient knobs, how tiled vs floating frost is produced, and the `terminal_blur`/`terminal_frost_color` migration note. Reload via `prefix+Shift+r` noted.
   - Relations: 4.1.
-  - Check: review.
+  - Check: review. ✅
 
-- [ ] **4.3 `AGENTS.md`** — add the z-layer frost model to the rendering/appearance notes; reinforce the "no hardcoded color/style — read from theme/config" rule with the gradient as an example; note the `BackgroundLayer` is a heca-renderer primitive (headless), not a `heca-grid-ui` widget.
+- [x] **4.3 `AGENTS.md`** — add the z-layer frost model to the rendering/appearance notes; reinforce the "no hardcoded color/style — read from theme/config" rule with the gradient as an example; note the `BackgroundLayer` is a heca-renderer primitive (headless), not a `heca-grid-ui` widget.
+  - **Done (this PR):** added a `### z=0 background frost model (heca-owned, cross-platform)` subsection after the Stack "What NOT to use" table — documents `BackgroundLayer` as a heca-renderer GPU primitive (NOT a `heca-grid-ui` widget), the full render order, the grill-me Q1 opaque-theme translucency rule, the removed knobs, and reinforces the no-hardcoded-color rule with the gradient (`Theme::effective_background_gradient_top/bottom()`) as the canonical example.
   - Relations: 4.1.
-  - Check: review.
+  - Check: review. ✅
 
-- [ ] **4.4 `.planning/research/ARCHITECTURE.md`** — document the z-layer model, `BackgroundLayer`, static blur cache, and the cross-platform rationale (app vs compositor).
+- [x] **4.4 `.planning/research/ARCHITECTURE.md`** — document the z-layer model, `BackgroundLayer`, static blur cache, and the cross-platform rationale (app vs compositor).
+  - **Done (this PR):** updated §3 (Compositor/Renderer) — rewrote the Composite step to the actual z=0 pipeline order (clear → z=0 blit pre-stencil → tiled stencil + translucent content → borders → floating blur capture + backdrop(100%) → grid-ui chrome → overlays → present) and added a `#### z=0 background frost model (heca-owned, cross-platform)` subsection covering `BackgroundLayer`'s `z0_tex`/`cache_tex`/dirty cache + snapshot contract, the translucency channel, removed knobs, and the app-vs-compositor rationale (why heca can't blur the desktop cross-platform).
   - Relations: 4.1.
-  - Check: review.
+  - Check: review. ✅
 
 ### Phase 4 exit — review together
-- [ ] Docs consistent across all four files; no stale references to the tint approach in code-facing docs. Proceed to Phase 5.
+- [x] Docs consistent across all four files; no stale references to the tint approach in code-facing docs. Proceed to Phase 5. ✅ (gate verified: `rg "terminal_frost_color"` / `content_canvas_fill` outside the plan return only historical/migration notes; `theming-documentation.md` clean.)
 
 ---
 

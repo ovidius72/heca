@@ -23,6 +23,24 @@ shell_integration = true
 transparency = 0
 blur = 0
 
+# z=0 background layer — heca-owned frosted gradient (the bottom-most layer
+# panes composite over). Cross-platform frost WITHOUT OS vibrancy: heca renders
+# + blurs the gradient itself, so it works on Linux/Windows/macOS identically.
+#   background_blur         = 0..=100  blur strength of the gradient (0 = sharp, 100 = max)
+#   background_transparency  = 0..=100  0 = opaque gradient (default); >0 = translucent
+#   background_gradient_top / _bottom  optional "#rrggbb" override; unset →
+#                                       theme.background (top) + a derived darker shade (bottom)
+background_blur = 0
+background_transparency = 0
+# background_gradient_top    = "#1e1e2e"
+# background_gradient_bottom = "#181825"
+
+# Migration: the old tiled-frost knobs `terminal_blur` and `terminal_frost_color`
+# are REMOVED. Tiled frost is now the z=0 layer showing through the translucent
+# terminal surface (`terminal_transparency` below) — use `background_blur` to
+# drive frost strength. Floating panes keep their own real blur
+# (`terminal_floating_blur`).
+
 # Terminal-pane translucency (surface alpha over z=0).
 # The tiled frost is owned by the z=0 background layer (`background_blur` /
 # `background_transparency` below) — there is no per-terminal tiled blur knob.
@@ -35,6 +53,14 @@ terminal_floating_blur = 0
 
 # Platform backdrop material
 # vibrancy = "under_window_background"
+
+# Effect tokens (override the theme; unset → inherits the theme value).
+# `glow_size` owns glow: presence + halo radius + strength.
+#   none | thin | medium | large
+# glow_size = "medium"
+# `intensity` owns the scanline/CRT overlay opacity only; it does NOT affect glow.
+#   off | low | medium | heavy
+# intensity = "medium"
 
 # Pane chrome
 # pane_border_width = 2.0

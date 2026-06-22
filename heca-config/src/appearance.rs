@@ -1,5 +1,5 @@
 use crate::color::Color;
-use crate::theme::Theme;
+use crate::theme::{GlowLevel, Intensity, Theme};
 use serde::{Deserialize, Serialize};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -207,6 +207,22 @@ pub struct AppearanceConfig {
     #[serde(default = "default_background_transparency")]
     pub background_transparency: u8,
 
+    // ── Effect tokens (glow + scanlines) ──
+    // Both override the theme's effect token when set; `None` inherits from
+    // the theme. They are independent dimensions: `glow_size` owns glow
+    // presence + radius + strength; `intensity` owns scanline/CRT overlay
+    // opacity only (it does NOT affect glow).
+    /// Glow halo level override. `None` → inherits `theme.glow_size`. Values:
+    /// `none | thin | medium | large`. Drives glow presence, halo radius, and
+    /// strength.
+    #[serde(default)]
+    pub glow_size: Option<GlowLevel>,
+    /// Scanline/CRT overlay intensity override. `None` → inherits
+    /// `theme.intensity`. Values: `off | low | medium | heavy`. Drives
+    /// scanline-overlay opacity only; does **not** affect glow.
+    #[serde(default)]
+    pub intensity: Option<Intensity>,
+
     // ── Pane chrome ──
     // All default to `None` (= inherit from theme). Set explicitly in
     // config.toml to override the theme-derived value.
@@ -345,6 +361,22 @@ impl AppearanceConfig {
         (1.0 - (self.background_transparency.min(100) as f32) / 100.0).clamp(0.0, 1.0)
     }
 
+    // ── Effect token resolvers ──
+    // Config.toml `[appearance]` overrides take precedence; `None` inherits
+    // from the theme automatically.
+
+    /// Effective glow halo level: config override → `theme.glow_size`. Owns
+    /// glow presence + radius + strength.
+    pub fn effective_glow_size(&self, theme: &Theme) -> GlowLevel {
+        self.glow_size.unwrap_or(theme.glow_size)
+    }
+
+    /// Effective scanline/CRT overlay intensity: config override →
+    /// `theme.intensity`. Drives scanline-overlay opacity only (not glow).
+    pub fn effective_intensity(&self, theme: &Theme) -> Intensity {
+        self.intensity.unwrap_or(theme.intensity)
+    }
+
     // ── Pane chrome resolvers ──
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
@@ -427,6 +459,8 @@ impl Default for AppearanceConfig {
             background_gradient_bottom: None,
             background_blur: default_background_blur(),
             background_transparency: default_background_transparency(),
+            glow_size: None,
+            intensity: None,
             pane_border_width: None,
             pane_border_color: None,
             pane_border_radius: None,
@@ -463,6 +497,8 @@ mod tests {
         assert_eq!(cfg.background_transparency, 0);
         assert_eq!(cfg.background_gradient_top, None);
         assert_eq!(cfg.background_gradient_bottom, None);
+        assert_eq!(cfg.glow_size, None);
+        assert_eq!(cfg.intensity, None);
         assert!(!cfg.is_transparent());
         assert!((cfg.opacity() - 1.0).abs() < f32::EPSILON);
         assert!((cfg.blur_radius()).abs() < f32::EPSILON);
@@ -588,6 +624,70 @@ mod tests {
         // top = background; bottom = darker(background) (≠ background).
         assert_eq!(cfg.effective_background_gradient_top(&bare), bare.background);
         assert_ne!(cfg.effective_background_gradient_bottom(&bare), bare.background);
+    }
+
+    #[test]
+    fn effect_token_defaults_unset() {
+        let cfg = AppearanceConfig::default();
+        assert_eq!(cfg.glow_size, None);
+        assert_eq!(cfg.intensity, None);
+    }
+
+    #[test]
+    fn effect_token_resolvers_inherit_theme_when_unset() {
+        let mocha = crate::theme::catppuccin_mocha();
+        let cfg = AppearanceConfig::default();
+        // mocha ships glow_size = GlowLevel::None (the "no glow" variant),
+        // intensity = Intensity::Off. (Not to be confused with cfg.glow_size,
+        // the Option<GlowLevel> field, which is Option::None for a default config.)
+        assert_eq!(cfg.effective_glow_size(&mocha), mocha.glow_size);
+        assert_eq!(cfg.effective_intensity(&mocha), mocha.intensity);
+
+        // grid_tron ships glow_size = Medium, intensity = Medium.
+        let grid_tron = crate::theme::load("grid_tron");
+        assert_eq!(cfg.effective_glow_size(&grid_tron), grid_tron.glow_size);
+        assert_eq!(cfg.effective_intensity(&grid_tron), grid_tron.intensity);
+    }
+
+    #[test]
+    fn effect_token_config_override_wins_over_theme() {
+        let mocha = crate::theme::catppuccin_mocha();
+        // mocha defaults: glow_size = None, intensity = Off.
+        let cfg = AppearanceConfig {
+            glow_size: Some(GlowLevel::Large),
+            intensity: Some(Intensity::Heavy),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_glow_size(&mocha), GlowLevel::Large);
+        assert_eq!(cfg.effective_intensity(&mocha), Intensity::Heavy);
+        // The theme value is untouched — override is read-only at resolve time.
+        assert_eq!(mocha.glow_size, GlowLevel::None);
+        assert_eq!(mocha.intensity, Intensity::Off);
+    }
+
+    #[test]
+    fn effect_tokens_parse_snake_case() {
+        // Tests the serde contract of the re-exported heca-theme types
+        // (`GlowLevel`/`Intensity` derive Deserialize with `#[serde(rename_all =
+        // "snake_case")]`) at the config boundary where TOML values flow into
+        // `AppearanceConfig`. If the enum serde representation changes in
+        // `heca-theme`, this test breaks — which is the intended signal here.
+        #[derive(Deserialize)]
+        struct Wrapper {
+            glow_size: GlowLevel,
+            intensity: Intensity,
+        }
+        let w: Wrapper = toml::from_str(r#"glow_size = "large"
+intensity = "heavy""#)
+            .expect("effect tokens should parse snake_case");
+        assert_eq!(w.glow_size, GlowLevel::Large);
+        assert_eq!(w.intensity, Intensity::Heavy);
+
+        let off: Wrapper = toml::from_str(r#"glow_size = "none"
+intensity = "off""#)
+            .expect("off values should parse");
+        assert_eq!(off.glow_size, GlowLevel::None);
+        assert_eq!(off.intensity, Intensity::Off);
     }
 
     #[test]
