@@ -24,6 +24,15 @@
 
 ---
 
+> ## ✅ INITIATIVE COMPLETE — all phases 0–10 merged to `main` (verified 2026-06-22)
+> Every phase below is implemented and on `origin/main`; the spun-out split-button chrome-flash
+> known issue is also fixed + merged. Verified by presence of each phase's key artifact/symbols on
+> `main` (git monitor, process catalog, host API, `mouse/resize.rs`, `ResizeColumnBy`/`ResizePaneHeightBy`,
+> `PaneAction::Zoom`/`Float`, `Glyph::FrameCorners`/`Cards`, `action_allowed_when_floating`,
+> `IconButton::active`). Nothing outstanding on this board. Per-phase detail kept below for the record.
+
+---
+
 ## Phase 0 — Chrome event bus + finish SharedChromeState migration  ⟶ FOUNDATION
 **Status:** Completed by Agent · **Assigned:** agent (dispatched 2026-06-18) · **Depends-on:** none · **Plan:** §4 Phase 0
 **One-liner:** typed event bus + emit-on-mutation; consume the dead store fields; retire the `Rc<Cell>`
@@ -40,7 +49,7 @@ Verification:
 - `cargo clippy -p heca --all-targets --quiet`
 Notes:
 - I intentionally extended Phase 0 slightly beyond the minimum wording to finish repaint granularity in the same slice; leaving damage collection wired but unused would have made the new invalidation path misleading and much less valuable.
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Reviewer Decision:** Accepted (merged to `main` via PR #129).
 
 ## Phase 1 — Pane runtime state model
 **Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 0 · **Plan:** §3 + §4 Phase 1
@@ -112,7 +121,7 @@ Built:
 - wired a debounced git sync into `sync_chrome_state`: canonical `Pane.runtime.cwd` now drives canonical `Pane.runtime.git` before the chrome-store mirror runs, so existing `set_pane_runtime` change-guards emit `pane.git.changed` on real change only
 - implemented non-repo behavior as `git = None`, with no per-frame churn for unchanged non-repo cwd values
 - added tests for runtime projection, shared repo-root cache reuse across panes, timed refresh after the debounce window, and a temp-repo `git2` integration check for branch + dirty counts
-**Reviewer Decision:** — · **Reviewer Notes:** Pending review / merge.
+**Reviewer Decision:** Accepted (merged to `main`; `git_monitor.rs` verified on `main` 2026-06-22).
 
 ## Phase 5 — Process catalog (`[program.<id>]` + `processes[]` aliases → {name, icon, description, color})
 **Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 1 · **Plan:** §0.7 + §4 Phase 5
@@ -129,7 +138,7 @@ Built:
 Verification:
 - `cargo test -p heca-config --quiet`
 - `cargo clippy -p heca-config --all-targets --quiet`
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Reviewer Decision:** Accepted (merged to `main`; `heca-config/src/programs.rs` verified on `main` 2026-06-22).
 
 ## Phase 6 — Command spawn (run real programs + kind + float + close-policy)
 **Status:** Completed by Agent · **Assigned:** agent · **Depends-on:** Phase 2 · **Plan:** §0.4 + §4 Phase 6
@@ -149,7 +158,7 @@ Verification:
 - `cargo clippy -p heca-core -p heca-config -p heca --all-targets --quiet` (existing warnings only in `selection_model.rs` and `terminal_render.rs`)
 Notes:
 - `kind = "terminal"` is implemented today; `app` and `plugin` currently report a clear "not yet implemented" message without forking a second spawn path.
-**Reviewer Decision:** — · **Reviewer Notes:** Review follow-ups addressed on branch: interactive command shell mode (`-ic`), clearer RPC separator errors, documented public close-policy fields, config validation for invalid command kinds, explicit direct-command shell-integration rationale, and minor formatting cleanup.
+**Reviewer Decision:** Accepted (merged to `main`). **Reviewer Notes:** Review follow-ups addressed on branch: interactive command shell mode (`-ic`), clearer RPC separator errors, documented public close-policy fields, config validation for invalid command kinds, explicit direct-command shell-integration rationale, and minor formatting cleanup.
 
 ## Phase 7 — Display: pane-info widgets (sidebar card + in-pane info bar)
 **Status:** Completed by Lead (verified live) · **Assigned:** lead+user (interactive, branch `feature/phase-7`; Slice 1 merged via PR #147, rest in a fresh PR → main) · **Depends-on:** Phases 1–6 (degrades gracefully) · **Plan:** §0.3 + §4 Phase 7
@@ -185,10 +194,10 @@ model + the deferred token customization in `pluggable-chrome-plugin-plan.md`; p
 - Tests: typed + catch-all delivery, unsubscribe-on-drop, and an end-to-end "provider subscribes to `pane.status.changed` then reads `pane_status`" round-trip.
 - Docs: `pluggable-chrome-plugin-plan.md` §3.3/§3.5/§5.4 marked foundation-landed; §8.1 records the deferred hybrid `${token}` customization shape (segment-list selection already shipped in Phase 7). `PLAN.md` refreshed.
 - Verification: clippy clean; heca 226 / config 51 tests green.
-**Reviewer Decision:** — · **Reviewer Notes:** pending review (PR → main).
+**Reviewer Decision:** Accepted (merged to `main` via PR #149; `heca/src/host.rs` verified on `main` 2026-06-22).
 
 ## Phase 9 — Mouse pane/column resize (drag dividers)  ⟶ NEW (spun out of Phase 7 discussion)
-**Status:** Completed by Lead (LIVE-VERIFIED 2026-06-21; commit/PR pending OK) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** niri-parity question #2 (RESOLVED) · **Plan:** §4 Phase 9
+**Status:** ✅ Accepted (MERGED to `main` via PR #157, 2026-06-21) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** niri-parity question #2 (RESOLVED) · **Plan:** §4 Phase 9
 **One-liner:** drag the gap between **columns** (vertical divider) → resize that column; drag the gap between
 **panes** in a column (horizontal divider) → resize pane height. **Fallback**: **hold right-button on a pane to
 resize** along the nearer axis (for when the thin ~8px gap fights the terminal).
@@ -222,11 +231,11 @@ Built:
 - **Live-feedback fixes round 1 (2026-06-21):** (1) columns can now grow to the **full visible width** — `resize_column` cap raised `Proportion 0.95 → 1.0`; (2) **min sizes** so a pane can't become a thin line — `MIN_COLUMN_WIDTH = 150px` (scrolling.rs) + `MIN_PANE_HEIGHT = 100px` (column.rs), replacing the old 50px floors; (3) **vertical first-drag jump fixed** — `resize_pane_height` now bases the new height on the pane's actual current `pane_sizes[idx].h` instead of a hardcoded 200px, so a still-auto pane no longer snaps on the first delta. Keyboard resize benefits too (shared core).
 - **Live-feedback fixes round 2 (2026-06-21):** (4) **single / rightmost column now resizable** — divider hit-test is edge-based: a column's RIGHT edge is its handle (between two columns it spans the gap; for the last/single column it's a band around the right edge); (5) **"resizes on the wrong side" fixed** — `resize_column` now anchors the view on the **resized** column's left edge (not the active column), so the dragged divider tracks the cursor; dropped the active-column recenter + per-move animation that fought a smooth drag.
 Verification: `cargo check/test/clippy -p heca-core -p heca` — heca 233 + heca-core resize tests green, clippy 0 warnings (incl. changed files). (Pre-existing `terminal_backend_bash_integration_*` flake unrelated.)
-**Live-verified by the user (2026-06-21):** divider drag, full-width growth, min sizes, no vertical jump, single/rightmost-column resize, and correct drag side all confirmed good. **Remaining: commit + PR (no commit/merge yet — awaiting OK).**
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Live-verified by the user (2026-06-21):** divider drag, full-width growth, min sizes, no vertical jump, single/rightmost-column resize, and correct drag side all confirmed good.
+**Reviewer Decision:** Accepted (merged via PR #157; symbols `ResizeColumnBy`/`ResizePaneHeightBy`/`MIN_COLUMN_WIDTH`/`MIN_PANE_HEIGHT`/`divider_at` + RPC `resize-column`/`resize-pane-height` verified on `main` 2026-06-22).
 
 ## Phase 10 — Pane action buttons: float + zoom  ⟶ NEW (requested 2026-06-21, after Phase 9)
-**Status:** Completed by Lead (unit-verified; live-verify pending) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** Phase 7 (in-pane action bar; DONE) · **Plan:** §0.3 + this entry
+**Status:** ✅ Accepted (MERGED to `main` via PR #157 + follow-up #158, 2026-06-21) · **Assigned:** lead (`feature/phase-9`) · **Depends-on:** Phase 7 (in-pane action bar; DONE) · **Plan:** §0.3 + this entry
 **One-liner:** add **float** and **zoom** as pane info-bar action buttons, alongside the existing split/close,
 each wired to its existing WM action + keybinding (`float` = `prefix+f`, `zoom_column` = `prefix+z`, both
 already configured).
@@ -258,8 +267,7 @@ phase lands. The user's recalled `pane_actions: ["close","zoom","float","split"]
 - Tests: `pane_action_spec` mapping, `floating_pane_keeps_only_float_and_close`. heca 241 green, clippy 0, showcase builds.
 - **Unfloat log fix:** float button no longer focus-firsts when the pane is floating (`needs_focus && !content.floating`) — a `FocusPane` from MouseContent is blocked in the floating domain and logged a spurious "blocked intent"; unfloat acts on the already-active floating pane directly.
 - **Live-verified by the user (2026-06-21):** active toggled look + floating shows only float/close + clean unfloat (no log).
-**Remaining:** commit + push pending OK (folds into PR #157).
-**Reviewer Decision:** — · **Reviewer Notes:** —
+**Reviewer Decision:** Accepted (zoom/float buttons merged via #157; toggled-state + floating filter merged via #158; symbols `PaneAction::Zoom`/`Float`, `Glyph::FrameCorners`/`Cards`, `action_allowed_when_floating`, `IconButton::active` verified on `main` 2026-06-22).
 
 ---
 
@@ -267,15 +275,19 @@ phase lands. The user's recalled `pane_actions: ["close","zoom","float","split"]
 `0 → 1 → 2 → 3 → 6 → 4 → 5 → 7 → 8` (single-threaded). Parallel once Phase 1 is Accepted: **2 & 5** together,
 then 3→4 and 6 alongside.
 
-## Known issues (open, not yet scheduled)
-- **Split-via-action-button flash (2026-06-21, reported):** splitting a pane with the in-pane action button
-  produces a brief full-window chrome flash (both sidebars + scrolling area). Traced to: the button press calls
-  `mark_full_redraw` (→ `ChromeDamageMode::Full`) and the new pane changes the chrome signature, so `render.rs`
-  rebuilds the entire retained chrome tree AND full-repaints in the same frame. Exact flashing layer (rebuilt-tree
-  default state vs. blur backdrop vs. opacity) needs live reproduction. **Independent of Phase 9** (pre-existing
-  split + chrome-rebuild path); does not block the Phase 9 commit. Likely also reproducible via keyboard split.
+## Known issues
+- ✅ **RESOLVED — Split-via-action-button flash** (reported 2026-06-21; fixed + merged 2026-06-22, `49a5cee`).
+  **Correct root cause** (the first guess above was wrong): the compositor scene texture is **cleared every
+  frame** while a `Tracked` chrome frame **scissored the chrome grid to the damage rect** — so chrome content
+  *outside* it (sidebars + tab/status bars) wasn't repainted that frame, leaving bare background → the dark
+  "re-render" flash. The split **button's press-flash animation** drove the `Tracked` (`RequestRedraw`) frames;
+  keyboard split stayed `Full`, so it didn't flash (the button-only asymmetry). **Fix:** chrome now **always
+  full-repaints** (`render.rs` `damage: None`) and the now-unsound `ChromeDamageMode` machinery was removed.
+  The deferred damage-region/scene-preservation optimization that would make partial chrome sound is tracked
+  in `PLAN.md` ("Foundation gaps").
 
 ## Activity log
+- 2026-06-22 — **Initiative closed out.** Verified all phases 0–10 on `origin/main`; refreshed every phase status to Accepted/merged. **Phase 9 (mouse resize) merged via PR #157; Phase 10 (zoom/float buttons) via #157 + toggled-state/floating-filter follow-up #158.** **Split-button chrome flash RESOLVED + merged** (`49a5cee`): real cause = per-frame scene clear + `Tracked` partial chrome repaint (button press-flash drove the Tracked frames); fix = chrome always full-repaints + removed the unsound `ChromeDamageMode`; deferred scene-preservation optimization tracked in `PLAN.md`.
 - 2026-06-21 — **Phase 10 added** (pane action buttons: float + zoom, `prefix+f`/`prefix+z`) per user request, after Phase 9. Confirmed the pane-action config key is `pane_title_actions` (like `pane_title_segments`), currently `split`/`move_left`/`move_right`/`close`; `zoom`/`float` land in Phase 10. Logged the split-via-button chrome flash as a known issue.
 - 2026-06-18 — board created; plan locked (`pane-runtime-state-plan.md`); all phases `Open`.
 - 2026-06-18 — docs landed (PR #127); **Phase 0 dispatched** to an agent (foundation).
