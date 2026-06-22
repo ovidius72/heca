@@ -643,7 +643,7 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 
 - **Don't run `cargo fmt`** in this repo — the local rustfmt reflows many files (no pinned `rustfmt.toml`); hand-format to match and verify with `cargo clippy --all-targets`.
 - **Renderer text API**: `TextRenderer::queue_text(text, x, y, size, color)` positions at a top-left point (used across the app); `queue_text_in_box(text, x, y, w, h, size, color, bold, align)` centers within a box (used by the grid scene). Don't conflate them.
-- **Never hard-code font family/size** — read `theme.font_family` / `theme.font_size`.
+- **Never hard-code font family/size** — read them from the dedicated `[font]` config (`state.font_config.family.ui_normal()` / `state.font_config.size.ui`), not the color `Theme` (fonts are system-local, not theme-portable — see `compositor-04c`). `normal` is optional: omitting it falls back to the surface-correct embedded font (`ui_normal()` → Geist Mono, `terminal_normal()` → Maple Mono Normal NF).
 
 ### Extra dependencies (in `heca-grid-ui` only)
 

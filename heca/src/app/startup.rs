@@ -217,13 +217,13 @@ pub(crate) async fn init_state(
     let mut text_renderer = TextRenderer::new(&device, surface_format);
     text_renderer.set_scale_factor(scale_factor);
     text_renderer.set_target_size(physical.width, physical.height);
-    text_renderer.set_font_family(&app_config.theme.font_family);
+    text_renderer.set_font_family(app_config.config.font.family.ui_normal());
     text_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
-    let terminal_cell_size = resolve_terminal_cell_size(&mut text_renderer, &app_config.theme);
+    let terminal_cell_size = resolve_terminal_cell_size(&mut text_renderer, &app_config.config.font);
     primitive_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
@@ -311,6 +311,7 @@ pub(crate) async fn init_state(
         theme: app_config.theme.clone(),
         programs: app_config.config.programs.clone(),
         appearance,
+        font_config: app_config.config.font.clone(),
         terminal_cell_size,
         scale_factor,
         needs_redraw: true,

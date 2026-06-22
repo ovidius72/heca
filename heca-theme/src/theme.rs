@@ -200,10 +200,6 @@ pub struct Theme {
     #[serde(default = "default_warning")]
     pub warning: Color,
 
-    // ── Typography ──
-    pub font_family: String,
-    pub font_size: f32,
-
     // ── Chrome geometry ──
     pub border_radius: f32,
     pub border_width: f32,
@@ -284,8 +280,6 @@ pub struct Theme {
     pub sidebar_button_font_size: f32,
 
     // ── Terminal ──
-    #[serde(default = "default_terminal_font_family")]
-    pub terminal_font_family: String,
     #[serde(default)]
     pub terminal_foreground: Option<Color>,
     #[serde(default)]
@@ -304,10 +298,6 @@ pub struct Theme {
     pub terminal_ansi: Option<[Color; 8]>,
     #[serde(default)]
     pub terminal_brights: Option<[Color; 8]>,
-    #[serde(default = "default_terminal_italic_font_family")]
-    pub terminal_italic_font_family: String,
-    #[serde(default = "default_terminal_font_size")]
-    pub terminal_font_size: f32,
 }
 
 // ── Serde default helpers ──
@@ -381,16 +371,6 @@ fn default_sidebar_label_font_size() -> f32 {
 fn default_sidebar_button_font_size() -> f32 {
     11.0
 }
-fn default_terminal_font_family() -> String {
-    "Maple Mono Normal NF".to_string()
-}
-fn default_terminal_italic_font_family() -> String {
-    default_terminal_font_family()
-}
-fn default_terminal_font_size() -> f32 {
-    14.0
-}
-
 impl Default for Theme {
     fn default() -> Self {
         Self::grid_tron()
@@ -439,16 +419,6 @@ impl Theme {
     pub fn effective_background_gradient_bottom(&self) -> Color {
         self.background_gradient_bottom
             .unwrap_or_else(|| self.derived_darker_background(GRADIENT_BOTTOM_DARKEN_FACTOR))
-    }
-
-    /// Approximate terminal cell metrics for the current terminal font size.
-    pub fn terminal_cell_size(&self) -> (f32, f32) {
-        const TERMINAL_CELL_WIDTH_RATIO: f32 = 0.58;
-        const TERMINAL_CELL_HEIGHT_RATIO: f32 = 1.28;
-        (
-            self.terminal_font_size * TERMINAL_CELL_WIDTH_RATIO,
-            self.terminal_font_size * TERMINAL_CELL_HEIGHT_RATIO,
-        )
     }
 
     /// The default dark, cyan-accented Tron theme.

@@ -373,12 +373,13 @@ Gate: ships together with `compositor-04` docs (one PR).
 - [ ] **compositor-task-29** — Verification gates: `cargo build --workspace --all-targets` green; `cargo clippy --workspace --all-targets --all-features` → 0 warnings; `cargo test --workspace` green except the known pre-existing env-dependent `heca-core::terminal_backend_bash_integration...` and the pre-existing `heca-grid-ui toast_action_press_flashes...` test (both fail on plain `main`); `rg "\.glow_scale\(\)"` → no remaining callers.
 - [ ] **compositor-task-30** — Fold the `docs/compositor-phase-4` doc changes (`compositor-task-16/17/18`) into this PR; resolve the rebase on shared doc files (README, theming-documentation, AGENTS, example.config, BACKLOG). Show the user the full diff for review. **Do not commit until the user reviews.**
 
-### [ ] Phase: Font settings separation (extract fonts from `Theme`) · `compositor-04c`
+### [x] Phase: Font settings separation (extract fonts from `Theme`) · `compositor-04c`
 Discovered during `compositor-04b`: fonts are **system-local, not theme-portable** — a theme that ships `font_family = "Maple Mono Normal NF"` breaks on a system without that font. Colors/palette are portable; fonts aren't. The terminal font handling is also messy (`Theme` owns `terminal_font_family`/`terminal_italic_font_family`/`terminal_font_size`, `[settings]` has Option-overrides applied via `loader::apply_overrides`). Move font family + size out of `Theme` into a dedicated structured `[font]` block in `config.toml` with per-style family slots.
 Source: discussion 2026-06-22 (during `compositor-04b`).
 Gate: after `compositor-04b` merges.
+**Status (2026-06-22):** ✅ DONE — merged. Implementation complete on `feature/compositor-04c-font-settings`; build + clippy clean; tests green. Per-style family slots (normal/bold/italic/bold_italic) supported end-to-end (config → resolver → renderer `TerminalFontFamilies`); unset slots fall back to `normal` + weight/synthesized-oblique, so no new font files are needed. `normal` itself is optional — omitting it falls back to the **surface-correct** embedded font (Geist Mono for UI, Maple Mono Normal NF for terminal). Cross-AI review passed; review fixes landed (consts for fallback names, `tf` binding in the renderer bridge, 3 new `TerminalFontFamilies::resolve` edge-case tests).
 
-- [ ] **compositor-task-31** — Add a `FontConfig` struct to `heca-config` with this schema:
+- [x] **compositor-task-31** — Add a `FontConfig` struct to `heca-config` with this schema:
   ```toml
   [font.family.ui]
   normal = "..."
@@ -399,20 +400,20 @@ Gate: after `compositor-04b` merges.
   Defaults live in `FontConfig::default()` (system-safe fonts) — **not** in the theme. Optional style slots fall back to `normal`.
   Files: `heca-config/src/font.rs` (new), `heca-config/src/lib.rs`, `heca-config/src/settings.rs` (remove the font Option-overrides)
 
-- [ ] **compositor-task-32** — Remove font fields from `heca-theme::Theme`: `font_family`, `font_size`, `terminal_font_family`, `terminal_italic_font_family`, `terminal_font_size`. Remove them from the 3 bundled TOMLs (`grid_tron.toml`, `mocha.toml`, `latte.toml`). Remove the font arms from `loader::apply_overrides()`.
+- [x] **compositor-task-32** — Remove font fields from `heca-theme::Theme`: `font_family`, `font_size`, `terminal_font_family`, `terminal_italic_font_family`, `terminal_font_size`. Remove them from the 3 bundled TOMLs (`grid_tron.toml`, `mocha.toml`, `latte.toml`). Remove the font arms from `loader::apply_overrides()`.
   Files: `heca-theme/src/theme.rs`, `heca-theme/src/themes/*.toml`, `heca-config/src/loader.rs`
 
-- [ ] **compositor-task-33** — Wire consumers to read fonts from `FontConfig` instead of `theme.font_*` (~45 call sites, 11 files):
+- [x] **compositor-task-33** — Wire consumers to read fonts from `FontConfig` instead of `theme.font_*` (~45 call sites, 11 files):
   `heca/src/main.rs`, `heca/src/app/startup.rs`, `heca/src/chrome/mod.rs` (6 sites), `heca/src/app/render.rs` (6 sites), `heca/src/app/terminal_render.rs`, `heca/src/app/terminal_metrics.rs`, `heca-grid-ui/src/layout.rs` + tests, `heca-renderer/examples/showcase.rs`.
   Pass the resolved font config down at the same choke points that today read `theme.font_*` (e.g. `chrome_gui_theme`, `TextRenderer::set_font_family`, terminal render pass context).
 
-- [ ] **compositor-task-34** — Renderer: support per-style family slots (normal/bold/italic/bold_italic) for both UI and terminal surfaces. `heca-renderer/src/text.rs` currently has one `font_family` slot + a `bold: bool` weight toggle; to honor distinct named families per style, load 4 font collections per surface (ui + terminal = 8) and select by (weight, style) via cosmic-text. Terminal already passes `italic_font_family` separately — extend to bold + bold_italic.
+- [x] **compositor-task-34** — Renderer: support per-style family slots (normal/bold/italic/bold_italic) for both UI and terminal surfaces. `heca-renderer/src/text.rs` currently has one `font_family` slot + a `bold: bool` weight toggle; to honor distinct named families per style, load 4 font collections per surface (ui + terminal = 8) and select by (weight, style) via cosmic-text. Terminal already passes `italic_font_family` separately — extend to bold + bold_italic.
   Files: `heca-renderer/src/text.rs`, `heca/src/app/render.rs`
   Note: if full per-style families are deferred, `bold`/`italic`/`bold_italic` slots fall back to `normal` and the renderer keeps weight-based bold — the config schema is still future-proof.
 
-- [ ] **compositor-task-35** — Update `example.config.toml` (document the `[font]` block), `theming-documentation.md` (remove font tokens from the Theme field list; add a `[font]` config section), `README.md`, `AGENTS.md`.
+- [x] **compositor-task-35** — Update `example.config.toml` (document the `[font]` block), `theming-documentation.md` (remove font tokens from the Theme field list; add a `[font]` config section), `README.md`, `AGENTS.md`.
 
-- [ ] **compositor-task-36** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green; grep gate `rg "theme\.font_|\.font_family|\.font_size" --glob '*.rs'` confirms no remaining theme-font reads in consumers.
+- [x] **compositor-task-36** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green; grep gate `rg "theme\.font_|\.font_family|\.font_size" --glob '*.rs'` confirms no remaining theme-font reads in consumers.
 
 ### [ ] Phase: Visual tuning with the user · `compositor-05`
 Source: `compositor-blur-refactor-plan.md` Phase 5

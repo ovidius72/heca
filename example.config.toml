@@ -8,15 +8,32 @@
 # and cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
-# UI/chrome font (sidebar, pane info bar, status bar) — decoupled from the color
-# theme, so switching theme keeps your font. Omit to use the built-in default
-# (Geist Mono / 15.0). The terminal font is configured separately below.
-# font_family = "Geist Mono"
-# font_size   = 15.0
+# Fonts are configured in the dedicated [font] block below — they are
+# system-local, NOT part of the color theme, so a theme never requires a
+# specific installed font.
 
-# Terminal font (independent of the UI font above).
-# terminal_font_family = "Maple Mono Normal NF"
-# terminal_font_size   = 14.0
+[font]
+# Font families + sizes, decoupled from the color theme. `normal` is optional —
+# if omitted, the surface falls back to its embedded font (Geist Mono for UI,
+# Maple Mono Normal NF for terminal). `bold` / `italic` / `bold_italic` are
+# optional — unset falls back to `normal` and the renderer selects the face via
+# weight/style within the family.
+# Defaults: UI = Geist Mono 15.0, terminal = Maple Mono Normal NF 14.0 (both
+# embedded, so they resolve without a system install).
+
+[font.family.ui]
+# normal = "Geist Mono"
+# bold = "..."        # optional → fall back to normal
+# italic = "..."      # optional → fall back to normal + synthesized oblique
+# bold_italic = "..." # optional → fall back to italic → bold → normal
+
+[font.family.terminal]
+# normal = "Maple Mono Normal NF"
+# italic = "..."      # optional distinct italic family
+
+[font.size]
+# ui = 15.0
+# terminal = 14.0
 
 [appearance]
 # Window / chrome transparency + blur (each 0..=100, default 0)

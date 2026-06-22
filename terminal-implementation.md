@@ -21,8 +21,10 @@ At the end of each completed implementation phase, the Rust code for that phase 
 > The canonical list of terminal theme tokens actually consumed by the backend
 > + renderer lives in `theming-documentation.md` §8 (“How terminal theming works
 > today”) — `terminal_foreground`, `terminal_background`, `terminal_cursor_*`,
-> `terminal_selection_*`, `terminal_ansi`, `terminal_brights`, `terminal_font_family`,
-> `terminal_italic_font_family`, `terminal_font_size`.
+> `terminal_selection_*`, `terminal_ansi`, `terminal_brights`. Font family/size
+> have moved out of `Theme` into the dedicated `[font]` block (see
+> `heca-config/src/font.rs` and `theming-documentation.md` §1 “Fonts are NOT
+> part of the theme”).
 
 ## Purpose
 
@@ -220,8 +222,7 @@ This layer must never paint inside the terminal content rect except by deliberat
 ### `heca-config`
 
 - Extend terminal-specific config:
-  - `terminal_font_family`
-  - `terminal_font_size`
+  - `[font.family.terminal]` (`normal` + optional `bold`/`italic`/`bold_italic`) + `[font.size].terminal` (see `heca-config/src/font.rs`)
   - `terminal_font_features` or equivalent shaping flags later
   - `terminal_line_height`
   - `terminal_letter_spacing` later if needed
@@ -309,27 +310,34 @@ The terminal font is user-configurable through `config.toml`.
 
 The terminal font must be independent from the UI font even if both use the same backend.
 
-Initial config targets:
+Initial config targets (now landed in the unified `[font]` block — see
+`heca-config/src/font.rs`):
 
 ```toml
-[terminal]
-font_family = "JetBrains Mono"
-font_size = 14
-line_height = 1.15
-ligatures = false
+[font.family.terminal]
+normal = "JetBrains Mono"
+# bold / italic / bold_italic optional → fall back to normal
+
+[font.size]
+terminal = 14.0
 ```
 
-Later expansion:
+Later expansion (not yet implemented):
 
 ```toml
-[terminal]
-font_family = "JetBrains Mono"
-font_size = 14
-line_height = 1.15
-ligatures = false
-font_features = ["calt=0", "liga=0"]
-fallback_families = ["Symbols Nerd Font", "Noto Color Emoji"]
-cursor_style = "block"
+[font.family.terminal]
+normal = "JetBrains Mono"
+# per-style slots: bold / italic / bold_italic
+
+[font.size]
+terminal = 14.0
+
+# future knobs (not yet implemented):
+# line_height = 1.15
+# ligatures = false
+# font_features = ["calt=0", "liga=0"]
+# fallback_families = ["Symbols Nerd Font", "Noto Color Emoji"]
+# cursor_style = "block"
 ```
 
 ## Ligature Policy
@@ -1247,8 +1255,8 @@ This section must be updated:
 - future pane migration should treat the current terminal host as inner content inside a `heca-grid-ui` pane shell, not as the permanent outer pane implementation
 - future pane shells must be able to surface process/global metadata such as idle/running/error state, git status/branch/changes, and AI-agent activity
 - terminal font settings are now separated from the UI theme font, with an embedded Maple Mono Normal NF fallback for terminal text
-- `config.toml` can now override terminal font family and terminal font size on top of the selected theme
-- both `terminal_font_family` / `terminal_font_size` and `terminal-font-family` / `terminal-font-size` are accepted from `config.toml`
+- `config.toml` can now override terminal font family and terminal font size on top of the selected theme (later superseded: these moved out of `[settings]`/`Theme` into the dedicated `[font]` block — see `heca-config/src/font.rs`)
+- both `terminal_font_family` / `terminal_font_size` and `terminal-font-family` / `terminal-font-size` were accepted from `config.toml` (superseded by `[font.family.terminal]` + `[font.size].terminal`)
 - pane render now resizes terminal backends to match the live pane content rect before taking terminal snapshots
 - PTY reader threads now wake the winit event loop through a user-event proxy so terminal output can trigger redraws without waiting for user input
 - active-pane highlighting during rendering now derives focus from the session active pane, not only from `AppState.focused_pane`
@@ -1261,7 +1269,7 @@ This section must be updated:
 - terminal cells now carry italic/underline style flags in addition to `fg/bg/bold`
 - terminal snapshots now carry resolved terminal default foreground/background colors from `wezterm-term`
 - terminal rendering now respects reverse-video cell colors, italic text, underline decoration, and uses the terminal's resolved default background instead of inferring pane fill from visible cells or using a hardcoded black backdrop
-- terminal style config now includes a separate `terminal_italic_font_family` path so italic rendering can use a different family than regular terminal text when needed
+- terminal style config now includes a separate italic family path so italic rendering can use a different family than regular terminal text when needed (now `[font.family.terminal].italic` in the `[font]` block)
 - bold ANSI foreground colors now follow wezterm-style brightening semantics for palette indices `0..7`
 - when italic text does not have a separate terminal italic family, terminal rendering now keeps the same family and applies a faux-italic slant instead of falling back to an unrelated generic italic face
 - terminal engine now supports explicit terminal default foreground/background overrides without tying terminal defaults to the outer app chrome theme
@@ -1310,7 +1318,7 @@ This section must be updated:
 - structured keyboard forwarding is landed, but live verification is still needed for modifier-heavy terminal apps and function-key behavior
 - terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
 - terminal style fidelity is much improved, but live verification is still needed for broad colorscheme parity across more themes and TUIs
-- italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `terminal_italic_font_family`, italic runs may fall back to a different family
+- italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `[font.family.terminal].italic`, italic runs synthesize an oblique from the normal family
 - `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
 - future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
 - current app integration still lives in `heca/src/app/render.rs`, but terminal sizing/snapshot acquisition now sits behind a dedicated terminal-host adapter rather than being inlined into pane drawing loops

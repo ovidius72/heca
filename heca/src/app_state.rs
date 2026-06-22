@@ -4,6 +4,7 @@ pub use crate::app::selection_model::SelectionState;
 use crate::input::WmAction;
 use crate::sidebar::SidebarTree;
 use heca_config::appearance::AppearanceConfig;
+use heca_config::font::FontConfig;
 use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
@@ -294,6 +295,10 @@ pub struct AppState {
     pub programs: ProgramsConfig,
     /// Appearance contract (transparency/blur/vibrancy) — read-only, copied from config.
     pub appearance: AppearanceConfig,
+    /// Structured font configuration (families + sizes), decoupled from the color
+    /// theme. Read at the same choke points that previously read `theme.font_*`.
+    /// Refreshed on `prefix+Shift+r` reload.
+    pub font_config: FontConfig,
     pub terminal_cell_size: (f32, f32),
     pub scale_factor: f64,
     pub needs_redraw: bool,

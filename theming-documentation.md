@@ -50,6 +50,38 @@ In `heca-theme` itself, the bundled names are currently:
 - `mocha`
 - `latte`
 
+### Fonts are NOT part of the theme
+
+Fonts are **system-local, not theme-portable**: a color theme that shipped a
+`font_family` would break on a system without that font installed. Colors and
+palette tokens travel with a theme; font families and sizes do not. So fonts
+live in a dedicated `[font]` block of `config.toml` (`heca-config/src/font.rs`),
+not in `Theme`.
+
+```toml
+[font.family.ui]
+normal = "Geist Mono"          # optional → embedded Geist Mono fallback
+# bold = "..."                  # optional → fall back to normal
+# italic = "..."                # optional → fall back to normal + synthesized oblique
+# bold_italic = "..."           # optional → fall back to italic → bold → normal
+
+[font.family.terminal]
+normal = "Maple Mono Normal NF"  # optional → embedded Maple Mono fallback
+# italic = "..."                # optional distinct italic family
+
+[font.size]
+ui = 15.0                      # default 15.0
+terminal = 14.0                # default 14.0
+```
+
+`normal` is optional — if omitted, the surface falls back to its **embedded**
+font (Geist Mono for UI, Maple Mono Normal NF for terminal), so a theme never
+depends on a system-installed font. The other slots are optional per-style
+family overrides. When unset, the renderer falls back to `normal` and selects the face via
+weight/style within the family (bold via `Weight::BOLD`; italic via a
+synthesized oblique when the family has no italic face). When set, the renderer
+uses the named family for that style. Reload live with `prefix+Shift+r`.
+
 ---
 
 ## 2. How to create a theme
@@ -104,8 +136,6 @@ danger = "#ff4455"
 success = "#33cc66"
 warning = "#ffaa33"
 
-font_family = "Geist Mono"
-font_size = 15.0
 
 border_radius = 6.0
 border_width = 1.0
@@ -139,9 +169,6 @@ drop_insertion = "#66ccff"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
 
-terminal_font_family = "Maple Mono Normal NF"
-terminal_italic_font_family = "Maple Mono Normal NF"
-terminal_font_size = 14.0
 
 # Optional terminal palette overrides
 terminal_foreground = "#d0d0d0"
@@ -176,8 +203,6 @@ These should be set explicitly in any real theme:
 - `foreground`
 - `border`
 - `accent`
-- `font_family`
-- `font_size`
 - `border_radius`
 - `border_width`
 
@@ -249,10 +274,8 @@ This behavior lives in:
 - `right_sidebar_background` — right sidebar shell background
 - `top_bottom_pane_background` — top bar, bottom bar, and pane title/header band background
 
-### Geometry / typography
+### Geometry
 
-- `font_family`
-- `font_size`
 - `border_radius`
 - `border_width`
 - `pane_padding`
@@ -297,9 +320,6 @@ Both `glow_size` and `intensity` are also overridable at runtime via
 
 ### Terminal
 
-- `terminal_font_family`
-- `terminal_italic_font_family`
-- `terminal_font_size`
 - `terminal_foreground`
 - `terminal_background`
 - `terminal_cursor_foreground`
@@ -330,8 +350,6 @@ glow = "#40e0ff"
 danger = "#ff4654"
 success = "#50ffaa"
 warning = "#ffbe46"
-font_family = "Geist Mono"
-font_size = 15.0
 border_radius = 8.0
 border_width = 1.0
 pane_padding = 4.0
@@ -357,9 +375,6 @@ drop_target_border = "#89b4fa"
 drop_insertion = "#89b4fa"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
-terminal_font_family = "Maple Mono Normal NF"
-terminal_italic_font_family = "Maple Mono Normal NF"
-terminal_font_size = 14.0
 ```
 
 ## `mocha`
@@ -376,8 +391,6 @@ glow = "#89b4fa"
 danger = "#f38ba8"
 success = "#a6e3a1"
 warning = "#fab387"
-font_family = "Geist Mono"
-font_size = 15.0
 border_radius = 6.0
 border_width = 1.0
 pane_padding = 4.0
@@ -403,9 +416,6 @@ drop_target_border = "#89b4fa"
 drop_insertion = "#89b4fa"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
-terminal_font_family = "Maple Mono Normal NF"
-terminal_italic_font_family = "Maple Mono Normal NF"
-terminal_font_size = 14.0
 ```
 
 ## `latte`
@@ -422,8 +432,6 @@ glow = "#1e66f5"
 danger = "#d20f39"
 success = "#40a02b"
 warning = "#df8e1d"
-font_family = "Geist Mono"
-font_size = 15.0
 border_radius = 6.0
 border_width = 1.0
 pane_padding = 4.0
@@ -449,7 +457,6 @@ drop_target_border = "#1e66f5"
 drop_insertion = "#1e66f5"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
-terminal_font_family = "Maple Mono Normal NF"
 terminal_foreground = "#4c4f69"
 terminal_background = "#e6e9ef" # opaque — frost comes from the z=0 background layer
 terminal_cursor_foreground = "#eff1f5"
@@ -457,8 +464,6 @@ terminal_cursor_background = "#4c4f69"
 terminal_cursor_border = "#1e66f5"
 terminal_selection_foreground = "#4c4f69"
 terminal_selection_background = "#bccfef"
-terminal_italic_font_family = "Maple Mono Normal NF"
-terminal_font_size = 14.0
 ```
 
 ---
@@ -498,9 +503,6 @@ These theme fields are already used:
 - `terminal_selection_background`
 - `terminal_ansi`
 - `terminal_brights`
-- `terminal_font_family`
-- `terminal_italic_font_family`
-- `terminal_font_size`
 
 ### Renderer state
 
@@ -578,8 +580,6 @@ glow = "#38bdf8"
 danger = "#fb7185"
 success = "#4ade80"
 warning = "#f59e0b"
-font_family = "Geist Mono"
-font_size = 15.0
 border_radius = 8.0
 border_width = 1.0
 pane_padding = 4.0
@@ -596,9 +596,6 @@ float_accent = "#38bdf8"
 float_focus = "#f59e0b"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
-terminal_font_family = "Maple Mono Normal NF"
-terminal_italic_font_family = "Maple Mono Normal NF"
-terminal_font_size = 14.0
 terminal_background = "#111827"
 terminal_foreground = "#e5e7eb"
 terminal_cursor_background = "#e5e7eb"
@@ -628,3 +625,4 @@ If this document and code ever disagree, the source of truth is:
 - `heca-theme/src/loader.rs`
 - `heca-theme/src/themes/*.toml`
 - `heca-config/src/appearance.rs` (for `[appearance]` overrides + resolvers)
+- `heca-config/src/font.rs` (for the `[font]` block — families + sizes, decoupled from the color theme)

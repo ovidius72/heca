@@ -116,6 +116,9 @@ impl HecaApp {
             // so would stack another container/effect view each reload. Changing
             // `vibrancy` (or toggling transparency on↔off) needs a restart.
             state.appearance = self.app_config.config.appearance.clone();
+            // Font config (families + sizes) is decoupled from the color theme;
+            // reload it so `prefix+Shift+r` picks up `[font]` changes live.
+            state.font_config = self.app_config.config.font.clone();
             // Sidebar width is config-driven; re-apply on reload (resets any runtime
             // drag-resize to the configured/clamped value).
             let sidebar_width = self.app_config.config.appearance.effective_sidebar_width();
@@ -123,7 +126,7 @@ impl HecaApp {
             state.chrome_state.set_right_size(sidebar_width);
             state
                 .text_renderer
-                .set_font_family(&self.app_config.theme.font_family);
+                .set_font_family(self.app_config.config.font.family.ui_normal());
             refresh_terminal_cell_size(state);
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.pane_action_hints = crate::chrome::PaneActionHints::from_keys(
