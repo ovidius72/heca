@@ -644,7 +644,7 @@ impl<'a> PaintCx<'a> {
         }));
     }
 
-    /// Queue a brightening "press flash" overlay over `rect`. `amount` is the
+    /// Queue a theme-tinted "press flash" overlay over `rect`. `amount` is the
     /// flash strength in `0.0..=1.0` (see [`Flash`](crate::effects::Flash));
     /// `radius` must match the widget's corner radius so the overlay follows a
     /// rounded shape instead of poking square corners past it.
@@ -653,13 +653,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(
-            rect,
-            Color::rgb(255, 255, 255).with_alpha(a),
-            None,
-            radius,
-            None,
-        );
+        self.rect(rect, self.theme.foreground.with_alpha(a), None, radius, None);
     }
 
     /// Draw the **drag ghost** — the small labelled chip that follows the cursor
