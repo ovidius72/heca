@@ -48,25 +48,7 @@ In `heca-theme` itself, the bundled names are currently:
 
 - `grid_tron`
 - `mocha`
-- `frappe`
-
-### Current latte compatibility note
-
-The app currently also accepts:
-
 - `latte`
-
-via a **temporary compatibility shim** in:
-
-- `heca-config/src/theme.rs`
-
-That shim adapts the legacy `heca-config/src/themes/latte.toml` into the unified `heca_theme::Theme` shape.
-
-So today:
-
-- `heca-theme` bundles `frappe`
-- `heca-config` also accepts `latte`
-- long-term direction is to replace active `frappe` use with real `latte`
 
 ---
 
@@ -411,10 +393,10 @@ terminal_italic_font_family = "Maple Mono Normal NF"
 terminal_font_size = 14.0
 ```
 
-## `frappe`
+## `latte`
 
 ```toml
-name = "Catppuccin Frappe"
+name = "Catppuccin Latte"
 background = "#eff1f5"
 surface = "#e6e9ef"
 foreground = "#4c4f69"
@@ -438,7 +420,7 @@ intensity = "off"
 show_focus_border = false
 icon_secondary_alpha = 0.2
 shadow = { color = "#000000", alpha = 0.15, blur = 8.0 }
-float_background = "#ccd0da"
+float_background = "#e6e9ef"
 float_accent = "#1e66f5"
 float_focus = "#e67e22"
 drag_ghost_bg = "#1e66f5d9"
@@ -451,26 +433,30 @@ drop_insertion = "#1e66f5"
 sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
 terminal_font_family = "Maple Mono Normal NF"
+terminal_foreground = "#4c4f69"
+terminal_background = "#e6e9ef00"
+terminal_cursor_foreground = "#eff1f5"
+terminal_cursor_background = "#4c4f69"
+terminal_cursor_border = "#1e66f5"
+terminal_selection_foreground = "#4c4f69"
+terminal_selection_background = "#bccfef"
+terminal_frost_color = "#e6e9ef"
 terminal_italic_font_family = "Maple Mono Normal NF"
 terminal_font_size = 14.0
 ```
 
 ---
 
-## 7. Current latte compatibility behavior
+## 7. Current latte behavior
 
-`latte` is currently accepted by `heca-config`, but it is not yet a bundled `heca-theme` file.
+`latte` is now a real bundled `heca-theme` file.
 
 Current behavior:
 
-- `heca-theme` bundled themes: `grid_tron`, `mocha`, `frappe`
-- `heca-config::theme::load("latte")`:
-  - loads legacy `heca-config/src/themes/latte.toml`
-  - starts from `frappe`
-  - overrides core light-theme values
-  - clears the new sidebar/bar tokens so they derive from latte background
+- `heca-theme` bundled themes: `grid_tron`, `mocha`, `latte`
+- `heca-config::theme::load("latte")` delegates directly to `heca_theme::load_theme("latte")`
 
-So **latte works today in the app**, but it is still a compatibility path, not the final bundled `heca-theme/src/themes/latte.toml` state.
+So the light theme is now unified across the active theme system.
 
 ---
 

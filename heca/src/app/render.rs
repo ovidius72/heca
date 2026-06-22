@@ -34,6 +34,85 @@ fn content_canvas_fill(
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FillRect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
+
+impl FillRect {
+    fn right(self) -> f32 {
+        self.x + self.w
+    }
+
+    fn bottom(self) -> f32 {
+        self.y + self.h
+    }
+}
+
+fn subtract_fill_rect(rect: FillRect, cut: FillRect) -> Vec<FillRect> {
+    let ix0 = rect.x.max(cut.x);
+    let iy0 = rect.y.max(cut.y);
+    let ix1 = rect.right().min(cut.right());
+    let iy1 = rect.bottom().min(cut.bottom());
+
+    if ix0 >= ix1 || iy0 >= iy1 {
+        return vec![rect];
+    }
+
+    let mut out = Vec::with_capacity(4);
+    if iy0 > rect.y {
+        out.push(FillRect {
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: iy0 - rect.y,
+        });
+    }
+    if iy1 < rect.bottom() {
+        out.push(FillRect {
+            x: rect.x,
+            y: iy1,
+            w: rect.w,
+            h: rect.bottom() - iy1,
+        });
+    }
+    if ix0 > rect.x {
+        out.push(FillRect {
+            x: rect.x,
+            y: iy0,
+            w: ix0 - rect.x,
+            h: iy1 - iy0,
+        });
+    }
+    if ix1 < rect.right() {
+        out.push(FillRect {
+            x: ix1,
+            y: iy0,
+            w: rect.right() - ix1,
+            h: iy1 - iy0,
+        });
+    }
+    out.into_iter().filter(|r| r.w > 0.0 && r.h > 0.0).collect()
+}
+
+fn uncovered_fill_rects(area: FillRect, occupied: &[FillRect]) -> Vec<FillRect> {
+    let mut rects = vec![area];
+    for cut in occupied {
+        let mut next = Vec::new();
+        for rect in rects {
+            next.extend(subtract_fill_rect(rect, *cut));
+        }
+        rects = next;
+        if rects.is_empty() {
+            break;
+        }
+    }
+    rects
+}
+
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
     match input_mode {
@@ -235,21 +314,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
-    // When the window is transparent, tint the scrolling content canvas with the
-    // loaded theme background at the configured app opacity. This keeps light
-    // themes coherent instead of showing a dark desktop hole in pane-less space,
-    // while still honoring transparency. Panes are still clipped to `pane_area`
-    // below so they don't bleed under the chrome.
-    if let Some(content_bg) = content_canvas_fill(theme, &state.appearance) {
-        state.primitive_renderer.draw_rect(
-            pane_area.loc.x as f32,
-            pane_area.loc.y as f32,
-            pane_area.size.w as f32,
-            pane_area.size.h as f32,
-            content_bg,
-        );
-    }
-
     let active_pane_id = state
         .session
         .active_workspace()
@@ -363,6 +427,34 @@ pub(crate) fn render_frame(state: &mut AppState) {
             content_rect,
             mount,
         });
+    }
+
+    // Tint any uncovered scrolling-area background so empty workspace space keeps
+    // the theme/vibrancy treatment without painting underneath pane rectangles.
+    if let Some(content_bg) = content_canvas_fill(theme, &state.appearance) {
+        let area = FillRect {
+            x: pane_area.loc.x as f32,
+            y: pane_area.loc.y as f32,
+            w: pane_area.size.w as f32,
+            h: pane_area.size.h as f32,
+        };
+        let occupied = tiled_panes
+            .iter()
+            .map(|pane| FillRect {
+                x: pane.x,
+                y: pane.y,
+                w: pane.w,
+                h: pane.h,
+            })
+            .collect::<Vec<_>>();
+        for rect in uncovered_fill_rects(area, &occupied) {
+            state
+                .primitive_renderer
+                .draw_rect(rect.x, rect.y, rect.w, rect.h, content_bg);
+        }
+        state
+            .primitive_renderer
+            .render(&state.device, scene_view, &mut encoder);
     }
 
     // ── Stencil-write: rounded content-clip mask for tiled panes ──
@@ -1055,7 +1147,7 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{content_canvas_fill, status_mode_parts};
+    use super::{content_canvas_fill, status_mode_parts, uncovered_fill_rects, FillRect};
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;
     use heca_core::layout::PaneId;
@@ -1074,11 +1166,31 @@ mod tests {
             transparency: 30,
             ..Default::default()
         };
-        let fill = content_canvas_fill(&theme, &appearance).expect("transparent window should tint content canvas");
+        let fill = content_canvas_fill(&theme, &appearance)
+            .expect("transparent window should tint empty pane-less content area");
         assert_eq!(fill[0], theme.background.r as f32 / 255.0);
         assert_eq!(fill[1], theme.background.g as f32 / 255.0);
         assert_eq!(fill[2], theme.background.b as f32 / 255.0);
         assert!((fill[3] - 0.7).abs() < 1e-6);
+    }
+
+    #[test]
+    fn uncovered_fill_rects_exclude_pane_rectangles() {
+        let area = FillRect {
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 100.0,
+        };
+        let occupied = [FillRect {
+            x: 10.0,
+            y: 10.0,
+            w: 30.0,
+            h: 40.0,
+        }];
+        let rects = uncovered_fill_rects(area, &occupied);
+        assert!(rects.iter().all(|r| !(r.x < 40.0 && r.right() > 10.0 && r.y < 50.0 && r.bottom() > 10.0)));
+        assert!(rects.iter().any(|r| r.x >= 40.0), "right-side empty space should remain fillable");
     }
 
     #[test]

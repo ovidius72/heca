@@ -321,8 +321,7 @@ impl Component for Button {
             }
             ButtonVariant::Link => {
                 // Color stays constant on hover; press flashes the TEXT (no bg).
-                let white = Color::rgb(255, 255, 255);
-                self.paint_label(cx, accent.lerp(white, self.flash.amount() * 0.7));
+                self.paint_label(cx, accent.lerp(foreground, self.flash.amount() * 0.7));
                 if p > 0.0 {
                     self.paint_underline(cx, accent.with_alpha(alpha(p)));
                 }

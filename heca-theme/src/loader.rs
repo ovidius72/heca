@@ -37,7 +37,7 @@ fn bundled_themes() -> HashMap<&'static str, &'static str> {
     [
         ("grid_tron", include_str!("themes/grid_tron.toml")),
         ("mocha", include_str!("themes/mocha.toml")),
-        ("frappe", include_str!("themes/frappe.toml")),
+        ("latte", include_str!("themes/latte.toml")),
     ]
     .into_iter()
     .collect()
@@ -54,7 +54,7 @@ pub fn available_themes() -> Vec<String> {
     let mut names: Vec<String> = vec![
         "grid_tron".to_string(),
         "mocha".to_string(),
-        "frappe".to_string(),
+        "latte".to_string(),
     ];
 
     // Add user themes from config dir.
@@ -92,9 +92,9 @@ mod tests {
     }
 
     #[test]
-    fn load_frappe() {
-        let theme = load_theme("frappe");
-        assert_eq!(theme.name, "Catppuccin Frappe");
+    fn load_latte() {
+        let theme = load_theme("latte");
+        assert_eq!(theme.name, "Catppuccin Latte");
     }
 
     #[test]
@@ -108,6 +108,6 @@ mod tests {
         let themes = available_themes();
         assert!(themes.contains(&"grid_tron".to_string()));
         assert!(themes.contains(&"mocha".to_string()));
-        assert!(themes.contains(&"frappe".to_string()));
+        assert!(themes.contains(&"latte".to_string()));
     }
 }
