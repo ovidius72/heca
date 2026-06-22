@@ -149,7 +149,6 @@ terminal_cursor_background = "#ffffff"
 terminal_cursor_border = "#ffffff"
 terminal_selection_foreground = "#000000"
 terminal_selection_background = "#88ccff"
-terminal_frost_color = "#101010"
 
 # Optional ANSI palettes
 terminal_ansi = [
@@ -297,7 +296,6 @@ This behavior lives in:
 - `terminal_selection_background`
 - `terminal_ansi`
 - `terminal_brights`
-- `terminal_frost_color`
 
 ---
 
@@ -434,13 +432,12 @@ sidebar_label_font_size = 14.0
 sidebar_button_font_size = 11.0
 terminal_font_family = "Maple Mono Normal NF"
 terminal_foreground = "#4c4f69"
-terminal_background = "#e6e9ef00"
+terminal_background = "#e6e9ef" # opaque — frost comes from the z=0 background layer
 terminal_cursor_foreground = "#eff1f5"
 terminal_cursor_background = "#4c4f69"
 terminal_cursor_border = "#1e66f5"
 terminal_selection_foreground = "#4c4f69"
 terminal_selection_background = "#bccfef"
-terminal_frost_color = "#e6e9ef"
 terminal_italic_font_family = "Maple Mono Normal NF"
 terminal_font_size = 14.0
 ```
@@ -485,7 +482,6 @@ These theme fields are already used:
 - `terminal_font_family`
 - `terminal_italic_font_family`
 - `terminal_font_size`
-- `terminal_frost_color`
 
 ### Renderer state
 

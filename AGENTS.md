@@ -534,6 +534,44 @@ To remove a default binding, add it to `[keys.unbind]`:
 | Bevy | Game engine ECS fights traditional GUI event loops. |
 | skia-safe | Proven (Neovide) but requires C++ toolchain. Rust-native is lighter. |
 
+### z=0 background frost model (heca-owned, cross-platform)
+
+Frosted-glass frost is **heca-owned**, not OS-dependent. heca renders a blurred
+vertical gradient as the bottom-most (z=0) layer in `render_frame`, and panes
+composite translucently over it. This is the canonical background; there is no
+second background-tint layer and no OS-vibrancy blur dependency (vibrancy is an
+optional platform backdrop material, `Vibrancy::None` by default — grill-me Q6:
+try z=0 without macOS vibrancy first).
+
+- **`BackgroundLayer`** (`heca-renderer/src/background.rs`) is a **heca-renderer
+  GPU primitive**, headless and unit-testable like the rest of `heca-renderer`.
+  It is **NOT a `heca-grid-ui` widget** — it owns GPU textures (`z0_tex` gradient
+  render target + `cache_tex` blurred result) and a static cached blur. It
+  recomputes only when dirty (resize or `set_params` change) and snapshots the
+  blurred result into its own cache before returning, so the shared `state.blur`
+  is free to be reused afterwards by the floating-pane frost pass.
+- **Render order** (see `heca/src/app/render.rs`): `clear → z=0 blit (pre-stencil,
+  `Backdrop::draw` fullscreen at `background_alpha()`, `stencil = None`) → tiled
+  stencil → tiled content (translucent `surface_alpha` over z=0) → borders →
+  floating blur capture → floating stencil → floating backdrop(1.0) + content →
+  grid-ui chrome → present`. z=0 is pre-stencil so the tiled content-clip never
+  clips the background.
+- **Translucency channel (grill-me Q1, Option A):** theme `terminal_background`
+  values are **opaque**; `terminal_transparency` → `surface_alpha` is the **only**
+  translucency channel. Never ship a theme `terminal_background` with alpha 0
+  (the `latte` `#e6e9ef00` bug) — that bypasses the knob and re-introduces the
+  "no blur/transparency" regression.
+- **Removed knobs:** `terminal_blur`, `terminal_frost_color`, `terminal_frost_opacity()`,
+  `effective_terminal_frost_color()` are gone. Tiled frost = z=0 showing through
+  `surface_alpha`; use `background_blur` for frost strength. Floating panes keep
+  `terminal_floating_blur` + `terminal_floating_transparency`.
+- **No hardcoded color/style (reinforced):** the gradient colors come from
+  `Theme::effective_background_gradient_top/bottom()` (config → theme field →
+  derived fallback), read at paint time — never literal `[f32;4]` in `render.rs`.
+  This is the same rule as for `heca-grid-ui` widgets: every visual value reads
+  from `heca-theme::Theme` / config, responds to `prefix+Shift+r` reload, and has
+  no `Color::new(...)` / `with_alpha(28)` magic numbers in the app.
+
 ---
 
 ## heca-grid-ui — Grid UI Component Library

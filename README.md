@@ -470,6 +470,45 @@ alpha = 0.3
 blur = 8.0
 ```
 
+### Appearance & Frost (z=0 background layer)
+
+Frosted-glass frost is **heca-owned**, not OS-dependent: heca renders a blurred
+vertical gradient as the bottom-most (z=0) layer, and panes composite
+translucently over it. This works identically on Linux, Windows, and macOS — no
+OS vibrancy required (vibrancy is an optional platform backdrop material, off by
+default).
+
+```toml
+[appearance]
+# z=0 background layer (the frosted gradient behind everything)
+background_blur          = 0    # 0..=100 — blur strength (0 = sharp gradient)
+background_transparency  = 0    # 0..=100 — 0 = opaque (default); >0 = translucent
+# background_gradient_top    = "#1e1e2e"   # optional; unset → theme.background
+# background_gradient_bottom = "#181825"   # optional; unset → derived darker shade
+
+# Tiled panes: frost = z=0 showing through the translucent terminal surface.
+terminal_transparency = 0             # 0..=100 — surface alpha over z=0
+
+# Floating panes: their own REAL blur of the tiled content behind them.
+terminal_floating_transparency = 0
+terminal_floating_blur          = 0    # 0..=100
+```
+
+**How frost is produced:**
+- **Tiled panes** — set `background_blur > 0` (frosts the gradient) +
+  `terminal_transparency > 0` (lets it show through the terminal surface). There
+  is **no per-terminal tiled blur knob** — the z=0 layer is the frost source.
+- **Floating panes** — set `terminal_floating_blur > 0` +
+  `terminal_floating_transparency > 0`; the blurred tiled content is stamped
+  behind the floating pane at full opacity (no sharp text leak).
+
+> **Migration:** the old `terminal_blur` and `terminal_frost_color` knobs are
+> **removed**. Use `background_blur` for tiled frost strength. (`terminal_blur`
+> only ever tinted behind panes and could not blur the desktop; the z=0 layer is
+> the real cross-platform fix.)
+
+Reload any of these at runtime with `prefix+Shift+r`.
+
 ### Settings
 
 ```toml

@@ -263,7 +263,7 @@ Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
 > Replace the tiled-tint + OS-vibrancy approach with a heca-owned z=0 blurred gradient background layer.
 > Fixes cross-platform frost AND the floating-pane text collision defect (5% sharp-content leak).
 > Gate: run AFTER `theming-04` so the new `background_*` config knobs live in the unified theme system.
-> **Status:** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) is next.
+> **Status:** Phases 1–4 done (code: PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3; docs check-off: PR #170; Phase 4 docs: this PR). Phase 5 (`compositor-05`, interactive visual tuning with the user) is next.
 
 ### [x] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
 New isolated GPU primitives in `heca-renderer`. No app wiring yet.
@@ -344,14 +344,18 @@ Merged in PR #169.
   The z=0 blit MUST be pre-stencil. Confirm no stencil state leaks between tiled and floating passes.
   Done: pipeline order walked and confirmed in the PR #169 body; z=0 is pre-stencil (`stencil = None`) so the tiled content-clip never clips it; the floating pass uses its own stencil. User review passed — 2 doc-only findings applied (z=0 ordering comment; `latte.toml` bug-fix inline comment).
 
-### [ ] Phase: Documentation update · `compositor-04`
+### [x] Phase: Documentation update · `compositor-04`
 Source: `compositor-blur-refactor-plan.md` Phase 4
+Merged in this PR.
 
-- [ ] **compositor-task-16** — Update `keybindings.toml` (or `example.config.toml`) — document new `background_*` knobs; add a migration note that `terminal_blur`/`terminal_frost_color` are removed (use `background_blur` instead).
+- [x] **compositor-task-16** — Update `keybindings.toml` (or `example.config.toml`) — document new `background_*` knobs; add a migration note that `terminal_blur`/`terminal_frost_color` are removed (use `background_blur` instead).
+  Done: `example.config.toml` `[appearance]` — added the z=0 block (`background_blur`, `background_transparency`, optional `background_gradient_top/bottom`) + a migration note that `terminal_blur`/`terminal_frost_color` are removed. Also cleaned `theming-documentation.md` (removed 4 `terminal_frost_color` entries + fixed the stale `#e6e9ef00` latte `terminal_background` → opaque `#e6e9ef`) and `theming-plan.md` (both `content_canvas_fill` stopgap notes now point to Phase 3 Task 3.4b as the folding target, marked done). Grep gate: `rg "terminal_frost_color" --glob '!compositor-blur-refactor-plan.md'` → only historical/migration notes remain; `theming-documentation.md` clean of `terminal_frost_color`/`content_canvas_fill`/`#e6e9ef00`.
 
-- [ ] **compositor-task-17** — Update `README.md` — revise the appearance/blur section to describe the z-layer model.
+- [x] **compositor-task-17** — Update `README.md` — revise the appearance/blur section to describe the z-layer model.
+  Done: added a new `### Appearance & Frost (z=0 background layer)` section after the Theme section — documents the z=0 gradient, `background_blur`/`background_transparency`/gradient knobs, tiled-vs-floating frost production, and the `terminal_blur`/`terminal_frost_color` migration note.
 
-- [ ] **compositor-task-18** — Update `AGENTS.md` — add z-layer frost model to rendering/appearance notes; reinforce "no hardcoded color — read from theme" rule with the gradient as the canonical example.
+- [x] **compositor-task-18** — Update `AGENTS.md` — add z-layer frost model to rendering/appearance notes; reinforce "no hardcoded color — read from theme" rule with the gradient as the canonical example.
+  Done: added a `### z=0 background frost model (heca-owned, cross-platform)` subsection after the Stack table — documents `BackgroundLayer` as a heca-renderer GPU primitive (NOT a `heca-grid-ui` widget), the render order, the grill-me Q1 opaque-theme translucency rule, the removed knobs, and reinforces the no-hardcoded-color rule with the gradient as the example. Also updated `.planning/research/ARCHITECTURE.md` §3 (Compositor/Renderer) with the z=0 pipeline + `BackgroundLayer` static blur cache + the app-vs-compositor cross-platform rationale.
 
 ### [ ] Phase: Visual tuning with the user · `compositor-05`
 Source: `compositor-blur-refactor-plan.md` Phase 5
