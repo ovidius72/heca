@@ -23,96 +23,6 @@ use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::TextRenderer;
 
-fn content_canvas_fill(
-    theme: &heca_config::theme::Theme,
-    appearance: &heca_config::appearance::AppearanceConfig,
-) -> Option<[f32; 4]> {
-    appearance.is_transparent().then(|| {
-        let mut bg = theme.background.to_f32x4();
-        bg[3] = appearance.opacity();
-        bg
-    })
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct FillRect {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-}
-
-impl FillRect {
-    fn right(self) -> f32 {
-        self.x + self.w
-    }
-
-    fn bottom(self) -> f32 {
-        self.y + self.h
-    }
-}
-
-fn subtract_fill_rect(rect: FillRect, cut: FillRect) -> Vec<FillRect> {
-    let ix0 = rect.x.max(cut.x);
-    let iy0 = rect.y.max(cut.y);
-    let ix1 = rect.right().min(cut.right());
-    let iy1 = rect.bottom().min(cut.bottom());
-
-    if ix0 >= ix1 || iy0 >= iy1 {
-        return vec![rect];
-    }
-
-    let mut out = Vec::with_capacity(4);
-    if iy0 > rect.y {
-        out.push(FillRect {
-            x: rect.x,
-            y: rect.y,
-            w: rect.w,
-            h: iy0 - rect.y,
-        });
-    }
-    if iy1 < rect.bottom() {
-        out.push(FillRect {
-            x: rect.x,
-            y: iy1,
-            w: rect.w,
-            h: rect.bottom() - iy1,
-        });
-    }
-    if ix0 > rect.x {
-        out.push(FillRect {
-            x: rect.x,
-            y: iy0,
-            w: ix0 - rect.x,
-            h: iy1 - iy0,
-        });
-    }
-    if ix1 < rect.right() {
-        out.push(FillRect {
-            x: ix1,
-            y: iy0,
-            w: rect.right() - ix1,
-            h: iy1 - iy0,
-        });
-    }
-    out.into_iter().filter(|r| r.w > 0.0 && r.h > 0.0).collect()
-}
-
-fn uncovered_fill_rects(area: FillRect, occupied: &[FillRect]) -> Vec<FillRect> {
-    let mut rects = vec![area];
-    for cut in occupied {
-        let mut next = Vec::new();
-        for rect in rects {
-            next.extend(subtract_fill_rect(rect, *cut));
-        }
-        rects = next;
-        if rects.is_empty() {
-            break;
-        }
-    }
-    rects
-}
-
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
     match input_mode {
@@ -237,11 +147,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(theme.background.to_f32x4());
     let surface_alpha = state.terminal_surface_opacity();
-    let frost_opacity = state.appearance.terminal_frost_opacity();
     // Floating panes use independent opacity/blur/border knobs so they can stay
     // readable (opaque by default) while tiled panes are frosted.
     let floating_surface_alpha = state.terminal_floating_surface_opacity();
-    let floating_frost_opacity = state.appearance.terminal_floating_frost_opacity();
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -303,6 +211,54 @@ pub(crate) fn render_frame(state: &mut AppState) {
         timestamp_writes: None,
     });
 
+    // ── z=0 background layer (heca-owned frosted gradient) ──
+    //
+    // Bottom-most layer: a blurred vertical gradient composited at
+    // `background_alpha()` (opaque by default per the locked decision). Tiled
+    // panes then render translucent (`surface_alpha`) directly over this — their
+    // frost IS z=0 showing through, not a per-pane tint. Drawn pre-stencil
+    // (`stencil = None`) so the tiled content-clip never clips the background.
+    // `BackgroundLayer` caches the blurred result; it recomputes only on resize
+    // or param change (see `heca-renderer/src/background.rs`).
+    {
+        let top = state
+            .appearance
+            .effective_background_gradient_top(theme)
+            .to_linear_f32x4();
+        let bottom = state
+            .appearance
+            .effective_background_gradient_bottom(theme)
+            .to_linear_f32x4();
+        let blur_radius = state.appearance.background_blur_radius() * scale;
+        state.background.set_params(top, bottom, blur_radius);
+        // Order invariant: BackgroundLayer snapshots the blurred gradient into its
+        // own cache inside `render()`, so the shared `state.blur` is free to be
+        // reused afterwards by the floating-pane frost pass below. The z=0 layer
+        // MUST be rendered BEFORE any other `state.blur` user this frame — if a
+        // later blur user runs first, the z=0 cache would capture that user's
+        // output instead of the gradient. (See `heca-renderer/src/background.rs`.)
+        let bg_view = state.background.render(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            &state.blur,
+        );
+        let vp_w = phys_size.width as f32;
+        let vp_h = phys_size.height as f32;
+        state.backdrop.draw(
+            &state.device,
+            &state.queue,
+            &mut encoder,
+            scene_view,
+            bg_view,
+            (vp_w, vp_h),
+            (0.0, 0.0, vp_w, vp_h),
+            Some([0.0, 0.0, 1.0, 1.0]),
+            state.appearance.background_alpha(),
+            None,
+        );
+    }
+
     let chrome_text = crate::chrome::CHROME_TEXT_SIZE;
     let tb = &chrome;
     // Frosted chrome colors come from the loaded theme's surface tone, with
@@ -329,34 +285,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .text_renderer
         .render(&state.queue, scene_view, &mut encoder, None);
 
-    // ── Frosted terminal backdrop ──
+    // ── Floating-pane real blur ──
     //
-    // heca cannot blur the desktop: macOS vibrancy composites it BEHIND the
-    // window, outside heca's render target, so blurring heca's own (mostly
-    // transparent) scene yields nothing visible — the original `terminal_blur`
-    // "no effect" bug. So the two pane types frost differently:
-    //
-    //   Tiled panes: a frosted-glass TINT (`terminal_frost_color` rect at
-    //     `terminal_frost_opacity()`, sqrt-curved from `terminal_blur`) stamped
-    //     behind the pane over the vibrancy, stencil-clipped to the rounded
-    //     shape. Drawn in Pass A below.
-    //
-    //   Floating panes: a REAL blur pass (the scene then includes tiled content,
-    //     so there's actual content behind a floating pane to frost). One blur
-    //     per frame, stamped behind each floating pane.
-    //
-    // Policy: frost only when the terminal surface is translucent
-    // (`terminal_opacity() < 1.0`) AND `terminal_blur > 0` — otherwise this is
-    // a no-op. Frost strength is driven by `terminal_blur`
-    // (`terminal_frost_opacity()`, sqrt 0..1), independent of `surface_alpha`
-    // (which controls how see-through the terminal surface itself is).
-    //
-    // Correct unit conversion: `terminal_blur_radius()` returns logical px, but
-    // `Blur::process` consumes source-texture pixels (physical px for the
-    // compositor scene texture). Scale by `scale_factor`.
-    let needs_frosted_backdrop = surface_alpha < 1.0
-        && state.appearance.terminal_blur_radius() > 0.0;
-    // Floating frost is gated independently (floating_surface_alpha + terminal_floating_blur).
+    // Floating panes frost the actual tiled content behind them (the scene
+    // already includes tiled panes + z=0), so a real blur pass is captured once
+    // per frame and stamped behind each floating pane at 100% opacity. Tiled
+    // panes frost via the z=0 background layer showing through their translucent
+    // surface (`surface_alpha`) — no per-tiled-pane tint.
     let needs_floating_frost = floating_surface_alpha < 1.0
         && state.appearance.terminal_floating_blur_radius() > 0.0;
     let mut float_blurred_view: Option<&wgpu::TextureView> = None;
@@ -429,34 +364,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         });
     }
 
-    // Tint any uncovered scrolling-area background so empty workspace space keeps
-    // the theme/vibrancy treatment without painting underneath pane rectangles.
-    if let Some(content_bg) = content_canvas_fill(theme, &state.appearance) {
-        let area = FillRect {
-            x: pane_area.loc.x as f32,
-            y: pane_area.loc.y as f32,
-            w: pane_area.size.w as f32,
-            h: pane_area.size.h as f32,
-        };
-        let occupied = tiled_panes
-            .iter()
-            .map(|pane| FillRect {
-                x: pane.x,
-                y: pane.y,
-                w: pane.w,
-                h: pane.h,
-            })
-            .collect::<Vec<_>>();
-        for rect in uncovered_fill_rects(area, &occupied) {
-            state
-                .primitive_renderer
-                .draw_rect(rect.x, rect.y, rect.w, rect.h, content_bg);
-        }
-        state
-            .primitive_renderer
-            .render(&state.device, scene_view, &mut encoder);
-    }
-
     // ── Stencil-write: rounded content-clip mask for tiled panes ──
     //
     // Mark each tiled pane's rounded rect (the full pane, radius =
@@ -498,40 +405,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         state
             .grid_renderer
             .render_stencil(&state.queue, stencil_view, &mut encoder);
-    }
-
-    // ── Pass A: Frosted tint behind tiled panes (under borders + content) ──
-    //
-    // A frosted-glass tint (`terminal_frost_color` at `frost_opacity`) stamped
-    // behind each tiled pane over the vibrancy, stencil-clipped to the pane's
-    // rounded shape. Drawn first so borders (Pass 3) + terminal content (Pass 2)
-    // sit on top. heca can't blur the desktop (vibrancy composites it behind the
-    // window), so `terminal_blur` drives this tint's strength instead of a real
-    // blur of an empty scene. Floating panes keep the real blur (see below).
-    if needs_frosted_backdrop {
-        let frost_color = state
-            .appearance
-            .effective_terminal_frost_color(theme)
-            .to_f32x4();
-        // Frost the full pane rect (not the inset content rect) so the frosted
-        // tint fills the whole pane — the content padding reads as a frosted
-        // inner margin, not an empty gap. The stencil clips it to the rounded shape.
-        for pane in &tiled_panes {
-            state.primitive_renderer.draw_rect(
-                pane.x,
-                pane.y,
-                pane.w,
-                pane.h,
-                [frost_color[0], frost_color[1], frost_color[2], frost_opacity],
-            );
-        }
-        state.primitive_renderer.render_clipped(
-            &state.device,
-            scene_view,
-            &mut encoder,
-            None,
-            Some(stencil_view),
-        );
     }
 
     // ── Pass 2: Terminal content ──
@@ -753,7 +626,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     (vp_w, vp_h),
                     dst,
                     None,
-                    floating_frost_opacity,
+                    1.0,
                     Some(stencil_view),
                 );
             } else {
@@ -1147,51 +1020,10 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 
 #[cfg(test)]
 mod tests {
-    use super::{content_canvas_fill, status_mode_parts, uncovered_fill_rects, FillRect};
+    use super::status_mode_parts;
     use crate::app_state::{InputMode, RenameTarget};
     use crate::input::WmAction;
     use heca_core::layout::PaneId;
-
-    #[test]
-    fn content_canvas_fill_is_none_when_window_is_opaque() {
-        let theme = heca_config::theme::load("latte");
-        let appearance = heca_config::appearance::AppearanceConfig::default();
-        assert_eq!(content_canvas_fill(&theme, &appearance), None);
-    }
-
-    #[test]
-    fn content_canvas_fill_uses_theme_background_and_app_opacity() {
-        let theme = heca_config::theme::load("latte");
-        let appearance = heca_config::appearance::AppearanceConfig {
-            transparency: 30,
-            ..Default::default()
-        };
-        let fill = content_canvas_fill(&theme, &appearance)
-            .expect("transparent window should tint empty pane-less content area");
-        assert_eq!(fill[0], theme.background.r as f32 / 255.0);
-        assert_eq!(fill[1], theme.background.g as f32 / 255.0);
-        assert_eq!(fill[2], theme.background.b as f32 / 255.0);
-        assert!((fill[3] - 0.7).abs() < 1e-6);
-    }
-
-    #[test]
-    fn uncovered_fill_rects_exclude_pane_rectangles() {
-        let area = FillRect {
-            x: 0.0,
-            y: 0.0,
-            w: 100.0,
-            h: 100.0,
-        };
-        let occupied = [FillRect {
-            x: 10.0,
-            y: 10.0,
-            w: 30.0,
-            h: 40.0,
-        }];
-        let rects = uncovered_fill_rects(area, &occupied);
-        assert!(rects.iter().all(|r| !(r.x < 40.0 && r.right() > 10.0 && r.y < 50.0 && r.bottom() > 10.0)));
-        assert!(rects.iter().any(|r| r.x >= 40.0), "right-side empty space should remain fillable");
-    }
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {

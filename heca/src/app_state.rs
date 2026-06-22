@@ -8,6 +8,7 @@ use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
+use heca_renderer::background::BackgroundLayer;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::blur::Blur;
 use heca_renderer::composite::Compositor;
@@ -279,6 +280,10 @@ pub struct AppState {
     /// Backdrop sampler (shared, stateless pipeline). Draws blurred scene regions
     /// into arbitrary on-screen rects with alpha blending.
     pub backdrop: Backdrop,
+    /// z=0 heca-owned frosted gradient background layer (the bottom-most layer
+    /// panes composite translucently over). Cached; recomputes only on resize
+    /// or gradient/blur param change. See `heca-renderer/src/background.rs`.
+    pub background: BackgroundLayer,
     /// Host-owned git metadata cache keyed by repo root / pane cwd.
     pub git_runtime_cache: crate::app::git_monitor::GitRuntimeCache,
     pub session: Session,
@@ -364,9 +369,9 @@ impl AppState {
     /// terminal-specific `terminal_opacity()` otherwise. This is the alpha used
     /// for the translucent pane surface fill drawn over the frosted backdrop.
     ///
-    /// In-app blur (frosted backdrop) is only drawn when this value is < 1.0
-    /// AND `appearance.terminal_blur_radius() > 0`. See `render_frame` for the
-    /// policy.
+    /// In the z=0 model, the tiled frost is the background layer showing through
+    /// the translucent terminal surface, so this is simply the surface alpha
+    /// used when compositing the terminal over z=0. See `render_frame`.
     pub fn terminal_surface_opacity(&self) -> f32 {
         if self.appearance.terminal_transparency > 0 {
             self.appearance.terminal_opacity()
