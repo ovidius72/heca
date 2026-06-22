@@ -101,8 +101,6 @@ background = "#1e1e2e"
 foreground = "#cdd6f4"
 border = "#313244"
 accent = "#89b4fa"
-font_family = "JetBrainsMono Nerd Font"
-font_size = 32.0
 border_radius = 6.0
 border_width = 1.0
 
@@ -110,6 +108,21 @@ border_width = 1.0
 color = "#000000"
 alpha = 0.3
 blur = 8.0
+```
+
+Fonts are **not** part of the color theme (they are system-local, not
+theme-portable). Configure them in the dedicated `[font]` block:
+
+```toml
+[font.family.ui]
+normal = "Geist Mono"
+
+[font.family.terminal]
+normal = "Maple Mono Normal NF"
+
+[font.size]
+ui = 15.0
+terminal = 14.0
 ```
 
 ## Settings

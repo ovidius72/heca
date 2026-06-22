@@ -50,13 +50,50 @@ impl SelectionOverlay {
 
 pub struct TerminalStyle<'a> {
     pub font_size: f32,
-    pub font_family: &'a str,
-    pub italic_font_family: &'a str,
+    pub families: TerminalFontFamilies<'a>,
     /// Alpha multiplier for the terminal surface background.
     /// 1.0 = fully opaque (no transparency). When < 1.0, the default-bg fill
     /// becomes translucent so a frosted backdrop can show through.
     /// Derived from `AppearanceConfig::opacity()`.
     pub surface_alpha: f32,
+}
+
+/// Per-style font family slots for terminal rendering, mirroring the app's
+/// `heca_config::font::FontFamilyGroup` but living in the renderer so the
+/// renderer stays config-free. Optional slots fall back to `normal` via
+/// [`TerminalFontFamilies::resolve`]; the renderer then selects the face with
+/// `Weight::BOLD` / `Style::Italic` (or a synthesized oblique when the resolved
+/// family is `normal` and no distinct italic face exists).
+#[derive(Clone, Copy)]
+pub struct TerminalFontFamilies<'a> {
+    /// Base (regular) family.
+    pub normal: &'a str,
+    /// Optional distinct family for bold runs. Unset → `normal` + weight-based
+    /// bold face selection within the family.
+    pub bold: Option<&'a str>,
+    /// Optional distinct family for italic runs. Unset → `normal` + synthesized
+    /// oblique.
+    pub italic: Option<&'a str>,
+    /// Optional distinct family for bold-italic runs. Unset → `italic` → `bold`
+    /// → `normal`.
+    pub bold_italic: Option<&'a str>,
+}
+
+impl<'a> TerminalFontFamilies<'a> {
+    /// Resolve the family name for a given (bold, italic) style combination,
+    /// applying the fallback chain: bold_italic → italic → bold → normal.
+    pub fn resolve(&self, bold: bool, italic: bool) -> &'a str {
+        match (bold, italic) {
+            (true, true) => self
+                .bold_italic
+                .or(self.italic)
+                .or(self.bold)
+                .unwrap_or(self.normal),
+            (true, false) => self.bold.unwrap_or(self.normal),
+            (false, true) => self.italic.unwrap_or(self.normal),
+            (false, false) => self.normal,
+        }
+    }
 }
 
 pub struct TerminalRenderer<'a> {
@@ -274,6 +311,13 @@ fn render_terminal_lines(
                 continue;
             }
 
+            // Resolve the per-style family once for this cell, then decide
+            // real-italic vs synthesized oblique: a distinct italic family was
+            // resolved only when it differs from `normal` (fallback). This
+            // generalizes the old `italic_family != font_family` check to all
+            // four style slots.
+            let resolved = style.families.resolve(cell.bold, cell.italic);
+            let is_faux_italic = cell.italic && resolved == style.families.normal;
             text_renderer.queue_text_in_line_box_with_style(
                 &cell.text,
                 TextBox {
@@ -286,13 +330,9 @@ fn render_terminal_lines(
                 TextStyle {
                     color: cell.fg,
                     bold: cell.bold,
-                    italic: cell.italic && style.italic_font_family != style.font_family,
-                    faux_italic: cell.italic && style.italic_font_family == style.font_family,
-                    font_family: Some(if cell.italic {
-                        style.italic_font_family
-                    } else {
-                        style.font_family
-                    }),
+                    italic: cell.italic && !is_faux_italic,
+                    faux_italic: is_faux_italic,
+                    font_family: Some(resolved),
                 },
                 TextAlign::Start,
                 false,
@@ -710,7 +750,7 @@ fn fitted_grid(rect: TextBox, cell_w: f32, cell_h: f32) -> (usize, usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_default_bg, with_surface_alpha};
+    use super::{is_default_bg, with_surface_alpha, TerminalFontFamilies};
 
     #[test]
     fn with_surface_alpha_scales_alpha_only() {
@@ -734,5 +774,55 @@ mod tests {
         let bg = [0.1, 0.2, 0.3, 1.0];
         assert!(is_default_bg(bg, bg));
         assert!(!is_default_bg(bg, [0.1, 0.2, 0.31, 1.0]));
+    }
+
+    #[test]
+    fn terminal_families_resolve_falls_back_to_normal() {
+        // No per-style overrides: every style resolves to `normal`.
+        let f = TerminalFontFamilies {
+            normal: "Maple Mono Normal NF",
+            bold: None,
+            italic: None,
+            bold_italic: None,
+        };
+        assert_eq!(f.resolve(false, false), "Maple Mono Normal NF");
+        assert_eq!(f.resolve(true, false), "Maple Mono Normal NF");
+        assert_eq!(f.resolve(false, true), "Maple Mono Normal NF");
+        assert_eq!(f.resolve(true, true), "Maple Mono Normal NF");
+    }
+
+    #[test]
+    fn terminal_families_resolve_bold_italic_falls_back_to_bold_when_italic_unset() {
+        // Edge case from the review: bold+italic with bold_italic=None and
+        // italic=None but bold=Some → resolve to the bold family (not normal).
+        // The render loop then sets `is_faux_italic = resolved == normal` →
+        // false, so the bold family is used with a real italic request rather
+        // than a faux-italic on normal. This is the improvement over the old
+        // `italic_font_family == font_family` comparison.
+        let f = TerminalFontFamilies {
+            normal: "Maple Mono Normal NF",
+            bold: Some("Maple Mono Bold NF"),
+            italic: None,
+            bold_italic: None,
+        };
+        assert_eq!(f.resolve(true, true), "Maple Mono Bold NF");
+        assert_eq!(f.resolve(true, false), "Maple Mono Bold NF");
+        // italic-only still falls back to normal (faux italic).
+        assert_eq!(f.resolve(false, true), "Maple Mono Normal NF");
+    }
+
+    #[test]
+    fn terminal_families_resolve_full_chain() {
+        // All four slots set: each style picks its own family.
+        let f = TerminalFontFamilies {
+            normal: "Regular",
+            bold: Some("Bold"),
+            italic: Some("Italic"),
+            bold_italic: Some("BoldItalic"),
+        };
+        assert_eq!(f.resolve(false, false), "Regular");
+        assert_eq!(f.resolve(true, false), "Bold");
+        assert_eq!(f.resolve(false, true), "Italic");
+        assert_eq!(f.resolve(true, true), "BoldItalic");
     }
 }
