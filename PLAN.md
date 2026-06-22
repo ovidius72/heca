@@ -197,6 +197,23 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 ---
 
 ## Foundation gaps (open, lower urgency)
+- **Damage-region render (scene preservation) — deferred optimization.** `heca-renderer`'s
+  `composite.rs` keeps a *persistent* scene texture precisely so a frame can re-render only the
+  changed region (scissored) and let unchanged pixels survive — cheap idle/animation frames (a cursor
+  blink, a hover glow) instead of repainting the whole UI 60×/s (battery/heat win, esp. an idle
+  terminal). **It is NOT realized today:** `render_frame` clears the whole scene every frame and
+  redraws every pane in full, so nothing is preserved to build on. The chrome-level `ChromeDamageMode`
+  (Full/Tracked/ForceFullOnNextRequest) was the app-side gate for this, but layered over the per-frame
+  clear it only ever *dropped* chrome content → the dark "re-render flash" on the split button's press
+  animation. **Fixed 2026-06-22 (PR TBD)** by making chrome **always full-repaint** (`render.rs`
+  `damage: None`) and **removing the dead `ChromeDamageMode` machinery** (unsound as built). To
+  actually land the optimization later: (1) stop the unconditional per-frame scene clear; (2) make
+  **panes** damage-aware (only re-render changed pane regions), not just chrome; (3) scissor the clear
+  + each renderer to the union damage rect against the preserved scene; (4) re-introduce an app-side
+  damage gate. Renderer-level `GridRenderer::set_damage` + the compositor preserved scene already
+  exist to build on. **Risk:** rendering correctness (transparent-pane double-blend, stale pixels) —
+  verify by running the app (GPU ordering isn't unit-tested). Relates to the §"P0" reconciliation note
+  ("feed signal changes into the `needs_paint`/`collect_damage` path — the deep part of the work").
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.

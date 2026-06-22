@@ -10,7 +10,7 @@ use crate::app::terminal_render::{
     stable_tiled_content_rect, PaneRenderState, TerminalPaneShell,
     TerminalRenderPassContext,
 };
-use crate::app_state::{AppState, ChromeDamageMode, InputMode};
+use crate::app_state::{AppState, InputMode};
 use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_grid_ui::Component;
@@ -989,12 +989,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         // event to flush the signal-backed structure.
         tree.root.tick(0.0);
     }
-    if matches!(state.chrome_damage_mode, ChromeDamageMode::Full) && chrome_signals_changed {
-        state.chrome_damage_mode = ChromeDamageMode::ForceFullOnNextRequest;
-    }
-    let chrome_damage = heca_grid_ui::collect_damage(
-        &state.chrome_tree.as_ref().expect("chrome tree set above").root,
-    );
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene = crate::chrome::paint_chrome_root(
         &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
@@ -1014,18 +1008,20 @@ pub(crate) fn render_frame(state: &mut AppState) {
         &state.queue,
         &chrome_scene,
         ChromePassOpts {
-            damage: match state.chrome_damage_mode {
-                ChromeDamageMode::Full | ChromeDamageMode::ForceFullOnNextRequest => None,
-                ChromeDamageMode::Tracked => chrome_damage,
-            },
+            // Always repaint the full chrome. The scene texture is cleared every
+            // frame (the clear pass above) and panes redraw in full, so a partial
+            // (damage-scissored) chrome repaint would leave the rest of the chrome
+            // (sidebars + tab/status bars) as bare background for that frame — the
+            // dark "re-render" flash seen mid-animation (e.g. the split button's
+            // press flash). Partial chrome is only sound with a *preserved* scene,
+            // which this render path does not keep. See PLAN.md "Damage-region
+            // render" for the deferred optimization that would make it sound.
+            damage: None,
             glow_alpha_scale,
         },
         scene_view,
         &mut encoder,
     );
-    if !matches!(state.chrome_damage_mode, ChromeDamageMode::ForceFullOnNextRequest) {
-        state.chrome_damage_mode = ChromeDamageMode::Full;
-    }
 
     state.compositor.blit(&view, &mut encoder);
     state.queue.submit(std::iter::once(encoder.finish()));

@@ -13,7 +13,7 @@ use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
 };
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
-use crate::app_state::{AppState, ChromeDamageMode};
+use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use std::collections::HashMap;
@@ -41,7 +41,6 @@ pub(crate) fn handle_window_event(
     match event {
         WindowEvent::CloseRequested => event_loop.exit(),
         WindowEvent::Resized(phys) if phys.width > 0 && phys.height > 0 => {
-            state.chrome_damage_mode = ChromeDamageMode::Full;
             state.surface_config.width = phys.width;
             state.surface_config.height = phys.height;
             state

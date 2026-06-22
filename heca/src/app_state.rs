@@ -292,12 +292,6 @@ pub struct AppState {
     pub terminal_cell_size: (f32, f32),
     pub scale_factor: f64,
     pub needs_redraw: bool,
-    /// Chrome repaint policy for the next frame.
-    ///
-    /// Retained-widget damage is only safe on frames driven purely by retained
-    /// invalidation/animation. Input, layout, and backend-driven frames repaint
-    /// the full chrome so the preserved composite cannot leave stale pixels.
-    pub chrome_damage_mode: ChromeDamageMode,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
     /// The sidebar tree model for workspace/pane tree navigation.
@@ -349,21 +343,9 @@ pub struct AppState {
     pub current_cursor: winit::window::CursorIcon,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ChromeDamageMode {
-    #[default]
-    Full,
-    Tracked,
-    /// The current frame repaints chrome fully, and the next retained-tree
-    /// `RequestRedraw` must also repaint fully before the policy can return to
-    /// tracked damage.
-    ForceFullOnNextRequest,
-}
-
 impl AppState {
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
-        self.chrome_damage_mode = ChromeDamageMode::Full;
     }
 
     /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over
