@@ -5,7 +5,7 @@
 
 use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
-use crate::app_state::{AppState, ChromeDamageMode, InputMode};
+use crate::app_state::{AppState, InputMode};
 use heca_core::backend::BackendAlert;
 use heca_grid_ui::Component;
 use crate::mouse;
@@ -57,7 +57,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     let edge_scrolled = mouse::process_edge_scroll(state);
     if edge_scrolled {
         after_config_change(state);
-        state.chrome_damage_mode = ChromeDamageMode::Full;
     }
 
     if state.mouse.drag_ctx.is_dragging() || state.mouse.interactive_move.is_some() {
@@ -84,21 +83,6 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         state
             .window
             .request_user_attention(Some(UserAttentionType::Informational));
-    }
-    if chrome_runtime_changed {
-        state.chrome_damage_mode = ChromeDamageMode::Full;
-    }
-
-    let animation_only_redraw =
-        !state.needs_redraw
-            && !backend_poll.has_data
-            && !backend_poll.closed_any
-            && !chrome_runtime_changed
-            && (state.session.are_animations_ongoing() || chrome_animating);
-    if animation_only_redraw {
-        state.chrome_damage_mode = ChromeDamageMode::Tracked;
-    } else if backend_poll.has_data || backend_poll.closed_any {
-        state.chrome_damage_mode = ChromeDamageMode::Full;
     }
 
     let needs_frame = state.needs_redraw

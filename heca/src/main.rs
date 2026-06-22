@@ -25,7 +25,7 @@ use app::registry::{build_keymap, build_modes, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
-use app_state::{AppState, ChromeDamageMode};
+use app_state::AppState;
 use heca_config::theme::AppConfig;
 use input::WmAction;
 use std::collections::HashMap;
@@ -215,18 +215,11 @@ impl ApplicationHandler<AppEvent> for HecaApp {
                 let backend_poll = poll_backends(state);
                 let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
                 if backend_poll.has_data || backend_poll.closed_any || chrome_runtime_changed {
-                    if chrome_runtime_changed {
-                        state.chrome_damage_mode = ChromeDamageMode::Full;
-                    }
                     state.mark_full_redraw();
                     state.window.request_redraw();
                 }
             }
             AppEvent::RequestRedraw => {
-                state.chrome_damage_mode = match state.chrome_damage_mode {
-                    ChromeDamageMode::ForceFullOnNextRequest => ChromeDamageMode::Full,
-                    _ => ChromeDamageMode::Tracked,
-                };
                 state.needs_redraw = true;
                 state.window.request_redraw();
             }
