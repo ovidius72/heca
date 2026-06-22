@@ -1117,11 +1117,11 @@ Done when:
 
 ## Phase 8
 
-- [ ] 8.1 Define pane-shell hosting contract
-- [ ] 8.2 Adapt terminal host to `heca-grid-ui` pane shell
-- [ ] 8.3 Add process-aware pane state model
-- [ ] 8.4 Define future global process metadata channel
-- [ ] 8.5 Keep terminal host pane-agnostic
+- [~] 8.1 Define pane-shell hosting contract — implicit via `heca/src/app/terminal_host.rs` Rectangle-based mount; not yet formalized as a documented content-slot contract
+- [~] 8.2 Adapt terminal host to `heca-grid-ui` pane shell — terminals render inside `heca_grid_ui::widgets::Pane` via `paint_terminal_pane_shell` (border/radius fixed #121/#122); outer chrome/layout still owned by `heca/src/app/render.rs`, so full shell-owned migration is Phase 13
+- [x] 8.3 Add process-aware pane state model — `ProcessStatus { Running, Idle, Success, Error }` + `PaneRuntime` in `heca-core/src/runtime`; `PaneBackend::runtime()`; `TerminalBackend`/`FakeBackend` report it (pane-runtime-state initiative, archived/shipped)
+- [x] 8.4 Define future global process metadata channel — `heca/src/host.rs` exposes `pane_runtime()`/`pane_status()` selectors + `App::on(event)` event bus; chrome store mirrors `PaneRuntime` via signals
+- [~] 8.5 Keep terminal host pane-agnostic — `terminal_host.rs` depends only on content/clip rects + focus/state/style inputs; not yet formally verified against a real pane-shell swap
 
 ## Review Backlog
 
@@ -1147,26 +1147,21 @@ Recommended ownership:
 
 ## Overall Acceptance
 
-- [ ] Real shell renders in panes
+> Reconciled 2026-06-21 against the current codebase. Items marked with a status
+> note reflect verified reality, not the doc's prior self-report.
+
 - [x] Real shell renders in panes
-- [ ] No pane-border text overlap
 - [x] No pane-border text overlap
-- [ ] No center title overlay inside terminal content
 - [x] No center title overlay inside terminal content
-- [ ] No per-frame full-grid reconstruction as the default path
-- [x] No per-frame full-grid reconstruction as the default path
-- [ ] Redraws are prompt and bounded
+- [ ] No per-frame full-grid reconstruction as the default path — **OPEN**: `heca-renderer/src/terminal.rs` still iterates `lines.iter().take(max_rows)` and renders every visible cell each frame (Phase 3.5 dirty-region)
 - [x] Redraws are prompt and bounded
-- [ ] Terminal font loads from `config.toml`
 - [x] Terminal font loads from `config.toml`
-- [ ] Truecolor output works
 - [x] Truecolor output works
-- [ ] Unicode fallback works
-- [ ] Mouse-aware TUIs work
+- [ ] Unicode fallback works — **UNVERIFIED** (awaiting Phase 7.3 manual validation matrix)
 - [x] Mouse-aware TUIs work
-- [ ] Architecture is documented and handoff is current
-- [ ] Terminal host can mount cleanly inside future `heca-grid-ui` pane shell
-- [ ] Pane shell can reflect process/global-state metadata without coupling to terminal rendering internals
+- [ ] Architecture is documented and handoff is current — **in progress**: this reconcile pass updates the handoff; architecture reference prose is still valid
+- [x] Terminal host can mount cleanly inside future `heca-grid-ui` pane shell — terminals render via `heca_grid_ui::widgets::Pane` (`paint_terminal_pane_shell`); full shell-owned chrome migration = Phase 13
+- [x] Pane shell can reflect process/global-state metadata without coupling to terminal rendering internals — `heca/src/host.rs` `pane_runtime()`/`pane_status()` selectors + chrome store `PaneRuntime` mirror
 
 ---
 
@@ -1183,13 +1178,28 @@ This section must be updated:
 
 ### Current Status
 
+> **RECONCILE (2026-06-21):** the Progress Checklist, Overall Acceptance, and Phase 8/9/13
+> checklists were re-ticked against the current codebase this pass. Findings: Phase 8.3/8.4 and
+> Phase 9.1/9.2 (+ most of the Phase 9 task checklist) are **done** and were wrongly unchecked;
+> the terminal `Pane` shell border/radius blocker is **fixed** (#121/#122). The only carry-over
+> from the old blocker is `terminal_blur`, now being resolved by `compositor-blur-refactor-plan.md`
+> (z=0 background model) — that plan supersedes the tiled-tint approach. Note also PR #160
+> (`frappe`→`latte` theme-unification) set `latte.toml` `terminal_background = "#e6e9ef00"`
+> (alpha 0), which bypasses the `terminal_transparency`→`surface_alpha` channel and is the
+> prime suspect for the deferred “no blur/transparency” regression; the compositor-blur plan's
+> Phase 3 critical review owns reconciling which channel owns pane translucency.
+
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: Phase 3 terminal-core work is complete and merged; remaining terminal tasks are post-merge backlog items
+- Active implementation phase: terminal core (Phases 0–5) is complete and merged; Phase 6 partial (6.1/6.2 done, 6.3 ligatures + 6.4 richer-protocol hooks open); Phase 7 partial (only 7.4 done — 7.1/7.2 tests + 7.3 manual validation matrix open); Phase 8 partial (8.3/8.4 done, 8.1/8.2/8.5 partial); Phase 9 partial (state model + actions + caret done, backend-capability contract + full terminal migration open); Phases 10–13 unbuilt (Phase 13 overlaps the partial Phase 8 pane-shell work)
+- Last completed phase: Phase 5 (input fidelity). Phase 6/7/8/9 are in-progress/partial; Phases 10–13 are backlog.
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
   - cursor/text regressions after the sync
   - measured terminal metrics replacing theme-ratio bootstrapping for PTY grid sizing
+  - pane-runtime-state initiative (Phases 8.3/8.4) shipped + archived
+  - selection model + action wiring (Phase 9.1/9.2) landed
+  - `frappe`→`latte` theme-unification (PR #160) and its terminal-bg-alpha interaction
 - Last completed phase: Phase 2
 
 ### Latest Decisions
@@ -1570,18 +1580,18 @@ The exact Rust type names can evolve, but the contract must support:
 
 ### Phase 9 checklist
 
-- [ ] Define the shared selection state in app/core terms
-- [ ] Define action names and input-mode integration
-- [ ] Add a keyboard caret model separate from “selection already exists”
-- [ ] Define backend/surface capability contract
-- [ ] Refactor current terminal-only selection groundwork onto the shared model
-- [ ] Implement host-rendered selection for terminal panes
-- [ ] Add keyboard-driven selection mode
-- [ ] Add explicit begin-selection actions (`v`, `Space`)
-- [ ] Add active-end inversion action (`o`)
-- [ ] Add copy action on top of shared selection
-- [ ] Add RPC-facing hooks where meaningful
-- [ ] Document pane-type-specific mouse entry rules
+- [x] Define the shared selection state in app/core terms — `SelectionState` (Inactive/Caret/Selecting/Selected) + `SelectionRegion::{HostGrid,BackendNative}` in `heca/src/app/selection_model.rs`
+- [x] Define action names and input-mode integration — all selection `WmAction`s in `heca/src/input.rs`, wired via `ActionRegistry`, `interaction.rs` (`FocusedPaneLocal`), `rpc.rs` parsers, `app/registry.rs` bindings
+- [x] Add a keyboard caret model separate from “selection already exists” — `SelectionState::Caret` variant + begin/toggle/end transitions
+- [ ] Define backend/surface capability contract — `selection_model_kind` / `supports_selection` / `begin_selection` / `selection_text` boundary not yet formalized as a trait
+- [ ] Refactor current terminal-only selection groundwork onto the shared model — terminal adapter not yet fully migrated onto the shared owner model
+- [x] Implement host-rendered selection for terminal panes — `selection_overlay_for_pane` + `build_selection_overlay` in `heca/src/app/terminal_render.rs` (HostGrid rendering)
+- [x] Add keyboard-driven selection mode — `InputMode::Selection` + caret movement
+- [x] Add explicit begin-selection actions (`v`, `Space`) — `WmAction::BeginSelection`
+- [x] Add active-end inversion action (`o`) — `WmAction::ToggleSelectionEndpoint`
+- [~] Add copy action on top of shared selection — `WmAction::CopySelection` exists; system-clipboard wiring is Phase 10 (not yet implemented)
+- [x] Add RPC-facing hooks where meaningful — `heca/src/rpc.rs` selection commands
+- [ ] Document pane-type-specific mouse entry rules — **OPEN** (deferred to Phase 11.3)
 
 ### Phase 9 tasks
 
@@ -1740,10 +1750,10 @@ Goal:
 
 ### Phase 13 checklist
 
-- [ ] terminal host mounted as content inside pane shell
-- [ ] process-aware shell state surfaced cleanly
-- [ ] selection/copy/paste actions still reachable through mouse, keyboard, and RPC after shell migration
-- [ ] float/transparency/blur planning remains shell-owned, not terminal-owned
+- [~] terminal host mounted as content inside pane shell — partly: terminals render via `heca_grid_ui::widgets::Pane` (`paint_terminal_pane_shell`), but outer chrome/layout is still owned by `heca/src/app/render.rs`, not a shell host
+- [x] process-aware shell state surfaced cleanly — `PaneRuntime` → chrome store → `heca/src/host.rs` selectors
+- [ ] selection/copy/paste actions still reachable through mouse, keyboard, and RPC after shell migration — not yet verified post shell-migration (shell migration itself pending)
+- [ ] float/transparency/blur planning remains shell-owned, not terminal-owned — **OPEN**: blur/frost is being resolved by `compositor-blur-refactor-plan.md` (z=0 background model); ownership boundary not yet settled
 
 ### In-Flight Work
 
@@ -1771,10 +1781,21 @@ Goal:
 >   Tracked as `shared-tasks.md` **Task 07 → Accepted**.
 > - **`terminal_blur`: partly addressed** by PR #125 (terminal-blur), but `PLAN.md` notes the blur rework is
 >   still WIP — verify before considering it closed. This is the only item from this section still open.
+>   **(2026-06-21 update)** — the blur/frost regression is now owned by `compositor-blur-refactor-plan.md`
+>   (z=0 background model), which supersedes the tiled-tint approach. PR #160's `latte.toml`
+>   `terminal_background = "#e6e9ef00"` (alpha 0) bypasses `terminal_transparency`→`surface_alpha` and is
+>   the prime suspect for the “no blur/transparency” regression; the compositor-blur plan's Phase 3
+>   critical review owns the translucency-channel reconciliation.
 > - Selection (Phase 9) is **partly built** — `EnterSelectionMode` / `SelectionLeft..Down` / `CopySelection`
 >   / `ToggleSelectionEndpoint` already exist as `WmAction`s in `heca/src/app/interaction.rs`.
+>   **(2026-06-21 update)** — verified further: `SelectionState` (Inactive/Caret/Selecting/Selected) +
+>   `SelectionRenderMode::{HostGrid,BackendNative}` exist in `heca/src/app/selection_model.rs`; the Phase 9
+>   checklist is now re-ticked (9.1/9.2 + most task items done; backend-capability contract + full terminal
+>   migration remain open).
 > - The phase checklists / Overall Acceptance below were **not** re-ticked box-by-box this pass (each needs
 >   its own code check). Do a fresh-session pass to mark Phase 8/13 + Overall Acceptance accurately.
+>   **(2026-06-21 update)** — DONE this pass: Phase 8/9/13 checklists + Overall Acceptance re-ticked against
+>   the codebase (see the reconcile note in `### Current Status` above).
 
 Current user-verified state:
 
@@ -1911,7 +1932,11 @@ Uncommitted local files at pause point for this blocker:
   see the RECONCILE note under "Current Blocker"; `shared-tasks.md` Task 07 → Accepted). Phase 13 pane-shell
   hosting is **no longer blocked** on border/radius.
 - **Still open:** `terminal_blur` — partly addressed by #125 but the blur rework is WIP per `PLAN.md`; verify
-  whether values produce a clearly distinct visual response before closing.
+  whether values produce a clearly distinct visual response before closing. **(2026-06-21)** The active
+  resolution path is now `compositor-blur-refactor-plan.md` (z=0 background model, which supersedes the
+  tiled-tint approach). That plan has been reconciled with PR #160; its Phase 3 critical review owns the
+  `latte.toml` transparent-bg / `surface_alpha` reconciliation. Do **not** fix the blur regression ad hoc in
+  `heca/src/app/render.rs` — route all frost/blur work through the compositor-blur plan.
 
 ### Verification State
 
