@@ -143,6 +143,15 @@ pub struct Theme {
     /// light backgrounds); on this dark theme the default is higher so the
     /// two-tone reads.
     pub icon_secondary_alpha: f32,
+    /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
+    /// overlay a [`DockFrame`](crate::widgets::DockFrame) paints over itself when
+    /// marked active (e.g. the active workspace in the sidebar). Theme-driven, not
+    /// baked into the widget.
+    pub active_wash_alpha: f32,
+    /// Opacity (`0.0..=1.0`) of a sidebar/list card's resting background tint
+    /// (e.g. each pane card). Kept very low so the card reads as a subtle raised
+    /// surface rather than a filled block.
+    pub card_background_alpha: f32,
 }
 
 impl Default for Theme {
@@ -187,6 +196,8 @@ impl Theme {
             intensity: Intensity::Medium,
             show_focus_border: true,
             icon_secondary_alpha: 0.45,
+            active_wash_alpha: 0.11,
+            card_background_alpha: 0.02,
         }
     }
 
@@ -213,6 +224,8 @@ impl Theme {
             intensity: Intensity::Medium,
             show_focus_border: true,
             icon_secondary_alpha: 0.45,
+            active_wash_alpha: 0.11,
+            card_background_alpha: 0.02,
         }
     }
 }

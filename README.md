@@ -464,6 +464,10 @@ sidebar_drag_source_border = "#89b4fa"   # Source item border (accent)
 sidebar_label_font_size = 14.0    # Workspace/column/pane labels
 sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 
+# Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
+active_wash_alpha = 0.11          # Accent wash over the active workspace
+card_background_alpha = 0.02      # Resting background tint of each pane card
+
 [shadow]
 color = "#000000"
 alpha = 0.3

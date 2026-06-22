@@ -23,6 +23,8 @@ glow_size = "none"
 intensity = "off"
 show_focus_border = false
 icon_secondary_alpha = 0.2
+active_wash_alpha = 0.11
+card_background_alpha = 0.02
 shadow = { color = "#000000", alpha = 0.15, blur = 8.0 }
 float_background = "#e6e9ef"
 float_accent = "#1e66f5"
