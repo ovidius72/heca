@@ -129,7 +129,6 @@ impl Component for Badge {
         // Pill widget: round harder than a box (×2), clamped to the capsule max —
         // radius:0 → square, a moderate radius → full pill.
         let radius = (cx.theme().radius * 2.0).min((pill.size.h / 2.0) as f32);
-        let white = Color::rgb(255, 255, 255);
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
             (Color::TRANSPARENT, muted, foreground, None)
@@ -147,7 +146,7 @@ impl Component for Badge {
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
-            (c.with_alpha(FILL_ALPHA), c, c.lerp(white, 0.25), glow)
+            (c.with_alpha(FILL_ALPHA), c, c.lerp(foreground, 0.25), glow)
         };
 
         let border = cx.border(border_c);

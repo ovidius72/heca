@@ -114,7 +114,7 @@ const ZOOM_STEP: f32 = 0.25;
 const APP_TITLE: &str = "heca-grid-ui showcase";
 
 /// Theme names loadable via `heca_theme::load_theme`, in cycle order.
-const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "frappe"];
+const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 
 /// Map a `heca_theme::Theme` onto a grid-ui `Theme`, bridging the two crates
 /// until Phase 3B migrates grid-ui to re-export from `heca-theme`.
@@ -324,7 +324,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Button::ghost("GHOST"))
                 .child(Button::link("LINK"))
                 .child(Button::destructive("DESTRUCTIVE").on_click(click("DESTRUCTIVE")))
-                // Theme switcher: click to cycle grid_tron → mocha → frappe → …
+                // Theme switcher: click to cycle grid_tron → mocha → latte → …
                 // The label shows the current theme name; the showcase tree is
                 // rebuilt on change so every widget picks up the new palette.
                 .child(

@@ -74,14 +74,22 @@ impl ChromeConfig {
     /// Compute the rectangle available for pane content, given a window size.
     /// Chrome occupies the outer edges; panes get the center.
     pub fn content_rect(&self, window_width: f32, window_height: f32) -> Rectangle {
-        let x = self.left_sidebar_width;
+        let sidebar_gap = self.sidebar_gap.max(0.0);
+        let x = self.left_sidebar_width
+            + if self.left_sidebar_width > 0.0 {
+                sidebar_gap
+            } else {
+                0.0
+            };
         let y = self.tab_bar_height;
-        let w = window_width
-            - x
-            - self
-                .right_sidebar_width
-                .min(window_width - x);
-        let h = window_height - self.tab_bar_height - self.status_bar_height;
+        let right_reserved = self.right_sidebar_width
+            + if self.right_sidebar_width > 0.0 {
+                sidebar_gap
+            } else {
+                0.0
+            };
+        let w = (window_width - x - right_reserved.min((window_width - x).max(0.0))).max(0.0);
+        let h = (window_height - self.tab_bar_height - self.status_bar_height).max(0.0);
         Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
     }
 }
@@ -1322,26 +1330,32 @@ fn build_sidebar_shell(
     Flex::column()
         .width(Length::Px(left_w))
         .height(Length::Px(sidebar_h))
-        .padding(sidebar_gap)
         .child(
-            Pane::new()
-                .bracketed()
-                .width(Length::Px(inner_w))
-                .height(Length::Px(inner_h))
-                .padding(10.0)
-                .gap(8.0)
+            Surface::column()
+                .width(Length::Px(left_w))
+                .height(Length::Px(sidebar_h))
                 .background(shell_bg)
-                .border(theme.border, theme.border_width)
-                .child(header)
-                .child(build_workspaces_container(
-                    tree,
-                    programs,
-                    theme,
-                    emit_intent,
-                    ws_state,
-                    signals,
-                    drag,
-                )),
+                .padding(sidebar_gap)
+                .child(
+                    Pane::new()
+                        .bracketed()
+                        .width(Length::Px(inner_w))
+                        .height(Length::Px(inner_h))
+                        .padding(10.0)
+                        .gap(8.0)
+                        .background(shell_bg)
+                        .border(theme.border, theme.border_width)
+                        .child(header)
+                        .child(build_workspaces_container(
+                            tree,
+                            programs,
+                            theme,
+                            emit_intent,
+                            ws_state,
+                            signals,
+                            drag,
+                        )),
+                ),
         )
 }
 
@@ -1367,17 +1381,23 @@ fn build_right_sidebar_shell(
     Flex::column()
         .width(Length::Px(right_w))
         .height(Length::Px(sidebar_h))
-        .padding(sidebar_gap)
         .child(
-            Pane::new()
-                .bracketed()
-                .width(Length::Px(inner_w))
-                .height(Length::Px(inner_h))
-                .padding(10.0)
-                .gap(8.0)
+            Surface::column()
+                .width(Length::Px(right_w))
+                .height(Length::Px(sidebar_h))
                 .background(shell_bg)
-                .border(theme.border, theme.border_width)
-                .child(header),
+                .padding(sidebar_gap)
+                .child(
+                    Pane::new()
+                        .bracketed()
+                        .width(Length::Px(inner_w))
+                        .height(Length::Px(inner_h))
+                        .padding(10.0)
+                        .gap(8.0)
+                        .background(shell_bg)
+                        .border(theme.border, theme.border_width)
+                        .child(header),
+                ),
         )
 }
 
@@ -2279,6 +2299,22 @@ mod tests {
     }
 
     #[test]
+    fn test_content_rect_reserves_sidebar_gap_between_sidebars_and_content() {
+        let c = ChromeConfig {
+            tab_bar_height: 32.0,
+            status_bar_height: 24.0,
+            left_sidebar_width: 200.0,
+            right_sidebar_width: 200.0,
+            sidebar_gap: 12.0,
+        };
+        let r = c.content_rect(1280.0, 800.0);
+        assert_eq!(r.loc.x, 212.0);
+        assert_eq!(r.loc.y, 32.0);
+        assert_eq!(r.size.w, 856.0);
+        assert_eq!(r.size.h, 744.0);
+    }
+
+    #[test]
     fn app_theme_to_gui_theme_preserves_loaded_palette_tokens() {
         let theme = heca_config::theme::load("mocha");
         let gui = app_theme_to_gui_theme(&theme);
@@ -2414,9 +2450,15 @@ mod tests {
         assert_eq!(
             shell.base().children.len(),
             1,
-            "sidebar shell wraps a single bracketed Pane",
+            "sidebar shell wraps a single full-height background surface",
         );
-        let pane = &shell.base().children[0];
+        let surface = &shell.base().children[0];
+        assert_eq!(
+            surface.base().children.len(),
+            1,
+            "the background surface wraps a single bracketed Pane",
+        );
+        let pane = &surface.base().children[0];
         assert_eq!(
             pane.base().children.len(),
             2,

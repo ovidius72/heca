@@ -6,7 +6,7 @@
 //! - [`Theme`] struct with palette colors, typography, effect tokens, and terminal config
 //! - [`Color`] type with hex parsing and serde support
 //! - [`Intensity`] and [`GlowLevel`] effect enums
-//! - Bundled themes: `grid_tron` (dark, default), `mocha` (dark), `frappe` (light)
+//! - Bundled themes: `grid_tron` (dark, default), `mocha` (dark), `latte` (light)
 //! - [`loader::load_theme`] for user-config → bundled → fallback resolution
 
 pub mod color;

@@ -15,7 +15,7 @@
 
 So **"default = grid_tron" and "default = mocha" are both true at different layers** — not a conflict. `grid_tron` **is the intended config default** (Decisions Log below); the live `mocha` default is simply the symptom that **Phase 3 (consumer migration) is not done**. `heca-theme` is the **target** crate (Phases 1–2 ✅), today only wired into the `heca-renderer` showcase (`heca_theme_to_grid_ui` in `showcase.rs`) — it is NOT dead.
 
-**Status recap:** Phase 1 ✅ (`heca-theme` crate: grid_tron/mocha/frappe + `load_theme` (light theme in code is still frappe; latte swap pending)). Phase 2 ✅ except 2.5/2.6 visual verify (showcase cycles themes live, works). **Phase 3 ⏳ is next** (migrate `heca-config` + `heca-grid-ui` to re-export `heca-theme`; wire `[settings].theme` + flip `default_theme()` to `grid_tron`; make `chrome_gui_theme()` a pass-through). Phase 4 deferred.
+**Status recap:** Phase 1 ✅ (`heca-theme` crate: grid_tron/mocha/latte + `load_theme`). Phase 2 ✅ except 2.5/2.6 visual verify (showcase cycles themes live, works). **Phase 3 ⏳ is next** (migrate `heca-config` + `heca-grid-ui` to re-export `heca-theme`; wire `[settings].theme` + flip `default_theme()` to `grid_tron`; make `chrome_gui_theme()` a pass-through). Phase 4 deferred.
 
 **Audit reconciliation (external agent, 2026-06-21) — corrections to apply during Phase 3:**
 1. **Default theme — RESOLVED (2026-06-21):** default is **`grid_tron`**, overridable via `[settings].theme`; shipped alternatives are **mocha + latte**. Implementation: current code still defaults to `mocha` and `heca-config` only bundles mocha/latte (not grid_tron), so the default flips to grid_tron in **Phase 3** once the app loads from `heca-theme` (which bundles grid_tron) + `default_theme()` is changed. Decisions Log + 3A.8 below rewritten to match.
@@ -23,17 +23,9 @@ So **"default = grid_tron" and "default = mocha" are both true at different laye
 3. **Light-theme glow assumption is stale:** the renderer now has explicit light-theme glow support (`heca-renderer/src/scene.rs` + `grid.wgsl`), so "Tron effects don't work on light backgrounds / latte must have glow off" is no longer a hard constraint — latte's glow/scanline values are a palette choice, not forced off. (Verify in 2.6.)
 4. Phase 3 (consumer migration) is still **largely undone** and remains the active phase — `heca-config`/`heca-grid-ui` have no `heca-theme` dep yet; duplicate `color.rs`/`theme.rs` still exist in both. 3C hardcoded branches (`if theme.name == "Catppuccin Mocha"`, `chrome_colors()`, `Color::new(17,17,27,255)`) are all still present and valid targets.
 
-**Requirement change (user, 2026-06-21): replace `frappe` with `latte` as the light theme.** Rationale: **Frappé is a *dark* Catppuccin flavor — Latte is the actual light/white one**; the plan mislabeled frappe as "light". Latte is also already the app's (`heca-config`) light theme, so this unifies both systems on one light palette. **This is a code task NOT yet done** — the references above were updated to `latte`, but `heca-theme` still ships `heca-theme/src/themes/frappe.toml` and the showcase still cycles `frappe`.
+**Requirement change (user, 2026-06-21): replace `frappe` with `latte` as the light theme.** Rationale: **Frappé is a *dark* Catppuccin flavor — Latte is the actual light/white one**; the plan mislabeled frappe as "light". Latte is also already the app's (`heca-config`) light theme, so this unifies both systems on one light palette. **Done** — `heca-theme` now ships `latte`, the showcase cycles `latte`, and active docs/tests were updated.
 
-**Scope of the swap:** this is a **global rename/replacement of the active third theme**, not a partial alias. When the task is done, every active occurrence of `frappe` in the theme crate, loader, showcase/theme switcher, user-visible labels, tests, and current docs should be replaced by `latte`. `frappe` should remain only in historical notes that explain the migration.
-
-Concrete steps:
-- `heca-theme/src/themes/latte.toml` — author the **real Catppuccin Latte** palette (base it on `heca-config/src/themes/latte.toml` + add the grid-ui fields: `surface`, `muted`, `glow`, `danger`, `success`, `warning`, `glow_size`, `intensity`, `show_focus_border`, `icon_secondary_alpha`). Light glow is now allowed (reconciliation #3) — tune, don't force off.
-- delete `heca-theme/src/themes/frappe.toml`; update `heca-theme/src/loader.rs` bundled list (`frappe`→`latte`).
-- `heca-renderer/examples/showcase.rs` — `THEMES` cycle + switcher label `frappe`→`latte` ("Catppuccin Latte").
-- update any remaining active docs/tests/config references so `latte` fully replaces `frappe` everywhere outside historical notes.
-- then visually verify (2.6) the light theme renders correctly.
-(The `[x]` on 1.6/2.x above now say "latte" but reflect the *target*, not current code — the swap is the task here.)
+**Scope of the swap:** this was a **global rename/replacement of the active third theme**, not a partial alias. Active occurrences of `frappe` in the theme crate, loader, showcase/theme switcher, user-visible labels, tests, and current docs were replaced by `latte`. `frappe` remains only in historical notes that explain the migration.
 
 **Hard requirement (user, 2026-06-21): eliminate ALL hardcoded color/style values — everything must be theme-driven.** No literal colors/alphas/effect constants anywhere; every visual value reads from the `heca-theme::Theme` (adding a token if one is missing). This is the acceptance bar for Phases 3–4, covering at least:
 - **App/chrome** (Phase 3C): remove all remaining hardcoded or semi-hardcoded color logic in active render paths. Earlier examples (`if theme.name == "Catppuccin Mocha"`, `chrome_colors()` + `Color::new(17,17,27,255)`, `chrome_gui_theme()` patching) were real and have started to be addressed, but the requirement is broader: `RenderColors` arrays (`sidebar/render.rs`), `[0.118,0.118,0.180,0.7]` + white text in `mouse/render.rs`, pane-select overlay `label_color = [1.0, 0.9, 0.3, 0.9]` in `app/render.rs`, and any fixed alpha/mix math in chrome/sidebar paint must be replaced by theme tokens.
@@ -59,7 +51,7 @@ heca-theme (new crate, standalone)
 └── bundled themes/
     ├── grid_tron.toml  (dark, cyan Tron — DEFAULT)
     ├── mocha.toml      (dark, Catppuccin Mocha)
-    └── frappe.toml    (light — code today; TARGET: replace with latte.toml)
+    └── latte.toml     (light, Catppuccin Latte)
 
 heca-theme  ◄──  heca-config   (replaces its Theme/Color)
 heca-theme  ◄──  heca-grid-ui  (replaces its Theme/Color/Intensity/GlowLevel)
@@ -83,7 +75,7 @@ heca-theme  ◄──  heca          (direct, for theme loading)
   - `Theme::control_radius()` helper (radius * 0.5)
 - [x] 1.4 Create `heca-theme/src/themes/grid_tron.toml` — current `grid_tron()` hardcoded values as TOML
 - [x] 1.5 Create `heca-theme/src/themes/mocha.toml` — copy from `heca-config/src/themes/mocha.toml`, add missing grid-ui fields (`surface`, `muted`, `glow`, `danger`, `success`, `warning`, `glow_size`, `intensity`, `show_focus_border`, `icon_secondary_alpha`)
-- [x] 1.6 Create `heca-theme/src/themes/frappe.toml` — Catppuccin Frappe palette (TARGET: replace with latte.toml), light theme defaults (`glow_size = "none"`, `intensity = "off"`)
+- [x] 1.6 Create `heca-theme/src/themes/latte.toml` — Catppuccin Latte palette, light theme defaults (`glow_size = "none"`, `intensity = "off"`)
 - [x] 1.7 Create `heca-theme/src/loader.rs` — `load_theme(name)`:
   1. Try `~/.config/heca/themes/{name}.toml`
   2. Try bundled `{name}.toml` (via `include_str!`)
@@ -104,10 +96,10 @@ heca-theme  ◄──  heca          (direct, for theme loading)
 
 - [x] 2.1 Add `heca-theme` dependency to `heca-renderer/Cargo.toml`
 - [x] 2.2 Update showcase: replace `Theme::grid_tron()` with `heca_theme::load_theme("grid_tron")`
-- [x] 2.3 Add theme cycling to showcase — button in the button row cycles `grid_tron → mocha → frappe`, rebuilds the showcase tree on change, and updates the window title with the active theme
-- [x] 2.4 Add a visible theme switcher button showing current theme name (`⇄ THEME: Grid Tron` / `⇄ THEME: Catppuccin Mocha` / `⇄ THEME: Catppuccin Frappe`)
+- [x] 2.3 Add theme cycling to showcase — button in the button row cycles `grid_tron → mocha → latte`, rebuilds the showcase tree on change, and updates the window title with the active theme
+- [x] 2.4 Add a visible theme switcher button showing current theme name (`⇄ THEME: Grid Tron` / `⇄ THEME: Catppuccin Mocha` / `⇄ THEME: Catppuccin Latte`)
 - [ ] 2.5 Verify all widgets react to theme change (colors, radius, border, glow, fonts)
-- [ ] 2.6 Verify the light theme renders correctly (frappe today; latte after the swap); light glow now supported
+- [ ] 2.6 Verify the light theme renders correctly (`latte`); light glow now supported
 - [x] 2.7 Run `cargo clippy --all-targets --all-features` — fix all warnings
 - [x] Load `rust-skills` and review before marking complete
 
@@ -200,9 +192,9 @@ Areas to migrate:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Default theme | `grid_tron` — overridable via `[settings].theme`. Bundled target (grid_tron default; mocha + latte) — code today ships **frappe** not latte, swap pending. (Current code still defaults to `mocha`; flips to `grid_tron` in Phase 3 once the app loads from `heca-theme`, which bundles grid_tron — `heca-config` does not.) | User decision (2026-06-21) — Tron identity is the default; mocha/latte are the shipped alternatives |
+| Default theme | `grid_tron` — overridable via `[settings].theme`. Bundled themes are `grid_tron`, `mocha`, and `latte`. (Current code still defaults to `mocha`; flips to `grid_tron` in Phase 3 once the app loads from `heca-theme`, which bundles grid_tron — `heca-config` does not.) | User decision (2026-06-21) — Tron identity is the default; mocha/latte are the shipped alternatives |
 | Theme crate | Separate `heca-theme` | Keeps grid-ui lean, avoids pulling in config/filesystem deps |
-| Light theme | Latte (target; code today ships frappe) — glow now OPTIONAL (renderer supports light-theme glow; see Audit reconciliation #3) | ~~Tron effects don't work on light backgrounds~~ stale |
+| Light theme | Latte — glow now OPTIONAL (renderer supports light-theme glow; see Audit reconciliation #3) | ~~Tron effects don't work on light backgrounds~~ stale |
 | `grid_ares()` | Deferred to Phase 4 | Only used in tests; decide after migration |
 | Config field | `[settings].theme` (already exists) — **stays in `[settings]`** (decided 2026-06-21; the earlier `[appearance].theme` idea is dropped) | One theme key; settings already owns it |
 | Fallback chain | user dir → bundled → grid_tron | Never fails, always has a valid theme |
