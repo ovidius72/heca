@@ -33,7 +33,7 @@ fn load_theme_from_disk(name: &str) -> Option<Theme> {
     toml::from_str(&content).ok()
 }
 
-fn bundled_themes() -> HashMap<&'static str, &'static str> {
+pub(crate) fn bundled_themes() -> HashMap<&'static str, &'static str> {
     [
         ("grid_tron", include_str!("themes/grid_tron.toml")),
         ("mocha", include_str!("themes/mocha.toml")),
