@@ -17,6 +17,7 @@
 //! write-via-actions rule) — matching `heca`'s existing `candidates` flow.
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
+use crate::color::Color;
 use crate::component::{paint_child, Base, Component, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet};
 use crate::scene::{Glow, TextAlign};
@@ -35,6 +36,11 @@ pub enum HintPlacement {
     /// (sidebar pane/column cards) where a right-aligned keycap keeps the row's
     /// label readable.
     CenterRight,
+    /// Pinned to the **top-right** — for tall targets (e.g. a workspace dock) whose
+    /// header row sits at the top: right-aligned like a list row, but anchored to the
+    /// top edge rather than the target's vertical center. Pair with
+    /// [`offset_y`](KeyHint::offset_y) to drop it onto the header line.
+    TopRight,
 }
 
 /// Keycap font size as a fraction of the wrapped component's resolved font.
@@ -63,6 +69,14 @@ pub struct KeyHint {
     placement: HintPlacement,
     /// Explicit keycap font size (px); otherwise derived from the resolved font.
     size: Option<f32>,
+    /// Keycap color override; defaults to the theme `accent`. Lets a host tint a
+    /// different *kind* of target distinctly (e.g. workspace vs pane) while keeping
+    /// `KeyHint` itself target-agnostic.
+    color: Option<Color>,
+    /// Extra vertical nudge (logical px) applied to the keycap after placement —
+    /// positive moves it down. Used to drop a `TopCenter` cap onto a target's header
+    /// row (e.g. align with a workspace dock's title) instead of its very top edge.
+    offset_y: f64,
 }
 
 impl KeyHint {
@@ -78,7 +92,14 @@ impl KeyHint {
         // shrinking to content width, while a hugged square target is unaffected.
         base.style.direction = Direction::Column;
         base.children.push(Box::new(child));
-        Self { base, hint: signal(None), placement: HintPlacement::default(), size: None }
+        Self {
+            base,
+            hint: signal(None),
+            placement: HintPlacement::default(),
+            size: None,
+            color: None,
+            offset_y: 0.0,
+        }
     }
 
     /// Bind the **host-owned** hint signal. The app sets `Some(letter)` when a
@@ -105,6 +126,20 @@ impl KeyHint {
         self
     }
 
+    /// Override the keycap color (default: theme `accent`). The glow follows it too.
+    pub fn color(mut self, c: Color) -> Self {
+        self.color = Some(c);
+        self
+    }
+
+    /// Nudge the keycap down by `px` logical pixels after placement (positive = down).
+    /// Use it to drop a `TopCenter` cap from a tall target's top edge onto its header
+    /// row (e.g. align with a workspace dock's title).
+    pub fn offset_y(mut self, px: f64) -> Self {
+        self.offset_y = px;
+        self
+    }
+
     fn hint_font(&self) -> f32 {
         self.size.unwrap_or(self.base.font * HINT_FONT_MUL)
     }
@@ -128,8 +163,11 @@ impl KeyHint {
             HintPlacement::CenterRight => {
                 (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + (b.size.h - h) / 2.0)
             }
+            HintPlacement::TopRight => {
+                (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET)
+            }
         };
-        Rectangle::new(Point::new(x, y), Size::new(w, h))
+        Rectangle::new(Point::new(x, y + self.offset_y), Size::new(w, h))
     }
 }
 
@@ -159,16 +197,20 @@ impl Component for KeyHint {
             let t = cx.theme();
             (t.accent, t.glow, t.background, t.control_radius())
         };
+        // Default to the theme accent; an explicit `.color()` overrides both fill and
+        // glow so a host can tint a different kind of target distinctly.
+        let keycap_c = self.color.unwrap_or(accent);
+        let keycap_glow = self.color.unwrap_or(glow_c);
         let cap = self.keycap_rect(self.base.bounds, &text);
         let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
-        // Softly-glowing, slightly translucent accent keycap; dark bold glyph on
-        // top for contrast on dark.
+        // Softly-glowing, slightly translucent keycap; dark bold glyph on top for
+        // contrast on dark.
         cx.rect(
             cap,
-            accent.with_alpha(KEYCAP_ALPHA),
+            keycap_c.with_alpha(KEYCAP_ALPHA),
             None,
             radius,
-            Some(Glow { color: glow_c, radius: 6.0, intensity: KEYCAP_GLOW }),
+            Some(Glow { color: keycap_glow, radius: 6.0, intensity: KEYCAP_GLOW }),
         );
         cx.text(cap, &text, background, self.hint_font(), TextAlign::Center, true);
     }

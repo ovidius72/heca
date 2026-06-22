@@ -288,6 +288,9 @@ impl Pane {
 pub struct Pane {
     pub id: PaneId,
     pub title: String,
+    /// User-set display name (from rename). `Some` **overrides** the process-derived
+    /// title everywhere it's shown; `None` means the name tracks the running process.
+    pub custom_name: Option<String>,
     pub runtime: PaneRuntime,
     pub close_policy: PaneClosePolicy,
     /// Preferred fixed height (None = auto).
@@ -304,6 +307,7 @@ impl Pane {
         Self {
             id,
             title: title.into(),
+            custom_name: None,
             runtime: PaneRuntime::default(),
             close_policy: PaneClosePolicy::default(),
             preferred_height: None,

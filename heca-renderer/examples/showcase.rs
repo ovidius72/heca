@@ -1114,8 +1114,12 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .draggable(DragItemId::new(901))
                         .drop_target(DragItemId::new(901))
                         .child(
+                            // `.color(theme.warning)` tints the keycap differently — the
+                            // app uses this so a "move → workspace" pick reads distinctly
+                            // from a pane pick.
                             KeyHint::new(Row::new().padding(6.0).child(Label::new("pane C")))
                                 .hint(rail_hints[2])
+                                .color(theme.warning)
                                 .placement(HintPlacement::CenterRight),
                         ),
                 )

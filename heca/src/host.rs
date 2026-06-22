@@ -83,6 +83,19 @@ impl StateView<'_> {
         self.state.workspaces.pane_runtime(pane).map(|r| r.status)
     }
 
+    /// A pane's user-set custom name (from rename), if any. `None` means the pane's
+    /// name tracks its running process. Observe changes via `PaneCustomNameChanged`.
+    pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
+        self.state.workspaces.pane_custom_name(pane)
+    }
+
+    /// The keyboard pick currently in progress (move/select/swap/take), if any — its
+    /// kind + human prompt. Observe changes via `PendingPickChanged` to render a custom
+    /// prompt UI for the pending action.
+    pub fn pending_pick(&self) -> Option<crate::app_state::PendingPick> {
+        self.state.workspaces.pending_pick()
+    }
+
     /// Is workspace `ws_idx` collapsed in the sidebar?
     pub fn is_workspace_collapsed(&self, ws_idx: usize) -> bool {
         self.state.workspaces.is_ws_collapsed(ws_idx)

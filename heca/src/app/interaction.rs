@@ -229,6 +229,11 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::PaneTake
         | WmAction::PaneTakeAndFocus
         | WmAction::TakePane { .. }
+        // Move-to-workspace overlays (active column / pane → picked workspace)
+        | WmAction::MoveColumnToWorkspacePick
+        | WmAction::MovePaneToWorkspacePick
+        // Move-to-column overlay (active pane → picked column)
+        | WmAction::MovePaneToColumnPick
         // FloatAt: spawns new floating pane — blocked when already floating
         | WmAction::FloatAt { .. } => ActionPolicy::TiledOnly,
 

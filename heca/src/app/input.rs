@@ -13,7 +13,7 @@ use crate::app::keyboard::{
 };
 use crate::app::mutations::after_metadata_change;
 use crate::app::selection::find_pane_location;
-use crate::app_state::{AppState, InputMode, RenameTarget};
+use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use std::collections::HashMap;
@@ -98,6 +98,12 @@ pub(crate) fn handle_keyboard_input(
         } => {
             handle_pane_take_mode(registry, state, &candidates, focus_after, ctx);
         }
+        InputMode::WorkspacePick { candidates, target } => {
+            handle_workspace_pick_mode(registry, state, &candidates, target, ctx);
+        }
+        InputMode::ColumnPick { candidates, pane_id } => {
+            handle_column_pick_mode(registry, state, &candidates, pane_id, ctx);
+        }
         InputMode::SidebarNav => {
             handle_sidebar_nav_mode(registry, mode_keymaps, state, ctx);
         }
@@ -146,11 +152,9 @@ fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
                 if let Some(ws) = state.session.active_workspace_mut()
                     && let Some(pane) = ws.find_pane_mut(*pane_id)
                 {
-                    pane.title = if new_name.is_empty() {
-                        format!("pane{}", pane_id)
-                    } else {
-                        new_name
-                    };
+                    // Set a user override that wins over the process-derived name; an
+                    // empty entry clears it so the name tracks the process again.
+                    pane.custom_name = if new_name.is_empty() { None } else { Some(new_name) };
                 }
             }
         }
@@ -423,6 +427,66 @@ fn handle_pane_take_mode(
                 pane_id: *target_id,
                 focus_after,
             },
+        );
+    }
+    state.needs_redraw = true;
+}
+
+/// Resolve a [`InputMode::WorkspacePick`] keypress: a matching candidate letter moves
+/// the captured `target` (active column or pane) into that workspace; any other key
+/// (e.g. Esc) just exits the mode. Mirrors [`handle_pane_swap_mode`].
+fn handle_workspace_pick_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    candidates: &[(char, usize)],
+    target: WorkspacePickTarget,
+    ctx: KeyInputContext<'_>,
+) {
+    let candidates = candidates.to_vec();
+    state.input_mode = InputMode::Normal;
+
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some((_, ws_idx)) = candidates.iter().find(|(c, _)| *c == ch)
+    {
+        let action = match target {
+            WorkspacePickTarget::Column(col_idx) => WmAction::MoveColumnToWorkspace {
+                col_idx,
+                ws_idx: *ws_idx,
+                focus: true,
+            },
+            WorkspacePickTarget::Pane(pane_id) => WmAction::MovePaneToWorkspace {
+                pane_id,
+                ws_idx: *ws_idx,
+            },
+        };
+        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
+    }
+    state.needs_redraw = true;
+}
+
+/// Resolve a [`InputMode::ColumnPick`] keypress: a matching candidate letter moves the
+/// captured pane into that column of the active workspace (stacking with its panes);
+/// any other key (e.g. Esc) exits the mode.
+fn handle_column_pick_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    candidates: &[(char, usize, usize)],
+    pane_id: PaneId,
+    ctx: KeyInputContext<'_>,
+) {
+    let candidates = candidates.to_vec();
+    state.input_mode = InputMode::Normal;
+
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some((_, ws_idx, col_idx)) = candidates.iter().find(|(c, _, _)| *c == ch)
+    {
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::MovePaneToColumn { pane_id, ws_idx: *ws_idx, col_idx: *col_idx },
         );
     }
     state.needs_redraw = true;

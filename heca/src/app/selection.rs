@@ -56,6 +56,39 @@ pub(crate) fn collect_all_pane_candidates(session: &Session) -> Vec<(char, PaneI
     candidates
 }
 
+/// Collect workspaces as letter candidates (letter → `ws_idx`) for the "move
+/// column/pane to workspace" pick — **excluding the active workspace** (moving the
+/// active column/pane to the workspace it already lives in is a no-op). Letters are
+/// assigned sequentially over the remaining workspaces; capped at 52.
+pub(crate) fn collect_workspace_candidates(session: &Session) -> Vec<(char, usize)> {
+    let active = session.active_workspace_idx;
+    session
+        .workspaces
+        .iter()
+        .enumerate()
+        .filter(|(ws_idx, _)| *ws_idx != active)
+        .take(PANE_CANDIDATE_LIMIT)
+        .enumerate()
+        .map(|(letter_idx, (ws_idx, _))| (CANDIDATE_ALPHABET[letter_idx], ws_idx))
+        .collect()
+}
+
+/// Collect **all** columns across **all** workspaces as letter candidates
+/// (letter → `(ws_idx, col_idx)`) for the "move pane to column" pick — a pane can be
+/// stacked into a column in any workspace. Capped at 52.
+pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, usize)> {
+    let mut candidates = Vec::new();
+    for (ws_idx, ws) in session.workspaces.iter().enumerate() {
+        for (col_idx, _) in ws.scrolling.columns.iter().enumerate() {
+            if candidates.len() >= PANE_CANDIDATE_LIMIT {
+                return candidates;
+            }
+            candidates.push((CANDIDATE_ALPHABET[candidates.len()], ws_idx, col_idx));
+        }
+    }
+    candidates
+}
+
 /// Find the (workspace_index, column_index, pane_index) containing a pane.
 pub(crate) fn find_pane_location(session: &Session, pane_id: PaneId) -> Option<(usize, usize, usize)> {
     for (ws_idx, ws) in session.workspaces.iter().enumerate() {

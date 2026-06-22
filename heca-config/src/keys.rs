@@ -205,6 +205,21 @@ impl Default for KeysConfig {
             "swap_and_focus_pane".to_string(),
             Single("prefix+m".to_string()),
         );
+        // Move active column → picked workspace (KeyHint over workspaces)
+        bindings.insert(
+            "move_column_to_workspace_pick".to_string(),
+            Single("prefix+c".to_string()),
+        );
+        // Move active pane → picked workspace
+        bindings.insert(
+            "move_pane_to_workspace_pick".to_string(),
+            Single("prefix+g".to_string()),
+        );
+        // Move active pane → picked column (stacks/splits into it)
+        bindings.insert(
+            "move_pane_to_column_pick".to_string(),
+            Single("prefix+Shift+c".to_string()),
+        );
         // Take: move target pane to bottom of active column
         bindings.insert("pane_take".to_string(), Single("prefix+t".to_string()));
         // Take + focus: same but focuses the moved pane
@@ -266,10 +281,8 @@ impl Default for KeysConfig {
             Single("prefix+Shift+w".to_string()),
         );
         bindings.insert("rename_pane".to_string(), Single("prefix+$".to_string()));
-        bindings.insert(
-            "rename_column".to_string(),
-            Single("prefix+Shift+c".to_string()),
-        );
+        // `rename_column` has no default binding (prefix+Shift+c is reused for
+        // move-pane-to-column); the action stays available for users to bind manually.
 
         // ── Command palette ──
         bindings.insert(
@@ -671,7 +684,7 @@ mod tests {
         assert!(cfg.bindings.contains_key("focus_left"));
         assert!(cfg.bindings.contains_key("split_horizontal"));
         assert!(cfg.bindings.contains_key("zoom_column"));
-        assert!(cfg.bindings.contains_key("rename_column"));
+        assert!(cfg.bindings.contains_key("move_pane_to_column_pick"));
         assert!(cfg.bindings.contains_key("close"));
     }
 

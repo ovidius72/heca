@@ -42,7 +42,11 @@ impl SidebarItem {
 #[derive(Debug, Clone)]
 pub struct SidebarPaneEntry {
     pub pane_id: PaneId,
+    /// Process-derived title (the program hint, used for icon resolution + as the
+    /// display name when no custom override is set).
     pub name: String,
+    /// User-set override name (from rename); when present it wins over the process name.
+    pub custom_name: Option<String>,
     pub state: SidebarItemState,
 }
 
@@ -186,6 +190,7 @@ impl SidebarTree {
                         col_entry.panes.push(SidebarPaneEntry {
                             pane_id: pane.id,
                             name: pane.title.clone(),
+                            custom_name: pane.custom_name.clone(),
                             state: if is_active_pane {
                                 SidebarItemState::Active
                             } else if is_visited_pane {
@@ -207,6 +212,7 @@ impl SidebarTree {
                 ws_entry.floating_panes.push(SidebarPaneEntry {
                     pane_id: float.pane.id,
                     name: float.pane.title.clone(),
+                    custom_name: float.pane.custom_name.clone(),
                     state: if is_active_float {
                         SidebarItemState::Active
                     } else if is_visited_float {

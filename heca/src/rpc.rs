@@ -15,6 +15,7 @@
 //!   move-pane-left [pane_id]
 //!   move-pane-right [pane_id]
 //!   swap <a_id> <b_id>
+//!   move-column-to-workspace <col_idx> <ws_idx>
 //!   move-column <src_ws> <src_col> <dst_ws> <dst_idx>
 //!   swap-columns <a_ws> <a_col> <b_ws> <b_col>
 //!   focus-left | focus-right | focus-up | focus-down
@@ -284,6 +285,17 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let b_id = PaneId(parse_u64!(b_arg, "b_id"));
             Ok(WmAction::Swap { a_id, b_id })
         }
+        "move-column-to-workspace" => {
+            let col_arg = expect_arg!("col_idx");
+            let col_idx = parse_usize!(col_arg, "col_idx");
+            let ws_arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(ws_arg, "ws_idx");
+            Ok(WmAction::MoveColumnToWorkspace {
+                col_idx,
+                ws_idx,
+                focus: true,
+            })
+        }
         "move-column" => {
             let src_ws_arg = expect_arg!("src_ws");
             let src_ws = parse_usize!(src_ws_arg, "src_ws");
@@ -432,6 +444,18 @@ use heca_core::layout::PaneId;
             parse_rpc_command("swap-columns 0 1 2 3"),
             Ok(WmAction::SwapColumns { a_ws: 0, a_col: 1, b_ws: 2, b_col: 3 }),
         );
+    }
+
+    #[test]
+    fn test_move_column_to_workspace() {
+        assert_eq!(
+            parse_rpc_command("move-column-to-workspace 2 1"),
+            Ok(WmAction::MoveColumnToWorkspace { col_idx: 2, ws_idx: 1, focus: true }),
+        );
+        assert!(matches!(
+            parse_rpc_command("move-column-to-workspace 2"),
+            Err(RpcError::MissingArgument { .. }),
+        ));
     }
 
     #[test]
