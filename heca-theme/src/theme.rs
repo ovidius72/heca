@@ -11,31 +11,27 @@ use serde::{Deserialize, Serialize};
 //  Intensity
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// How strongly Tron effects (glow, scanlines) are applied.
+/// Scanline / CRT overlay intensity. This controls **scanline-overlay
+/// opacity only** — it does **not** affect glow. Glow is owned by
+/// [`GlowLevel`] (presence + radius + strength). Higher `Intensity` = a
+/// stronger visible CRT grille; `Off` = no scanlines (closest to a standard
+/// UI).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Intensity {
-    /// Plain — no glow or scanlines (closest to a standard UI).
+    /// No scanlines / CRT overlay.
     Off,
     Low,
     #[default]
     Medium,
-    /// Full Tron: strong glow + visible scanlines.
+    /// Strong CRT grille (heaviest scanlines). Does not add glow.
     Heavy,
 }
 
 impl Intensity {
-    /// Glow strength multiplier for this level.
-    pub fn glow_scale(self) -> f32 {
-        match self {
-            Intensity::Off => 0.0,
-            Intensity::Low => 0.5,
-            Intensity::Medium => 1.0,
-            Intensity::Heavy => 1.6,
-        }
-    }
-
-    /// CRT scanline-overlay opacity for this level.
+    /// CRT scanline-overlay opacity for this level — the visible thing
+    /// `intensity` controls. `Off` = no scanlines; higher = a stronger CRT
+    /// grille. Glow is separate (see [`GlowLevel`]).
     pub fn scanline_opacity(self) -> f32 {
         match self {
             Intensity::Off => 0.0,
@@ -77,12 +73,30 @@ pub enum GlowLevel {
 
 impl GlowLevel {
     /// Multiplier applied to a glow's base falloff radius. `0.0` means "off".
+    /// This is the *radius* (halo size) dimension; glow *strength* (alpha) is
+    /// [`strength_scale`](GlowLevel::strength_scale). The two are independent
+    /// so e.g. `Large` = 2.0× radius but only 1.6× strength.
     pub fn radius_scale(self) -> f32 {
         match self {
             GlowLevel::None => 0.0,
             GlowLevel::Thin => 0.5,
             GlowLevel::Medium => 1.0,
             GlowLevel::Large => 2.0,
+        }
+    }
+
+    /// Multiplier applied to a glow's base strength (alpha). `0.0` means "off".
+    /// This is the *strength* (alpha) dimension; glow *radius* (halo size) is
+    /// [`radius_scale`](GlowLevel::radius_scale). `GlowLevel` is the sole owner
+    /// of glow — both radius and strength — so `intensity` no longer feeds glow.
+    /// Curve: `none=0.0, thin=0.5, medium=1.0, large=1.6` (preserves the former
+    /// `Intensity::glow_scale()` values exactly).
+    pub fn strength_scale(self) -> f32 {
+        match self {
+            GlowLevel::None => 0.0,
+            GlowLevel::Thin => 0.5,
+            GlowLevel::Medium => 1.0,
+            GlowLevel::Large => 1.6,
         }
     }
 
@@ -479,16 +493,34 @@ mod tests {
     }
 
     #[test]
-    fn intensity_glow_scales() {
-        assert!((Intensity::Off.glow_scale()).abs() < f32::EPSILON);
-        assert!((Intensity::Medium.glow_scale() - 1.0).abs() < f32::EPSILON);
+    fn glow_level_radius_scales() {
+        assert!((GlowLevel::None.radius_scale()).abs() < f32::EPSILON);
+        assert!((GlowLevel::Thin.radius_scale() - 0.5).abs() < f32::EPSILON);
+        assert!((GlowLevel::Medium.radius_scale() - 1.0).abs() < f32::EPSILON);
+        assert!((GlowLevel::Large.radius_scale() - 2.0).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn glow_level_radius_scales() {
-        assert!((GlowLevel::None.radius_scale()).abs() < f32::EPSILON);
-        assert!((GlowLevel::Medium.radius_scale() - 1.0).abs() < f32::EPSILON);
-        assert!((GlowLevel::Large.radius_scale() - 2.0).abs() < f32::EPSILON);
+    fn glow_level_strength_scales() {
+        // GlowLevel is the sole owner of glow strength; curve preserves the
+        // former Intensity::glow_scale() values exactly (none/thin/medium/large).
+        assert!((GlowLevel::None.strength_scale()).abs() < f32::EPSILON);
+        assert!((GlowLevel::Thin.strength_scale() - 0.5).abs() < f32::EPSILON);
+        assert!((GlowLevel::Medium.strength_scale() - 1.0).abs() < f32::EPSILON);
+        assert!((GlowLevel::Large.strength_scale() - 1.6).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn intensity_scanline_opacity_is_separate_from_glow() {
+        // Intensity owns scanlines only; it no longer exposes glow_scale().
+        // Pin exact values (not just ordering) so an accidental curve change is caught.
+        assert!((Intensity::Off.scanline_opacity()).abs() < f32::EPSILON);
+        assert!((Intensity::Low.scanline_opacity() - 0.05).abs() < 1e-6);
+        assert!((Intensity::Medium.scanline_opacity() - 0.11).abs() < 1e-6);
+        assert!((Intensity::Heavy.scanline_opacity() - 0.20).abs() < 1e-6);
+        // Ordering still holds as a sanity check.
+        assert!(Intensity::Medium.scanline_opacity() > Intensity::Low.scanline_opacity());
+        assert!(Intensity::Heavy.scanline_opacity() > Intensity::Medium.scanline_opacity());
     }
 
     #[test]

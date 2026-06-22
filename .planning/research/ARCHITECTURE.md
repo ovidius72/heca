@@ -64,12 +64,48 @@ Runs every frame:
    - Text-grid panes (terminal): update cell buffers
    - Future: Texture panes (browser), draw-command panes (plugins)
 3. **Chrome draw** — Tab bar, pane borders/titles, status bar, sidebars
-4. **Composite** — Single `wgpu` render pass:
-   - Clear background
-   - Draw workspace content (panes with borders)
-   - Draw floating panes (future)
-   - Draw global overlays (overview, command palette)
+4. **Composite** — `wgpu` render passes (see `heca/src/app/render.rs`), in order:
+   - **Clear** the scene target
+   - **z=0 background blit** — `BackgroundLayer::render()` produces a (optionally
+     blurred) vertical gradient, stamped fullscreen via `Backdrop::draw` at
+     `background_alpha()` **pre-stencil** (`stencil = None`) so the tiled
+     content-clip never clips it. This is the bottom-most layer panes composite over.
+   - **Tiled stencil + content** — write the rounded content-clip mask, then draw
+     tiled panes translucently (`surface_alpha`) over z=0; the frost IS z=0
+     showing through, not a per-pane tint.
+   - **Borders** (Pass 3).
+   - **Floating panes** — capture a real blur of the tiled content
+     (`state.blur.process`), then per floating pane stamp the blurred backdrop at
+     **100% opacity** (no sharp leak) + terminal content + shell, clipped to the
+     floating union stencil.
+   - **Grid-ui chrome** (sidebar shell + status bar) — last.
+   - **Global overlays** (overview, command palette)
 5. **Present** — swapchain present
+
+#### z=0 background frost model (heca-owned, cross-platform)
+
+Frost is **heca-owned**, not OS-dependent. heca is an *application*, not a
+Wayland compositor — it cannot blur the real desktop cross-platform (the
+original `terminal_blur` "no effect" bug on macOS: vibrancy composites the
+desktop *behind* the window, outside heca's render target). So heca renders and
+blurs its own content: a vertical gradient (`heca-renderer/src/gradient.rs`)
+blurred into a cached texture (`heca-renderer/src/background.rs` → `BackgroundLayer`).
+
+- **`BackgroundLayer`** owns `z0_tex` (gradient render target) + `cache_tex`
+  (blurred result) + a `dirty` flag. `render()` re-runs gradient+blur only when
+  dirty (resize or `set_params` change); otherwise it returns the cached view.
+  It **snapshots** the blurred result into `cache_tex` (via
+  `encoder.copy_texture_to_texture`) *before* returning, so the shared
+  `state.blur` is free to be reused afterwards by the floating-pane frost pass —
+  z=0 MUST render before any other `state.blur` user in a frame.
+- **Translucency channel:** theme `terminal_background` is opaque;
+  `terminal_transparency` → `surface_alpha` is the only translucency channel
+  (grill-me Q1, Option A). A theme `terminal_background` with alpha 0 is a bug.
+- **Removed:** `terminal_blur`, `terminal_frost_color`, `terminal_frost_opacity()`,
+  `effective_terminal_frost_color()`. Tiled frost strength = `background_blur`;
+  floating frost = `terminal_floating_blur` + `terminal_floating_transparency`.
+- **OS vibrancy** (`Vibrancy`) is an optional platform backdrop material only,
+  `Vibrancy::None` by default (grill-me Q6: try z=0 without vibrancy first).
 
 ### 4. Pane Runtime (`PaneBackend` Trait)
 

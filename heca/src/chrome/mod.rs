@@ -1705,6 +1705,12 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     let mut theme = app_theme_to_gui_theme(&state.theme);
     theme.background = app_color_to_gui(state.theme.background);
     theme.surface = sidebar_bg;
+    // `[appearance]` effect-token overrides take precedence over the theme.
+    // `glow_size` owns glow (presence + radius + strength); `intensity` owns
+    // scanline/CRT overlay opacity only. Unset → the theme value already set
+    // above by `app_theme_to_gui_theme` wins.
+    theme.glow_size = glow_level_to_gui(state.appearance.effective_glow_size(&state.theme));
+    theme.intensity = intensity_to_gui(state.appearance.effective_intensity(&state.theme));
     theme
 }
 
