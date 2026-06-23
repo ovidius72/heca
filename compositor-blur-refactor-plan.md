@@ -5,7 +5,10 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs). Two follow-on phases landed after Phase 4: **`compositor-04b`** (`intensity`/`glow_size` `[appearance]` override + glow/scanline separation, PR #172) and **`compositor-04c`** (extract fonts from `Theme` into a dedicated `[font]` config block, PR #175). **`compositor-06` quality gates are done (2026-06-22):** rust-skill review clean (no HIGH/MED findings), clippy 0, `cargo test --workspace` green (the previously env-dependent bash integration test now passes after isolating the test shell from the user's `~/.bashrc`). **Phase 5 (interactive visual tuning with the user) is the only remaining gate** — it needs the user to run the app and sign off on tiled + floating frost / no-collision / resize; until then Phase 6 exit (ship) stays blocked per the AGENTS.md user-approval gate.
+- **Status:** **CLOSED — not passed (2026-06-22).** Phases 0–4c complete and merged (PRs #165/#167/#169/#172/#175); the z=0 GPU pipeline is the cross-platform frost surface and stays merged. `compositor-06` quality gates are done (rust-skill review clean, clippy 0). Tests: heca-core 57/57, heca-config 61/61, heca-renderer 241/241, heca 61/61 — all green in isolation. The two non-green tests in a full `cargo test --workspace` run are both **pre-existing / unrelated, not regressions**: (1) `heca-grid-ui::toast_action_press_flashes_only_the_action_not_the_whole_card` — the known white-press-flash theming debt, fails on plain `main`; (2) `heca-core::terminal_backend_exit_captures_code_via_take_exit` — a flaky PTY-timing test under workspace-parallel load (passes 5/5 in isolation and 5/5 when heca-core runs alone); `b42c016` only touched the `bash_integration` test, not this one.
+- **Why Phase 5 did not pass:** the frost never reached a user-approved look. Root cause established during tuning — the **frosted-desktop-BEHIND-the-window** look the user wanted is an OS capability (macOS `vibrancy`), which an app *cannot* do cross-platform (an app cannot sample/blur the OS desktop). The within-heca frost approaches tried (gradient tint, embedded background image, procedural gradient noise) only frost heca's own z=0 gradient, **not** the desktop behind the window, and none got user sign-off. `vibrancy` remains the only path to blurred-desktop-behind and is left for the user to enable on macOS (it was intentionally not wired in Phases 1–5 per §3).
+- **Why Phase 6 did not pass:** its exit (ship) is gated on Phase 5 user sign-off (AGENTS.md gate), which did not pass; quality gates 6.1–6.5 are done. The `compositor-05-06-finalize` branch carries only the bash-test fix (`b42c016`) + doc updates (`243f875`); it is **not** shipped as the blur-refactor PR (Phases 1–4c were already merged independently).
+- **Revert note:** all uncommitted tuning experiments (procedural frost noise in `gradient.wgsl`/`gradient.rs`/`background.rs`/`shader_valid.rs` + the `is_transparent()` change in `appearance.rs`) were discarded; the working tree is clean at `243f875`. No compositor-track code was committed past the merged Phases 1–4c.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -581,8 +584,8 @@ determines success — the GPU work is deterministic, the *look* is not.
   - Relations: 5.2.
   - Check: user confirms "resize is ok."
 
-### Phase 5 exit — user sign-off
-- [ ] User confirms tiled + floating frost look good, no collision, resize works. Proceed to Phase 6.
+### Phase 5 exit — user sign-off (NOT PASSED — closed 2026-06-22)
+- [ ] User confirms tiled + floating frost look good, no collision, resize works. Proceed to Phase 6. **Not reached** — the frost never reached a user-approved look. The frosted-desktop-behind-the-window look the user wanted is an OS capability (macOS `vibrancy`), not cross-platform app code; the within-heca frost approaches (gradient tint / image / procedural noise) only frost heca's own z=0 gradient, not the desktop. See the status note at the top of this file.
 
 ---
 
@@ -613,8 +616,8 @@ has tested, per AGENTS.md).
   - Relations: 6.3 + user approval.
   - Check: PR open; CI green (or the repo's equivalent gate). **N/A for the merged refactor** — Phases 1–4c are already merged into `main` (PRs #165/#167/#169/#172/#175). The `compositor-05-06-finalize` branch carries only the bash-test fix + these doc updates; it ships as a small follow-up PR after `compositor-05` user sign-off (the AGENTS.md gate that still blocks Phase 6 exit).
 
-### Phase 6 exit — merged (after user approval + review)
-- [ ] Blur refactor shipped; PR merged.
+### Phase 6 exit — merged (after user approval + review) (NOT PASSED — closed 2026-06-22)
+- [ ] Blur refactor shipped; PR merged. **Not passed** — gated on Phase 5 user sign-off, which did not pass. Quality gates 6.1–6.5 are done. The `compositor-05-06-finalize` branch (bash-test fix + doc updates) is not shipped as the blur-refactor PR; Phases 1–4c were already merged independently.
 
 ---
 
