@@ -19,10 +19,10 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
+use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, Shadow, TextAlign};
-use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
+use heca_core::layout::{Point, Rectangle, Size};
 
 /// Scrim (backdrop) alpha over the rest of the UI.
 const SCRIM_ALPHA: u8 = 150;
@@ -161,27 +161,16 @@ impl Modal {
             .text_w(&self.title)
             .max(self.text_w(&self.message))
             .max(actions_w);
-        let cap = if vp.w.is_finite() {
-            vp.w * PANEL_MAX_W_FRAC
-        } else {
-            f64::MAX
-        };
+        let cap = if vp.w.is_finite() { vp.w * PANEL_MAX_W_FRAC } else { f64::MAX };
         let panel_w = (content_w + 2.0 * PAD).clamp(PANEL_MIN_W, cap.max(PANEL_MIN_W));
         let panel_h = PAD + line + GAP + line + GAP + BTN_H + PAD;
 
-        let (vw, vh) = if vp.w.is_finite() {
-            (vp.w, vp.h)
-        } else {
-            (panel_w, panel_h)
-        };
+        let (vw, vh) = if vp.w.is_finite() { (vp.w, vp.h) } else { (panel_w, panel_h) };
         let px = (vw - panel_w) / 2.0;
         let py = (vh - panel_h) / 2.0;
         let panel = Rectangle::new(Point::new(px, py), Size::new(panel_w, panel_h));
 
-        let title = Rectangle::new(
-            Point::new(px + PAD, py + PAD),
-            Size::new(panel_w - 2.0 * PAD, line),
-        );
+        let title = Rectangle::new(Point::new(px + PAD, py + PAD), Size::new(panel_w - 2.0 * PAD, line));
         let message = Rectangle::new(
             Point::new(px + PAD, title.loc.y + line + GAP),
             Size::new(panel_w - 2.0 * PAD, line),
@@ -190,15 +179,10 @@ impl Modal {
         let by = py + panel_h - PAD - BTN_H;
         let confirm_x = px + panel_w - PAD - confirm_w;
         let confirm = Rectangle::new(Point::new(confirm_x, by), Size::new(confirm_w, BTN_H));
-        let cancel = cancel_w
-            .map(|w| Rectangle::new(Point::new(confirm_x - BTN_GAP - w, by), Size::new(w, BTN_H)));
-        Rects {
-            panel,
-            title,
-            message,
-            cancel,
-            confirm,
-        }
+        let cancel = cancel_w.map(|w| {
+            Rectangle::new(Point::new(confirm_x - BTN_GAP - w, by), Size::new(w, BTN_H))
+        });
+        Rects { panel, title, message, cancel, confirm }
     }
 
     /// Fire confirm + close.
@@ -247,17 +231,7 @@ impl Component for Modal {
         self.viewport.set(cx.viewport());
         let (background, surface, accent, danger, foreground, muted, shadow, ctrl_radius, radius) = {
             let t = cx.theme();
-            (
-                t.background,
-                t.surface,
-                t.accent,
-                t.danger,
-                t.foreground,
-                t.muted,
-                t.shadow,
-                t.control_radius(),
-                t.radius,
-            )
+            (t.background, t.surface, t.accent, t.danger, t.foreground, t.muted, t.shadow, t.control_radius(), t.radius)
         };
         let r = self.rects();
         let confirm_tone = if self.danger { danger } else { accent };
@@ -275,37 +249,14 @@ impl Component for Modal {
             // Lift the dialog off the scrim with a soft drop shadow (drawn behind
             // the panel). Independent of the glow/border tokens, so the modal stays
             // identifiable even at border_width == 0.
-            cx.drop_shadow(
-                r.panel,
-                radius,
-                Shadow {
-                    color: shadow,
-                    radius: SHADOW_BLUR,
-                    dx: 0.0,
-                    dy: SHADOW_DROP,
-                },
-            );
+            cx.drop_shadow(r.panel, radius, Shadow { color: shadow, radius: SHADOW_BLUR, dx: 0.0, dy: SHADOW_DROP });
 
             // Panel: surface fill + the shared Pane/DockFrame corner-bracket
             // reticle frame (matches the linked GridCN modal — no plain border).
             cx.rect(r.panel, surface, None, radius, None);
-            cx.bracket_frame(r.panel, Some(surface));
-            cx.text(
-                r.title,
-                &self.title,
-                foreground,
-                self.base.font,
-                TextAlign::Start,
-                true,
-            );
-            cx.text(
-                r.message,
-                &self.message,
-                muted,
-                self.base.font,
-                TextAlign::Start,
-                false,
-            );
+            cx.bracket_frame(r.panel);
+            cx.text(r.title, &self.title, foreground, self.base.font, TextAlign::Start, true);
+            cx.text(r.message, &self.message, muted, self.base.font, TextAlign::Start, false);
 
             // Cancel (ghost) + Confirm (toned) buttons.
             if let Some(cr) = r.cancel {
@@ -318,14 +269,7 @@ impl Component for Modal {
                     ctrl_radius,
                     None,
                 );
-                cx.text(
-                    cr,
-                    self.cancel_label.as_deref().unwrap_or(""),
-                    foreground,
-                    self.base.font,
-                    TextAlign::Center,
-                    false,
-                );
+                cx.text(cr, self.cancel_label.as_deref().unwrap_or(""), foreground, self.base.font, TextAlign::Center, false);
             }
             let hov = self.hovered == Some(true);
             cx.rect(
@@ -333,20 +277,9 @@ impl Component for Modal {
                 confirm_tone.with_alpha(if hov { 235 } else { 200 }),
                 None,
                 ctrl_radius,
-                (hov).then_some(Glow {
-                    color: confirm_tone,
-                    radius: 8.0,
-                    intensity: 0.3,
-                }),
+                (hov).then_some(Glow { color: confirm_tone, radius: 8.0, intensity: 0.3 }),
             );
-            cx.text(
-                r.confirm,
-                &self.confirm_label,
-                background,
-                self.base.font,
-                TextAlign::Center,
-                true,
-            );
+            cx.text(r.confirm, &self.confirm_label, background, self.base.font, TextAlign::Center, true);
         });
     }
 
@@ -381,19 +314,13 @@ impl Component for Modal {
                 // Always swallow input while open (modal).
                 Handled::Yes
             }
-            Event::Key {
-                key: GridKey::Escape,
-                pressed: true,
-            } => {
+            Event::Key { key: GridKey::Escape, pressed: true } => {
                 if self.dismissible {
                     self.do_cancel();
                 }
                 Handled::Yes
             }
-            Event::Key {
-                key: GridKey::Enter,
-                pressed: true,
-            } => {
+            Event::Key { key: GridKey::Enter, pressed: true } => {
                 self.do_confirm();
                 Handled::Yes
             }

@@ -103,6 +103,10 @@ impl LayoutEngine {
             let child = &mut c.base_mut().children[i];
             self.assign(child.as_mut(), abs);
         }
+        // Post-order: this node's bounds and all descendants' are now freshly
+        // computed, so a widget can reset layout-derived state (e.g. a scroll
+        // viewport clears the shift baked into its children's bounds).
+        c.on_layout();
     }
 }
 

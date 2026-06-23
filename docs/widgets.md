@@ -19,7 +19,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
 - [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion)
   - Text: [`Label`](#label)
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
@@ -462,6 +462,98 @@ Grid::new()
     .area(Label::new("nvim"), "title")
     .area(Badge::success("RUN"), "tag");
 ```
+
+### ScrollRegion
+
+An embeddable **vertical scroll viewport**: a column of children laid out at their
+natural height (the layout engine never shrinks them, so the column overflows),
+clipped to the region's own bounds. The visible window is the `ScrollRegion`
+itself; content beyond it is clipped (`PushClip`). It is a **dumb viewport** —
+it owns no selection state; selection/cursor is the host container's concern,
+and the region just scrolls where it's told (see *Real-app integration* below).
+
+**Mechanism — same as the whole-page scroll.** Rather than a separate
+translation layer, `ScrollRegion` reuses the page-scroll pattern: it bakes
+`-scroll_offset` into its children's **bounds** (so paint, hit-testing, and DnD
+all see the *visual* position — bounds === what's drawn) and clips to its own
+rect via `PushClip` (a sub-region has no framebuffer, so it needs an explicit
+clip). Because bounds always match the visual, pointer routing and the drag
+framework's `source_at`/`resolve_at` (which hit-test against bounds) just work
+while scrolled. A fresh layout pass would compound the shift, so the layout
+engine's post-order `on_layout` hook resets the baked offset (children are back
+at natural) and re-applies it from scratch — no compounding across relayouts.
+
+- **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
+  Give it a fixed `.height()` (and usually `.width()`) via `LayoutExt` so the
+  content actually overflows; otherwise it sizes to its children and never
+  scrolls.
+- **Builders**: `LayoutExt`, `Parent`.
+- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read from the host);
+  `.scroll_to(f32) -> f32` (clamped to `[0, max_offset]`, **bakes the shift into
+  bounds immediately**, requests a repaint, returns the applied value). Prefer
+  `scroll_to` over raw `scroll_offset().set()` — it keeps the shifted bounds
+  (paint/hit-testing/DnD) in sync with the offset in the same call.
+- **Scroll-into-view** (for keyboard cursor following): `.ensure_visible(rect)`
+  scrolls minimally so a descendant's current `bounds` (visual space, read
+  straight off the component) is fully inside the viewport — above → align tops,
+  below → align bottoms, already visible → no-op. `.scroll_to_child(index)` is
+  the convenience for a flat list whose selectable units are direct children.
+  The widget recovers natural positions internally via its baked shift
+  (`applied_offset`), so the host never tracks the scroll offset or does offset
+  math. Minimal movement — it won't jump if the item is already on screen.
+- **Wheel** (built-in): advances the offset by ~10% of the viewport per notch
+  (viewport-proportional, so a small sidebar doesn't overshoot). **Hover-gated**:
+  `Event::Scroll` carries no position, so the region tracks the cursor via
+  `PointerMoved` and only swallows the wheel when hovered (and scrollable);
+  otherwise the event propagates so the host page (or a nested region) can
+  scroll. Single inline region only — nested scroll regions need host-side
+  hit-testing (future).
+- **Keyboard** (built-in, focus-gated): the region is `focusable()`, so click it
+  or Tab to it to focus. `Event::Key` is delivered to the **focused component
+  only** (`FocusManager`), so the gate is simply `focused` — no broadcast-key
+  ambiguity. When focused: `ArrowUp`/`ArrowDown` and `j`/`k` (with or without
+  `Ctrl`) move by one step (~10% of the viewport, matching the wheel), `Home`/
+  `End` jump to top/bottom. A focus ring (corner brackets, `theme.accent`, gated
+  by `focus_visible` + `show_focus_border`) shows which region receives the keys.
+  A focused **child** (e.g. an `Input`) receives its keys directly via its own
+  `event` and never has them stolen. PageUp/PageDown are future work (`GridKey`
+  has no page keys yet).
+- **Scrollbar thumb** (built-in): auto-shown when content overflows; **draggable**.
+  A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
+  grip bar), sitting in a wider invisible **grab lane** (16px) so the thin 8px
+  thumb is easy to click. The thumb radius reads the `Theme::control_radius()`
+  token (no hardcoded radius); the thumb color is `theme.accent` (no hardcoded
+  color). The affordance alphas (rest/hover) are widget-internal constants,
+  consistent with `MarkerGroup`.
+- **Traits**: `LayoutExt`, `Parent`.
+- **v1 scope**: vertical-only. Horizontal scroll, a dedicated scrollbar color
+  token, PageUp/PageDown keys, and nested-region hit-testing are future work.
+
+```rust
+let mut list = ScrollRegion::new()
+    .height(Length::Px(180.0))
+    .width(Length::Px(300.0));
+for i in 1..=25 {
+    list = list.child(Item::new(format!("item {i:02}")));
+}
+// Drive from the host (a “jump to top” action):
+list.scroll_to(0.0);
+```
+
+> **Real-app integration (sidebar):** selection is container-owned, not widget
+> state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
+> existing `SidebarNav` cursor handler (`j`/`k`, selection-driven) gains one line —
+> after moving the cursor, call `region.ensure_visible(selected_row.bounds)` (or
+> `scroll_to_child` for a flat list) to keep the cursor on screen. The selected
+> row's visual state (accent bar) stays container-driven via `Item::marker`/
+> `state`. See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)
+> for the wheel/thumb/keyboard demo.
+>
+> **Host wiring:** route keys through `FocusManager::deliver_key` (keys go to the
+> focused component only — that's the whole gate), and pointer/wheel through
+> `FocusManager::dispatch`. Note: in the showcase `Ctrl+K` is host-bound to the
+> command palette, so use `k`/`Ctrl+J`/arrows there; the chord is configurable in
+> the app.
 
 ### Label
 
@@ -1034,6 +1126,40 @@ let open = palette.open_signal();
 
 > Needs the same host wiring as `Modal` (route keys to the overlay). Because it tracks `Ctrl` for
 > Ctrl+J/K, the host must also broadcast `Event::ModifiersChanged` to the tree (most hosts do).
+
+### ContextMenu
+
+A **cursor-anchored action menu** overlay — the pointer counterpart to the keyboard pick flows
+(same input-capturing contract as `CommandPalette`/`Modal`). A floating list of entries, each with
+an optional **icon**, an optional **quick-pick keycap** (a `KeyHint`-style cap; press the letter to
+run), an optional textual shortcut hint, a `danger` flag (destructive entries render red), and an
+`enabled` flag. Open/close **and the anchor point** are host-owned signals — right-click detection
+lives at the app level (grid-ui pointer events carry no button), so the host sets the anchor to the
+cursor and flips `open`. The panel sizes to its content and flips/clamps to stay on-screen.
+
+- **Construct**: `ContextMenu::new()`; add entries with `.entry(MenuEntry::new(label, on_select)
+  .icon(Glyph)?.key('x')?.shortcut("prefix+x")?.danger(bool)?.enabled(bool)?)`; `.open(bool)`, `.anchor(Point)`.
+- **Accessors**: `.open_signal() -> Signal<bool>`, `.anchor_signal() -> Signal<Point>`.
+- **Nav (built-in)**: ↑/↓ move (skipping disabled), **Enter** runs, a **quick-pick key** runs its
+  entry directly, **Esc** / outside-click close. Hover highlights; click runs. Also `select_next()`,
+  `select_prev()`, `run_selected()`.
+
+```rust
+let menu = ContextMenu::new()
+    .entry(MenuEntry::new("Rename", || wm.rename()).icon(Glyph::FileCode).key('r'))
+    .entry(MenuEntry::new("Close", || wm.close()).icon(Glyph::XSquare).key('x').danger(true));
+let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
+// host: on right-click → anchor.set(cursor); open.set(true); add `menu` to the tree
+```
+
+> Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
+> (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
+
+> **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
+> `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
+> `heca::shortcut::format_shortcut(keys, with_prefix)` — e.g. `format_shortcut("prefix+x", true)` →
+> `"λ x"`. Feed that into `.shortcut(...)` so the symbol/formatting live in one place (the showcase
+> mirrors this with its own `display_shortcut`).
 
 ### ToastStack
 

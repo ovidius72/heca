@@ -1,9 +1,7 @@
 //! Phase A integration tests: the reactive + layout + component model, headless.
 
 use heca_grid_ui::prelude::*;
-use heca_grid_ui::{
-    DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme,
-};
+use heca_grid_ui::{DrawCommand, Event, LayoutEngine, PaintCx, Point, Rectangle, Scene, Size, Theme};
 
 /// A leaf box with a fixed size, for deterministic layout assertions.
 fn fixed_box(w: f32, h: f32) -> Flex {
@@ -177,18 +175,12 @@ fn widget_size_scales_font_and_box_proportionally() {
     let (normal_f, normal_b) = measure(WidgetSize::Normal);
     let (big_f, big_b) = measure(WidgetSize::Large);
 
-    assert!(
-        small_f < normal_f && normal_f < big_f,
-        "font grows Small < Normal < Big"
-    );
+    assert!(small_f < normal_f && normal_f < big_f, "font grows Small < Normal < Big");
     assert!(
         small_b.size.h < normal_b.size.h && normal_b.size.h < big_b.size.h,
         "box height grows with the size variant"
     );
-    assert!(
-        small_b.size.w < big_b.size.w,
-        "box width grows with the size variant"
-    );
+    assert!(small_b.size.w < big_b.size.w, "box width grows with the size variant");
 
     // The default is Normal.
     let mut default_btn = Button::new("RUN");
@@ -337,19 +329,12 @@ fn dispatch_focuses_on_press_and_falls_through_when_unconsumed() {
 
     // A press dispatches with focus-on-press semantics: the clicked widget focuses.
     focus.dispatch(&mut ui, &Event::PointerPressed { pos: center });
-    assert_eq!(
-        focus.focused(),
-        Some(1),
-        "dispatch focuses the pressed widget"
-    );
+    assert_eq!(focus.focused(), Some(1), "dispatch focuses the pressed widget");
 
     // A press that misses every focusable clears focus.
-    focus.dispatch(
-        &mut ui,
-        &Event::PointerPressed {
-            pos: Point::new(9999.0, 9999.0),
-        },
-    );
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(9999.0, 9999.0),
+    });
     assert_eq!(focus.focused(), None, "dispatch clears focus on a miss");
 
     // No widget consumes a scroll → dispatch reports No so the host can page-scroll.
@@ -374,12 +359,9 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     let sb = ui.base().children[1].base().bounds;
 
     // Press on the Select trigger opens its dropdown (no overlay yet → normal route).
-    focus.dispatch(
-        &mut ui,
-        &Event::PointerPressed {
-            pos: Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
-        },
-    );
+    focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 5.0, sb.loc.y + 5.0),
+    });
     assert!(
         focus.overlay_active(&mut ui),
         "pressing the trigger opens the dropdown overlay"
@@ -390,12 +372,9 @@ fn dispatch_gives_an_open_overlay_first_dibs() {
     // than being treated as a fresh focus/click on the tree behind it.
     // Row layout: trigger bottom + panel_gap(4) + panel_pad(4) + 2*ROW_H(30) + mid(15).
     let row2_y = sb.loc.y + sb.size.h + 4.0 + 4.0 + 2.0 * 30.0 + 15.0;
-    let handled = focus.dispatch(
-        &mut ui,
-        &Event::PointerPressed {
-            pos: Point::new(sb.loc.x + 10.0, row2_y),
-        },
-    );
+    let handled = focus.dispatch(&mut ui, &Event::PointerPressed {
+        pos: Point::new(sb.loc.x + 10.0, row2_y),
+    });
     assert_eq!(handled, Handled::Yes, "the open overlay consumes the press");
     assert!(
         !focus.overlay_active(&mut ui),
@@ -422,10 +401,7 @@ fn glow_none_suppresses_glow() {
         DrawCommand::Rect(r) => r.glow.is_some(),
         _ => false,
     });
-    assert!(
-        !glow_present,
-        "glow must be suppressed when glow_size is None"
-    );
+    assert!(!glow_present, "glow must be suppressed when glow_size is None");
 
     // And with a glow size set, the glow survives.
     theme.glow_size = GlowLevel::Medium;
@@ -434,9 +410,7 @@ fn glow_none_suppresses_glow() {
         let mut cx = PaintCx::new(&mut scene2, &theme);
         Surface::new().glow(Color::rgb(64, 224, 255)).paint(&mut cx);
     }
-    let glow_present2 = scene2
-        .iter()
-        .any(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()));
+    let glow_present2 = scene2.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.glow.is_some()));
     assert!(glow_present2, "glow present when glow_size is Medium");
 }
 
@@ -1703,10 +1677,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
         .iter()
         .filter(|c| matches!(c, DrawCommand::Brackets(_)))
         .count();
-    assert_eq!(
-        brackets, 0,
-        "pane no longer uses the square bracket primitive"
-    );
+    assert_eq!(brackets, 0, "pane no longer uses the square bracket primitive");
 
     let rounded_border = scene.iter().any(|c| {
         matches!(
@@ -1715,17 +1686,16 @@ fn pane_draws_rounded_accent_border_no_brackets() {
                 if r.border.is_some() && r.radius == theme.radius && r.glow.is_none()
         )
     });
-    assert!(
-        rounded_border,
-        "pane draws a rounded accent border at the theme radius"
-    );
+    assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
 }
 
 #[test]
 fn item_group_collapses_rows_out_of_layout() {
     use heca_grid_ui::ItemGroup;
     let row = || Item::new("row").on_activate(|| {});
-    let mut group = ItemGroup::new("GROUP").child(row()).child(row());
+    let mut group = ItemGroup::new("GROUP")
+        .child(row())
+        .child(row());
 
     // Expanded: header + 2 rows all take height.
     LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
@@ -1738,10 +1708,7 @@ fn item_group_collapses_rows_out_of_layout() {
     LayoutEngine::new().compute(&mut group, Size::new(200.0, 400.0));
     let collapsed_h = group.base().bounds.size.h;
     let r1c = group.base().children[1].base().bounds.size.h;
-    assert!(
-        collapsed_h < expanded_h,
-        "collapsed group is shorter ({collapsed_h} < {expanded_h})"
-    );
+    assert!(collapsed_h < expanded_h, "collapsed group is shorter ({collapsed_h} < {expanded_h})");
     assert_eq!(r1c, 0.0, "collapsed rows take no layout space");
 }
 
@@ -1802,10 +1769,7 @@ fn dock_frame_collapse_folds_body_out_of_layout() {
     let body_h = dock.base().children[1].base().bounds.size.h;
     assert_eq!(body_h, 0.0, "collapsed body takes no layout space");
     let collapsed_h = dock.base().bounds.size.h;
-    assert!(
-        collapsed_h < expanded_h,
-        "collapsed dock is shorter ({collapsed_h} < {expanded_h})"
-    );
+    assert!(collapsed_h < expanded_h, "collapsed dock is shorter ({collapsed_h} < {expanded_h})");
 }
 
 #[test]
@@ -1822,16 +1786,10 @@ fn dock_frame_header_click_toggles_and_emits_dock_toggle() {
 
     // Click the toggle area of the title bar (header child 0): collapses + reports.
     let toggle = dock.base().children[0].base().children[0].base().bounds;
-    let center = Point::new(
-        toggle.loc.x + toggle.size.w / 2.0,
-        toggle.loc.y + toggle.size.h / 2.0,
-    );
+    let center = Point::new(toggle.loc.x + toggle.size.w / 2.0, toggle.loc.y + toggle.size.h / 2.0);
     dock.event(&Event::PointerPressed { pos: center });
 
-    assert!(
-        !dock.state().get_untracked(),
-        "header click collapses the frame"
-    );
+    assert!(!dock.state().get_untracked(), "header click collapses the frame");
     assert_eq!(
         log.borrow().last(),
         Some(&Action::value("dock-toggle", SignalData::Bool(false))),
@@ -1853,17 +1811,11 @@ fn dock_frame_header_control_receives_events_before_toggle() {
 
     // Click the control (header child 1): it consumes the event; frame must NOT toggle.
     let ctrl = dock.base().children[0].base().children[1].base().bounds;
-    let center = Point::new(
-        ctrl.loc.x + ctrl.size.w / 2.0,
-        ctrl.loc.y + ctrl.size.h / 2.0,
-    );
+    let center = Point::new(ctrl.loc.x + ctrl.size.w / 2.0, ctrl.loc.y + ctrl.size.h / 2.0);
     dock.event(&Event::PointerPressed { pos: center });
 
     assert_eq!(control_clicks.get(), 1, "header control received the click");
-    assert!(
-        dock.state().get_untracked(),
-        "clicking the control did not toggle the frame"
-    );
+    assert!(dock.state().get_untracked(), "clicking the control did not toggle the frame");
 }
 
 #[test]
@@ -1876,17 +1828,9 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
-    assert_eq!(
-        focus.focused(),
-        Some(0),
-        "header toggle is first in tab order"
-    );
+    assert_eq!(focus.focused(), Some(0), "header toggle is first in tab order");
     focus.advance(&mut dock, true);
-    assert_eq!(
-        focus.focused(),
-        Some(1),
-        "body row is tabbable while expanded"
-    );
+    assert_eq!(focus.focused(), Some(1), "body row is tabbable while expanded");
 
     // Collapse + relayout: the body subtree becomes display:none and drops out of
     // the tab order, so only the header toggle remains (forward Tab wraps to it).
@@ -1895,17 +1839,9 @@ fn dock_frame_collapsed_body_is_skipped_by_focus_traversal() {
 
     let mut focus = FocusManager::new();
     focus.advance(&mut dock, true);
-    assert_eq!(
-        focus.focused(),
-        Some(0),
-        "only the header toggle is focusable when collapsed"
-    );
+    assert_eq!(focus.focused(), Some(0), "only the header toggle is focusable when collapsed");
     focus.advance(&mut dock, true);
-    assert_eq!(
-        focus.focused(),
-        Some(0),
-        "collapsed body row is not reachable by Tab"
-    );
+    assert_eq!(focus.focused(), Some(0), "collapsed body row is not reachable by Tab");
 }
 
 #[test]
@@ -1918,11 +1854,7 @@ fn chrome_region_expanded_uses_full_width() {
 
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(
-        region.base().bounds.size.w,
-        240.0,
-        "expanded sidebar uses its full width"
-    );
+    assert_eq!(region.base().bounds.size.w, 240.0, "expanded sidebar uses its full width");
 }
 
 #[test]
@@ -1936,11 +1868,7 @@ fn chrome_region_collapses_to_rail_width() {
     region.mode_signal().set(RegionMode::CollapsedRail);
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(
-        region.base().bounds.size.w,
-        48.0,
-        "collapsed sidebar shrinks to the rail width"
-    );
+    assert_eq!(region.base().bounds.size.w, 48.0, "collapsed sidebar shrinks to the rail width");
 }
 
 #[test]
@@ -1951,11 +1879,7 @@ fn chrome_region_hidden_folds_out_of_layout() {
     region.mode_signal().set(RegionMode::Hidden);
     LayoutEngine::new().compute(&mut region, Size::new(400.0, 600.0));
 
-    assert_eq!(
-        region.base().bounds.size.w,
-        0.0,
-        "hidden region takes no layout space"
-    );
+    assert_eq!(region.base().bounds.size.w, 0.0, "hidden region takes no layout space");
 }
 
 #[test]
@@ -1969,11 +1893,7 @@ fn chrome_region_horizontal_bar_collapses_height() {
     bar.mode_signal().set(RegionMode::CollapsedRail);
     LayoutEngine::new().compute(&mut bar, Size::new(800.0, 300.0));
 
-    assert_eq!(
-        bar.base().bounds.size.h,
-        40.0,
-        "collapsed top/bottom bar shrinks to the rail height"
-    );
+    assert_eq!(bar.base().bounds.size.h, 40.0, "collapsed top/bottom bar shrinks to the rail height");
 }
 
 #[test]
@@ -1983,17 +1903,9 @@ fn chrome_region_toggle_flips_expanded_and_rail() {
     assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded);
 
     region.toggle();
-    assert_eq!(
-        region.mode_signal().get_untracked(),
-        RegionMode::CollapsedRail,
-        "toggle collapses to rail"
-    );
+    assert_eq!(region.mode_signal().get_untracked(), RegionMode::CollapsedRail, "toggle collapses to rail");
     region.toggle();
-    assert_eq!(
-        region.mode_signal().get_untracked(),
-        RegionMode::Expanded,
-        "toggle expands again"
-    );
+    assert_eq!(region.mode_signal().get_untracked(), RegionMode::Expanded, "toggle expands again");
 }
 
 #[test]
@@ -2026,13 +1938,9 @@ fn collapsed_dock_body_is_not_painted() {
         "expanded dock paints its body row"
     );
 
-    let mut collapsed = DockFrame::new("FILES")
-        .expanded(false)
-        .child(Item::new("SECRET.rs"));
+    let mut collapsed = DockFrame::new("FILES").expanded(false).child(Item::new("SECRET.rs"));
     assert!(
-        collect_labels(&mut collapsed)
-            .iter()
-            .all(|t| t != "SECRET.rs"),
+        collect_labels(&mut collapsed).iter().all(|t| t != "SECRET.rs"),
         "collapsed dock must not paint its hidden body row"
     );
 }
@@ -2053,10 +1961,7 @@ fn icon_lays_out_as_a_square() {
     let mut small = Icon::new(Glyph::GitBranch).size(24.0);
     small.base_mut().style.size = WidgetSize::Small;
     LayoutEngine::new().compute(&mut small, Size::new(200.0, 200.0));
-    assert!(
-        small.base().bounds.size.w < 24.0,
-        "Small scales the explicit glyph size down"
-    );
+    assert!(small.base().bounds.size.w < 24.0, "Small scales the explicit glyph size down");
 }
 
 #[test]
@@ -2082,20 +1987,9 @@ fn icon_paints_duotone_layers_in_the_icon_font() {
     // Two stacked layers: secondary (:before) then primary (secondary+1), both
     // shaped with the icon font.
     assert_eq!(glyphs.len(), 2, "duotone icon paints two layers");
-    assert!(
-        glyphs.iter().all(|(_, f)| *f == FontRole::Icon),
-        "both shaped with the icon font"
-    );
-    assert_eq!(
-        glyphs[0].0,
-        char::from_u32(0xe24a).unwrap().to_string(),
-        "secondary layer first"
-    );
-    assert_eq!(
-        glyphs[1].0,
-        char::from_u32(0xe24b).unwrap().to_string(),
-        "primary layer on top"
-    );
+    assert!(glyphs.iter().all(|(_, f)| *f == FontRole::Icon), "both shaped with the icon font");
+    assert_eq!(glyphs[0].0, char::from_u32(0xe24a).unwrap().to_string(), "secondary layer first");
+    assert_eq!(glyphs[1].0, char::from_u32(0xe24b).unwrap().to_string(), "primary layer on top");
 }
 
 #[test]
@@ -2121,10 +2015,7 @@ fn row_activates_on_click_and_key_when_interactive() {
     assert_eq!(clicks.get(), 0, "a click outside the row does nothing");
     row.event(&Event::PointerPressed { pos: center });
     assert_eq!(clicks.get(), 1, "a click inside the row activates it");
-    row.event(&Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    });
+    row.event(&Event::Key { key: GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "Enter activates the focused row");
 }
 
@@ -2143,23 +2034,10 @@ fn tag_lays_out_leading_and_label_and_hugs_content() {
 
     // The first segment holds [leading, label].
     let seg0 = tag.base().children[0].base();
-    assert_eq!(
-        seg0.children.len(),
-        2,
-        "first segment holds [leading, label]"
-    );
-    assert!(
-        seg0.children[0].base().bounds.size.w > 0.0,
-        "leading icon is laid out"
-    );
-    assert!(
-        seg0.children[1].base().bounds.size.w > 0.0,
-        "label is laid out"
-    );
-    assert!(
-        tag.base().bounds.size.w < 300.0,
-        "chip hugs its content, not the full width"
-    );
+    assert_eq!(seg0.children.len(), 2, "first segment holds [leading, label]");
+    assert!(seg0.children[0].base().bounds.size.w > 0.0, "leading icon is laid out");
+    assert!(seg0.children[1].base().bounds.size.w > 0.0, "label is laid out");
+    assert!(tag.base().bounds.size.w < 300.0, "chip hugs its content, not the full width");
 }
 
 #[test]
@@ -2174,10 +2052,7 @@ fn tag_with_multiple_segments_lays_them_in_a_row() {
     assert_eq!(tag.base().children.len(), 2, "two segments");
     let s0 = tag.base().children[0].base().bounds;
     let s1 = tag.base().children[1].base().bounds;
-    assert!(
-        s1.loc.x > s0.loc.x + s0.size.w - 1.0,
-        "the second segment sits right of the first"
-    );
+    assert!(s1.loc.x > s0.loc.x + s0.size.w - 1.0, "the second segment sits right of the first");
 }
 
 #[test]
@@ -2186,35 +2061,19 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
 
     // A rail-aware dock bound to its region's mode signal (obtained before the
     // region is moved into `.dock(...)`).
-    let sidebar = ChromeRegion::vertical()
-        .expanded_size(240.0)
-        .rail_size(48.0);
+    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
     let mode = sidebar.mode_signal();
-    let dock = DockFrame::new("FILES")
-        .rail(mode, Glyph::FolderOpen)
-        .child(Item::new("main.rs"));
+    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
     let mut sidebar = sidebar.dock(dock);
 
     // Expanded: header + body are shown; the rail icon is hidden.
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(
-            !dock.children[0].base().style.hidden,
-            "header shown while expanded"
-        );
-        assert!(
-            !dock.children[1].base().style.hidden,
-            "body shown while expanded"
-        );
-        assert!(
-            dock.children[2].base().style.hidden,
-            "rail icon hidden while expanded"
-        );
-        assert!(
-            dock.children[1].base().bounds.size.h > 0.0,
-            "expanded body has height"
-        );
+        assert!(!dock.children[0].base().style.hidden, "header shown while expanded");
+        assert!(!dock.children[1].base().style.hidden, "body shown while expanded");
+        assert!(dock.children[2].base().style.hidden, "rail icon hidden while expanded");
+        assert!(dock.children[1].base().bounds.size.h > 0.0, "expanded body has height");
     }
 
     // Collapse the region to its rail: header + body fold away; the rail icon shows.
@@ -2222,27 +2081,11 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
     LayoutEngine::new().compute(&mut sidebar, Size::new(400.0, 600.0));
     {
         let dock = sidebar.base().children[0].base();
-        assert!(
-            dock.children[0].base().style.hidden,
-            "header folds away in rail mode"
-        );
-        assert!(
-            dock.children[1].base().style.hidden,
-            "body folds away in rail mode"
-        );
-        assert!(
-            !dock.children[2].base().style.hidden,
-            "rail icon shows in rail mode"
-        );
-        assert_eq!(
-            dock.children[1].base().bounds.size.h,
-            0.0,
-            "folded body takes no layout space"
-        );
-        assert!(
-            dock.children[2].base().bounds.size.h > 0.0,
-            "rail icon is laid out"
-        );
+        assert!(dock.children[0].base().style.hidden, "header folds away in rail mode");
+        assert!(dock.children[1].base().style.hidden, "body folds away in rail mode");
+        assert!(!dock.children[2].base().style.hidden, "rail icon shows in rail mode");
+        assert_eq!(dock.children[1].base().bounds.size.h, 0.0, "folded body takes no layout space");
+        assert!(dock.children[2].base().bounds.size.h > 0.0, "rail icon is laid out");
     }
 }
 
@@ -2250,13 +2093,9 @@ fn dock_frame_rail_mode_folds_header_and_body_to_icon() {
 fn dock_frame_rail_paints_icon_not_title() {
     use heca_grid_ui::{ChromeRegion, DockFrame, DrawCommand, FontRole, Glyph, Item, RegionMode};
 
-    let sidebar = ChromeRegion::vertical()
-        .expanded_size(240.0)
-        .rail_size(48.0);
+    let sidebar = ChromeRegion::vertical().expanded_size(240.0).rail_size(48.0);
     let mode = sidebar.mode_signal();
-    let dock = DockFrame::new("FILES")
-        .rail(mode, Glyph::FolderOpen)
-        .child(Item::new("main.rs"));
+    let dock = DockFrame::new("FILES").rail(mode, Glyph::FolderOpen).child(Item::new("main.rs"));
     let mut sidebar = sidebar.dock(dock);
 
     let paint = |sidebar: &mut ChromeRegion| -> (Vec<String>, usize) {
@@ -2283,30 +2122,15 @@ fn dock_frame_rail_paints_icon_not_title() {
 
     // Expanded: the title + body row paint as text; no icon-rail glyph yet.
     let (texts, _) = paint(&mut sidebar);
-    assert!(
-        texts.iter().any(|t| t == "FILES"),
-        "title paints while expanded"
-    );
-    assert!(
-        texts.iter().any(|t| t == "main.rs"),
-        "body row paints while expanded"
-    );
+    assert!(texts.iter().any(|t| t == "FILES"), "title paints while expanded");
+    assert!(texts.iter().any(|t| t == "main.rs"), "body row paints while expanded");
 
     // Rail mode: the title + body text are gone; a duotone icon (2 glyph runs) paints.
     mode.set(RegionMode::CollapsedRail);
     let (texts, icons) = paint(&mut sidebar);
-    assert!(
-        texts.iter().all(|t| t != "FILES"),
-        "title is not painted in rail mode"
-    );
-    assert!(
-        texts.iter().all(|t| t != "main.rs"),
-        "body row is not painted in rail mode"
-    );
-    assert!(
-        icons >= 2,
-        "rail paints the duotone dock icon (secondary + primary), got {icons}"
-    );
+    assert!(texts.iter().all(|t| t != "FILES"), "title is not painted in rail mode");
+    assert!(texts.iter().all(|t| t != "main.rs"), "body row is not painted in rail mode");
+    assert!(icons >= 2, "rail paints the duotone dock icon (secondary + primary), got {icons}");
 }
 
 #[test]
@@ -2324,14 +2148,8 @@ fn rail_cell_lays_out_a_square_with_centered_icon() {
     let icon = cell.base().children[0].base().bounds;
     let icon_cx = icon.loc.x + icon.size.w / 2.0;
     let icon_cy = icon.loc.y + icon.size.h / 2.0;
-    assert!(
-        (icon_cx - (b.loc.x + b.size.w / 2.0)).abs() < 1.0,
-        "icon centered horizontally"
-    );
-    assert!(
-        (icon_cy - (b.loc.y + b.size.h / 2.0)).abs() < 1.0,
-        "icon centered vertically"
-    );
+    assert!((icon_cx - (b.loc.x + b.size.w / 2.0)).abs() < 1.0, "icon centered horizontally");
+    assert!((icon_cy - (b.loc.y + b.size.h / 2.0)).abs() < 1.0, "icon centered vertically");
 }
 
 #[test]
@@ -2349,10 +2167,7 @@ fn rail_cell_activates_on_click_and_enter() {
     let b = cell.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     cell.event(&Event::PointerPressed { pos: center });
-    cell.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Enter,
-        pressed: true,
-    });
+    cell.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "click + Enter both activate the cell");
 }
 
@@ -2387,19 +2202,13 @@ fn key_hint_overlays_letter_only_when_set() {
     // No hint: the child icon paints, no keycap letter.
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "wrapped icon still paints (duotone = 2 runs)");
-    assert!(
-        texts.iter().all(|t| t != "a"),
-        "no keycap letter while hint is None"
-    );
+    assert!(texts.iter().all(|t| t != "a"), "no keycap letter while hint is None");
 
     // Hint set: the letter overlays; the child icon still paints underneath.
     hint.set(Some("a".to_string()));
     let (texts, icons) = paint(&mut wrapped);
     assert!(icons >= 2, "child icon still paints under the keycap");
-    assert!(
-        texts.iter().any(|t| t == "a"),
-        "keycap letter paints while hint is Some"
-    );
+    assert!(texts.iter().any(|t| t == "a"), "keycap letter paints while hint is Some");
 }
 
 #[test]
@@ -2411,18 +2220,13 @@ fn key_hint_is_transparent_to_focus_and_activation() {
     // A focusable child wrapped in a KeyHint must stay reachable + activatable.
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
-    let mut wrapped =
-        KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
+    let mut wrapped = KeyHint::new(Item::new("file.rs").on_activate(move || sink.set(sink.get() + 1)));
     LayoutEngine::new().compute(&mut wrapped, Size::new(200.0, 60.0));
 
     // Focus traversal recurses through the transparent wrapper to the child.
     let mut focus = FocusManager::new();
     focus.advance(&mut wrapped, true);
-    assert_eq!(
-        focus.focused(),
-        Some(0),
-        "wrapped child is reachable by Tab"
-    );
+    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
 
     // Events route through the wrapper to the child.
     focus.deliver_key(&mut wrapped, heca_grid_ui::GridKey::Enter);
@@ -2457,10 +2261,7 @@ fn row_attention_request_pulses_then_settles() {
     LayoutEngine::new().compute(&mut row, Size::new(200.0, 40.0));
 
     req.set(true);
-    assert!(
-        row.tick(0.0),
-        "attention request triggers an animating pulse"
-    );
+    assert!(row.tick(0.0), "attention request triggers an animating pulse");
     assert!(!req.get_untracked(), "the request signal is consumed");
 
     // The sequence is finite — ticking it out eventually settles (no animation).
@@ -2471,10 +2272,7 @@ fn row_attention_request_pulses_then_settles() {
             break;
         }
     }
-    assert!(
-        settled,
-        "attention pulse sequence ends and the row stops animating"
-    );
+    assert!(settled, "attention pulse sequence ends and the row stops animating");
 }
 
 #[test]
@@ -2505,10 +2303,7 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     // No on_click → inert + unfocusable.
     let mut bare = IconButton::new(Icon::new(Glyph::Search).size(18.0));
     LayoutEngine::new().compute(&mut bare, Size::new(100.0, 100.0));
-    assert!(
-        !bare.focusable(),
-        "an icon button without on_click is not focusable"
-    );
+    assert!(!bare.focusable(), "an icon button without on_click is not focusable");
 
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
@@ -2520,10 +2315,7 @@ fn icon_button_activates_on_click_and_enter_only_when_wired() {
     let b = btn.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     btn.event(&Event::PointerPressed { pos: center });
-    btn.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Enter,
-        pressed: true,
-    });
+    btn.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(clicks.get(), 2, "click + Enter both fire on_click");
 }
 
@@ -2544,9 +2336,7 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
             let mut cx = PaintCx::new(&mut scene, &theme);
             tip.paint(&mut cx);
         }
-        scene
-            .iter()
-            .any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
+        scene.iter().any(|c| matches!(c, DrawCommand::Text(t) if t.text == "HELP"))
     };
 
     // Idle: no bubble.
@@ -2557,19 +2347,14 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     let b = tip.base().bounds;
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     tip.event(&Event::PointerMoved { pos: center });
-    assert!(
-        !shows_help(&mut tip),
-        "still hidden before the delay elapses"
-    );
+    assert!(!shows_help(&mut tip), "still hidden before the delay elapses");
 
     // Past the delay: the bubble shows.
     std::thread::sleep(std::time::Duration::from_millis(120));
     assert!(shows_help(&mut tip), "bubble reveals after the hover delay");
 
     // Pointer leaves: hidden again immediately.
-    tip.event(&Event::PointerMoved {
-        pos: Point::new(-50.0, -50.0),
-    });
+    tip.event(&Event::PointerMoved { pos: Point::new(-50.0, -50.0) });
     assert!(!shows_help(&mut tip), "hidden once the pointer leaves");
 }
 
@@ -2581,25 +2366,14 @@ fn tooltip_is_transparent_to_child_events() {
 
     let clicks = Rc::new(Cell::new(0u32));
     let sink = clicks.clone();
-    let mut tip = Tooltip::new(
-        Item::new("file").on_activate(move || sink.set(sink.get() + 1)),
-        "open",
-    );
+    let mut tip = Tooltip::new(Item::new("file").on_activate(move || sink.set(sink.get() + 1)), "open");
     LayoutEngine::new().compute(&mut tip, Size::new(200.0, 60.0));
 
     let mut focus = FocusManager::new();
     focus.advance(&mut tip, true);
-    assert_eq!(
-        focus.focused(),
-        Some(0),
-        "wrapped child is reachable by Tab"
-    );
+    assert_eq!(focus.focused(), Some(0), "wrapped child is reachable by Tab");
     focus.deliver_key(&mut tip, heca_grid_ui::GridKey::Enter);
-    assert_eq!(
-        clicks.get(),
-        1,
-        "Enter activates the wrapped child through the tooltip"
-    );
+    assert_eq!(clicks.get(), 1, "Enter activates the wrapped child through the tooltip");
 }
 
 #[test]
@@ -2609,9 +2383,7 @@ fn tooltip_flips_to_fit_the_viewport() {
     // A `Bottom` tooltip whose target sits near the viewport's bottom edge has no
     // room below → it must flip above the target.
     let vp = Size::new(300.0, 100.0);
-    let mut tip = Tooltip::new(Item::new("X"), "HELP")
-        .side(TooltipSide::Bottom)
-        .delay(0.0);
+    let mut tip = Tooltip::new(Item::new("X"), "HELP").side(TooltipSide::Bottom).delay(0.0);
     LayoutEngine::new().compute(&mut tip, vp);
 
     // Shove the whole subtree down so the target is near the bottom edge.
@@ -2652,15 +2424,9 @@ fn tooltip_flips_to_fit_the_viewport() {
 fn modal_captures_input_only_while_open() {
     use heca_grid_ui::{Component, Modal};
     let closed = Modal::new("Title", "msg").confirm("OK", || {});
-    assert!(
-        !closed.overlay_active() && !closed.focusable(),
-        "inert while closed"
-    );
+    assert!(!closed.overlay_active() && !closed.focusable(), "inert while closed");
     let open = Modal::new("Title", "msg").confirm("OK", || {}).open(true);
-    assert!(
-        open.overlay_active() && open.focusable(),
-        "captures input while open"
-    );
+    assert!(open.overlay_active() && open.focusable(), "captures input while open");
 }
 
 #[test]
@@ -2678,19 +2444,13 @@ fn modal_enter_confirms_escape_cancels_then_closes() {
         .open(true);
 
     // Enter = confirm → fires + closes.
-    m.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Enter,
-        pressed: true,
-    });
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(confirms.get(), 1, "Enter confirms");
     assert!(!m.overlay_active(), "closed after confirm");
 
     // Reopen; Esc = cancel → fires + closes.
     m.open_signal().set(true);
-    m.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Escape,
-        pressed: true,
-    });
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
     assert_eq!(cancels.get(), 1, "Escape cancels");
     assert!(!m.overlay_active(), "closed after cancel");
 }
@@ -2719,17 +2479,13 @@ fn modal_scrim_click_dismisses_but_panel_body_does_not() {
     }
 
     // A click in the far corner (scrim) dismisses (= cancel).
-    m.event(&Event::PointerPressed {
-        pos: Point::new(3.0, 3.0),
-    });
+    m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
     assert_eq!(cancels.get(), 1, "scrim click cancels");
     assert!(!m.overlay_active(), "closed after scrim dismiss");
 
     // Reopen; a click in the panel body (its center, not a button) must NOT close.
     m.open_signal().set(true);
-    m.event(&Event::PointerPressed {
-        pos: Point::new(200.0, 150.0),
-    });
+    m.event(&Event::PointerPressed { pos: Point::new(200.0, 150.0) });
     assert_eq!(cancels.get(), 1, "clicking the panel body does not dismiss");
     assert!(m.overlay_active(), "panel-body click keeps the dialog open");
 }
@@ -2758,33 +2514,19 @@ fn modal_non_dismissible_forces_a_button_choice() {
     }
 
     // Esc + scrim click are swallowed but DON'T close a non-dismissible dialog.
-    m.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Escape,
-        pressed: true,
-    });
-    m.event(&Event::PointerPressed {
-        pos: Point::new(3.0, 3.0),
-    });
-    assert!(
-        m.overlay_active(),
-        "non-dismissible dialog ignores Esc + scrim"
-    );
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
+    m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
+    assert!(m.overlay_active(), "non-dismissible dialog ignores Esc + scrim");
 
     // Only a button closes it (Enter = confirm).
-    m.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Enter,
-        pressed: true,
-    });
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
     assert_eq!(confirms.get(), 1, "a button still works");
     assert!(!m.overlay_active(), "closed once a button is chosen");
 }
 
 // --- CommandPalette --------------------------------------------------------
 
-fn palette_with_markers() -> (
-    heca_grid_ui::CommandPalette,
-    std::rc::Rc<std::cell::Cell<u8>>,
-) {
+fn palette_with_markers() -> (heca_grid_ui::CommandPalette, std::rc::Rc<std::cell::Cell<u8>>) {
     use heca_grid_ui::{Command, CommandPalette};
     let ran = std::rc::Rc::new(std::cell::Cell::new(0u8));
     let (r1, r2, r3) = (ran.clone(), ran.clone(), ran.clone());
@@ -2801,10 +2543,7 @@ fn command_palette_is_overlay_active_only_while_open() {
     let (p, _) = palette_with_markers();
     assert!(!p.overlay_active() && !p.focusable(), "inert while closed");
     let p = p.open(true);
-    assert!(
-        p.overlay_active() && p.focusable(),
-        "captures input while open"
-    );
+    assert!(p.overlay_active() && p.focusable(), "captures input while open");
 }
 
 #[test]
@@ -2815,24 +2554,11 @@ fn command_palette_typing_filters_then_enter_runs_top_result() {
 
     // Type "tog" → "Toggle sidebar" is the top (only) match.
     for c in "tog".chars() {
-        p.event(&Event::Key {
-            key: GridKey::Char(c),
-            pressed: true,
-        });
+        p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
     }
-    p.event(&Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    });
-    assert_eq!(
-        ran.get(),
-        3,
-        "Enter runs the filtered top result (Toggle sidebar)"
-    );
-    assert!(
-        !p.overlay_active(),
-        "palette closes after running a command"
-    );
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 3, "Enter runs the filtered top result (Toggle sidebar)");
+    assert!(!p.overlay_active(), "palette closes after running a command");
 }
 
 #[test]
@@ -2842,33 +2568,14 @@ fn command_palette_navigates_with_arrows_and_ctrl_jk() {
     p = p.open(true);
 
     // No query → all three; selection starts at 0. Ctrl+J moves down twice → idx 2.
-    p.event(&Event::ModifiersChanged(Modifiers {
-        ctrl: true,
-        ..Default::default()
-    }));
-    p.event(&Event::Key {
-        key: GridKey::Char('j'),
-        pressed: true,
-    });
-    p.event(&Event::Key {
-        key: GridKey::Char('j'),
-        pressed: true,
-    });
+    p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
+    p.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
     // ArrowUp moves back to idx 1.
     p.event(&Event::ModifiersChanged(Modifiers::default()));
-    p.event(&Event::Key {
-        key: GridKey::ArrowUp,
-        pressed: true,
-    });
-    p.event(&Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    });
-    assert_eq!(
-        ran.get(),
-        2,
-        "Ctrl+J ×2 then ArrowUp lands on the 2nd command (Close pane)"
-    );
+    p.event(&Event::Key { key: GridKey::ArrowUp, pressed: true });
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 2, "Ctrl+J ×2 then ArrowUp lands on the 2nd command (Close pane)");
 }
 
 #[test]
@@ -2879,32 +2586,16 @@ fn command_palette_query_reuses_input_word_delete() {
 
     // "Toggle xyz" matches nothing (no command contains "...xyz").
     for c in "Toggle xyz".chars() {
-        p.event(&Event::Key {
-            key: GridKey::Char(c),
-            pressed: true,
-        });
+        p.event(&Event::Key { key: GridKey::Char(c), pressed: true });
     }
     // Ctrl+Backspace word-deletes the whole "xyz" (not one char), leaving
     // "Toggle " — which now matches "Toggle sidebar". A char-delete would leave
     // "Toggle xy" (still no match), so this proves the Input editing is wired.
-    p.event(&Event::ModifiersChanged(Modifiers {
-        ctrl: true,
-        ..Default::default()
-    }));
-    p.event(&Event::Key {
-        key: GridKey::Backspace,
-        pressed: true,
-    });
+    p.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+    p.event(&Event::Key { key: GridKey::Backspace, pressed: true });
     p.event(&Event::ModifiersChanged(Modifiers::default()));
-    p.event(&Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    });
-    assert_eq!(
-        ran.get(),
-        3,
-        "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar"
-    );
+    p.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(ran.get(), 3, "Ctrl+Backspace word-delete leaves 'Toggle ' → runs Toggle sidebar");
 }
 
 #[test]
@@ -2912,30 +2603,13 @@ fn input_ctrl_h_deletes_char_and_ctrl_u_deletes_to_line_start() {
     use heca_grid_ui::{Input, Modifiers};
     let mut inp = Input::new().value("hello world");
 
-    inp.event(&Event::ModifiersChanged(Modifiers {
-        ctrl: true,
-        ..Default::default()
-    }));
+    inp.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
     // Ctrl+H = delete one char back.
-    inp.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Char('h'),
-        pressed: true,
-    });
-    assert_eq!(
-        inp.value_str(),
-        "hello worl",
-        "Ctrl+H deletes one char back"
-    );
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('h'), pressed: true });
+    assert_eq!(inp.value_str(), "hello worl", "Ctrl+H deletes one char back");
     // Ctrl+U = delete from caret to line start.
-    inp.event(&Event::Key {
-        key: heca_grid_ui::GridKey::Char('u'),
-        pressed: true,
-    });
-    assert_eq!(
-        inp.value_str(),
-        "",
-        "Ctrl+U deletes to the start of the line"
-    );
+    inp.event(&Event::Key { key: heca_grid_ui::GridKey::Char('u'), pressed: true });
+    assert_eq!(inp.value_str(), "", "Ctrl+U deletes to the start of the line");
 }
 
 // --- Toast ------------------------------------------------------------------
@@ -2952,11 +2626,8 @@ fn toast_height_grows_with_body_then_action() {
     use heca_grid_ui::Toast;
     let bare = layout_toast(&mut Toast::info("Saved"));
     let with_body = layout_toast(&mut Toast::info("Saved").body("All files written"));
-    let with_action = layout_toast(
-        &mut Toast::info("Saved")
-            .body("All files written")
-            .action("Undo", || {}),
-    );
+    let with_action =
+        layout_toast(&mut Toast::info("Saved").body("All files written").action("Undo", || {}));
     assert!(with_body > bare, "a body line adds height");
     assert!(with_action > with_body, "an action row adds further height");
 }
@@ -2973,9 +2644,7 @@ fn toast_dismiss_button_fires_on_dismiss_and_consumes() {
     layout_toast(&mut t);
 
     // The × lives in the top-right gutter (width 320, ~21px square inset by 13).
-    let hit = t.event(&Event::PointerPressed {
-        pos: Point::new(296.0, 23.0),
-    });
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(296.0, 23.0) });
     assert_eq!(dismissed.get(), 1, "clicking × fires on_dismiss");
     assert!(matches!(hit, Handled::Yes), "the × consumes the click");
 }
@@ -2992,9 +2661,7 @@ fn toast_action_button_fires_on_action() {
     layout_toast(&mut t);
 
     // Action row sits below the title, left-aligned in the text column.
-    t.event(&Event::PointerPressed {
-        pos: Point::new(60.0, 50.0),
-    });
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
     assert_eq!(acted.get(), 1, "clicking the action button fires on_action");
 }
 
@@ -3007,13 +2674,8 @@ fn toast_body_click_fires_on_click_only_when_set() {
     // Without on_click, a body click is not consumed (it can fall through).
     let mut inert = Toast::info("Build finished").dismissible(false);
     layout_toast(&mut inert);
-    let hit = inert.event(&Event::PointerPressed {
-        pos: Point::new(160.0, 20.0),
-    });
-    assert!(
-        matches!(hit, Handled::No),
-        "a non-clickable toast doesn't eat body clicks"
-    );
+    let hit = inert.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
+    assert!(matches!(hit, Handled::No), "a non-clickable toast doesn't eat body clicks");
 
     // With on_click, the same click activates + consumes.
     let clicked = Rc::new(Cell::new(0u32));
@@ -3022,14 +2684,9 @@ fn toast_body_click_fires_on_click_only_when_set() {
         .dismissible(false)
         .on_click(move || c.set(c.get() + 1));
     layout_toast(&mut t);
-    let hit = t.event(&Event::PointerPressed {
-        pos: Point::new(160.0, 20.0),
-    });
+    let hit = t.event(&Event::PointerPressed { pos: Point::new(160.0, 20.0) });
     assert_eq!(clicked.get(), 1, "body click fires on_click");
-    assert!(
-        matches!(hit, Handled::Yes),
-        "a clickable toast consumes the body click"
-    );
+    assert!(matches!(hit, Handled::Yes), "a clickable toast consumes the body click");
 }
 
 #[test]
@@ -3045,15 +2702,8 @@ fn toast_focusable_only_when_clickable_and_enter_activates() {
     let c = clicked.clone();
     let mut t = Toast::info("Open log?").on_click(move || c.set(c.get() + 1));
     assert!(t.focusable(), "a clickable toast is focusable");
-    t.event(&Event::Key {
-        key: GridKey::Enter,
-        pressed: true,
-    });
-    assert_eq!(
-        clicked.get(),
-        1,
-        "Enter activates a focused clickable toast"
-    );
+    t.event(&Event::Key { key: GridKey::Enter, pressed: true });
+    assert_eq!(clicked.get(), 1, "Enter activates a focused clickable toast");
 }
 
 // --- Button respects theme border_width + radius ----------------------------
@@ -3069,9 +2719,7 @@ fn button_derives_border_width_and_radius_from_theme() {
     let expected_radius = theme.control_radius();
 
     let mut btn = Button::primary("OK");
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(&mut btn, Size::new(300.0, 80.0));
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -3081,17 +2729,11 @@ fn button_derives_border_width_and_radius_from_theme() {
     // The button's background box uses the surface fill; it must round to the
     // theme's control radius and stroke at the theme's border width — not the
     // old hardcoded 0.0 / 1.5.
-    let bg = scene
-        .iter()
-        .find_map(|cmd| match cmd {
-            DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
-            _ => None,
-        })
-        .expect("button paints a surface-filled background box");
-    assert_eq!(
-        bg.radius, expected_radius,
-        "button corner radius follows theme.control_radius()"
-    );
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button paints a surface-filled background box");
+    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.control_radius()");
     assert_eq!(
         bg.border.expect("primary button has a border").width,
         theme.border_width,
@@ -3101,34 +2743,27 @@ fn button_derives_border_width_and_radius_from_theme() {
     // border_width == 0 → no border drawn (borders off, like every surface).
     theme.border_width = 0.0;
     let mut btn = Button::primary("OK");
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(&mut btn, Size::new(300.0, 80.0));
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
         btn.paint(&mut cx);
     }
-    let bg = scene
-        .iter()
-        .find_map(|cmd| match cmd {
-            DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
-            _ => None,
-        })
-        .expect("button still paints its background box");
-    assert!(
-        bg.border.is_none(),
-        "border_width == 0 means no button border"
-    );
+    let bg = scene.iter().find_map(|cmd| match cmd {
+        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        _ => None,
+    }).expect("button still paints its background box");
+    assert!(bg.border.is_none(), "border_width == 0 means no button border");
 }
 
-// --- border_width == 0 ⇒ no borders (containers keep a thin uniform hairline) -
+// --- border_width == 0 ⇒ no borders anywhere (bracket_frame draws nothing) ----
 
 #[test]
-fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
-    // Containers stay defined at border_width == 0, but via a single thin SOLID
-    // uniform border — NOT the reticle (whose bright corners collapsed to nothing,
-    // leaving empty corners + lingering dim straight edges).
+fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
+    // `border_width == 0` means borders off everywhere — `bracket_frame` draws
+    // NOTHING (no hairline). A container that needs definition at 0 carries a fill,
+    // not a forced border. This keeps the bracket frame consistent with every other
+    // widget's border gate.
     let mut theme = Theme::grid_tron();
     theme.border_width = 0.0;
     let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
@@ -3136,43 +2771,80 @@ fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
-    let rects: Vec<_> = scene
-        .iter()
-        .filter_map(|c| match c {
-            DrawCommand::Rect(r) => Some(*r),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        rects.len(),
-        1,
-        "border=0 frame is one uniform hairline (no dim-edge overlays)"
-    );
-    assert!(
-        rects[0].border.is_some_and(|b| b.width > 0.0),
-        "the hairline is solid + visible"
-    );
+    assert!(scene.is_empty(), "border_width == 0 draws no frame at all");
 
-    // With a real border the bright accent reticle (+ dim midsection overlays) returns.
+    // With a real border: one dimmed continuous accent line tracing the perimeter,
+    // plus four bright accent corners — each redrawn clipped to its corner box.
     theme.border_width = 2.0;
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
-    let bright = scene.iter().any(|c| matches!(
+    let bright_corners = scene.iter().filter(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    )).count();
+    let dim_line = scene.iter().any(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.accent.a && b.width > 0.0)
     ));
-    let n_rects = scene
-        .iter()
-        .filter(|c| matches!(c, DrawCommand::Rect(_)))
-        .count();
-    assert!(bright, "border>0 draws the bright accent reticle border");
+    let clips = scene.iter().filter(|c| matches!(c, DrawCommand::PushClip(_))).count();
+    assert_eq!(bright_corners, 4, "border>0 draws four bright accent corner brackets");
+    assert!(dim_line, "border>0 traces a dimmed continuous accent line under the corners");
+    assert_eq!(clips, 4, "each bright corner is clipped to its own corner box");
+}
+
+#[test]
+fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
+    // A default `Bordered` Pane with NO explicit `.border()` derives its border
+    // from `theme.border_width` (the global border control): a theme-colored
+    // border when borders are on, and nothing at `border_width == 0`. This is the
+    // consistency contract — the global control governs every container.
+    use heca_grid_ui::{Component, Pane};
+    // `explicit_border` width is the literal a caller passes to `.border()` — it must
+    // be ignored in favour of the live theme width, so a build-time literal can't
+    // survive a global border change (the showcase bug). `None` ⇒ no `.border()`.
+    let border_rects = |theme: &Theme, explicit: Option<(heca_grid_ui::Color, f32)>| -> Vec<heca_grid_ui::scene::RectCmd> {
+        let mut p = Pane::new()
+            .background(theme.surface)
+            .width(Length::Px(120.0))
+            .height(Length::Px(80.0));
+        if let Some((c, w)) = explicit {
+            p = p.border(c, w);
+        }
+        LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, theme);
+            p.paint(&mut cx);
+        }
+        scene.iter().filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+            _ => None,
+        }).collect()
+    };
+
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 2.0;
+    let on = border_rects(&theme, None);
     assert!(
-        n_rects > 1,
-        "border>0 also dims the straight midsections (overlay rects)"
+        on.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 2.0)),
+        "Bordered pane draws theme.border at theme.border_width without an explicit .border()",
+    );
+
+    // An explicit `.border(accent, 9.0)` keeps the COLOR but the width follows the
+    // theme (2.0), never the 9.0 literal.
+    let explicit = border_rects(&theme, Some((theme.accent, 9.0)));
+    assert!(
+        explicit.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 2.0)),
+        "explicit .border() supplies color only; width tracks theme.border_width",
+    );
+
+    theme.border_width = 0.0;
+    assert!(
+        border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.accent, 9.0))).is_empty(),
+        "border_width == 0 leaves the Bordered pane with no visible border, even with an explicit .border()",
     );
 }
 
@@ -3182,22 +2854,16 @@ fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f3
     let mut theme = Theme::grid_tron();
     theme.border_width = 0.0;
     let vp = Size::new(400.0, 200.0);
-    LayoutEngine::new()
-        .base_font(theme.font_size)
-        .compute(&mut w, vp);
+    LayoutEngine::new().base_font(theme.font_size).compute(&mut w, vp);
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         w.paint(&mut cx);
     }
-    scene
-        .iter()
-        .filter_map(|c| match c {
-            DrawCommand::Rect(r) => r.border.map(|b| b.width),
-            _ => None,
-        })
-        .filter(|w| *w > 0.0)
-        .collect()
+    scene.iter().filter_map(|c| match c {
+        DrawCommand::Rect(r) => r.border.map(|b| b.width),
+        _ => None,
+    }).filter(|w| *w > 0.0).collect()
 }
 
 #[test]
@@ -3206,28 +2872,13 @@ fn non_container_widgets_drop_their_border_at_zero_border_width() {
     // Guard against the recurring regression: a widget that hardcodes a border
     // stroke instead of routing it through the theme (cx.border / border_width).
     for (name, widths) in [
-        (
-            "button",
-            visible_border_widths_at_zero(Button::primary("OK")),
-        ),
+        ("button", visible_border_widths_at_zero(Button::primary("OK"))),
         ("badge", visible_border_widths_at_zero(Badge::success("ON"))),
-        (
-            "alert",
-            visible_border_widths_at_zero(Alert::warning("W").body("b")),
-        ),
-        (
-            "progress",
-            visible_border_widths_at_zero(ProgressBar::new().value(0.5)),
-        ),
-        (
-            "toggle",
-            visible_border_widths_at_zero(Toggle::new().on(true)),
-        ),
+        ("alert", visible_border_widths_at_zero(Alert::warning("W").body("b"))),
+        ("progress", visible_border_widths_at_zero(ProgressBar::new().value(0.5))),
+        ("toggle", visible_border_widths_at_zero(Toggle::new().on(true))),
     ] {
-        assert!(
-            widths.is_empty(),
-            "{name}: expected no border at border_width=0, got {widths:?}"
-        );
+        assert!(widths.is_empty(), "{name}: expected no border at border_width=0, got {widths:?}");
     }
 }
 
@@ -3242,58 +2893,28 @@ fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(
-            rect,
-            8.0,
-            Shadow {
-                color: theme.shadow,
-                radius: 24.0,
-                dx: 0.0,
-                dy: 10.0,
-            },
-        );
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow, radius: 24.0, dx: 0.0, dy: 10.0 });
     }
-    let sh = scene
-        .iter()
-        .find_map(|c| match c {
-            DrawCommand::Rect(r) => r.shadow,
-            _ => None,
-        })
-        .expect("drop_shadow emits a rect carrying a Shadow");
-    assert_eq!(
-        (sh.radius, sh.dy),
-        (24.0, 10.0),
-        "shadow blur + offset are threaded through"
-    );
+    let sh = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) => r.shadow,
+        _ => None,
+    }).expect("drop_shadow emits a rect carrying a Shadow");
+    assert_eq!((sh.radius, sh.dy), (24.0, 10.0), "shadow blur + offset are threaded through");
 
     // A fully-transparent shadow (alpha 0) or zero radius is a no-op.
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(
-            rect,
-            8.0,
-            Shadow {
-                color: theme.shadow.with_alpha(0),
-                radius: 24.0,
-                dx: 0.0,
-                dy: 10.0,
-            },
-        );
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow.with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
     }
-    assert!(
-        scene.is_empty(),
-        "a zero-alpha shadow draws nothing (shadows-off)"
-    );
+    assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
 }
 
 #[test]
 fn open_modal_casts_a_drop_shadow() {
     use heca_grid_ui::{Component, Modal};
     let theme = Theme::grid_tron();
-    let mut m = Modal::new("Delete?", "Cannot undo")
-        .confirm("OK", || {})
-        .open(true);
+    let mut m = Modal::new("Delete?", "Cannot undo").confirm("OK", || {}).open(true);
     let vp = Size::new(400.0, 300.0);
     LayoutEngine::new().compute(&mut m, vp);
     let mut scene = Scene::new();
@@ -3301,13 +2922,8 @@ fn open_modal_casts_a_drop_shadow() {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         m.paint(&mut cx);
     }
-    let has_shadow = scene
-        .iter()
-        .any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
-    assert!(
-        has_shadow,
-        "an open modal lifts off the scrim with a drop shadow"
-    );
+    let has_shadow = scene.iter().any(|c| matches!(c, DrawCommand::Rect(r) if r.shadow.is_some()));
+    assert!(has_shadow, "an open modal lifts off the scrim with a drop shadow");
 }
 
 #[test]
@@ -3320,9 +2936,7 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     let mut t = Toast::info("File deleted").action("Retry", || {});
     layout_toast(&mut t);
     let card_w = t.base().bounds.size.w;
-    t.event(&Event::PointerPressed {
-        pos: Point::new(60.0, 50.0),
-    });
+    t.event(&Event::PointerPressed { pos: Point::new(60.0, 50.0) });
 
     let mut scene = Scene::new();
     {
@@ -3330,17 +2944,10 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
         t.paint(&mut cx);
     }
     // The flash is a white overlay rect (see PaintCx::flash).
-    let flash = scene
-        .iter()
-        .find_map(|c| match c {
-            DrawCommand::Rect(r)
-                if r.fill.r == 255 && r.fill.g == 255 && r.fill.b == 255 && r.fill.a > 0 =>
-            {
-                Some(*r)
-            }
-            _ => None,
-        })
-        .expect("an action press emits a press-flash rect");
+    let flash = scene.iter().find_map(|c| match c {
+        DrawCommand::Rect(r) if r.fill.r == 255 && r.fill.g == 255 && r.fill.b == 255 && r.fill.a > 0 => Some(*r),
+        _ => None,
+    }).expect("an action press emits a press-flash rect");
     assert!(
         flash.rect.size.w < card_w - 1.0,
         "action flash ({}) must be narrower than the whole card ({card_w})",
@@ -3361,10 +2968,7 @@ fn toast_stack_is_overlay_active_only_when_it_has_toasts() {
 
     items.set(vec![ToastSpec::new(1, "Saved"), ToastSpec::new(2, "Done")]);
     stack.tick(0.0); // reconcile (now 2)
-    assert!(
-        stack.overlay_active(),
-        "a non-empty stack is overlay-active"
-    );
+    assert!(stack.overlay_active(), "a non-empty stack is overlay-active");
 }
 
 #[test]
@@ -3391,18 +2995,9 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
     }
 
     // Top-left toast sits at (16,16), width 320; its × is in the top-right gutter.
-    let hit = stack.event(&Event::PointerPressed {
-        pos: Point::new(310.0, 38.0),
-    });
-    assert!(
-        matches!(hit, Handled::Yes),
-        "a click on a toast's × is consumed"
-    );
-    assert_eq!(
-        dismissed.get(),
-        7,
-        "the dismissed toast's id is reported to the host"
-    );
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(310.0, 38.0) });
+    assert!(matches!(hit, Handled::Yes), "a click on a toast's × is consumed");
+    assert_eq!(dismissed.get(), 7, "the dismissed toast's id is reported to the host");
 }
 
 #[test]
@@ -3419,13 +3014,8 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
         stack.paint(&mut cx);
     }
     // Far from the top-left toast → not consumed, so the UI behind still gets it.
-    let hit = stack.event(&Event::PointerPressed {
-        pos: Point::new(700.0, 500.0),
-    });
-    assert!(
-        matches!(hit, Handled::No),
-        "clicks that miss every toast pass through"
-    );
+    let hit = stack.event(&Event::PointerPressed { pos: Point::new(700.0, 500.0) });
+    assert!(matches!(hit, Handled::No), "clicks that miss every toast pass through");
 }
 
 // --- viewport culling -------------------------------------------------------
@@ -3450,14 +3040,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
         cx.rect(off, theme.surface, None, 0.0, None);
-        cx.text(
-            off,
-            "hidden",
-            theme.foreground,
-            15.0,
-            TextAlign::Start,
-            false,
-        );
+        cx.text(off, "hidden", theme.foreground, 15.0, TextAlign::Start, false);
     }
     assert!(scene.is_empty(), "content far below the viewport is culled");
 
@@ -3467,11 +3050,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.rect(off, theme.surface, None, 0.0, None);
     }
-    assert_eq!(
-        scene.len(),
-        1,
-        "no viewport ⇒ no culling (headless default)"
-    );
+    assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
 }
 
 #[test]
@@ -3517,16 +3096,9 @@ fn focused_input_requests_a_timed_caret_redraw_not_continuous() {
     LayoutEngine::new().compute(&mut input, Size::new(200.0, 60.0));
 
     // The caret is never a continuous animation: tick reports no animating frame.
-    assert!(
-        !input.tick(0.016),
-        "an input never drives the continuous redraw loop"
-    );
+    assert!(!input.tick(0.016), "an input never drives the continuous redraw loop");
     // Unfocused: nothing to redraw on a timer.
-    assert_eq!(
-        input.next_redraw(),
-        None,
-        "an unfocused input asks for no timed redraw"
-    );
+    assert_eq!(input.next_redraw(), None, "an unfocused input asks for no timed redraw");
 
     // Focused: it schedules a wake at its next caret toggle (within a half period),
     // so the host sleeps until then instead of redrawing every frame.
@@ -3552,10 +3124,7 @@ fn collect_damage_unions_dirty_widgets_then_clears_flags() {
     LayoutEngine::new().compute(&mut ui, Size::new(400.0, 100.0));
 
     // A fresh tree needs its first paint; collecting reports damage and clears flags.
-    assert!(
-        collect_damage(&ui).is_some(),
-        "a fresh tree needs its first paint"
-    );
+    assert!(collect_damage(&ui).is_some(), "a fresh tree needs its first paint");
     assert!(
         collect_damage(&ui).is_none(),
         "flags cleared → no damage on the next collect"

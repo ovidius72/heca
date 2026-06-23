@@ -9,9 +9,7 @@
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{
-    Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd,
-};
+use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -321,6 +319,17 @@ pub trait Component {
     /// without per-widget wiring. Default: no-op.
     fn remeasure(&mut self) {}
 
+    /// Called by the layout engine **after** this node's bounds (and all its
+    /// descendants' bounds) have been (re)computed and written to `Base::bounds`.
+    /// Post-order: children fire before the parent. Default: no-op. Override to
+    /// react to a fresh layout — e.g. a scroll viewport resets any shift it had
+    /// baked into its children's bounds (they are now back at their natural
+    /// positions), so the next paint re-applies the shift from scratch instead
+    /// of compounding. This is what lets an embeddable scroll viewport reuse the
+    /// whole-page scroll pattern (shift subtree bounds + clip) without owning the
+    /// layout/scroll cycle.
+    fn on_layout(&mut self) {}
+
     /// Advance time-based animations by `dt` seconds. Returns `true` if a
     /// **continuous** animation is still running (eases, slides, spinners), so the
     /// host schedules another frame at its frame cap. Default: recurse.
@@ -425,19 +434,14 @@ const CULL_MARGIN: f64 = 96.0;
 /// measured from the corner (in addition to the rounded arc). The straight
 /// midsection between the two brackets on an edge is dimmed back to a line.
 const BRACKET_ARM_LEN: f32 = 12.0;
-/// Bright corner brackets are drawn thicker than the subtle border for emphasis.
-const BRACKET_WIDTH_MUL: f32 = 2.0;
-/// Alpha of the fill-colored overlay used to dim the straight border midsections.
-/// ~0.7 over the bright accent border leaves a ~30% accent line — matching the
-/// subtle continuous border, while the corners stay fully bright.
-const BRACKET_STRAIGHT_DIM: u8 = 178;
-/// With box borders off (`border_width == 0`) a container still needs definition,
-/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline
-/// (these are its width + alpha) instead of the reticle — whose corners vanish
-/// when the bright stroke collapses. The alpha matches the ~30% the straight
-/// midsections dim to at `border_width > 0`, so the two cases read consistently.
-const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
-const BRACKET_HAIRLINE_ALPHA: u8 = 80;
+/// Bright corner brackets are drawn a touch thicker than the subtle border for
+/// emphasis — an **additive** boost so they don't balloon at large border widths
+/// (a multiplier made them far too heavy at e.g. `border_width = 3`).
+const BRACKET_WIDTH_BOOST: f32 = 1.0;
+/// Alpha of the subtle continuous accent line that traces the whole perimeter of
+/// a [`PaintCx::bracket_frame`] — the dimmed "midsection" the bright corners sit
+/// on top of. ~0.31 leaves a faint accent line.
+const BRACKET_DIM_ALPHA: u8 = 80;
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
@@ -596,7 +600,9 @@ impl<'a> PaintCx<'a> {
             rect,
             color,
             len: 12.0,
-            thickness: 1.5,
+            // Affordance outline width (focus ring) — its own theme token, so it
+            // stays visible even when decorative borders are off (`border_width == 0`).
+            thickness: self.theme.focus_border_width,
             glow,
         }));
     }
@@ -655,13 +661,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(
-            rect,
-            self.theme.foreground.with_alpha(a),
-            None,
-            radius,
-            None,
-        );
+        self.rect(rect, self.theme.foreground.with_alpha(a), None, radius, None);
     }
 
     /// Draw the **drag ghost** — the small labelled chip that follows the cursor
@@ -677,32 +677,17 @@ impl<'a> PaintCx<'a> {
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
-            cx.rect(
-                rect,
-                Color::TRANSPARENT,
-                Some(Border {
-                    color: accent,
-                    width: 1.5,
-                }),
-                radius,
-                None,
-            );
+            cx.rect(rect, Color::TRANSPARENT, Some(Border { color: accent, width: 1.5 }), radius, None);
             if swap {
                 let inset = 3.0_f64;
                 let inner = Rectangle::new(
                     Point::new(rect.loc.x + inset, rect.loc.y + inset),
-                    Size::new(
-                        (rect.size.w - inset * 2.0).max(0.0),
-                        (rect.size.h - inset * 2.0).max(0.0),
-                    ),
+                    Size::new((rect.size.w - inset * 2.0).max(0.0), (rect.size.h - inset * 2.0).max(0.0)),
                 );
                 cx.rect(
                     inner,
                     Color::TRANSPARENT,
-                    Some(Border {
-                        color: bg.with_alpha(180),
-                        width: 1.0,
-                    }),
+                    Some(Border { color: bg.with_alpha(180), width: 1.0 }),
                     (radius - inset as f32).max(0.0),
                     None,
                 );
@@ -723,10 +708,7 @@ impl<'a> PaintCx<'a> {
                 self.rect(
                     bounds,
                     Color::TRANSPARENT,
-                    Some(Border {
-                        color: accent,
-                        width: 1.5,
-                    }),
+                    Some(Border { color: accent, width: 1.5 }),
                     self.theme.radius,
                     None,
                 );
@@ -739,10 +721,7 @@ impl<'a> PaintCx<'a> {
                     bounds.loc.y + bounds.size.h - thickness / 2.0
                 };
                 self.rect(
-                    Rectangle::new(
-                        Point::new(bounds.loc.x, y),
-                        Size::new(bounds.size.w, thickness),
-                    ),
+                    Rectangle::new(Point::new(bounds.loc.x, y), Size::new(bounds.size.w, thickness)),
                     accent,
                     None,
                     1.0,
@@ -767,10 +746,7 @@ impl<'a> PaintCx<'a> {
         self.rect(
             bounds,
             Color::TRANSPARENT,
-            Some(Border {
-                color: accent,
-                width: outer_w,
-            }),
+            Some(Border { color: accent, width: outer_w }),
             radius,
             None,
         );
@@ -787,10 +763,7 @@ impl<'a> PaintCx<'a> {
         self.rect(
             inner,
             Color::TRANSPARENT,
-            Some(Border {
-                color: accent.with_alpha(120),
-                width: 1.0,
-            }),
+            Some(Border { color: accent.with_alpha(120), width: 1.0 }),
             (radius - inset as f32).max(0.0),
             None,
         );
@@ -813,95 +786,63 @@ impl<'a> PaintCx<'a> {
 
     /// Draw the prominent **flat corner-bracket frame** used by container chrome
     /// ([`Pane`](crate::widgets::Pane), [`DockFrame`](crate::widgets::DockFrame)):
-    /// a bright accent border tracing the full rounded perimeter, with the
-    /// straight midsection of each edge dimmed back to a subtle ~30% line — so
-    /// only the rounded corners plus a short arm stay bright. `fill` is the
-    /// container's own fill (used to color the dimming overlay so it blends in);
-    /// it falls back to the theme background. DRY: the frame is defined once here
-    /// instead of per-widget.
-    pub fn bracket_frame(&mut self, rect: Rectangle, fill: Option<Color>) {
-        let (accent, background, radius, border_width) = {
+    /// a subtle continuous accent line tracing the full rounded perimeter, with
+    /// bright thick accent **corners** (rounded arc + a short straight arm along
+    /// each edge) layered on top — the Tron reticle. DRY: the frame is defined
+    /// once here instead of per-widget.
+    ///
+    /// Width is driven entirely by `theme.border_width`: at `border_width == 0`
+    /// the frame draws **nothing** (no border anywhere), consistent with every
+    /// other widget's border gate.
+    pub fn bracket_frame(&mut self, rect: Rectangle) {
+        let (accent, radius, border_width) = {
             let t = self.theme;
-            (t.accent, t.background, t.radius, t.border_width)
+            (t.accent, t.radius, t.border_width)
         };
-        let b = rect;
-
-        // Box borders off: a container still reads as framed, but via a thin SOLID
-        // uniform hairline around the whole perimeter — not the bracket reticle,
-        // whose bright corners collapse to nothing at width 0 (leaving the old
-        // "empty corners + lingering straight edges" look). Scales back up to the
-        // reticle as soon as `border_width > 0`.
+        // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
+        // widget. A container that needs definition without a border should carry
+        // a fill, not a forced hairline.
         if border_width <= 0.0 {
-            self.rect(
-                b,
-                Color::TRANSPARENT,
-                Some(Border {
-                    color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
-                    width: BRACKET_HAIRLINE_WIDTH,
-                }),
-                radius,
-                None,
-            );
             return;
         }
+        let b = rect;
 
-        // Bright accent border tracing the full rounded perimeter. The renderer's
-        // bracket primitive only draws square 90° corners, so instead of brackets
-        // we draw a full rounded border (which has the radius) and then dim its
-        // straight midsections — leaving the rounded corners + short arms bright.
-        let bracket_width = border_width * BRACKET_WIDTH_MUL;
+        // Subtle continuous accent line tracing the whole rounded perimeter — the
+        // dimmed "midsection" that the bright corners sit on top of.
         self.rect(
             b,
             Color::TRANSPARENT,
             Some(Border {
-                color: accent,
-                width: bracket_width,
+                color: accent.with_alpha(BRACKET_DIM_ALPHA),
+                width: border_width,
             }),
             radius,
             None,
         );
 
-        // Dim the straight midsection of each edge back to a subtle ~30% line, so
-        // only the rounded corners (plus a `BRACKET_ARM_LEN` arm) stay bright. The
-        // overlay is the fill (or background) color at ~0.7 alpha, with no glow.
-        let cover = fill.unwrap_or(background).with_alpha(BRACKET_STRAIGHT_DIM);
+        // Bright thick corner brackets. The renderer draws the accent border as a
+        // band just OUTSIDE the rect edge, carrying the theme corner radius — so
+        // redrawing that same border clipped to a corner-sized box yields a bright
+        // *rounded* corner plus a short straight arm along each edge, without
+        // faking the rounding. `keep` is the bright span from each corner (rounded
+        // arc + `BRACKET_ARM_LEN`); `m` grows the clip box outward so it also
+        // captures the outer border band hugging the corner.
+        let bracket_width = border_width + BRACKET_WIDTH_BOOST;
         let keep = f64::from(radius + BRACKET_ARM_LEN);
-        let t = f64::from(bracket_width) + 1.0;
+        let m = f64::from(bracket_width);
         let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);
+        let bright = Border { color: accent, width: bracket_width };
 
-        let mid_w = w - 2.0 * keep;
-        if mid_w > 0.0 {
-            self.rect(
-                Rectangle::new(Point::new(x + keep, y), Size::new(mid_w, t)),
-                cover,
-                None,
-                0.0,
-                None,
-            );
-            self.rect(
-                Rectangle::new(Point::new(x + keep, y + h - t), Size::new(mid_w, t)),
-                cover,
-                None,
-                0.0,
-                None,
-            );
-        }
-        let mid_h = h - 2.0 * keep;
-        if mid_h > 0.0 {
-            self.rect(
-                Rectangle::new(Point::new(x, y + keep), Size::new(t, mid_h)),
-                cover,
-                None,
-                0.0,
-                None,
-            );
-            self.rect(
-                Rectangle::new(Point::new(x + w - t, y + keep), Size::new(t, mid_h)),
-                cover,
-                None,
-                0.0,
-                None,
-            );
+        let corners = [
+            Point::new(x - m, y - m),               // top-left
+            Point::new(x + w - keep, y - m),        // top-right
+            Point::new(x - m, y + h - keep),        // bottom-left
+            Point::new(x + w - keep, y + h - keep), // bottom-right
+        ];
+        for loc in corners {
+            self.with_clip(Rectangle::new(loc, Size::new(keep + m, keep + m)), |cx| {
+                cx.rect(b, Color::TRANSPARENT, Some(bright), radius, None);
+            });
         }
     }
 
@@ -951,10 +892,6 @@ mod tests {
 
         base.mark_needs_paint();
         assert!(base.needs_paint(), "marking re-sets the repaint flag");
-        assert_eq!(
-            frames.get(),
-            1,
-            "marking asks the host for exactly one frame"
-        );
+        assert_eq!(frames.get(), 1, "marking asks the host for exactly one frame");
     }
 }

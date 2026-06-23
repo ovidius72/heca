@@ -120,6 +120,23 @@ const ZOOM_STEP: f32 = 0.25;
 
 const APP_TITLE: &str = "heca-grid-ui showcase";
 
+/// How the keybinding "prefix" is *displayed* (the config/parse token stays "prefix").
+/// Single source of truth — change it here, not at each call site.
+const PREFIX_SYMBOL: &str = "λ";
+
+/// Render a keybinding string for **display**: the `prefix` token becomes
+/// [`PREFIX_SYMBOL`]. Pass the real combo (the config/parse form, e.g. `"prefix+f"`)
+/// — the stored binding is unchanged; only the rendered text substitutes the symbol.
+fn display_shortcut(combo: &str) -> String {
+    // The prefix is a *sequence* (press prefix, then the key), so join it with a
+    // space — not "+", which would imply a simultaneous chord. Modifier chords
+    // inside the key (e.g. "Shift+c") keep their own "+".
+    match combo.strip_prefix("prefix+") {
+        Some(rest) => format!("{PREFIX_SYMBOL} {rest}"),
+        None => combo.to_string(),
+    }
+}
+
 /// Theme names loadable via `heca_theme::load_theme`, in cycle order.
 const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 
@@ -161,6 +178,9 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         font_size: font_config.size.ui,
         radius: ht.border_radius,
         border_width: ht.border_width,
+        // TODO: map from config `focus_border_width` once added to heca-theme;
+        // for now the affordance outlines keep their visible default.
+        focus_border_width: 1.5,
         glow_size: match ht.glow_size {
             heca_theme::GlowLevel::None => GlowLevel::None,
             heca_theme::GlowLevel::Thin => GlowLevel::Thin,
@@ -224,6 +244,9 @@ struct BuiltUi {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Context-menu open state + anchor; right-click opens it at the cursor.
+    menu_open: Signal<bool>,
+    menu_anchor: Signal<Point>,
     /// Host-owned toast render list; `t` pushes one, the stack reports dismiss.
     toasts: Signal<Vec<ToastSpec>>,
 }
@@ -279,6 +302,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .key("⌘,"),
         );
     let palette_open = palette.open_signal();
+
+    // Right-click context menu: the pointer counterpart to the keyboard picks.
+    // Right-click anywhere to open it at the cursor. Entries carry an icon and a
+    // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
+    let menu = ContextMenu::new()
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(display_shortcut("prefix+$")))
+        .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
+        .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
+        .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(display_shortcut("prefix+x")));
+    let menu_open = menu.open_signal();
+    let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -311,7 +346,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             .width(Length::Px(220.0))
             .height(Length::Px(140.0))
             .background(theme.surface)
-            .border(theme.accent, 1.5)
+            .border(theme.border, theme.border_width)
             .glow(theme.glow)
             .child(Label::new(value).color(theme.foreground).font_scale(2.0))
     };
@@ -665,15 +700,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     1,
                     Item::new("VIEW PROFILE")
                         .marker(ActiveMarker::Bar)
-                        .trailing(Label::new("CMD P").color(theme.muted).font_scale(0.8))
-                        .trailing_bordered(true),
+                        .trailing(Tag::new("CMD P")),
                 ))
                 .child(select(
                     2,
                     Item::new("SETTINGS")
                         .marker(ActiveMarker::Bar)
-                        .trailing(Label::new("CMD ,").color(theme.muted).font_scale(0.8))
-                        .trailing_bordered(true),
+                        .trailing(Tag::new("CMD ,")),
                 ))
                 .child(
                     Item::new("SYSTEM")
@@ -806,16 +839,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .width(Length::Px(100.0))
                         .height(Length::Px(80.0))
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(Label::new("Bordered").font_size(12.0).color(theme.accent)),
                 )
                 .child(
+                    // Bracketed: the self-contained corner reticle (driven by
+                    // `theme.border_width`); no `.border()` — that would compete.
                     Pane::new()
                         .bracketed()
                         .width(Length::Px(100.0))
                         .height(Length::Px(80.0))
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
                 )
         })
@@ -837,7 +871,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(
                             Tag::new("~/projects/heca")
                                 .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.muted))
@@ -871,7 +905,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(
                             Flex::row()
                                 .width(Length::Px(344.0))
@@ -934,6 +968,29 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         )
                         .child(Label::new("running").font_size(12.0).color(theme.muted)),
                 ),
+        )
+        // ScrollRegion (gridui-01): an embeddable vertical scroll viewport —
+        // 25 rows in a 180px window → auto-scrollbar + wheel/drag. Pointer
+        // coords are translated into content space so the rows stay clickable at
+        // their visual position while scrolled. (The chrome sidebar itself is
+        // not yet wired to it — that needs scroll-aware DnD hit-testing, a
+        // follow-up.)
+        .child(
+            Flex::column()
+                .gap(8.0)
+                .child(Label::new("SCROLL REGION").color(theme.muted).font_scale(0.8))
+                .child({
+                    let mut list = ScrollRegion::new()
+                        .height(Length::Px(180.0))
+                        .width(Length::Px(300.0));
+                    for i in 1..=25 {
+                        list = list.child(
+                            Item::new(format!("item {i:02}"))
+                                .leading(Icon::new(Glyph::FileCode).color(theme.accent).size(16.0)),
+                        );
+                    }
+                    list
+                }),
         )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
@@ -1293,11 +1350,31 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 ),
                         ),
                 );
+            // Prefix-as-symbol: the keybinding "prefix" is *displayed* as λ (a plain
+            // Geist Mono glyph — no icon/Nerd font needed). The config/parse token
+            // stays "prefix+…"; only the rendered shortcut uses λ.
+            let prefix_demo = Flex::column()
+                .gap(8.0)
+                .child(Label::new(format!("PREFIX AS SYMBOL — {PREFIX_SYMBOL}")).color(theme.muted).font_scale(0.82))
+                .child(
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(18.0)
+                        .child(Tag::new(display_shortcut("prefix+f")))
+                        .child(Tag::new(display_shortcut("prefix+q")))
+                        .child(Tag::new(display_shortcut("prefix+Shift+c"))),
+                )
+                .child(
+                    Label::new("(config token stays \"prefix+…\")")
+                        .color(theme.muted)
+                        .font_scale(0.74),
+                );
             let panes_col = Flex::column()
                 .width(Length::Px(380.0))
                 .gap(16.0)
                 .child(panes)
-                .child(marker_demo);
+                .child(marker_demo)
+                .child(prefix_demo);
 
             // Workspaces rail (enumerate flavor): one icon cell PER pane, so every
             // pane stays visible + addressable when collapsed — unlike a tool dock
@@ -1343,6 +1420,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         })
         // The command palette overlays everything when open (Ctrl+K).
         .child(palette)
+        // The right-click context menu overlays at the cursor when open.
+        .child(menu)
         // The toast stack overlays a corner (presentation only; app owns the list).
         .child(toast_stack);
     BuiltUi {
@@ -1353,6 +1432,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_letters,
         attention_req,
         palette_open,
+        menu_open,
+        menu_anchor,
         toasts,
     }
 }
@@ -1418,7 +1499,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                 theme.surface,
                 Some(heca_grid_ui::scene::Border {
                     color: theme.accent,
-                    width: theme.border_width.max(1.0),
+                    width: theme.border_width,
                 }),
                 theme.radius,
                 None,
@@ -1490,6 +1571,9 @@ struct GpuState {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Context-menu open state + anchor; right-click opens it at the cursor.
+    menu_open: Signal<bool>,
+    menu_anchor: Signal<Point>,
     /// Host-owned toast render list; `t` pushes one.
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
@@ -1616,6 +1700,8 @@ impl GpuState {
             rail_letters,
             attention_req,
             palette_open,
+            menu_open,
+            menu_anchor,
             toasts,
         } = built;
 
@@ -1639,6 +1725,8 @@ impl GpuState {
             clip_demo: false,
             attention_req,
             palette_open,
+            menu_open,
+            menu_anchor,
             toasts,
             ctrl: false,
             meta: false,
@@ -1804,6 +1892,8 @@ impl GpuState {
                 rail_letters,
                 attention_req,
                 palette_open,
+                menu_open,
+                menu_anchor,
                 toasts,
             } = built;
             self.ui = ui;
@@ -1813,6 +1903,8 @@ impl GpuState {
             self.rail_letters = rail_letters;
             self.attention_req = attention_req;
             self.palette_open = palette_open;
+            self.menu_open = menu_open;
+            self.menu_anchor = menu_anchor;
             self.toasts = toasts;
             self.focus.clear(&mut self.ui);
             self.scroll_y = 0.0;
@@ -2034,6 +2126,30 @@ impl ApplicationHandler for App {
                     .focus
                     .dispatch(&mut state.ui, &Event::PointerPressed { pos: state.cursor });
                 state.layout_dirty = true; // a click can change content/size
+                state.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => {
+                // Right-click opens the context menu at the cursor (the host decides
+                // *where* and *when*; the widget just renders + captures input).
+                state.menu_anchor.set(state.cursor);
+                state.menu_open.set(true);
+                state.layout_dirty = true;
+                state.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                // Deliver the release so a grabbed widget (e.g. a ScrollRegion
+                // thumb drag) can end its grab — without this the drag never stops.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerReleased { pos: state.cursor });
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {

@@ -319,7 +319,8 @@ Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
 > Replace the tiled-tint + OS-vibrancy approach with a heca-owned z=0 blurred gradient background layer.
 > Fixes cross-platform frost AND the floating-pane text collision defect (5% sharp-content leak).
 > Gate: run AFTER `theming-04` so the new `background_*` config knobs live in the unified theme system.
-> **Status:** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) docs shipped folded into `compositor-04b`. `compositor-04b` (intensity/glow override + glow/scanline separation) ✅ merged (PR #172). `compositor-04c` (font settings separation) ✅ merged (PR #175). **Next: `compositor-05` (visual tuning with the user) + `compositor-06` (review/ship).**
+> **Status:** **CLOSED — not passed (2026-06-22).** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) docs shipped folded into `compositor-04b`. `compositor-04b` (intensity/glow override + glow/scanline separation) ✅ merged (PR #172). `compositor-04c` (font settings separation) ✅ merged (PR #175). **`compositor-06` quality gates ✅ done (2026-06-22, on `feature/compositor-05-06-finalize`):** rust-skill review clean, clippy 0, tests green in isolation (heca-core 57/57, heca-config 61/61, heca-renderer 241/241, heca 61/61; the bash-test fix `b42c016` isolated the test shell from `~/.bashrc`). The two non-green tests in a full workspace run are both pre-existing/unrelated, not regressions: the `heca-grid-ui` white-press-flash toast test fails on plain `main`, and `terminal_backend_exit_captures_code_via_take_exit` is a flaky PTY-timing test under workspace-parallel load (passes 5/5 in isolation).
+> **`compositor-05` (visual tuning with the user) DID NOT PASS — closed not-passed.** The frost never reached a user-approved look. Root cause: the frosted-desktop-BEHIND-the-window look the user wanted is an OS capability (macOS `vibrancy`), which an app cannot do cross-platform (an app cannot sample/blur the OS desktop). The within-heca frost approaches tried (gradient tint, embedded background image, procedural gradient noise) only frost heca's own z=0 gradient, not the desktop, and none got user sign-off. `vibrancy` remains the only path to blurred-desktop-behind and is left for the user to enable on macOS. **`compositor-06` exit (ship) did not pass** — it was gated on Phase 5 sign-off (AGENTS.md gate). All uncommitted tuning experiments (procedural frost noise + `is_transparent()` change) were discarded; working tree clean at `243f875`. The merged z=0 GPU pipeline (Phases 1–4c) stays as the cross-platform frost surface.
 
 ### [x] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
 New isolated GPU primitives in `heca-renderer`. No app wiring yet.
@@ -472,9 +473,10 @@ Gate: after `compositor-04b` merges.
 
 - [x] **compositor-task-36** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green; grep gate `rg "theme\.font_|\.font_family|\.font_size" --glob '*.rs'` confirms no remaining theme-font reads in consumers.
 
-### [ ] Phase: Visual tuning with the user · `compositor-05`
+### [—] Phase: Visual tuning with the user · `compositor-05` — CLOSED NOT PASSED (2026-06-22)
 Source: `compositor-blur-refactor-plan.md` Phase 5
 This phase is interactive — cannot be done without the user running the app.
+**Closed not-passed:** the frost never reached a user-approved look. The frosted-desktop-BEHIND-the-window look the user wanted is an OS capability (macOS `vibrancy`), not cross-platform app code; within-heca frost approaches (gradient tint / image / procedural noise) only frost heca's own z=0 gradient, not the desktop. `vibrancy` is left for the user to enable on macOS. Tasks below were not completed; retained for reference if a cross-platform within-heca frost is revisited.
 
 - [ ] **compositor-task-19** — User sets `background_blur`, `background_transparency`, gradient colors, `terminal_transparency`; confirms tiled frost looks like real frosted glass.
 
@@ -645,16 +647,26 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 > Source: `grid-ui-chrome-plan.md`, `PLAN.md` grid-ui backlog
 > Core widget vocabulary is largely built. Remaining: scroll primitive, Pane shell header, more widgets, Nerd-Font icons, showcase coverage, bloom effects, crate debt.
 
-### [ ] Phase: Scroll / list primitive · `gridui-01`
+### [x] Phase: Scroll / list primitive · `gridui-01`
 An embeddable scroll region for sidebar docks and list views.
 Note: renderer `PushClip`/`PopClip` is ALREADY implemented in `heca-renderer/src/scene.rs` — this gate is closed.
+**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (PR #177). Reuses the whole-page scroll pattern (shift subtree bounds + clip) inside a widget: bakes `-scroll_offset` into the children's bounds so paint, hit-testing, and DnD all see the visual position (bounds === drawn), and clips to the viewport via `PushClip`. A new post-order `Component::on_layout` hook (layout engine) resets the baked offset on a fresh layout so the shift never compounds — this is what lets an embeddable scroll viewport reuse the page-scroll mechanism without owning the layout/scroll cycle. v1 is vertical-only, multi-child column: wheel (~10% of viewport/notch, viewport-proportional so a small sidebar doesn't overshoot) + draggable thumb (theme-accent grip that brightens on hover/drag, wider 16px grab lane, thumb radius from the `Theme::control_radius()` token), offset exposed as `Signal<f32>`; `Event::Scroll` has no position so the region hover-gates the wheel (tracks hover via `PointerMoved`) so an inline region doesn't swallow every wheel event in the tree. **Focus-gated keyboard scroll** (focusable; `Event::Key` goes to the focused component only, so the gate is just `focused`): `ArrowUp`/`ArrowDown` + `j`/`k` (with/without `Ctrl`) step, `Home`/`End` jump to top/bottom, with a focus ring; a focused child (e.g. `Input`) keeps its keys. **Scroll-into-view API** for keyboard cursor following: `ensure_visible(visual_rect)` (minimal scroll, recovers natural position internally via the baked shift so the host never tracks the offset) + `scroll_to_child(index)` convenience — the widget-side prep for mounting the sidebar tree and having `SidebarNav` keep the cursor on screen. Showcase demo + full `docs/widgets.md` reference added. Same radius-token fix applied to `MarkerGroup`'s marker bar (`control_radius()` instead of hardcoded `bar_w/2`). Grid-ui 47 tests pass, clippy 0. (An earlier draft used a renderer `Translate` primitive; pivoted to bounds-shift per review — no second scroll mechanism, DnD works while scrolled.) **Follow-ups are tracked as open tasks below** (`gridui-task-29`…`gridui-task-34`): horizontal scroll, a dedicated scrollbar color token, PageUp/PageDown keys, nested-region hit-testing, the sidebar scroll wiring, and the pick-a-scrollable-region mode — so the deferral is tracked, not buried in prose.
 
-- [ ] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
-  Uses `PushClip`/`PopClip` for content clipping.
-  Exposes `scroll_offset: Signal<f32>` (vertical).
-  Optional theme-driven scrollbar visual.
-  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`
+- [x] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
+  Uses `PushClip`/`PopClip` for content clipping + bounds-shift (the page-scroll pattern) for the offset.
+  Exposes `scroll_offset: Signal<f32>` (vertical) + `scroll_to(v)` (clamps + bakes the shift into bounds).
+  Wheel handling (`Event::Scroll`, viewport-proportional step) + draggable theme-colored (`muted`) scrollbar thumb, auto-shown on overflow; hover-gated so it doesn't swallow the page wheel.
+  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`, `heca-grid-ui/src/lib.rs` (exports + prelude), `heca-grid-ui/src/component.rs` (`Component::on_layout` hook), `heca-grid-ui/src/layout.rs` (call `on_layout` post-order in `assign`), `heca-renderer/examples/showcase.rs` (demo).
   Update `docs/widgets.md` + add showcase demo section.
+
+**Follow-ups (carved out of v1 — tracked, not deferred-to-prose):**
+
+- [ ] **gridui-task-29** — `ScrollRegion`: add **horizontal scroll** (axis-aware offset + thumb; reuse the bounds-shift mechanism). The widget is vertical-only today. Files: `heca-grid-ui/src/widgets/scroll_region.rs`.
+- [ ] **gridui-task-30** — `ScrollRegion`: add a **dedicated scrollbar color token** to `Theme` (config-overridable, `heca-theme/src/themes/*.toml` + `heca-config/src/settings.rs` `[appearance]` override + `heca-grid-ui/src/theme.rs`); the thumb currently reuses `theme.accent`. Alphas stay widget-internal (consistent with `MarkerGroup`).
+- [ ] **gridui-task-31** — `ScrollRegion`: add **PageUp/PageDown** keys (page = one viewport). Blocked on `GridKey` having no page keys — add `PageUp`/`PageDown` to the `GridKey` enum (`heca-grid-ui/src/component.rs`) + the host key mapping (`heca-renderer/examples/showcase.rs` and the app's input path), then handle them in `ScrollRegion::event`.
+- [ ] **gridui-task-32** — `ScrollRegion`: **nested-region wheel hit-testing**. Today the wheel is hover-gated for a single inline region; with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree. Files: `heca-grid-ui/src/widgets/scroll_region.rs` + host wiring.
+- [ ] **gridui-task-33** — **Sidebar scroll wiring** (integration, separate phase): mount the sidebar workspace tree inside a `ScrollRegion`; the `SidebarNav` cursor handler (`j`/`k`, selection-driven) calls `ScrollRegion::ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving the cursor to keep it on screen. Selection stays container-owned via `Item::marker`/`state`. The widget API (`ensure_visible`/`scroll_to_child`) is already in place from `gridui-01`. Files: `heca/src/sidebar/*`, `heca/src/chrome/*`.
+- [ ] **gridui-task-34** — **Pick-a-scrollable-region mode** (app-level, larger): `prefix+<key>` → a `KeyHint` overlay enumerating every scrollable region → pick one → enter a sticky scroll/nav mode bound to it (`j`/`k`/arrows/PgUp/PgDn/Home/End → `WmAction::ScrollFocused`). Needs the full "Adding New Actions" checklist: `WmAction::EnterScrollSelect` + `WmAction::ScrollFocused`, `InputMode::ScrollSelect` + `InputMode::Scroll`, action-registry registration, default binding + descriptor, RPC, `action_policy()` classification, `default-keybindings.toml`/`README.md`. Only needed once multiple scrollable regions compete for `j`/`k`. Run `/grill-me` first (key choice, sticky vs one-shot, pick→focus vs pick→mode). Files: `heca/src/input.rs`, `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app_state.rs`.
 
 ### [ ] Phase: Pane shell widget — header and tabs · `gridui-02`
 The `Pane` widget is today a bracket container without a header. Add HUD header, tab bar, and expose the inner content rect properly.
@@ -869,6 +881,9 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project
   the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it
   column-specific (memory `grid-ui-keyhint-universal`).
+  NOTE (2026-06-23): the per-column `KeyHint` + candidate infra now exists (`ChromeSignals.col_hint`,
+  `WorkspacesContainerState.col_pick_candidates`, built in `app-12`). This task is now just adding the
+  *column-as-pick-target* candidate computation for move/swap/take that act ON a column.
   Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`
 
 - [x] **app-task-31** — F4.5 drop-onto-workspace. DONE 2026-06-22. Scope narrowed with the user: the only
@@ -880,6 +895,27 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   is what dropping on a column/pane card is for). The drop indicator already handled workspace targets
   (column-drag path), so it lights up for pane drags too.
   Files: `heca/src/mouse/surface_left.rs`, `heca/src/chrome/mod.rs`
+
+### [x] Phase: Keyboard move-to-target picks + rename override + plugin-observable state · `app-12`
+DONE 2026-06-23 (PR #178). Keyboard counterparts to the sidebar drag moves, plus making picks/renames
+observable by plugins.
+
+- [x] **app-task-33** — Keyboard "move to" picks via universal `KeyHint`: move active **column → workspace**
+  (`prefix+c`), active **pane → workspace** (`prefix+g`), active **pane → column** (`prefix+Shift+c`, freed
+  from `rename_column`). New `InputMode::WorkspacePick`/`ColumnPick`, candidate collectors (exclude the
+  current workspace for the workspace picks; pane→column spans **all** workspaces and stacks into the target
+  column), per-target `KeyHint` projection (`ws_hint`/`col_hint`), and resolve handlers dispatching the
+  existing `MoveColumnToWorkspace`/`MovePaneToWorkspace`/`MovePaneToColumn`. `KeyHint` gained `.color()`,
+  `.offset_y()`, `TopRight`; `Color::with_alpha_f32()` added; `DockFrame` active wash is signal-driven.
+  Cross-workspace move-pane-to-column now stacks (`join_existing`) instead of making a new column.
+- [x] **app-task-34** — Rename **custom-name override**: `Pane.custom_name` wins over the process-derived
+  title everywhere (sidebar card, reactive sync, in-pane info bar/header); icon still tracks the process;
+  empty rename clears it.
+- [x] **app-task-35** — Plugin-observable state (per the Architecture principle): custom name → store signal
+  + `PaneCustomNameChanged` + `host.pane_custom_name()`; in-progress pick → `PendingPick` (kind + label +
+  prompt, text sourced from each action's `ActionDescriptor`) + `PendingPickChanged` + `host.pending_pick()`.
+  Files: `heca/src/{app_state,handlers,actions,host}.rs`, `heca/src/app/{input,selection,render}.rs`,
+  `heca/src/chrome/{mod,state,events}.rs`, `heca-grid-ui/src/{color,widgets/key_hint,widgets/dock_frame}.rs`
 
 ### [ ] Phase: Right-click context menu · `app-11`
 Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename actions.

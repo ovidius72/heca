@@ -97,10 +97,9 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 - Add a thin `Tag`/`Chip` (e.g. git branch) and optionally a `MetricRow` convenience.
 - **Status:** primitives mostly exist; needs `Grid` (2.1) + `Icon` (2.2) + `Tag`.
 
-### 2.8 Scroll / list primitive — **renderer dependency requested**
+### 2.8 Scroll / list primitive — **DONE** (`gridui-01`)
 - Region shells and dock lists overflow → need embeddable scrolling.
-- **Hard dependency:** real clipping needs `PushClip`/`PopClip`, currently a **no-op** in `heca-renderer/src/scene.rs` (owned by another dev). **Action: request the renderer dev implement it.** Until then, only whole-page scroll works (shells render unclipped).
-- **Status:** gated on renderer clip.
+- **Resolved:** `PushClip`/`PopClip` is implemented in `heca-renderer/src/scene.rs` (nesting + intersection). `gridui-01` ships the `ScrollRegion` widget (`heca-grid-ui/src/widgets/scroll_region.rs`) reusing the **whole-page scroll pattern** (shift subtree bounds + clip) inside a widget — bakes `-scroll_offset` into the children's bounds so paint/hit-testing/DnD all see the visual position, and clips via `PushClip`. A new post-order `Component::on_layout` hook (called by the layout engine after `assign`) resets the baked offset on a fresh layout so the shift never compounds — the enabler for an embeddable scroll viewport that doesn't own the layout/scroll cycle. v1: vertical-only, multi-child column; wheel (~10% viewport/notch, viewport-proportional) hover-gated via `PointerMoved`; draggable theme-accent thumb (wider 16px grab lane, `Theme::control_radius()` radius); offset as `Signal<f32>` + `scroll_to` (clamps + bakes shift). **Focus-gated keyboard scroll** (focusable; `Event::Key` goes to the focused component only, so the gate is just `focused`): arrows + `j`/`k` (with or without `Ctrl`) step, `Home`/`End` jump, focus ring; a focused child keeps its keys. **Scroll-into-view API** for keyboard cursor following: `ensure_visible(visual_rect)` (minimal scroll, recovers natural position internally via the baked shift) + `scroll_to_child(index)` — widget-side prep for the sidebar (mount tree in a `ScrollRegion`, `SidebarNav` cursor handler calls `ensure_visible`). Same radius-token fix applied to `MarkerGroup`'s bar. Grid-ui 47 tests, clippy 0. **Future:** horizontal scroll, a dedicated scrollbar color token, PageUp/PageDown keys (`GridKey` lacks page keys), host-side hit-testing for nested scroll regions, and the sidebar wiring itself (separate phase).
 
 ---
 
@@ -192,7 +191,7 @@ Realizes chrome plan Phase 7. Build the vocabulary **now**; app integration is g
 | **G4** | `DockFrame` (title + collapse + drag handle + header slot; reuse Pane brackets) | — | none |
 | **G5** | `ChromeRegion`/`Sidebar` shell (oriented all-4, collapsible w/ icon-rail, mode-aware, hosts DockFrames, drop targets) | G4 | none for shell; rail uses G2; full use needs G6 + ChromeHost |
 | **G6** | DnD **hooks** onto the **shipped** `src/drag/` framework: a region `DragSurfaceId` + Dock-level `DragItem`, `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`; additive variants only | shipped `src/drag/`; G4/G5 | none — framework present |
-| **G7** | Scroll/list primitive (embeddable) | **renderer `PushClip`/`PopClip`** | **request + wait on renderer** |
+| **G7** | Scroll/list primitive (embeddable) | **renderer `PushClip`/`PopClip` + `Component::on_layout` hook** | **DONE (`gridui-01`)** |
 | **G8** | Rich status-item recipe + `Tag`/`Chip`; showcase: mock WorkspacesDock with program/git/status rows, collapse, (DnD reorder via G6) | G1, G2, G3 | none |
 
 **Suggested order now:** G1 → G3/G4 (+G5 alongside) → G2 → G6 (framework's already there) → G8 (visible payoff). G7 when clip lands.
