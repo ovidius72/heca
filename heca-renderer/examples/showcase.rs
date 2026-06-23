@@ -1161,11 +1161,29 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .child(Label::new("swap (Shift)").color(theme.muted).font_scale(0.8)),
                         ),
                 );
+            // Prefix-as-symbol: how `prefix+f` reads when the "prefix" word is a
+            // Phosphor icon instead. Four candidate glyphs side by side.
+            let prefix_sample = |sym: Glyph, name: &str| {
+                Flex::row()
+                    .align(Align::Center)
+                    .gap(7.0)
+                    .child(Icon::new(sym).size(18.0).color(theme.accent))
+                    .child(Label::new("+ F").color(theme.foreground).bold(true))
+                    .child(Flex::row().width(Length::Px(8.0)))
+                    .child(Label::new(name).color(theme.muted).font_scale(0.78))
+            };
+            let prefix_demo = Flex::column()
+                .gap(10.0)
+                .child(Label::new("PREFIX AS SYMBOL — prefix+f").color(theme.muted).font_scale(0.82))
+                .child(prefix_sample(Glyph::Sigma, "sigma"))
+                .child(prefix_sample(Glyph::Atom, "atom"))
+                .child(prefix_sample(Glyph::Bandaids, "bandaids"));
             let panes_col = Flex::column()
                 .width(Length::Px(380.0))
                 .gap(16.0)
                 .child(panes)
-                .child(marker_demo);
+                .child(marker_demo)
+                .child(prefix_demo);
 
             // Workspaces rail (enumerate flavor): one icon cell PER pane, so every
             // pane stays visible + addressable when collapsed — unlike a tool dock
