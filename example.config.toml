@@ -1,110 +1,178 @@
 # heca Example Config
 # ===================
 # Copy this file to ~/.config/heca/config.toml (Linux/macOS) or
-# %APPDATA%\heca\config.toml (Windows) and then adjust only what you need.
+# %APPDATA%\heca\config.toml (Windows) and adjust only what you need.
+#
+# Every key below shows its DEFAULT value. Lines that are commented out (`#`)
+# are optional overrides — uncomment to change them. Anything you omit falls
+# back to the default shown, so a minimal config is perfectly fine.
+#
+# Color values are "#rrggbb" (or "#rrggbbaa" where alpha is supported).
 
+# ─────────────────────────────────────────────────────────────────────────────
 [settings]
-# Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status
-# and cwd updates. Disable to spawn a bare shell instead.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Color theme by name. Built-ins: "grid_tron" (default), "grid_ares", "mocha",
+# "latte". A theme only sets colors/effects — never fonts (see [font]).
+theme = "grid_tron"
+
+# Enable mouse support (selection, click-to-focus, drag-to-move panes).
+mouse = true
+
+# Initial window size in logical pixels.
+window_width = 1280
+window_height = 800
+
+# Auto-scroll the workspace view when the pointer nears the left/right edge.
+auto_scroll_edge = true
+
+# Modifier held to start an interactive pane drag with the mouse.
+# One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
+interactive_move_modifier = "Super"
+
+# Center a single column even when it already fits in the viewport.
+always_center_single_column = false
+
+# Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status and
+# cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
-# Fonts are configured in the dedicated [font] block below — they are
-# system-local, NOT part of the color theme, so a theme never requires a
-# specific installed font.
+# Terminal color palette overrides (all optional → fall back to the theme).
+# terminal_foreground          = "#c6f0ff"
+# terminal_background          = "#060a0e"
+# terminal_cursor_foreground   = "#060a0e"
+# terminal_cursor_background    = "#40e0ff"
+# terminal_cursor_border       = "#40e0ff"
+# terminal_selection_foreground = "#ffffff"
+# terminal_selection_background = "#234"
+# ANSI 0..7 (black,red,green,yellow,blue,magenta,cyan,white):
+# terminal_ansi    = ["#000000","#ff4654","#50ffaa","#ffbe46","#40e0ff","#b48cff","#5ff","#c6f0ff"]
+# Bright ANSI 8..15:
+# terminal_brights = ["#444","#ff6b78","#7dffc0","#ffd27a","#7fe9ff","#cdb0ff","#9ff","#ffffff"]
 
+# ─────────────────────────────────────────────────────────────────────────────
 [font]
-# Font families + sizes, decoupled from the color theme. `normal` is optional —
-# if omitted, the surface falls back to its embedded font (Geist Mono for UI,
-# Maple Mono Normal NF for terminal). `bold` / `italic` / `bold_italic` are
-# optional — unset falls back to `normal` and the renderer selects the face via
-# weight/style within the family.
-# Defaults: UI = Geist Mono 15.0, terminal = Maple Mono Normal NF 14.0 (both
-# embedded, so they resolve without a system install).
+# ─────────────────────────────────────────────────────────────────────────────
+# Fonts are decoupled from the color theme (system-local), so a theme never
+# requires a specific installed font. Defaults: UI = Geist Mono 15.0, terminal =
+# Maple Mono Normal NF 14.0 — both embedded, so they resolve without a system
+# install. `bold`/`italic`/`bold_italic` are optional; unset falls back to
+# `normal` and the renderer selects the face via weight/style.
 
 [font.family.ui]
-# normal = "Geist Mono"
-# bold = "..."        # optional → fall back to normal
-# italic = "..."      # optional → fall back to normal + synthesized oblique
-# bold_italic = "..." # optional → fall back to italic → bold → normal
+# normal      = "Geist Mono"
+# bold        = "..."   # optional → falls back to normal
+# italic      = "..."   # optional → falls back to normal + synthesized oblique
+# bold_italic = "..."   # optional → falls back to italic → bold → normal
 
 [font.family.terminal]
 # normal = "Maple Mono Normal NF"
-# italic = "..."      # optional distinct italic family
+# italic = "..."        # optional distinct italic family
 
 [font.size]
-# ui = 15.0
+# ui       = 15.0
 # terminal = 14.0
 
+# ─────────────────────────────────────────────────────────────────────────────
 [appearance]
-# Window / chrome transparency + blur (each 0..=100, default 0)
+# ─────────────────────────────────────────────────────────────────────────────
+# Each numeric knob below is 0..=100 unless noted; 0 = off (default).
+
+# Window / chrome transparency + in-app frosted blur.
+#   transparency : how see-through the whole app is (0 opaque … 100 transparent)
+#   blur         : in-app frosted-glass blur behind translucent panels (0 = off)
 transparency = 0
 blur = 0
 
-# z=0 background layer — heca-owned frosted gradient (the bottom-most layer
-# panes composite over). Cross-platform frost WITHOUT OS vibrancy: heca renders
-# + blurs the gradient itself, so it works on Linux/Windows/macOS identically.
-#   background_blur         = 0..=100  blur strength of the gradient (0 = sharp, 100 = max)
-#   background_transparency  = 0..=100  0 = opaque gradient (default); >0 = translucent
-#   background_gradient_top / _bottom  optional "#rrggbb" override; unset →
-#                                       theme.background (top) + a derived darker shade (bottom)
+# z=0 background layer — heca's own frosted gradient (the bottom-most layer panes
+# composite over). Cross-platform frost WITHOUT OS vibrancy.
+#   background_blur          : blur strength of the gradient (0 sharp … 100 max)
+#   background_transparency  : 0 opaque (default) … 100 see-through to the desktop
 background_blur = 0
 background_transparency = 0
+# Optional gradient color overrides (unset → theme.background + a darker shade):
 # background_gradient_top    = "#1e1e2e"
 # background_gradient_bottom = "#181825"
 
-# Migration: the old tiled-frost knobs `terminal_blur` and `terminal_frost_color`
-# are REMOVED. Tiled frost is now the z=0 layer showing through the translucent
-# terminal surface (`terminal_transparency` below) — use `background_blur` to
-# drive frost strength. Floating panes keep their own real blur
-# (`terminal_floating_blur`).
-
-# Terminal-pane translucency (surface alpha over z=0).
-# The tiled frost is owned by the z=0 background layer (`background_blur` /
-# `background_transparency` below) — there is no per-terminal tiled blur knob.
+# Terminal-pane translucency (tiled panes; surface alpha over the z=0 layer).
 terminal_transparency = 0
 
-# Floating panes default to opaque + no real blur.
+# Floating panes: independent translucency + real blur (default opaque, no blur).
 terminal_floating_transparency = 0
 terminal_floating_blur = 0
-# pane_floating_border_color = "#89b4fa"
 
-# Platform backdrop material
+# OS backdrop material (blurs the desktop BEHIND the window). Not portable:
+# macOS NSVisualEffect materials, Windows acrylic/mica (best-effort), Linux no-op.
+# One of: none (default) | sidebar | hud_window | under_window_background |
+#         popover | menu | full_screen_ui | window_background
 # vibrancy = "under_window_background"
 
-# Effect tokens (override the theme; unset → inherits the theme value).
-# `glow_size` owns glow: presence + halo radius + strength.
-#   none | thin | medium | large
+# Effect tokens — override the theme; unset → inherit the theme value.
+#   glow_size : owns glow presence + halo radius + strength. none|thin|medium|large
+#   intensity : owns the scanline/CRT overlay opacity only. off|low|medium|heavy
 # glow_size = "medium"
-# `intensity` owns the scanline/CRT overlay opacity only; it does NOT affect glow.
-#   off | low | medium | heavy
 # intensity = "medium"
 
-# Pane chrome
-# pane_border_width = 2.0
-# pane_border_radius = 20.0
-# pane_padding = 4.0
-# pane_border_color = "#313244"
-# pane_active_border_color = "#89b4fa"
-# pane_gap = 8.0
-# sidebar_gap = 12.0
-# sidebar_width = 300       # logical px; clamped to 160..=560 (default 300)
+# ── Border style per surface ──
+# Frame decoration, independent of width. One of: none | bordered | bracketed.
+#   pane_border_style    : terminal panes  (default "bordered")
+#   sidebar_border_style : the sidebar shell (default "bracketed")
+# The sidebar border WIDTH follows the global/theme border width (it has no
+# separate width knob); the pane width is `pane_border_width` below.
+# pane_border_style    = "bordered"
+# sidebar_border_style = "bracketed"
 
-# Pane info bar (segmented pill inside the pane top + action buttons)
+# ── Border / affordance widths ──
+# A border width of 0 removes the decorative border everywhere. Affordance
+# outlines (keyboard focus ring + selected-item highlight) use their own width
+# so they stay visible even with borders off.
+#   focus_border_width : focus ring + selection outline width, px (default 1.5)
+# focus_border_width = 1.5
+
+# ── Pane chrome (all optional → inherit the theme when unset) ──
+# pane_border_width        = 2.0    # px; 0 = no border. Clamped to [0, 10].
+# pane_border_radius       = 20.0   # px; clamped to [0, 20].
+# pane_padding             = 4.0    # content inset; clamped to [0, 20].
+# pane_gap                 = 8.0    # gap between tiled panes
+# pane_border_color        = "#313244"   # inactive pane border
+# pane_active_border_color = "#89b4fa"   # focused pane border
+# pane_floating_border_color = "#89b4fa" # floating panes (active or not)
+
+# ── Sidebar geometry ──
+# sidebar_gap   = 12.0   # gap between sidebar and content
+# sidebar_width = 300    # logical px; clamped to 160..=560
+
+# ── Pane info bar (segmented pill inside the pane top + action buttons) ──
 # Left side — segments, in order ([] hides them):
 #   "location" | "app_name" | "git_branch" | "git_status"
 # pane_title_segments = ["location", "app_name"]
 # Right side — action buttons, in order ([] hides them):
 #   "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
-# Default is split + close (panes are already movable by mouse drag); add
-# "zoom"/"float"/"move_left"/"move_right" here for more buttons. Each button's
-# tooltip shows its real configured keybinding.
-# pane_title_actions  = ["split", "zoom", "float", "close"]
+# Default is split + close (panes are already movable by mouse drag). Each
+# button's tooltip shows its real configured keybinding.
+# pane_title_actions = ["split", "close"]
 # Both empty ⇒ no bar and no reserved top padding.
 
+# ─────────────────────────────────────────────────────────────────────────────
 [keys]
-# Prefix key triggers prefix mode for all `prefix+...` bindings.
+# ─────────────────────────────────────────────────────────────────────────────
+# Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
 prefix = "ctrl+b"
 
+# Rebind built-in actions: `bindings = { action = "keys" }`. (Actions are the
+# window-manager commands; see the docs for the full list.)
+# [keys.bindings]
+# split_right = "prefix+d"
+# close_pane  = "prefix+x"
+
+# Disable a built-in binding entirely.
+# [keys.unbind]
+# "prefix+z" = true
+
+# Launch a program on a key. `kind = "terminal"` runs it inside a pane;
+# `float = true` opens it floating; `close_pane = true` closes the pane on exit;
+# `keep_on_error` / `keep_on_success` keep the pane open after the program ends.
 [[keys.command]]
 keys = "prefix+g"
 command = "lazygit"
@@ -116,18 +184,30 @@ keys = "Alt+Enter"
 command = "alacritty"
 kind = "terminal"
 
-# Built-in catalog entries are seeded in code for common shells plus:
-# nvim, vim, helix, yazi, ranger, claude, codex, opencode, pi.
-# Use `[program.<id>]` to override one, add aliases, or disable it cleanly.
+# Custom key MODES (a sub-mode entered via a trigger, with its own bindings).
+# `sticky = true` keeps the mode active until Esc; otherwise it fires one action.
+# [[keys.mode]]
+# name = "resize"
+# trigger = "prefix+r"
+# sticky = true
+# [[keys.mode.bindings]]
+# action = "resize_grow"
+# keys = "l"
 
+# ─────────────────────────────────────────────────────────────────────────────
 [program.nvim]
+# ─────────────────────────────────────────────────────────────────────────────
+# The process catalog maps running processes to a display name + icon + color
+# (shown in the pane info bar / sidebar). Built-in entries are seeded in code for
+# common shells plus: nvim, vim, helix, yazi, ranger, claude, codex, opencode, pi.
+# Use `[program.<id>]` to override one, add aliases, or disable it.
 name = "Neovim"
 processes = ["v", "nvim"]
 icon = "file_code"
 description = "modal editor"
 color = "#89b4fa"
 
-# Remove a built-in entry and fall back to raw process name + terminal icon.
+# Remove a built-in entry and fall back to the raw process name + terminal icon.
 # [program.ranger]
 # disabled = true
 

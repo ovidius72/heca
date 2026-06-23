@@ -1430,6 +1430,7 @@ fn build_sidebar_shell(
     emit_intent: &ChromeIntentEmitter,
     ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
+    border_style: heca_config::appearance::BorderStyle,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> Flex {
@@ -1457,8 +1458,7 @@ fn build_sidebar_shell(
                 .background(shell_bg)
                 .padding(sidebar_gap)
                 .child(
-                    Pane::new()
-                        .bracketed()
+                    apply_pane_frame(Pane::new(), border_style)
                         .width(Length::Px(inner_w))
                         .height(Length::Px(inner_h))
                         .padding(10.0)
@@ -1484,6 +1484,7 @@ fn build_right_sidebar_shell(
     shell_bg: Color,
     theme: &GuiTheme,
     sidebar_gap: f32,
+    border_style: heca_config::appearance::BorderStyle,
 ) -> Flex {
     let inner_w = (right_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1507,8 +1508,7 @@ fn build_right_sidebar_shell(
                 .background(shell_bg)
                 .padding(sidebar_gap)
                 .child(
-                    Pane::new()
-                        .bracketed()
+                    apply_pane_frame(Pane::new(), border_style)
                         .width(Length::Px(inner_w))
                         .height(Length::Px(inner_h))
                         .padding(10.0)
@@ -1838,7 +1838,26 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // above by `app_theme_to_gui_theme` wins.
     theme.glow_size = glow_level_to_gui(state.appearance.effective_glow_size(&state.theme));
     theme.intensity = intensity_to_gui(state.appearance.effective_intensity(&state.theme));
+    // Affordance outlines (focus ring + selection) get their own configurable
+    // width, independent of the decorative border so they stay visible at
+    // `border_width = 0`.
+    theme.focus_border_width = state.appearance.effective_focus_border_width();
     theme
+}
+
+/// Apply a config [`BorderStyle`](heca_config::appearance::BorderStyle) as the
+/// grid-ui [`Pane`] frame — the single mapping used for both terminal panes
+/// (`pane_border_style`) and the sidebar shell (`sidebar_border_style`).
+pub(crate) fn apply_pane_frame(
+    pane: Pane,
+    style: heca_config::appearance::BorderStyle,
+) -> Pane {
+    use heca_config::appearance::BorderStyle;
+    match style {
+        BorderStyle::None => pane.frameless(),
+        BorderStyle::Bordered => pane.bordered(),
+        BorderStyle::Bracketed => pane.bracketed(),
+    }
 }
 
 /// The status-bar text projection (`N panes | focus | MODE…`).
@@ -2309,6 +2328,7 @@ pub(crate) fn build_chrome_root(
             &emit_intent,
             &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
+            state.appearance.effective_sidebar_border_style(),
             &mut signals,
             &mut drag_items,
         ))
@@ -2324,6 +2344,7 @@ pub(crate) fn build_chrome_root(
             right_sidebar_shell_background_color(state),
             &theme,
             state.appearance.effective_sidebar_gap(&state.theme),
+            state.appearance.effective_sidebar_border_style(),
         ))
     } else {
         None
@@ -2763,6 +2784,7 @@ mod tests {
             &emit_intent,
             &chrome.workspaces,
             8.0,
+            heca_config::appearance::BorderStyle::Bracketed,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
         );
@@ -2828,6 +2850,7 @@ mod tests {
             &emit_intent,
             &chrome.workspaces,
             8.0,
+            heca_config::appearance::BorderStyle::Bracketed,
             &mut super::ChromeSignals::default(),
             &mut drag,
         );
