@@ -91,7 +91,7 @@ impl PtyHandle {
         wake_on_output: Option<WakeCallback>,
         shell_integration: Option<ShellIntegrationAssets>,
     ) -> Result<Self, PtyError> {
-        Self::new_with_shell(cols, rows, wake_on_output, shell_integration, None)
+        Self::new_with_shell(cols, rows, wake_on_output, shell_integration, None, false, &[])
     }
 
     pub(super) fn new_with_shell(
@@ -100,6 +100,8 @@ impl PtyHandle {
         wake_on_output: Option<WakeCallback>,
         shell_integration: Option<ShellIntegrationAssets>,
         shell_override: Option<&str>,
+        env_clear: bool,
+        env: &[(String, String)],
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
         let size = pty_size(cols, rows);
@@ -108,7 +110,7 @@ impl PtyHandle {
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
         let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
-        let cmd = command_for_shell(&shell, shell_integration.as_ref());
+        let cmd = command_for_shell(&shell, shell_integration.as_ref(), env_clear, env);
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }
 
@@ -234,8 +236,16 @@ impl PtyHandle {
 fn command_for_shell(
     shell: &str,
     shell_integration: Option<&ShellIntegrationAssets>,
+    env_clear: bool,
+    env: &[(String, String)],
 ) -> CommandBuilder {
     let mut cmd = CommandBuilder::new(shell);
+    if env_clear {
+        cmd.env_clear();
+    }
+    for (key, value) in env {
+        cmd.env(key, value);
+    }
     let Some(assets) = shell_integration else {
         return cmd;
     };

@@ -35,6 +35,15 @@ pub struct ShellIntegrationAssets {
 struct ShellLaunch<'a> {
     integration: Option<ShellIntegrationAssets>,
     override_path: Option<&'a str>,
+    /// Clear the inherited environment before spawning, isolating the shell from
+    /// the user's shell config (e.g. a `~/.bashrc` that loads bash-preexec and
+    /// clobbers our OSC 133 `DEBUG` trap / `PROMPT_COMMAND`). `env` is applied
+    /// after the clear. Default `false` — the real app keeps the user's env.
+    env_clear: bool,
+    /// Extra env vars to set on the spawned shell (after an optional
+    /// `env_clear`). Used by integration tests to give the shell a clean `HOME`
+    /// so the test is deterministic across machines.
+    env: Vec<(String, String)>,
 }
 
 struct CommandLaunch<'a> {
@@ -157,6 +166,8 @@ impl TerminalBackend {
             LaunchTarget::Shell(ShellLaunch {
                 integration: options.shell_integration,
                 override_path: None,
+                env_clear: false,
+                env: Vec::new(),
             }),
         )
     }
@@ -199,6 +210,8 @@ impl TerminalBackend {
                             wake_on_output,
                             shell.integration,
                             Some(shell_path),
+                            shell.env_clear,
+                            &shell.env,
                         )?
                     }
                     None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
@@ -353,6 +366,8 @@ impl TerminalBackend {
             ShellLaunch {
                 integration: None,
                 override_path: Some(shell),
+                env_clear: false,
+                env: Vec::new(),
             },
         )
     }
@@ -773,6 +788,18 @@ mod tests {
         }
 
         let integration = write_shell_integration_assets_for_test();
+        // Isolate the shell from the user's environment: a ~/.bashrc that loads
+        // bash-preexec (or any framework trapping DEBUG / rewriting
+        // PROMPT_COMMAND) clobbers our OSC 133 hooks so `D;0` for `true` never
+        // arrives. Spawn with a clean HOME (no ~/.bashrc to source) + the
+        // inherited PATH so the test is deterministic across machines.
+        let clean_home = std::env::temp_dir()
+            .join(format!("heca-bash-test-home-{}", std::process::id()));
+        std::fs::create_dir_all(&clean_home).expect("create clean HOME for bash test");
+        let env = vec![
+            ("HOME".to_string(), clean_home.to_string_lossy().into_owned()),
+            ("PATH".to_string(), std::env::var("PATH").unwrap_or_default()),
+        ];
         let mut backend = TerminalBackend::with_test_shell(
             80,
             24,
@@ -783,6 +810,8 @@ mod tests {
             ShellLaunch {
                 integration: Some(integration),
                 override_path: Some(bash.to_str().expect("bash path should be valid utf-8")),
+                env_clear: true,
+                env,
             },
         )
         .expect("terminal backend should initialize");
@@ -813,6 +842,10 @@ mod tests {
             }),
             "bash shell integration should update cwd via OSC 7 after `cd /tmp`"
         );
+
+        // Clean up the isolated HOME (best-effort; a panic above just leaks it
+        // in /tmp, which the OS reaps).
+        let _ = std::fs::remove_dir_all(&clean_home);
     }
 
     #[test]
@@ -833,6 +866,8 @@ mod tests {
             ShellLaunch {
                 integration: Some(integration),
                 override_path: Some(zsh.to_str().expect("zsh path should be valid utf-8")),
+                env_clear: false,
+                env: Vec::new(),
             },
         )
         .expect("terminal backend should initialize");
