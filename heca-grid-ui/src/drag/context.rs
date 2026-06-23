@@ -106,7 +106,9 @@ mod tests {
     }
 
     fn dragging(id: u64, swap: bool) -> DragPhase<TestPayload> {
-        DragPhase::Dragging { payload: TestPayload { id, swap } }
+        DragPhase::Dragging {
+            payload: TestPayload { id, swap },
+        }
     }
 
     #[test]
@@ -123,7 +125,10 @@ mod tests {
         ctx.surface_mut(DragSurfaceId::LeftSidebar).unwrap().phase = dragging(7, false);
         ctx.set_active(DragSurfaceId::LeftSidebar);
         assert!(ctx.is_dragging());
-        assert_eq!(ctx.active().and_then(|s| s.payload()).map(|p| p.id), Some(7));
+        assert_eq!(
+            ctx.active().and_then(|s| s.payload()).map(|p| p.id),
+            Some(7)
+        );
         ctx.clear_active();
         assert!(!ctx.is_dragging());
     }
@@ -132,8 +137,18 @@ mod tests {
     fn payload_round_trips_unchanged() {
         let mut ctx: DragContext<TestPayload> = DragContext::new();
         ctx.surface_mut(DragSurfaceId::LeftSidebar).unwrap().phase = dragging(42, false);
-        let p = ctx.surface(DragSurfaceId::LeftSidebar).unwrap().payload().unwrap();
-        assert_eq!(*p, TestPayload { id: 42, swap: false });
+        let p = ctx
+            .surface(DragSurfaceId::LeftSidebar)
+            .unwrap()
+            .payload()
+            .unwrap();
+        assert_eq!(
+            *p,
+            TestPayload {
+                id: 42,
+                swap: false
+            }
+        );
     }
 
     #[test]

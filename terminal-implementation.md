@@ -649,6 +649,11 @@ Details:
 
 - render only changed rows/ranges where possible
 - define fallback for full invalidation
+- this depends on a retained terminal-content path; if the app still clears the
+  full scene each frame, skipping unchanged rows would erase them instead of
+  optimizing redraw cost
+- keep the broader app/compositor damage-preservation work explicit rather than
+  burying it inside the terminal renderer task
 
 Files:
 
@@ -658,6 +663,119 @@ Files:
 Done when:
 
 - redraw cost scales with changed content rather than full pane size
+
+## Phase 3A — Terminal Damage-Preservation Foundation
+
+Goal:
+
+- make dirty-row rendering possible without breaking visible output
+- preserve terminal damage through the backend/app/renderer boundary instead of
+  draining and discarding it
+- add the minimum retained-content foundation so unchanged terminal rows can
+  remain visible across frames
+
+Why this phase exists:
+
+- the live app currently clears the scene each frame before re-rendering panes
+- terminal backends expose a damage API, but the app currently acknowledges that
+  damage before rendering and drops it on the floor
+- as long as unchanged terminal content is not preserved somewhere, "render only
+  dirty rows" is not an optimization; it is a correctness bug because skipped
+  rows disappear on the next frame
+
+### Task 3A.1 — Preserve terminal damage through the app path
+
+Details:
+
+- stop acknowledging terminal damage inside mount preparation before render uses it
+- thread damage metadata alongside `TerminalSnapshot` through the terminal mount
+  and render path
+- keep the contract renderer-agnostic: backend owns damage production, app owns
+  routing, renderer consumes already-decided visible row ranges
+
+Files:
+
+- `heca-core/src/backend/mod.rs`
+- `heca-core/src/backend/snapshot.rs`
+- `heca/src/app/terminal_host.rs`
+- `heca/src/app/terminal_render.rs`
+
+Done when:
+
+- a terminal render pass receives both the snapshot and the pending
+  `TerminalDamage` for that pane
+
+### Task 3A.2 — Produce real visible-row damage from the terminal backend
+
+Details:
+
+- replace the current `dirty: bool -> Full|None` behavior with visible row-range
+  damage where possible
+- derive dirty visible rows from `wezterm-term` / `termwiz` line sequence
+  numbers or equivalent viewport-aware invalidation data instead of diffing full
+  snapshots blindly
+- coalesce adjacent visible rows into `TerminalRowRange`
+- fall back to `Full` when damage cannot be described safely: resize,
+  viewport-shape changes, alternate-screen transitions, scroll-region changes,
+  or any uncertain state transition
+
+Files:
+
+- `heca-core/src/backend/terminal.rs`
+- `heca-core/src/backend/terminal/engine.rs`
+- `heca-core/src/backend/snapshot.rs`
+
+Done when:
+
+- terminal damage is usually `Rows(...)` for ordinary output/cursor changes and
+  conservatively `Full` for structural viewport changes
+
+### Task 3A.3 — Add retained terminal-content foundation
+
+Details:
+
+- introduce the minimum retained-content mechanism required so unchanged rows
+  remain visible when only dirty rows are redrawn
+- keep this scoped to terminal panes; do not silently expand it into general
+  compositor-wide damage optimization in the same task
+- acceptable implementations include:
+  - a retained terminal layer/texture per pane
+  - app-side preserved scene content scoped to pane damage
+- whichever implementation is chosen must make the dependency explicit: terminal
+  row damage is invalid without retained content
+
+Files:
+
+- `heca/src/app/render.rs`
+- `heca/src/app/terminal_render.rs`
+- `heca-renderer` modules only if a terminal-specific retained surface is needed
+
+Done when:
+
+- unchanged terminal rows remain visible across frames while only dirty rows are
+  redrawn
+
+### Task 3A.4 — Verify the dependency itself
+
+Details:
+
+- add focused tests for:
+  - backend row-range damage production
+  - app-path damage propagation
+  - retained-content correctness when only dirty rows are redrawn
+- keep renderer-side tests small and structural; broader visual validation stays
+  in the later manual matrix
+
+Files:
+
+- `heca-core/src/backend/terminal.rs`
+- `heca-renderer/src/terminal.rs`
+- app-side test modules where feasible
+
+Done when:
+
+- the retained-content prerequisite is covered well enough that Phase 3.5 can
+  optimize row redraw without relying on undocumented assumptions
 
 ## Phase 4 — App Integration and Pane Geometry
 
@@ -1111,6 +1229,13 @@ Done when:
 - [x] 3.4 Add clipping/scissor support
 - [ ] 3.5 Add dirty-region rendering strategy
 
+## Phase 3A
+
+- [x] 3A.1 Preserve terminal damage through the app path
+- [x] 3A.2 Produce real visible-row damage from the terminal backend
+- [~] 3A.3 Add retained terminal-content foundation
+- [~] 3A.4 Verify the dependency itself
+
 ## Phase 4
 
 - [x] 4.1 Compute pane content rect
@@ -1212,10 +1337,20 @@ This section must be updated:
 > (alpha 0), which bypasses the `terminal_transparency`→`surface_alpha` channel and is the
 > prime suspect for the deferred “no blur/transparency” regression; the compositor-blur plan's
 > Phase 3 critical review owns reconciling which channel owns pane translucency.
+>
+> **RECONCILE (2026-06-23):** `terminal-00` was advanced in the `feature/terminal-followups`
+> worktree. `3A.1` and `3A.2` are now done: terminal damage is preserved through the app path
+> and the backend now emits visible row-range damage where safe. `3A.3` is only **partial**:
+> a retained terminal-content foundation exists, but the first live damaged-frame presentation
+> caused a real runtime regression (oversized glyphs while resizing, freshly typed text becoming
+> temporarily invisible). The current safety mitigation is to present the retained layer only on
+> clean frames while still updating the cache in the background on damaged frames. `3A.4` is also
+> partial: focused validation exists, but retained-content correctness under damaged-frame
+> presentation still needs direct coverage before `3.5` / `terminal-01` can be considered safe.
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
-- Active implementation phase: terminal core (Phases 0–5) is complete and merged; Phase 6 partial (6.1/6.2 done, 6.3 ligatures + 6.4 richer-protocol hooks open); Phase 7 partial (only 7.4 done — 7.1/7.2 tests + 7.3 manual validation matrix open); Phase 8 partial (8.3/8.4 done, 8.1/8.2/8.5 partial); Phase 9 partial (state model + actions + caret done, backend-capability contract + full terminal migration open); Phases 10–13 unbuilt (Phase 13 overlaps the partial Phase 8 pane-shell work)
+- Active implementation phase: terminal core (Phases 0–5) is complete and merged; Phase 3A partial (`3A.1`/`3A.2` done, `3A.3`/`3A.4` still open), Phase 6 partial (6.1/6.2 done, 6.3 ligatures + 6.4 richer-protocol hooks open); Phase 7 partial (only 7.4 done — 7.1/7.2 tests + 7.3 manual validation matrix open); Phase 8 partial (8.3/8.4 done, 8.1/8.2/8.5 partial); Phase 9 partial (state model + actions + caret done, backend-capability contract + full terminal migration open); Phases 10–13 unbuilt (Phase 13 overlaps the partial Phase 8 pane-shell work)
 - Last completed phase: Phase 5 (input fidelity). Phase 6/7/8/9 are in-progress/partial; Phases 10–13 are backlog.
 - Last materially advanced areas:
   - renderer sync onto `main`'s atlas-based text path
@@ -1224,7 +1359,7 @@ This section must be updated:
   - pane-runtime-state initiative (Phases 8.3/8.4) shipped + archived
   - selection model + action wiring (Phase 9.1/9.2) landed
   - `frappe`→`latte` theme-unification (PR #160) and its terminal-bg-alpha interaction
-- Last completed phase: Phase 2
+  - `terminal-00` prerequisite work: app-path damage preservation, backend visible-row damage, and a guarded retained terminal-content foundation
 
 ### Latest Decisions
 
@@ -1318,6 +1453,7 @@ This section must be updated:
 - structured keyboard forwarding is landed, but live verification is still needed for modifier-heavy terminal apps and function-key behavior
 - terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
 - terminal style fidelity is much improved, but live verification is still needed for broad colorscheme parity across more themes and TUIs
+- retained terminal-content groundwork exists, but presenting the retained layer during damaged frames currently regresses resize-time glyph scale and can temporarily hide fresh typing; the live path is guarded to clean frames until that is fixed
 - italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `[font.family.terminal].italic`, italic runs synthesize an oblique from the normal family
 - `FakeBackend` still exists as an error fallback and testing backend, not as the normal pane path
 - future work must avoid coupling terminal backend/renderer to a specific pane widget implementation while pane shells evolve
@@ -1383,23 +1519,17 @@ This section must be updated:
 
 ### Next Recommended Task
 
-- Validate the now-landed measured-metric and symbol-renderer path across more live TUIs:
-  - retest Yazi after the measured metric, powerline, and per-cell text changes
-  - test multiple terminal Nerd Fonts in heca and compare terminal-UI behavior
-  - determine whether any remaining misalignment is mostly font-specific or still renderer-specific
-  - verify that the measured-metric path did not regress the now-correct shell/nvim cursor spacing
-- Expand the shared terminal symbol/decorations subsystem only where live TUIs justify it:
-  - keep box-drawing geometry
-  - keep powerline separator geometry (``, ``, ``, ``, ``, ``)
-  - keep underline/undercurl rendering GUI-native and app-agnostic
-  - defer rarer symbol families until a real TUI exposes them
-- Keep merge-readiness hardening in place:
-  - primitive rendering must stay `u32`-indexed
-  - terminal grid fitting must reject invalid cell dimensions before integer conversion
-  - initial PTY grid sizing should come from workspace/cell metrics, not hardcoded `80x24` spawn defaults
-- Keep richer graphics/image protocol support explicitly out-of-scope for the immediate merge path, but track Yazi image preview as the next protocol-facing TODO
-- then continue terminal visual/cell-fidelity refinement where runtime gaps remain
-- after terminal rendering/input completion, start Phase 8 pane-shell integration with `heca-grid-ui`
+- Finish `3A.3` honestly before attempting `3.5` / `terminal-01`:
+  - debug why live retained-layer presentation on damaged frames causes oversized glyphs while resizing and temporarily hidden freshly typed text
+  - keep the work scoped to terminal panes; do not broaden it into general compositor damage optimization
+  - preserve the current safety fallback until the damaged-frame path is demonstrably correct
+- Complete `3A.4`:
+  - add direct app-path damage propagation coverage where feasible
+  - add retained-content correctness coverage for damaged-row redraw assumptions
+  - keep focused validation green as the retained path changes
+- Only after `3A.3`/`3A.4` are complete:
+  - make dirty-row rendering (`3.5` / `terminal-01`) the real live path
+  - then return to broader terminal visual/cell-fidelity validation across TUIs/fonts
 
 ### Planned Post-Merge Terminal Backlog
 
@@ -1793,6 +1923,10 @@ Goal:
 - `heca/src/app/terminal_host.rs` now also owns terminal content-area mouse routing and focus notifications, making terminal interaction less dependent on the current pane implementation
 - Terminal panes now use dedicated terminal font settings and fallback assets instead of inheriting only the UI theme font
 - A future pane-shell phase is now planned to host this terminal inside `heca-grid-ui` while adding process/global-state awareness at the shell layer
+- terminal mounts now preserve `TerminalDamage` through the app path instead of draining it before render can use it
+- terminal backend damage now derives visible changed-row ranges from `wezterm-term` sequence data where safe, with conservative `Full` fallback on uncertain structural transitions
+- a retained terminal-content foundation now exists in app/renderer state, but its live damaged-frame presentation path is still guarded after a real resize/typing regression
+- a follow-up review-fix pass cleaned up redundant clones, stale duplicated docs, TODO tracking, and targeted lint suppressions without broadening task scope
 
 ### Current Blocker — Terminal Pane Shell / Frosted Terminal Surface
 
@@ -1983,6 +2117,14 @@ Uncommitted local files at pause point for this blocker:
 - During the current pane-shell blocker investigation:
   - `cargo check -p heca` passes after each structural/render-order change
   - `cargo test -p heca-renderer terminal::tests -- --nocapture` passes for the terminal alpha helpers
+- During the `terminal-00` damage-preservation pass:
+  - `cargo check -p heca` passes
+  - targeted `heca` terminal-render tests passed during retained-layer implementation
+  - targeted backend damage tests passed while landing visible-row damage production
+- During the 2026-06-23 review-fix pass:
+  - `cargo check -p heca` passes
+  - `cargo test -p heca app::interaction::tests -- --nocapture` passes
+  - `cargo test -p heca app::selection_model::tests -- --nocapture` passes
 
 ### Fresh Session Restart Steps
 

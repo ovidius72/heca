@@ -5,9 +5,9 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::input::{KeyInputContext, handle_keyboard_input};
-use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
+use crate::app::interaction::{InteractionIntent, InteractionSource, dispatch_action};
 use crate::app::keyboard::{build_event_combo, is_prefix_match};
-use crate::app::mutations::{after_mutation_change, MutationKind};
+use crate::app::mutations::{MutationKind, after_mutation_change};
 use crate::app::render::{render_frame, update_session_viewport};
 use crate::app::terminal_host::{
     forward_mouse_button, forward_mouse_move, forward_mouse_wheel, notify_window_focus_changed,
@@ -48,12 +48,8 @@ pub(crate) fn handle_window_event(
                 .configure(&state.device, &state.surface_config);
             let log_w = phys.width as f32 / state.scale_factor as f32;
             let log_h = phys.height as f32 / state.scale_factor as f32;
-            state
-                .text_renderer
-                .set_target_size(phys.width, phys.height);
-            state
-                .grid_renderer
-                .set_target_size(phys.width, phys.height);
+            state.text_renderer.set_target_size(phys.width, phys.height);
+            state.grid_renderer.set_target_size(phys.width, phys.height);
             state
                 .primitive_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
@@ -63,9 +59,13 @@ pub(crate) fn handle_window_event(
             state
                 .grid_renderer
                 .set_screen_size(&state.queue, log_w, log_h);
-            state.compositor.resize(&state.device, phys.width, phys.height);
+            state
+                .compositor
+                .resize(&state.device, phys.width, phys.height);
             state.blur.resize(&state.device, phys.width, phys.height);
-            state.background.resize(&state.device, phys.width, phys.height);
+            state
+                .background
+                .resize(&state.device, phys.width, phys.height);
             update_session_viewport(state);
             after_mutation_change(state, MutationKind::Config);
         }
@@ -77,6 +77,7 @@ pub(crate) fn handle_window_event(
             state.scale_factor = scale_factor;
             state.text_renderer.set_scale_factor(scale_factor);
             state.grid_renderer.set_scale_factor(scale_factor);
+            state.terminal_layers.clear();
             refresh_terminal_cell_size(state);
             state.mark_full_redraw();
         }
@@ -197,7 +198,8 @@ pub(crate) fn handle_window_event(
             if let Some((action, source)) = mouse::on_mouse_input(state, button, button_state) {
                 dispatch_action(state, registry, source, &action);
             }
-            let started_interactive_move = !interactive_before && state.mouse.interactive_move.is_some();
+            let started_interactive_move =
+                !interactive_before && state.mouse.interactive_move.is_some();
             // A button event that started, drove, or ended a divider resize (e.g.
             // the right-button fallback press, or a release) must not also reach the
             // terminal — the gesture consumed it.

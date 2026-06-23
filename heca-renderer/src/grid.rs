@@ -338,8 +338,8 @@ impl GridRenderer {
     pub fn draw(&mut self, r: GlowRect) {
         // Expand the quad to contain whichever halo reaches furthest: the glow, or
         // the (offset) drop shadow's blur — so neither falloff is clipped.
-        let shadow_reach = r.shadow_radius.max(0.0)
-            + r.shadow_offset[0].abs().max(r.shadow_offset[1].abs());
+        let shadow_reach =
+            r.shadow_radius.max(0.0) + r.shadow_offset[0].abs().max(r.shadow_offset[1].abs());
         let margin = r.glow_radius.max(0.0).max(shadow_reach).max(r.border_width) + 2.0;
         let (x0, y0) = (r.x - margin, r.y - margin);
         let (x1, y1) = (r.x + r.w + margin, r.y + r.h + margin);
@@ -507,7 +507,11 @@ impl GridRenderer {
         // not scissored color spans).
         let idx_base = self.frame_idx;
         let base_vertex = self.frame_vtx as i32;
-        rpass.draw_indexed(idx_base..idx_base + self.indices.len() as u32, base_vertex, 0..1);
+        rpass.draw_indexed(
+            idx_base..idx_base + self.indices.len() as u32,
+            base_vertex,
+            0..1,
+        );
 
         self.frame_vtx += self.vertices.len() as u32;
         self.frame_idx += self.indices.len() as u32;

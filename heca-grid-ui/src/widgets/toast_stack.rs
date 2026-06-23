@@ -232,7 +232,11 @@ impl ToastStack {
             if let Some(pos) = entries.iter().position(|e| e.id == spec.id) {
                 next.push(entries.remove(pos));
             } else {
-                next.push(Entry { id: spec.id, toast: self.build(spec), enter: 0.0 });
+                next.push(Entry {
+                    id: spec.id,
+                    toast: self.build(spec),
+                    enter: 0.0,
+                });
             }
         }
         *entries = next;
@@ -242,20 +246,34 @@ impl ToastStack {
     /// (in viewport space). `heights[i]` is entry `i`'s measured height.
     fn slots(&self, heights: &[f32]) -> Vec<Rectangle> {
         let vp = self.viewport.get();
-        let (vw, vh) = if vp.w.is_finite() { (vp.w as f32, vp.h as f32) } else { (TOAST_W + 2.0 * self.margin, 1000.0) };
-        let x = if self.corner.is_right() { vw - self.margin - TOAST_W } else { self.margin };
+        let (vw, vh) = if vp.w.is_finite() {
+            (vp.w as f32, vp.h as f32)
+        } else {
+            (TOAST_W + 2.0 * self.margin, 1000.0)
+        };
+        let x = if self.corner.is_right() {
+            vw - self.margin - TOAST_W
+        } else {
+            self.margin
+        };
         let mut out = Vec::with_capacity(heights.len());
         if self.corner.is_top() {
             let mut y = self.margin;
             for &h in heights {
-                out.push(Rectangle::new(Point::new(x as f64, y as f64), Size::new(TOAST_W as f64, h as f64)));
+                out.push(Rectangle::new(
+                    Point::new(x as f64, y as f64),
+                    Size::new(TOAST_W as f64, h as f64),
+                ));
                 y += h + self.gap;
             }
         } else {
             let mut y = vh - self.margin;
             for &h in heights {
                 y -= h;
-                out.push(Rectangle::new(Point::new(x as f64, y as f64), Size::new(TOAST_W as f64, h as f64)));
+                out.push(Rectangle::new(
+                    Point::new(x as f64, y as f64),
+                    Size::new(TOAST_W as f64, h as f64),
+                ));
                 y -= self.gap;
             }
         }

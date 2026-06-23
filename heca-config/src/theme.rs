@@ -1,8 +1,7 @@
 pub use crate::keys::{
-    BindingValue, CommandKeybindConfig, KeybindingMap, KeyModeConfig, KeysConfig,
-    ModeBindingConfig,
+    BindingValue, CommandKeybindConfig, KeyModeConfig, KeybindingMap, KeysConfig, ModeBindingConfig,
 };
-pub use crate::loader::{config_dir, AppConfig, Config};
+pub use crate::loader::{AppConfig, Config, config_dir};
 pub use crate::settings::{ModifierKey, SettingsConfig};
 pub use heca_theme::{Color, GlowLevel, Intensity, Shadow, Theme};
 

@@ -30,12 +30,23 @@ pub(crate) fn on_cursor_moved(state: &mut AppState, pos: (f32, f32)) {
 /// Handle threshold detection for sidebar drag. On threshold exceeded,
 /// transitions to active sidebar drag mode and sets up ghost label + source highlight.
 fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
-    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+    let left = state
+        .mouse
+        .drag_ctx
+        .surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
     let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
-    let DragPhase::Starting { payload, start_pos, threshold_sq } = phase else {
+    let DragPhase::Starting {
+        payload,
+        start_pos,
+        threshold_sq,
+    } = phase
+    else {
         // Not a Starting phase — restore whatever it was.
-        state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+        state
+            .mouse
+            .drag_ctx
+            .surface_mut(DragSurfaceId::LeftSidebar)
             .expect("LeftSidebar pre-populated in DragContext::default")
             .phase = phase;
         return;
@@ -45,9 +56,16 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
     let dy = pos.1 - start_pos.1;
     if dx * dx + dy * dy <= threshold_sq {
         // Threshold not exceeded — restore the Starting phase.
-        state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+        state
+            .mouse
+            .drag_ctx
+            .surface_mut(DragSurfaceId::LeftSidebar)
             .expect("LeftSidebar pre-populated in DragContext::default")
-            .phase = DragPhase::Starting { payload, start_pos, threshold_sq };
+            .phase = DragPhase::Starting {
+            payload,
+            start_pos,
+            threshold_sq,
+        };
         return;
     }
 
@@ -59,9 +77,18 @@ fn handle_sidebar_drag_starting(state: &mut AppState, pos: (f32, f32)) {
     } else {
         DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
-    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+    let left = state
+        .mouse
+        .drag_ctx
+        .surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
-    left.ghost_label = Some(DragLabel { text: label, x: pos.0, y: pos.1, width: sw, height: 20.0 });
+    left.ghost_label = Some(DragLabel {
+        text: label,
+        x: pos.0,
+        y: pos.1,
+        width: sw,
+        height: 20.0,
+    });
     left.phase = DragPhase::Dragging { payload };
     // source_item was already set when the Starting phase began.
 }
@@ -87,7 +114,10 @@ fn drag_ghost_label(state: &AppState, payload: &AppDragPayload) -> String {
 /// Handle cursor movement during an active sidebar drag.
 /// Updates the ghost label position to follow the cursor.
 fn handle_sidebar_drag_move(state: &mut AppState, pos: (f32, f32)) {
-    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+    let left = state
+        .mouse
+        .drag_ctx
+        .surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
     if let DragPhase::Dragging { .. } = left.phase
         && let Some(label) = &mut left.ghost_label
@@ -110,7 +140,10 @@ fn update_sidebar_drag_hover(state: &mut AppState) {
     } else {
         DEFAULT_COLLAPSED_SIDEBAR_WIDTH
     };
-    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+    let left = state
+        .mouse
+        .drag_ctx
+        .surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
     if pos.0 >= 0.0 && pos.0 <= sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;

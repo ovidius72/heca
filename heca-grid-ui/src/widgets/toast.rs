@@ -251,7 +251,10 @@ impl Toast {
         let right = b.loc.x + b.size.w - PAD - if has_dismiss { dsz + ICON_GAP } else { 0.0 };
         let text_w = (right - text_x).max(0.0);
 
-        let title = Rectangle::new(Point::new(text_x, b.loc.y + PAD), Size::new(text_w, title_h));
+        let title = Rectangle::new(
+            Point::new(text_x, b.loc.y + PAD),
+            Size::new(text_w, title_h),
+        );
         let mut y = b.loc.y + PAD + title_h;
         let body = self.body.as_ref().map(|_| {
             let h = self.line_h(BODY_SCALE);
@@ -264,7 +267,13 @@ impl Toast {
             Rectangle::new(Point::new(text_x, y + GAP), Size::new(w, ACTION_H))
         });
 
-        Rects { icon, title, body, action, dismiss }
+        Rects {
+            icon,
+            title,
+            body,
+            action,
+            dismiss,
+        }
     }
 
     /// Which sub-region a point falls in.
@@ -313,7 +322,13 @@ impl Component for Toast {
         }
         let (surface, foreground, muted, radius, card_radius) = {
             let t = cx.theme();
-            (t.surface, t.foreground, t.muted, t.control_radius(), t.radius)
+            (
+                t.surface,
+                t.foreground,
+                t.muted,
+                t.control_radius(),
+                t.radius,
+            )
         };
         let tone = match self.severity {
             ToastSeverity::Info => cx.theme().accent,
@@ -328,18 +343,36 @@ impl Component for Toast {
 
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79).
-        cx.rect(b, surface.lerp(tone, TINT_ALPHA as f32 / 255.0), None, card_radius, None);
+        cx.rect(
+            b,
+            surface.lerp(tone, TINT_ALPHA as f32 / 255.0),
+            None,
+            card_radius,
+            None,
+        );
         cx.bracket_frame(b, Some(surface));
 
         // Leading severity icon (single-layer, toned).
-        if let (Some(ir), Some(ch)) = (r.icon, self.icon.unwrap_or(self.severity.default_glyph()).primary_char()) {
+        if let (Some(ir), Some(ch)) = (
+            r.icon,
+            self.icon
+                .unwrap_or(self.severity.default_glyph())
+                .primary_char(),
+        ) {
             cx.icon(ir, &ch.to_string(), tone, ir.size.h as f32);
         }
 
         // Title (strong, severity-toned) then optional body (muted).
         cx.text(r.title, &self.title, tone, title_fs, TextAlign::Start, true);
         if let (Some(br), Some(body)) = (r.body, &self.body) {
-            cx.text(br, body, foreground.lerp(muted, 0.2), body_fs, TextAlign::Start, false);
+            cx.text(
+                br,
+                body,
+                foreground.lerp(muted, 0.2),
+                body_fs,
+                TextAlign::Start,
+                false,
+            );
         }
 
         // Action button (toned ghost; brighter on hover).
@@ -348,9 +381,16 @@ impl Component for Toast {
             cx.rect(
                 ar,
                 tone.with_alpha(if hov { 40 } else { 22 }),
-                Some(Border { color: tone.with_alpha(if hov { 220 } else { 150 }), width: 1.0 }),
+                Some(Border {
+                    color: tone.with_alpha(if hov { 220 } else { 150 }),
+                    width: 1.0,
+                }),
                 radius,
-                hov.then_some(Glow { color: tone, radius: 7.0, intensity: 0.2 }),
+                hov.then_some(Glow {
+                    color: tone,
+                    radius: 7.0,
+                    intensity: 0.2,
+                }),
             );
             cx.text(ar, label, tone, title_fs, TextAlign::Center, false);
         }
@@ -359,7 +399,12 @@ impl Component for Toast {
         if let Some(dr) = r.dismiss {
             let hov = self.hovered == Region::Dismiss;
             if let Some(ch) = Glyph::Close.primary_char() {
-                cx.icon(dr, &ch.to_string(), if hov { foreground } else { muted }, self.base.font);
+                cx.icon(
+                    dr,
+                    &ch.to_string(),
+                    if hov { foreground } else { muted },
+                    self.base.font,
+                );
             }
         }
 
@@ -377,7 +422,10 @@ impl Component for Toast {
             }
         }
         // Focus ring when clickable + focused.
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if self.focusable()
+            && self.base.focus_visible.get_untracked()
+            && cx.theme().show_focus_border
+        {
             cx.corner_brackets(b, tone);
         }
     }
@@ -423,7 +471,10 @@ impl Component for Toast {
                 }
                 _ => Handled::No,
             },
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } if self.focusable() => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } if self.focusable() => {
                 self.flash_region = Region::Body;
                 self.flash.trigger();
                 if let Some(f) = &self.on_click {

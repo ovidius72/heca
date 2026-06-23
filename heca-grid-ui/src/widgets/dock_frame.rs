@@ -25,8 +25,8 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::{LayoutExt, Parent, StyleExt};
-use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, route_event};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Direction, Justify};
 use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
@@ -171,7 +171,10 @@ impl DockFrame {
     /// Append body content (folds away when collapsed). This is also the seam G6
     /// uses to make the frame draggable via the shipped `drag/` framework.
     pub fn child(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[BODY].base_mut().children.push(Box::new(c));
+        self.base.children[BODY]
+            .base_mut()
+            .children
+            .push(Box::new(c));
         self
     }
 

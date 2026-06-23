@@ -1,7 +1,7 @@
-use super::engine::SharedWriter;
 use super::ShellIntegrationAssets;
+use super::engine::SharedWriter;
 use anyhow::Error as AnyError;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
@@ -107,7 +107,9 @@ impl PtyHandle {
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
 
-        let shell = shell_override.map(str::to_string).unwrap_or_else(default_shell);
+        let shell = shell_override
+            .map(str::to_string)
+            .unwrap_or_else(default_shell);
         let cmd = command_for_shell(&shell, shell_integration.as_ref());
         Self::spawn_with_command_builder(pair, shell, cmd, wake_on_output)
     }

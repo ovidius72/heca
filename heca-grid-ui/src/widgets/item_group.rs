@@ -9,8 +9,8 @@
 
 use crate::action::{Action, SignalData};
 use crate::builders::LayoutExt;
-use crate::component::{route_event, Base, Component, Event, Handled};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::component::{Base, Component, Event, Handled, route_event};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::Direction;
 use crate::widgets::{Item, Label};
 
@@ -45,7 +45,12 @@ impl ItemGroup {
         let mut base = Base::new();
         base.style.direction = Direction::Column;
         base.children.push(Box::new(header));
-        Self { base, expanded, chevron, on_toggle: None }
+        Self {
+            base,
+            expanded,
+            chevron,
+            on_toggle: None,
+        }
     }
 
     /// Set the initial expanded state.

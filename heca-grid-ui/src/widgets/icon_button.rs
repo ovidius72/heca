@@ -13,7 +13,7 @@ use crate::builders::LayoutExt;
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Icon;
@@ -187,7 +187,10 @@ impl Component for IconButton {
             cx.rect(
                 b,
                 tone.with_alpha(fill_a as u8),
-                Some(Border { color: tone.with_alpha(border_a as u8), width: BORDER_W }),
+                Some(Border {
+                    color: tone.with_alpha(border_a as u8),
+                    width: BORDER_W,
+                }),
                 radius,
                 g,
             );
@@ -204,7 +207,10 @@ impl Component for IconButton {
         if disabled {
             cx.dim(b, radius);
         }
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if self.focusable()
+            && self.base.focus_visible.get_untracked()
+            && cx.theme().show_focus_border
+        {
             cx.corner_brackets(b, accent);
         }
     }
@@ -225,7 +231,10 @@ impl Component for IconButton {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }
@@ -235,7 +244,11 @@ impl Component for IconButton {
 
     fn tick(&mut self, dt: f32) -> bool {
         let mut animating = false;
-        let target = if self.hovered.get_untracked() { 1.0 } else { 0.0 };
+        let target = if self.hovered.get_untracked() {
+            1.0
+        } else {
+            0.0
+        };
         if (self.progress - target).abs() >= 1e-3 {
             let step = dt / HOVER_DURATION;
             self.progress = if self.progress < target {

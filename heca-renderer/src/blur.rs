@@ -93,7 +93,12 @@ pub struct Blur {
 }
 
 impl Blur {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("blur_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("blur.wgsl").into()),
@@ -181,7 +186,11 @@ impl Blur {
             .map(|_| {
                 device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("blur_params"),
-                    contents: bytemuck::cast_slice(&[BlurParams { step: [0.0, 0.0], radius: 0.0, _pad: 0.0 }]),
+                    contents: bytemuck::cast_slice(&[BlurParams {
+                        step: [0.0, 0.0],
+                        radius: 0.0,
+                        _pad: 0.0,
+                    }]),
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 })
             })
@@ -331,9 +340,18 @@ impl Blur {
             label: Some("blur_bg"),
             layout: &self.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: params.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(src),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params.as_entire_binding(),
+                },
             ],
         })
     }

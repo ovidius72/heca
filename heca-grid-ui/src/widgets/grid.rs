@@ -106,7 +106,12 @@ impl Grid {
         col_span: u16,
         row_span: u16,
     ) -> Self {
-        child.base_mut().style.grid_cell = Some(GridCell { col, row, col_span, row_span });
+        child.base_mut().style.grid_cell = Some(GridCell {
+            col,
+            row,
+            col_span,
+            row_span,
+        });
         self.base.children.push(Box::new(child));
         self
     }

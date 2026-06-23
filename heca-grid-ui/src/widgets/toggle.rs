@@ -14,7 +14,7 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow};
+use crate::scene::Glow;
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 

@@ -16,7 +16,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::{Attention, Flash};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction};
 use crate::widgets::ActiveMarker;
@@ -203,11 +203,16 @@ impl Component for Row {
             };
             // A crisp same-hue border is the clearest "selected" cue — a tinted
             // fill alone is hard to tell apart from the row's background.
-            let edge = highlight_base.unwrap_or(accent).with_alpha(ACTIVE_BORDER_ALPHA);
+            let edge = highlight_base
+                .unwrap_or(accent)
+                .with_alpha(ACTIVE_BORDER_ALPHA);
             cx.rect(
                 sel,
                 fill,
-                Some(Border { color: edge, width: ACTIVE_BORDER_W }),
+                Some(Border {
+                    color: edge,
+                    width: ACTIVE_BORDER_W,
+                }),
                 sel_radius,
                 None,
             );
@@ -236,7 +241,11 @@ impl Component for Row {
                         bar_c,
                         None,
                         (BAR_W / 2.0) as f32,
-                        Some(Glow { color: bar_glow, radius: 8.0, intensity: 0.16 }),
+                        Some(Glow {
+                            color: bar_glow,
+                            radius: 8.0,
+                            intensity: 0.16,
+                        }),
                     );
                 }
                 ActiveMarker::Check => {
@@ -283,9 +292,16 @@ impl Component for Row {
             cx.rect(
                 b,
                 c.with_alpha((40.0 * attn) as u8),
-                Some(Border { color: c.with_alpha((235.0 * attn) as u8), width: ACTIVE_BORDER_W }),
+                Some(Border {
+                    color: c.with_alpha((235.0 * attn) as u8),
+                    width: ACTIVE_BORDER_W,
+                }),
                 radius,
-                Some(Glow { color: c, radius: ATTENTION_GLOW_RADIUS, intensity: attn }),
+                Some(Glow {
+                    color: c,
+                    radius: ATTENTION_GLOW_RADIUS,
+                    intensity: attn,
+                }),
             );
         }
     }
@@ -306,7 +322,10 @@ impl Component for Row {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }

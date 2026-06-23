@@ -85,8 +85,8 @@ mod tests {
     use crate::chrome::{ChromeEvent, ChromeEventBus};
     use heca_core::backend::FakeBackend;
     use heca_core::layout::{
-        workspace::FloatingPane, ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session,
-        SessionId, Size,
+        ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size,
+        workspace::FloatingPane,
     };
     use heca_core::runtime::{ContentKind, PaneClosePolicy, PaneRuntime, ProcessStatus};
     use std::cell::RefCell;
@@ -200,9 +200,7 @@ mod tests {
         let pid = PaneId(14);
         let mut session = session_with_tiled_pane(PaneId(99));
         {
-            let ws = session
-                .active_workspace_mut()
-                .expect("workspace exists");
+            let ws = session.active_workspace_mut().expect("workspace exists");
             ws.floating_panes.push(FloatingPane {
                 pane: Pane::new(pid, "float"),
                 position: Point::new(10.0, 10.0),

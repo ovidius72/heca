@@ -51,7 +51,10 @@ pub use component::{
     Base, Component, Event, GridKey, Handled, Modifiers, PaintCx, collect_damage,
     install_frame_request, request_frame,
 };
-pub use drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide, SurfaceDragState, resolve_at, source_at};
+pub use drag::{
+    DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, DropHit, DropSide,
+    SurfaceDragState, resolve_at, source_at,
+};
 pub use effects::{Attention, Flash};
 pub use focus::FocusManager;
 pub use layout::LayoutEngine;
@@ -59,11 +62,12 @@ pub use scene::{DrawCommand, FontRole, Scene};
 pub use style::{Align, Direction, GridCell, Justify, Length, Style, Track, WidgetSize};
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
-    container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button,
-    ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
-    Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-    LabelSide, MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
+    ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonVariant, Card, Checkbox,
+    ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
+    Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label, LabelSide,
+    MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row,
+    Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity,
+    ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, container,
 };
 
 /// Common imports for building UIs.
@@ -72,17 +76,21 @@ pub mod prelude {
     pub use crate::builders::{DragExt, LayoutExt, Parent, StyleExt};
     pub use crate::color::Color;
     pub use crate::component::{Component, Event, GridKey, Handled, Modifiers};
-    pub use crate::drag::{DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState};
+    pub use crate::drag::{
+        DragContext, DragItemId, DragLabel, DragPhase, DragSurfaceId, SurfaceDragState,
+    };
     pub use crate::focus::FocusManager;
     pub use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
     pub use crate::scene::TextAlign;
     pub use crate::style::{Align, Direction, GridCell, Justify, Length, Track, WidgetSize};
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
-        container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button,
-        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge,
-        Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
-        StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
+        ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button, ButtonVariant, Card,
+        Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex,
+        Gauge, Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint,
+        Label, LabelSide, MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell,
+        RegionMode, Row, Select, Separator, Spinner, StatusDot, Surface, Tabs, Tag, Toast,
+        ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide,
+        Visibility, container,
     };
 }

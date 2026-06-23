@@ -32,19 +32,29 @@
 //!      RPC, keyboard bindings, and future mouse/UI dispatch)
 
 use crate::input::{ResizeTarget, SpawnKind, WmAction};
-use heca_core::runtime::PaneClosePolicy;
 use heca_core::layout::PaneId;
+use heca_core::runtime::PaneClosePolicy;
 
 /// Errors that can occur when parsing an RPC command.
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RpcError {
     UnknownCommand(String),
-    MissingArgument { cmd: String, arg: String },
-    MissingSeparator { cmd: String },
-    ParseInt { cmd: String, value: String },
-    ParseFloat { cmd: String, value: String },
+    MissingArgument {
+        cmd: String,
+        arg: String,
+    },
+    MissingSeparator {
+        cmd: String,
+    },
+    ParseInt {
+        cmd: String,
+        value: String,
+    },
+    ParseFloat {
+        cmd: String,
+        value: String,
+    },
     /// The app is not yet initialized (no state available).
     NotInitialized,
 }
@@ -85,7 +95,6 @@ impl std::error::Error for RpcError {}
 /// );
 /// ```
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
-#[allow(dead_code)]
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
     let input = input.trim();
     if input.is_empty() {
@@ -322,7 +331,12 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             let b_ws = parse_usize!(b_ws_arg, "b_ws");
             let b_col_arg = expect_arg!("b_col");
             let b_col = parse_usize!(b_col_arg, "b_col");
-            Ok(WmAction::SwapColumns { a_ws, a_col, b_ws, b_col })
+            Ok(WmAction::SwapColumns {
+                a_ws,
+                a_col,
+                b_ws,
+                b_col,
+            })
         }
         "rename-pane" => Ok(WmAction::RenamePane),
         "rename-column" => Ok(WmAction::RenameColumn),
@@ -331,9 +345,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "sidebar-right" => Ok(WmAction::SidebarRight),
         "collapse-current-workspace" => Ok(WmAction::CollapseCurrentWorkspace),
         "expand-current-workspace" => Ok(WmAction::ExpandCurrentWorkspace),
-        "toggle-current-workspace-collapsed" => {
-            Ok(WmAction::ToggleCurrentWorkspaceCollapsed)
-        }
+        "toggle-current-workspace-collapsed" => Ok(WmAction::ToggleCurrentWorkspaceCollapsed),
         "collapse-current-column" => Ok(WmAction::CollapseCurrentColumn),
         "expand-current-column" => Ok(WmAction::ExpandCurrentColumn),
         "toggle-current-column-collapsed" => Ok(WmAction::ToggleCurrentColumnCollapsed),
@@ -416,13 +428,15 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
 mod tests {
     use super::*;
     use crate::input::{ResizeTarget, WmAction};
-use heca_core::layout::PaneId;
+    use heca_core::layout::PaneId;
 
     #[test]
     fn test_focus_pane() {
         assert_eq!(
             parse_rpc_command("focus-pane 42"),
-            Ok(WmAction::FocusPane { pane_id: PaneId(42) }),
+            Ok(WmAction::FocusPane {
+                pane_id: PaneId(42)
+            }),
         );
     }
 
@@ -430,7 +444,13 @@ use heca_core::layout::PaneId;
     fn test_move_column() {
         assert_eq!(
             parse_rpc_command("move-column 0 2 1 0"),
-            Ok(WmAction::MoveColumn { src_ws: 0, src_col: 2, dst_ws: 1, dst_idx: 0, focus: true }),
+            Ok(WmAction::MoveColumn {
+                src_ws: 0,
+                src_col: 2,
+                dst_ws: 1,
+                dst_idx: 0,
+                focus: true
+            }),
         );
         assert!(matches!(
             parse_rpc_command("move-column 0 2 1"),
@@ -442,7 +462,12 @@ use heca_core::layout::PaneId;
     fn test_swap_columns() {
         assert_eq!(
             parse_rpc_command("swap-columns 0 1 2 3"),
-            Ok(WmAction::SwapColumns { a_ws: 0, a_col: 1, b_ws: 2, b_col: 3 }),
+            Ok(WmAction::SwapColumns {
+                a_ws: 0,
+                a_col: 1,
+                b_ws: 2,
+                b_col: 3
+            }),
         );
     }
 
@@ -450,7 +475,11 @@ use heca_core::layout::PaneId;
     fn test_move_column_to_workspace() {
         assert_eq!(
             parse_rpc_command("move-column-to-workspace 2 1"),
-            Ok(WmAction::MoveColumnToWorkspace { col_idx: 2, ws_idx: 1, focus: true }),
+            Ok(WmAction::MoveColumnToWorkspace {
+                col_idx: 2,
+                ws_idx: 1,
+                focus: true
+            }),
         );
         assert!(matches!(
             parse_rpc_command("move-column-to-workspace 2"),
@@ -604,11 +633,15 @@ use heca_core::layout::PaneId;
         // With an explicit pane id (pane-header button / RPC).
         assert_eq!(
             parse_rpc_command("move-pane-left 7"),
-            Ok(WmAction::MovePaneLeft { pane_id: Some(PaneId(7)) }),
+            Ok(WmAction::MovePaneLeft {
+                pane_id: Some(PaneId(7))
+            }),
         );
         assert_eq!(
             parse_rpc_command("move-pane-right 7"),
-            Ok(WmAction::MovePaneRight { pane_id: Some(PaneId(7)) }),
+            Ok(WmAction::MovePaneRight {
+                pane_id: Some(PaneId(7))
+            }),
         );
         // Without an id ⇒ active pane (mirrors the keybind).
         assert_eq!(
@@ -625,7 +658,10 @@ use heca_core::layout::PaneId;
     fn test_swap() {
         assert_eq!(
             parse_rpc_command("swap 1 2"),
-            Ok(WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) }),
+            Ok(WmAction::Swap {
+                a_id: PaneId(1),
+                b_id: PaneId(2)
+            }),
         );
     }
 
@@ -753,10 +789,7 @@ use heca_core::layout::PaneId;
             parse_rpc_command("selection-right"),
             Ok(WmAction::SelectionRight)
         );
-        assert_eq!(
-            parse_rpc_command("selection-up"),
-            Ok(WmAction::SelectionUp)
-        );
+        assert_eq!(parse_rpc_command("selection-up"), Ok(WmAction::SelectionUp));
         assert_eq!(
             parse_rpc_command("selection-down"),
             Ok(WmAction::SelectionDown)

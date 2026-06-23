@@ -244,7 +244,11 @@ mod tests {
         assert_eq!(backend.take_exit_code(), None, "no exit queued ⇒ None");
         backend.queue_exit(7);
         assert_eq!(backend.take_exit_code(), Some(7), "queued exit drains once");
-        assert_eq!(backend.take_exit_code(), None, "drained exit does not repeat");
+        assert_eq!(
+            backend.take_exit_code(),
+            None,
+            "drained exit does not repeat"
+        );
     }
 
     #[test]
@@ -256,8 +260,14 @@ mod tests {
 
         assert_eq!(snapshot.cols, 16, "snapshot cols should match backend");
         assert_eq!(snapshot.rows, 8, "snapshot rows should match backend");
-        assert_eq!(snapshot.cursor.col, 0, "fake cursor col should stay at origin");
-        assert_eq!(snapshot.cursor.row, 0, "fake cursor row should stay at origin");
+        assert_eq!(
+            snapshot.cursor.col, 0,
+            "fake cursor col should stay at origin"
+        );
+        assert_eq!(
+            snapshot.cursor.row, 0,
+            "fake cursor row should stay at origin"
+        );
         assert_eq!(
             snapshot.lines.len(),
             snapshot.rows,
@@ -331,8 +341,7 @@ mod tests {
 
         let empty_legacy = FakeBackend::new(16, 0).render_data();
         let BackendRenderData::Terminal {
-            lines: empty_lines,
-            ..
+            lines: empty_lines, ..
         } = empty_legacy;
         assert!(
             empty_lines.is_empty(),

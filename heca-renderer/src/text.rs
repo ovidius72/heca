@@ -634,7 +634,10 @@ impl TextRenderer {
     /// Queue text centered within the box `(x, y, w, h)` (logical px):
     /// horizontally per `align`, always centered vertically. Used by the grid
     /// scene renderer ([`crate::scene`]).
-    #[expect(clippy::too_many_arguments, reason = "Public text-box API keeps geometry, styling, and alignment explicit for renderer call sites.")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public text-box API keeps geometry, styling, and alignment explicit for renderer call sites."
+    )]
     pub fn queue_text_in_box(
         &mut self,
         text: &str,
@@ -812,7 +815,11 @@ impl TextRenderer {
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
             buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
-            let weight = if cmd.bold { Weight::BOLD } else { Weight::NORMAL };
+            let weight = if cmd.bold {
+                Weight::BOLD
+            } else {
+                Weight::NORMAL
+            };
             let family = if cmd.icon {
                 self.icon_family.as_str()
             } else {
@@ -821,7 +828,11 @@ impl TextRenderer {
             let attrs = Attrs::new()
                 .family(Family::Name(family))
                 .weight(weight)
-                .style(if cmd.italic { Style::Italic } else { Style::Normal });
+                .style(if cmd.italic {
+                    Style::Italic
+                } else {
+                    Style::Normal
+                });
             buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -933,10 +944,26 @@ impl TextRenderer {
             let [u0, v0, u1, v1] = g.uv;
             let top_x = gx + faux_italic_skew * 0.5;
             let bottom_x = gx - faux_italic_skew * 0.5;
-            verts.push(TextVertex { position: [top_x, gy], texcoord: [u0, v0], color: cmd.color });
-            verts.push(TextVertex { position: [top_x + gw, gy], texcoord: [u1, v0], color: cmd.color });
-            verts.push(TextVertex { position: [bottom_x + gw, gy + gh], texcoord: [u1, v1], color: cmd.color });
-            verts.push(TextVertex { position: [bottom_x, gy + gh], texcoord: [u0, v1], color: cmd.color });
+            verts.push(TextVertex {
+                position: [top_x, gy],
+                texcoord: [u0, v0],
+                color: cmd.color,
+            });
+            verts.push(TextVertex {
+                position: [top_x + gw, gy],
+                texcoord: [u1, v0],
+                color: cmd.color,
+            });
+            verts.push(TextVertex {
+                position: [bottom_x + gw, gy + gh],
+                texcoord: [u1, v1],
+                color: cmd.color,
+            });
+            verts.push(TextVertex {
+                position: [bottom_x, gy + gh],
+                texcoord: [u0, v1],
+                color: cmd.color,
+            });
             bx0 = bx0.min(bottom_x);
             by0 = by0.min(gy);
             bx1 = bx1.max(top_x + gw);
@@ -1086,6 +1113,10 @@ mod tests {
         ];
         v.sort_unstable();
         v.dedup();
-        assert_eq!(v.len(), 3, "each alignment hashes to a distinct discriminant");
+        assert_eq!(
+            v.len(),
+            3,
+            "each alignment hashes to a distinct discriminant"
+        );
     }
 }

@@ -6,9 +6,9 @@
 use crate::app::mutations::after_config_change;
 use crate::app::mutations::close_pane_by_id_anywhere;
 use crate::app_state::{AppState, InputMode};
+use crate::mouse;
 use heca_core::backend::BackendAlert;
 use heca_grid_ui::Component;
-use crate::mouse;
 use std::time::Instant;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::UserAttentionType;

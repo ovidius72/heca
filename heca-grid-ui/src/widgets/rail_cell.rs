@@ -16,7 +16,7 @@
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::effects::Flash;
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, Glow};
 use crate::style::{Align, Direction, Justify, Length};
 use crate::widgets::Icon;
@@ -148,12 +148,25 @@ impl Component for RailCell {
             cx.rect(
                 b,
                 accent.with_alpha(ACTIVE_FILL_ALPHA),
-                Some(Border { color: accent.with_alpha(ACTIVE_BORDER_ALPHA), width: ACTIVE_BORDER_W }),
+                Some(Border {
+                    color: accent.with_alpha(ACTIVE_BORDER_ALPHA),
+                    width: ACTIVE_BORDER_W,
+                }),
                 cell_radius,
-                Some(Glow { color: glow_c, radius: ACTIVE_GLOW_RADIUS, intensity: ACTIVE_GLOW_INTENSITY }),
+                Some(Glow {
+                    color: glow_c,
+                    radius: ACTIVE_GLOW_RADIUS,
+                    intensity: ACTIVE_GLOW_INTENSITY,
+                }),
             );
         } else if self.hovered.get_untracked() {
-            cx.rect(b, foreground.with_alpha(HOVER_FILL_ALPHA), None, cell_radius, None);
+            cx.rect(
+                b,
+                foreground.with_alpha(HOVER_FILL_ALPHA),
+                None,
+                cell_radius,
+                None,
+            );
         }
 
         // The icon (carries its own status color).
@@ -192,7 +205,10 @@ impl Component for RailCell {
                 self.activate();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
+            Event::Key {
+                key: GridKey::Enter | GridKey::Space,
+                pressed: true,
+            } => {
                 self.activate();
                 Handled::Yes
             }

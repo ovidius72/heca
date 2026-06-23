@@ -142,10 +142,22 @@ mod tests {
         ));
 
         // Top third → Before, middle → Onto, bottom third → After.
-        assert_eq!(resolve_at(&root, Point::new(50.0, 10.0)).map(|h| h.side), Some(DropSide::Before));
-        assert_eq!(resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.side), Some(DropSide::Onto));
-        assert_eq!(resolve_at(&root, Point::new(50.0, 80.0)).map(|h| h.side), Some(DropSide::After));
-        assert_eq!(resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.id), Some(DragItemId::new(5)));
+        assert_eq!(
+            resolve_at(&root, Point::new(50.0, 10.0)).map(|h| h.side),
+            Some(DropSide::Before)
+        );
+        assert_eq!(
+            resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.side),
+            Some(DropSide::Onto)
+        );
+        assert_eq!(
+            resolve_at(&root, Point::new(50.0, 80.0)).map(|h| h.side),
+            Some(DropSide::After)
+        );
+        assert_eq!(
+            resolve_at(&root, Point::new(50.0, 45.0)).map(|h| h.id),
+            Some(DragItemId::new(5))
+        );
     }
 
     #[test]
@@ -157,9 +169,15 @@ mod tests {
         outer.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
         outer.base_mut().children.push(Box::new(inner));
 
-        assert_eq!(resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id), Some(DragItemId::new(2)));
+        assert_eq!(
+            resolve_at(&outer, Point::new(20.0, 20.0)).map(|h| h.id),
+            Some(DragItemId::new(2))
+        );
         // Outside the inner but inside the outer → the outer.
-        assert_eq!(resolve_at(&outer, Point::new(80.0, 80.0)).map(|h| h.id), Some(DragItemId::new(1)));
+        assert_eq!(
+            resolve_at(&outer, Point::new(80.0, 80.0)).map(|h| h.id),
+            Some(DragItemId::new(1))
+        );
     }
 
     #[test]
@@ -198,9 +216,24 @@ mod tests {
         // Two overlapping sources; the later child (top z-order) wins.
         let mut root = Flex::column();
         root.base_mut().bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 100.0));
-        root.base_mut().children.push(at(Surface::new().draggable(DragItemId::new(1)), 0.0, 0.0, 100.0, 100.0));
-        root.base_mut().children.push(at(Surface::new().draggable(DragItemId::new(2)), 0.0, 0.0, 100.0, 100.0));
-        assert_eq!(source_at(&root, Point::new(50.0, 50.0)), Some(DragItemId::new(2)));
+        root.base_mut().children.push(at(
+            Surface::new().draggable(DragItemId::new(1)),
+            0.0,
+            0.0,
+            100.0,
+            100.0,
+        ));
+        root.base_mut().children.push(at(
+            Surface::new().draggable(DragItemId::new(2)),
+            0.0,
+            0.0,
+            100.0,
+            100.0,
+        ));
+        assert_eq!(
+            source_at(&root, Point::new(50.0, 50.0)),
+            Some(DragItemId::new(2))
+        );
     }
 
     #[test]

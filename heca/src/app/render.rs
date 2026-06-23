@@ -5,22 +5,21 @@
 
 use crate::app::terminal_host::prepare_terminal_mount;
 use crate::app::terminal_render::{
-    paint_terminal_pane_shell, pane_scissor_rect, render_terminal_mount,
-    selection_overlay_for_pane, stable_floating_content_rect,
-    stable_tiled_content_rect, PaneRenderState, TerminalPaneShell,
-    TerminalRenderPassContext,
+    PaneRenderState, TerminalPaneShell, TerminalRenderPassContext, blit_retained_terminal_layer,
+    paint_terminal_pane_shell, pane_scissor_rect, queue_terminal_dynamic_overlays,
+    render_terminal_mount, selection_overlay_for_pane, stable_floating_content_rect,
+    stable_tiled_content_rect, sync_retained_terminal_layers,
 };
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
+use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use crate::{mouse, sidebar};
 use heca_grid_ui::Component;
-use heca_grid_ui::{
-    Point as GuiPoint,
-    Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
-};
-use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
+use heca_grid_ui::{
+    Point as GuiPoint, Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
+};
 use heca_renderer::grid::GridRenderer;
+use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 use heca_renderer::text::TextRenderer;
 
 /// Project the terminal font-family group from config into the renderer's
@@ -45,15 +44,20 @@ fn terminal_font_families_from(
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
     // For pick modes the prompt suffix is sourced from the action's `ActionDescriptor`
     // (via `pending_pick`) so the text lives in one place — the action registry.
-    let pick_suffix =
-        || input_mode.pending_pick().map(|p| format!(" — {}", p.prompt)).unwrap_or_default();
+    let pick_suffix = || {
+        input_mode
+            .pending_pick()
+            .map(|p| format!(" — {}", p.prompt))
+            .unwrap_or_default()
+    };
     match input_mode {
         InputMode::Normal => ("NORMAL", String::new()),
         InputMode::Prefix => ("PREFIX", String::new()),
         InputMode::PaneSelect { .. } => ("SELECT", pick_suffix()),
-        InputMode::PaneSwap { focus_after, .. } => {
-            (if *focus_after { "SWAP+FOCUS" } else { "SWAP" }, pick_suffix())
-        }
+        InputMode::PaneSwap { focus_after, .. } => (
+            if *focus_after { "SWAP+FOCUS" } else { "SWAP" },
+            pick_suffix(),
+        ),
         InputMode::SidebarNav => ("SIDEBAR", String::new()),
         InputMode::Rename { buffer, .. } => ("RENAME", format!(": {}_", buffer)),
         InputMode::Chord { sequence } => ("CHORD", format!(" w→{}", sequence.join("→"))),
@@ -132,42 +136,19 @@ pub(crate) fn render_frame(state: &mut AppState) {
         return;
     }
     state.needs_redraw = false;
-
-    let surface_texture = match state.surface.get_current_texture() {
-        Ok(t) => t,
-        Err(wgpu::SurfaceError::Lost) => {
-            state
-                .surface
-                .configure(&state.device, &state.surface_config);
-            return;
-        }
-        Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(1),
-        Err(_) => {
-            return;
-        }
-    };
-
-    let view = surface_texture
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
     let _ = crate::chrome::sync_chrome_state(state);
     // Build/position the retained per-pane info-bar headers *before* the GPU borrow
     // below (`scene_view` borrows `state.compositor`), so render can paint them
     // read-only and `mouse.rs` can dispatch pointer events into them.
     crate::chrome::sync_pane_headers(state);
-    let scene_view = state.compositor.scene_view();
-    // Stencil buffer paired with the scene texture: holds the rounded content-clip
-    // mask written each frame so terminal content follows the pane's rounded border.
-    let stencil_view = state.compositor.stencil_view();
 
     let phys_size = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys_size.width as f32 / scale;
     let h = phys_size.height as f32 / scale;
 
-    let theme = &state.theme;
     let glow_alpha_scale =
-        heca_renderer::scene::glow_alpha_scale_for_background(theme.background.to_f32x4());
+        heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
     let surface_alpha = state.terminal_surface_opacity();
     // Floating panes use independent opacity/blur/border knobs so they can stay
     // readable (opaque by default) while tiled panes are frosted.
@@ -189,12 +170,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     };
     let pane_area = chrome.content_rect(w, h);
-
-    let mut encoder = state
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("render"),
-        });
     state.text_renderer.begin_frame();
     state.text_renderer.set_damage(None);
     state.text_renderer.set_clip(None);
@@ -202,6 +177,173 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // frame so each `render_chrome` pass appends at a distinct region (see the
     // note in `render_chrome`).
     state.grid_renderer.begin_frame();
+
+    let active_pane_id = state
+        .session
+        .active_workspace()
+        .and_then(|ws| ws.active_pane())
+        .map(|pane| pane.id)
+        .or_else(|| state.chrome_state.workspaces.active_pane())
+        .or(state.focused_pane);
+
+    // ── Pane chrome from pane-specific config ──
+    let pane_border_color = state
+        .appearance
+        .effective_pane_border_color(&state.theme)
+        .to_f32x4();
+    let pane_active_border_color = state
+        .appearance
+        .effective_pane_active_border_color(&state.theme)
+        .to_f32x4();
+    let pane_floating_border_color = state
+        .appearance
+        .effective_pane_floating_border_color(&state.theme)
+        .to_f32x4();
+    let pane_border_width = state.appearance.effective_pane_border_width(&state.theme);
+    let pane_border_radius = state.appearance.effective_pane_border_radius(&state.theme);
+    let pane_content_inset = state.appearance.effective_pane_padding(&state.theme);
+    let pane_title_top_inset = crate::app::terminal_render::pane_title_top_inset(state);
+    let pane_positions = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.scrolling.panes_with_positions())
+        .unwrap_or_default();
+
+    let ws_geometries = state.session.workspace_geometries();
+    let ws_offset = ws_geometries
+        .first()
+        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
+        .unwrap_or((0.0, 0.0));
+    let surface_physical_size = state.window.inner_size();
+    let content_scissor = pane_scissor_rect(
+        pane_area.loc.x as f32,
+        pane_area.loc.y as f32,
+        pane_area.size.w as f32,
+        pane_area.size.h as f32,
+        state.scale_factor,
+        surface_physical_size,
+    );
+
+    let mut tiled_panes = Vec::with_capacity(pane_positions.len());
+    for (pane_id, rect) in &pane_positions {
+        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
+        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
+        let pw = rect.size.w as f32;
+        let ph = rect.size.h as f32;
+        let content_rect =
+            stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
+        let mount = content_rect.and_then(|content_rect| {
+            prepare_terminal_mount(
+                &mut state.backends,
+                *pane_id,
+                content_rect,
+                state.terminal_cell_size,
+            )
+        });
+        tiled_panes.push(PaneRenderState {
+            pane_id: *pane_id,
+            x: px,
+            y: py,
+            w: pw,
+            h: ph,
+            is_active: active_pane_id == Some(*pane_id),
+            content_rect,
+            mount,
+        });
+    }
+
+    let sidebar_top = chrome.tab_bar_height;
+    let sidebar_bottom = h - chrome.status_bar_height;
+    let sidebar_h = sidebar_bottom - sidebar_top;
+    let terminal_font_config = state.font_config.clone();
+    let mut floating_panes = Vec::new();
+    if let Some(ws) = state.session.active_workspace() {
+        for float in &ws.floating_panes {
+            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
+            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
+            let fw = float.size.w as f32;
+            let fh = float.size.h as f32;
+            let content_rect = stable_floating_content_rect(
+                fx,
+                fy,
+                fw,
+                fh,
+                pane_content_inset,
+                pane_title_top_inset,
+            );
+            let mount = content_rect.and_then(|content_rect| {
+                prepare_terminal_mount(
+                    &mut state.backends,
+                    float.pane.id,
+                    content_rect,
+                    state.terminal_cell_size,
+                )
+            });
+            floating_panes.push(PaneRenderState {
+                pane_id: float.pane.id,
+                x: fx,
+                y: fy,
+                w: fw,
+                h: fh,
+                is_active: active_pane_id == Some(float.pane.id),
+                content_rect,
+                mount,
+            });
+        }
+    }
+
+    sync_retained_terminal_layers(
+        state,
+        &tiled_panes,
+        TerminalStyle {
+            font_size: terminal_font_config.size.terminal,
+            families: terminal_font_families_from(&terminal_font_config.family),
+            surface_alpha,
+        },
+        (w, h),
+        surface_physical_size,
+    );
+    sync_retained_terminal_layers(
+        state,
+        &floating_panes,
+        TerminalStyle {
+            font_size: terminal_font_config.size.terminal,
+            families: terminal_font_families_from(&terminal_font_config.family),
+            surface_alpha: floating_surface_alpha,
+        },
+        (w, h),
+        surface_physical_size,
+    );
+
+    let surface_texture = match state.surface.get_current_texture() {
+        Ok(t) => t,
+        Err(wgpu::SurfaceError::Lost) => {
+            state
+                .surface
+                .configure(&state.device, &state.surface_config);
+            return;
+        }
+        Err(wgpu::SurfaceError::OutOfMemory) => std::process::exit(1),
+        Err(_) => {
+            return;
+        }
+    };
+
+    let view = surface_texture
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let scene_view = state.compositor.scene_view();
+    // Stencil buffer paired with the scene texture: holds the rounded content-clip
+    // mask written each frame so terminal content follows the pane's rounded border.
+    let stencil_view = state.compositor.stencil_view();
+
+    let mut encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("render"),
+        });
+
+    let theme = &state.theme;
 
     let bg = theme.background.to_linear_f32x4();
     // Transparent window: clear fully transparent so empty/background areas show
@@ -259,12 +401,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
         // MUST be rendered BEFORE any other `state.blur` user this frame — if a
         // later blur user runs first, the z=0 cache would capture that user's
         // output instead of the gradient. (See `heca-renderer/src/background.rs`.)
-        let bg_view = state.background.render(
-            &state.device,
-            &state.queue,
-            &mut encoder,
-            &state.blur,
-        );
+        let bg_view =
+            state
+                .background
+                .render(&state.device, &state.queue, &mut encoder, &state.blur);
         let vp_w = phys_size.width as f32;
         let vp_h = phys_size.height as f32;
         state.backdrop.draw(
@@ -292,14 +432,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .primitive_renderer
         .draw_rect(0.0, 0.0, w, tb.tab_bar_height, side_bg);
 
-    let active_pane_id = state
-        .session
-        .active_workspace()
-        .and_then(|ws| ws.active_pane())
-        .map(|pane| pane.id)
-        .or_else(|| state.chrome_state.workspaces.active_pane())
-        .or(state.focused_pane);
-
     state
         .primitive_renderer
         .render(&state.device, scene_view, &mut encoder);
@@ -314,77 +446,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // per frame and stamped behind each floating pane at 100% opacity. Tiled
     // panes frost via the z=0 background layer showing through their translucent
     // surface (`surface_alpha`) — no per-tiled-pane tint.
-    let needs_floating_frost = floating_surface_alpha < 1.0
-        && state.appearance.terminal_floating_blur_radius() > 0.0;
+    let needs_floating_frost =
+        floating_surface_alpha < 1.0 && state.appearance.terminal_floating_blur_radius() > 0.0;
     let mut float_blurred_view: Option<&wgpu::TextureView> = None;
-
-    // ── Pane chrome from pane-specific config ──
-    // These are separate from the global theme border/accent so panes can
-    // have their own border width, radius, and color treatment.
-    let pane_border_color = state.appearance.effective_pane_border_color(theme).to_f32x4();
-    let pane_active_border_color = state.appearance.effective_pane_active_border_color(theme).to_f32x4();
-    let pane_floating_border_color = state.appearance.effective_pane_floating_border_color(theme).to_f32x4();
-    let pane_border_width = state.appearance.effective_pane_border_width(theme);
-    let pane_border_radius = state.appearance.effective_pane_border_radius(theme);
-    // Outer border: the border is drawn OUTSIDE the pane edge, so terminal
-    // content no longer needs to clear an inside border (the old
-    // `border_width + 1.0` inset). The inset is just the theme-driven pane
-    // padding; the frosted tint (Pass A) fills the full pane, so this padding
-    // reads as a frosted inner margin rather than an empty gap.
-    let pane_content_inset = state.appearance.effective_pane_padding(theme);
-    // Reserve extra top padding for a shown pane title so terminal content starts
-    // below it (the title straddles the top border and dips into the pane).
-    let pane_title_top_inset = crate::app::terminal_render::pane_title_top_inset(state);
-    let pane_positions = state
-        .session
-        .active_workspace()
-        .map(|ws| ws.scrolling.panes_with_positions())
-        .unwrap_or_default();
-
-    let ws_geometries = state.session.workspace_geometries();
-    let ws_offset = ws_geometries
-        .first()
-        .map(|(_, rect)| (rect.loc.x as f32, rect.loc.y as f32))
-        .unwrap_or((0.0, 0.0));
-    let surface_physical_size = state.window.inner_size();
-    // Scissor for the scrolling content area — pane backgrounds/borders are clipped
-    // to it so panes scrolled partially behind the chrome don't bleed under it.
-    let content_scissor = pane_scissor_rect(
-        pane_area.loc.x as f32,
-        pane_area.loc.y as f32,
-        pane_area.size.w as f32,
-        pane_area.size.h as f32,
-        state.scale_factor,
-        surface_physical_size,
-    );
-
-    let mut tiled_panes = Vec::with_capacity(pane_positions.len());
-    for (pane_id, rect) in &pane_positions {
-        let px = pane_area.loc.x as f32 + ws_offset.0 + rect.loc.x as f32;
-        let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
-        let pw = rect.size.w as f32;
-        let ph = rect.size.h as f32;
-        let content_rect =
-            stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
-        let mount = content_rect.and_then(|content_rect| {
-            prepare_terminal_mount(
-                &mut state.backends,
-                *pane_id,
-                content_rect,
-                state.terminal_cell_size,
-            )
-        });
-        tiled_panes.push(PaneRenderState {
-            pane_id: *pane_id,
-            x: px,
-            y: py,
-            w: pw,
-            h: ph,
-            is_active: active_pane_id == Some(*pane_id),
-            content_rect,
-            mount,
-        });
-    }
 
     // ── Stencil-write: rounded content-clip mask for tiled panes ──
     //
@@ -436,39 +500,58 @@ pub(crate) fn render_frame(state: &mut AppState) {
         {
             let selection_overlay =
                 selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
-            render_terminal_mount(
-                TerminalRenderPassContext {
-                    text_renderer: &mut state.text_renderer,
-                    primitive_renderer: &mut state.primitive_renderer,
-                    device: &state.device,
-                    queue: &state.queue,
-                    view: scene_view,
-                    encoder: &mut encoder,
-                    scale_factor: state.scale_factor,
-                    surface_physical_size,
-                    content_clip: pane_area,
-                    stencil: Some(stencil_view),
-                },
-                TerminalStyle {
-                    font_size: state.font_config.size.terminal,
-                    families: terminal_font_families_from(&state.font_config.family),
-                    surface_alpha,
-                },
-                crate::app::terminal_host::TerminalMount {
-                    content_rect: mount.content_rect,
-                    snapshot: mount.snapshot.clone(),
-                },
-                selection_overlay,
-            );
+            if mount.damage.is_empty()
+                && blit_retained_terminal_layer(
+                state,
+                pane.pane_id,
+                &mut encoder,
+                scene_view,
+                (
+                    surface_physical_size.width as f32,
+                    surface_physical_size.height as f32,
+                ),
+                mount,
+                Some(stencil_view),
+            )
+            {
+                queue_terminal_dynamic_overlays(
+                    &mut state.text_renderer,
+                    &mut state.primitive_renderer,
+                    mount,
+                    selection_overlay,
+                );
+            } else {
+                render_terminal_mount(
+                    TerminalRenderPassContext {
+                        text_renderer: &mut state.text_renderer,
+                        primitive_renderer: &mut state.primitive_renderer,
+                        device: &state.device,
+                        queue: &state.queue,
+                        view: scene_view,
+                        encoder: &mut encoder,
+                        scale_factor: state.scale_factor,
+                        surface_physical_size,
+                        content_clip: pane_area,
+                        stencil: Some(stencil_view),
+                    },
+                    TerminalStyle {
+                        font_size: state.font_config.size.terminal,
+                        families: terminal_font_families_from(&state.font_config.family),
+                        surface_alpha,
+                    },
+                    mount.clone(),
+                    selection_overlay,
+                );
+            }
         }
     }
-    // ── End pass 2 (terminal content flushed inside render_terminal_mount) ──
-    state
-        .primitive_renderer
-        .render_clipped(&state.device, scene_view, &mut encoder, content_scissor, Some(stencil_view));
-    state
-        .text_renderer
-        .render(&state.queue, scene_view, &mut encoder, Some(stencil_view));
+    state.primitive_renderer.render_clipped(
+        &state.device,
+        scene_view,
+        &mut encoder,
+        content_scissor,
+        Some(stencil_view),
+    );
 
     // ── Pass 3: Pane chrome overlay (on top of terminal content) ──
     //
@@ -538,40 +621,6 @@ pub(crate) fn render_frame(state: &mut AppState) {
             scene_view,
             radius_physical,
         ));
-    }
-
-    let sidebar_top = chrome.tab_bar_height;
-    let sidebar_bottom = h - chrome.status_bar_height;
-    let sidebar_h = sidebar_bottom - sidebar_top;
-
-    let mut floating_panes = Vec::new();
-    if let Some(ws) = state.session.active_workspace() {
-        for float in &ws.floating_panes {
-            let fx = float.position.x as f32 + pane_area.loc.x as f32 + ws_offset.0;
-            let fy = float.position.y as f32 + pane_area.loc.y as f32 + ws_offset.1;
-            let fw = float.size.w as f32;
-            let fh = float.size.h as f32;
-            let content_rect =
-                stable_floating_content_rect(fx, fy, fw, fh, pane_content_inset, pane_title_top_inset);
-            let mount = content_rect.and_then(|content_rect| {
-                prepare_terminal_mount(
-                    &mut state.backends,
-                    float.pane.id,
-                    content_rect,
-                    state.terminal_cell_size,
-                )
-            });
-            floating_panes.push(PaneRenderState {
-                pane_id: float.pane.id,
-                x: fx,
-                y: fy,
-                w: fw,
-                h: fh,
-                is_active: active_pane_id == Some(float.pane.id),
-                content_rect,
-                mount,
-            });
-        }
     }
 
     // ── Stencil-write: rounded content-clip mask for floating panes ──
@@ -671,30 +720,56 @@ pub(crate) fn render_frame(state: &mut AppState) {
             if let Some(mount) = pane.mount.as_ref() {
                 let selection_overlay =
                     selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
-                render_terminal_mount(
-                    TerminalRenderPassContext {
-                        text_renderer: &mut state.text_renderer,
-                        primitive_renderer: &mut state.primitive_renderer,
-                        device: &state.device,
-                        queue: &state.queue,
-                        view: scene_view,
-                        encoder: &mut encoder,
-                        scale_factor: state.scale_factor,
-                        surface_physical_size,
-                        content_clip: pane_area,
-                        stencil: Some(stencil_view),
-                    },
-                    TerminalStyle {
-                        font_size: state.font_config.size.terminal,
-                        families: terminal_font_families_from(&state.font_config.family),
-                        surface_alpha: floating_surface_alpha,
-                    },
-                    crate::app::terminal_host::TerminalMount {
-                        content_rect: mount.content_rect,
-                        snapshot: mount.snapshot.clone(),
-                    },
-                    selection_overlay,
-                );
+                if mount.damage.is_empty()
+                    && blit_retained_terminal_layer(
+                    state,
+                    pane.pane_id,
+                    &mut encoder,
+                    scene_view,
+                    (
+                        surface_physical_size.width as f32,
+                        surface_physical_size.height as f32,
+                    ),
+                    mount,
+                    Some(stencil_view),
+                )
+                {
+                    queue_terminal_dynamic_overlays(
+                        &mut state.text_renderer,
+                        &mut state.primitive_renderer,
+                        mount,
+                        selection_overlay,
+                    );
+                    state.primitive_renderer.render_clipped(
+                        &state.device,
+                        scene_view,
+                        &mut encoder,
+                        float_scissor,
+                        Some(stencil_view),
+                    );
+                } else {
+                    render_terminal_mount(
+                        TerminalRenderPassContext {
+                            text_renderer: &mut state.text_renderer,
+                            primitive_renderer: &mut state.primitive_renderer,
+                            device: &state.device,
+                            queue: &state.queue,
+                            view: scene_view,
+                            encoder: &mut encoder,
+                            scale_factor: state.scale_factor,
+                            surface_physical_size,
+                            content_clip: pane_area,
+                            stencil: Some(stencil_view),
+                        },
+                        TerminalStyle {
+                            font_size: state.font_config.size.terminal,
+                            families: terminal_font_families_from(&state.font_config.family),
+                            surface_alpha: floating_surface_alpha,
+                        },
+                        mount.clone(),
+                        selection_overlay,
+                    );
+                }
             }
 
             let mut float_scene = GuiScene::new();
@@ -751,19 +826,20 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let rail_y = sidebar_top + sidebar_gap;
         let rail_w = (chrome.left_sidebar_width - rail_x * 2.0).max(0.0);
         let rail_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-        state.primitive_renderer.draw_rect(
-            rail_x,
-            rail_y,
-            rail_w,
-            rail_h,
-            collapsed_sidebar_bg,
-        );
+        state
+            .primitive_renderer
+            .draw_rect(rail_x, rail_y, rail_w, rail_h, collapsed_sidebar_bg);
         state.primitive_renderer.draw_outline(
             rail_x,
             rail_y,
             rail_w,
             rail_h,
-            [theme.border.to_f32x4()[0], theme.border.to_f32x4()[1], theme.border.to_f32x4()[2], 0.35],
+            [
+                theme.border.to_f32x4()[0],
+                theme.border.to_f32x4()[1],
+                theme.border.to_f32x4()[2],
+                0.35,
+            ],
             1.0,
         );
         state.primitive_renderer.draw_border(
@@ -870,7 +946,12 @@ pub(crate) fn render_frame(state: &mut AppState) {
             rail_y,
             rail_w,
             rail_h,
-            [theme.border.to_f32x4()[0], theme.border.to_f32x4()[1], theme.border.to_f32x4()[2], 0.35],
+            [
+                theme.border.to_f32x4()[0],
+                theme.border.to_f32x4()[1],
+                theme.border.to_f32x4()[2],
+                0.35,
+            ],
             1.0,
         );
         state.primitive_renderer.draw_border(
@@ -958,15 +1039,17 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
         let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
-        state.chrome_tree =
-            Some(crate::chrome::RetainedChrome { root, sig: chrome_sig, signals, drag_items });
+        state.chrome_tree = Some(crate::chrome::RetainedChrome {
+            root,
+            sig: chrome_sig,
+            signals,
+            drag_items,
+        });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
     // focus/mode changes update in place without a rebuild (the signature excludes them).
     let chrome_signals_changed = crate::chrome::sync_chrome_signals(state);
-    if chrome_signals_changed
-        && let Some(tree) = state.chrome_tree.as_mut()
-    {
+    if chrome_signals_changed && let Some(tree) = state.chrome_tree.as_mut() {
         // Runtime/git signal writes happen during render, but wrappers like
         // `Visibility` apply their `style.hidden` flip in `tick()`. Advance the
         // retained chrome tree immediately so new branch/count rows participate in
@@ -976,7 +1059,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
     }
     let chrome_theme = crate::chrome::chrome_gui_theme(state);
     let mut chrome_scene = crate::chrome::paint_chrome_root(
-        &mut state.chrome_tree.as_mut().expect("chrome tree set above").root,
+        &mut state
+            .chrome_tree
+            .as_mut()
+            .expect("chrome tree set above")
+            .root,
         w,
         h,
         &chrome_theme,
@@ -1060,7 +1147,10 @@ mod tests {
                 candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
                 focus_after: true,
             }),
-            ("TAKE+", " — Select a pane to pull into the active column, then focus it.".to_string())
+            (
+                "TAKE+",
+                " — Select a pane to pull into the active column, then focus it.".to_string()
+            )
         );
 
         assert_eq!(

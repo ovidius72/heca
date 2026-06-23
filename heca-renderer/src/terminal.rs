@@ -1,7 +1,8 @@
 use crate::primitive::PrimitiveRenderer;
 use crate::text::{TextBox, TextRenderer, TextStyle};
 use heca_core::backend::{
-    TerminalCursorShape, TerminalLine, TerminalSnapshot, TerminalUnderlineStyle,
+    TerminalCursorShape, TerminalDamage, TerminalLine, TerminalRowRange, TerminalSnapshot,
+    TerminalUnderlineStyle,
 };
 use heca_grid_ui::scene::TextAlign;
 
@@ -39,7 +40,11 @@ pub struct SelectionOverlay {
 
 impl SelectionOverlay {
     pub fn new(spans: Vec<SelectionOverlaySpan>, color: [f32; 4]) -> Self {
-        Self { spans, color, caret: None }
+        Self {
+            spans,
+            color,
+            caret: None,
+        }
     }
 
     pub fn with_caret(mut self, caret: CaretIndicator) -> Self {
@@ -48,6 +53,7 @@ impl SelectionOverlay {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct TerminalStyle<'a> {
     pub font_size: f32,
     pub families: TerminalFontFamilies<'a>,
@@ -140,7 +146,36 @@ impl<'a> TerminalRenderer<'a> {
                 style,
                 rect,
             },
+            None,
         );
+    }
+
+    pub fn render_snapshot_damage(
+        &mut self,
+        snapshot: &TerminalSnapshot,
+        rect: TextBox,
+        style: TerminalStyle<'_>,
+        damage: &TerminalDamage,
+    ) {
+        match damage {
+            TerminalDamage::None => {}
+            TerminalDamage::Full => self.render_snapshot(snapshot, rect, style),
+            TerminalDamage::Rows(ranges) => render_terminal_lines(
+                self.text_renderer,
+                self.primitive_renderer,
+                &snapshot.lines,
+                snapshot.default_bg,
+                TerminalRenderLayout {
+                    cell_w: snapshot.cell_w,
+                    cell_h: snapshot.cell_h,
+                    cols: snapshot.cols,
+                    rows: snapshot.rows,
+                    style,
+                    rect,
+                },
+                Some(ranges),
+            ),
+        }
     }
 
     pub fn render_cursor_overlay(&mut self, snapshot: &TerminalSnapshot, rect: TextBox) {
@@ -220,7 +255,6 @@ impl<'a> TerminalRenderer<'a> {
                 .draw_rect(x, y, caret_w, cell_h, caret_color);
         }
     }
-
 }
 
 fn render_terminal_lines(
@@ -229,6 +263,7 @@ fn render_terminal_lines(
     lines: &[TerminalLine],
     default_bg: [f32; 4],
     layout: TerminalRenderLayout<'_>,
+    dirty_rows: Option<&[TerminalRowRange]>,
 ) {
     let TerminalRenderLayout {
         cell_w,
@@ -257,7 +292,8 @@ fn render_terminal_lines(
         default_bg[2],
         default_bg[3] * style.surface_alpha,
     ];
-    if surface_bg[3] > 0.0 {
+    let full_redraw = dirty_rows.is_none();
+    if full_redraw && surface_bg[3] > 0.0 {
         primitive_renderer.draw_rect(px, py, pw, ph, surface_bg);
     }
     let max_rows = fitted_rows.min(rows).min(lines.len());
@@ -266,92 +302,124 @@ fn render_terminal_lines(
         return;
     }
 
-    for (row, line) in lines.iter().take(max_rows).enumerate() {
-        let y = py + row as f32 * cell_h;
-        let visible_cols = max_cols.min(line.cells.len());
-        if visible_cols == 0 {
+    let full_rows;
+    let dirty_ranges = if let Some(ranges) = dirty_rows {
+        ranges
+    } else {
+        full_rows = [TerminalRowRange::new(0, max_rows)];
+        &full_rows
+    };
+
+    for range in dirty_ranges {
+        let row_start = range.start.min(max_rows);
+        let row_end = range.end.min(max_rows);
+        if row_start >= row_end {
             continue;
         }
-        let mut bg_start = 0usize;
-        while bg_start < visible_cols {
-            let bg_color = line.cells[bg_start].bg;
-            let mut bg_end = bg_start + 1;
-            while bg_end < visible_cols && line.cells[bg_end].bg == bg_color {
-                bg_end += 1;
-            }
-            if !is_default_bg(bg_color, default_bg) {
-                let bg_color = with_surface_alpha(bg_color, style.surface_alpha);
-                if bg_color[3] > 0.0 {
-                    let x = px + bg_start as f32 * cell_w;
-                    let w = (bg_end - bg_start) as f32 * cell_w;
-                    primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
-                }
-            }
-            bg_start = bg_end;
+
+        if !full_redraw && surface_bg[3] > 0.0 {
+            let y = py + row_start as f32 * cell_h;
+            let h = (row_end - row_start) as f32 * cell_h;
+            primitive_renderer.draw_rect(px, y, pw, h, surface_bg);
         }
 
-        for (col, cell) in line.cells.iter().take(visible_cols).enumerate() {
-            let is_blank = cell.text.trim().is_empty();
-            let x = px + col as f32 * cell_w;
-            let width = (cell.width.max(1) as f32) * cell_w;
-
-            if is_blank {
+        for (row, line) in lines
+            .iter()
+            .enumerate()
+            .skip(row_start)
+            .take(row_end - row_start)
+        {
+            let y = py + row as f32 * cell_h;
+            let visible_cols = max_cols.min(line.cells.len());
+            if visible_cols == 0 {
                 continue;
             }
-
-            if draw_terminal_symbol_cell(
-                primitive_renderer,
-                &cell.text,
-                x,
-                y,
-                width,
-                cell_h,
-                cell.fg,
-            ) {
-                continue;
+            let mut bg_start = 0usize;
+            while bg_start < visible_cols {
+                let bg_color = line.cells[bg_start].bg;
+                let mut bg_end = bg_start + 1;
+                while bg_end < visible_cols && line.cells[bg_end].bg == bg_color {
+                    bg_end += 1;
+                }
+                if !is_default_bg(bg_color, default_bg) {
+                    let bg_color = with_surface_alpha(bg_color, style.surface_alpha);
+                    if bg_color[3] > 0.0 {
+                        let x = px + bg_start as f32 * cell_w;
+                        let w = (bg_end - bg_start) as f32 * cell_w;
+                        primitive_renderer.draw_rect(x, y, w, cell_h, bg_color);
+                    }
+                }
+                bg_start = bg_end;
             }
 
-            // Resolve the per-style family once for this cell, then decide
-            // real-italic vs synthesized oblique: a distinct italic family was
-            // resolved only when it differs from `normal` (fallback). This
-            // generalizes the old `italic_family != font_family` check to all
-            // four style slots.
-            let resolved = style.families.resolve(cell.bold, cell.italic);
-            let is_faux_italic = cell.italic && resolved == style.families.normal;
-            text_renderer.queue_text_in_line_box_with_style(
-                &cell.text,
-                TextBox {
+            for (col, cell) in line.cells.iter().take(visible_cols).enumerate() {
+                let is_blank = cell.text.trim().is_empty();
+                let x = px + col as f32 * cell_w;
+                let width = (cell.width.max(1) as f32) * cell_w;
+
+                if is_blank {
+                    continue;
+                }
+
+                if draw_terminal_symbol_cell(
+                    primitive_renderer,
+                    &cell.text,
                     x,
                     y,
-                    w: width,
-                    h: cell_h,
-                },
-                style.font_size,
-                TextStyle {
-                    color: cell.fg,
-                    bold: cell.bold,
-                    italic: cell.italic && !is_faux_italic,
-                    faux_italic: is_faux_italic,
-                    font_family: Some(resolved),
-                },
-                TextAlign::Start,
-                false,
-            );
-            draw_underline_style(
-                primitive_renderer,
-                cell.underline,
-                x,
-                y,
-                width,
-                cell_h,
-                cell.fg,
-            );
+                    width,
+                    cell_h,
+                    cell.fg,
+                ) {
+                    continue;
+                }
+
+                // Resolve the per-style family once for this cell, then decide
+                // real-italic vs synthesized oblique: a distinct italic family was
+                // resolved only when it differs from `normal` (fallback). This
+                // generalizes the old `italic_family != font_family` check to all
+                // four style slots.
+                let resolved = style.families.resolve(cell.bold, cell.italic);
+                let is_faux_italic = cell.italic && resolved == style.families.normal;
+                text_renderer.queue_text_in_line_box_with_style(
+                    &cell.text,
+                    TextBox {
+                        x,
+                        y,
+                        w: width,
+                        h: cell_h,
+                    },
+                    style.font_size,
+                    TextStyle {
+                        color: cell.fg,
+                        bold: cell.bold,
+                        italic: cell.italic && !is_faux_italic,
+                        faux_italic: is_faux_italic,
+                        font_family: Some(resolved),
+                    },
+                    TextAlign::Start,
+                    false,
+                );
+                draw_underline_style(
+                    primitive_renderer,
+                    cell.underline,
+                    x,
+                    y,
+                    width,
+                    cell_h,
+                    cell.fg,
+                );
+            }
         }
     }
 }
 
 fn with_surface_alpha(color: [f32; 4], surface_alpha: f32) -> [f32; 4] {
-    [color[0], color[1], color[2], color[3] * surface_alpha.clamp(0.0, 1.0)]
+    [
+        color[0],
+        color[1],
+        color[2],
+        color[3] * surface_alpha.clamp(0.0, 1.0),
+    ]
 }
 
 fn is_default_bg(bg: [f32; 4], default_bg: [f32; 4]) -> bool {
@@ -445,13 +513,7 @@ fn draw_underline_style(
         TerminalUnderlineStyle::Double => {
             let separation = (stroke * 1.6).max(2.0);
             primitive_renderer.draw_rect(x, baseline_y, width, stroke, color);
-            primitive_renderer.draw_rect(
-                x,
-                (baseline_y - separation).max(y),
-                width,
-                stroke,
-                color,
-            );
+            primitive_renderer.draw_rect(x, (baseline_y - separation).max(y), width, stroke, color);
         }
         TerminalUnderlineStyle::Dotted => {
             let dot = stroke.max(1.0);
@@ -541,7 +603,6 @@ fn draw_terminal_symbol_cell(
     draw_box_drawing_cell(primitive_renderer, ch, x, y, w, h, color)
 }
 
-
 fn draw_box_drawing_cell(
     primitive_renderer: &mut PrimitiveRenderer,
     ch: char,
@@ -620,12 +681,7 @@ fn draw_powerline_cell(
             primitive_renderer.draw_triangle([x, y], [x, y + h], [x + w, y + h * 0.5], color);
         }
         '' => {
-            primitive_renderer.draw_triangle(
-                [x + w, y],
-                [x + w, y + h],
-                [x, y + h * 0.5],
-                color,
-            );
+            primitive_renderer.draw_triangle([x + w, y], [x + w, y + h], [x, y + h * 0.5], color);
         }
         '' => {
             draw_segmented_line(
@@ -712,13 +768,7 @@ fn draw_half_ellipse(
         if bulge_right {
             primitive_renderer.draw_rect(x, band_y, (w - inset).max(0.0), draw_h, color);
         } else {
-            primitive_renderer.draw_rect(
-                x + inset,
-                band_y,
-                (w - inset).max(0.0),
-                draw_h,
-                color,
-            );
+            primitive_renderer.draw_rect(x + inset, band_y, (w - inset).max(0.0), draw_h, color);
         }
     }
 }
@@ -750,7 +800,7 @@ fn fitted_grid(rect: TextBox, cell_w: f32, cell_h: f32) -> (usize, usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_default_bg, with_surface_alpha, TerminalFontFamilies};
+    use super::{TerminalFontFamilies, is_default_bg, with_surface_alpha};
 
     #[test]
     fn with_surface_alpha_scales_alpha_only() {

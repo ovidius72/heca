@@ -8,7 +8,7 @@ mod pty;
 
 use super::{
     BackendAlert, BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType,
-    TerminalDamage, TerminalPaletteDefaults, TerminalSnapshot,
+    TerminalDamage, TerminalPaletteDefaults, TerminalRowRange, TerminalSnapshot,
 };
 use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
 use engine::TerminalEngine;
@@ -70,7 +70,9 @@ pub struct TerminalBackend {
     reader_disconnected: bool,
     exited: bool,
     reaped: bool,
-    dirty: bool,
+    force_full_damage: bool,
+    last_damage_seqno: Option<usize>,
+    last_damage_viewport_top: Option<isize>,
     /// Cached canonical runtime truth (program/status/cwd/exit_code/kind). Updated
     /// in [`update`] (event-driven) and exposed via [`PaneBackend::runtime`].
     runtime: PaneRuntime,
@@ -105,7 +107,12 @@ impl TerminalBackend {
         Self::with_cell_size(cols, rows, 8.4, 14.0)
     }
 
-    pub fn with_cell_size(cols: usize, rows: usize, cell_w: f32, cell_h: f32) -> Result<Self, PtyError> {
+    pub fn with_cell_size(
+        cols: usize,
+        rows: usize,
+        cell_w: f32,
+        cell_h: f32,
+    ) -> Result<Self, PtyError> {
         Self::with_cell_size_and_defaults_and_waker(cols, rows, cell_w, cell_h, None, None)
     }
 
@@ -116,7 +123,14 @@ impl TerminalBackend {
         cell_h: f32,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     ) -> Result<Self, PtyError> {
-        Self::with_cell_size_and_defaults_and_waker(cols, rows, cell_w, cell_h, None, wake_on_output)
+        Self::with_cell_size_and_defaults_and_waker(
+            cols,
+            rows,
+            cell_w,
+            cell_h,
+            None,
+            wake_on_output,
+        )
     }
 
     pub fn with_cell_size_and_defaults_and_waker(
@@ -192,15 +206,13 @@ impl TerminalBackend {
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Shell(shell) => {
                 let pty = match shell.override_path {
-                    Some(shell_path) => {
-                        PtyHandle::new_with_shell(
-                            cols,
-                            rows,
-                            wake_on_output,
-                            shell.integration,
-                            Some(shell_path),
-                        )?
-                    }
+                    Some(shell_path) => PtyHandle::new_with_shell(
+                        cols,
+                        rows,
+                        wake_on_output,
+                        shell.integration,
+                        Some(shell_path),
+                    )?,
                     None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
                 };
                 (pty, true)
@@ -227,7 +239,9 @@ impl TerminalBackend {
             reader_disconnected: false,
             exited: false,
             reaped: false,
-            dirty: true,
+            force_full_damage: true,
+            last_damage_seqno: None,
+            last_damage_viewport_top: None,
             runtime: PaneRuntime {
                 kind: ContentKind::Terminal,
                 ..PaneRuntime::default()
@@ -375,7 +389,7 @@ impl PaneBackend for TerminalBackend {
         self.cols = cols;
         self.rows = rows;
         self.engine.resize(cols, rows);
-        self.dirty = true;
+        self.force_full_damage = true;
 
         if self.pty.resize(cols, rows).is_err() {
             #[cfg(debug_assertions)]
@@ -409,7 +423,7 @@ impl PaneBackend for TerminalBackend {
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
         self.cell_w = cell_w;
         self.cell_h = cell_h;
-        self.dirty = true;
+        self.force_full_damage = true;
     }
 
     fn update(&mut self) -> bool {
@@ -494,10 +508,6 @@ impl PaneBackend for TerminalBackend {
             }
         }
 
-        if had_data {
-            self.dirty = true;
-        }
-
         had_data
     }
 
@@ -508,11 +518,29 @@ impl PaneBackend for TerminalBackend {
     }
 
     fn take_terminal_damage(&mut self) -> TerminalDamage {
-        if std::mem::replace(&mut self.dirty, false) {
+        let current_seqno = self.engine.current_seqno();
+        let viewport_top = self.engine.visible_top_stable_row();
+
+        let damage = if self.force_full_damage {
             TerminalDamage::Full
-        } else {
+        } else if self.last_damage_seqno == Some(current_seqno)
+            && self.last_damage_viewport_top == Some(viewport_top)
+        {
             TerminalDamage::None
-        }
+        } else if self.last_damage_viewport_top != Some(viewport_top) {
+            // Viewport motion invalidates visible row identity, so per-row
+            // damage is unsafe until retained-content work can reason about it.
+            TerminalDamage::Full
+        } else if let Some(last_seqno) = self.last_damage_seqno {
+            coalesce_terminal_damage_rows(self.engine.changed_visible_rows_since(last_seqno))
+        } else {
+            TerminalDamage::Full
+        };
+
+        self.force_full_damage = false;
+        self.last_damage_seqno = Some(current_seqno);
+        self.last_damage_viewport_top = Some(viewport_top);
+        damage
     }
 
     fn render_data(&self) -> BackendRenderData {
@@ -566,6 +594,27 @@ fn reconcile_exit_state(
     }
 }
 
+fn coalesce_terminal_damage_rows(rows: Vec<usize>) -> TerminalDamage {
+    let mut ranges = Vec::new();
+    let mut iter = rows.into_iter();
+    let Some(mut start) = iter.next() else {
+        return TerminalDamage::None;
+    };
+    let mut end = start + 1;
+
+    for row in iter {
+        if row == end {
+            end += 1;
+        } else {
+            ranges.push(TerminalRowRange::new(start, end));
+            start = row;
+            end = row + 1;
+        }
+    }
+    ranges.push(TerminalRowRange::new(start, end));
+    TerminalDamage::Rows(ranges)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -613,6 +662,35 @@ mod tests {
     }
 
     #[test]
+    fn terminal_backend_initial_damage_is_full_then_none() {
+        let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
+            .expect("terminal backend should initialize");
+
+        assert!(
+            matches!(backend.take_terminal_damage(), TerminalDamage::Full),
+            "initial terminal mount should force a full redraw"
+        );
+        assert!(
+            matches!(backend.take_terminal_damage(), TerminalDamage::None),
+            "without new terminal changes, damage should drain to None"
+        );
+    }
+
+    #[test]
+    fn terminal_backend_resize_forces_full_damage() {
+        let mut backend = TerminalBackend::new_for_test_with_shell(12, 5, TEST_SHELL)
+            .expect("terminal backend should initialize");
+        let _ = backend.take_terminal_damage();
+
+        backend.set_size(20, 8);
+
+        assert!(
+            matches!(backend.take_terminal_damage(), TerminalDamage::Full),
+            "resizing changes visible row identity and must force full redraw"
+        );
+    }
+
+    #[test]
     fn terminal_backend_process_input_reaches_shell() {
         let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
             .expect("terminal backend should initialize");
@@ -626,6 +704,32 @@ mod tests {
         });
 
         assert!(saw_output, "shell output should include echoed marker");
+    }
+
+    #[test]
+    fn terminal_backend_output_produces_row_damage() {
+        let mut backend = TerminalBackend::new_for_test_with_shell(80, 24, TEST_SHELL)
+            .expect("terminal backend should initialize");
+        let marker = "HECA_DAMAGE_ROWS";
+
+        warm_shell(&mut backend);
+        let _ = backend.take_terminal_damage();
+        backend.process_input(shell_echo_command(marker).as_bytes());
+
+        let saw_output = pump_backend_until(&mut backend, |backend| {
+            terminal_text(backend).contains(marker)
+        });
+        assert!(saw_output, "shell output should include echoed marker");
+
+        match backend.take_terminal_damage() {
+            TerminalDamage::Rows(ranges) => {
+                assert!(
+                    !ranges.is_empty(),
+                    "ordinary output should produce at least one damaged visible row"
+                );
+            }
+            other => panic!("expected row damage after ordinary output, got {other:?}"),
+        }
     }
 
     #[test]
@@ -657,7 +761,10 @@ mod tests {
 
         let exited = pump_backend_until(&mut backend, TerminalBackend::should_close);
         assert!(exited, "backend should report shell exit");
-        assert!(backend.reaped, "backend should reap the PTY child after exit");
+        assert!(
+            backend.reaped,
+            "backend should reap the PTY child after exit"
+        );
     }
 
     #[test]
@@ -693,12 +800,21 @@ mod tests {
 
         let exited = pump_backend_until(&mut backend, TerminalBackend::should_close);
         assert!(exited, "backend should report shell exit");
-        assert!(backend.reaped, "backend should reap the PTY child before staying closed");
+        assert!(
+            backend.reaped,
+            "backend should reap the PTY child before staying closed"
+        );
 
         let _ = backend.update();
         let _ = backend.update();
-        assert!(backend.should_close(), "backend should stay closed after repeated updates");
-        assert!(backend.reaped, "backend should remain reaped after repeated updates");
+        assert!(
+            backend.should_close(),
+            "backend should stay closed after repeated updates"
+        );
+        assert!(
+            backend.reaped,
+            "backend should remain reaped after repeated updates"
+        );
     }
 
     #[test]
@@ -709,7 +825,10 @@ mod tests {
         reconcile_exit_state(true, &mut exited, &mut reaped, Ok(false));
 
         assert!(!exited, "reader disconnect alone should not close the pane");
-        assert!(!reaped, "reader disconnect alone should not mark the child reaped");
+        assert!(
+            !reaped,
+            "reader disconnect alone should not mark the child reaped"
+        );
     }
 
     #[test]
@@ -719,7 +838,10 @@ mod tests {
 
         reconcile_exit_state(true, &mut exited, &mut reaped, Ok(true));
 
-        assert!(exited, "reaped child should close the pane once the reader is disconnected");
+        assert!(
+            exited,
+            "reaped child should close the pane once the reader is disconnected"
+        );
         assert!(reaped, "reaped child should stay marked as reaped");
     }
 
@@ -735,7 +857,10 @@ mod tests {
             Err(io::Error::other("wait failed")),
         );
 
-        assert!(exited, "failed wait should conservatively close the backend");
+        assert!(
+            exited,
+            "failed wait should conservatively close the backend"
+        );
         assert!(reaped, "failed wait should stop future reap polling");
     }
 
@@ -754,9 +879,11 @@ mod tests {
             let snapshot = backend
                 .terminal_snapshot()
                 .expect("terminal backend should expose a snapshot");
-            snapshot.lines.iter().flat_map(|line| line.cells.iter()).any(|cell| {
-                color_differs(cell.bg, snapshot.default_bg)
-            })
+            snapshot
+                .lines
+                .iter()
+                .flat_map(|line| line.cells.iter())
+                .any(|cell| color_differs(cell.bg, snapshot.default_bg))
         });
 
         assert!(
@@ -849,9 +976,7 @@ mod tests {
         assert!(
             saw_nvim,
             "zsh shell integration should report `nvim` as the running foreground program; got program={:?} status={:?} exit_code={:?}",
-            runtime.program,
-            runtime.status,
-            runtime.exit_code,
+            runtime.program, runtime.status, runtime.exit_code,
         );
 
         let stable_until = Instant::now() + Duration::from_millis(400);
@@ -859,7 +984,9 @@ mod tests {
         while Instant::now() < stable_until {
             let _ = backend.update();
             let runtime = backend.runtime();
-            if runtime.program.as_deref() != Some("nvim") || runtime.status != ProcessStatus::Running {
+            if runtime.program.as_deref() != Some("nvim")
+                || runtime.status != ProcessStatus::Running
+            {
                 reverted = true;
                 break;
             }
@@ -884,7 +1011,8 @@ mod tests {
         .expect("command backend should initialize");
 
         assert!(
-            pump_backend_until(&mut backend, |backend| backend.runtime().exit_code == Some(7)),
+            pump_backend_until(&mut backend, |backend| backend.runtime().exit_code
+                == Some(7)),
             "command backend should capture the exit code"
         );
         assert_eq!(backend.runtime().status, ProcessStatus::Error);
@@ -929,7 +1057,12 @@ mod tests {
         snapshot
             .lines
             .iter()
-            .map(|line| line.cells.iter().map(|cell| cell.text.as_str()).collect::<String>())
+            .map(|line| {
+                line.cells
+                    .iter()
+                    .map(|cell| cell.text.as_str())
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>()
             .join("\n")
     }

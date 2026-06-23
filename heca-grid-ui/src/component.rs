@@ -9,7 +9,9 @@
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
+use crate::scene::{
+    Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd,
+};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -653,7 +655,13 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(rect, self.theme.foreground.with_alpha(a), None, radius, None);
+        self.rect(
+            rect,
+            self.theme.foreground.with_alpha(a),
+            None,
+            radius,
+            None,
+        );
     }
 
     /// Draw the **drag ghost** — the small labelled chip that follows the cursor
@@ -669,17 +677,32 @@ impl<'a> PaintCx<'a> {
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
-            cx.rect(rect, Color::TRANSPARENT, Some(Border { color: accent, width: 1.5 }), radius, None);
+            cx.rect(
+                rect,
+                Color::TRANSPARENT,
+                Some(Border {
+                    color: accent,
+                    width: 1.5,
+                }),
+                radius,
+                None,
+            );
             if swap {
                 let inset = 3.0_f64;
                 let inner = Rectangle::new(
                     Point::new(rect.loc.x + inset, rect.loc.y + inset),
-                    Size::new((rect.size.w - inset * 2.0).max(0.0), (rect.size.h - inset * 2.0).max(0.0)),
+                    Size::new(
+                        (rect.size.w - inset * 2.0).max(0.0),
+                        (rect.size.h - inset * 2.0).max(0.0),
+                    ),
                 );
                 cx.rect(
                     inner,
                     Color::TRANSPARENT,
-                    Some(Border { color: bg.with_alpha(180), width: 1.0 }),
+                    Some(Border {
+                        color: bg.with_alpha(180),
+                        width: 1.0,
+                    }),
                     (radius - inset as f32).max(0.0),
                     None,
                 );
@@ -700,7 +723,10 @@ impl<'a> PaintCx<'a> {
                 self.rect(
                     bounds,
                     Color::TRANSPARENT,
-                    Some(Border { color: accent, width: 1.5 }),
+                    Some(Border {
+                        color: accent,
+                        width: 1.5,
+                    }),
                     self.theme.radius,
                     None,
                 );
@@ -713,7 +739,10 @@ impl<'a> PaintCx<'a> {
                     bounds.loc.y + bounds.size.h - thickness / 2.0
                 };
                 self.rect(
-                    Rectangle::new(Point::new(bounds.loc.x, y), Size::new(bounds.size.w, thickness)),
+                    Rectangle::new(
+                        Point::new(bounds.loc.x, y),
+                        Size::new(bounds.size.w, thickness),
+                    ),
                     accent,
                     None,
                     1.0,
@@ -738,7 +767,10 @@ impl<'a> PaintCx<'a> {
         self.rect(
             bounds,
             Color::TRANSPARENT,
-            Some(Border { color: accent, width: outer_w }),
+            Some(Border {
+                color: accent,
+                width: outer_w,
+            }),
             radius,
             None,
         );
@@ -755,7 +787,10 @@ impl<'a> PaintCx<'a> {
         self.rect(
             inner,
             Color::TRANSPARENT,
-            Some(Border { color: accent.with_alpha(120), width: 1.0 }),
+            Some(Border {
+                color: accent.with_alpha(120),
+                width: 1.0,
+            }),
             (radius - inset as f32).max(0.0),
             None,
         );
@@ -818,7 +853,10 @@ impl<'a> PaintCx<'a> {
         self.rect(
             b,
             Color::TRANSPARENT,
-            Some(Border { color: accent, width: bracket_width }),
+            Some(Border {
+                color: accent,
+                width: bracket_width,
+            }),
             radius,
             None,
         );
@@ -833,13 +871,37 @@ impl<'a> PaintCx<'a> {
 
         let mid_w = w - 2.0 * keep;
         if mid_w > 0.0 {
-            self.rect(Rectangle::new(Point::new(x + keep, y), Size::new(mid_w, t)), cover, None, 0.0, None);
-            self.rect(Rectangle::new(Point::new(x + keep, y + h - t), Size::new(mid_w, t)), cover, None, 0.0, None);
+            self.rect(
+                Rectangle::new(Point::new(x + keep, y), Size::new(mid_w, t)),
+                cover,
+                None,
+                0.0,
+                None,
+            );
+            self.rect(
+                Rectangle::new(Point::new(x + keep, y + h - t), Size::new(mid_w, t)),
+                cover,
+                None,
+                0.0,
+                None,
+            );
         }
         let mid_h = h - 2.0 * keep;
         if mid_h > 0.0 {
-            self.rect(Rectangle::new(Point::new(x, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
-            self.rect(Rectangle::new(Point::new(x + w - t, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
+            self.rect(
+                Rectangle::new(Point::new(x, y + keep), Size::new(t, mid_h)),
+                cover,
+                None,
+                0.0,
+                None,
+            );
+            self.rect(
+                Rectangle::new(Point::new(x + w - t, y + keep), Size::new(t, mid_h)),
+                cover,
+                None,
+                0.0,
+                None,
+            );
         }
     }
 
@@ -889,6 +951,10 @@ mod tests {
 
         base.mark_needs_paint();
         assert!(base.needs_paint(), "marking re-sets the repaint flag");
-        assert_eq!(frames.get(), 1, "marking asks the host for exactly one frame");
+        assert_eq!(
+            frames.get(),
+            1,
+            "marking asks the host for exactly one frame"
+        );
     }
 }

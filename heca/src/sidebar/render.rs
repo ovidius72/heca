@@ -1,7 +1,7 @@
 use crate::app_state::SidebarItemState;
+use heca_core::layout::PaneId;
 use heca_grid_ui::drag::DragItemId;
 use heca_renderer::primitive::PrimitiveRenderer;
-use heca_core::layout::PaneId;
 use heca_renderer::text::TextRenderer;
 
 use super::{SidebarPaneEntry, SidebarTree, SidebarWsEntry};
@@ -23,7 +23,10 @@ struct RenderColors {
 /// can navigate even in collapsed mode.
 /// `candidates` are shown as pane letters during PaneSwap / PaneSelect.
 // Each param is a distinct render input; grouping would hurt call-site readability.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "distinct render inputs keep sidebar paint call sites explicit and readable"
+)]
 pub fn render_sidebar_collapsed(
     tree: &mut SidebarTree,
     x: f32,
@@ -79,7 +82,12 @@ pub fn render_sidebar_collapsed(
             line_y,
             activity_bar_w,
             section_height,
-            item_state_color(ws.state, colors.accent, colors.foreground, colors.visited_color),
+            item_state_color(
+                ws.state,
+                colors.accent,
+                colors.foreground,
+                colors.visited_color,
+            ),
         );
 
         if is_ws_cursor {
@@ -109,7 +117,12 @@ pub fn render_sidebar_collapsed(
         let ws_color = if is_ws_cursor {
             colors.accent
         } else {
-            item_state_color(ws.state, colors.accent, colors.foreground, colors.visited_color)
+            item_state_color(
+                ws.state,
+                colors.accent,
+                colors.foreground,
+                colors.visited_color,
+            )
         };
         let ws_text_y = line_y + (ITEM_HEIGHT - font_size) / 2.0;
         text_renderer.queue_text(&ws_label, text_x, ws_text_y, font_size, ws_color);
@@ -153,7 +166,10 @@ pub fn render_sidebar_collapsed(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "collapsed-column rendering needs the expanded paint context without packing ad hoc structs"
+)]
 fn render_collapsed_columns(
     ws: &SidebarWsEntry,
     cursor: usize,
@@ -206,7 +222,12 @@ fn render_collapsed_columns(
             let pane_color = if is_pane_cursor {
                 colors.accent
             } else {
-                item_state_color(pane.state, colors.accent, colors.foreground, colors.visited_color)
+                item_state_color(
+                    pane.state,
+                    colors.accent,
+                    colors.foreground,
+                    colors.visited_color,
+                )
             };
             let pane_text_y = *line_y + (ITEM_HEIGHT - font_size) / 2.0;
             text_renderer.queue_text(&pane_char, text_x, pane_text_y, font_size, pane_color);
@@ -215,7 +236,10 @@ fn render_collapsed_columns(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "collapsed floating-pane rendering needs the expanded paint context without packing ad hoc structs"
+)]
 fn render_collapsed_floating_panes(
     ws: &SidebarWsEntry,
     flat_idx: &mut usize,
@@ -318,7 +342,10 @@ fn candidate_char(
         if focused_pane == Some(pane_id) {
             None
         } else {
-            cands.iter().find(|(_, pid)| *pid == pane_id).map(|(ch, _)| *ch)
+            cands
+                .iter()
+                .find(|(_, pid)| *pid == pane_id)
+                .map(|(ch, _)| *ch)
         }
     })
 }
@@ -346,4 +373,3 @@ fn item_state_color(
         SidebarItemState::None => foreground,
     }
 }
-

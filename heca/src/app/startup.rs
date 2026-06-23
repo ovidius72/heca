@@ -7,17 +7,17 @@ use crate::app::backend_factory::{create_terminal_backend, estimate_terminal_gri
 use crate::app::backend_store::BackendStore;
 use crate::app::terminal_metrics::resolve_terminal_cell_size;
 use crate::app_state::{self, AppState, InputMode};
-use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT};
+use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use crate::keymap;
 use crate::pane_name;
 use crate::sidebar::SidebarTree;
 use heca_config::theme::AppConfig;
 use heca_core::layout::{Pane as LayoutPane, PaneId, Session};
 use heca_grid_ui::install_frame_request;
-use heca_renderer::composite::Compositor;
 use heca_renderer::backdrop::Backdrop;
 use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
+use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
@@ -66,7 +66,10 @@ pub(crate) fn apply_window_vibrancy(
     apply_macos_vibrancy(window, vibrancy);
     #[cfg(target_os = "windows")]
     {
-        let _ = (vibrancy, window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125))));
+        let _ = (
+            vibrancy,
+            window_vibrancy::apply_acrylic(window, Some((18, 18, 18, 125))),
+        );
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -223,7 +226,8 @@ pub(crate) async fn init_state(
         physical.width as f32 / scale_factor as f32,
         physical.height as f32 / scale_factor as f32,
     );
-    let terminal_cell_size = resolve_terminal_cell_size(&mut text_renderer, &app_config.config.font);
+    let terminal_cell_size =
+        resolve_terminal_cell_size(&mut text_renderer, &app_config.config.font);
     primitive_renderer.set_screen_size(
         &queue,
         physical.width as f32 / scale_factor as f32,
@@ -240,15 +244,17 @@ pub(crate) async fn init_state(
     let compositor = Compositor::new(&device, surface_format, physical.width, physical.height);
     let blur = Blur::new(&device, surface_format, physical.width, physical.height);
     let backdrop = Backdrop::new(&device, surface_format);
-    let background =
-        BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
+    let background = BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
         status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
         left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
-        sidebar_gap: app_config.config.appearance.effective_sidebar_gap(&app_config.theme),
+        sidebar_gap: app_config
+            .config
+            .appearance
+            .effective_sidebar_gap(&app_config.theme),
     };
     let log_w = physical.width as f32 / scale_factor as f32;
     let log_h = physical.height as f32 / scale_factor as f32;
@@ -256,7 +262,10 @@ pub(crate) async fn init_state(
 
     let viewport_size = heca_core::layout::types::Size::new(pane_area.size.w, pane_area.size.h);
     let layout_options = heca_core::layout::types::LayoutOptions {
-        gaps: app_config.config.appearance.effective_pane_gap(&app_config.theme) as f64,
+        gaps: app_config
+            .config
+            .appearance
+            .effective_pane_gap(&app_config.theme) as f64,
         always_center_single_column: app_config.config.settings.always_center_single_column,
         ..Default::default()
     };
@@ -270,11 +279,8 @@ pub(crate) async fn init_state(
     let pane_id = add_initial_pane(&mut session);
 
     let mut backends = BackendStore::new();
-    let (initial_cols, initial_rows) = estimate_terminal_grid(
-        pane_area.size.w,
-        pane_area.size.h,
-        terminal_cell_size,
-    );
+    let (initial_cols, initial_rows) =
+        estimate_terminal_grid(pane_area.size.w, pane_area.size.h, terminal_cell_size);
     backends.insert_for_pane(
         pane_id,
         create_terminal_backend(
@@ -291,6 +297,9 @@ pub(crate) async fn init_state(
     let mut sidebar_tree = SidebarTree::new();
     sidebar_tree.sync_from_session(&session, None, Some(pane_id), &vec![None; ws_count]);
 
+    let terminal_layer_scratch =
+        app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
+
     Box::new(AppState {
         window,
         event_proxy,
@@ -302,6 +311,8 @@ pub(crate) async fn init_state(
         text_renderer,
         grid_renderer,
         compositor,
+        terminal_layers: std::collections::HashMap::new(),
+        terminal_layer_scratch,
         blur,
         backdrop,
         background,

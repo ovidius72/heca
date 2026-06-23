@@ -18,10 +18,13 @@ mod target;
 use crate::app::interaction::InteractionSource;
 use crate::app::terminal_host::should_intercept_selection_gesture;
 use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
-use heca_core::layout::PaneId;
-use crate::chrome::{ChromeConfig, DEFAULT_TAB_BAR_HEIGHT, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_COLLAPSED_SIDEBAR_WIDTH};
+use crate::chrome::{
+    ChromeConfig, DEFAULT_COLLAPSED_SIDEBAR_WIDTH, DEFAULT_STATUS_BAR_HEIGHT,
+    DEFAULT_TAB_BAR_HEIGHT,
+};
 use crate::input::WmAction;
-use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId, DEFAULT_DRAG_THRESHOLD_SQ};
+use heca_core::layout::PaneId;
+use heca_grid_ui::drag::{DEFAULT_DRAG_THRESHOLD_SQ, DragItemId, DragPhase, DragSurfaceId};
 use winit::event::{ElementState, MouseButton};
 
 /// Handle cursor movement. Returns a `WmAction` if one should be dispatched
@@ -130,7 +133,11 @@ pub fn on_mouse_input(
                             None => return None,
                         };
                         (
-                            AppDragPayload::Pane { pane_id, origin_ws, swap },
+                            AppDragPayload::Pane {
+                                pane_id,
+                                origin_ws,
+                                swap,
+                            },
                             // Legacy collapsed-rail dim id (pane-only); see render.rs.
                             Some(DragItemId::new(pane_id.0 as usize)),
                         )
@@ -160,7 +167,8 @@ pub fn on_mouse_input(
             }
 
             // Sidebar click.
-            let sidebar_action = target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
+            let sidebar_action =
+                target::surface_click_action(state, DragSurfaceId::LeftSidebar, pos);
 
             // Sidebar button clicks / non-pane item clicks dispatch immediately.
             if let Some(action) = sidebar_action {
@@ -169,7 +177,10 @@ pub fn on_mouse_input(
 
             // Content click → focus.
             if let Some(pane_id) = hit_test_pane(state, pos) {
-                return Some((WmAction::FocusPane { pane_id }, InteractionSource::MouseContent));
+                return Some((
+                    WmAction::FocusPane { pane_id },
+                    InteractionSource::MouseContent,
+                ));
             }
         }
         (MouseButton::Left, ElementState::Released) => {
@@ -190,15 +201,27 @@ pub fn on_mouse_input(
             if let Some(active) = state.mouse.drag_ctx.active_surface {
                 match active {
                     DragSurfaceId::LeftSidebar => {
-                        let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar).expect("LeftSidebar pre-populated in DragContext::default");
+                        let left = state
+                            .mouse
+                            .drag_ctx
+                            .surface_mut(DragSurfaceId::LeftSidebar)
+                            .expect("LeftSidebar pre-populated in DragContext::default");
                         let phase = std::mem::replace(&mut left.phase, DragPhase::Idle);
                         match phase {
                             DragPhase::Dragging { payload } => match payload {
-                                AppDragPayload::Pane { pane_id, origin_ws, swap } => {
-                                    release::handle_sidebar_drag_release(state, pane_id, origin_ws, swap, pos);
+                                AppDragPayload::Pane {
+                                    pane_id,
+                                    origin_ws,
+                                    swap,
+                                } => {
+                                    release::handle_sidebar_drag_release(
+                                        state, pane_id, origin_ws, swap, pos,
+                                    );
                                 }
                                 AppDragPayload::Column { ws, col, swap } => {
-                                    release::handle_sidebar_column_drag_release(state, ws, col, swap, pos);
+                                    release::handle_sidebar_column_drag_release(
+                                        state, ws, col, swap, pos,
+                                    );
                                 }
                             },
                             DragPhase::Starting { .. } => {
@@ -267,7 +290,8 @@ pub fn process_edge_scroll(state: &mut AppState) -> bool {
         && pos.0 < pane_area.loc.x as f32 + pane_area.size.w as f32
     {
         // Near the right content area edge.
-        (pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger)) / content_trigger
+        (pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32 - content_trigger))
+            / content_trigger
     } else if pos.0 >= pane_area.loc.x as f32 + pane_area.size.w as f32 {
         // In the right sidebar/activity area — use distance from content edge.
         let dist = pos.0 - (pane_area.loc.x as f32 + pane_area.size.w as f32);

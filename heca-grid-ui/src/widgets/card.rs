@@ -25,7 +25,8 @@ impl Card {
         base.style.direction = Direction::Column;
         base.style.padding = 18.0;
         base.style.gap = 10.0;
-        base.children.push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
+        base.children
+            .push(Box::new(Label::new(title).font_scale(TITLE_SCALE)));
         Self { base }
     }
 }
@@ -50,7 +51,10 @@ impl Component for Card {
         };
         let s = &self.base.style;
         // Keep the styled border color, but take its width from the theme.
-        let border = s.border.map(|b| Border { color: b.color, width: bw });
+        let border = s.border.map(|b| Border {
+            color: b.color,
+            width: bw,
+        });
         if s.fill.is_some() || border.is_some() || s.glow.is_some() {
             cx.rect(
                 self.base.bounds,

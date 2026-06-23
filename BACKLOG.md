@@ -40,13 +40,52 @@
 > Real PTY terminal using `portable-pty` + `wezterm-term` + `cosmic-text` is live. Core (Phases 0–5) is shipped.
 > Remaining: advanced fidelity, test coverage, selection/clipboard, pane-shell integration.
 
+### [~] Phase: Terminal damage-preservation foundation · `terminal-00`
+Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
+
+- [x] **terminal-task-00** — Preserve terminal damage through the app path.
+  Stop draining-and-dropping terminal damage in the mount path. Carry `TerminalDamage`
+  alongside `TerminalSnapshot` through the terminal host/render boundary so the
+  renderer can consume real pending damage for the pane it is about to draw.
+  Files: `heca-core/src/backend/mod.rs`, `heca-core/src/backend/snapshot.rs`,
+  `heca/src/app/terminal_host.rs`, `heca/src/app/terminal_render.rs`
+  Status: done on `feature/terminal-followups`; terminal mount/render prep now carries damage through to the pane render path.
+
+- [x] **terminal-task-00a** — Produce visible row-range damage from the terminal backend.
+  Replace the current `dirty: bool -> Full|None` behavior with `Rows(...)` where
+  possible, using `wezterm-term` / `termwiz` viewport line invalidation
+  information. Coalesce adjacent rows. Fall back to `Full` on resize,
+  alternate-screen transitions, viewport-shape changes, or any uncertain state.
+  Files: `heca-core/src/backend/terminal.rs`,
+  `heca-core/src/backend/terminal/engine.rs`,
+  `heca-core/src/backend/snapshot.rs`
+  Status: done on `feature/terminal-followups`; backend now derives/coalesces changed visible rows and falls back conservatively to `Full` for uncertain structural transitions.
+
+- [~] **terminal-task-00b** — Add retained terminal-content foundation.
+  Introduce the minimum retained-content mechanism required so unchanged rows stay
+  visible while only dirty rows are redrawn. Keep this scoped to terminal panes;
+  do not silently broaden it into general compositor optimization in the same
+  task.
+  Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`,
+  `heca-renderer/*` only if a terminal-specific retained surface is needed
+  Status: retained layer/cache, row-band copy logic, and renderer damage entrypoints are in place, but live retained presentation is currently guarded to clean frames only after a resize/typing regression. Finish the damaged-frame presentation path before marking done.
+
+- [~] **terminal-task-00c** — Verify the prerequisite itself.
+  Add focused tests for backend row-range damage production, app-path damage
+  propagation, and retained-content correctness when only dirty rows are
+  redrawn.
+  Files: `heca-core/src/backend/terminal.rs`, `heca-renderer/src/terminal.rs`,
+  app-side tests where feasible
+  Status: partial. Focused backend/terminal-render checks exist and current `heca` targeted tests are green, but retained-content correctness under live damaged-row presentation is not fully covered yet.
+
 ### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
-Render only changed terminal rows instead of the full pane every frame. Foundation for battery-friendly redraws.
+Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.
 
 - [ ] **terminal-task-01** — Implement dirty-row rendering in `heca-renderer/src/terminal.rs`.
-  Only re-render rows in the dirty set from `TerminalSnapshot`. Fall back to full when snapshot says `Full`.
-  `DamageKind::Rows(...)` is already modeled in `heca-core/src/backend/terminal/snapshot.rs`.
-  Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/terminal/snapshot.rs`
+  Consume the already-plumbed `TerminalDamage` and redraw only dirty visible rows
+  into the retained terminal content path. Fall back to full redraw when damage
+  says `Full`.
+  Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/snapshot.rs`
   Related: compositor damage-region optimization (`app-task-22`)
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`

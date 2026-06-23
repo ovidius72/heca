@@ -178,7 +178,10 @@ impl Backdrop {
     /// `src_uv` selects the source region in UV space (0..1, origin top-left);
     /// `None` samples the **same screen location** as `dst` (frost what's directly
     /// behind the rect). `viewport_px` is the target/framebuffer size in physical px.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "backdrop draws need explicit texture, viewport, rect, opacity, and stencil inputs"
+    )]
     pub fn draw(
         &self,
         device: &wgpu::Device,
@@ -198,9 +201,7 @@ impl Backdrop {
         }
         let (x, y, w, h) = dst;
         // Destination px → NDC (y flipped: screen-top = +1).
-        let ndc = |px: f32, py: f32| -> (f32, f32) {
-            (px / vw * 2.0 - 1.0, 1.0 - py / vh * 2.0)
-        };
+        let ndc = |px: f32, py: f32| -> (f32, f32) { (px / vw * 2.0 - 1.0, 1.0 - py / vh * 2.0) };
         let (l, t) = ndc(x, y);
         let (r, b) = ndc(x + w, y + h);
         // Source UV: explicit, or the same screen location as dst (origin top-left).
@@ -224,9 +225,18 @@ impl Backdrop {
             label: Some("backdrop_bind_group"),
             layout: &self.layout,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(src) },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                wgpu::BindGroupEntry { binding: 2, resource: ubo.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(src),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: ubo.as_entire_binding(),
+                },
             ],
         });
 

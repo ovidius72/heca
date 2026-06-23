@@ -6,20 +6,26 @@
 
 use crate::actions::ActionRegistry;
 use crate::app::backend_store::BackendStore;
-use crate::app::interaction::{dispatch_action, InteractionSource};
+use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
 use crate::input::WmAction;
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
-    TerminalSnapshot,
+    TerminalDamage, TerminalSnapshot,
 };
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 
+#[derive(Clone)]
 pub(crate) struct TerminalMount {
     pub content_rect: Rectangle,
     pub snapshot: TerminalSnapshot,
+    /// Pending visible damage for this pane's terminal content. Carried through
+    /// the mount/render boundary even when the renderer still falls back to
+    /// full redraw, so later retained-content work can consume real row damage
+    /// without changing the host contract again.
+    pub damage: TerminalDamage,
 }
 
 #[derive(Clone, Copy)]
@@ -37,11 +43,12 @@ pub(crate) fn prepare_terminal_mount(
     let backend = backends.get_mut(pane_id)?;
     sync_terminal_backend_size(backend, content_rect, base_cell_size);
     let snapshot = backend.terminal_snapshot()?;
-    let _ = backend.take_terminal_damage();
+    let damage = backend.take_terminal_damage();
 
     Some(TerminalMount {
         content_rect,
         snapshot,
+        damage,
     })
 }
 
@@ -113,7 +120,13 @@ pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
         return;
     }
 
-    let Some(event) = build_mouse_event(state, target, pos, BackendMouseEventKind::Move, BackendMouseButton::None) else {
+    let Some(event) = build_mouse_event(
+        state,
+        target,
+        pos,
+        BackendMouseEventKind::Move,
+        BackendMouseButton::None,
+    ) else {
         return;
     };
     if let Some(backend) = state.backends.get_mut(target.pane_id) {
@@ -231,11 +244,7 @@ pub(crate) fn forward_mouse_button(
     }
 }
 
-pub(crate) fn forward_mouse_wheel(
-    state: &mut AppState,
-    pos: (f32, f32),
-    delta: MouseScrollDelta,
-) {
+pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: MouseScrollDelta) {
     if state.mouse.interactive_move.is_some() || state.mouse.drag_ctx.is_dragging() {
         return;
     }
@@ -244,7 +253,9 @@ pub(crate) fn forward_mouse_wheel(
         return;
     };
     for button in wheel_buttons(delta) {
-        let Some(event) = build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button) else {
+        let Some(event) =
+            build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
+        else {
             continue;
         };
         if let Some(backend) = state.backends.get_mut(target.pane_id) {
@@ -253,7 +264,11 @@ pub(crate) fn forward_mouse_wheel(
     }
 }
 
-pub(crate) fn notify_focus_changed(state: &mut AppState, prev: Option<PaneId>, next: Option<PaneId>) {
+pub(crate) fn notify_focus_changed(
+    state: &mut AppState,
+    prev: Option<PaneId>,
+    next: Option<PaneId>,
+) {
     if prev == next {
         return;
     }
@@ -288,7 +303,10 @@ pub(crate) fn should_intercept_selection_gesture(
     button: MouseButton,
     button_state: ElementState,
 ) -> bool {
-    if button != MouseButton::Left || button_state != ElementState::Pressed || !state.modifiers.shift_key() {
+    if button != MouseButton::Left
+        || button_state != ElementState::Pressed
+        || !state.modifiers.shift_key()
+    {
         return false;
     }
     let move_modifier_held = match state.interactive_move_modifier {
@@ -378,21 +396,17 @@ pub(crate) fn move_focused_terminal_selection(
 
     // Handle active selection: update the focus end.
     let (anchor_row, anchor_col, focus_row, focus_col) = match state.selection.active() {
-        Some(active)
-            if active.owner == SelectionOwner::Pane(pane_id) =>
-        {
-            match active.region {
-                SelectionRegion::HostGrid {
-                    anchor_row,
-                    anchor_col,
-                    focus_row,
-                    focus_col,
-                } => (anchor_row, anchor_col, focus_row, focus_col),
-                SelectionRegion::BackendNative => {
-                    return false;
-                }
+        Some(active) if active.owner == SelectionOwner::Pane(pane_id) => match active.region {
+            SelectionRegion::HostGrid {
+                anchor_row,
+                anchor_col,
+                focus_row,
+                focus_col,
+            } => (anchor_row, anchor_col, focus_row, focus_col),
+            SelectionRegion::BackendNative => {
+                return false;
             }
-        }
+        },
         _ => (
             snapshot.cursor.row,
             snapshot.cursor.col,
@@ -432,12 +446,7 @@ fn build_mouse_event(
         .get(target.pane_id)
         .map(|backend| backend.cell_size())
         .unwrap_or(state.terminal_cell_size);
-    let (row, col) = cell_coords_in_rect(
-        pos,
-        target.content_rect,
-        cell_w as f64,
-        cell_h as f64,
-    )?;
+    let (row, col) = cell_coords_in_rect(pos, target.content_rect, cell_w as f64, cell_h as f64)?;
 
     let local_x = pos.0 as f64 - target.content_rect.loc.x;
     let local_y = pos.1 as f64 - target.content_rect.loc.y;
@@ -531,7 +540,11 @@ fn cell_coords_in_rect(
 /// Resolves the pane's content rect and cell metrics, then delegates to
 /// `cell_coords_in_rect` — the single geometry path shared with
 /// `build_mouse_event`.
-fn cell_coords_at_position(state: &AppState, pane_id: PaneId, pos: (f32, f32)) -> Option<(usize, usize)> {
+fn cell_coords_at_position(
+    state: &AppState,
+    pane_id: PaneId,
+    pos: (f32, f32),
+) -> Option<(usize, usize)> {
     let content_rect = content_rect_for_pane(state, pane_id)?;
     let (cell_w, cell_h) = state
         .backends
@@ -559,8 +572,18 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
 
 fn axis_wheel_buttons(x: f64, y: f64) -> Vec<BackendMouseButton> {
     let mut buttons = Vec::new();
-    push_wheel_buttons(&mut buttons, y, BackendMouseButton::WheelUp, BackendMouseButton::WheelDown);
-    push_wheel_buttons(&mut buttons, x, BackendMouseButton::WheelRight, BackendMouseButton::WheelLeft);
+    push_wheel_buttons(
+        &mut buttons,
+        y,
+        BackendMouseButton::WheelUp,
+        BackendMouseButton::WheelDown,
+    );
+    push_wheel_buttons(
+        &mut buttons,
+        x,
+        BackendMouseButton::WheelRight,
+        BackendMouseButton::WheelLeft,
+    );
     buttons
 }
 
@@ -614,7 +637,13 @@ pub(crate) fn pane_outer_frames(state: &AppState) -> Vec<(PaneId, f32, f32, f32,
     for float in &ws.floating_panes {
         let x = pane_area.loc.x as f32 + ws_offset.0 + float.position.x as f32;
         let y = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
-        frames.push((float.pane.id, x, y, float.size.w as f32, float.size.h as f32));
+        frames.push((
+            float.pane.id,
+            x,
+            y,
+            float.size.w as f32,
+            float.size.h as f32,
+        ));
     }
     frames
 }

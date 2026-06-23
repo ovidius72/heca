@@ -1122,7 +1122,10 @@ mod tests {
         let mut space = space_with_columns(4); // [1,2,3,4]
         assert!(space.reorder_column(0, 2));
         assert_eq!(column_ids(&space), vec![2, 3, 1, 4]);
-        assert_eq!(space.active_column_idx, 2, "the moved column becomes active");
+        assert_eq!(
+            space.active_column_idx, 2,
+            "the moved column becomes active"
+        );
     }
 
     #[test]
@@ -1131,7 +1134,10 @@ mod tests {
         assert!(space.reorder_column(0, 99), "dst clamps to the last index");
         assert_eq!(column_ids(&space), vec![2, 3, 1]);
         assert!(!space.reorder_column(1, 1), "same index is a no-op");
-        assert!(!space.reorder_column(9, 0), "out-of-range source is a no-op");
+        assert!(
+            !space.reorder_column(9, 0),
+            "out-of-range source is a no-op"
+        );
     }
 
     #[test]
@@ -1174,10 +1180,17 @@ mod tests {
         // `col.width` — the resize must NOT be recomputed away (the niri landmine).
         space.update_all_column_widths();
         assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7));
-        assert_eq!(space.column_widths[0], w0, "recompute preserves the manual resize");
+        assert_eq!(
+            space.column_widths[0], w0,
+            "recompute preserves the manual resize"
+        );
         // Adding a column must not reflow column 0 (independent proportions).
         space.add_column(None, test_column(3, ColumnWidth::Proportion(0.5)), true);
-        assert_eq!(space.columns[0].width, ColumnWidth::Proportion(0.7), "resize survives add");
+        assert_eq!(
+            space.columns[0].width,
+            ColumnWidth::Proportion(0.7),
+            "resize survives add"
+        );
     }
 
     #[test]
@@ -1189,7 +1202,10 @@ mod tests {
         space.resize_column(1, -10.0);
         match space.columns[1].width {
             ColumnWidth::Proportion(p) => {
-                assert!(p > 0.0 && p < 0.5, "clamped to a small but non-zero min, got {p}");
+                assert!(
+                    p > 0.0 && p < 0.5,
+                    "clamped to a small but non-zero min, got {p}"
+                );
             }
             other => panic!("expected a proportion, got {other:?}"),
         }

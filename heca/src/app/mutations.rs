@@ -131,7 +131,8 @@ pub(crate) fn move_pane_to_workspace_column(
             // Stack into the existing target column (split with its panes).
             if let Some(ws) = state.session.active_workspace_mut() {
                 let pane_idx = ws.scrolling.columns[target_col].panes.len();
-                ws.scrolling.add_pane_to_column(target_col, Some(pane_idx), pane, true);
+                ws.scrolling
+                    .add_pane_to_column(target_col, Some(pane_idx), pane, true);
                 state.focused_pane = Some(pane_id);
             }
         } else {
@@ -313,12 +314,10 @@ pub(crate) fn move_column_to_workspace(
             ws.scrolling.add_column(None, placeholder_col, true);
         }
         let (cols, rows) = terminal_grid_for_workspace(state, current_ws);
-        state
-            .backends
-            .insert_for_pane(
-                PaneId(next_id),
-                create_terminal_backend_for_state(state, cols, rows),
-            );
+        state.backends.insert_for_pane(
+            PaneId(next_id),
+            create_terminal_backend_for_state(state, cols, rows),
+        );
     }
 
     state.session.switch_to_workspace(target_ws);
