@@ -254,7 +254,7 @@ impl Component for Modal {
             // Panel: surface fill + the shared Pane/DockFrame corner-bracket
             // reticle frame (matches the linked GridCN modal — no plain border).
             cx.rect(r.panel, surface, None, radius, None);
-            cx.bracket_frame(r.panel, Some(surface));
+            cx.bracket_frame(r.panel);
             cx.text(r.title, &self.title, foreground, self.base.font, TextAlign::Start, true);
             cx.text(r.message, &self.message, muted, self.base.font, TextAlign::Start, false);
 

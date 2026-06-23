@@ -6,7 +6,7 @@
 //! |------|--------|
 //! | [`PaneFrame::None`] | Background fill only — no border, no brackets |
 //! | [`PaneFrame::Bordered`] | A clean border from `style.border` |
-//! | [`PaneFrame::Bracketed`] | `style.border` + accent corner brackets on top |
+//! | [`PaneFrame::Bracketed`] | The self-contained accent corner-bracket reticle (no `style.border`) |
 //!
 //! Default mode is [`PaneFrame::Bordered`] — a fill-only container that
 //! becomes a bordered panel once `.border(color, width)` is called.
@@ -35,8 +35,10 @@ pub enum PaneFrame {
     /// A clean border from `style.border` (set via `.border(color, width)`).
     /// No corner brackets.
     Bordered,
-    /// `style.border` + accent corner brackets on top (the classic
-    /// bracket-framed look).
+    /// The self-contained accent corner-bracket reticle drawn by
+    /// [`PaintCx::bracket_frame`](crate::PaintCx::bracket_frame): bright rounded
+    /// corners with short arms over a dimmed continuous line. Does **not** also
+    /// draw `style.border` — that would wash the reticle into a plain border.
     Bracketed,
 }
 
@@ -133,14 +135,15 @@ impl Component for Pane {
                 }
             }
             PaneFrame::Bracketed => {
-                // Fill + style.border + bracket accents on top.
-                let border = self.base.style.border;
+                // Fill only; the frame is the self-contained corner-bracket reticle
+                // drawn by `bracket_frame` (bright rounded corners + a dimmed
+                // continuous line) — matching Modal/Toast. Drawing a full
+                // `style.border` here too would wash the reticle into a plain
+                // border (indistinguishable from `Bordered`).
                 if let Some(f) = fill {
-                    cx.rect(b, f, border, radius, self.base.style.glow);
-                } else if border.is_some() {
-                    cx.rect(b, Color::TRANSPARENT, border, radius, None);
+                    cx.rect(b, f, None, radius, self.base.style.glow);
                 }
-                cx.bracket_frame(b, fill);
+                cx.bracket_frame(b);
             }
         }
 

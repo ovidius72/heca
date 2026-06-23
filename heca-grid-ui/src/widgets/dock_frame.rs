@@ -293,7 +293,7 @@ impl Component for DockFrame {
         // Prominent flat corner-bracket frame (shared with Pane) — unless frameless
         // (hosted inside an already-framed container, e.g. a sidebar shell).
         if !self.frameless {
-            cx.bracket_frame(b, fill);
+            cx.bracket_frame(b);
         }
 
         // Header + body draw themselves; a collapsed (hidden) body is skipped so

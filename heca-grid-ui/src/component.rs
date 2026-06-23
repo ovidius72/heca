@@ -436,17 +436,16 @@ const CULL_MARGIN: f64 = 96.0;
 const BRACKET_ARM_LEN: f32 = 12.0;
 /// Bright corner brackets are drawn thicker than the subtle border for emphasis.
 const BRACKET_WIDTH_MUL: f32 = 2.0;
-/// Alpha of the fill-colored overlay used to dim the straight border midsections.
-/// ~0.7 over the bright accent border leaves a ~30% accent line — matching the
-/// subtle continuous border, while the corners stay fully bright.
-const BRACKET_STRAIGHT_DIM: u8 = 178;
-/// With box borders off (`border_width == 0`) a container still needs definition,
-/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline
-/// (these are its width + alpha) instead of the reticle — whose corners vanish
-/// when the bright stroke collapses. The alpha matches the ~30% the straight
-/// midsections dim to at `border_width > 0`, so the two cases read consistently.
-const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
+/// Alpha of the subtle continuous accent line that traces the whole perimeter of
+/// a [`PaintCx::bracket_frame`] — the dimmed "midsection" the bright corners sit
+/// on top of. ~0.31 leaves a faint accent hairline. Reused for the
+/// `border_width == 0` fallback below so the two cases read consistently.
 const BRACKET_HAIRLINE_ALPHA: u8 = 80;
+/// With box borders off (`border_width == 0`) a container still needs definition,
+/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline at
+/// this width instead of the reticle — whose bright corners vanish when the
+/// stroke collapses to nothing.
+const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
@@ -789,16 +788,14 @@ impl<'a> PaintCx<'a> {
 
     /// Draw the prominent **flat corner-bracket frame** used by container chrome
     /// ([`Pane`](crate::widgets::Pane), [`DockFrame`](crate::widgets::DockFrame)):
-    /// a bright accent border tracing the full rounded perimeter, with the
-    /// straight midsection of each edge dimmed back to a subtle ~30% line — so
-    /// only the rounded corners plus a short arm stay bright. `fill` is the
-    /// container's own fill (used to color the dimming overlay so it blends in);
-    /// it falls back to the theme background. DRY: the frame is defined once here
-    /// instead of per-widget.
-    pub fn bracket_frame(&mut self, rect: Rectangle, fill: Option<Color>) {
-        let (accent, background, radius, border_width) = {
+    /// a subtle continuous accent hairline tracing the full rounded perimeter,
+    /// with bright thick accent **corners** (rounded arc + a short straight arm
+    /// along each edge) layered on top — the Tron reticle. DRY: the frame is
+    /// defined once here instead of per-widget.
+    pub fn bracket_frame(&mut self, rect: Rectangle) {
+        let (accent, radius, border_width) = {
             let t = self.theme;
-            (t.accent, t.background, t.radius, t.border_width)
+            (t.accent, t.radius, t.border_width)
         };
         let b = rect;
 
@@ -821,36 +818,42 @@ impl<'a> PaintCx<'a> {
             return;
         }
 
-        // Bright accent border tracing the full rounded perimeter. The renderer's
-        // bracket primitive only draws square 90° corners, so instead of brackets
-        // we draw a full rounded border (which has the radius) and then dim its
-        // straight midsections — leaving the rounded corners + short arms bright.
-        let bracket_width = border_width * BRACKET_WIDTH_MUL;
+        // Subtle continuous accent line tracing the whole rounded perimeter — the
+        // dimmed "midsection" that the bright corners sit on top of.
         self.rect(
             b,
             Color::TRANSPARENT,
-            Some(Border { color: accent, width: bracket_width }),
+            Some(Border {
+                color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
+                width: border_width,
+            }),
             radius,
             None,
         );
 
-        // Dim the straight midsection of each edge back to a subtle ~30% line, so
-        // only the rounded corners (plus a `BRACKET_ARM_LEN` arm) stay bright. The
-        // overlay is the fill (or background) color at ~0.7 alpha, with no glow.
-        let cover = fill.unwrap_or(background).with_alpha(BRACKET_STRAIGHT_DIM);
+        // Bright thick corner brackets. The renderer draws the accent border as a
+        // band just OUTSIDE the rect edge, carrying the theme corner radius — so
+        // redrawing that same border clipped to a corner-sized box yields a bright
+        // *rounded* corner plus a short straight arm along each edge, without
+        // faking the rounding. `keep` is the bright span from each corner (rounded
+        // arc + `BRACKET_ARM_LEN`); `m` grows the clip box outward so it also
+        // captures the outer border band hugging the corner.
+        let bracket_width = border_width * BRACKET_WIDTH_MUL;
         let keep = f64::from(radius + BRACKET_ARM_LEN);
-        let t = f64::from(bracket_width) + 1.0;
+        let m = f64::from(bracket_width);
         let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);
+        let bright = Border { color: accent, width: bracket_width };
 
-        let mid_w = w - 2.0 * keep;
-        if mid_w > 0.0 {
-            self.rect(Rectangle::new(Point::new(x + keep, y), Size::new(mid_w, t)), cover, None, 0.0, None);
-            self.rect(Rectangle::new(Point::new(x + keep, y + h - t), Size::new(mid_w, t)), cover, None, 0.0, None);
-        }
-        let mid_h = h - 2.0 * keep;
-        if mid_h > 0.0 {
-            self.rect(Rectangle::new(Point::new(x, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
-            self.rect(Rectangle::new(Point::new(x + w - t, y + keep), Size::new(t, mid_h)), cover, None, 0.0, None);
+        let corners = [
+            Point::new(x - m, y - m),               // top-left
+            Point::new(x + w - keep, y - m),        // top-right
+            Point::new(x - m, y + h - keep),        // bottom-left
+            Point::new(x + w - keep, y + h - keep), // bottom-right
+        ];
+        for loc in corners {
+            self.with_clip(Rectangle::new(loc, Size::new(keep + m, keep + m)), |cx| {
+                cx.rect(b, Color::TRANSPARENT, Some(bright), radius, None);
+            });
         }
     }
 

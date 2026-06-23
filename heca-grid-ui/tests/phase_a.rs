@@ -2770,28 +2770,33 @@ fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
     let rects: Vec<_> = scene.iter().filter_map(|c| match c {
         DrawCommand::Rect(r) => Some(*r),
         _ => None,
     }).collect();
-    assert_eq!(rects.len(), 1, "border=0 frame is one uniform hairline (no dim-edge overlays)");
+    assert_eq!(rects.len(), 1, "border=0 frame is one uniform hairline (no reticle corners)");
     assert!(rects[0].border.is_some_and(|b| b.width > 0.0), "the hairline is solid + visible");
 
-    // With a real border the bright accent reticle (+ dim midsection overlays) returns.
+    // With a real border: one dimmed continuous accent line tracing the perimeter,
+    // plus four bright accent corners — each redrawn clipped to its corner box.
     theme.border_width = 2.0;
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
-    let bright = scene.iter().any(|c| matches!(
+    let bright_corners = scene.iter().filter(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    )).count();
+    let dim_line = scene.iter().any(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.accent.a && b.width > 0.0)
     ));
-    let n_rects = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
-    assert!(bright, "border>0 draws the bright accent reticle border");
-    assert!(n_rects > 1, "border>0 also dims the straight midsections (overlay rects)");
+    let clips = scene.iter().filter(|c| matches!(c, DrawCommand::PushClip(_))).count();
+    assert_eq!(bright_corners, 4, "border>0 draws four bright accent corner brackets");
+    assert!(dim_line, "border>0 traces a dimmed continuous accent line under the corners");
+    assert_eq!(clips, 4, "each bright corner is clipped to its own corner box");
 }
 
 /// Paint `w` under `border_width == 0` and return every visible (width>0) Rect

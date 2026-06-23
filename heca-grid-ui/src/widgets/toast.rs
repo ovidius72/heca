@@ -329,7 +329,7 @@ impl Component for Toast {
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79).
         cx.rect(b, surface.lerp(tone, TINT_ALPHA as f32 / 255.0), None, card_radius, None);
-        cx.bracket_frame(b, Some(surface));
+        cx.bracket_frame(b);
 
         // Leading severity icon (single-layer, toned).
         if let (Some(ir), Some(ch)) = (r.icon, self.icon.unwrap_or(self.severity.default_glyph()).primary_char()) {
