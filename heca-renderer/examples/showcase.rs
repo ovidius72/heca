@@ -647,15 +647,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     1,
                     Item::new("VIEW PROFILE")
                         .marker(ActiveMarker::Bar)
-                        .trailing(Label::new("CMD P").color(theme.muted).font_scale(0.8))
-                        .trailing_bordered(true),
+                        .trailing(Tag::new("CMD P")),
                 ))
                 .child(select(
                     2,
                     Item::new("SETTINGS")
                         .marker(ActiveMarker::Bar)
-                        .trailing(Label::new("CMD ,").color(theme.muted).font_scale(0.8))
-                        .trailing_bordered(true),
+                        .trailing(Tag::new("CMD ,")),
                 ))
                 .child(
                     Item::new("SYSTEM")
@@ -1188,9 +1186,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     Flex::row()
                         .align(Align::Center)
                         .gap(18.0)
-                        .child(Label::new(display_shortcut("prefix+f")).color(theme.foreground).bold(true))
-                        .child(Label::new(display_shortcut("prefix+q")).color(theme.foreground).bold(true))
-                        .child(Label::new(display_shortcut("prefix+Shift+c")).color(theme.foreground).bold(true)),
+                        .child(Tag::new(display_shortcut("prefix+f")))
+                        .child(Tag::new(display_shortcut("prefix+q")))
+                        .child(Tag::new(display_shortcut("prefix+Shift+c"))),
                 )
                 .child(
                     Label::new("(config token stays \"prefix+…\")")
