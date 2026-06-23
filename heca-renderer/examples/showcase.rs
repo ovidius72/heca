@@ -121,7 +121,13 @@ const PREFIX_SYMBOL: &str = "λ";
 /// [`PREFIX_SYMBOL`]. Pass the real combo (the config/parse form, e.g. `"prefix+f"`)
 /// — the stored binding is unchanged; only the rendered text substitutes the symbol.
 fn display_shortcut(combo: &str) -> String {
-    combo.replace("prefix", PREFIX_SYMBOL)
+    // The prefix is a *sequence* (press prefix, then the key), so join it with a
+    // space — not "+", which would imply a simultaneous chord. Modifier chords
+    // inside the key (e.g. "Shift+c") keep their own "+".
+    match combo.strip_prefix("prefix+") {
+        Some(rest) => format!("{PREFIX_SYMBOL} {rest}"),
+        None => combo.to_string(),
+    }
 }
 
 /// Theme names loadable via `heca_theme::load_theme`, in cycle order.
