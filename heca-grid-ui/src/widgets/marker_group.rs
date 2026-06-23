@@ -174,7 +174,11 @@ impl Component for MarkerGroup {
         } else {
             (accent.with_alpha(INACTIVE_BAR_ALPHA), None)
         };
-        cx.rect(bar, color, None, (bar_w / 2.0) as f32, glow);
+        // Radius from the theme token (small-control radius) — not a hardcoded
+        // width/2 literal — so `border_radius` in config / `prefix+Shift+r` reflows
+        // the bar. The SDF path clamps radius to half the bar width, so default themes
+        // still render a pill; a sharp theme (border_radius 0) makes it square.
+        cx.rect(bar, color, None, cx.theme().control_radius(), glow);
 
         // Children paint on top of (right of) the gutter.
         for child in &self.base.children {
