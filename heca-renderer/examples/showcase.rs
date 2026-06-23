@@ -113,6 +113,10 @@ const ZOOM_STEP: f32 = 0.25;
 
 const APP_TITLE: &str = "heca-grid-ui showcase";
 
+/// How the keybinding "prefix" is *displayed* (the config/parse token stays "prefix").
+/// Single source of truth — change it here, not at each call site.
+const PREFIX_SYMBOL: &str = "λ";
+
 /// Theme names loadable via `heca_theme::load_theme`, in cycle order.
 const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 
@@ -243,11 +247,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Right-click anywhere to open it at the cursor. Entries carry an icon and a
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut("λ $"))
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(format!("{PREFIX_SYMBOL} $")))
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
         .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
         .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut("λ x"));
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(format!("{PREFIX_SYMBOL} x")));
     let menu_open = menu.open_signal();
     let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control
@@ -1166,14 +1170,14 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // stays "prefix+…"; only the rendered shortcut uses λ.
             let prefix_demo = Flex::column()
                 .gap(8.0)
-                .child(Label::new("PREFIX AS SYMBOL — λ").color(theme.muted).font_scale(0.82))
+                .child(Label::new(format!("PREFIX AS SYMBOL — {PREFIX_SYMBOL}")).color(theme.muted).font_scale(0.82))
                 .child(
                     Flex::row()
                         .align(Align::Center)
                         .gap(18.0)
-                        .child(Label::new("λ f").color(theme.foreground).bold(true))
-                        .child(Label::new("λ q").color(theme.foreground).bold(true))
-                        .child(Label::new("λ ⇧c").color(theme.foreground).bold(true)),
+                        .child(Label::new(format!("{PREFIX_SYMBOL} f")).color(theme.foreground).bold(true))
+                        .child(Label::new(format!("{PREFIX_SYMBOL} q")).color(theme.foreground).bold(true))
+                        .child(Label::new(format!("{PREFIX_SYMBOL} ⇧c")).color(theme.foreground).bold(true)),
                 )
                 .child(
                     Label::new("(config token stays \"prefix+…\")")
