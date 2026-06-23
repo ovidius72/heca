@@ -496,8 +496,10 @@ at natural) and the next paint re-applies it from scratch.
   viewport per notch (viewport-proportional, so a small sidebar doesn't
   overshoot); the auto-shown scrollbar **thumb is draggable**.
 - **Traits**: `LayoutExt`, `Parent`.
-- **v1**: vertical-only; thumb colored from `theme.muted`. Horizontal scroll and
-  a dedicated scrollbar token are future work.
+- **v1**: vertical-only; the thumb is a theme-**accent** grip that brightens on
+  hover/drag (mirroring `MarkerGroup`'s grip bar) and sits in a wider invisible
+  grab lane (16px) so a thin 8px thumb is easy to click. Horizontal scroll and a
+  dedicated scrollbar color token are future work.
 
 ```rust
 let mut list = ScrollRegion::new().height(Length::Px(180.0)).width(Length::Px(300.0));

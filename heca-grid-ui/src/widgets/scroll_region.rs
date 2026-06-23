@@ -26,22 +26,34 @@
 //! offset is also exposed as a reactive [`Signal<f32>`] the host can read or
 //! drive directly.
 //!
-//! v1 is vertical-only and the thumb is theme-colored (`muted`); a distinct
-//! scrollbar color token and horizontal scrolling are future work.
+//! v1 is vertical-only; the thumb is a theme-**accent** grip that brightens on
+//! hover/drag (mirroring [`MarkerGroup`](crate::widgets::MarkerGroup)'s grip bar)
+//! and sits in a wider invisible grab lane so a thin thumb is easy to click. A
+//! distinct scrollbar color token and horizontal scrolling are future work.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::color::Color;
 use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::Direction;
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Scrollbar thumb width (logical px).
+/// Visible scrollbar thumb width (logical px).
 const SCROLLBAR_W: f64 = 8.0;
 /// Gap between the scrollbar and the content edge.
 const SCROLLBAR_PAD: f64 = 2.0;
+/// Grab lane width (logical px): the visible thumb is `SCROLLBAR_W`, but the
+/// click/hover target is this wide (centered on the right edge) so a thin thumb
+/// is still easy to grab — mirrors [`MarkerGroup`](crate::widgets::MarkerGroup)'s
+/// `GRIP_W` invisible grab padding around its thin bar. Without it the 8px thumb
+/// misses clicks too often.
+const THUMB_HIT_W: f64 = 16.0;
 /// Minimum thumb height so a very long list still has a grabbable thumb.
 const MIN_THUMB: f64 = 24.0;
+/// Thumb alpha at rest — dim accent (reads as "there's more content").
+const THUMB_REST_ALPHA: u8 = 90;
+/// Thumb alpha when hovered or dragged — brightened to read as grabbable, the
+/// same affordance as [`MarkerGroup`](crate::widgets::MarkerGroup)'s grip bar.
+const THUMB_HOVER_ALPHA: u8 = 200;
 /// Wheel step as a fraction of the viewport height per "line" of delta. The
 /// winit wheel delta is already in lines, so one notch (delta ≈ 1) scrolls ~10%
 /// of the viewport — gentle in a small sidebar, scales up for a tall one. (The
@@ -81,6 +93,10 @@ pub struct ScrollRegion {
     /// `PointerMoved`/`PointerPressed`; gates `Event::Scroll` so an inline
     /// region only swallows the wheel when actually hovered.
     hovered: bool,
+    /// Whether the cursor is over the scrollbar thumb's grab lane. Drives the
+    /// hover affordance (the thumb brightens, like [`MarkerGroup`](crate::widgets::MarkerGroup)'s
+    /// grip bar).
+    thumb_hovered: bool,
 }
 
 impl ScrollRegion {
@@ -94,6 +110,7 @@ impl ScrollRegion {
             applied_offset: 0.0,
             thumb_grab: None,
             hovered: false,
+            thumb_hovered: false,
         }
     }
 
@@ -165,6 +182,20 @@ impl ScrollRegion {
         ))
     }
 
+    /// The thumb's **grab lane** — the visible 8px thumb centered inside a wider
+    /// `THUMB_HIT_W` click/hover target at the right edge (at the thumb's y), so a
+    /// thin thumb is still easy to grab. `None` when not scrollable. Used for
+    /// press/hover hit-testing; [`thumb_rect`](Self::thumb_rect) is the painted
+    /// (thin) thumb.
+    fn thumb_hit_rect(&self) -> Option<Rectangle> {
+        let t = self.thumb_rect()?;
+        let lane_x = self.base.bounds.loc.x + self.base.bounds.size.w - THUMB_HIT_W;
+        Some(Rectangle::new(
+            Point::new(lane_x, t.loc.y),
+            Size::new(THUMB_HIT_W, t.size.h),
+        ))
+    }
+
     /// Bake the current `scroll_offset` into the children's bounds. Shifts each
     /// direct child's subtree by `applied_offset − scroll_offset` so the bounds
     /// end at `natural − scroll_offset` (the visual position). Idempotent when
@@ -219,8 +250,17 @@ impl Component for ScrollRegion {
             }
         });
         // Scrollbar thumb on top, in viewport space (not scrolled with content).
+        // Theme-driven hover affordance (mirrors MarkerGroup's grip bar): the
+        // thumb is a dim accent at rest, brightens when its grab lane is hovered,
+        // and is full-bright while dragged — reading as "grab here".
         if let Some(t) = self.thumb_rect() {
-            cx.rect(t, scrollbar_thumb_color(cx), None, (SCROLLBAR_W / 2.0) as f32, None);
+            let alpha = if self.thumb_grab.is_some() || self.thumb_hovered {
+                THUMB_HOVER_ALPHA
+            } else {
+                THUMB_REST_ALPHA
+            };
+            let color = cx.theme().accent.with_alpha(alpha);
+            cx.rect(t, color, None, (SCROLLBAR_W / 2.0) as f32, None);
         }
     }
 
@@ -248,12 +288,16 @@ impl Component for ScrollRegion {
             }
             Event::PointerPressed { pos } => {
                 self.hovered = vp.contains(*pos);
-                if let Some(t) = self.thumb_rect()
-                    && t.contains(*pos)
+                // Grab the thumb via its wider hit lane (the thin visible thumb is
+                // easy to miss); `thumb_grab` stores the grab point relative to the
+                // *visible* thumb top so the cursor stays pinned to it.
+                if let Some(hit) = self.thumb_hit_rect()
+                    && hit.contains(*pos)
                 {
-                    // Grab the thumb: remember where in the thumb the press
-                    // landed so the grab point tracks the cursor.
+                    let t = self.thumb_rect().expect("scrollable: thumb exists");
                     self.thumb_grab = Some(pos.y - t.loc.y);
+                    self.thumb_hovered = true;
+                    self.base.mark_needs_paint();
                     return Handled::Yes;
                 }
                 if self.hovered {
@@ -266,9 +310,14 @@ impl Component for ScrollRegion {
             }
             Event::PointerMoved { pos } => {
                 self.hovered = vp.contains(*pos);
+                // Track thumb-lane hover for the highlight affordance. A drag in
+                // progress keeps handling moves even after the cursor leaves.
+                let lane_hit = self.thumb_hit_rect().is_some_and(|h| h.contains(*pos));
+                if lane_hit != self.thumb_hovered {
+                    self.thumb_hovered = lane_hit;
+                    self.base.mark_needs_paint();
+                }
                 if let Some(grab) = self.thumb_grab {
-                    // Drag in progress — keep handling even if the cursor leaves
-                    // the region. Derive the offset from the thumb top under cursor.
                     let content_h = self.content_extent();
                     let max_off = (content_h - vp.size.h).max(0.0);
                     let track_h = vp.size.h;
@@ -289,6 +338,9 @@ impl Component for ScrollRegion {
             }
             Event::PointerReleased { .. } => {
                 if self.thumb_grab.take().is_some() {
+                    // Drag ended: the thumb may go from drag-bright to rest if the
+                    // cursor is no longer over the lane, so repaint.
+                    self.base.mark_needs_paint();
                     return Handled::Yes;
                 }
                 // Route the release to children regardless of hover: a press
@@ -313,10 +365,6 @@ fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
     }
 }
 
-/// Thumb color: the theme's `muted` token.
-fn scrollbar_thumb_color(cx: &PaintCx) -> Color {
-    cx.theme().muted
-}
 
 impl LayoutExt for ScrollRegion {}
 impl Parent for ScrollRegion {}
@@ -364,6 +412,39 @@ mod tests {
         let t = r.thumb_rect().expect("scrollable → thumb");
         assert!((t.size.h - (100.0 / 120.0 * 100.0)).abs() < 1e-6);
         assert!(t.loc.y.abs() < 1e-6);
+    }
+
+    #[test]
+    fn thumb_hit_lane_is_wider_than_the_visible_thumb_and_contains_it() {
+        // Regression guard for "thumb misses clicks": the grab lane must be wider
+        // than the thin visible thumb and must contain it, so a click near the
+        // thumb still grabs.
+        let r = region_with_children(&[60.0, 60.0]);
+        let t = r.thumb_rect().expect("scrollable → thumb");
+        let hit = r.thumb_hit_rect().expect("scrollable → hit lane");
+        assert!(hit.size.w > t.size.w, "hit lane is wider than the visible thumb");
+        assert_eq!(hit.size.w as i32, THUMB_HIT_W as i32);
+        // The visible thumb sits inside the lane horizontally.
+        assert!(t.loc.x >= hit.loc.x - 0.001);
+        assert!(t.loc.x + t.size.w <= hit.loc.x + hit.size.w + 0.001);
+        // Same vertical span.
+        assert!((hit.loc.y - t.loc.y).abs() < 1e-6);
+        assert!((hit.size.h - t.size.h).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pressing_in_the_hit_lane_but_off_the_visible_thumb_still_grabs() {
+        // A click in the grab padding (left of the thin thumb, inside the wider
+        // lane) must still start a drag — the original 8px thumb missed these.
+        let mut r = region_with_children(&[60.0, 60.0]);
+        let t = r.thumb_rect().expect("scrollable → thumb");
+        // A point just left of the visible thumb, inside the hit lane.
+        let pos = Point::new(t.loc.x - 4.0, t.loc.y + 4.0);
+        assert!(r.thumb_hit_rect().unwrap().contains(pos), "pos is in the hit lane");
+        assert!(!t.contains(pos), "pos is NOT on the thin visible thumb");
+        let handled = r.event(&Event::PointerPressed { pos });
+        assert_eq!(handled, Handled::Yes, "press in the lane grabs the thumb");
+        assert!(r.thumb_grab.is_some(), "a drag started");
     }
 
     #[test]
