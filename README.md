@@ -137,6 +137,7 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 - **Prefix timeout**: 500ms — if you don't press a key, prefix mode exits automatically.
 - **Double prefix**: pressing the configured prefix twice sends the literal configured prefix key to the focused pane (for example `Ctrl+B Ctrl+B` → `Ctrl+B`, `Ctrl+A Ctrl+A` → `Ctrl+A`).
 - **Bare modifiers**: Holding Shift/Ctrl/Alt alone in prefix mode does nothing — wait for the actual key.
+- **Display symbol**: in the UI (context menus, hints) the prefix is shown as the symbol **`λ`** — e.g. `prefix+f` renders as `λ f`. This is display-only: config and keybinding strings keep the literal `prefix` token. The substitution lives in one helper, `heca::shortcut::format_shortcut(keys, with_prefix)` (change the symbol there).
 
 ### Navigation
 

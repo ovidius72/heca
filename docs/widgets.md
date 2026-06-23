@@ -1063,6 +1063,12 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
 > (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
 
+> **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
+> `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
+> `heca::shortcut::format_shortcut(keys, with_prefix)` — e.g. `format_shortcut("prefix+x", true)` →
+> `"λ x"`. Feed that into `.shortcut(...)` so the symbol/formatting live in one place (the showcase
+> mirrors this with its own `display_shortcut`).
+
 ### ToastStack
 
 An overlay that arranges a **host-supplied** set of notifications into a corner stack. **Presentation
