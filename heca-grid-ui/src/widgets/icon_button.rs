@@ -22,8 +22,6 @@ use crate::widgets::Icon;
 const DEFAULT_PAD: f32 = 8.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
-/// Border width of the hover frame.
-const BORDER_W: f32 = 1.3;
 /// Peak alpha of the hover fill (tone-tinted) and border.
 const HOVER_FILL_ALPHA: f32 = 28.0;
 const HOVER_BORDER_ALPHA: f32 = 190.0;
@@ -157,9 +155,9 @@ impl Component for IconButton {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (accent, glow_c, ctrl_radius) = {
+        let (accent, glow_c, ctrl_radius, border_width, focus_border_width) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.control_radius())
+            (t.accent, t.glow, t.control_radius(), t.border_width, t.focus_border_width)
         };
         let tone = self.tone.unwrap_or(accent);
         let p = self.progress.clamp(0.0, 1.0);
@@ -184,13 +182,14 @@ impl Component for IconButton {
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY * glow_amt,
             });
-            cx.rect(
-                b,
-                tone.with_alpha(fill_a as u8),
-                Some(Border { color: tone.with_alpha(border_a as u8), width: BORDER_W }),
-                radius,
-                g,
-            );
+            // Frame line width: when `active` (a held-on *status*, i.e. a selection
+            // cue) use `focus_border_width` so it stays visible even with decorative
+            // borders off; a transient hover frame follows the global `border_width`
+            // and vanishes at 0. The tone-tinted fill stays either way.
+            let line_w = if self.active { focus_border_width } else { border_width };
+            let frame_border = (line_w > 0.0)
+                .then_some(Border { color: tone.with_alpha(border_a as u8), width: line_w });
+            cx.rect(b, tone.with_alpha(fill_a as u8), frame_border, radius, g);
         }
 
         // The icon itself.

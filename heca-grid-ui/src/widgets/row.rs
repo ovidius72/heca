@@ -38,8 +38,6 @@ const HOVER_TINT_ALPHA: u8 = 40;
 /// Alpha of the crisp same-hue border drawn around the *active* pill — the main
 /// cue that distinguishes a selected row from a merely tinted/hovered one.
 const ACTIVE_BORDER_ALPHA: u8 = 180;
-/// Width of the active pill's border (logical px).
-const ACTIVE_BORDER_W: f32 = 1.3;
 /// Number of flashes a `needs attention` pulse plays.
 const ATTENTION_PULSES: u32 = 4;
 /// Peak glow radius (logical px) of the attention pulse border.
@@ -170,9 +168,9 @@ impl Component for Row {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.control_radius())
+            (t.accent, t.glow, t.foreground, t.control_radius(), t.focus_border_width)
         };
         let b = self.base.bounds;
 
@@ -207,7 +205,7 @@ impl Component for Row {
             cx.rect(
                 sel,
                 fill,
-                Some(Border { color: edge, width: ACTIVE_BORDER_W }),
+                Some(Border { color: edge, width: sel_border_w }),
                 sel_radius,
                 None,
             );
@@ -283,7 +281,7 @@ impl Component for Row {
             cx.rect(
                 b,
                 c.with_alpha((40.0 * attn) as u8),
-                Some(Border { color: c.with_alpha((235.0 * attn) as u8), width: ACTIVE_BORDER_W }),
+                Some(Border { color: c.with_alpha((235.0 * attn) as u8), width: sel_border_w }),
                 radius,
                 Some(Glow { color: c, radius: ATTENTION_GLOW_RADIUS, intensity: attn }),
             );

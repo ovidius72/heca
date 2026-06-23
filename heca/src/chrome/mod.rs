@@ -1396,7 +1396,6 @@ fn build_sidebar_shell(
                         .padding(10.0)
                         .gap(8.0)
                         .background(shell_bg)
-                        .border(theme.border, theme.border_width)
                         .child(header)
                         .child(build_workspaces_container(
                             tree,
@@ -1447,7 +1446,6 @@ fn build_right_sidebar_shell(
                         .padding(10.0)
                         .gap(8.0)
                         .background(shell_bg)
-                        .border(theme.border, theme.border_width)
                         .child(header),
                 ),
         )
@@ -1670,6 +1668,9 @@ fn app_theme_to_gui_theme(
         font_size: font_config.size.ui,
         radius: theme.border_radius,
         border_width: theme.border_width,
+        // TODO: map from config `focus_border_width` once added to heca-theme; for
+        // now the affordance outlines (focus ring + selection) keep a visible default.
+        focus_border_width: 1.5,
         glow_size: glow_level_to_gui(theme.glow_size),
         intensity: intensity_to_gui(theme.intensity),
         show_focus_border: theme.show_focus_border,

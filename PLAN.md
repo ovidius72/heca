@@ -224,6 +224,32 @@ vis/width, `input_mode` candidates, the `ChromeSinks` `Rc<Cell>` stopgap; drag s
 - **Collapsed sidebar rail** still legacy hand-drawn + `sidebar_hit_test` (only EXPANDED is grid-ui).
 - **Sidebar buttons** (`+w/+c/+p`, workspace/column clicks) not wired (button_hitboxes unused).
 - **NSWindow vibrancy console warning** — benign (memory `heca-nswindow-vibrancy-warning`); address.
+- **Border consistency — `border_width` is not a single source of truth (user-reported 2026-06-23).**
+  Symptoms the user saw: with the global **BORDER = 0**, notifications (`Toast`), `Modal`, and
+  `Bracketed` panes **still show a (hairline) border**, and the showcase demo panes keep a 2px border;
+  and raising BORDER **adds no border** to the default `DASHBOARD` `Pane`. Root cause = three disagreeing
+  border paths:
+  1. **`theme.border_width`-driven** (Button, Input, Select, Checkbox, Tag, Card; `PaintCx::border()`
+     at `component.rs:567` returns `None` when width 0) — already correct: 0 ⇒ none. ✅
+  2. **`PaintCx::bracket_frame`** (`component.rs`, used by Toast `toast.rs:332`, Modal `modal.rs:257`,
+     `Pane::Bracketed` `pane.rs:143`): at `border_width == 0` it falls back to a **solid hairline**
+     (`BRACKET_HAIRLINE_WIDTH`/`BRACKET_HAIRLINE_ALPHA`) so the container "stays framed" → this is why
+     Toast/Modal/Bracketed keep a border at 0.
+  3. **Hardcoded literal widths in the showcase** (`heca-renderer/examples/showcase.rs` lines ~762, 771,
+     793, 819: `.border(theme.accent, 2.0)`) — ignore the global BORDER control entirely.
+  Plus: a `Bordered` `Pane` draws `style.border` (per-widget, from `.border(color,width)`), so a pane
+  with no explicit `.border()` (the DASHBOARD pane, `showcase.rs:635`) never shows a border regardless
+  of the global setting.
+  **Proposed consistent model (NOT yet built — user chose "plan, don't code" 2026-06-23):**
+  `theme.border_width` becomes the one global control; **`border_width == 0` ⇒ no border anywhere**
+  (drop the `bracket_frame` hairline fallback **and** update the test
+  `bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners` in `tests/phase_a.rs` which
+  currently asserts the hairline); container border **width always comes from `theme.border_width`**
+  (widgets pick only the color; a `Bordered` pane with no explicit color uses the theme border color);
+  showcase reads `theme.border_width` instead of literal `2.0`. **Open decision before building:** does
+  an explicit `.border(color, width)` still override the global width, or is width always theme-driven?
+  Ties into the planned config (memory `border-style-config-options`: `sidebar_border_style` /
+  `pane_border_style`). Separate from the bracket reticle fix on branch `fix/bracket-frame-render`.
 - **Split `heca/src/app/render.rs`** into a `render/` folder — *do at the end, its own PR, not
   mid-feature.* **Partly done by #121** (the terminal pass is already extracted to
   `app/terminal_render.rs` — `PaneRenderState`, `paint_terminal_pane_shell`, `render_terminal_mount`,

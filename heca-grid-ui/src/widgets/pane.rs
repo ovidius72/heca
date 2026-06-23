@@ -6,7 +6,7 @@
 //! |------|--------|
 //! | [`PaneFrame::None`] | Background fill only — no border, no brackets |
 //! | [`PaneFrame::Bordered`] | A clean border from `style.border` |
-//! | [`PaneFrame::Bracketed`] | `style.border` + accent corner brackets on top |
+//! | [`PaneFrame::Bracketed`] | The self-contained accent corner-bracket reticle (no `style.border`) |
 //!
 //! Default mode is [`PaneFrame::Bordered`] — a fill-only container that
 //! becomes a bordered panel once `.border(color, width)` is called.
@@ -35,8 +35,10 @@ pub enum PaneFrame {
     /// A clean border from `style.border` (set via `.border(color, width)`).
     /// No corner brackets.
     Bordered,
-    /// `style.border` + accent corner brackets on top (the classic
-    /// bracket-framed look).
+    /// The self-contained accent corner-bracket reticle drawn by
+    /// [`PaintCx::bracket_frame`](crate::PaintCx::bracket_frame): bright rounded
+    /// corners with short arms over a dimmed continuous line. Does **not** also
+    /// draw `style.border` — that would wash the reticle into a plain border.
     Bracketed,
 }
 
@@ -124,8 +126,20 @@ impl Component for Pane {
                 }
             }
             PaneFrame::Bordered => {
-                // Fill + clean border from style.border.
-                let border = self.base.style.border;
+                // A clean border whose WIDTH always comes from the live
+                // `theme.border_width` (the global border control) — read at paint
+                // time so it tracks the control immediately and is gone at
+                // `border_width == 0`. An explicit `.border(color, _)` only supplies
+                // the COLOR; its width is ignored in favour of the theme (so a
+                // build-time width literal can't get "stuck" past a slider change).
+                // No explicit color ⇒ the theme border color.
+                let (tb_color, tb_width) = {
+                    let t = cx.theme();
+                    (t.border, t.border_width)
+                };
+                let color = self.base.style.border.map_or(tb_color, |bd| bd.color);
+                let border = (tb_width > 0.0)
+                    .then_some(crate::scene::Border { color, width: tb_width });
                 if let Some(f) = fill {
                     cx.rect(b, f, border, radius, self.base.style.glow);
                 } else if border.is_some() {
@@ -133,14 +147,15 @@ impl Component for Pane {
                 }
             }
             PaneFrame::Bracketed => {
-                // Fill + style.border + bracket accents on top.
-                let border = self.base.style.border;
+                // Fill only; the frame is the self-contained corner-bracket reticle
+                // drawn by `bracket_frame` (bright rounded corners + a dimmed
+                // continuous line) — matching Modal/Toast. Drawing a full
+                // `style.border` here too would wash the reticle into a plain
+                // border (indistinguishable from `Bordered`).
                 if let Some(f) = fill {
-                    cx.rect(b, f, border, radius, self.base.style.glow);
-                } else if border.is_some() {
-                    cx.rect(b, Color::TRANSPARENT, border, radius, None);
+                    cx.rect(b, f, None, radius, self.base.style.glow);
                 }
-                cx.bracket_frame(b, fill);
+                cx.bracket_frame(b);
             }
         }
 

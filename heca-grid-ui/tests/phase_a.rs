@@ -2756,13 +2756,14 @@ fn button_derives_border_width_and_radius_from_theme() {
     assert!(bg.border.is_none(), "border_width == 0 means no button border");
 }
 
-// --- border_width == 0 ⇒ no borders (containers keep a thin uniform hairline) -
+// --- border_width == 0 ⇒ no borders anywhere (bracket_frame draws nothing) ----
 
 #[test]
-fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
-    // Containers stay defined at border_width == 0, but via a single thin SOLID
-    // uniform border — NOT the reticle (whose bright corners collapsed to nothing,
-    // leaving empty corners + lingering dim straight edges).
+fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
+    // `border_width == 0` means borders off everywhere — `bracket_frame` draws
+    // NOTHING (no hairline). A container that needs definition at 0 carries a fill,
+    // not a forced border. This keeps the bracket frame consistent with every other
+    // widget's border gate.
     let mut theme = Theme::grid_tron();
     theme.border_width = 0.0;
     let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
@@ -2770,28 +2771,81 @@ fn bracket_frame_zero_border_is_a_uniform_hairline_not_broken_corners() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
-    let rects: Vec<_> = scene.iter().filter_map(|c| match c {
-        DrawCommand::Rect(r) => Some(*r),
-        _ => None,
-    }).collect();
-    assert_eq!(rects.len(), 1, "border=0 frame is one uniform hairline (no dim-edge overlays)");
-    assert!(rects[0].border.is_some_and(|b| b.width > 0.0), "the hairline is solid + visible");
+    assert!(scene.is_empty(), "border_width == 0 draws no frame at all");
 
-    // With a real border the bright accent reticle (+ dim midsection overlays) returns.
+    // With a real border: one dimmed continuous accent line tracing the perimeter,
+    // plus four bright accent corners — each redrawn clipped to its corner box.
     theme.border_width = 2.0;
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.bracket_frame(rect, Some(theme.surface));
+        cx.bracket_frame(rect);
     }
-    let bright = scene.iter().any(|c| matches!(
+    let bright_corners = scene.iter().filter(|c| matches!(
         c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    )).count();
+    let dim_line = scene.iter().any(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.accent.a && b.width > 0.0)
     ));
-    let n_rects = scene.iter().filter(|c| matches!(c, DrawCommand::Rect(_))).count();
-    assert!(bright, "border>0 draws the bright accent reticle border");
-    assert!(n_rects > 1, "border>0 also dims the straight midsections (overlay rects)");
+    let clips = scene.iter().filter(|c| matches!(c, DrawCommand::PushClip(_))).count();
+    assert_eq!(bright_corners, 4, "border>0 draws four bright accent corner brackets");
+    assert!(dim_line, "border>0 traces a dimmed continuous accent line under the corners");
+    assert_eq!(clips, 4, "each bright corner is clipped to its own corner box");
+}
+
+#[test]
+fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
+    // A default `Bordered` Pane with NO explicit `.border()` derives its border
+    // from `theme.border_width` (the global border control): a theme-colored
+    // border when borders are on, and nothing at `border_width == 0`. This is the
+    // consistency contract — the global control governs every container.
+    use heca_grid_ui::{Component, Pane};
+    // `explicit_border` width is the literal a caller passes to `.border()` — it must
+    // be ignored in favour of the live theme width, so a build-time literal can't
+    // survive a global border change (the showcase bug). `None` ⇒ no `.border()`.
+    let border_rects = |theme: &Theme, explicit: Option<(heca_grid_ui::Color, f32)>| -> Vec<heca_grid_ui::scene::RectCmd> {
+        let mut p = Pane::new()
+            .background(theme.surface)
+            .width(Length::Px(120.0))
+            .height(Length::Px(80.0));
+        if let Some((c, w)) = explicit {
+            p = p.border(c, w);
+        }
+        LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, theme);
+            p.paint(&mut cx);
+        }
+        scene.iter().filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+            _ => None,
+        }).collect()
+    };
+
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 2.0;
+    let on = border_rects(&theme, None);
+    assert!(
+        on.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 2.0)),
+        "Bordered pane draws theme.border at theme.border_width without an explicit .border()",
+    );
+
+    // An explicit `.border(accent, 9.0)` keeps the COLOR but the width follows the
+    // theme (2.0), never the 9.0 literal.
+    let explicit = border_rects(&theme, Some((theme.accent, 9.0)));
+    assert!(
+        explicit.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 2.0)),
+        "explicit .border() supplies color only; width tracks theme.border_width",
+    );
+
+    theme.border_width = 0.0;
+    assert!(
+        border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.accent, 9.0))).is_empty(),
+        "border_width == 0 leaves the Bordered pane with no visible border, even with an explicit .border()",
+    );
 }
 
 /// Paint `w` under `border_width == 0` and return every visible (width>0) Rect
