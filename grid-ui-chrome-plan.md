@@ -99,7 +99,7 @@ The enabler for rich items ("a CSS grid where we can put whatever we want"). taf
 
 ### 2.8 Scroll / list primitive — **DONE** (`gridui-01`)
 - Region shells and dock lists overflow → need embeddable scrolling.
-- **Resolved:** `PushClip`/`PopClip` is implemented in `heca-renderer/src/scene.rs` (nesting + intersection). `gridui-01` added a companion `Translate`/`PopTranslate` primitive + `PaintCx::with_offset`, and the `ScrollRegion` widget (`heca-grid-ui/src/widgets/scroll_region.rs`): vertical viewport, multi-child column, wheel + draggable thumb, `scroll_offset: Signal<f32>`. Future: horizontal scroll, a dedicated scrollbar color token.
+- **Resolved:** `PushClip`/`PopClip` is implemented in `heca-renderer/src/scene.rs` (nesting + intersection). `gridui-01` ships the `ScrollRegion` widget (`heca-grid-ui/src/widgets/scroll_region.rs`) reusing the **whole-page scroll pattern** (shift subtree bounds + clip) inside a widget — bakes `-scroll_offset` into the children's bounds so paint/hit-testing/DnD all see the visual position, and clips via `PushClip`. A new post-order `Component::on_layout` hook (called by the layout engine after `assign`) resets the baked offset on a fresh layout so the shift never compounds — the enabler for an embeddable scroll viewport that doesn't own the layout/scroll cycle. `Event::Scroll` has no position, so the region hover-gates the wheel (via `PointerMoved`). Future: horizontal scroll, a dedicated scrollbar color token, host-side hit-testing for nested scroll regions.
 
 ---
 
@@ -191,7 +191,7 @@ Realizes chrome plan Phase 7. Build the vocabulary **now**; app integration is g
 | **G4** | `DockFrame` (title + collapse + drag handle + header slot; reuse Pane brackets) | — | none |
 | **G5** | `ChromeRegion`/`Sidebar` shell (oriented all-4, collapsible w/ icon-rail, mode-aware, hosts DockFrames, drop targets) | G4 | none for shell; rail uses G2; full use needs G6 + ChromeHost |
 | **G6** | DnD **hooks** onto the **shipped** `src/drag/` framework: a region `DragSurfaceId` + Dock-level `DragItem`, `DockFrame` drag handle drives `SurfaceDragState`, `ChromeRegion` drop targets set `hover_item`; additive variants only | shipped `src/drag/`; G4/G5 | none — framework present |
-| **G7** | Scroll/list primitive (embeddable) | **renderer `PushClip`/`PopClip` + `Translate`** | **DONE (`gridui-01`)** |
+| **G7** | Scroll/list primitive (embeddable) | **renderer `PushClip`/`PopClip` + `Component::on_layout` hook** | **DONE (`gridui-01`)** |
 | **G8** | Rich status-item recipe + `Tag`/`Chip`; showcase: mock WorkspacesDock with program/git/status rows, collapse, (DnD reorder via G6) | G1, G2, G3 | none |
 
 **Suggested order now:** G1 → G3/G4 (+G5 alongside) → G2 → G6 (framework's already there) → G8 (visible payoff). G7 when clip lands.

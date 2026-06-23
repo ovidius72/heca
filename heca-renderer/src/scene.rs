@@ -98,22 +98,10 @@ pub fn enqueue_scene(
     // Active clip rects (each already intersected with its parent), so nested
     // `PushClip`s clip to their intersection. Both renderers scissor to the top.
     let mut clip_stack: Vec<[f32; 4]> = Vec::new();
-    // Active translations (summed), applied to coordinate-bearing commands
-    // (`Rect`/`Text`/`Brackets` + inner `PushClip` rects) — NOT to the outer
-    // `PushClip` set outside a translate scope, nor to full-screen `Scanline`s.
-    let mut translate_stack: Vec<[f32; 2]> = Vec::new();
-    let tr = |stack: &[[f32; 2]]| -> (f32, f32) {
-        stack
-            .iter()
-            .fold((0.0, 0.0), |(ax, ay), b| (ax + b[0], ay + b[1]))
-    };
     for cmd in scene.iter() {
         match cmd {
             DrawCommand::Rect(r) => {
                 let (x, y, w, h) = xywh(&r.rect);
-                let (tx, ty) = tr(&translate_stack);
-                let x = x + tx;
-                let y = y + ty;
                 let (border, border_width) = match r.border {
                     Some(b) => (b.color.to_f32x4(), b.width),
                     None => (NO_BORDER, 0.0),
@@ -148,17 +136,15 @@ pub fn enqueue_scene(
                 });
             }
             DrawCommand::Brackets(b) => {
-                let (tx, ty) = tr(&translate_stack);
-                draw_brackets(grid, b, glow_alpha_scale, tx, ty);
+                draw_brackets(grid, b, glow_alpha_scale);
             }
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
                 let (x, y, w, h) = xywh(&t.rect);
-                let (tx, ty) = tr(&translate_stack);
                 text.queue_text_in_box(
                     &t.text,
-                    x + tx,
-                    y + ty,
+                    x,
+                    y,
                     w,
                     h,
                     t.size,
@@ -170,10 +156,7 @@ pub fn enqueue_scene(
             }
             DrawCommand::PushClip(r) => {
                 let (x, y, w, h) = xywh(r);
-                // Inner clips move with translated content; the outer viewport
-                // clip is pushed before any Translate so it stays untranslated.
-                let (tx, ty) = tr(&translate_stack);
-                let rect = [x + tx, y + ty, w, h];
+                let rect = [x, y, w, h];
                 // Intersect with the enclosing clip so nested clips never exceed it.
                 let eff = clip_stack.last().map_or(rect, |&prev| intersect_clip(prev, rect));
                 clip_stack.push(eff);
@@ -186,15 +169,9 @@ pub fn enqueue_scene(
                 grid.set_clip(eff);
                 text.set_clip(eff);
             }
-            DrawCommand::Translate(p) => {
-                translate_stack.push([p.x as f32, p.y as f32]);
-            }
-            DrawCommand::PopTranslate => {
-                translate_stack.pop();
-            }
         }
     }
-    // Defensive: clear any unbalanced clip/translate so they can't leak.
+    // Defensive: clear any unbalanced clip so it can't leak.
     if !clip_stack.is_empty() {
         grid.set_clip(None);
         text.set_clip(None);
@@ -206,12 +183,8 @@ fn draw_brackets(
     grid: &mut GridRenderer,
     b: &BracketCmd,
     glow_alpha_scale: f32,
-    tx: f32,
-    ty: f32,
 ) {
     let (x, y, w, h) = xywh(&b.rect);
-    let x = x + tx;
-    let y = y + ty;
     let color = b.color.to_f32x4();
     let (gc, mut gr, gi) = match b.glow {
         Some(g) => (g.color.to_f32x4(), g.radius, g.intensity),

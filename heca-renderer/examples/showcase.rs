@@ -1909,6 +1909,18 @@ impl ApplicationHandler for App {
                 state.layout_dirty = true; // a click can change content/size
                 state.window.request_redraw();
             }
+            WindowEvent::MouseInput {
+                state: ElementState::Released,
+                button: MouseButton::Left,
+                ..
+            } => {
+                // Deliver the release so a grabbed widget (e.g. a ScrollRegion
+                // thumb drag) can end its grab — without this the drag never stops.
+                state
+                    .focus
+                    .dispatch(&mut state.ui, &Event::PointerReleased { pos: state.cursor });
+                state.window.request_redraw();
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 // Lines to scroll the open dropdown (positive = down the list).
                 let lines = match delta {

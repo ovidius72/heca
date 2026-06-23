@@ -319,6 +319,17 @@ pub trait Component {
     /// without per-widget wiring. Default: no-op.
     fn remeasure(&mut self) {}
 
+    /// Called by the layout engine **after** this node's bounds (and all its
+    /// descendants' bounds) have been (re)computed and written to `Base::bounds`.
+    /// Post-order: children fire before the parent. Default: no-op. Override to
+    /// react to a fresh layout — e.g. a scroll viewport resets any shift it had
+    /// baked into its children's bounds (they are now back at their natural
+    /// positions), so the next paint re-applies the shift from scratch instead
+    /// of compounding. This is what lets an embeddable scroll viewport reuse the
+    /// whole-page scroll pattern (shift subtree bounds + clip) without owning the
+    /// layout/scroll cycle.
+    fn on_layout(&mut self) {}
+
     /// Advance time-based animations by `dt` seconds. Returns `true` if a
     /// **continuous** animation is still running (eases, slides, spinners), so the
     /// host schedules another frame at its frame cap. Default: recurse.
@@ -499,18 +510,6 @@ impl<'a> PaintCx<'a> {
         self.scene.push(DrawCommand::PushClip(rect));
         f(self);
         self.scene.push(DrawCommand::PopClip);
-    }
-
-    /// Push a translation applied to all subsequent coordinate-bearing commands
-    /// emitted inside `f` (rects/text/brackets + inner clips), then pop it. Use to
-    /// paint scrolled/offset content inside a clip: `with_clip(viewport)` then
-    /// `with_offset((0.0, -offset))` then paint the children. Clip rects pushed
-    /// *before* this stay untranslated (the viewport), inner clips move with the
-    /// content. See [`crate::widgets::ScrollRegion`].
-    pub fn with_offset(&mut self, offset: Point, f: impl FnOnce(&mut PaintCx<'a>)) {
-        self.scene.push(DrawCommand::Translate(offset));
-        f(self);
-        self.scene.push(DrawCommand::PopTranslate);
     }
 
     /// The active theme.

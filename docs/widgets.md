@@ -468,17 +468,33 @@ Grid::new()
 An embeddable **vertical scroll viewport**: a column of children laid out at
 their natural height (the layout engine never shrinks them, so the column
 overflows), clipped to the region's own bounds. The visible window is the
-`ScrollRegion` itself; content beyond it is clipped (`PushClip`) and painted
-shifted by `-scroll_offset` (`Translate`).
+`ScrollRegion` itself; content beyond it is clipped (`PushClip`).
+
+**Mechanism — same as the whole-page scroll.** Rather than a separate
+translation layer, `ScrollRegion` reuses the page-scroll pattern: it bakes
+`-scroll_offset` into its children's **bounds** (so paint, hit-testing, and DnD
+all see the *visual* position — bounds === what's drawn) and clips to its own
+rect via `PushClip` (a sub-region has no framebuffer, so it needs an explicit
+clip). Because bounds always match the visual, pointer routing and the drag
+framework's `source_at`/`resolve_at` (which hit-test against bounds) just work
+while scrolled. A fresh layout pass would compound the shift, so the layout
+engine's post-order `on_layout` hook resets the baked offset (children are back
+at natural) and the next paint re-applies it from scratch.
 
 - **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
 - **Builders**: `LayoutExt` (give it a fixed `.height()` so content overflows).
-- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read/drive from the
-  host); `.scroll_to(f32) -> f32` (clamped set, returns the applied value).
-- **Interaction** (built-in): the wheel (`Event::Scroll`) advances the offset
-  (clamped to `[0, max_offset]`); the auto-shown scrollbar **thumb is draggable**.
-  Pointer coords are translated into content space before routing to children,
-  so buttons/items inside a scrolled list stay clickable at their visual spot.
+- **Scroll position**: `.scroll_offset() -> Signal<f32>` (read from the host);
+  `.scroll_to(f32) -> f32` (clamped set **+ bakes the shift into bounds**, returns
+  the applied value). Prefer `scroll_to` over raw `scroll_offset().set()` — it
+  keeps the shifted bounds (paint/hit-testing/DnD) in sync in the same call.
+- **Wheel gating**: `Event::Scroll` has no position, so the broadcast router
+  can't hit-test it. The region tracks hover via `PointerMoved` and only swallows
+  the wheel when hovered (and scrollable); otherwise the event propagates so the
+  host page (or a nested region) can scroll. Single inline region only; nested
+  scroll regions need host-side hit-testing (future).
+- **Interaction** (built-in): the wheel advances the offset by ~10% of the
+  viewport per notch (viewport-proportional, so a small sidebar doesn't
+  overshoot); the auto-shown scrollbar **thumb is draggable**.
 - **Traits**: `LayoutExt`, `Parent`.
 - **v1**: vertical-only; thumb colored from `theme.muted`. Horizontal scroll and
   a dedicated scrollbar token are future work.
@@ -489,7 +505,7 @@ for name in ["alpha", "beta", "gamma", "delta", "epsilon"] {
     list = list.child(Item::new(name));
 }
 // Drive from the host (e.g. a “jump to top” action):
-list.scroll_offset().set(0.0);
+list.scroll_to(0.0);
 ```
 
 ### Label

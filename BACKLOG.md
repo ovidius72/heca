@@ -609,13 +609,13 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 ### [x] Phase: Scroll / list primitive · `gridui-01`
 An embeddable scroll region for sidebar docks and list views.
 Note: renderer `PushClip`/`PopClip` is ALREADY implemented in `heca-renderer/src/scene.rs` — this gate is closed.
-**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (pending PR). Added a companion renderer `Translate`/`PopTranslate` primitive (mirroring PushClip/PopClip) + `PaintCx::with_offset`, so scrolled content is clipped to the viewport and painted shifted by `-scroll_offset`. v1 is vertical-only, multi-child column, wheel + draggable thumb, offset exposed as `Signal<f32>`; pointer coords translated into content space so children stay clickable. Showcase demo + `docs/widgets.md` entry added.
+**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (pending PR). Reuses the whole-page scroll pattern (shift subtree bounds + clip) inside a widget: bakes `-scroll_offset` into the children's bounds so paint, hit-testing, and DnD all see the visual position (bounds === drawn), and clips to the viewport via `PushClip`. A new post-order `Component::on_layout` hook (layout engine) resets the baked offset on a fresh layout so the shift never compounds — this is what lets an embeddable scroll viewport reuse the page-scroll mechanism without owning the layout/scroll cycle. v1 is vertical-only, multi-child column, wheel (~10% of viewport/notch, viewport-proportional so a small sidebar doesn't overshoot) + draggable thumb, offset exposed as `Signal<f32>`; `Event::Scroll` has no position so the region hover-gates the wheel (tracks hover via `PointerMoved`) so an inline region doesn't swallow every wheel event in the tree. Showcase demo + `docs/widgets.md` entry added. (An earlier draft used a renderer `Translate` primitive; pivoted to bounds-shift per review — no second scroll mechanism, DnD works while scrolled.)
 
 - [x] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
-  Uses `PushClip`/`PopClip` for content clipping + `Translate`/`PopTranslate` for the offset.
-  Exposes `scroll_offset: Signal<f32>` (vertical) + `scroll_to(v)` clamp helper.
-  Wheel handling (`Event::Scroll`) + draggable theme-colored (`muted`) scrollbar thumb, auto-shown on overflow.
-  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`, `heca-grid-ui/src/lib.rs` (exports + prelude), `heca-grid-ui/src/scene.rs` (Translate/PopTranslate), `heca-grid-ui/src/component.rs` (`PaintCx::with_offset`), `heca-renderer/src/scene.rs` (translation stack), `heca-renderer/examples/showcase.rs` (demo).
+  Uses `PushClip`/`PopClip` for content clipping + bounds-shift (the page-scroll pattern) for the offset.
+  Exposes `scroll_offset: Signal<f32>` (vertical) + `scroll_to(v)` (clamps + bakes the shift into bounds).
+  Wheel handling (`Event::Scroll`, viewport-proportional step) + draggable theme-colored (`muted`) scrollbar thumb, auto-shown on overflow; hover-gated so it doesn't swallow the page wheel.
+  Files: `heca-grid-ui/src/widgets/scroll_region.rs`, `heca-grid-ui/src/widgets/mod.rs`, `heca-grid-ui/src/lib.rs` (exports + prelude), `heca-grid-ui/src/component.rs` (`Component::on_layout` hook), `heca-grid-ui/src/layout.rs` (call `on_layout` post-order in `assign`), `heca-renderer/examples/showcase.rs` (demo).
   Update `docs/widgets.md` + add showcase demo section.
 
 ### [ ] Phase: Pane shell widget — header and tabs · `gridui-02`

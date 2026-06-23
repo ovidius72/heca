@@ -3,16 +3,28 @@
 //! A scrollable column: children are laid out top-to-bottom at their natural
 //! height (the layout engine never flex-shrinks them, so the column overflows),
 //! and the visible window is the [`ScrollRegion`]'s own bounds. Content beyond
-//! the viewport is clipped (renderer `PushClip`/`PopClip`) and painted shifted
-//! up by `-scroll_offset` (renderer `Translate`/`PopTranslate` via
-//! [`PaintCx::with_offset`](crate::component::PaintCx::with_offset)).
+//! the viewport is clipped (renderer `PushClip`/`PopClip`).
+//!
+//! **Mechanism — same as the whole-page scroll.** The page scroll shifts the
+//! tree's bounds by the scroll delta and lets the framebuffer clip the overflow.
+//! This widget reuses that pattern for a sub-region: it bakes `-scroll_offset`
+//! into its children's bounds (so paint, hit-testing, and DnD all see the
+//! *visual* position — bounds === what's drawn) and clips to its own rect via
+//! `PushClip` (a sub-region has no framebuffer, so it needs an explicit clip).
+//! Because bounds always match the visual, pointer routing and the drag
+//! framework's `source_at`/`resolve_at` (which hit-test against bounds) just
+//! work while scrolled — no separate translation layer for DnD.
+//!
+//! **Layout reset.** Shifting bounds is destructive, so a fresh layout pass
+//! (resize / font / content change) would compound the shift. The layout engine
+//! calls [`Component::on_layout`] post-order after re-computing bounds; the
+//! region resets its `applied_offset` there (children are back at natural), so
+//! the next paint re-applies the shift from scratch instead of compounding.
 //!
 //! Interaction: the wheel (`Event::Scroll`) advances the offset (clamped to
-//! `[0, max_offset]`), and the auto-shown scrollbar thumb is draggable. Pointer
-//! coordinates are translated into content space before being routed to
-//! children, so buttons/items inside a scrolled list remain clickable at their
-//! *visual* position. The offset is also exposed as a reactive
-//! [`Signal<f32>`](crate::reactive::Signal) the host can read or drive directly.
+//! `[0, max_offset]`), and the auto-shown scrollbar thumb is draggable. The
+//! offset is also exposed as a reactive [`Signal<f32>`] the host can read or
+//! drive directly.
 //!
 //! v1 is vertical-only and the thumb is theme-colored (`muted`); a distinct
 //! scrollbar color token and horizontal scrolling are future work.
@@ -30,8 +42,12 @@ const SCROLLBAR_W: f64 = 8.0;
 const SCROLLBAR_PAD: f64 = 2.0;
 /// Minimum thumb height so a very long list still has a grabbable thumb.
 const MIN_THUMB: f64 = 24.0;
-/// Wheel delta is in "lines"; multiply by this many font-sized steps.
-const WHEEL_STEP_LINES: f32 = 3.0;
+/// Wheel step as a fraction of the viewport height per "line" of delta. The
+/// winit wheel delta is already in lines, so one notch (delta ≈ 1) scrolls ~10%
+/// of the viewport — gentle in a small sidebar, scales up for a tall one. (The
+/// previous build multiplied by a fixed line count × font, which made each notch
+/// jump ~75% of a small viewport and overshoot.)
+const WHEEL_STEP_FRAC: f64 = 0.1;
 
 /// An embeddable vertical scroll viewport hosting a column of children.
 ///
@@ -39,14 +55,32 @@ const WHEEL_STEP_LINES: f32 = 3.0;
 /// read/drive the position via [`ScrollRegion::scroll_offset`] /
 /// [`ScrollRegion::scroll_to`]. The scrollbar appears automatically when the
 /// content is taller than the viewport.
+///
+/// **Wheel gating.** `Event::Scroll` carries no position, so the default
+/// broadcast router (`route_event`) can't hit-test it — an inline scroll region
+/// would swallow *every* wheel event in the tree. To avoid that, the region
+/// tracks whether the cursor is over it via `PointerMoved` and only consumes a
+/// scroll when hovered (and scrollable). This works for a single inline region;
+/// *nested* scroll regions need host-side hit-testing (finding the innermost
+/// scrollable under the cursor), which is future work.
 pub struct ScrollRegion {
     base: Base,
     /// Vertical scroll offset (content px shifted up). 0 = top.
     scroll_offset: Signal<f32>,
+    /// The shift currently baked into the children's bounds (= `scroll_offset`
+    /// at the last [`sync_shift`](Self::sync_shift)). Bounds hold `natural -
+    /// applied_offset`; geometry helpers recover natural as `bounds +
+    /// applied_offset`. Reset to 0 by [`on_layout`](Component::on_layout) when
+    /// layout re-computes bounds to natural.
+    applied_offset: f64,
     /// While dragging the thumb: the y-offset (content px) from the thumb's top
     /// where the grab landed, so the grab point stays under the cursor. `None`
     /// when not dragging.
     thumb_grab: Option<f64>,
+    /// Whether the cursor is currently over this region. Updated from
+    /// `PointerMoved`/`PointerPressed`; gates `Event::Scroll` so an inline
+    /// region only swallows the wheel when actually hovered.
+    hovered: bool,
 }
 
 impl ScrollRegion {
@@ -57,7 +91,9 @@ impl ScrollRegion {
         Self {
             base,
             scroll_offset: signal(0.0),
+            applied_offset: 0.0,
             thumb_grab: None,
+            hovered: false,
         }
     }
 
@@ -68,24 +104,31 @@ impl ScrollRegion {
         self.scroll_offset
     }
 
-    /// Set the scroll offset, clamped to `[0, max_offset]`, and request a
-    /// repaint. Returns the clamped value actually applied.
-    pub fn scroll_to(&self, offset: f32) -> f32 {
+    /// Set the scroll offset, clamped to `[0, max_offset]`, bake it into the
+    /// children's bounds immediately, and request a repaint. Returns the clamped
+    /// value actually applied. Prefer this over raw `scroll_offset().set()` —
+    /// it keeps the shifted bounds (used for paint, hit-testing, and DnD) in
+    /// sync with the offset in the same call.
+    pub fn scroll_to(&mut self, offset: f32) -> f32 {
         let max = self.max_offset() as f32;
         let v = offset.clamp(0.0, max);
         self.scroll_offset.set(v);
-        self.base.mark_needs_paint();
+        self.sync_shift();
         v
     }
 
-    /// Total content extent along the scroll axis (max child bottom relative to
-    /// this region's top, never less than the viewport height).
+    /// Total content extent along the scroll axis (max child **natural** bottom
+    /// relative to this region's top, never less than the viewport height).
+    /// Uses `+ applied_offset` to recover natural positions from the shifted
+    /// bounds.
     fn content_extent(&self) -> f64 {
         let vp = self.base.bounds;
+        let off = self.applied_offset;
         let mut max_bottom = vp.loc.y + vp.size.h;
         for c in &self.base.children {
             let b = c.base().bounds;
-            let bottom = b.loc.y + b.size.h;
+            // natural bottom = shifted bottom + applied shift.
+            let bottom = b.loc.y + b.size.h + off;
             if bottom > max_bottom {
                 max_bottom = bottom;
             }
@@ -98,7 +141,8 @@ impl ScrollRegion {
         (self.content_extent() - self.base.bounds.size.h).max(0.0)
     }
 
-    /// The scrollbar thumb rect, or `None` when the content fits (no scroll).
+    /// The scrollbar thumb rect (in viewport space), or `None` when the content
+    /// fits (no scroll).
     fn thumb_rect(&self) -> Option<Rectangle> {
         let vp = self.base.bounds;
         let content_h = self.content_extent();
@@ -120,6 +164,23 @@ impl ScrollRegion {
             Size::new(SCROLLBAR_W, thumb_h),
         ))
     }
+
+    /// Bake the current `scroll_offset` into the children's bounds. Shifts each
+    /// direct child's subtree by `applied_offset − scroll_offset` so the bounds
+    /// end at `natural − scroll_offset` (the visual position). Idempotent when
+    /// already in sync. Called from `paint` and `event` so bounds are always
+    /// current for drawing, hit-testing, and DnD.
+    fn sync_shift(&mut self) {
+        let target = self.scroll_offset.get_untracked() as f64;
+        let delta = self.applied_offset - target;
+        if delta != 0.0 {
+            for child in self.base.children.iter_mut() {
+                shift_subtree(child.as_mut(), 0.0, delta);
+            }
+            self.applied_offset = target;
+            self.base.mark_needs_paint();
+        }
+    }
 }
 
 impl Default for ScrollRegion {
@@ -136,46 +197,57 @@ impl Component for ScrollRegion {
         &mut self.base
     }
 
+    /// Layout just re-computed every bound to its natural position — clear the
+    /// baked shift so the next `sync_shift` re-applies it from scratch instead
+    /// of compounding. (Post-order: children already assigned.)
+    fn on_layout(&mut self) {
+        self.applied_offset = 0.0;
+        self.sync_shift();
+    }
+
     fn paint(&self, cx: &mut PaintCx) {
         if !self.base.visible.get_untracked() {
             return;
         }
         let vp = self.base.bounds;
-        let offset = self.scroll_offset.get_untracked() as f64;
-        // Clip to the viewport, then shift content up by the offset. Clip rects
-        // pushed before the offset stay untranslated (the viewport window);
-        // inner clips move with the content.
+        // Keep the baked shift current (paint takes `&self`, so sync via the
+        // signal value; the shift was already applied by the last `event`/layout
+        // reset — `applied_offset` matches `scroll_offset` here in steady state).
         cx.with_clip(vp, |cx| {
-            cx.with_offset(Point::new(0.0, -offset), |cx| {
-                for child in &self.base.children {
-                    paint_child(child.as_ref(), cx);
-                }
-            });
+            for child in &self.base.children {
+                paint_child(child.as_ref(), cx);
+            }
         });
-        // Scrollbar thumb on top, not translated (it lives in viewport space).
+        // Scrollbar thumb on top, in viewport space (not scrolled with content).
         if let Some(t) = self.thumb_rect() {
-            let color = scrollbar_thumb_color(cx);
-            cx.rect(t, color, None, (SCROLLBAR_W / 2.0) as f32, None);
+            cx.rect(t, scrollbar_thumb_color(cx), None, (SCROLLBAR_W / 2.0) as f32, None);
         }
     }
 
     fn event(&mut self, ev: &Event) -> Handled {
+        // Bake the current scroll offset into bounds first, so hit-testing and
+        // DnD see the visual position (bounds === what's drawn).
+        self.sync_shift();
         let vp = self.base.bounds;
-        let offset = self.scroll_offset.get_untracked() as f64;
 
         match ev {
             Event::Scroll { delta } => {
-                if self.max_offset() > 0.0 {
-                    let step = WHEEL_STEP_LINES * self.base.font;
-                    let next = (offset + (*delta as f64) * step as f64) as f32;
-                    self.scroll_to(next);
+                // Only swallow the wheel when the cursor is over this region AND it
+                // is scrollable. `Event::Scroll` has no position, so the router
+                // can't hit-test it; `hovered` (from `PointerMoved`) is our gate.
+                // Otherwise let it propagate so the host page (or a nested region)
+                // can scroll.
+                if self.hovered && self.max_offset() > 0.0 {
+                    let step = WHEEL_STEP_FRAC * vp.size.h;
+                    let next = self.scroll_offset.get_untracked() as f64 + (*delta as f64) * step;
+                    self.scroll_to(next as f32);
                     Handled::Yes
                 } else {
-                    // Not scrollable here — let a (possibly scrollable) child have it.
                     route_event(&mut self.base.children, ev)
                 }
             }
             Event::PointerPressed { pos } => {
+                self.hovered = vp.contains(*pos);
                 if let Some(t) = self.thumb_rect()
                     && t.contains(*pos)
                 {
@@ -184,11 +256,19 @@ impl Component for ScrollRegion {
                     self.thumb_grab = Some(pos.y - t.loc.y);
                     return Handled::Yes;
                 }
-                self.route_to_children_translated(ev, offset)
+                if self.hovered {
+                    // Bounds are shifted to visual, so route the raw event —
+                    // children hit-test against their (shifted) bounds.
+                    route_event(&mut self.base.children, ev)
+                } else {
+                    Handled::No
+                }
             }
             Event::PointerMoved { pos } => {
+                self.hovered = vp.contains(*pos);
                 if let Some(grab) = self.thumb_grab {
-                    // Drag: derive offset from the thumb top under the cursor.
+                    // Drag in progress — keep handling even if the cursor leaves
+                    // the region. Derive the offset from the thumb top under cursor.
                     let content_h = self.content_extent();
                     let max_off = (content_h - vp.size.h).max(0.0);
                     let track_h = vp.size.h;
@@ -200,49 +280,40 @@ impl Component for ScrollRegion {
                         0.0
                     };
                     self.scroll_to((frac * max_off) as f32);
-                    return Handled::Yes;
+                    Handled::Yes
+                } else if self.hovered {
+                    route_event(&mut self.base.children, ev)
+                } else {
+                    Handled::No
                 }
-                self.route_to_children_translated(ev, offset)
             }
             Event::PointerReleased { .. } => {
                 if self.thumb_grab.take().is_some() {
                     return Handled::Yes;
                 }
-                self.route_to_children_translated(ev, offset)
+                // Route the release to children regardless of hover: a press
+                // that started inside should still get its matching release even
+                // if the cursor drifted out before release.
+                route_event(&mut self.base.children, ev)
             }
             _ => route_event(&mut self.base.children, ev),
         }
     }
 }
 
-impl ScrollRegion {
-    /// Route a pointer event to children with the position translated into
-    /// content space (children's bounds are absolute/untranslated, while they
-    /// are *painted* shifted up by `offset`; a click at the visual spot must be
-    /// mapped back by `+offset` to hit the right child).
-    fn route_to_children_translated(&mut self, ev: &Event, offset: f64) -> Handled {
-        let translated = match ev {
-            Event::PointerMoved { pos } => {
-                Event::PointerMoved { pos: shift_y(*pos, offset) }
-            }
-            Event::PointerPressed { pos } => {
-                Event::PointerPressed { pos: shift_y(*pos, offset) }
-            }
-            Event::PointerReleased { pos } => {
-                Event::PointerReleased { pos: shift_y(*pos, offset) }
-            }
-            other => *other,
-        };
-        route_event(&mut self.base.children, &translated)
+/// Shift a component's subtree's bounds by `(dx, dy)` — the whole-page scroll
+/// pattern (`offset_tree`), applied here to a scroll region's children.
+fn shift_subtree(c: &mut dyn Component, dx: f64, dy: f64) {
+    c.base_mut().bounds.loc.x += dx;
+    c.base_mut().bounds.loc.y += dy;
+    let n = c.base().children.len();
+    for i in 0..n {
+        let child = &mut c.base_mut().children[i];
+        shift_subtree(child.as_mut(), dx, dy);
     }
 }
 
-/// Return `pos` shifted down by `offset` (visual → content space).
-fn shift_y(pos: Point, offset: f64) -> Point {
-    Point::new(pos.x, pos.y + offset)
-}
-
-/// Thumb color: the theme's `muted` token, slightly lifted for visibility.
+/// Thumb color: the theme's `muted` token.
 fn scrollbar_thumb_color(cx: &PaintCx) -> Color {
     cx.theme().muted
 }
@@ -258,9 +329,8 @@ mod tests {
         // Children are real components only for layout; here we just need bounds
         // set on them. We build a ScrollRegion and manually stamp child bounds
         // (as the layout engine would) so the geometry helpers are testable in
-        // isolation.
+        // isolation. `applied_offset` starts at 0, so bounds are "natural".
         let mut r = ScrollRegion::new();
-        // Simulate layout: viewport at (0,0), 200 wide × 100 tall.
         r.base.bounds = Rectangle::new(Point::new(0.0, 0.0), Size::new(200.0, 100.0));
         r.base.children.clear();
         let mut y = 0.0;
@@ -276,7 +346,6 @@ mod tests {
 
     #[test]
     fn content_extent_sums_children_and_clamps_to_viewport() {
-        // Two 60px children = 120px content; viewport 100 → extent 120.
         let r = region_with_children(&[60.0, 60.0]);
         assert!((r.content_extent() - 120.0).abs() < f64::EPSILON);
         assert!((r.max_offset() - 20.0).abs() < f64::EPSILON);
@@ -284,7 +353,6 @@ mod tests {
 
     #[test]
     fn no_thumb_when_content_fits() {
-        // Children total 80px < viewport 100 → not scrollable.
         let r = region_with_children(&[40.0, 40.0]);
         assert!(r.thumb_rect().is_none());
         assert!(r.max_offset().abs() < f64::EPSILON);
@@ -292,27 +360,65 @@ mod tests {
 
     #[test]
     fn thumb_appears_and_scales_with_visible_fraction() {
-        let r = region_with_children(&[60.0, 60.0]); // content 120, viewport 100
+        let r = region_with_children(&[60.0, 60.0]);
         let t = r.thumb_rect().expect("scrollable → thumb");
-        // thumb_h = viewport/content * track = 100/120*100 ≈ 83.3
         assert!((t.size.h - (100.0 / 120.0 * 100.0)).abs() < 1e-6);
-        // At offset 0 the thumb sits at the top.
         assert!(t.loc.y.abs() < 1e-6);
     }
 
     #[test]
     fn scroll_to_clamps_to_max_offset() {
-        let r = region_with_children(&[60.0, 60.0]); // max_offset 20
+        let mut r = region_with_children(&[60.0, 60.0]); // max_offset 20
         assert!((r.scroll_to(50.0) - 20.0_f32).abs() < f32::EPSILON);
         assert!((r.scroll_to(-5.0) - 0.0_f32).abs() < f32::EPSILON);
         assert!((r.scroll_to(10.0) - 10.0_f32).abs() < f32::EPSILON);
     }
 
     #[test]
-    fn shift_y_maps_visual_to_content_space() {
-        let p = Point::new(5.0, 7.0);
-        let s = shift_y(p, 20.0);
-        assert!((s.x - 5.0).abs() < f64::EPSILON);
-        assert!((s.y - 27.0).abs() < f64::EPSILON);
+    fn sync_shift_bakes_offset_into_children_and_recovers_natural() {
+        let mut r = region_with_children(&[60.0, 60.0]); // content 120, vp 100
+        r.scroll_offset.set(20.0); // max_offset
+        r.sync_shift();
+        // applied_offset now equals scroll_offset.
+        assert!((r.applied_offset - 20.0).abs() < f64::EPSILON);
+        // Children shifted up by 20 (visual position): first child now at y=-20.
+        assert!((r.base.children[0].base().bounds.loc.y - (-20.0)).abs() < f64::EPSILON);
+        // Geometry helpers still report the *natural* extent (120) via the
+        // applied_offset recovery — scrolling must not change content_extent.
+        assert!((r.content_extent() - 120.0).abs() < f64::EPSILON);
+        assert!((r.max_offset() - 20.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn on_layout_resets_applied_offset_so_shift_does_not_compound() {
+        let mut r = region_with_children(&[60.0, 60.0]);
+        r.scroll_offset.set(20.0);
+        r.sync_shift();
+        assert!(r.applied_offset.abs() > 0.0); // applied = 20
+        // Simulate a fresh layout pass re-stamping natural bounds, then on_layout.
+        let mut y = 0.0;
+        for c in r.base.children.iter_mut() {
+            c.base_mut().bounds = Rectangle::new(Point::new(0.0, y), Size::new(200.0, 60.0));
+            y += 60.0;
+        }
+        r.on_layout();
+        // on_layout re-applies the shift immediately (paint is \u0026self and can't
+        // sync, so we must leave the bounds already shifted) — no snap to top, no
+        // compounding: applied is back to the scroll offset and child 0 is at -20.
+        assert!((r.applied_offset - 20.0).abs() < f64::EPSILON);
+        assert!((r.base.children[0].base().bounds.loc.y - (-20.0)).abs() < f64::EPSILON);
+        // A follow-up sync_shift is a no-op (already in sync) — no double shift.
+        r.sync_shift();
+        assert!((r.base.children[0].base().bounds.loc.y - (-20.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn wheel_step_is_viewport_fraction_not_fixed_lines() {
+        // Regression guard: the step must scale with the viewport, so a small
+        // viewport doesn't jump ~75% per notch (the original overshoot bug).
+        let r = region_with_children(&[60.0, 60.0]); // vp 100
+        let step = WHEEL_STEP_FRAC * r.base.bounds.size.h;
+        // 10% of viewport per line of delta — gentle, proportional.
+        assert!((step - 10.0).abs() < f64::EPSILON);
     }
 }
