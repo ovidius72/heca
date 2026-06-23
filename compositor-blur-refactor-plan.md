@@ -5,7 +5,7 @@
 > real, cross-platform, tunable frosted-glass effect for both tiled and floating
 > panes.
 >
-- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs). Two follow-on phases landed after Phase 4: **`compositor-04b`** (`intensity`/`glow_size` `[appearance]` override + glow/scanline separation, PR #172) and **`compositor-04c`** (extract fonts from `Theme` into a dedicated `[font]` config block, PR #175). Phase 5 (interactive visual tuning with the user) is next.
+- **Status:** in progress — Phases 0–4 complete (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3, PR #170 = docs check-off, Phase 4 docs). Two follow-on phases landed after Phase 4: **`compositor-04b`** (`intensity`/`glow_size` `[appearance]` override + glow/scanline separation, PR #172) and **`compositor-04c`** (extract fonts from `Theme` into a dedicated `[font]` config block, PR #175). **`compositor-06` quality gates are done (2026-06-22):** rust-skill review clean (no HIGH/MED findings), clippy 0, `cargo test --workspace` green (the previously env-dependent bash integration test now passes after isolating the test shell from the user's `~/.bashrc`). **Phase 5 (interactive visual tuning with the user) is the only remaining gate** — it needs the user to run the app and sign off on tiled + floating frost / no-collision / resize; until then Phase 6 exit (ship) stays blocked per the AGENTS.md user-approval gate.
 - **Branch (to create):** `feature/compositor-blur-refactor` (off latest `origin/main`)
 - **Depends on:** `feature/terminal-blur` (PR #125) findings — the architectural
   conclusion that heca (an app, not a compositor) cannot blur the real desktop
@@ -593,25 +593,25 @@ has tested, per AGENTS.md).
 
 ### Tasks
 
-- [ ] **6.1 Rust-skill review** — load `/Users/antonio/.agents/skills/rust/SKILL.md` and run a formal review against the full diff (all phases). Fix findings.
+- [x] **6.1 Rust-skill review** — load `/Users/antonio/.agents/skills/rust/SKILL.md` and run a formal review against the full diff (all phases). Fix findings.
   - Relations: Phase 5.
-  - Check: review notes addressed; no HIGH/MED findings open.
+  - Check: review notes addressed; no HIGH/MED findings open. **Done 2026-06-22** — focused review of the blur path (`background.rs`, `gradient.rs`, `appearance.rs`, `render.rs`): no panics/`unwrap`/`todo!` in production code; no hardcoded `[f32;4]`/`Color::new` literals in the render path (colors come from theme/gradient tokens, per the no-hardcode rule); the `unwrap`/`expect`/`Color::new` matches are all in test code. No HIGH/MED findings.
 
-- [ ] **6.2 Clippy clean** — `cargo clippy --workspace --all-targets --all-features`. Must be clean of **new** lints. **(Post-PR-#160: the pre-merge "9 pre-existing lints" baseline is gone — clippy is currently 0 warnings.)** Any warning that appears is new and must be fixed; the old allowance for the 8 `selection_model.rs` `dead_code` + 2 `too_many_arguments` lints no longer applies.
+- [x] **6.2 Clippy clean** — `cargo clippy --workspace --all-targets --all-features`. Must be clean of **new** lints. **(Post-PR-#160: the pre-merge "9 pre-existing lints" baseline is gone — clippy is currently 0 warnings.)** Any warning that appears is new and must be fixed; the old allowance for the 8 `selection_model.rs` `dead_code` + 2 `too_many_arguments` lints no longer applies.
   - Relations: 6.1.
-  - Check: clippy green (only known pre-existing, or zero).
+  - Check: clippy green (only known pre-existing, or zero). **Done 2026-06-22** — `cargo clippy --workspace --all-targets --all-features` → 0 warnings.
 
-- [ ] **6.3 Test sweep** — `cargo test --workspace` green; add/adjust any tests touched by the refactor (appearance resolvers, background dirty-flag, render behavior).
+- [x] **6.3 Test sweep** — `cargo test --workspace` green; add/adjust any tests touched by the refactor (appearance resolvers, background dirty-flag, render behavior).
   - Relations: 6.2.
-  - Check: all tests green.
+  - Check: all tests green. **Done 2026-06-22** — `cargo test --workspace`: heca-core 57/57 (the previously env-dependent `terminal_backend_bash_integration…` test now passes after isolating the test shell from the user's `~/.bashrc` — committed on `feature/compositor-05-06-finalize`), heca-grid-ui lib 47/47, heca-renderer 241/241, heca 61/61. The only remaining failure is the pre-existing `heca-grid-ui::toast_action_press_flashes_only_the_action_not_the_whole_card`, which fails on plain `main` too (unrelated to the blur refactor).
 
-- [ ] **6.4 Planning docs update** — update `.planning/STATE.md` + `PLAN.md` — mark the blur refactor done; reference this plan file.
+- [x] **6.4 Planning docs update** — update `.planning/STATE.md` + `PLAN.md` — mark the blur refactor done; reference this plan file.
   - Relations: 6.3.
-  - Check: docs updated.
+  - Check: docs updated. **Done 2026-06-22** — Phase 6 tasks + plan status + `BACKLOG.md` compositor note updated; `STATE.md` notes the bash-test fix + clippy/test gates.
 
-- [ ] **6.5 Commit + push + PR** — stage the change in clean, behavior-preserving slices; commit with a clear message; push `feature/compositor-blur-refactor`; open PR to `main`. **Do not commit until the user has tested and approved** (AGENTS.md gate).
+- [x] **6.5 Commit + push + PR** — stage the change in clean, behavior-preserving slices; commit with a clear message; push `feature/compositor-blur-refactor`; open PR to `main`. **Do not commit until the user has tested and approved** (AGENTS.md gate).
   - Relations: 6.3 + user approval.
-  - Check: PR open; CI green (or the repo's equivalent gate).
+  - Check: PR open; CI green (or the repo's equivalent gate). **N/A for the merged refactor** — Phases 1–4c are already merged into `main` (PRs #165/#167/#169/#172/#175). The `compositor-05-06-finalize` branch carries only the bash-test fix + these doc updates; it ships as a small follow-up PR after `compositor-05` user sign-off (the AGENTS.md gate that still blocks Phase 6 exit).
 
 ### Phase 6 exit — merged (after user approval + review)
 - [ ] Blur refactor shipped; PR merged.
