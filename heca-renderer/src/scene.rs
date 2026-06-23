@@ -135,7 +135,9 @@ pub fn enqueue_scene(
                     shadow_offset,
                 });
             }
-            DrawCommand::Brackets(b) => draw_brackets(grid, b, glow_alpha_scale),
+            DrawCommand::Brackets(b) => {
+                draw_brackets(grid, b, glow_alpha_scale);
+            }
             DrawCommand::Scanline(s) => draw_scanlines(grid, s),
             DrawCommand::Text(t) => {
                 let (x, y, w, h) = xywh(&t.rect);
@@ -169,7 +171,7 @@ pub fn enqueue_scene(
             }
         }
     }
-    // Defensive: clear any unbalanced clip so it can't leak into the next pass.
+    // Defensive: clear any unbalanced clip so it can't leak.
     if !clip_stack.is_empty() {
         grid.set_clip(None);
         text.set_clip(None);
@@ -177,7 +179,11 @@ pub fn enqueue_scene(
 }
 
 /// Eight thin arms framing the rect's corners (Tron reticle).
-fn draw_brackets(grid: &mut GridRenderer, b: &BracketCmd, glow_alpha_scale: f32) {
+fn draw_brackets(
+    grid: &mut GridRenderer,
+    b: &BracketCmd,
+    glow_alpha_scale: f32,
+) {
     let (x, y, w, h) = xywh(&b.rect);
     let color = b.color.to_f32x4();
     let (gc, mut gr, gi) = match b.glow {
