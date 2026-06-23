@@ -252,15 +252,17 @@ impl Component for ScrollRegion {
         // Scrollbar thumb on top, in viewport space (not scrolled with content).
         // Theme-driven hover affordance (mirrors MarkerGroup's grip bar): the
         // thumb is a dim accent at rest, brightens when its grab lane is hovered,
-        // and is full-bright while dragged — reading as "grab here".
+        // and is full-bright while dragged — reading as "grab here". Radius and
+        // color both come from the theme (no hardcoded radius/Color).
         if let Some(t) = self.thumb_rect() {
             let alpha = if self.thumb_grab.is_some() || self.thumb_hovered {
                 THUMB_HOVER_ALPHA
             } else {
                 THUMB_REST_ALPHA
             };
-            let color = cx.theme().accent.with_alpha(alpha);
-            cx.rect(t, color, None, (SCROLLBAR_W / 2.0) as f32, None);
+            let theme = cx.theme();
+            let color = theme.accent.with_alpha(alpha);
+            cx.rect(t, color, None, theme.control_radius(), None);
         }
     }
 
