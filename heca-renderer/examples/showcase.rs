@@ -118,7 +118,11 @@ const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 
 /// Map a `heca_theme::Theme` onto a grid-ui `Theme`, bridging the two crates
 /// until Phase 3B migrates grid-ui to re-export from `heca-theme`.
+///
+/// Font family/size come from the default [`heca_config::font::FontConfig`] —
+/// fonts are decoupled from the color theme (see `compositor-04c`).
 fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
+    let font_config = heca_config::font::FontConfig::default();
     let shadow_color = match heca_theme::Color::from_str(&ht.shadow.color) {
         Ok(c) => Color::new(c.r, c.g, c.b, (ht.shadow.alpha * 255.0).min(255.0) as u8),
         Err(_) => Color::TRANSPARENT,
@@ -136,8 +140,8 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         danger: Color::new(ht.danger.r, ht.danger.g, ht.danger.b, ht.danger.a),
         success: Color::new(ht.success.r, ht.success.g, ht.success.b, ht.success.a),
         warning: Color::new(ht.warning.r, ht.warning.g, ht.warning.b, ht.warning.a),
-        font_family: ht.font_family.clone(),
-        font_size: ht.font_size,
+        font_family: font_config.family.ui_normal().to_string(),
+        font_size: font_config.size.ui,
         radius: ht.border_radius,
         border_width: ht.border_width,
         glow_size: match ht.glow_size {

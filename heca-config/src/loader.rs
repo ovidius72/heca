@@ -66,6 +66,10 @@ pub struct Config {
     pub settings: SettingsConfig,
     #[serde(default)]
     pub appearance: crate::appearance::AppearanceConfig,
+    /// Structured font configuration (families + sizes), decoupled from the
+    /// color theme. See [`crate::font::FontConfig`].
+    #[serde(default)]
+    pub font: crate::font::FontConfig,
     #[serde(default, alias = "program")]
     pub programs: ProgramsConfig,
     #[serde(default)]
@@ -145,19 +149,10 @@ impl AppConfig {
     }
 }
 
-/// Apply `[settings]` overrides onto the loaded color `theme`. Covers the UI
-/// font (decoupled from the color preset) and all terminal overrides.
+/// Apply `[settings]` overrides onto the loaded color `theme`. Covers the
+/// terminal color palette overrides only — font family/size configuration has
+/// moved to the dedicated `[font]` block (see [`crate::font::FontConfig`]).
 fn apply_overrides(theme: &mut Theme, settings: &SettingsConfig) {
-    // UI/chrome font — decoupled from the color theme (§ Phase 7 B).
-    if let Some(family) = &settings.font_family {
-        theme.font_family = family.clone();
-    }
-    if let Some(size) = settings.font_size {
-        theme.font_size = size;
-    }
-    if let Some(family) = &settings.terminal_font_family {
-        theme.terminal_font_family = family.clone();
-    }
     if let Some(color) = settings.terminal_foreground {
         theme.terminal_foreground = Some(color);
     }
@@ -185,15 +180,10 @@ fn apply_overrides(theme: &mut Theme, settings: &SettingsConfig) {
     if let Some(colors) = settings.terminal_brights {
         theme.terminal_brights = Some(colors);
     }
-    if let Some(family) = &settings.terminal_italic_font_family {
-        theme.terminal_italic_font_family = family.clone();
-    }
-    if let Some(size) = settings.terminal_font_size {
-        theme.terminal_font_size = size;
-    }
 }
 
 fn validate_config(config: &Config) -> Result<(), String> {
+    config.font.validate()?;
     for command in &config.keys.command {
         command.validate()?;
     }
@@ -311,27 +301,10 @@ color = "#112233"
     }
 
     #[test]
-    fn terminal_theme_values_survive_when_settings_do_not_override_them() {
-        let mut theme = theme::load("mocha");
-        let original_family = theme.terminal_font_family.clone();
-        let original_italic_family = theme.terminal_italic_font_family.clone();
-        let original_size = theme.terminal_font_size;
-
-        apply_overrides(&mut theme, &SettingsConfig::default());
-
-        assert_eq!(theme.terminal_font_family, original_family);
-        assert_eq!(theme.terminal_italic_font_family, original_italic_family);
-        assert_eq!(theme.terminal_font_size, original_size);
-    }
-
-    #[test]
-    fn settings_override_bundled_terminal_theme_values() {
+    fn terminal_color_overrides_apply_via_apply_overrides() {
         let mut theme = theme::load("mocha");
         let settings: SettingsConfig = toml::from_str(
             r##"
-terminal-font-family = "Iosevka Term"
-terminal-italic-font-family = "Iosevka Term Italic"
-terminal-font-size = 16.0
 terminal-background = "#112233"
 terminal-foreground = "#ddeeff"
 "##,
@@ -340,35 +313,51 @@ terminal-foreground = "#ddeeff"
 
         apply_overrides(&mut theme, &settings);
 
-        assert_eq!(theme.terminal_font_family, "Iosevka Term");
-        assert_eq!(theme.terminal_italic_font_family, "Iosevka Term Italic");
-        assert_eq!(theme.terminal_font_size, 16.0);
         assert_eq!(theme.terminal_background, Some(Color::new(17, 34, 51, 255)));
         assert_eq!(theme.terminal_foreground, Some(Color::new(221, 238, 255, 255)));
     }
 
     #[test]
-    fn ui_font_values_come_from_the_unified_theme_when_not_overridden() {
-        let theme = theme::load("mocha");
-        assert_eq!(theme.font_family, "Geist Mono");
-        assert_eq!(theme.font_size, 15.0);
+    fn terminal_color_values_survive_when_settings_do_not_override_them() {
+        let mut theme = theme::load("mocha");
+        let original_bg = theme.terminal_background;
+        apply_overrides(&mut theme, &SettingsConfig::default());
+        assert_eq!(theme.terminal_background, original_bg);
     }
 
     #[test]
-    fn settings_override_ui_font() {
-        let mut theme = theme::load("mocha");
-        let settings: SettingsConfig = toml::from_str(
-            r##"
-font-family = "Iosevka"
-font-size = 18.0
-"##,
-        )
-        .expect("settings should parse");
+    fn font_config_parses_from_full_config() {
+        let toml = r##"
+[font.family.ui]
+normal = "Iosevka"
 
-        apply_overrides(&mut theme, &settings);
+[font.family.terminal]
+normal = "Iosevka Term"
+italic = "Iosevka Term Italic"
 
-        assert_eq!(theme.font_family, "Iosevka");
-        assert_eq!(theme.font_size, 18.0);
+[font.size]
+ui = 18.0
+terminal = 16.0
+"##;
+        let cfg: Config = toml::from_str(toml).expect("config should parse");
+        assert_eq!(cfg.font.family.ui_normal(), "Iosevka");
+        assert_eq!(cfg.font.family.terminal_normal(), "Iosevka Term");
+        assert_eq!(
+            cfg.font.family.terminal.italic.as_deref(),
+            Some("Iosevka Term Italic")
+        );
+        assert_eq!(cfg.font.size.ui, 18.0);
+        assert_eq!(cfg.font.size.terminal, 16.0);
+        cfg.font.validate().unwrap();
+    }
+
+    #[test]
+    fn font_config_defaults_when_section_absent() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.font.family.ui_normal(), "Geist Mono");
+        assert_eq!(cfg.font.family.terminal_normal(), "Maple Mono Normal NF");
+        assert_eq!(cfg.font.size.ui, 15.0);
+        assert_eq!(cfg.font.size.terminal, 14.0);
     }
 
     #[test]

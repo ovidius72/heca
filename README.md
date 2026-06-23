@@ -452,9 +452,8 @@ background = "#1e1e2e"
 foreground = "#cdd6f4"
 border = "#313244"
 accent = "#89b4fa"
-# UI font is decoupled from the color theme — set it under [settings] (see below),
-# not here. `font_family` / `font_size` are still accepted here but optional and
-# overridden by [settings].
+# Fonts are decoupled from the color theme (they are system-local, not
+# theme-portable) — set them under [font] (see below), not here.
 border_radius = 6.0
 border_width = 1.0
 
@@ -547,15 +546,40 @@ focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
-font_family = "Geist Mono"    # UI/chrome font (decoupled from color theme; default Geist Mono)
-font_size = 15.0              # UI/chrome font size (default 15.0)
-terminal_font_family = "Maple Mono Normal NF"  # Terminal font (independent of UI font)
-terminal_font_size = 14.0     # Terminal font size
 ```
 
-The **UI font** (`font_family` / `font_size`) and the **terminal font**
-(`terminal_font_family` / `terminal_font_size`) are configured here under
-`[settings]`, independently of the color theme — switching theme keeps your fonts.
+### Fonts
+
+Fonts are **system-local, not theme-portable** — a color theme that shipped a
+`font_family` would break on a system without that font. So fonts live in a
+dedicated `[font]` block, independent of the color theme: switching theme keeps
+your fonts, and a theme never requires a specific installed font.
+
+```toml
+[font.family.ui]
+normal = "Geist Mono"          # UI/chrome font (omit → embedded Geist Mono fallback)
+# bold = "..."                  # optional → falls back to normal
+# italic = "..."                # optional → falls back to normal + synthesized oblique
+# bold_italic = "..."           # optional → falls back to italic → bold → normal
+
+[font.family.terminal]
+normal = "Maple Mono Normal NF"  # Terminal font (omit → embedded Maple Mono fallback)
+# italic = "..."                # optional distinct italic family
+
+[font.size]
+ui = 15.0                      # UI/chrome font size (default 15.0)
+terminal = 14.0                # Terminal font size (default 14.0)
+```
+
+`normal` is optional — if omitted, the surface falls back to its **embedded**
+font (Geist Mono for UI, Maple Mono Normal NF for terminal), so a theme never
+depends on a system-installed font. `bold` / `italic` / `bold_italic` are
+optional per-style family slots. When unset, the renderer falls back to
+`normal` and selects the face via weight/style within the family (bold face via
+`Weight::BOLD`; italic via a synthesized oblique when the family has no italic
+face). When set, the renderer uses the named family for that style — so you can
+point bold/italic at a different installed font without touching the regular
+family.
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 

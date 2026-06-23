@@ -35,7 +35,7 @@ So **"default = grid_tron" and "default = mocha" are both true at different laye
 - Grep gate before sign-off: no remaining `Color::new(`/`Color::rgb(`/`[0.` literal colors or `*_ALPHA` consts in active render/widget paths that aren't theme-sourced; if a literal remains intentionally for tests or protocol fallbacks, document why.
 
 **Two cross-cutting findings to fold into Phase 3/4:**
-- **font landmine:** pane-runtime Phase 8 put a `state.theme.font_size` mapping inside `chrome_gui_theme()`, and the in-pane info bar reads `chrome_gui_theme().font_size`. Phase 3C.2 turns that fn into a pass-through — **fold the font handling into the unified `Theme`**, don't keep the patch. (Also note `[settings] font_family`/`font_size` now override the theme font via `loader::apply_overrides` — preserve that.)
+- **font landmine (RESOLVED — `compositor-04c`):** pane-runtime Phase 8 put a `state.theme.font_size` mapping inside `chrome_gui_theme()`, and the in-pane info bar reads `chrome_gui_theme().font_size`. Fonts have now been **moved OUT of `Theme`** entirely into a dedicated `[font]` config block (`heca-config/src/font.rs`, `FontConfig`). `chrome_gui_theme()` / `app_theme_to_gui_theme()` now take a `&FontConfig` and fill the grid-ui `Theme.font_family`/`font_size` from it. The old `[settings] font_family`/`font_size` overrides + `loader::apply_overrides` font arms are removed.
 - **widgets only PARTLY theme-driven:** grid-ui widgets read core colors from `cx.theme()` but **hardcode alphas/effects** that should be theme tokens — `IconButton` `HOVER_FILL_ALPHA` + the **white press flash** (`cx.flash` = `rgb(255,255,255)` in `component.rs`), `Tag` `FILL_ALPHA`/`BORDER_ALPHA`, and the pane-bar close-red is a hand-`lerp` (`danger.lerp(surface,0.25)`) for lack of a "muted danger" token. Promote these into `heca-theme::Theme` tokens during widget tokenization so a theme switch fully restyles them (the white flash especially looks wrong off-theme).
 
 ---
@@ -67,7 +67,7 @@ heca-theme  ◄──  heca          (direct, for theme loading)
 - [x] 1.1 Create `heca-theme/Cargo.toml` — deps: `serde` (derive), `toml`, `dirs`
 - [x] 1.2 Create `heca-theme/src/color.rs` — merge grid-ui `Color` + config `Color` into one type (serde hex, `with_alpha`, `lerp`, `to_f32x4`, `FromStr`, `Display`)
 - [x] 1.3 Create `heca-theme/src/theme.rs` — unified `Theme` struct with ALL fields:
-  - From current config: `name`, `background`, `foreground`, `border`, `accent`, `font_family`, `font_size`, `terminal_*`, `border_radius`, `border_width`, `pane_padding`, `shadow`, `float_*`, `drag_*`, `drop_*`, `sidebar_*_font_size`
+  - From current config: `name`, `background`, `foreground`, `border`, `accent`, `border_radius`, `border_width`, `pane_padding`, `shadow`, `float_*`, `drag_*`, `drop_*`, `sidebar_*_font_size` (fonts moved out to `[font]` in `compositor-04c`)
   - From current grid-ui: `surface`, `muted`, `glow`, `danger`, `success`, `warning`, `glow_size` (GlowLevel), `intensity` (Intensity), `show_focus_border`, `icon_secondary_alpha`
   - `Shadow` struct (color String, alpha f32, blur f32)
   - `Intensity` enum (Off/Low/Medium/Heavy) with `glow_scale()`, `scanline_opacity()`, `next()`

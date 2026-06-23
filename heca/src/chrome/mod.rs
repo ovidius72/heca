@@ -1647,8 +1647,12 @@ fn intensity_to_gui(level: heca_config::theme::Intensity) -> heca_grid_ui::theme
 /// Projects the loaded app theme into the grid-ui widget theme contract.
 ///
 /// This keeps chrome widgets visually aligned with the runtime app palette and
-/// effect tokens until the theme model is fully unified across crates.
-fn app_theme_to_gui_theme(theme: &heca_config::theme::Theme) -> GuiTheme {
+/// effect tokens until the theme model is fully unified across crates. Font
+/// family/size come from `font_config` (decoupled from the color theme).
+fn app_theme_to_gui_theme(
+    theme: &heca_config::theme::Theme,
+    font_config: &heca_config::font::FontConfig,
+) -> GuiTheme {
     GuiTheme {
         name: theme.name.clone(),
         background: app_color_to_gui(theme.background),
@@ -1662,8 +1666,8 @@ fn app_theme_to_gui_theme(theme: &heca_config::theme::Theme) -> GuiTheme {
         danger: app_color_to_gui(theme.danger),
         success: app_color_to_gui(theme.success),
         warning: app_color_to_gui(theme.warning),
-        font_family: theme.font_family.clone(),
-        font_size: theme.font_size,
+        font_family: font_config.family.ui_normal().to_string(),
+        font_size: font_config.size.ui,
         radius: theme.border_radius,
         border_width: theme.border_width,
         glow_size: glow_level_to_gui(theme.glow_size),
@@ -1745,7 +1749,7 @@ pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color
 /// Bridge the loaded app theme into a GuiTheme for chrome widgets.
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     let (_, sidebar_bg, _) = chrome_colors(state);
-    let mut theme = app_theme_to_gui_theme(&state.theme);
+    let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
     theme.background = app_color_to_gui(state.theme.background);
     theme.surface = sidebar_bg;
     // `[appearance]` effect-token overrides take precedence over the theme.
@@ -2269,12 +2273,17 @@ pub(crate) enum DragSourceKind {
 }
 
 /// Which drop-target kinds a given drag source may land on (F4.5 scope C). A pane
-/// drag targets panes; a column drag targets columns + workspaces — **never** the
-/// nested pane cards, or the deepest hit would always be a pane and a column could
-/// never be dropped on another column.
+/// drag targets panes **and workspaces** — a workspace is only the resolved target
+/// when the cursor is over its header/empty area (a pane card under the cursor is the
+/// deeper hit and wins), which is the one way to move a pane into an *empty* workspace
+/// (empty columns can't exist, so columns need no pane-drop target). A column drag
+/// targets columns + workspaces — **never** the nested pane cards, or the deepest hit
+/// would always be a pane and a column could never be dropped on another column.
 fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
     match source {
-        DragSourceKind::Pane => matches!(item, ChromeDragItem::Pane(_)),
+        DragSourceKind::Pane => {
+            matches!(item, ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. })
+        }
         DragSourceKind::Column => {
             matches!(item, ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. })
         }
@@ -2473,7 +2482,8 @@ mod tests {
     #[test]
     fn app_theme_to_gui_theme_preserves_loaded_palette_tokens() {
         let theme = heca_config::theme::load("mocha");
-        let gui = app_theme_to_gui_theme(&theme);
+        let font_config = heca_config::font::FontConfig::default();
+        let gui = app_theme_to_gui_theme(&theme, &font_config);
 
         assert_eq!(gui.name, theme.name);
         assert_eq!(gui.background, app_color_to_gui(theme.background));
@@ -2485,8 +2495,8 @@ mod tests {
         assert_eq!(gui.danger, app_color_to_gui(theme.danger));
         assert_eq!(gui.success, app_color_to_gui(theme.success));
         assert_eq!(gui.warning, app_color_to_gui(theme.warning));
-        assert_eq!(gui.font_family, theme.font_family);
-        assert_eq!(gui.font_size, theme.font_size);
+        assert_eq!(gui.font_family, font_config.family.ui_normal());
+        assert_eq!(gui.font_size, font_config.size.ui);
         assert_eq!(gui.radius, theme.border_radius);
         assert_eq!(gui.border_width, theme.border_width);
         assert_eq!(gui.glow_size, heca_grid_ui::theme::GlowLevel::None);

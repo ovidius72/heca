@@ -280,7 +280,7 @@ Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
 > Replace the tiled-tint + OS-vibrancy approach with a heca-owned z=0 blurred gradient background layer.
 > Fixes cross-platform frost AND the floating-pane text collision defect (5% sharp-content leak).
 > Gate: run AFTER `theming-04` so the new `background_*` config knobs live in the unified theme system.
-> **Status:** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) docs committed on `docs/compositor-phase-4` but never PR'd — will ship folded into `compositor-04b`. **`compositor-04b` (intensity/glow override + glow/scanline separation) is the active phase.** Then `compositor-04c` (font settings separation), then `compositor-05` (visual tuning) + `compositor-06` (review/ship).
+> **Status:** Phases 1–3 done and merged (PR #165 = Phase 1, PR #167 = Phase 2, PR #169 = Phase 3). Phase 4 (`compositor-04`) docs shipped folded into `compositor-04b`. `compositor-04b` (intensity/glow override + glow/scanline separation) ✅ merged (PR #172). `compositor-04c` (font settings separation) ✅ merged (PR #175). **Next: `compositor-05` (visual tuning with the user) + `compositor-06` (review/ship).**
 
 ### [x] Phase: GPU plumbing — gradient layer and cached blur · `compositor-01`
 New isolated GPU primitives in `heca-renderer`. No app wiring yet.
@@ -374,28 +374,30 @@ Merged in this PR.
 - [x] **compositor-task-18** — Update `AGENTS.md` — add z-layer frost model to rendering/appearance notes; reinforce "no hardcoded color — read from theme" rule with the gradient as the canonical example.
   Done: added a `### z=0 background frost model (heca-owned, cross-platform)` subsection after the Stack table — documents `BackgroundLayer` as a heca-renderer GPU primitive (NOT a `heca-grid-ui` widget), the render order, the grill-me Q1 opaque-theme translucency rule, the removed knobs, and reinforces the no-hardcoded-color rule with the gradient as the example. Also updated `.planning/research/ARCHITECTURE.md` §3 (Compositor/Renderer) with the z=0 pipeline + `BackgroundLayer` static blur cache + the app-vs-compositor cross-platform rationale.
 
-> **Note (2026-06-22):** Phase 4 docs were committed to `docs/compositor-phase-4` (`75c1857`) but **no PR was made**. The docs will ship folded into the `compositor-04b` PR (the intensity/glow task below) rather than getting their own PR.
+> **Note (2026-06-22):** Phase 4 docs were committed to `docs/compositor-phase-4` (`75c1857`) and **shipped folded into the `compositor-04b` PR (#172)** rather than getting their own PR. ✅
 
-### [~] Phase: `intensity` / `glow_size` `[appearance]` override + glow/scanline separation · `compositor-04b`
+### [x] Phase: `intensity` / `glow_size` `[appearance]` override + glow/scanline separation · `compositor-04b`
 On-the-fly phase added during the compositor refactor when a problem was found: the `intensity` token was leaking into glow rendering (via `Intensity::glow_scale()`), and the two effect tokens (`glow_size` = glow, `intensity` = scanlines/CRT overlay) had no `[appearance]` override. `intensity` is tied to the compositor's z=0.5 CRT scanline overlay pass (Q2-extra in `compositor-blur-refactor-plan.md`), so this is compositor-track work even though it touches `Theme`/`AppearanceConfig`.
 Source: `handoff-intensity-glow.md`, discussion 2026-06-22.
 Gate: ships together with `compositor-04` docs (one PR).
+**Status (2026-06-22):** ✅ DONE — merged in PR #172 (`feat(compositor): add intensity/glow appearance overrides`).
 
-- [~] **compositor-task-23** — Add `[appearance]` override fields `intensity: Option<Intensity>` and `glow_size: Option<GlowLevel>` to `AppearanceConfig` (`heca-config/src/appearance.rs`) with resolvers `effective_intensity(&Theme)` / `effective_glow_size(&Theme)` (unset → theme wins, set → overrides). Unit tests: unset → theme value; set → override wins; snake_case parse.
-- [~] **compositor-task-24** — Clean the glow/scanline separation: remove `Intensity::glow_scale()` from both `heca-theme::Intensity` and `heca-grid-ui::theme::Intensity`; add `GlowLevel::strength_scale()` to both crates (`none=0.0, thin=0.5, medium=1.0, large=1.6` — preserves the old `Intensity::glow_scale()` curve exactly so MarkerGroup's glow strength is unchanged). `GlowLevel::radius_scale()` stays `0.0/0.5/1.0/2.0`. Fix the single caller `heca-grid-ui/src/widgets/marker_group.rs:156` to read `t.glow_size.strength_scale()`; update its comment. Remove the `intensity_glow_scales` test; add `glow_level_strength_scales` + `intensity_scanline_opacity_is_separate_from_glow`.
-- [~] **compositor-task-25** — Wire the override into the app at the single choke point `chrome_gui_theme(state)` (`heca/src/chrome/mod.rs`): after `app_theme_to_gui_theme`, override `theme.glow_size`/`theme.intensity` from `state.appearance.effective_*(state.theme)`. `terminal_pane_gui_theme` inherits via `chrome_gui_theme` — no extra wiring.
-- [~] **compositor-task-26** — Fix the misleading `Intensity` doc comments in both `heca-theme/src/theme.rs` and `heca-grid-ui/src/theme.rs`: `intensity` controls scanline/CRT overlay opacity only, not glow; glow is `glow_size` (presence + radius + strength).
-- [~] **compositor-task-27** — Document the two knobs in `example.config.toml` (commented, with value lists + the "unset → theme" + separation notes).
-- [~] **compositor-task-28** — Full token doc audit across `theming-documentation.md` (every `Theme` field + every `[appearance]` field; remove stale `terminal_frost_color` references; corrected `intensity`/`glow_size` semantics; `[appearance]`-overridable note), `README.md`, `AGENTS.md`, `BACKLOG.md`.
-- [ ] **compositor-task-29** — Verification gates: `cargo build --workspace --all-targets` green; `cargo clippy --workspace --all-targets --all-features` → 0 warnings; `cargo test --workspace` green except the known pre-existing env-dependent `heca-core::terminal_backend_bash_integration...` and the pre-existing `heca-grid-ui toast_action_press_flashes...` test (both fail on plain `main`); `rg "\.glow_scale\(\)"` → no remaining callers.
-- [ ] **compositor-task-30** — Fold the `docs/compositor-phase-4` doc changes (`compositor-task-16/17/18`) into this PR; resolve the rebase on shared doc files (README, theming-documentation, AGENTS, example.config, BACKLOG). Show the user the full diff for review. **Do not commit until the user reviews.**
+- [x] **compositor-task-23** — Add `[appearance]` override fields `intensity: Option<Intensity>` and `glow_size: Option<GlowLevel>` to `AppearanceConfig` (`heca-config/src/appearance.rs`) with resolvers `effective_intensity(&Theme)` / `effective_glow_size(&Theme)` (unset → theme wins, set → overrides). Unit tests: unset → theme value; set → override wins; snake_case parse.
+- [x] **compositor-task-24** — Clean the glow/scanline separation: remove `Intensity::glow_scale()` from both `heca-theme::Intensity` and `heca-grid-ui::theme::Intensity`; add `GlowLevel::strength_scale()` to both crates (`none=0.0, thin=0.5, medium=1.0, large=1.6` — preserves the old `Intensity::glow_scale()` curve exactly so MarkerGroup's glow strength is unchanged). `GlowLevel::radius_scale()` stays `0.0/0.5/1.0/2.0`. Fix the single caller `heca-grid-ui/src/widgets/marker_group.rs:156` to read `t.glow_size.strength_scale()`; update its comment. Remove the `intensity_glow_scales` test; add `glow_level_strength_scales` + `intensity_scanline_opacity_is_separate_from_glow`.
+- [x] **compositor-task-25** — Wire the override into the app at the single choke point `chrome_gui_theme(state)` (`heca/src/chrome/mod.rs`): after `app_theme_to_gui_theme`, override `theme.glow_size`/`theme.intensity` from `state.appearance.effective_*(state.theme)`. `terminal_pane_gui_theme` inherits via `chrome_gui_theme` — no extra wiring.
+- [x] **compositor-task-26** — Fix the misleading `Intensity` doc comments in both `heca-theme/src/theme.rs` and `heca-grid-ui/src/theme.rs`: `intensity` controls scanline/CRT overlay opacity only, not glow; glow is `glow_size` (presence + radius + strength).
+- [x] **compositor-task-27** — Document the two knobs in `example.config.toml` (commented, with value lists + the "unset → theme" + separation notes).
+- [x] **compositor-task-28** — Full token doc audit across `theming-documentation.md` (every `Theme` field + every `[appearance]` field; remove stale `terminal_frost_color` references; corrected `intensity`/`glow_size` semantics; `[appearance]`-overridable note), `README.md`, `AGENTS.md`, `BACKLOG.md`.
+- [x] **compositor-task-29** — Verification gates: `cargo build --workspace --all-targets` green; `cargo clippy --workspace --all-targets --all-features` → 0 warnings; `cargo test --workspace` green except the known pre-existing env-dependent `heca-core::terminal_backend_bash_integration...` and the pre-existing `heca-grid-ui toast_action_press_flashes...` test (both fail on plain `main`); `rg "\.glow_scale\(\)"` → no remaining callers.
+- [x] **compositor-task-30** — Fold the `docs/compositor-phase-4` doc changes (`compositor-task-16/17/18`) into this PR; resolve the rebase on shared doc files (README, theming-documentation, AGENTS, example.config, BACKLOG). Show the user the full diff for review. **Do not commit until the user reviews.**
 
-### [ ] Phase: Font settings separation (extract fonts from `Theme`) · `compositor-04c`
+### [x] Phase: Font settings separation (extract fonts from `Theme`) · `compositor-04c`
 Discovered during `compositor-04b`: fonts are **system-local, not theme-portable** — a theme that ships `font_family = "Maple Mono Normal NF"` breaks on a system without that font. Colors/palette are portable; fonts aren't. The terminal font handling is also messy (`Theme` owns `terminal_font_family`/`terminal_italic_font_family`/`terminal_font_size`, `[settings]` has Option-overrides applied via `loader::apply_overrides`). Move font family + size out of `Theme` into a dedicated structured `[font]` block in `config.toml` with per-style family slots.
 Source: discussion 2026-06-22 (during `compositor-04b`).
 Gate: after `compositor-04b` merges.
+**Status (2026-06-22):** ✅ DONE — merged. Implementation complete on `feature/compositor-04c-font-settings`; build + clippy clean; tests green. Per-style family slots (normal/bold/italic/bold_italic) supported end-to-end (config → resolver → renderer `TerminalFontFamilies`); unset slots fall back to `normal` + weight/synthesized-oblique, so no new font files are needed. `normal` itself is optional — omitting it falls back to the **surface-correct** embedded font (Geist Mono for UI, Maple Mono Normal NF for terminal). Cross-AI review passed; review fixes landed (consts for fallback names, `tf` binding in the renderer bridge, 3 new `TerminalFontFamilies::resolve` edge-case tests).
 
-- [ ] **compositor-task-31** — Add a `FontConfig` struct to `heca-config` with this schema:
+- [x] **compositor-task-31** — Add a `FontConfig` struct to `heca-config` with this schema:
   ```toml
   [font.family.ui]
   normal = "..."
@@ -416,20 +418,20 @@ Gate: after `compositor-04b` merges.
   Defaults live in `FontConfig::default()` (system-safe fonts) — **not** in the theme. Optional style slots fall back to `normal`.
   Files: `heca-config/src/font.rs` (new), `heca-config/src/lib.rs`, `heca-config/src/settings.rs` (remove the font Option-overrides)
 
-- [ ] **compositor-task-32** — Remove font fields from `heca-theme::Theme`: `font_family`, `font_size`, `terminal_font_family`, `terminal_italic_font_family`, `terminal_font_size`. Remove them from the 3 bundled TOMLs (`grid_tron.toml`, `mocha.toml`, `latte.toml`). Remove the font arms from `loader::apply_overrides()`.
+- [x] **compositor-task-32** — Remove font fields from `heca-theme::Theme`: `font_family`, `font_size`, `terminal_font_family`, `terminal_italic_font_family`, `terminal_font_size`. Remove them from the 3 bundled TOMLs (`grid_tron.toml`, `mocha.toml`, `latte.toml`). Remove the font arms from `loader::apply_overrides()`.
   Files: `heca-theme/src/theme.rs`, `heca-theme/src/themes/*.toml`, `heca-config/src/loader.rs`
 
-- [ ] **compositor-task-33** — Wire consumers to read fonts from `FontConfig` instead of `theme.font_*` (~45 call sites, 11 files):
+- [x] **compositor-task-33** — Wire consumers to read fonts from `FontConfig` instead of `theme.font_*` (~45 call sites, 11 files):
   `heca/src/main.rs`, `heca/src/app/startup.rs`, `heca/src/chrome/mod.rs` (6 sites), `heca/src/app/render.rs` (6 sites), `heca/src/app/terminal_render.rs`, `heca/src/app/terminal_metrics.rs`, `heca-grid-ui/src/layout.rs` + tests, `heca-renderer/examples/showcase.rs`.
   Pass the resolved font config down at the same choke points that today read `theme.font_*` (e.g. `chrome_gui_theme`, `TextRenderer::set_font_family`, terminal render pass context).
 
-- [ ] **compositor-task-34** — Renderer: support per-style family slots (normal/bold/italic/bold_italic) for both UI and terminal surfaces. `heca-renderer/src/text.rs` currently has one `font_family` slot + a `bold: bool` weight toggle; to honor distinct named families per style, load 4 font collections per surface (ui + terminal = 8) and select by (weight, style) via cosmic-text. Terminal already passes `italic_font_family` separately — extend to bold + bold_italic.
+- [x] **compositor-task-34** — Renderer: support per-style family slots (normal/bold/italic/bold_italic) for both UI and terminal surfaces. `heca-renderer/src/text.rs` currently has one `font_family` slot + a `bold: bool` weight toggle; to honor distinct named families per style, load 4 font collections per surface (ui + terminal = 8) and select by (weight, style) via cosmic-text. Terminal already passes `italic_font_family` separately — extend to bold + bold_italic.
   Files: `heca-renderer/src/text.rs`, `heca/src/app/render.rs`
   Note: if full per-style families are deferred, `bold`/`italic`/`bold_italic` slots fall back to `normal` and the renderer keeps weight-based bold — the config schema is still future-proof.
 
-- [ ] **compositor-task-35** — Update `example.config.toml` (document the `[font]` block), `theming-documentation.md` (remove font tokens from the Theme field list; add a `[font]` config section), `README.md`, `AGENTS.md`.
+- [x] **compositor-task-35** — Update `example.config.toml` (document the `[font]` block), `theming-documentation.md` (remove font tokens from the Theme field list; add a `[font]` config section), `README.md`, `AGENTS.md`.
 
-- [ ] **compositor-task-36** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green; grep gate `rg "theme\.font_|\.font_family|\.font_size" --glob '*.rs'` confirms no remaining theme-font reads in consumers.
+- [x] **compositor-task-36** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green; grep gate `rg "theme\.font_|\.font_family|\.font_size" --glob '*.rs'` confirms no remaining theme-font reads in consumers.
 
 ### [ ] Phase: Visual tuning with the user · `compositor-05`
 Source: `compositor-blur-refactor-plan.md` Phase 5
@@ -830,9 +832,15 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   column-specific (memory `grid-ui-keyhint-universal`).
   Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`
 
-- [ ] **app-task-31** — F4.5 "onto-third" drop semantics: sidebar drag/move/swap for panes + columns is
-  done; this adds the remaining drop case (dropping onto a third target). Small / opportunistic.
-  Files: `heca/src/mouse/surface_left.rs` (drag dispatch)
+- [x] **app-task-31** — F4.5 drop-onto-workspace. DONE 2026-06-22. Scope narrowed with the user: the only
+  real gap was **dropping a pane onto a workspace → move it into that workspace** (the one way to reach an
+  *empty* workspace, since empty columns can't exist and pane-on-pane already covers column moves).
+  `target_accepted_by` now lets a pane drag accept `Workspace` targets, and `accept_drop` routes a workspace
+  target through `place_pane_at_sidebar_target`'s `Workspace` arm, which creates a **new column** at the end
+  of the workspace (a pane dropped on a workspace starts its own column; appending into an existing column
+  is what dropping on a column/pane card is for). The drop indicator already handled workspace targets
+  (column-drag path), so it lights up for pane drags too.
+  Files: `heca/src/mouse/surface_left.rs`, `heca/src/chrome/mod.rs`
 
 ### [ ] Phase: Right-click context menu · `app-11`
 Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename actions.

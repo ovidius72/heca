@@ -18,10 +18,28 @@ use heca_grid_ui::{
     Point as GuiPoint,
     Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
 };
-use heca_renderer::terminal::TerminalStyle;
+use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 use heca_grid_ui::drag::DragSurfaceId;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::text::TextRenderer;
+
+/// Project the terminal font-family group from config into the renderer's
+/// per-style family slots. The renderer stays config-free; this is the app-side
+/// bridge. Takes the whole `FontFamilies` so the `normal` slot can be resolved
+/// with the **terminal** embedded fallback (`terminal_normal()`), not the UI
+/// fallback — omitting `[font.family.terminal].normal` keeps Maple Mono, not
+/// Geist Mono. Borrows from `families` so the returned slots live as long as it.
+fn terminal_font_families_from(
+    families: &heca_config::font::FontFamilies,
+) -> TerminalFontFamilies<'_> {
+    let tf = &families.terminal;
+    TerminalFontFamilies {
+        normal: families.terminal_normal(),
+        bold: tf.bold.as_deref(),
+        italic: tf.italic.as_deref(),
+        bold_italic: tf.bold_italic.as_deref(),
+    }
+}
 
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
@@ -432,9 +450,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     stencil: Some(stencil_view),
                 },
                 TerminalStyle {
-                    font_size: theme.terminal_font_size,
-                    font_family: &theme.terminal_font_family,
-                    italic_font_family: &theme.terminal_italic_font_family,
+                    font_size: state.font_config.size.terminal,
+                    families: terminal_font_families_from(&state.font_config.family),
                     surface_alpha,
                 },
                 crate::app::terminal_host::TerminalMount {
@@ -668,9 +685,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         stencil: Some(stencil_view),
                     },
                     TerminalStyle {
-                        font_size: theme.terminal_font_size,
-                        font_family: &theme.terminal_font_family,
-                        italic_font_family: &theme.terminal_italic_font_family,
+                        font_size: state.font_config.size.terminal,
+                        families: terminal_font_families_from(&state.font_config.family),
                         surface_alpha: floating_surface_alpha,
                     },
                     crate::app::terminal_host::TerminalMount {
