@@ -465,10 +465,12 @@ Grid::new()
 
 ### ScrollRegion
 
-An embeddable **vertical scroll viewport**: a column of children laid out at
-their natural height (the layout engine never shrinks them, so the column
-overflows), clipped to the region's own bounds. The visible window is the
-`ScrollRegion` itself; content beyond it is clipped (`PushClip`).
+An embeddable **vertical scroll viewport**: a column of children laid out at their
+natural height (the layout engine never shrinks them, so the column overflows),
+clipped to the region's own bounds. The visible window is the `ScrollRegion`
+itself; content beyond it is clipped (`PushClip`). It is a **dumb viewport** —
+it owns no selection state; selection/cursor is the host container's concern,
+and the region just scrolls where it's told (see *Real-app integration* below).
 
 **Mechanism — same as the whole-page scroll.** Rather than a separate
 translation layer, `ScrollRegion` reuses the page-scroll pattern: it bakes
@@ -479,53 +481,79 @@ clip). Because bounds always match the visual, pointer routing and the drag
 framework's `source_at`/`resolve_at` (which hit-test against bounds) just work
 while scrolled. A fresh layout pass would compound the shift, so the layout
 engine's post-order `on_layout` hook resets the baked offset (children are back
-at natural) and the next paint re-applies it from scratch.
+at natural) and re-applies it from scratch — no compounding across relayouts.
 
 - **Construct**: `ScrollRegion::new()`. Append children with [`Parent::child`].
-- **Builders**: `LayoutExt` (give it a fixed `.height()` so content overflows).
+  Give it a fixed `.height()` (and usually `.width()`) via `LayoutExt` so the
+  content actually overflows; otherwise it sizes to its children and never
+  scrolls.
+- **Builders**: `LayoutExt`, `Parent`.
 - **Scroll position**: `.scroll_offset() -> Signal<f32>` (read from the host);
-  `.scroll_to(f32) -> f32` (clamped set **+ bakes the shift into bounds**, returns
-  the applied value). Prefer `scroll_to` over raw `scroll_offset().set()` — it
-  keeps the shifted bounds (paint/hit-testing/DnD) in sync in the same call.
+  `.scroll_to(f32) -> f32` (clamped to `[0, max_offset]`, **bakes the shift into
+  bounds immediately**, requests a repaint, returns the applied value). Prefer
+  `scroll_to` over raw `scroll_offset().set()` — it keeps the shifted bounds
+  (paint/hit-testing/DnD) in sync with the offset in the same call.
 - **Scroll-into-view** (for keyboard cursor following): `.ensure_visible(rect)`
-  scrolls minimally so a descendant's current `bounds` (visual space) is fully
-  inside the viewport — a host container calls this when its selection/cursor
-  moves so the selected row stays on screen. `.scroll_to_child(index)` is the
-  convenience for a flat list whose selectable units are direct children. The
-  widget recovers natural positions internally (via its baked shift), so the
-  host never tracks the scroll offset.
-- **Wheel gating**: `Event::Scroll` has no position, so the broadcast router
-  can't hit-test it. The region tracks hover via `PointerMoved` and only swallows
-  the wheel when hovered (and scrollable); otherwise the event propagates so the
-  host page (or a nested region) can scroll. Single inline region only; nested
-  scroll regions need host-side hit-testing (future).
-- **Interaction** (built-in): the wheel advances the offset by ~10% of the
-  viewport per notch (viewport-proportional, so a small sidebar doesn't
-  overshoot); the auto-shown scrollbar **thumb is draggable**; and when the
-  region is **focused** (click it or Tab to it), **keyboard scroll** works —
-  `ArrowUp`/`ArrowDown` and `j`/`k` (with or without `Ctrl`) move by one step
-  (~10% of the viewport), `Home`/`End` jump to top/bottom. A focus ring
-  (corner brackets) shows which region receives the keys. `Event::Key` is
-  delivered to the focused component only, so the gate is simply `focused`; a
-  focused child (e.g. an `Input`) receives its keys directly and never has them
-  stolen. PageUp/PageDown are future work (`GridKey` has no page keys yet).
-  Note: in the showcase `Ctrl+K` is host-bound to the command palette, so use
-  `k`/`Ctrl+J`/arrows there; the chord is configurable in the app.
+  scrolls minimally so a descendant's current `bounds` (visual space, read
+  straight off the component) is fully inside the viewport — above → align tops,
+  below → align bottoms, already visible → no-op. `.scroll_to_child(index)` is
+  the convenience for a flat list whose selectable units are direct children.
+  The widget recovers natural positions internally via its baked shift
+  (`applied_offset`), so the host never tracks the scroll offset or does offset
+  math. Minimal movement — it won't jump if the item is already on screen.
+- **Wheel** (built-in): advances the offset by ~10% of the viewport per notch
+  (viewport-proportional, so a small sidebar doesn't overshoot). **Hover-gated**:
+  `Event::Scroll` carries no position, so the region tracks the cursor via
+  `PointerMoved` and only swallows the wheel when hovered (and scrollable);
+  otherwise the event propagates so the host page (or a nested region) can
+  scroll. Single inline region only — nested scroll regions need host-side
+  hit-testing (future).
+- **Keyboard** (built-in, focus-gated): the region is `focusable()`, so click it
+  or Tab to it to focus. `Event::Key` is delivered to the **focused component
+  only** (`FocusManager`), so the gate is simply `focused` — no broadcast-key
+  ambiguity. When focused: `ArrowUp`/`ArrowDown` and `j`/`k` (with or without
+  `Ctrl`) move by one step (~10% of the viewport, matching the wheel), `Home`/
+  `End` jump to top/bottom. A focus ring (corner brackets, `theme.accent`, gated
+  by `focus_visible` + `show_focus_border`) shows which region receives the keys.
+  A focused **child** (e.g. an `Input`) receives its keys directly via its own
+  `event` and never has them stolen. PageUp/PageDown are future work (`GridKey`
+  has no page keys yet).
+- **Scrollbar thumb** (built-in): auto-shown when content overflows; **draggable**.
+  A theme-**accent** grip that brightens on hover/drag (mirroring `MarkerGroup`'s
+  grip bar), sitting in a wider invisible **grab lane** (16px) so the thin 8px
+  thumb is easy to click. The thumb radius reads the `Theme::control_radius()`
+  token (no hardcoded radius); the thumb color is `theme.accent` (no hardcoded
+  color). The affordance alphas (rest/hover) are widget-internal constants,
+  consistent with `MarkerGroup`.
 - **Traits**: `LayoutExt`, `Parent`.
-- **v1**: vertical-only; the thumb is a theme-**accent** grip that brightens on
-  hover/drag (mirroring `MarkerGroup`'s grip bar) and sits in a wider invisible
-  grab lane (16px) so a thin 8px thumb is easy to click; the thumb radius reads
-  the `Theme::control_radius()` token (no hardcoded radius). Horizontal scroll
-  and a dedicated scrollbar color token are future work.
+- **v1 scope**: vertical-only. Horizontal scroll, a dedicated scrollbar color
+  token, PageUp/PageDown keys, and nested-region hit-testing are future work.
 
 ```rust
-let mut list = ScrollRegion::new().height(Length::Px(180.0)).width(Length::Px(300.0));
-for name in ["alpha", "beta", "gamma", "delta", "epsilon"] {
-    list = list.child(Item::new(name));
+let mut list = ScrollRegion::new()
+    .height(Length::Px(180.0))
+    .width(Length::Px(300.0));
+for i in 1..=25 {
+    list = list.child(Item::new(format!("item {i:02}")));
 }
-// Drive from the host (e.g. a “jump to top” action):
+// Drive from the host (a “jump to top” action):
 list.scroll_to(0.0);
 ```
+
+> **Real-app integration (sidebar):** selection is container-owned, not widget
+> state. Mount the sidebar tree (DockFrames + rows) inside a `ScrollRegion`; the
+> existing `SidebarNav` cursor handler (`j`/`k`, selection-driven) gains one line —
+> after moving the cursor, call `region.ensure_visible(selected_row.bounds)` (or
+> `scroll_to_child` for a flat list) to keep the cursor on screen. The selected
+> row's visual state (accent bar) stays container-driven via `Item::marker`/
+> `state`. See [`heca-renderer/examples/showcase.rs`](../heca-renderer/examples/showcase.rs)
+> for the wheel/thumb/keyboard demo.
+>
+> **Host wiring:** route keys through `FocusManager::deliver_key` (keys go to the
+> focused component only — that's the whole gate), and pointer/wheel through
+> `FocusManager::dispatch`. Note: in the showcase `Ctrl+K` is host-bound to the
+> command palette, so use `k`/`Ctrl+J`/arrows there; the chord is configurable in
+> the app.
 
 ### Label
 
