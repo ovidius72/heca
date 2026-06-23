@@ -840,6 +840,9 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   pick candidates today, so this needs NEW candidate computation in `heca/src/app/input.rs`, then project
   the candidates onto a per-column hint signal each frame. `KeyHint` stays universal — do NOT make it
   column-specific (memory `grid-ui-keyhint-universal`).
+  NOTE (2026-06-23): the per-column `KeyHint` + candidate infra now exists (`ChromeSignals.col_hint`,
+  `WorkspacesContainerState.col_pick_candidates`, built in `app-12`). This task is now just adding the
+  *column-as-pick-target* candidate computation for move/swap/take that act ON a column.
   Files: `heca/src/app/input.rs`, `heca/src/chrome/mod.rs`
 
 - [x] **app-task-31** — F4.5 drop-onto-workspace. DONE 2026-06-22. Scope narrowed with the user: the only
@@ -851,6 +854,27 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   is what dropping on a column/pane card is for). The drop indicator already handled workspace targets
   (column-drag path), so it lights up for pane drags too.
   Files: `heca/src/mouse/surface_left.rs`, `heca/src/chrome/mod.rs`
+
+### [x] Phase: Keyboard move-to-target picks + rename override + plugin-observable state · `app-12`
+DONE 2026-06-23 (PR #178). Keyboard counterparts to the sidebar drag moves, plus making picks/renames
+observable by plugins.
+
+- [x] **app-task-33** — Keyboard "move to" picks via universal `KeyHint`: move active **column → workspace**
+  (`prefix+c`), active **pane → workspace** (`prefix+g`), active **pane → column** (`prefix+Shift+c`, freed
+  from `rename_column`). New `InputMode::WorkspacePick`/`ColumnPick`, candidate collectors (exclude the
+  current workspace for the workspace picks; pane→column spans **all** workspaces and stacks into the target
+  column), per-target `KeyHint` projection (`ws_hint`/`col_hint`), and resolve handlers dispatching the
+  existing `MoveColumnToWorkspace`/`MovePaneToWorkspace`/`MovePaneToColumn`. `KeyHint` gained `.color()`,
+  `.offset_y()`, `TopRight`; `Color::with_alpha_f32()` added; `DockFrame` active wash is signal-driven.
+  Cross-workspace move-pane-to-column now stacks (`join_existing`) instead of making a new column.
+- [x] **app-task-34** — Rename **custom-name override**: `Pane.custom_name` wins over the process-derived
+  title everywhere (sidebar card, reactive sync, in-pane info bar/header); icon still tracks the process;
+  empty rename clears it.
+- [x] **app-task-35** — Plugin-observable state (per the Architecture principle): custom name → store signal
+  + `PaneCustomNameChanged` + `host.pane_custom_name()`; in-progress pick → `PendingPick` (kind + label +
+  prompt, text sourced from each action's `ActionDescriptor`) + `PendingPickChanged` + `host.pending_pick()`.
+  Files: `heca/src/{app_state,handlers,actions,host}.rs`, `heca/src/app/{input,selection,render}.rs`,
+  `heca/src/chrome/{mod,state,events}.rs`, `heca-grid-ui/src/{color,widgets/key_hint,widgets/dock_frame}.rs`
 
 ### [ ] Phase: Right-click context menu · `app-11`
 Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename actions.
