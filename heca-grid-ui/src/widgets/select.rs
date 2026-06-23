@@ -181,7 +181,10 @@ impl Select {
     /// The bounding rect of the open option list (panel).
     fn panel_rect(&self) -> Rectangle {
         let b = self.base.bounds;
-        Rectangle::new(Point::new(b.loc.x, self.panel_top()), Size::new(b.size.w, self.panel_h()))
+        Rectangle::new(
+            Point::new(b.loc.x, self.panel_top()),
+            Size::new(b.size.w, self.panel_h()),
+        )
     }
 
     /// The rect of the `slot`-th *visible* row (0-based from the top of the list).
@@ -273,7 +276,12 @@ impl Component for Select {
     fn remeasure(&mut self) {
         let fs = self.base.font;
         self.base.style.height = Length::Px(fs * MONO_LINE_RATIO + 2.0 * self.pad_v() as f32);
-        let longest = self.options.iter().map(|s| s.chars().count()).max().unwrap_or(0) as f32;
+        let longest = self
+            .options
+            .iter()
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0) as f32;
         let text_w = longest * fs * MONO_ADVANCE_RATIO;
         let chrome = (2.0 * self.pad_h() + self.chevron_w() + SCROLLBAR_W) as f32;
         self.base.style.width = Length::Px(text_w + chrome);
@@ -289,7 +297,15 @@ impl Component for Select {
         let active = self.open || self.base.focused.get_untracked();
         let (surface, accent, glow_c, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.control_radius(), t.border_width)
+            (
+                t.surface,
+                t.accent,
+                t.glow,
+                t.muted,
+                t.foreground,
+                t.control_radius(),
+                t.border_width,
+            )
         };
         let b = self.base.bounds;
         let fs = self.base.font;
@@ -354,7 +370,16 @@ impl Component for Select {
                     radius: GLOW_RADIUS,
                     intensity: GLOW_INTENSITY,
                 });
-                cx.rect(panel, surface, Some(Border { color: accent, width: bw }), radius, glow);
+                cx.rect(
+                    panel,
+                    surface,
+                    Some(Border {
+                        color: accent,
+                        width: bw,
+                    }),
+                    radius,
+                    glow,
+                );
                 let selected = self.selected.get_untracked();
                 let scrollbar = self.scrollable();
                 // Render only the visible window of rows (no clipping needed).
@@ -366,7 +391,11 @@ impl Component for Select {
                     }
                     // Leave room for the scrollbar on the right when present.
                     let pad_h = self.pad_h();
-                    let right_pad = if scrollbar { pad_h + SCROLLBAR_W } else { pad_h };
+                    let right_pad = if scrollbar {
+                        pad_h + SCROLLBAR_W
+                    } else {
+                        pad_h
+                    };
                     let row_text = Rectangle::new(
                         Point::new(row.loc.x + pad_h, row.loc.y),
                         Size::new((row.size.w - pad_h - right_pad).max(0.0), row.size.h),

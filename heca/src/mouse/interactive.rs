@@ -117,7 +117,8 @@ pub(super) fn handle_interactive_move_starting(state: &mut AppState, pos: (f32, 
     }
 
     if should_transition
-        && let Some(InteractiveMovePhase::Starting { pane_id, swap, .. }) = state.mouse.interactive_move
+        && let Some(InteractiveMovePhase::Starting { pane_id, swap, .. }) =
+            state.mouse.interactive_move
     {
         transition_to_moving(state, pane_id, pos, swap);
     }
@@ -148,12 +149,14 @@ pub(super) fn handle_interactive_move_drag(state: &mut AppState, pos: (f32, f32)
     };
 
     if state.mouse.detached_pane.is_none()
-        && let Some(ws) = state.session.workspaces.get_mut(state.session.active_workspace_idx)
+        && let Some(ws) = state
+            .session
+            .workspaces
+            .get_mut(state.session.active_workspace_idx)
         && let Some((ci, pi)) = super::find_pane_in_workspace(ws, source_id)
     {
         let col_x = ws.scrolling.column_x(ci) - ws.scrolling.view_pos();
-        let pane_y = ws.scrolling.working_area.loc.y
-            + ws.scrolling.pane_y_in_column(ci, pi);
+        let pane_y = ws.scrolling.working_area.loc.y + ws.scrolling.pane_y_in_column(ci, pi);
         ws.scrolling.columns[ci].panes[pi].interactive_move_offset = Point::new(
             pointer_in.0 as f64 - offset.0 as f64 - col_x,
             pointer_in.1 as f64 - offset.1 as f64 - pane_y,
@@ -217,7 +220,10 @@ fn transition_to_moving(state: &mut AppState, pane_id: PaneId, mouse_pos: (f32, 
 
     // Compute grab offset: cursor position relative to pane top-left in content coords.
     let pointer_in = ((mouse_pos.0 - cx) as f64, (mouse_pos.1 - cy) as f64);
-    let view_pos = state.session.workspaces.get(original_ws)
+    let view_pos = state
+        .session
+        .workspaces
+        .get(original_ws)
         .map(|ws| ws.scrolling.view_pos())
         .unwrap_or(0.0);
     let col_screen_x = col_x - view_pos;

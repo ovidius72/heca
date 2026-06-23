@@ -9,13 +9,14 @@ use heca_config::programs::ProgramsConfig;
 use heca_config::theme::Theme;
 use heca_core::layout::{PaneId, Session};
 use heca_grid_ui::drag::DragContext;
-use heca_renderer::background::BackgroundLayer;
 use heca_renderer::backdrop::Backdrop;
+use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
 use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
+use std::collections::HashMap;
 use std::sync::Arc;
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::ModifiersState;
@@ -61,10 +62,13 @@ pub enum InputMode {
     },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
-    /// 
+    ///
     /// Partially wired: render and input handling exist, but no command path
     /// constructs this variant yet. See handle_chord_mode() in app/input.rs.
-    #[expect(dead_code, reason = "Reserved for multi-key chord UX; will be constructed when chord entry is implemented.")]
+    #[expect(
+        dead_code,
+        reason = "Reserved for multi-key chord UX; will be constructed when chord entry is implemented."
+    )]
     Chord {
         sequence: Vec<String>,
     },
@@ -158,25 +162,41 @@ impl InputMode {
         // of truth for action text — no duplicated strings here).
         let (kind, action_name) = match self {
             InputMode::PaneSelect { .. } => (PickKind::SelectPane, "pane_select"),
-            InputMode::PaneSwap { focus_after: true, .. } => {
-                (PickKind::SwapPane, "swap_and_focus_pane")
+            InputMode::PaneSwap {
+                focus_after: true, ..
+            } => (PickKind::SwapPane, "swap_and_focus_pane"),
+            InputMode::PaneSwap {
+                focus_after: false, ..
+            } => (PickKind::SwapPane, "swap_pane"),
+            InputMode::PaneTake {
+                focus_after: true, ..
+            } => (PickKind::TakePane, "pane_take_and_focus"),
+            InputMode::PaneTake {
+                focus_after: false, ..
+            } => (PickKind::TakePane, "pane_take"),
+            InputMode::WorkspacePick {
+                target: WorkspacePickTarget::Pane(_),
+                ..
+            } => (PickKind::MovePaneToWorkspace, "move_pane_to_workspace_pick"),
+            InputMode::WorkspacePick {
+                target: WorkspacePickTarget::Column { .. },
+                ..
+            } => (
+                PickKind::MoveColumnToWorkspace,
+                "move_column_to_workspace_pick",
+            ),
+            InputMode::ColumnPick { .. } => {
+                (PickKind::MovePaneToColumn, "move_pane_to_column_pick")
             }
-            InputMode::PaneSwap { focus_after: false, .. } => (PickKind::SwapPane, "swap_pane"),
-            InputMode::PaneTake { focus_after: true, .. } => {
-                (PickKind::TakePane, "pane_take_and_focus")
-            }
-            InputMode::PaneTake { focus_after: false, .. } => (PickKind::TakePane, "pane_take"),
-            InputMode::WorkspacePick { target: WorkspacePickTarget::Pane(_), .. } => {
-                (PickKind::MovePaneToWorkspace, "move_pane_to_workspace_pick")
-            }
-            InputMode::WorkspacePick { target: WorkspacePickTarget::Column { .. }, .. } => {
-                (PickKind::MoveColumnToWorkspace, "move_column_to_workspace_pick")
-            }
-            InputMode::ColumnPick { .. } => (PickKind::MovePaneToColumn, "move_pane_to_column_pick"),
             _ => return None,
         };
         let desc = crate::actions::ActionRegistry::find(action_name)?;
-        Some(PendingPick { kind, action_name, label: desc.label, prompt: desc.description })
+        Some(PendingPick {
+            kind,
+            action_name,
+            label: desc.label,
+            prompt: desc.description,
+        })
     }
 }
 
@@ -206,7 +226,6 @@ pub enum PickKind {
     MoveColumnToWorkspace,
     MovePaneToColumn,
 }
-
 
 /// What a surface drag carries — the app payload `P` for
 /// [`DragContext<AppDragPayload>`]. The `heca-grid-ui` drag framework is
@@ -345,6 +364,158 @@ impl MouseState {
     }
 }
 
+pub struct RetainedTerminalLayer {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    physical_size: (u32, u32),
+    pub render_key: u64,
+}
+
+impl RetainedTerminalLayer {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+        render_key: u64,
+    ) -> Self {
+        let (texture, view) = make_terminal_texture(
+            device,
+            format,
+            width,
+            height,
+            "terminal_layer",
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
+        Self {
+            texture,
+            view,
+            physical_size: (width.max(1), height.max(1)),
+            render_key,
+        }
+    }
+
+    pub fn ensure_size(
+        &mut self,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        let next_size = (width.max(1), height.max(1));
+        if self.physical_size == next_size {
+            return false;
+        }
+        let (texture, view) = make_terminal_texture(
+            device,
+            format,
+            next_size.0,
+            next_size.1,
+            "terminal_layer",
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
+        self.texture = texture;
+        self.view = view;
+        self.physical_size = next_size;
+        true
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
+}
+
+pub struct RetainedTerminalScratch {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    physical_size: (u32, u32),
+}
+
+impl RetainedTerminalScratch {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let (texture, view) = make_terminal_texture(
+            device,
+            format,
+            width,
+            height,
+            "terminal_layer_scratch",
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
+        Self {
+            texture,
+            view,
+            physical_size: (width.max(1), height.max(1)),
+        }
+    }
+
+    pub fn ensure_at_least(
+        &mut self,
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) {
+        let next_size = (width.max(1), height.max(1));
+        if self.physical_size.0 >= next_size.0 && self.physical_size.1 >= next_size.1 {
+            return;
+        }
+        let (texture, view) = make_terminal_texture(
+            device,
+            format,
+            next_size.0,
+            next_size.1,
+            "terminal_layer_scratch",
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
+        self.texture = texture;
+        self.view = view;
+        self.physical_size = next_size;
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
+    }
+}
+
+fn make_terminal_texture(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+    label: &str,
+    usage: wgpu::TextureUsages,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: width.max(1),
+            height: height.max(1),
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
+}
+
 /// Central application runtime state.
 ///
 /// Holds the winit window, GPU resources, session layout, backends,
@@ -373,6 +544,8 @@ pub struct AppState {
     pub text_renderer: TextRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
+    pub terminal_layers: HashMap<PaneId, RetainedTerminalLayer>,
+    pub terminal_layer_scratch: RetainedTerminalScratch,
     /// In-app frosted-blur primitive (shared, compositor-owned).
     /// Produces a blurred copy of the scene texture once per frame, then many
     /// `Backdrop::draw` calls stamp it into pane surface rects.
@@ -411,7 +584,7 @@ pub struct AppState {
     /// Retained per-pane info-bar headers (segment `Tag` + action `IconButton`s),
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
-    pub pane_headers: std::collections::HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
+    pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
     /// Tooltip keybind hints for the pane-action buttons, resolved from config at
     /// load/reload (so the tooltips show the user's real, rebindable keys).
     pub pane_action_hints: crate::chrome::PaneActionHints,
@@ -460,7 +633,10 @@ impl AppState {
     /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over
     /// the shared chrome store. The seam first-party providers (and the future WASM
     /// bridge) use to observe events + read state without touching internal signals.
-    #[allow(dead_code, reason = "host API seam — first-party providers land in a later phase")]
+    #[allow(
+        dead_code,
+        reason = "host API seam — first-party providers land in a later phase"
+    )]
     pub fn host(&self) -> crate::host::App {
         crate::host::App::new(&self.chrome_state)
     }

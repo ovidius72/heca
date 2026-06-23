@@ -246,7 +246,18 @@ impl Component for Button {
             return;
         }
         // Snapshot theme colors so we can call &mut cx methods afterwards.
-        let (surface, accent, glow_c, danger, background, foreground, muted, border_c, border_width, radius) = {
+        let (
+            surface,
+            accent,
+            glow_c,
+            danger,
+            background,
+            foreground,
+            muted,
+            border_c,
+            border_width,
+            radius,
+        ) = {
             let t = cx.theme();
             (
                 t.surface,
@@ -266,14 +277,26 @@ impl Component for Button {
 
         match self.variant {
             ButtonVariant::Primary => {
-                cx.rect(b, surface, self.animated_border(accent, p, border_width), radius, None);
+                cx.rect(
+                    b,
+                    surface,
+                    self.animated_border(accent, p, border_width),
+                    radius,
+                    None,
+                );
                 if p > 0.0 {
                     self.paint_rising_fill(cx, accent, glow_c, p, radius);
                 }
                 self.paint_label(cx, accent.lerp(background, p));
             }
             ButtonVariant::Destructive => {
-                cx.rect(b, surface, self.animated_border(danger, p, border_width), radius, None);
+                cx.rect(
+                    b,
+                    surface,
+                    self.animated_border(danger, p, border_width),
+                    radius,
+                    None,
+                );
                 if p > 0.0 {
                     let g = self.show_glow.then_some(Glow {
                         color: danger,
@@ -287,7 +310,13 @@ impl Component for Button {
             ButtonVariant::Secondary => {
                 // Border becomes more vivid on hover (brighter + solid).
                 let bc = border_c.lerp(foreground, 0.4 * p);
-                cx.rect(b, surface, self.animated_border(bc, p, border_width), radius, None);
+                cx.rect(
+                    b,
+                    surface,
+                    self.animated_border(bc, p, border_width),
+                    radius,
+                    None,
+                );
                 self.paint_label(cx, foreground);
             }
             ButtonVariant::Outline => {

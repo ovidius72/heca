@@ -34,7 +34,10 @@ pub enum SelectionSource {
     /// Keyboard-driven selection mode.
     KeyboardMode,
     /// RPC or other programmatic request.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "RPC-originated selection is reserved for upcoming wiring")
+    )]
     Rpc,
 }
 
@@ -43,7 +46,6 @@ pub enum SelectionSource {
 /// Reserved for the planned RPC/backend-native selection flow. Today the app
 /// matches directly on [`SelectionState`], but the phase enum stays in sync with
 /// the shared selection contract that the next task will wire up.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum SelectionPhase {
     /// No active selection.
@@ -58,7 +60,6 @@ pub enum SelectionPhase {
 /// Who renders the selection visual and owns the anchor semantics.
 ///
 /// Reserved for the planned RPC/backend-native selection flow.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SelectionRenderMode {
     /// heca owns the text/grid model and renders the selection overlay.
@@ -82,13 +83,15 @@ pub enum SelectionRegion {
         focus_col: usize,
     },
     /// Opaque backend-native region. The host does not interpret it.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "backend-native region is reserved for future backend-owned selection")
+    )]
     BackendNative,
 }
 
 impl SelectionRegion {
     /// Return the host-grid render mode this region belongs to.
-    #[allow(dead_code)]
     pub fn render_mode(&self) -> SelectionRenderMode {
         match self {
             SelectionRegion::HostGrid { .. } => SelectionRenderMode::HostGrid,
@@ -101,7 +104,11 @@ impl SelectionRegion {
     /// Has no effect for backend-native regions.
     pub fn with_focus(self, row: usize, col: usize) -> Self {
         match self {
-            SelectionRegion::HostGrid { anchor_row, anchor_col, .. } => SelectionRegion::HostGrid {
+            SelectionRegion::HostGrid {
+                anchor_row,
+                anchor_col,
+                ..
+            } => SelectionRegion::HostGrid {
                 anchor_row,
                 anchor_col,
                 focus_row: row,
@@ -125,7 +132,6 @@ pub struct ActiveSelection {
 
 impl ActiveSelection {
     /// Who renders the selection visual.
-    #[allow(dead_code)]
     pub fn render_mode(&self) -> SelectionRenderMode {
         self.region.render_mode()
     }
@@ -174,12 +180,17 @@ impl SelectionState {
         match self {
             SelectionState::Inactive => None,
             SelectionState::Caret { owner, .. } => Some(*owner),
-            SelectionState::Selecting(active) | SelectionState::Selected(active) => Some(active.owner),
+            SelectionState::Selecting(active) | SelectionState::Selected(active) => {
+                Some(active.owner)
+            }
         }
     }
 
     /// Current lifecycle phase.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for future selection lifecycle routing")
+    )]
     pub fn phase(&self) -> SelectionPhase {
         match self {
             SelectionState::Inactive => SelectionPhase::Inactive,
@@ -203,20 +214,29 @@ impl SelectionState {
     }
 
     /// Who renders the selection visual, if a selection is active.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for backend-native selection wiring")
+    )]
     pub fn render_mode(&self) -> Option<SelectionRenderMode> {
         self.active().map(|a| a.render_mode())
     }
 
     /// Selection region, if active.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for backend-native selection wiring")
+    )]
     pub fn region(&self) -> Option<&SelectionRegion> {
         self.active().map(|a| &a.region)
     }
 
     /// True if a selection gesture or confirmed selection exists (excludes caret-only).
     pub fn is_active(&self) -> bool {
-        matches!(self, SelectionState::Selecting(_) | SelectionState::Selected(_))
+        matches!(
+            self,
+            SelectionState::Selecting(_) | SelectionState::Selected(_)
+        )
     }
 
     /// True if a selection gesture is currently in progress.
@@ -225,7 +245,10 @@ impl SelectionState {
     }
 
     /// True if a selection has been confirmed.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for upcoming confirmed-selection flows")
+    )]
     pub fn has_selection(&self) -> bool {
         matches!(self, SelectionState::Selected(_))
     }
@@ -282,11 +305,23 @@ impl SelectionState {
     pub fn toggle_selection_endpoint(&mut self) {
         match self {
             SelectionState::Selecting(ActiveSelection {
-                region: SelectionRegion::HostGrid { anchor_row, anchor_col, focus_row, focus_col },
+                region:
+                    SelectionRegion::HostGrid {
+                        anchor_row,
+                        anchor_col,
+                        focus_row,
+                        focus_col,
+                    },
                 ..
             })
             | SelectionState::Selected(ActiveSelection {
-                region: SelectionRegion::HostGrid { anchor_row, anchor_col, focus_row, focus_col },
+                region:
+                    SelectionRegion::HostGrid {
+                        anchor_row,
+                        anchor_col,
+                        focus_row,
+                        focus_col,
+                    },
                 ..
             }) => {
                 std::mem::swap(anchor_row, focus_row);
@@ -601,7 +636,10 @@ mod tests {
                 focus_row,
                 focus_col,
             } => {
-                assert_eq!((*anchor_row, *anchor_col, *focus_row, *focus_col), (3, 5, 3, 5));
+                assert_eq!(
+                    (*anchor_row, *anchor_col, *focus_row, *focus_col),
+                    (3, 5, 3, 5)
+                );
             }
             _ => panic!("expected HostGrid region"),
         }
@@ -800,20 +838,10 @@ pub fn extract_selection_text(
             focus_row,
             focus_col,
         } => {
-            let (start_row, start_col, end_row, end_col) = normalize_selection_rect(
-                *anchor_row,
-                *anchor_col,
-                *focus_row,
-                *focus_col,
-            );
+            let (start_row, start_col, end_row, end_col) =
+                normalize_selection_rect(*anchor_row, *anchor_col, *focus_row, *focus_col);
             Some(extract_text_from_grid(
-                lines,
-                cols,
-                start_row,
-                start_col,
-                end_row,
-                end_col,
-                default_bg,
+                lines, cols, start_row, start_col, end_row, end_col, default_bg,
             ))
         }
         SelectionRegion::BackendNative => {
@@ -1052,14 +1080,25 @@ mod extraction_tests {
 
     #[test]
     fn extract_single_line_selection() {
-        let lines = vec![
-            line(vec![cell("h", 1), cell("e", 1), cell("l", 1), cell("l", 1), cell("o", 1), blank_cell(), blank_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("h", 1),
+            cell("e", 1),
+            cell("l", 1),
+            cell("l", 1),
+            cell("o", 1),
+            blank_cell(),
+            blank_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 0, focus_row: 0, focus_col: 4 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 0,
+                focus_row: 0,
+                focus_col: 4,
+            },
         );
         sel.end();
         let text = extract_selection_text(&sel, &lines, 7, TEST_BG).unwrap();
@@ -1077,7 +1116,12 @@ mod extraction_tests {
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 1, focus_row: 2, focus_col: 1 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 1,
+                focus_row: 2,
+                focus_col: 1,
+            },
         );
         sel.end();
         // Row 0: start_col=1, end=3 → "bc" (trailing blank trimmed)
@@ -1098,7 +1142,12 @@ mod extraction_tests {
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::KeyboardMode,
-            SelectionRegion::HostGrid { anchor_row: 1, anchor_col: 2, focus_row: 0, focus_col: 0 },
+            SelectionRegion::HostGrid {
+                anchor_row: 1,
+                anchor_col: 2,
+                focus_row: 0,
+                focus_col: 0,
+            },
         );
         sel.end();
         let text = extract_selection_text(&sel, &lines, 3, TEST_BG).unwrap();
@@ -1111,14 +1160,22 @@ mod extraction_tests {
     #[test]
     fn extract_wide_char_skips_filler() {
         // Wide character '中' takes 2 cells; the second cell has width=0 (filler).
-        let lines = vec![
-            line(vec![cell("中", 2), blank_cell(), cell("b", 1), blank_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("中", 2),
+            blank_cell(),
+            cell("b", 1),
+            blank_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 0, focus_row: 0, focus_col: 2 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 0,
+                focus_row: 0,
+                focus_col: 2,
+            },
         );
         sel.end();
         // Should copy "中b" (filler cell at col 1 is skipped)
@@ -1147,14 +1204,22 @@ mod extraction_tests {
 
     #[test]
     fn extract_text_with_trailing_blanks_trimmed() {
-        let lines = vec![
-            line(vec![cell("a", 1), cell("b", 1), blank_cell(), blank_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("a", 1),
+            cell("b", 1),
+            blank_cell(),
+            blank_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 0, focus_row: 0, focus_col: 3 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 0,
+                focus_row: 0,
+                focus_col: 3,
+            },
         );
         sel.end();
         // Selecting entire row including trailing blanks — should get "ab"
@@ -1166,14 +1231,21 @@ mod extraction_tests {
     fn extract_trailing_spaces_with_non_default_bg_are_preserved() {
         // Trailing spaces with a highlighted (non-default) background must NOT
         // be trimmed — they were intentionally selected.
-        let lines = vec![
-            line(vec![cell("a", 1), cell(" ", 1), highlighted_space_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("a", 1),
+            cell(" ", 1),
+            highlighted_space_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 0, focus_row: 0, focus_col: 2 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 0,
+                focus_row: 0,
+                focus_col: 2,
+            },
         );
         sel.end();
         // "a" + space + highlighted_space — both spaces must be preserved.
@@ -1184,14 +1256,22 @@ mod extraction_tests {
     #[test]
     fn extract_default_bg_trailing_blanks_are_trimmed() {
         // Trailing cells with empty text AND default_bg are filler and trimmed.
-        let lines = vec![
-            line(vec![cell("a", 1), cell("b", 1), blank_cell(), blank_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("a", 1),
+            cell("b", 1),
+            blank_cell(),
+            blank_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 0, focus_row: 0, focus_col: 3 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 0,
+                focus_row: 0,
+                focus_col: 3,
+            },
         );
         sel.end();
         // Trailing blank_cell() has default_bg, so it's trimmed.
@@ -1203,15 +1283,23 @@ mod extraction_tests {
     fn extract_wide_char_partial_selection_includes_anchor() {
         // If selection starts at a filler cell (width == 0), walk back to
         // include the anchor wide character.
-        let lines = vec![
-            line(vec![cell("\u{4e2d}", 2), filler_cell(), cell("b", 1), blank_cell()]),
-        ];
+        let lines = vec![line(vec![
+            cell("\u{4e2d}", 2),
+            filler_cell(),
+            cell("b", 1),
+            blank_cell(),
+        ])];
         let mut sel = SelectionState::new();
         sel.begin(
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
             // Start at column 1 (the filler of '中') — should include '中'
-            SelectionRegion::HostGrid { anchor_row: 0, anchor_col: 1, focus_row: 0, focus_col: 2 },
+            SelectionRegion::HostGrid {
+                anchor_row: 0,
+                anchor_col: 1,
+                focus_row: 0,
+                focus_col: 2,
+            },
         );
         sel.end();
         // Normalized: start=(0,1), end=(0,2)

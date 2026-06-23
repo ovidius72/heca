@@ -3,8 +3,8 @@
 //! These functions bridge session/workspace focus state into app-level UI state
 //! such as `focused_pane`, focus history, and sidebar projection rebuilds.
 
-use crate::app_state::AppState;
 use crate::app::terminal_host::notify_focus_changed;
+use crate::app_state::AppState;
 use heca_core::layout::{FocusDomain, PaneId, Session};
 
 /// Find which workspace contains a pane (by ID). Returns workspace index or None.
@@ -93,7 +93,10 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     // The chrome build reads selection from here, not from `Session` — the Phase-2
     // state boundary (`pluggable-chrome-plugin-plan.md` §3.3): the WorkspacesContainer
     // (and future providers) consume `chrome_state`, never `Session` directly.
-    state.chrome_state.workspaces.set_active_pane(state.focused_pane);
+    state
+        .chrome_state
+        .workspaces
+        .set_active_pane(state.focused_pane);
     notify_focus_changed(state, prev_focused, state.focused_pane);
 
     let focus_changed = prev_focused != state.focused_pane;
@@ -135,6 +138,9 @@ pub(crate) fn sync_focus(state: &mut AppState) {
     );
     // Re-project the canonical workspace-collapse set (chrome_state) onto the rebuilt
     // tree — sync_from_session defaults to expanded.
-    let collapsed = state.chrome_state.workspaces.with_collapsed_ws(|s| s.clone());
+    let collapsed = state
+        .chrome_state
+        .workspaces
+        .with_collapsed_ws(|s| s.clone());
     state.sidebar_tree.apply_ws_collapsed(&collapsed, None);
 }

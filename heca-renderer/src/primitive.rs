@@ -267,7 +267,10 @@ impl PrimitiveRenderer {
     /// Note: `radius` is currently ignored. True rounded corners (SDF or
     /// geometry-based) are planned for a future phase. The function name is
     /// kept for API stability but the output is currently sharp-cornered.
-    #[expect(clippy::too_many_arguments, reason = "Renderer primitive API keeps rectangle geometry and fill/border styling explicit at call sites.")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Renderer primitive API keeps rectangle geometry and fill/border styling explicit at call sites."
+    )]
     pub fn draw_rounded_rect(
         &mut self,
         x: f32,
@@ -284,13 +287,7 @@ impl PrimitiveRenderer {
     }
 
     /// Queue a filled triangle.
-    pub fn draw_triangle(
-        &mut self,
-        a: [f32; 2],
-        b: [f32; 2],
-        c: [f32; 2],
-        color: [f32; 4],
-    ) {
+    pub fn draw_triangle(&mut self, a: [f32; 2], b: [f32; 2], c: [f32; 2], color: [f32; 4]) {
         let base = self.vertices.len() as u32;
         self.vertices.push(Vertex { position: a, color });
         self.vertices.push(Vertex { position: b, color });

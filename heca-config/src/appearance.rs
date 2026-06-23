@@ -451,7 +451,8 @@ impl AppearanceConfig {
     /// active or inactive, so they read as a distinct layer). Config override →
     /// `theme.float_accent`.
     pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
-        self.pane_floating_border_color.unwrap_or(theme.float_accent)
+        self.pane_floating_border_color
+            .unwrap_or(theme.float_accent)
     }
 
     /// Effective pane gap. Config override → 8.0 (built-in layout default).
@@ -464,7 +465,9 @@ impl AppearanceConfig {
     /// `[0, 20]`. Snug by default now that the rounded content-clip (stencil)
     /// handles corners — a small straight-edge gap no longer overflows.
     pub fn effective_pane_padding(&self, theme: &Theme) -> f32 {
-        self.pane_padding.unwrap_or(theme.pane_padding).clamp(0.0, 20.0)
+        self.pane_padding
+            .unwrap_or(theme.pane_padding)
+            .clamp(0.0, 20.0)
     }
 
     /// Effective sidebar gap. Config override → 12.0.
@@ -602,7 +605,10 @@ mod tests {
                 PaneSegment::GitStatus
             ]
         );
-        assert_eq!(cfg.pane_title_actions, vec![PaneAction::Split, PaneAction::Close]);
+        assert_eq!(
+            cfg.pane_title_actions,
+            vec![PaneAction::Split, PaneAction::Close]
+        );
     }
 
     #[test]
@@ -671,8 +677,14 @@ mod tests {
             background_gradient_bottom: Some(Color::new(4, 5, 6, 255)),
             ..Default::default()
         };
-        assert_eq!(cfg.effective_background_gradient_top(&mocha), Color::new(1, 2, 3, 255));
-        assert_eq!(cfg.effective_background_gradient_bottom(&mocha), Color::new(4, 5, 6, 255));
+        assert_eq!(
+            cfg.effective_background_gradient_top(&mocha),
+            Color::new(1, 2, 3, 255)
+        );
+        assert_eq!(
+            cfg.effective_background_gradient_bottom(&mocha),
+            Color::new(4, 5, 6, 255)
+        );
     }
 
     #[test]
@@ -683,8 +695,14 @@ mod tests {
         bare.background_gradient_bottom = None;
         let cfg = AppearanceConfig::default();
         // top = background; bottom = darker(background) (≠ background).
-        assert_eq!(cfg.effective_background_gradient_top(&bare), bare.background);
-        assert_ne!(cfg.effective_background_gradient_bottom(&bare), bare.background);
+        assert_eq!(
+            cfg.effective_background_gradient_top(&bare),
+            bare.background
+        );
+        assert_ne!(
+            cfg.effective_background_gradient_bottom(&bare),
+            bare.background
+        );
     }
 
     #[test]
@@ -738,23 +756,28 @@ mod tests {
             glow_size: GlowLevel,
             intensity: Intensity,
         }
-        let w: Wrapper = toml::from_str(r#"glow_size = "large"
-intensity = "heavy""#)
-            .expect("effect tokens should parse snake_case");
+        let w: Wrapper = toml::from_str(
+            r#"glow_size = "large"
+intensity = "heavy""#,
+        )
+        .expect("effect tokens should parse snake_case");
         assert_eq!(w.glow_size, GlowLevel::Large);
         assert_eq!(w.intensity, Intensity::Heavy);
 
-        let off: Wrapper = toml::from_str(r#"glow_size = "none"
-intensity = "off""#)
-            .expect("off values should parse");
+        let off: Wrapper = toml::from_str(
+            r#"glow_size = "none"
+intensity = "off""#,
+        )
+        .expect("off values should parse");
         assert_eq!(off.glow_size, GlowLevel::None);
         assert_eq!(off.intensity, Intensity::Off);
     }
 
     #[test]
     fn partial_toml_fills_defaults() {
-        let cfg: AppearanceConfig = toml::from_str("transparency = 30\nterminal_transparency = 15\n")
-            .expect("partial appearance toml should parse");
+        let cfg: AppearanceConfig =
+            toml::from_str("transparency = 30\nterminal_transparency = 15\n")
+                .expect("partial appearance toml should parse");
         assert_eq!(cfg.transparency, 30);
         assert_eq!(cfg.blur, 0);
         assert_eq!(cfg.terminal_transparency, 15);
@@ -820,7 +843,10 @@ theme = "mocha"
 
         // Default: no config override -> theme.float_accent.
         let cfg = AppearanceConfig::default();
-        assert_eq!(cfg.effective_pane_floating_border_color(&mocha), mocha.float_accent);
+        assert_eq!(
+            cfg.effective_pane_floating_border_color(&mocha),
+            mocha.float_accent
+        );
 
         // Config override wins.
         let cfg = AppearanceConfig {
@@ -895,7 +921,10 @@ theme = "mocha"
         // padding defaults to 4.0.
         let dflt = AppearanceConfig::default();
         assert_eq!(dflt.effective_pane_border_width(&theme), theme.border_width);
-        assert_eq!(dflt.effective_pane_border_radius(&theme), theme.border_radius);
+        assert_eq!(
+            dflt.effective_pane_border_radius(&theme),
+            theme.border_radius
+        );
         assert_eq!(dflt.effective_pane_padding(&theme), 4.0);
 
         // In-range values pass through unchanged.

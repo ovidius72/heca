@@ -1,7 +1,7 @@
-use super::engine::SharedWriter;
 use super::ShellIntegrationAssets;
+use super::engine::SharedWriter;
 use anyhow::Error as AnyError;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;

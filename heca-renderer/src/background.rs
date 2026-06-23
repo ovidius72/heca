@@ -294,10 +294,7 @@ impl BackgroundLayer {
 /// Free comparison of two `(top, bottom, blur_radius)` param triples. Used by
 /// [`BackgroundLayer::params_changed`] so the dirty-flag logic is unit-testable
 /// without constructing a layer (which needs a GPU device).
-fn params_differ(
-    a: ([f32; 4], [f32; 4], f32),
-    b: ([f32; 4], [f32; 4], f32),
-) -> bool {
+fn params_differ(a: ([f32; 4], [f32; 4], f32), b: ([f32; 4], [f32; 4], f32)) -> bool {
     a.0 != b.0 || a.1 != b.1 || a.2 != b.2
 }
 

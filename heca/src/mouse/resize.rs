@@ -45,7 +45,14 @@ fn pane_boxes(state: &AppState) -> Vec<PaneBox> {
         .into_iter()
         .filter_map(|(id, x, y, w, h)| {
             let (_, col, pane) = crate::find_pane_location(&state.session, id)?;
-            Some(PaneBox { col, pane, x, y, w, h })
+            Some(PaneBox {
+                col,
+                pane,
+                x,
+                y,
+                w,
+                h,
+            })
         })
         .collect()
 }
@@ -65,7 +72,10 @@ fn divider_at(boxes: &[PaneBox], pos: (f32, f32)) -> Option<ResizeDivider> {
         {
             let centerline = (b.y + b.h + below.y) / 2.0;
             if (my - centerline).abs() <= GRAB_TOLERANCE && mx >= b.x && mx <= b.x + b.w {
-                return Some(ResizeDivider::Pane { col: b.col, pane: b.pane });
+                return Some(ResizeDivider::Pane {
+                    col: b.col,
+                    pane: b.pane,
+                });
             }
         }
     }
@@ -91,7 +101,7 @@ fn divider_at(boxes: &[PaneBox], pos: (f32, f32)) -> Option<ResizeDivider> {
         let (col, (_min_x, max_x, min_y, max_y)) = entries[i];
         let (lo, hi) = if i + 1 < entries.len() {
             // Span the gap up to the next column's left edge.
-            let next_min_x = entries[i + 1].1 .0;
+            let next_min_x = entries[i + 1].1.0;
             (max_x - GRAB_TOLERANCE, next_min_x + GRAB_TOLERANCE)
         } else {
             // Rightmost / single column: a band around its right edge.
@@ -238,9 +248,30 @@ mod tests {
     // split at y≈96..104 (centerline y=100).
     fn layout() -> Vec<PaneBox> {
         vec![
-            PaneBox { col: 0, pane: 0, x: 0.0, y: 0.0, w: 100.0, h: 96.0 },
-            PaneBox { col: 0, pane: 1, x: 0.0, y: 104.0, w: 100.0, h: 96.0 },
-            PaneBox { col: 1, pane: 0, x: 108.0, y: 0.0, w: 100.0, h: 200.0 },
+            PaneBox {
+                col: 0,
+                pane: 0,
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 96.0,
+            },
+            PaneBox {
+                col: 0,
+                pane: 1,
+                x: 0.0,
+                y: 104.0,
+                w: 100.0,
+                h: 96.0,
+            },
+            PaneBox {
+                col: 1,
+                pane: 0,
+                x: 108.0,
+                y: 0.0,
+                w: 100.0,
+                h: 200.0,
+            },
         ]
     }
 
@@ -289,7 +320,14 @@ mod tests {
 
     #[test]
     fn single_column_is_resizable_at_its_right_edge() {
-        let one = vec![PaneBox { col: 0, pane: 0, x: 0.0, y: 0.0, w: 100.0, h: 200.0 }];
+        let one = vec![PaneBox {
+            col: 0,
+            pane: 0,
+            x: 0.0,
+            y: 0.0,
+            w: 100.0,
+            h: 200.0,
+        }];
         // Right edge = 100 → band [94, 106] resizes the lone column.
         assert_eq!(
             divider_at(&one, (100.0, 100.0)),

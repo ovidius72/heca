@@ -1,10 +1,10 @@
-pub mod font;
 pub mod atlas;
-pub(crate) mod clip;
 pub mod backdrop;
 pub mod background;
 pub mod blur;
+pub(crate) mod clip;
 pub mod composite;
+pub mod font;
 pub mod gradient;
 pub mod grid;
 pub mod primitive;

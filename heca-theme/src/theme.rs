@@ -459,7 +459,10 @@ mod tests {
 
         assert_ne!(theme.effective_left_sidebar_background(), theme.background);
         assert_ne!(theme.effective_right_sidebar_background(), theme.background);
-        assert_ne!(theme.effective_top_bottom_pane_background(), theme.background);
+        assert_ne!(
+            theme.effective_top_bottom_pane_background(),
+            theme.background
+        );
     }
 
     #[test]
@@ -518,7 +521,10 @@ mod tests {
         assert_eq!(theme.effective_background_gradient_top(), theme.background);
         // Bottom falls back to a slightly darkened background (not the raw
         // background — subtle vertical depth).
-        assert_ne!(theme.effective_background_gradient_bottom(), theme.background);
+        assert_ne!(
+            theme.effective_background_gradient_bottom(),
+            theme.background
+        );
     }
 
     /// Bundled themes ship explicit z=0 gradient colors in their TOMLs. This pins

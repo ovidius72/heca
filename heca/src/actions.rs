@@ -25,7 +25,10 @@ pub enum ActionCategory {
     /// Workspace creation, renaming, switching.
     Workspace,
     /// Session-level: overview, save, load.
-    #[allow(dead_code)] // No session-level actions yet; will be used when overview/save/load are implemented.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "no session-level actions exist yet; used when overview/save/load land")
+    )]
     Session,
     /// UI chrome: sidebar toggle, tab management.
     Chrome,
@@ -35,7 +38,10 @@ pub enum ActionCategory {
 
 // ActionCategory and its label() are used by ActionDescriptor metadata.
 // The metadata catalog is preserved for the command palette (not yet implemented).
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "category labels are preserved for command-palette metadata")
+)]
 impl ActionCategory {
     /// Human-readable category name for UI display.
     pub const fn label(self) -> &'static str {
@@ -54,7 +60,10 @@ impl ActionCategory {
 /// Static descriptor for a window-manager action.
 #[derive(Debug, Clone, Copy)]
 // Preserved for the command palette and RPC introspection (not yet implemented).
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "descriptor fields are preserved for command-palette and RPC metadata")
+)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
@@ -118,7 +127,10 @@ impl ActionRegistry {
 
     /// Check whether a handler is registered for the given action.
     // Used in tests and debugging; kept for future RPC introspection.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for future RPC introspection")
+    )]
     pub fn has_handler(&self, action: &crate::input::WmAction) -> bool {
         let disc = crate::input::action_discriminant(action);
         self.handlers.contains_key(&disc)
@@ -127,7 +139,10 @@ impl ActionRegistry {
 
 // ── Static metadata catalog for command palette and RPC introspection ──
 // Not yet consumed by runtime UI; preserved for planned features.
-#[allow(dead_code)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "metadata catalog is preserved for planned command-palette and RPC introspection")
+)]
 impl ActionRegistry {
     /// All registered actions in a stable order.
     pub const ALL: &[ActionDescriptor] = &[
@@ -358,7 +373,6 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "q",
         },
-
         // Pick-mode prompts (`description`) double as the in-progress pick text shown
         // in `InputMode::pending_pick()` — single source of truth, not duplicated. The
         // "+ focus" variants make the focus-follow difference explicit.
@@ -546,7 +560,6 @@ impl ActionRegistry {
             category: ActionCategory::Chrome,
             default_binding: "(",
         },
-
         // ── System ──
         ActionDescriptor {
             name: "command_palette",
@@ -562,7 +575,6 @@ impl ActionRegistry {
             category: ActionCategory::System,
             default_binding: "Shift+r",
         },
-
         // ── Selection (host capability) ──
         ActionDescriptor {
             name: "enter_selection_mode",
@@ -704,9 +716,15 @@ mod tests {
             let desc = ActionRegistry::find(name);
             assert!(desc.is_some(), "missing descriptor for {name}");
             let desc = desc.unwrap();
-            assert!(!desc.default_binding.is_empty(), "{name} default_binding must be set");
+            assert!(
+                !desc.default_binding.is_empty(),
+                "{name} default_binding must be set"
+            );
             assert!(!desc.label.is_empty(), "{name} label must be set");
-            assert!(!desc.description.is_empty(), "{name} description must be set");
+            assert!(
+                !desc.description.is_empty(),
+                "{name} description must be set"
+            );
         }
     }
 

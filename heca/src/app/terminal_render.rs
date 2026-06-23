@@ -8,6 +8,7 @@ use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionStat
 use crate::app::terminal_host::TerminalMount;
 use crate::app_state::AppState;
 use heca_config::theme::Color;
+use heca_core::backend::{TerminalDamage, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use heca_grid_ui::builders::{LayoutExt, StyleExt};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -21,6 +22,8 @@ use heca_renderer::terminal::{
     CaretIndicator, SelectionOverlay, SelectionOverlaySpan, TerminalRenderer, TerminalStyle,
 };
 use heca_renderer::text::{TextBox, TextRenderer};
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 pub(crate) struct PaneRenderState {
     pub(crate) pane_id: PaneId,
@@ -31,6 +34,341 @@ pub(crate) struct PaneRenderState {
     pub(crate) is_active: bool,
     pub(crate) content_rect: Option<Rectangle>,
     pub(crate) mount: Option<TerminalMount>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TerminalCopyBand {
+    pub(crate) y: u32,
+    pub(crate) height: u32,
+}
+
+pub(crate) fn sync_retained_terminal_layers(
+    state: &mut AppState,
+    panes: &[PaneRenderState],
+    terminal_style: TerminalStyle<'_>,
+    window_logical_size: (f32, f32),
+    window_physical_size: winit::dpi::PhysicalSize<u32>,
+) {
+    retain_live_terminal_layers(state);
+
+    let render_key = terminal_layer_render_key(&terminal_style);
+    for pane in panes {
+        let Some(mount) = pane.mount.as_ref() else {
+            state.terminal_layers.remove(&pane.pane_id);
+            continue;
+        };
+
+        let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
+        state.terminal_layer_scratch.ensure_at_least(
+            &state.device,
+            state.surface_config.format,
+            physical_size.width,
+            physical_size.height,
+        );
+
+        let layer = state
+            .terminal_layers
+            .entry(pane.pane_id)
+            .or_insert_with(|| {
+                crate::app_state::RetainedTerminalLayer::new(
+                    &state.device,
+                    state.surface_config.format,
+                    physical_size.width,
+                    physical_size.height,
+                    render_key,
+                )
+            });
+
+        let resized = layer.ensure_size(
+            &state.device,
+            state.surface_config.format,
+            physical_size.width,
+            physical_size.height,
+        );
+        let style_changed = layer.render_key != render_key;
+        if style_changed {
+            layer.render_key = render_key;
+        }
+
+        let damage = if resized || style_changed {
+            TerminalDamage::Full
+        } else {
+            mount.damage.clone()
+        };
+        if matches!(damage, TerminalDamage::None) {
+            continue;
+        }
+
+        render_terminal_layer_update(
+            state,
+            pane.pane_id,
+            mount,
+            &damage,
+            terminal_style,
+            window_logical_size,
+            window_physical_size,
+        );
+    }
+}
+
+pub(crate) fn blit_retained_terminal_layer(
+    state: &AppState,
+    pane_id: PaneId,
+    encoder: &mut wgpu::CommandEncoder,
+    target: &wgpu::TextureView,
+    viewport_px: (f32, f32),
+    mount: &TerminalMount,
+    stencil: Option<&wgpu::TextureView>,
+) -> bool {
+    let Some(layer) = state.terminal_layers.get(&pane_id) else {
+        return false;
+    };
+    let rect = mount.content_rect;
+    let scale = state.scale_factor as f32;
+    state.backdrop.draw(
+        &state.device,
+        &state.queue,
+        encoder,
+        target,
+        layer.view(),
+        viewport_px,
+        (
+            rect.loc.x as f32 * scale,
+            rect.loc.y as f32 * scale,
+            rect.size.w as f32 * scale,
+            rect.size.h as f32 * scale,
+        ),
+        Some([0.0, 0.0, 1.0, 1.0]),
+        1.0,
+        stencil,
+    );
+    true
+}
+
+pub(crate) fn queue_terminal_dynamic_overlays(
+    text_renderer: &mut TextRenderer,
+    primitive_renderer: &mut PrimitiveRenderer,
+    mount: &TerminalMount,
+    selection_overlay: Option<SelectionOverlay>,
+) {
+    let content_box = rect_to_text_box(mount.content_rect);
+    let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
+    if let Some(ref overlay) = selection_overlay {
+        terminal_renderer.render_selection_overlay(
+            overlay,
+            content_box,
+            mount.snapshot.cell_w,
+            mount.snapshot.cell_h,
+        );
+    }
+    terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
+}
+
+fn retain_live_terminal_layers(state: &mut AppState) {
+    let mut live_panes = HashSet::new();
+    for ws in &state.session.workspaces {
+        for col in &ws.scrolling.columns {
+            for pane in &col.panes {
+                live_panes.insert(pane.id);
+            }
+        }
+        for float in &ws.floating_panes {
+            live_panes.insert(float.pane.id);
+        }
+    }
+    state
+        .terminal_layers
+        .retain(|pane_id, _| live_panes.contains(pane_id));
+}
+
+fn terminal_layer_render_key(style: &TerminalStyle<'_>) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    style.font_size.to_bits().hash(&mut hasher);
+    style.surface_alpha.to_bits().hash(&mut hasher);
+    style.families.normal.hash(&mut hasher);
+    style.families.bold.hash(&mut hasher);
+    style.families.italic.hash(&mut hasher);
+    style.families.bold_italic.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn retained_terminal_texture_size(
+    content_rect: Rectangle,
+    scale_factor: f64,
+) -> winit::dpi::PhysicalSize<u32> {
+    let scale = scale_factor as f32;
+    let width = (content_rect.size.w as f32 * scale).ceil().max(1.0) as u32;
+    let height = (content_rect.size.h as f32 * scale).ceil().max(1.0) as u32;
+    winit::dpi::PhysicalSize::new(width, height)
+}
+
+fn render_terminal_layer_update(
+    state: &mut AppState,
+    pane_id: PaneId,
+    mount: &TerminalMount,
+    damage: &TerminalDamage,
+    terminal_style: TerminalStyle<'_>,
+    window_logical_size: (f32, f32),
+    window_physical_size: winit::dpi::PhysicalSize<u32>,
+) {
+    let logical_size = (
+        mount.content_rect.size.w as f32,
+        mount.content_rect.size.h as f32,
+    );
+    let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
+
+    state
+        .primitive_renderer
+        .set_screen_size(&state.queue, logical_size.0, logical_size.1);
+    state
+        .text_renderer
+        .set_screen_size(&state.queue, logical_size.0, logical_size.1);
+    state
+        .text_renderer
+        .set_target_size(physical_size.width, physical_size.height);
+    state.text_renderer.set_clip(None);
+    state.text_renderer.set_damage(None);
+
+    let mut encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("terminal_layer_update"),
+        });
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("terminal_layer_clear_scratch"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: state.terminal_layer_scratch.view(),
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        occlusion_query_set: None,
+        timestamp_writes: None,
+    });
+
+    let local_rect = Rectangle::new(
+        Point::new(0.0, 0.0),
+        Size::new(logical_size.0 as f64, logical_size.1 as f64),
+    );
+    {
+        let mut terminal_renderer =
+            TerminalRenderer::new(&mut state.text_renderer, &mut state.primitive_renderer);
+        terminal_renderer.render_snapshot_damage(
+            &mount.snapshot,
+            rect_to_text_box(local_rect),
+            terminal_style,
+            damage,
+        );
+    }
+    state.primitive_renderer.render(
+        &state.device,
+        state.terminal_layer_scratch.view(),
+        &mut encoder,
+    );
+    state.text_renderer.render(
+        &state.queue,
+        state.terminal_layer_scratch.view(),
+        &mut encoder,
+        None,
+    );
+
+    let copy_bands = terminal_damage_copy_bands(
+        damage,
+        &mount.snapshot,
+        logical_size.1,
+        state.scale_factor,
+        physical_size.height,
+    );
+    let layer_texture = state
+        .terminal_layers
+        .get(&pane_id)
+        .expect("terminal layer must exist before updating")
+        .texture();
+    for band in copy_bands {
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: state.terminal_layer_scratch.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: band.y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: layer_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: band.y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: physical_size.width,
+                height: band.height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    state.queue.submit(std::iter::once(encoder.finish()));
+    state.primitive_renderer.set_screen_size(
+        &state.queue,
+        window_logical_size.0,
+        window_logical_size.1,
+    );
+    state
+        .text_renderer
+        .set_screen_size(&state.queue, window_logical_size.0, window_logical_size.1);
+    state
+        .text_renderer
+        .set_target_size(window_physical_size.width, window_physical_size.height);
+}
+
+fn terminal_damage_copy_bands(
+    damage: &TerminalDamage,
+    snapshot: &TerminalSnapshot,
+    logical_height: f32,
+    scale_factor: f64,
+    texture_height: u32,
+) -> Vec<TerminalCopyBand> {
+    match damage {
+        TerminalDamage::None => Vec::new(),
+        TerminalDamage::Full => vec![TerminalCopyBand {
+            y: 0,
+            height: texture_height.max(1),
+        }],
+        TerminalDamage::Rows(ranges) => {
+            let scale = scale_factor as f32;
+            let max_height = logical_height.max(0.0);
+            let mut bands = Vec::with_capacity(ranges.len());
+            for range in ranges {
+                let start = range.start.min(snapshot.rows);
+                let end = range.end.min(snapshot.rows);
+                if start >= end {
+                    continue;
+                }
+                let top = ((start as f32 * snapshot.cell_h) * scale).floor() as u32;
+                let bottom =
+                    (((end as f32 * snapshot.cell_h).min(max_height)) * scale).ceil() as u32;
+                let y = top.min(texture_height);
+                let clipped_bottom = bottom.min(texture_height);
+                if clipped_bottom > y {
+                    bands.push(TerminalCopyBand {
+                        y,
+                        height: clipped_bottom - y,
+                    });
+                }
+            }
+            bands
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -98,7 +436,10 @@ pub(crate) fn stable_tiled_content_rect(
     extra_top: f32,
 ) -> Option<Rectangle> {
     pane_content_rect(px, py, pw, ph, content_inset, extra_top).map(|(x, y, w, h)| {
-        Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
+        Rectangle::new(
+            Point::new(x as f64, y as f64),
+            Size::new(w as f64, h as f64),
+        )
     })
 }
 
@@ -205,7 +546,12 @@ pub(crate) fn paint_terminal_pane_shell(
                     GuiPoint::new(x as f64, y as f64),
                     GuiSize::new(w as f64, title_bar_reserve(font) as f64),
                 ),
-                to_gui_color(state.theme.effective_top_bottom_pane_background().to_f32x4()),
+                to_gui_color(
+                    state
+                        .theme
+                        .effective_top_bottom_pane_background()
+                        .to_f32x4(),
+                ),
                 None,
                 border_radius,
                 None,
@@ -221,9 +567,7 @@ pub(crate) fn paint_terminal_pane_shell(
     // is a *base-layer* scissor; a button's hover Tooltip draws on the **overlay**
     // layer (rendered after the base PopClip in `render_chrome`), so it still escapes
     // the pane and sits above neighbors. Interactivity is routed in `mouse.rs`.
-    if show_bar
-        && let Some(header) = state.pane_headers.get(&pane_id)
-    {
+    if show_bar && let Some(header) = state.pane_headers.get(&pane_id) {
         let clip = GuiRectangle::new(
             GuiPoint::new(x as f64, y as f64),
             GuiSize::new(w as f64, h as f64),
@@ -266,7 +610,12 @@ pub(crate) fn render_terminal_mount(
         content_clip,
         stencil,
     } = render_ctx;
-    let content_box = rect_to_text_box(mount.content_rect);
+    let TerminalMount {
+        content_rect,
+        snapshot,
+        damage: _damage,
+    } = mount;
+    let content_box = rect_to_text_box(content_rect);
     let clip_x = content_box.x.max(content_clip.loc.x as f32);
     let clip_y = content_box.y.max(content_clip.loc.y as f32);
     let clip_right =
@@ -278,13 +627,13 @@ pub(crate) fn render_terminal_mount(
     {
         text_renderer.set_clip(Some([clip_x, clip_y, clip_w, clip_h]));
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-        terminal_renderer.render_snapshot(&mount.snapshot, content_box, terminal_style);
+        terminal_renderer.render_snapshot(&snapshot, content_box, terminal_style);
         if let Some(ref overlay) = selection_overlay {
             terminal_renderer.render_selection_overlay(
                 overlay,
                 content_box,
-                mount.snapshot.cell_w,
-                mount.snapshot.cell_h,
+                snapshot.cell_w,
+                snapshot.cell_h,
             );
         }
         text_renderer.set_clip(None);
@@ -302,7 +651,7 @@ pub(crate) fn render_terminal_mount(
     text_renderer.render(queue, view, encoder, stencil);
     {
         let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
-        terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
+        terminal_renderer.render_cursor_overlay(&snapshot, content_box);
     }
     primitive_renderer.render_clipped(device, view, encoder, clip_rect, stencil);
 }
@@ -474,12 +823,32 @@ pub(super) fn build_selection_overlay(
 
 #[cfg(test)]
 mod tests {
-    use super::build_selection_overlay;
+    use super::{TerminalCopyBand, build_selection_overlay, terminal_damage_copy_bands};
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
     };
     use heca_config::theme::Color;
+    use heca_core::backend::{TerminalDamage, TerminalSnapshot};
     use heca_core::layout::PaneId;
+
+    fn snapshot(rows: usize, cell_h: f32) -> TerminalSnapshot {
+        TerminalSnapshot {
+            cols: 80,
+            rows,
+            cell_w: 8.0,
+            cell_h,
+            default_fg: [1.0; 4],
+            default_bg: [0.0, 0.0, 0.0, 1.0],
+            cursor_color: [1.0; 4],
+            cursor: heca_core::backend::TerminalCursor {
+                col: 0,
+                row: 0,
+                visible: true,
+                shape: heca_core::backend::TerminalCursorShape::Block,
+            },
+            lines: Vec::new(),
+        }
+    }
 
     #[test]
     fn build_selection_overlay_returns_none_when_inactive() {
@@ -564,7 +933,10 @@ mod tests {
         assert_eq!(overlay.spans[3].start_col, 0);
         assert_eq!(overlay.spans[3].end_col, 9);
         // Color should be accent / 255 with 0.25 alpha
-        assert_eq!(overlay.color, [100.0 / 255.0, 150.0 / 255.0, 200.0 / 255.0, 0.25]);
+        assert_eq!(
+            overlay.color,
+            [100.0 / 255.0, 150.0 / 255.0, 200.0 / 255.0, 0.25]
+        );
     }
 
     #[test]
@@ -611,9 +983,14 @@ mod tests {
         // Caret-only state: no selection spans.
         assert!(overlay.spans.is_empty());
         // But we get a caret indicator at the caret position.
-        let caret = overlay.caret.expect("caret should be present in caret-only state");
+        let caret = overlay
+            .caret
+            .expect("caret should be present in caret-only state");
         assert_eq!((caret.row, caret.col), (3, 7));
-        assert!(!caret.is_selection_endpoint, "caret-only should not be a selection endpoint");
+        assert!(
+            !caret.is_selection_endpoint,
+            "caret-only should not be a selection endpoint"
+        );
     }
 
     #[test]
@@ -651,8 +1028,43 @@ mod tests {
         let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
         // Active selection: should have both selection spans and a focus-end caret.
         assert!(!overlay.spans.is_empty());
-        let caret = overlay.caret.expect("focus caret should be present for active selection");
+        let caret = overlay
+            .caret
+            .expect("focus caret should be present for active selection");
         assert_eq!((caret.row, caret.col), (4, 5));
-        assert!(caret.is_selection_endpoint, "active selection caret should be a selection endpoint");
+        assert!(
+            caret.is_selection_endpoint,
+            "active selection caret should be a selection endpoint"
+        );
+    }
+
+    #[test]
+    fn terminal_damage_copy_bands_full_covers_entire_texture() {
+        let bands =
+            terminal_damage_copy_bands(&TerminalDamage::Full, &snapshot(3, 12.0), 36.0, 2.0, 72);
+        assert_eq!(bands, vec![TerminalCopyBand { y: 0, height: 72 }]);
+    }
+
+    #[test]
+    fn terminal_damage_copy_bands_rows_convert_row_ranges_to_pixel_bands() {
+        let damage = TerminalDamage::Rows(vec![
+            heca_core::backend::TerminalRowRange::new(1, 3),
+            heca_core::backend::TerminalRowRange::new(4, 5),
+        ]);
+        let bands = terminal_damage_copy_bands(&damage, &snapshot(5, 10.0), 50.0, 2.0, 100);
+        assert_eq!(
+            bands,
+            vec![
+                TerminalCopyBand { y: 20, height: 40 },
+                TerminalCopyBand { y: 80, height: 20 },
+            ]
+        );
+    }
+
+    #[test]
+    fn terminal_damage_copy_bands_clamps_rows_to_visible_height() {
+        let damage = TerminalDamage::Rows(vec![heca_core::backend::TerminalRowRange::new(2, 8)]);
+        let bands = terminal_damage_copy_bands(&damage, &snapshot(4, 12.0), 48.0, 1.0, 48);
+        assert_eq!(bands, vec![TerminalCopyBand { y: 24, height: 24 }]);
     }
 }

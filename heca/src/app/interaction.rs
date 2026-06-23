@@ -89,28 +89,30 @@ pub(crate) enum InteractionIntent {
     /// Focus a specific pane (from sidebar click, content click, or RPC).
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
-    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
     FocusPane { pane_id: PaneId },
     /// Focus a specific workspace (from sidebar click).
     ///
     /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
-    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")
+    )]
     FocusWorkspace { ws_idx: usize },
     /// Enter sidebar navigation mode (from keyboard shortcut or click).
     ///
     /// Dispatched to `WmAction::SidebarFocus` in `dispatch_action`.
-    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")
+    )]
     EnterSidebarNav,
     /// Toggle a specific workspace header's collapsed state from the sidebar.
-    ToggleWorkspaceCollapsed {
-        ws_idx: usize,
-    },
+    ToggleWorkspaceCollapsed { ws_idx: usize },
     /// Start dragging a sidebar item (no WmAction equivalent).
     ///
     /// Policy-routed only — the drag itself is initiated in the mouse layer.
-    #[allow(dead_code)] // constructed from mouse/sidebar in future wiring pass
+    #[expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")]
     StartSidebarDrag {
-        #[allow(dead_code)] // read when constructed from mouse input
         pane_id: PaneId,
     },
 }
@@ -330,9 +332,7 @@ pub(crate) fn route_interaction_for_session(
     intent: InteractionIntent,
 ) -> RouteDecision {
     match &intent {
-        InteractionIntent::ActivateAction(action) => {
-            route_action(session, source, action)
-        }
+        InteractionIntent::ActivateAction(action) => route_action(session, source, action),
         InteractionIntent::FocusPane { .. } => {
             // FocusPane from mouse content/sidebar: blocked when floating.
             // Only the active floating pane can receive focus in floating domain.
@@ -402,7 +402,9 @@ fn route_action(
                 RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
             }
         }
-        ActionPolicy::FocusedPaneLocal => RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone())),
+        ActionPolicy::FocusedPaneLocal => {
+            RouteDecision::Allow(InteractionIntent::ActivateAction(action.clone()))
+        }
         ActionPolicy::TiledOnly => {
             if floating {
                 RouteDecision::Block
@@ -466,12 +468,10 @@ pub(crate) fn is_floating_domain(session: &heca_core::layout::Session) -> bool {
 ///
 /// Convenience wrapper for code that needs to branch on the domain directly
 /// rather than just checking `is_floating_domain()`.
-///
-/// Returns the `FocusDomain` of the active workspace.
-///
-/// Convenience wrapper for code that needs to branch on the domain directly
-/// rather than just checking `is_floating_domain()`.
-#[allow(dead_code)] // consumed by handlers and sidebar routing in Phase E
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by handlers and sidebar routing in Phase E")
+)]
 pub(crate) fn active_focus_domain(session: &heca_core::layout::Session) -> FocusDomain {
     session
         .active_workspace()
@@ -495,7 +495,10 @@ pub(crate) fn focused_pane_id(state: &AppState) -> Option<PaneId> {
 /// (they go through `dispatch_action` which handles policy).
 ///
 /// Checks whether `pane_id` can receive focus from the given source.
-#[allow(dead_code)] // consumed by handlers and sidebar routing in Phase E
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "consumed by handlers and sidebar routing in Phase E")
+)]
 pub(crate) fn can_focus_pane(
     session: &heca_core::layout::Session,
     source: InteractionSource,
@@ -601,10 +604,10 @@ pub(crate) fn dispatch_action(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use heca_core::layout::{LayoutOptions, PaneId, SessionId, Size};
     use heca_core::layout::column::Pane;
-    use heca_core::layout::workspace::FloatingPane;
     use heca_core::layout::types::{Point, Rectangle};
+    use heca_core::layout::workspace::FloatingPane;
+    use heca_core::layout::{LayoutOptions, PaneId, SessionId, Size};
 
     /// Helper to create a minimal Session for routing tests.
     fn test_session() -> heca_core::layout::Session {
@@ -695,7 +698,13 @@ mod tests {
             WmAction::CommandPalette,
             WmAction::FocusToggleLocal,
             WmAction::PaneSelect,
-            WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            WmAction::FloatAt {
+                pane_id: PaneId(0),
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
         ];
         for action in &actions {
             let decision = route_interaction_for_session(
@@ -741,10 +750,14 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
         let intents = [
-            InteractionIntent::FocusPane { pane_id: PaneId(99) },
+            InteractionIntent::FocusPane {
+                pane_id: PaneId(99),
+            },
             InteractionIntent::FocusWorkspace { ws_idx: 0 },
             InteractionIntent::EnterSidebarNav,
-            InteractionIntent::StartSidebarDrag { pane_id: PaneId(42) },
+            InteractionIntent::StartSidebarDrag {
+                pane_id: PaneId(42),
+            },
         ];
         for intent in &intents {
             let decision = route_interaction_for_session(
@@ -765,35 +778,74 @@ mod tests {
     #[test]
     fn action_policy_covers_all_variants() {
         let unit_actions: Vec<WmAction> = vec![
-            WmAction::FocusLeft, WmAction::FocusRight, WmAction::FocusUp, WmAction::FocusDown,
-            WmAction::NextPane, WmAction::PrevPane, WmAction::FocusToggleLocal, WmAction::FocusToggleGlobal,
-            WmAction::SplitHorizontal, WmAction::SplitVertical, WmAction::ZoomColumn,
-            WmAction::ResizeIncrease, WmAction::ResizeDecrease,
-            WmAction::PaneHeightIncrease, WmAction::PaneHeightDecrease,
-            WmAction::SwapLeft, WmAction::SwapRight, WmAction::SwapUp, WmAction::SwapDown,
-            WmAction::MovePaneLeft { pane_id: None }, WmAction::MovePaneRight { pane_id: None }, WmAction::MoveColumnUp, WmAction::MoveColumnDown,
-            WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
-            WmAction::PaneTake, WmAction::PaneTakeAndFocus,
-            WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::RenameColumn,
-            WmAction::SidebarLeft, WmAction::SidebarRight, WmAction::SidebarFocus,
-            WmAction::SidebarUp, WmAction::SidebarDown,
-            WmAction::SidebarLeftNav, WmAction::SidebarRightNav, WmAction::SidebarExpandToggle,
-            WmAction::SidebarCreateWorkspace, WmAction::SidebarCreateColumn,
-            WmAction::SidebarSplitInColumn, WmAction::SidebarZoomSelectedColumn,
+            WmAction::FocusLeft,
+            WmAction::FocusRight,
+            WmAction::FocusUp,
+            WmAction::FocusDown,
+            WmAction::NextPane,
+            WmAction::PrevPane,
+            WmAction::FocusToggleLocal,
+            WmAction::FocusToggleGlobal,
+            WmAction::SplitHorizontal,
+            WmAction::SplitVertical,
+            WmAction::ZoomColumn,
+            WmAction::ResizeIncrease,
+            WmAction::ResizeDecrease,
+            WmAction::PaneHeightIncrease,
+            WmAction::PaneHeightDecrease,
+            WmAction::SwapLeft,
+            WmAction::SwapRight,
+            WmAction::SwapUp,
+            WmAction::SwapDown,
+            WmAction::MovePaneLeft { pane_id: None },
+            WmAction::MovePaneRight { pane_id: None },
+            WmAction::MoveColumnUp,
+            WmAction::MoveColumnDown,
+            WmAction::PaneSelect,
+            WmAction::SwapPane,
+            WmAction::SwapAndFocusPane,
+            WmAction::PaneTake,
+            WmAction::PaneTakeAndFocus,
+            WmAction::Float,
+            WmAction::ClosePane,
+            WmAction::RenamePane,
+            WmAction::RenameColumn,
+            WmAction::SidebarLeft,
+            WmAction::SidebarRight,
+            WmAction::SidebarFocus,
+            WmAction::SidebarUp,
+            WmAction::SidebarDown,
+            WmAction::SidebarLeftNav,
+            WmAction::SidebarRightNav,
+            WmAction::SidebarExpandToggle,
+            WmAction::SidebarCreateWorkspace,
+            WmAction::SidebarCreateColumn,
+            WmAction::SidebarSplitInColumn,
+            WmAction::SidebarZoomSelectedColumn,
             WmAction::SidebarDeleteSelected,
-            WmAction::CollapseCurrentWorkspace, WmAction::ExpandCurrentWorkspace,
+            WmAction::CollapseCurrentWorkspace,
+            WmAction::ExpandCurrentWorkspace,
             WmAction::ToggleCurrentWorkspaceCollapsed,
-            WmAction::CollapseCurrentColumn, WmAction::ExpandCurrentColumn,
+            WmAction::CollapseCurrentColumn,
+            WmAction::ExpandCurrentColumn,
             WmAction::ToggleCurrentColumnCollapsed,
-            WmAction::WorkspaceNext, WmAction::WorkspacePrev,
-            WmAction::CreateWorkspace, WmAction::RenameWorkspace,
-            WmAction::CommandPalette, WmAction::ReloadConfig,
+            WmAction::WorkspaceNext,
+            WmAction::WorkspacePrev,
+            WmAction::CreateWorkspace,
+            WmAction::RenameWorkspace,
+            WmAction::CommandPalette,
+            WmAction::ReloadConfig,
             // Selection (host capability, Task 02).
-            WmAction::EnterSelectionMode, WmAction::ClearSelection,
-            WmAction::SelectionLeft, WmAction::SelectionRight,
-            WmAction::SelectionUp, WmAction::SelectionDown,
-            WmAction::CopySelection, WmAction::PasteClipboard,
-            WmAction::BeginSelection, WmAction::ToggleSelectionEndpoint,
+            WmAction::EnterSelectionMode,
+            WmAction::ClearSelection,
+            WmAction::SelectionLeft,
+            WmAction::SelectionRight,
+            WmAction::SelectionUp,
+            WmAction::SelectionDown,
+            WmAction::CopySelection,
+            WmAction::PasteClipboard,
+            WmAction::BeginSelection,
+            WmAction::ToggleSelectionEndpoint,
         ];
         for action in &unit_actions {
             let _policy = action_policy(action);
@@ -802,29 +854,81 @@ mod tests {
         let param_actions = [
             WmAction::FocusPane { pane_id: PaneId(0) },
             WmAction::FocusWorkspace { ws_idx: 0 },
-            WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) },
-            WmAction::Move { pane_id: PaneId(0), target_col: 0 },
-            WmAction::MovePaneToWorkspace { pane_id: PaneId(0), ws_idx: 0 },
-            WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
-            WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
-            WmAction::Resize { target: crate::input::ResizeTarget::Column, axis: crate::input::ResizeAxis::X, amount: 0.0 },
-            WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
-            WmAction::ResizePaneHeightBy { col_idx: 0, pane_idx: 0, delta: 0.0 },
-            WmAction::ResizeTo { target: crate::input::ResizeTarget::Column, width: 0.0, height: 0.0 },
-            WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+            WmAction::Swap {
+                a_id: PaneId(0),
+                b_id: PaneId(0),
+            },
+            WmAction::Move {
+                pane_id: PaneId(0),
+                target_col: 0,
+            },
+            WmAction::MovePaneToWorkspace {
+                pane_id: PaneId(0),
+                ws_idx: 0,
+            },
+            WmAction::MovePaneToColumn {
+                pane_id: PaneId(0),
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::MoveColumnToWorkspace {
+                col_idx: 0,
+                ws_idx: 0,
+                focus: false,
+            },
+            WmAction::Resize {
+                target: crate::input::ResizeTarget::Column,
+                axis: crate::input::ResizeAxis::X,
+                amount: 0.0,
+            },
+            WmAction::ResizeColumnBy {
+                col_idx: 0,
+                delta: 0.0,
+            },
+            WmAction::ResizePaneHeightBy {
+                col_idx: 0,
+                pane_idx: 0,
+                delta: 0.0,
+            },
+            WmAction::ResizeTo {
+                target: crate::input::ResizeTarget::Column,
+                width: 0.0,
+                height: 0.0,
+            },
+            WmAction::FloatAt {
+                pane_id: PaneId(0),
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
             WmAction::ClosePaneById { pane_id: PaneId(0) },
-            WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
+            WmAction::RenameTarget {
+                pane_id: PaneId(0),
+                name: String::new(),
+            },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,
                 float: false,
                 close_policy: heca_core::runtime::PaneClosePolicy::default(),
             },
-            WmAction::EnterMode { name: String::new() },
-            WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
-            WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+            WmAction::EnterMode {
+                name: String::new(),
+            },
+            WmAction::AddPaneToColumn {
+                ws_idx: 0,
+                col_idx: 0,
+            },
+            WmAction::DeleteColumn {
+                ws_idx: 0,
+                col_idx: 0,
+            },
             WmAction::DeleteWorkspace { ws_idx: 0 },
-            WmAction::TakePane { pane_id: PaneId(0), focus_after: false },
+            WmAction::TakePane {
+                pane_id: PaneId(0),
+                focus_after: false,
+            },
         ];
         for action in &param_actions {
             let _policy = action_policy(action);
@@ -832,12 +936,27 @@ mod tests {
 
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
-        assert_eq!(action_policy(&WmAction::Float), ActionPolicy::FocusedPaneLocal);
-        assert_eq!(action_policy(&WmAction::ClosePane), ActionPolicy::FocusedPaneLocal);
-        assert_eq!(action_policy(&WmAction::CommandPalette), ActionPolicy::AlwaysAllowed);
+        assert_eq!(
+            action_policy(&WmAction::Float),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ClosePane),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::CommandPalette),
+            ActionPolicy::AlwaysAllowed
+        );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
-        assert_eq!(action_policy(&WmAction::WorkspaceNext), ActionPolicy::WorkspaceLevel);
-        assert_eq!(action_policy(&WmAction::FocusPane { pane_id: PaneId(0) }), ActionPolicy::SourceDependent);
+        assert_eq!(
+            action_policy(&WmAction::WorkspaceNext),
+            ActionPolicy::WorkspaceLevel
+        );
+        assert_eq!(
+            action_policy(&WmAction::FocusPane { pane_id: PaneId(0) }),
+            ActionPolicy::SourceDependent
+        );
     }
 
     /// is_floating_domain returns false for default (Tiled) workspace.
@@ -866,7 +985,9 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::MouseContent,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(99) }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane {
+                pane_id: PaneId(99),
+            }),
         );
         assert!(
             matches!(decision, RouteDecision::Block),
@@ -940,9 +1061,21 @@ mod tests {
     #[test]
     fn can_focus_pane_allows_any_in_tiled_domain() {
         let session = test_session();
-        assert!(can_focus_pane(&session, InteractionSource::Keyboard, PaneId(1)));
-        assert!(can_focus_pane(&session, InteractionSource::MouseContent, PaneId(1)));
-        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(1)));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::Keyboard,
+            PaneId(1)
+        ));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::MouseContent,
+            PaneId(1)
+        ));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::MouseLeftSidebar,
+            PaneId(1)
+        ));
     }
 
     /// `can_focus_pane` blocks non-floating pane when in floating domain.
@@ -952,9 +1085,21 @@ mod tests {
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
         // In a floating domain, pane 1 (in scrolling columns) is NOT the active floating pane.
         // So can_focus_pane should block it from all sources.
-        assert!(!can_focus_pane(&session, InteractionSource::Keyboard, PaneId(1)));
-        assert!(!can_focus_pane(&session, InteractionSource::MouseContent, PaneId(1)));
-        assert!(!can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(1)));
+        assert!(!can_focus_pane(
+            &session,
+            InteractionSource::Keyboard,
+            PaneId(1)
+        ));
+        assert!(!can_focus_pane(
+            &session,
+            InteractionSource::MouseContent,
+            PaneId(1)
+        ));
+        assert!(!can_focus_pane(
+            &session,
+            InteractionSource::MouseLeftSidebar,
+            PaneId(1)
+        ));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -984,7 +1129,9 @@ mod tests {
         let decision = route_interaction_for_session(
             &session,
             InteractionSource::Keyboard,
-            InteractionIntent::ActivateAction(WmAction::FocusPane { pane_id: PaneId(99) }),
+            InteractionIntent::ActivateAction(WmAction::FocusPane {
+                pane_id: PaneId(99),
+            }),
         );
         assert!(
             matches!(decision, RouteDecision::Allow(_)),
@@ -1311,8 +1458,20 @@ mod tests {
         ws.focus_domain = FocusDomain::Floating;
 
         // The active floating pane (ID 99) can be focused from all sources.
-        assert!(can_focus_pane(&session, InteractionSource::Keyboard, PaneId(99)));
-        assert!(can_focus_pane(&session, InteractionSource::MouseContent, PaneId(99)));
-        assert!(can_focus_pane(&session, InteractionSource::MouseLeftSidebar, PaneId(99)));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::Keyboard,
+            PaneId(99)
+        ));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::MouseContent,
+            PaneId(99)
+        ));
+        assert!(can_focus_pane(
+            &session,
+            InteractionSource::MouseLeftSidebar,
+            PaneId(99)
+        ));
     }
 }

@@ -27,8 +27,8 @@
 //! styling is read from the [`Theme`](crate::theme::Theme) at paint.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, route_event};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::Glow;
 use crate::style::Direction;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -73,7 +73,11 @@ impl MarkerGroup {
     pub fn new() -> Self {
         let mut base = Base::new();
         base.style.direction = Direction::Column;
-        Self { base, active: signal(false), hovered: signal(false) }
+        Self {
+            base,
+            active: signal(false),
+            hovered: signal(false),
+        }
     }
 
     /// Set the active state (brightens the bar).
@@ -220,7 +224,10 @@ mod tests {
         // without rebuilding the widget.
         let g = MarkerGroup::new();
         g.state().set(true);
-        assert!(g.state().get_untracked(), "writing the state handle activates the group");
+        assert!(
+            g.state().get_untracked(),
+            "writing the state handle activates the group"
+        );
     }
 
     #[test]
@@ -233,10 +240,20 @@ mod tests {
     #[test]
     fn hover_tracks_only_the_left_grip() {
         let mut g = sized(MarkerGroup::new(), 100.0, 40.0);
-        g.event(&Event::PointerMoved { pos: Point::new(5.0, 20.0) }); // x < GRIP_W → gutter
-        assert!(g.hovered().get_untracked(), "pointer in the grip gutter hovers the bar");
-        g.event(&Event::PointerMoved { pos: Point::new(60.0, 20.0) }); // over content
-        assert!(!g.hovered().get_untracked(), "pointer over content does not hover the bar");
+        g.event(&Event::PointerMoved {
+            pos: Point::new(5.0, 20.0),
+        }); // x < GRIP_W → gutter
+        assert!(
+            g.hovered().get_untracked(),
+            "pointer in the grip gutter hovers the bar"
+        );
+        g.event(&Event::PointerMoved {
+            pos: Point::new(60.0, 20.0),
+        }); // over content
+        assert!(
+            !g.hovered().get_untracked(),
+            "pointer over content does not hover the bar"
+        );
     }
 
     #[test]

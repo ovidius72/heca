@@ -61,7 +61,12 @@ pub fn content_clip_stencil_state() -> wgpu::DepthStencilState {
 }
 
 impl Compositor {
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, width: u32, height: u32) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        format: wgpu::TextureFormat,
+        width: u32,
+        height: u32,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("composite_shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("composite.wgsl").into()),

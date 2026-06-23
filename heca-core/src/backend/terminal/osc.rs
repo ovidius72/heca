@@ -157,7 +157,8 @@ mod tests {
     #[test]
     fn parses_osc_133_and_osc_7_with_bel_terminator() {
         let mut snooper = OscSnooper::default();
-        let events = snooper.observe(b"\x1b]133;D;1\x07\x1b]7;file://localhost/tmp/project%20x\x07");
+        let events =
+            snooper.observe(b"\x1b]133;D;1\x07\x1b]7;file://localhost/tmp/project%20x\x07");
         assert_eq!(
             events,
             vec![

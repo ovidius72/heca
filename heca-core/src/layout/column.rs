@@ -225,7 +225,13 @@ impl Column {
     /// Resize pane `pane_idx`'s height by `delta` logical px. No-op for single-pane
     /// columns or an out-of-range index. Used by the keyboard resize (active pane),
     /// the mouse divider drag (any pane), and RPC.
-    pub fn resize_pane_height(&mut self, pane_idx: usize, delta: f64, working_height: f64, gaps: f64) {
+    pub fn resize_pane_height(
+        &mut self,
+        pane_idx: usize,
+        delta: f64,
+        working_height: f64,
+        gaps: f64,
+    ) {
         if self.panes.len() <= 1 || pane_idx >= self.panes.len() {
             return;
         }

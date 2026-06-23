@@ -209,7 +209,15 @@ impl Component for Checkbox {
         let disabled = self.base.disabled.get_untracked();
         let (surface, accent, glow_c, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.control_radius(), t.border_width)
+            (
+                t.surface,
+                t.accent,
+                t.glow,
+                t.muted,
+                t.foreground,
+                t.control_radius(),
+                t.border_width,
+            )
         };
         let p = self.progress.clamp(0.0, 1.0);
         let bx = self.box_rect();

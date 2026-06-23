@@ -266,7 +266,10 @@ impl Style {
     pub fn to_taffy(&self) -> taffy::Style {
         use taffy::prelude::*;
         if self.hidden {
-            return taffy::Style { display: Display::None, ..Default::default() };
+            return taffy::Style {
+                display: Display::None,
+                ..Default::default()
+            };
         }
         taffy::Style {
             display: Display::Flex,

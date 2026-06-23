@@ -40,7 +40,10 @@ mod tests {
         let r1 = rubberband(5.0);
         let r2 = rubberband(10.0);
         let r3 = rubberband(50.0);
-        assert!(r1 < r2 && r2 < r3, "rubberband should be monotonically increasing");
+        assert!(
+            r1 < r2 && r2 < r3,
+            "rubberband should be monotonically increasing"
+        );
     }
 
     #[test]

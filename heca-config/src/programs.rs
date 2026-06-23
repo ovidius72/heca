@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{HashMap, hash_map::Entry};
 
 use crate::color::Color;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
@@ -31,10 +31,7 @@ impl ProgramIcon {
     }
 
     fn parse(raw: &str) -> Option<Self> {
-        let normalized = raw
-            .trim()
-            .to_ascii_lowercase()
-            .replace(['-', ' '], "_");
+        let normalized = raw.trim().to_ascii_lowercase().replace(['-', ' '], "_");
         match normalized.as_str() {
             "terminal" => Some(ProgramIcon::Terminal),
             "file_code" | "filecode" | "code" | "editor" => Some(ProgramIcon::FileCode),
@@ -110,15 +107,15 @@ impl ProgramMeta {
         }
     }
 
-    fn named(
-        name: &str,
-        processes: &[&str],
-        icon: ProgramIcon,
-        color: Option<Color>,
-    ) -> Self {
+    fn named(name: &str, processes: &[&str], icon: ProgramIcon, color: Option<Color>) -> Self {
         Self {
             name: Some(name.to_string()),
-            processes: Some(processes.iter().map(|process| (*process).to_string()).collect()),
+            processes: Some(
+                processes
+                    .iter()
+                    .map(|process| (*process).to_string())
+                    .collect(),
+            ),
             icon: Some(icon),
             color,
             ..Self::default()

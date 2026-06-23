@@ -3,12 +3,12 @@
 //! These helpers collect repeated low-level move/swap mechanics so handlers
 //! and mouse paths can delegate to one implementation.
 
-use heca_core::layout::animation::AnimationConfig;
 use crate::chrome;
-use heca_core::layout::workspace::Workspace;
-use heca_core::layout::types::{Point, Rectangle};
-use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
+use heca_core::layout::animation::AnimationConfig;
 use heca_core::layout::types::PaneInsertTarget;
+use heca_core::layout::types::{Point, Rectangle};
+use heca_core::layout::workspace::Workspace;
+use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};
 
 /// Information about a pane removed from a workspace.
 #[derive(Debug)]
@@ -320,24 +320,10 @@ pub(crate) fn swap_panes_diff_columns(args: SwapDiffColumnsArgs<'_>) {
     let max_dy = viewport_h * 0.9;
 
     if let Some(a_pane) = removed_a {
-        replace_placeholder_and_animate(
-            ws,
-            placeholder_a_id,
-            a_pane,
-            old_a_rect,
-            max_dx,
-            max_dy,
-        );
+        replace_placeholder_and_animate(ws, placeholder_a_id, a_pane, old_a_rect, max_dx, max_dy);
     }
     if let Some(b_pane) = removed_b {
-        replace_placeholder_and_animate(
-            ws,
-            placeholder_b_id,
-            b_pane,
-            old_b_rect,
-            max_dx,
-            max_dy,
-        );
+        replace_placeholder_and_animate(ws, placeholder_b_id, b_pane, old_b_rect, max_dx, max_dy);
     }
 }
 
@@ -355,10 +341,8 @@ fn replace_placeholder_and_animate(
     if let Some((ci, pi)) = found {
         ws.scrolling.columns[ci].panes[pi] = new_pane;
         ws.scrolling.columns[ci].active_pane_idx = pi;
-        ws.scrolling.columns[ci].compute_pane_sizes(
-            ws.scrolling.working_area.size.h,
-            ws.scrolling.options.gaps,
-        );
+        ws.scrolling.columns[ci]
+            .compute_pane_sizes(ws.scrolling.working_area.size.h, ws.scrolling.options.gaps);
         ws.scrolling.update_all_column_widths();
 
         // Animate from old position to new.
@@ -409,8 +393,14 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
     let max_dy = vh * 0.9;
 
     // Capture working area info for column recreation.
-    let a_wa = session.workspaces.get(a_ws).map(|ws| ws.scrolling.working_area);
-    let b_wa = session.workspaces.get(b_ws).map(|ws| ws.scrolling.working_area);
+    let a_wa = session
+        .workspaces
+        .get(a_ws)
+        .map(|ws| ws.scrolling.working_area);
+    let b_wa = session
+        .workspaces
+        .get(b_ws)
+        .map(|ws| ws.scrolling.working_area);
     let a_gaps = session
         .workspaces
         .get(a_ws)
@@ -475,7 +465,8 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         if b_was_only {
             // B's column was deleted when B was removed. Recreate it with A.
             let insert_pos = b_col.min(ws_b.scrolling.columns.len());
-            let mut new_col = Column::new(b_original_col_id, removed_a, chrome::default_column_width());
+            let mut new_col =
+                Column::new(b_original_col_id, removed_a, chrome::default_column_width());
             if let Some(wa) = b_wa {
                 new_col.compute_pane_sizes(wa.size.h, b_gaps);
             }
@@ -500,10 +491,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         && let Some((new_ci, new_pi)) = find_pane_indices_in_workspace(ws_b, a_id)
     {
         let new_rects = ws_b.scrolling.panes_with_positions();
-        if let Some((_, new_rect)) = new_rects
-            .into_iter()
-            .find(|(pid, _)| *pid == a_id)
-        {
+        if let Some((_, new_rect)) = new_rects.into_iter().find(|(pid, _)| *pid == a_id) {
             let offset = clamped_move_offset(old_rect, new_rect, max_dx, max_dy);
             ws_b.scrolling.columns[new_ci].panes[new_pi]
                 .animate_move_from(offset, AnimationConfig::default());
@@ -515,7 +503,8 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         if a_was_only {
             // A's column was deleted when A was removed. Recreate it with B.
             let insert_pos = a_col.min(ws_a.scrolling.columns.len());
-            let mut new_col = Column::new(a_original_col_id, removed_b, chrome::default_column_width());
+            let mut new_col =
+                Column::new(a_original_col_id, removed_b, chrome::default_column_width());
             if let Some(wa) = a_wa {
                 new_col.compute_pane_sizes(wa.size.h, a_gaps);
             }
@@ -540,10 +529,7 @@ pub(crate) fn swap_panes_cross_workspace(args: SwapCrossWorkspaceArgs<'_>) {
         && let Some((new_ci, new_pi)) = find_pane_indices_in_workspace(ws_a, b_id)
     {
         let new_rects = ws_a.scrolling.panes_with_positions();
-        if let Some((_, new_rect)) = new_rects
-            .into_iter()
-            .find(|(pid, _)| *pid == b_id)
-        {
+        if let Some((_, new_rect)) = new_rects.into_iter().find(|(pid, _)| *pid == b_id) {
             let offset = clamped_move_offset(old_rect, new_rect, max_dx, max_dy);
             ws_a.scrolling.columns[new_ci].panes[new_pi]
                 .animate_move_from(offset, AnimationConfig::default());

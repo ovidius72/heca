@@ -12,10 +12,7 @@ pub enum ConfigError {
     /// No config file found in any search path.
     NotFound,
     /// Config file parsed, but semantic validation failed.
-    Invalid {
-        path: PathBuf,
-        message: String,
-    },
+    Invalid { path: PathBuf, message: String },
     /// Config file found but could not be parsed as valid TOML.
     Parse {
         path: PathBuf,
@@ -119,29 +116,20 @@ impl AppConfig {
         ];
         for path in paths.into_iter().flatten() {
             match std::fs::read_to_string(&path) {
-                Ok(content) => {
-                    match toml::from_str::<Config>(&content) {
-                        Ok(config) => {
-                            validate_config(&config).map_err(|message| ConfigError::Invalid {
-                                path: path.clone(),
-                                message,
-                            })?;
-                            return Ok(config);
+                Ok(content) => match toml::from_str::<Config>(&content) {
+                    Ok(config) => {
+                        if let Err(message) = validate_config(&config) {
+                            return Err(ConfigError::Invalid { path, message });
                         }
-                        Err(e) => {
-                            return Err(ConfigError::Parse {
-                                path: path.clone(),
-                                source: e,
-                            });
-                        }
+                        return Ok(config);
                     }
-                }
+                    Err(e) => {
+                        return Err(ConfigError::Parse { path, source: e });
+                    }
+                },
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => {
-                    return Err(ConfigError::Io {
-                        path: path.clone(),
-                        source: e,
-                    });
+                    return Err(ConfigError::Io { path, source: e });
                 }
             }
         }
@@ -290,7 +278,10 @@ color = "#112233"
         assert!(cfg.keys.command[0].close_pane);
         assert!(cfg.keys.command[0].keep_on_error);
         assert_eq!(cfg.programs.resolve("nv").name, "Neovim");
-        assert_eq!(cfg.programs.resolve("nv").icon, crate::programs::ProgramIcon::FileCode);
+        assert_eq!(
+            cfg.programs.resolve("nv").icon,
+            crate::programs::ProgramIcon::FileCode
+        );
         assert_eq!(
             cfg.programs.resolve("nv").color,
             Some(Color::new(17, 34, 51, 255))
@@ -328,7 +319,10 @@ terminal-foreground = "#ddeeff"
         apply_overrides(&mut theme, &settings);
 
         assert_eq!(theme.terminal_background, Some(Color::new(17, 34, 51, 255)));
-        assert_eq!(theme.terminal_foreground, Some(Color::new(221, 238, 255, 255)));
+        assert_eq!(
+            theme.terminal_foreground,
+            Some(Color::new(221, 238, 255, 255))
+        );
     }
 
     #[test]

@@ -48,10 +48,26 @@ mod tests {
     fn combine_clip_pairs() {
         let a = [0.0, 0.0, 100.0, 100.0];
         let b = [40.0, 30.0, 100.0, 100.0];
-        assert_eq!(combine_clip(None, None), None, "unbounded ∩ unbounded = unbounded");
-        assert_eq!(combine_clip(Some(a), None), Some(a), "one side unbounded passes through");
-        assert_eq!(combine_clip(None, Some(b)), Some(b), "one side unbounded passes through");
-        assert_eq!(combine_clip(Some(a), Some(b)), Some(intersect(a, b)), "both bounded ⇒ intersect");
+        assert_eq!(
+            combine_clip(None, None),
+            None,
+            "unbounded ∩ unbounded = unbounded"
+        );
+        assert_eq!(
+            combine_clip(Some(a), None),
+            Some(a),
+            "one side unbounded passes through"
+        );
+        assert_eq!(
+            combine_clip(None, Some(b)),
+            Some(b),
+            "one side unbounded passes through"
+        );
+        assert_eq!(
+            combine_clip(Some(a), Some(b)),
+            Some(intersect(a, b)),
+            "both bounded ⇒ intersect"
+        );
     }
 
     #[test]
@@ -64,6 +80,9 @@ mod tests {
         let i_out = intersect(region, outside);
         let i_touch = intersect(region, touching);
         assert!(i_out[2] <= 0.0 || i_out[3] <= 0.0, "outside draw is culled");
-        assert!(i_touch[2] > 0.0 && i_touch[3] > 0.0, "overlapping draw is kept");
+        assert!(
+            i_touch[2] > 0.0 && i_touch[3] > 0.0,
+            "overlapping draw is kept"
+        );
     }
 }

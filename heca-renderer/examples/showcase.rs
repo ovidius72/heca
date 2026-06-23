@@ -38,7 +38,10 @@ struct IndicatorSwatch {
 
 impl IndicatorSwatch {
     fn new(swap: bool) -> Self {
-        Self { base: heca_grid_ui::component::Base::new(), swap }
+        Self {
+            base: heca_grid_ui::component::Base::new(),
+            swap,
+        }
     }
 }
 
@@ -91,8 +94,12 @@ use winit::window::{Window, WindowId};
 /// the next frame's `build_scene` (which reads `self.theme`). Demonstrates that
 /// border width, radius and glow are all configurable at runtime, not hardcoded.
 /// Intensity options in the order shown by the INTENSITY select.
-const INTENSITY_OPTS: [Intensity; 4] =
-    [Intensity::Off, Intensity::Low, Intensity::Medium, Intensity::Heavy];
+const INTENSITY_OPTS: [Intensity; 4] = [
+    Intensity::Off,
+    Intensity::Low,
+    Intensity::Medium,
+    Intensity::Heavy,
+];
 
 /// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
 const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
@@ -146,9 +153,19 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
     };
     Theme {
         name: ht.name.clone(),
-        background: Color::new(ht.background.r, ht.background.g, ht.background.b, ht.background.a),
+        background: Color::new(
+            ht.background.r,
+            ht.background.g,
+            ht.background.b,
+            ht.background.a,
+        ),
         surface: Color::new(ht.surface.r, ht.surface.g, ht.surface.b, ht.surface.a),
-        foreground: Color::new(ht.foreground.r, ht.foreground.g, ht.foreground.b, ht.foreground.a),
+        foreground: Color::new(
+            ht.foreground.r,
+            ht.foreground.g,
+            ht.foreground.b,
+            ht.foreground.a,
+        ),
         muted: Color::new(ht.muted.r, ht.muted.g, ht.muted.b, ht.muted.a),
         border: Color::new(ht.border.r, ht.border.g, ht.border.b, ht.border.a),
         accent: Color::new(ht.accent.r, ht.accent.g, ht.accent.b, ht.accent.a),
@@ -241,7 +258,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Workspaces rail (enumerate flavor): one icon cell per pane, with a generic
     // KeyHint keycap that lights up on a move/swap/select pick (`p` in the demo).
     let rail_letters = vec!['a', 'b', 'c', 'd', 'e'];
-    let rail_hints: Vec<Signal<Option<String>>> = rail_letters.iter().map(|_| signal(None)).collect();
+    let rail_hints: Vec<Signal<Option<String>>> =
+        rail_letters.iter().map(|_| signal(None)).collect();
     let rail_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
     // Host-owned "needs attention" request for a pane (`n` fires it): the row
     // flashes and the host plays its own beep — grid-ui stays audio-free.
@@ -250,13 +268,39 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // ↑/↓ or Ctrl+J/K to move, Enter to run, Esc to close. Commands just print.
     let palette = CommandPalette::new()
         .placeholder("Type a command…   (↑/↓ · Ctrl+J/K · Enter)")
-        .command(Command::new("Split pane right", || println!("[showcase] split right")).icon(Glyph::Sidebar).key("⌥⌘→"))
-        .command(Command::new("Close pane", || println!("[showcase] close pane")).icon(Glyph::Close).key("⌘W"))
-        .command(Command::new("Toggle sidebar", || println!("[showcase] toggle sidebar")).icon(Glyph::Sidebar).key("⌘B"))
-        .command(Command::new("New terminal", || println!("[showcase] new terminal")).icon(Glyph::Terminal))
-        .command(Command::new("Search files", || println!("[showcase] search files")).icon(Glyph::Search).key("⌘P"))
-        .command(Command::new("Git: commit", || println!("[showcase] git commit")).icon(Glyph::GitCommit))
-        .command(Command::new("Settings", || println!("[showcase] settings")).icon(Glyph::Gear).key("⌘,"));
+        .command(
+            Command::new("Split pane right", || println!("[showcase] split right"))
+                .icon(Glyph::Sidebar)
+                .key("⌥⌘→"),
+        )
+        .command(
+            Command::new("Close pane", || println!("[showcase] close pane"))
+                .icon(Glyph::Close)
+                .key("⌘W"),
+        )
+        .command(
+            Command::new("Toggle sidebar", || println!("[showcase] toggle sidebar"))
+                .icon(Glyph::Sidebar)
+                .key("⌘B"),
+        )
+        .command(
+            Command::new("New terminal", || println!("[showcase] new terminal"))
+                .icon(Glyph::Terminal),
+        )
+        .command(
+            Command::new("Search files", || println!("[showcase] search files"))
+                .icon(Glyph::Search)
+                .key("⌘P"),
+        )
+        .command(
+            Command::new("Git: commit", || println!("[showcase] git commit"))
+                .icon(Glyph::GitCommit),
+        )
+        .command(
+            Command::new("Settings", || println!("[showcase] settings"))
+                .icon(Glyph::Gear)
+                .key("⌘,"),
+        );
     let palette_open = palette.open_signal();
 
     // Right-click context menu: the pointer counterpart to the keyboard picks.
@@ -276,7 +320,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     let border_opts = [0.0f32, 1.0, 2.0, 3.0];
     let font_opts = [8.0f32, 10.0, 12.0, 15.0, 20.0, 28.0];
     let near = |arr: &[f32], v: f32, dflt: usize| {
-        arr.iter().position(|x| (x - v).abs() < 0.01).unwrap_or(dflt)
+        arr.iter()
+            .position(|x| (x - v).abs() < 0.01)
+            .unwrap_or(dflt)
     };
     let glow_idx = GlowLevel::ALL
         .iter()
@@ -369,11 +415,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 // The label shows the current theme name; the showcase tree is
                 // rebuilt on change so every widget picks up the new palette.
                 .child(
-                    Button::primary(format!("⇄ THEME: {}", theme.name))
-                        .on_click(move || {
-                            let next = (ctl.theme_idx.get_untracked() + 1) % THEME_NAMES.len();
-                            ctl.theme_idx.set(next);
-                        }),
+                    Button::primary(format!("⇄ THEME: {}", theme.name)).on_click(move || {
+                        let next = (ctl.theme_idx.get_untracked() + 1) % THEME_NAMES.len();
+                        ctl.theme_idx.set(next);
+                    }),
                 ),
         )
         // Change widgets: Toggles across their states (on / off / disabled).
@@ -528,13 +573,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Label::new("INTENSITY").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"]).selected(intensity_idx).on_change(
-                        move |a| {
+                    Select::new(["OFF", "LOW", "MEDIUM", "HEAVY"])
+                        .selected(intensity_idx)
+                        .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.intensity.set(INTENSITY_OPTS[i.min(3)]);
                             }
-                        },
-                    ),
+                        }),
                 ),
         )
         // Live theme controls — glow size, corner radius, border width. Each
@@ -549,25 +594,30 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .selected(glow_idx)
                         .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
-                                ctl.glow.set(GlowLevel::ALL[i.min(GlowLevel::ALL.len() - 1)]);
+                                ctl.glow
+                                    .set(GlowLevel::ALL[i.min(GlowLevel::ALL.len() - 1)]);
                             }
                         }),
                 )
                 .child(Label::new("RADIUS").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["0", "4", "8", "16"]).selected(radius_idx).on_change(move |a| {
-                        if let SignalData::Usize(i) = a.data {
-                            ctl.radius.set(radius_opts[i.min(3)]);
-                        }
-                    }),
+                    Select::new(["0", "4", "8", "16"])
+                        .selected(radius_idx)
+                        .on_change(move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.radius.set(radius_opts[i.min(3)]);
+                            }
+                        }),
                 )
                 .child(Label::new("BORDER").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["0", "1", "2", "3"]).selected(border_idx).on_change(move |a| {
-                        if let SignalData::Usize(i) = a.data {
-                            ctl.border.set(border_opts[i.min(3)]);
-                        }
-                    }),
+                    Select::new(["0", "1", "2", "3"])
+                        .selected(border_idx)
+                        .on_change(move |a| {
+                            if let SignalData::Usize(i) = a.data {
+                                ctl.border.set(border_opts[i.min(3)]);
+                            }
+                        }),
                 ),
         )
         // Font-size control + widgets that re-measure from it: the Input, Select
@@ -579,13 +629,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Label::new("FONT").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["8", "10", "12", "15", "20", "28"]).selected(font_idx).on_change(
-                        move |a| {
+                    Select::new(["8", "10", "12", "15", "20", "28"])
+                        .selected(font_idx)
+                        .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.font.set(font_opts[i.min(font_opts.len() - 1)]);
                             }
-                        },
-                    ),
+                        }),
                 )
                 .child(Input::new().value("SIZED"))
                 .child(Select::new(["ALPHA", "BETA", "GAMMA"]))
@@ -600,23 +650,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Label::new("SIZE").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["NORMAL", "SMALL", "LARGE"]).selected(size_idx).on_change(
-                        move |a| {
+                    Select::new(["NORMAL", "SMALL", "LARGE"])
+                        .selected(size_idx)
+                        .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.size.set(SIZE_OPTS[i.min(SIZE_OPTS.len() - 1)]);
                             }
-                        },
-                    ),
+                        }),
                 )
                 .child(Label::new("ZOOM").color(theme.muted).font_scale(0.85))
                 .child(
-                    Select::new(["0", "1", "2", "3", "4", "5"]).selected(zoom_idx).on_change(
-                        move |a| {
+                    Select::new(["0", "1", "2", "3", "4", "5"])
+                        .selected(zoom_idx)
+                        .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
                                 ctl.zoom.set((i as f32).min(ZOOM_MAX));
                             }
-                        },
-                    ),
+                        }),
                 ),
         )
         // Item rows: a single-select menu panel. Clicking a row highlights it and
@@ -674,15 +724,35 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Icon::new(Glyph::Folder).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::FileCode).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::GitBranch).color(theme.success).size(34.0))
-                .child(Icon::new(Glyph::Terminal).color(theme.foreground).size(34.0))
+                .child(
+                    Icon::new(Glyph::Terminal)
+                        .color(theme.foreground)
+                        .size(34.0),
+                )
                 .child(Icon::new(Glyph::Gear).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::Lightning).color(theme.accent).size(34.0))
                 .child(Icon::new(Glyph::Warning).color(theme.warning).size(34.0))
                 // Pane-action glyphs (the in-pane info bar buttons).
-                .child(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(34.0))
-                .child(Icon::new(Glyph::ArrowLineLeft).color(theme.foreground).size(34.0))
-                .child(Icon::new(Glyph::ArrowLineRight).color(theme.foreground).size(34.0))
-                .child(Icon::new(Glyph::FrameCorners).color(theme.foreground).size(34.0))
+                .child(
+                    Icon::new(Glyph::SquareSplitVertical)
+                        .color(theme.foreground)
+                        .size(34.0),
+                )
+                .child(
+                    Icon::new(Glyph::ArrowLineLeft)
+                        .color(theme.foreground)
+                        .size(34.0),
+                )
+                .child(
+                    Icon::new(Glyph::ArrowLineRight)
+                        .color(theme.foreground)
+                        .size(34.0),
+                )
+                .child(
+                    Icon::new(Glyph::FrameCorners)
+                        .color(theme.foreground)
+                        .size(34.0),
+                )
                 .child(Icon::new(Glyph::Cards).color(theme.foreground).size(34.0))
                 .child(Icon::new(Glyph::XSquare).color(theme.danger).size(34.0)),
         )
@@ -711,17 +781,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 // `.active(true)`: held-on (toggled) status — a persistent tone-tinted
                 // frame, like the in-pane zoom/float buttons when engaged.
                 .child(Tooltip::new(
-                    IconButton::new(Icon::new(Glyph::FrameCorners).color(theme.foreground).size(20.0))
-                        .active(true)
-                        .on_click(|| println!("[showcase] unzoom")),
+                    IconButton::new(
+                        Icon::new(Glyph::FrameCorners)
+                            .color(theme.foreground)
+                            .size(20.0),
+                    )
+                    .active(true)
+                    .on_click(|| println!("[showcase] unzoom")),
                     "Zoom (active)",
                 ))
-                .child(Tooltip::new(
-                    IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
-                        .tone(theme.danger)
-                        .on_click(|| println!("[showcase] close")),
-                    "Close",
-                ).side(TooltipSide::Bottom)),
+                .child(
+                    Tooltip::new(
+                        IconButton::new(Icon::new(Glyph::Close).color(theme.danger).size(20.0))
+                            .tone(theme.danger)
+                            .on_click(|| println!("[showcase] close")),
+                        "Close",
+                    )
+                    .side(TooltipSide::Bottom),
+                ),
         )
         // Modal: a centered confirm dialog over a scrim. The destructive button
         // opens it; Esc / scrim / the dialog buttons close it (keys route to the
@@ -802,8 +879,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                     Flex::row()
                                         .align(Align::Center)
                                         .gap(6.0)
-                                        .child(Icon::new(Glyph::Terminal).size(13.0).color(theme.muted))
-                                        .child(Label::new("zsh").color(theme.foreground).font_scale(0.8)),
+                                        .child(
+                                            Icon::new(Glyph::Terminal)
+                                                .size(13.0)
+                                                .color(theme.muted),
+                                        )
+                                        .child(
+                                            Label::new("zsh")
+                                                .color(theme.foreground)
+                                                .font_scale(0.8),
+                                        ),
                                 ),
                         )
                         .child(Label::new("idle").font_size(12.0).color(theme.muted)),
@@ -828,13 +913,25 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .justify(Justify::SpaceBetween)
                                 .child(
                                     Tag::new("Neovim")
-                                        .leading(Icon::new(Glyph::FileCode).size(13.0).color(theme.accent))
+                                        .leading(
+                                            Icon::new(Glyph::FileCode)
+                                                .size(13.0)
+                                                .color(theme.accent),
+                                        )
                                         .segment(
                                             Flex::row()
                                                 .align(Align::Center)
                                                 .gap(6.0)
-                                                .child(Icon::new(Glyph::GitBranch).size(13.0).color(theme.muted))
-                                                .child(Label::new("…phase-7").color(theme.foreground).font_scale(0.8)),
+                                                .child(
+                                                    Icon::new(Glyph::GitBranch)
+                                                        .size(13.0)
+                                                        .color(theme.muted),
+                                                )
+                                                .child(
+                                                    Label::new("…phase-7")
+                                                        .color(theme.foreground)
+                                                        .font_scale(0.8),
+                                                ),
                                         )
                                         .color(theme.accent),
                                 )
@@ -842,18 +939,35 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                     Flex::row()
                                         .align(Align::Center)
                                         .gap(2.0)
-                                        .child(Tooltip::new(
-                                            IconButton::new(Icon::new(Glyph::SquareSplitVertical).color(theme.foreground).size(15.0)).cell(24.0),
-                                            "Add pane  ⌃B V",
-                                        ).side(TooltipSide::Bottom))
-                                        .child(Tooltip::new(
-                                            IconButton::new(Icon::new(Glyph::XSquare).color(theme.danger).size(15.0)).cell(24.0).tone(theme.danger),
-                                            "Close  ⌃B X",
-                                        ).side(TooltipSide::Bottom)),
+                                        .child(
+                                            Tooltip::new(
+                                                IconButton::new(
+                                                    Icon::new(Glyph::SquareSplitVertical)
+                                                        .color(theme.foreground)
+                                                        .size(15.0),
+                                                )
+                                                .cell(24.0),
+                                                "Add pane  ⌃B V",
+                                            )
+                                            .side(TooltipSide::Bottom),
+                                        )
+                                        .child(
+                                            Tooltip::new(
+                                                IconButton::new(
+                                                    Icon::new(Glyph::XSquare)
+                                                        .color(theme.danger)
+                                                        .size(15.0),
+                                                )
+                                                .cell(24.0)
+                                                .tone(theme.danger),
+                                                "Close  ⌃B X",
+                                            )
+                                            .side(TooltipSide::Bottom),
+                                        ),
                                 ),
                         )
                         .child(Label::new("running").font_size(12.0).color(theme.muted)),
-                )
+                ),
         )
         // ScrollRegion (gridui-01): an embeddable vertical scroll viewport —
         // 25 rows in a 180px window → auto-scrollbar + wheel/drag. Pointer
@@ -905,17 +1019,15 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // metadata line (`branch + optional counts`), hidden outside repos.
             let pane_sel = signal(0usize);
             let pane_states: Rc<RefCell<Vec<Signal<bool>>>> = Rc::new(RefCell::new(Vec::new()));
-            let pane_titles: Rc<RefCell<Vec<PaneTitleSignals>>> =
-                Rc::new(RefCell::new(Vec::new()));
-            let pane = move |
-                icon: Glyph,
-                title: &str,
-                git_branch: Option<&str>,
-                git_added: Option<&str>,
-                git_modified: Option<&str>,
-                git_deleted: Option<&str>,
-                status: DotStatus,
-            | -> Row {
+            let pane_titles: Rc<RefCell<Vec<PaneTitleSignals>>> = Rc::new(RefCell::new(Vec::new()));
+            let pane = move |icon: Glyph,
+                             title: &str,
+                             git_branch: Option<&str>,
+                             git_added: Option<&str>,
+                             git_modified: Option<&str>,
+                             git_deleted: Option<&str>,
+                             status: DotStatus|
+                  -> Row {
                 let git_row = Visibility::new(
                     Flex::row()
                         .align(Align::Center)
@@ -997,23 +1109,13 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                             .child(StatusDot::new(status)),
                                     )
                                     .child(
-                                        Flex::row()
-                                            .align(Align::Center)
-                                            .child(
-                                                Icon::new(icon)
-                                                    .color(theme.foreground)
-                                                    .size(14.0),
-                                            ),
+                                        Flex::row().align(Align::Center).child(
+                                            Icon::new(icon).color(theme.foreground).size(14.0),
+                                        ),
                                     )
-                                    .child(
-                                        Flex::row()
-                                            .align(Align::Center)
-                                            .child(
-                                                Flex::column()
-                                                    .child(active_title)
-                                                    .child(inactive_title),
-                                            ),
-                                    ),
+                                    .child(Flex::row().align(Align::Center).child(
+                                        Flex::column().child(active_title).child(inactive_title),
+                                    )),
                             )
                             .child(
                                 Flex::row()
@@ -1062,21 +1164,34 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )
                 .child(
                     ItemGroup::new("src")
-                        .child(file("main.rs", Icon::new(Glyph::FileCode).color(theme.accent).size(18.0)))
-                        .child(file("chrome_region.rs", Icon::new(Glyph::FileCode).color(theme.foreground).size(18.0)))
-                        .child(file("dock_frame.rs", Icon::new(Glyph::FileCode).color(theme.foreground).size(18.0))),
+                        .child(file(
+                            "main.rs",
+                            Icon::new(Glyph::FileCode).color(theme.accent).size(18.0),
+                        ))
+                        .child(file(
+                            "chrome_region.rs",
+                            Icon::new(Glyph::FileCode)
+                                .color(theme.foreground)
+                                .size(18.0),
+                        ))
+                        .child(file(
+                            "dock_frame.rs",
+                            Icon::new(Glyph::FileCode)
+                                .color(theme.foreground)
+                                .size(18.0),
+                        )),
                 )
                 .child(
                     // Collapsed group — verifies the paint fix: its rows must not
                     // bleed to the top-left while hidden.
-                    ItemGroup::new("tests")
-                        .expanded(false)
-                        .child(file("phase_a.rs", Icon::new(Glyph::FileCode).color(theme.muted).size(18.0))),
+                    ItemGroup::new("tests").expanded(false).child(file(
+                        "phase_a.rs",
+                        Icon::new(Glyph::FileCode).color(theme.muted).size(18.0),
+                    )),
                 );
             // Git status rows: a state-colored duotone icon + change-kind badge.
-            let git_row = |icon: Icon, name: &str, tag: Badge| {
-                Item::new(name).leading(icon).trailing(tag)
-            };
+            let git_row =
+                |icon: Icon, name: &str, tag: Badge| Item::new(name).leading(icon).trailing(tag);
             let source_control = DockFrame::new("SOURCE CONTROL")
                 .rail(sidebar_mode, Glyph::GitBranch)
                 .header(
@@ -1085,9 +1200,21 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .child(Badge::warning("3"))
                         .child(Flex::row().width(Length::Px(14.0))),
                 )
-                .child(git_row(Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0), "chrome_region.rs", Badge::warning("M")))
-                .child(git_row(Icon::new(Glyph::Plus).color(theme.success).size(18.0), "showcase.rs", Badge::success("A")))
-                .child(git_row(Icon::new(Glyph::Minus).color(theme.danger).size(18.0), "old_sidebar.rs", Badge::danger("D")));
+                .child(git_row(
+                    Icon::new(Glyph::GitBranch).color(theme.warning).size(18.0),
+                    "chrome_region.rs",
+                    Badge::warning("M"),
+                ))
+                .child(git_row(
+                    Icon::new(Glyph::Plus).color(theme.success).size(18.0),
+                    "showcase.rs",
+                    Badge::success("A"),
+                ))
+                .child(git_row(
+                    Icon::new(Glyph::Minus).color(theme.danger).size(18.0),
+                    "old_sidebar.rs",
+                    Badge::danger("D"),
+                ));
 
             // G5 ChromeRegion: a vertical sidebar shell hosting the docks. Bound
             // to the host-owned mode signal so `[` collapses it to the icon rail.
@@ -1147,7 +1274,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             // `drag::resolve_at_filtered`, so nested pane rows fall through to the group.
             let marker_demo = Flex::column()
                 .gap(8.0)
-                .child(Label::new("MARKER GROUP").color(theme.muted).font_scale(0.8))
+                .child(
+                    Label::new("MARKER GROUP")
+                        .color(theme.muted)
+                        .font_scale(0.8),
+                )
                 .child(
                     // Wide rows wrapped in KeyHint with `CenterRight`: the pick keycap
                     // pins to the right edge (vs the rail's `Center`) so the row label
@@ -1186,21 +1317,37 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 )
                 // The two host-painted drop visuals: a MOVE inserts (line on an edge);
                 // a SWAP exchanges the whole item (double frame, no before/after).
-                .child(Label::new("DROP INDICATORS").color(theme.muted).font_scale(0.8))
+                .child(
+                    Label::new("DROP INDICATORS")
+                        .color(theme.muted)
+                        .font_scale(0.8),
+                )
                 .child(
                     Flex::row()
                         .gap(12.0)
                         .child(
                             Flex::column()
                                 .gap(4.0)
-                                .child(IndicatorSwatch::new(false).width(Length::Px(120.0)).height(Length::Px(34.0)))
+                                .child(
+                                    IndicatorSwatch::new(false)
+                                        .width(Length::Px(120.0))
+                                        .height(Length::Px(34.0)),
+                                )
                                 .child(Label::new("move").color(theme.muted).font_scale(0.8)),
                         )
                         .child(
                             Flex::column()
                                 .gap(4.0)
-                                .child(IndicatorSwatch::new(true).width(Length::Px(120.0)).height(Length::Px(34.0)))
-                                .child(Label::new("swap (Shift)").color(theme.muted).font_scale(0.8)),
+                                .child(
+                                    IndicatorSwatch::new(true)
+                                        .width(Length::Px(120.0))
+                                        .height(Length::Px(34.0)),
+                                )
+                                .child(
+                                    Label::new("swap (Shift)")
+                                        .color(theme.muted)
+                                        .font_scale(0.8),
+                                ),
                         ),
                 );
             // Prefix-as-symbol: the keybinding "prefix" is *displayed* as λ (a plain
@@ -1252,8 +1399,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         s.set(j == i);
                     }
                 });
-                workspaces_rail = workspaces_rail
-                    .child(KeyHint::new(cell).hint(rail_hints[i]).placement(HintPlacement::Center));
+                workspaces_rail = workspaces_rail.child(
+                    KeyHint::new(cell)
+                        .hint(rail_hints[i])
+                        .placement(HintPlacement::Center),
+                );
             }
             let rail_col = Flex::column()
                 .gap(8.0)
@@ -1302,8 +1452,7 @@ fn offset_tree(c: &mut dyn Component, dy: f64) {
 fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_demo: bool) -> Scene {
     let mut scene = Scene::new();
     {
-        let mut cx =
-            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         // Background fill as the first scene command (not a clear pass): scissored to
         // the damage region it clears only the changed area, so the rest of the
         // persistent scene texture is preserved for damage-region redraw.
@@ -1338,8 +1487,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
     // are sliced cleanly at the panel edges instead of spilling out — the editor's
     // pixel-scroll foundation. Painted into the overlay layer so it sits on top.
     if show_clip_demo {
-        let mut cx =
-            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         let (pw, ph) = (240.0, 150.0);
         let panel = Rectangle::new(
             Point::new((w as f64 - pw) * 0.5, (h as f64 - ph) * 0.5),
@@ -1378,10 +1526,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                 for i in 0..12 {
                     let y = inner.loc.y - 9.0 + i as f64 * 18.0;
                     cx.text(
-                        Rectangle::new(
-                            Point::new(inner.loc.x, y),
-                            Size::new(inner.size.w, 16.0),
-                        ),
+                        Rectangle::new(Point::new(inner.loc.x, y), Size::new(inner.size.w, 16.0)),
                         &format!("clip line {i:02} — sliced at the edges"),
                         theme.foreground,
                         12.0,
@@ -1558,8 +1703,7 @@ impl GpuState {
             menu_open,
             menu_anchor,
             toasts,
-        } =
-            built;
+        } = built;
 
         Self {
             window,
@@ -1611,8 +1755,10 @@ impl GpuState {
         self.surface.configure(&self.device, &self.config);
         // Keep the renderers' scissor-clamp size + the persistent scene texture in
         // sync with the framebuffer.
-        self.grid.set_target_size(self.config.width, self.config.height);
-        self.text.set_target_size(self.config.width, self.config.height);
+        self.grid
+            .set_target_size(self.config.width, self.config.height);
+        self.text
+            .set_target_size(self.config.width, self.config.height);
         self.compositor
             .resize(&self.device, self.config.width, self.config.height);
         self.layout_dirty = true; // window size feeds layout
@@ -1672,8 +1818,9 @@ impl GpuState {
 
     fn enter_zoom_mode(&mut self) {
         self.zoom_mode = true;
-        self.window
-            .set_title(&format!("{APP_TITLE} — ZOOM  (k/+ in · j/- out · 0 reset · Esc exit)"));
+        self.window.set_title(&format!(
+            "{APP_TITLE} — ZOOM  (k/+ in · j/- out · 0 reset · Esc exit)"
+        ));
         self.window.request_redraw();
     }
 
@@ -1764,7 +1911,8 @@ impl GpuState {
             self.applied_scroll = 0.0;
             self.layout_dirty = true;
             self.force_full = true;
-            self.window.set_title(&format!("{} — {}", APP_TITLE, self.theme.name));
+            self.window
+                .set_title(&format!("{} — {}", APP_TITLE, self.theme.name));
         }
 
         // Fold live theme controls in (paint-only except font, which reflows layout).
@@ -1884,11 +2032,13 @@ impl GpuState {
             glow_alpha_scale,
         );
         self.grid.render(&self.queue, scene_view, &mut encoder);
-        self.text.render(&self.queue, scene_view, &mut encoder, None);
+        self.text
+            .render(&self.queue, scene_view, &mut encoder, None);
         for overlay in scene.overlay_segments() {
             enqueue_scene(&mut self.grid, &mut self.text, &overlay, glow_alpha_scale);
             self.grid.render(&self.queue, scene_view, &mut encoder);
-            self.text.render(&self.queue, scene_view, &mut encoder, None);
+            self.text
+                .render(&self.queue, scene_view, &mut encoder, None);
         }
         // Blit the composited scene onto the swapchain.
         self.compositor.blit(&view, &mut encoder);
@@ -2017,7 +2167,9 @@ impl ApplicationHandler for App {
                     // Modal) gets it first but only swallows it if it consumes it — a
                     // non-scrolling overlay like the ToastStack lets it fall through.
                     // When nothing in the tree consumes it, scroll the whole page.
-                    if state.focus.dispatch(&mut state.ui, &Event::Scroll { delta: lines })
+                    if state
+                        .focus
+                        .dispatch(&mut state.ui, &Event::Scroll { delta: lines })
                         == Handled::No
                     {
                         state.scroll_y += lines * 40.0;
@@ -2055,7 +2207,10 @@ impl ApplicationHandler for App {
                         // global keys (`t`, `[`, …) still work while toasts show.
                         gk if state.focus.offer_to_overlay(
                             &mut state.ui,
-                            &Event::Key { key: gk, pressed: true },
+                            &Event::Key {
+                                key: gk,
+                                pressed: true,
+                            },
                         ) == Handled::Yes => {}
                         // Ctrl+K opens the command palette (a host-bound chord).
                         GridKey::Char('k') if state.ctrl => {

@@ -16,7 +16,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{
-    paint_child, route_event, soonest_redraw, Base, Component, Event, Handled, PaintCx,
+    Base, Component, Event, Handled, PaintCx, paint_child, route_event, soonest_redraw,
 };
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, signal};
@@ -221,7 +221,13 @@ impl Component for Tooltip {
 
         let (surface, accent, glow_c, foreground, ctrl_radius) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.foreground, t.control_radius())
+            (
+                t.surface,
+                t.accent,
+                t.glow,
+                t.foreground,
+                t.control_radius(),
+            )
         };
         let font = self.base.font;
         let (w, h) = self.bubble_size();
@@ -236,7 +242,11 @@ impl Component for Tooltip {
                 surface,
                 border,
                 radius,
-                Some(Glow { color: glow_c, radius: 5.0, intensity: 0.2 }),
+                Some(Glow {
+                    color: glow_c,
+                    radius: 5.0,
+                    intensity: 0.2,
+                }),
             );
             cx.text(rect, &text, foreground, font, TextAlign::Center, false);
         });

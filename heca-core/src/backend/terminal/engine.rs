@@ -7,14 +7,12 @@ use crate::backend::{TerminalCursor, TerminalCursorShape};
 use std::io::{Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use wezterm_surface::CursorVisibility;
 use wezterm_term::color::{ColorAttribute, ColorPalette};
-use wezterm_term::input::{
-    KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
-};
+use wezterm_term::input::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use wezterm_term::{
     Alert, AlertHandler, CellAttributes, Intensity, Terminal, TerminalConfiguration, TerminalSize,
 };
-use wezterm_surface::CursorVisibility;
 
 /// Small wrapper around a shared PTY writer so `wezterm-term` can encode
 /// responses and future keyboard/mouse input directly to the PTY.
@@ -170,7 +168,7 @@ impl TerminalEngine {
         let cols = size.cols.max(1);
         let rows = size.rows.max(1);
         let blank_line = TerminalLine {
-            cells: vec![blank.clone(); cols],
+            cells: vec![blank; cols],
         };
         let lines = self.visible_lines(cols, rows, &palette, &blank_line);
 
@@ -193,6 +191,29 @@ impl TerminalEngine {
         };
         snapshot.debug_assert_valid();
         snapshot
+    }
+
+    pub(super) fn current_seqno(&self) -> usize {
+        self.terminal.current_seqno()
+    }
+
+    pub(super) fn visible_top_stable_row(&self) -> isize {
+        self.terminal.screen().visible_row_to_stable_row(0)
+    }
+
+    pub(super) fn changed_visible_rows_since(&self, seqno: usize) -> Vec<usize> {
+        let screen = self.terminal.screen();
+        let rows = screen.physical_rows.max(1);
+        let top = screen.visible_row_to_stable_row(0);
+        let bottom = screen.visible_row_to_stable_row(rows.saturating_sub(1) as i64);
+        screen
+            .get_changed_stable_rows(top..bottom.saturating_add(1), seqno)
+            .into_iter()
+            .filter_map(|stable_row| {
+                let visible_row = stable_row - top;
+                usize::try_from(visible_row).ok().filter(|row| *row < rows)
+            })
+            .collect()
     }
 
     fn visible_lines(
@@ -241,11 +262,7 @@ fn snapshot_line(
 
         let rendered = terminal_cell(cell.str(), cell.width(), cell.attrs(), palette);
         let span_end = (cell.cell_index() + rendered.width).min(cols);
-        for slot in cells
-            .iter_mut()
-            .take(span_end)
-            .skip(cell.cell_index())
-        {
+        for slot in cells.iter_mut().take(span_end).skip(cell.cell_index()) {
             *slot = blank_with_attrs(&rendered);
         }
         cells[cell.cell_index()] = rendered;
@@ -475,12 +492,14 @@ fn to_rgba(color: wezterm_term::color::SrgbaTuple) -> [f32; 4] {
 fn map_cursor_shape(shape: wezterm_surface::CursorShape) -> TerminalCursorShape {
     match shape {
         wezterm_surface::CursorShape::Default => TerminalCursorShape::Default,
-        wezterm_surface::CursorShape::BlinkingBlock
-        | wezterm_surface::CursorShape::SteadyBlock => TerminalCursorShape::Block,
+        wezterm_surface::CursorShape::BlinkingBlock | wezterm_surface::CursorShape::SteadyBlock => {
+            TerminalCursorShape::Block
+        }
         wezterm_surface::CursorShape::BlinkingUnderline
         | wezterm_surface::CursorShape::SteadyUnderline => TerminalCursorShape::Underline,
-        wezterm_surface::CursorShape::BlinkingBar
-        | wezterm_surface::CursorShape::SteadyBar => TerminalCursorShape::Bar,
+        wezterm_surface::CursorShape::BlinkingBar | wezterm_surface::CursorShape::SteadyBar => {
+            TerminalCursorShape::Bar
+        }
     }
 }
 
@@ -513,12 +532,12 @@ mod tests {
 
         assert!(
             snapshot.lines.iter().all(|line| {
-                line.cells
-                    .iter()
-                    .all(|cell| (cell.bg[0] - expected_bg[0]).abs() < 0.001
+                line.cells.iter().all(|cell| {
+                    (cell.bg[0] - expected_bg[0]).abs() < 0.001
                         && (cell.bg[1] - expected_bg[1]).abs() < 0.001
                         && (cell.bg[2] - expected_bg[2]).abs() < 0.001
-                        && (cell.bg[3] - expected_bg[3]).abs() < 0.001)
+                        && (cell.bg[3] - expected_bg[3]).abs() < 0.001
+                })
             }),
             "clear-screen background should be preserved across blank cells"
         );

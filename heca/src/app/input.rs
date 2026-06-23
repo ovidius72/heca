@@ -4,9 +4,8 @@
 //! preserving the existing key handling behavior.
 
 use crate::actions::ActionRegistry;
-use crate::app::interaction::dispatch_action;
 use crate::app::interaction::InteractionSource;
-use heca_core::layout::PaneId;
+use crate::app::interaction::dispatch_action;
 use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_backend_event, winit_key_to_terminal_input,
@@ -16,6 +15,7 @@ use crate::app::selection::find_pane_location;
 use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry};
+use heca_core::layout::PaneId;
 use std::collections::HashMap;
 use winit::keyboard::{Key, NamedKey, PhysicalKey};
 
@@ -101,7 +101,10 @@ pub(crate) fn handle_keyboard_input(
         InputMode::WorkspacePick { candidates, target } => {
             handle_workspace_pick_mode(registry, state, &candidates, target, ctx);
         }
-        InputMode::ColumnPick { candidates, pane_id } => {
+        InputMode::ColumnPick {
+            candidates,
+            pane_id,
+        } => {
             handle_column_pick_mode(registry, state, &candidates, pane_id, ctx);
         }
         InputMode::SidebarNav => {
@@ -154,7 +157,11 @@ fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
                 {
                     // Set a user override that wins over the process-derived name; an
                     // empty entry clears it so the name tracks the process again.
-                    pane.custom_name = if new_name.is_empty() { None } else { Some(new_name) };
+                    pane.custom_name = if new_name.is_empty() {
+                        None
+                    } else {
+                        Some(new_name)
+                    };
                 }
             }
         }
@@ -290,7 +297,12 @@ fn handle_chord_mode(
     {
         let ws_idx = (digit as usize).saturating_sub(1);
         if ws_idx < state.session.workspaces.len() {
-            dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusWorkspace { ws_idx });
+            dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
+                &WmAction::FocusWorkspace { ws_idx },
+            );
             state.needs_redraw = true;
         }
         state.input_mode = InputMode::Normal;
@@ -451,18 +463,26 @@ fn handle_workspace_pick_mode(
     {
         let target_ws = *target_ws;
         let action = match target {
-            WorkspacePickTarget::Column { ws_idx: origin_ws, col_idx } => {
+            WorkspacePickTarget::Column {
+                ws_idx: origin_ws,
+                col_idx,
+            } => {
                 // `move_column_to_workspace` resolves the source column against the
                 // active workspace, so re-activate the captured origin first in case
                 // the active workspace drifted while the pick was open.
                 if state.session.active_workspace_idx != origin_ws {
                     crate::app::focus::switch_workspace_tracked(state, origin_ws);
                 }
-                WmAction::MoveColumnToWorkspace { col_idx, ws_idx: target_ws, focus: true }
+                WmAction::MoveColumnToWorkspace {
+                    col_idx,
+                    ws_idx: target_ws,
+                    focus: true,
+                }
             }
-            WorkspacePickTarget::Pane(pane_id) => {
-                WmAction::MovePaneToWorkspace { pane_id, ws_idx: target_ws }
-            }
+            WorkspacePickTarget::Pane(pane_id) => WmAction::MovePaneToWorkspace {
+                pane_id,
+                ws_idx: target_ws,
+            },
         };
         dispatch_action(state, registry, InteractionSource::Keyboard, &action);
     }
@@ -490,7 +510,11 @@ fn handle_column_pick_mode(
             state,
             registry,
             InteractionSource::Keyboard,
-            &WmAction::MovePaneToColumn { pane_id, ws_idx: *ws_idx, col_idx: *col_idx },
+            &WmAction::MovePaneToColumn {
+                pane_id,
+                ws_idx: *ws_idx,
+                col_idx: *col_idx,
+            },
         );
     }
     state.needs_redraw = true;
@@ -509,7 +533,12 @@ fn handle_sidebar_nav_mode(
         if let Some(item) = state.sidebar_tree.current_item().cloned()
             && let Some(pane_id) = sidebar_item_focus_target(&state.session, &item)
         {
-            dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusPane { pane_id });
+            dispatch_action(
+                state,
+                registry,
+                InteractionSource::Keyboard,
+                &WmAction::FocusPane { pane_id },
+            );
         }
         state.input_mode = InputMode::Normal;
         state.needs_redraw = true;
@@ -518,14 +547,24 @@ fn handle_sidebar_nav_mode(
         match item {
             Some(crate::sidebar::SidebarItem::Pane { pane_id })
             | Some(crate::sidebar::SidebarItem::FloatingPane { pane_id, .. }) => {
-                dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusPane { pane_id });
+                dispatch_action(
+                    state,
+                    registry,
+                    InteractionSource::Keyboard,
+                    &WmAction::FocusPane { pane_id },
+                );
                 state.input_mode = InputMode::Normal;
             }
             Some(crate::sidebar::SidebarItem::Workspace { ws_idx })
             | Some(crate::sidebar::SidebarItem::Column { ws_idx, .. })
                 if ws_idx != state.session.active_workspace_idx =>
             {
-                dispatch_action(state, registry, InteractionSource::Keyboard, &WmAction::FocusWorkspace { ws_idx });
+                dispatch_action(
+                    state,
+                    registry,
+                    InteractionSource::Keyboard,
+                    &WmAction::FocusWorkspace { ws_idx },
+                );
             }
             _ => {}
         }
@@ -694,15 +733,18 @@ mod tests {
     #[test]
     fn floating_and_pane_items_target_their_exact_pane() {
         let mut session = make_session();
-        let ws = session.active_workspace_mut().expect("active workspace exists");
-        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-            pane: Pane::new(PaneId(99), "float"),
-            position: Point::new(0.0, 0.0),
-            size: Size::new(200.0, 100.0),
-            is_active: false,
-            original_column_idx: None,
-            original_pane_idx: None,
-        });
+        let ws = session
+            .active_workspace_mut()
+            .expect("active workspace exists");
+        ws.floating_panes
+            .push(heca_core::layout::workspace::FloatingPane {
+                pane: Pane::new(PaneId(99), "float"),
+                position: Point::new(0.0, 0.0),
+                size: Size::new(200.0, 100.0),
+                is_active: false,
+                original_column_idx: None,
+                original_pane_idx: None,
+            });
         ws.focus_domain = FocusDomain::Tiled;
 
         assert_eq!(
@@ -729,16 +771,22 @@ mod tests {
             1.0,
             LayoutOptions::default(),
         );
-        let ws = session.active_workspace_mut().expect("active workspace exists");
-        ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-            pane: Pane::new(PaneId(77), "float-only"),
-            position: Point::new(0.0, 0.0),
-            size: Size::new(200.0, 100.0),
-            is_active: false,
-            original_column_idx: None,
-            original_pane_idx: None,
-        });
-        ws.update_working_area(Rectangle::new(Point::new(0.0, 0.0), Size::new(1280.0, 800.0)));
+        let ws = session
+            .active_workspace_mut()
+            .expect("active workspace exists");
+        ws.floating_panes
+            .push(heca_core::layout::workspace::FloatingPane {
+                pane: Pane::new(PaneId(77), "float-only"),
+                position: Point::new(0.0, 0.0),
+                size: Size::new(200.0, 100.0),
+                is_active: false,
+                original_column_idx: None,
+                original_pane_idx: None,
+            });
+        ws.update_working_area(Rectangle::new(
+            Point::new(0.0, 0.0),
+            Size::new(1280.0, 800.0),
+        ));
 
         let target = sidebar_item_focus_target(&session, &SidebarItem::Workspace { ws_idx: 0 });
         assert_eq!(target, Some(PaneId(77)));

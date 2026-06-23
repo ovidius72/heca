@@ -66,13 +66,20 @@ impl Tag {
         let label = Label::new(label).font_scale(FONT_SCALE);
         let label_signal = label.text_signal();
         base.children.push(Box::new(segment().child(label)));
-        Self { base, color: None, label: label_signal }
+        Self {
+            base,
+            color: None,
+            label: label_signal,
+        }
     }
 
     /// Set the leading slot of the **first** segment — typically an
     /// [`Icon`](super::Icon).
     pub fn leading(mut self, c: impl Component + 'static) -> Self {
-        self.base.children[0].base_mut().children.insert(0, Box::new(c));
+        self.base.children[0]
+            .base_mut()
+            .children
+            .insert(0, Box::new(c));
         self
     }
 
@@ -85,7 +92,11 @@ impl Tag {
 
     /// Append a `label` segment with an optional leading icon — a convenience over
     /// [`segment`](Tag::segment) for the common icon-plus-text section.
-    pub fn segment_text(self, label: impl Into<String>, leading: Option<Box<dyn Component>>) -> Self {
+    pub fn segment_text(
+        self,
+        label: impl Into<String>,
+        leading: Option<Box<dyn Component>>,
+    ) -> Self {
         let mut seg = segment().child(Label::new(label).font_scale(FONT_SCALE));
         if let Some(icon) = leading {
             seg.base_mut().children.insert(0, icon);
@@ -128,7 +139,10 @@ impl Component for Tag {
         cx.rect(
             pill,
             c.with_alpha(FILL_ALPHA),
-            Some(Border { color: c.with_alpha(BORDER_ALPHA), width: border_w }),
+            Some(Border {
+                color: c.with_alpha(BORDER_ALPHA),
+                width: border_w,
+            }),
             radius,
             None,
         );

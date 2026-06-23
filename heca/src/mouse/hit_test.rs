@@ -14,7 +14,11 @@ pub(crate) fn hit_test_pane(state: &AppState, pos: (f32, f32)) -> Option<PaneId>
 
 /// Find which pane (if any) is under the cursor, optionally excluding one pane ID.
 /// This is used during swap-drag to skip the dragged source pane.
-pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude: Option<PaneId>) -> Option<PaneId> {
+pub(crate) fn hit_test_pane_excluding(
+    state: &AppState,
+    pos: (f32, f32),
+    exclude: Option<PaneId>,
+) -> Option<PaneId> {
     let (win_w, win_h) = super::window_logical_size(state);
     let chrome = super::chrome_config(state);
     let pane_area = chrome.content_rect(win_w, win_h);
@@ -50,7 +54,10 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
             let fy = pane_area.loc.y as f32 + ws_offset.1 + float.position.y as f32;
             let fw = float.size.w as f32;
             let fh = float.size.h as f32;
-            if pos.0 >= fx && pos.0 < fx + fw && pos.1 >= fy && pos.1 < fy + fh
+            if pos.0 >= fx
+                && pos.0 < fx + fw
+                && pos.1 >= fy
+                && pos.1 < fy + fh
                 && Some(float.pane.id) != exclude
             {
                 return Some(float.pane.id);
@@ -69,7 +76,10 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
         let py = pane_area.loc.y as f32 + ws_offset.1 + rect.loc.y as f32;
         let pw = rect.size.w as f32;
         let ph = rect.size.h as f32;
-        if pos.0 >= px && pos.0 < px + pw && pos.1 >= py && pos.1 < py + ph
+        if pos.0 >= px
+            && pos.0 < px + pw
+            && pos.1 >= py
+            && pos.1 < py + ph
             && Some(*pane_id) != exclude
         {
             return Some(*pane_id);
@@ -78,4 +88,3 @@ pub(crate) fn hit_test_pane_excluding(state: &AppState, pos: (f32, f32), exclude
 
     None
 }
-

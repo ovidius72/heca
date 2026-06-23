@@ -7,8 +7,8 @@ use crate::actions::ActionRegistry;
 use crate::handlers::*;
 use crate::input::{self, SpawnKind, WmAction, action_from_name, build_action};
 use crate::keymap::{KeyCombo, KeymapRegistry};
-use heca_core::runtime::PaneClosePolicy;
 use heca_core::layout::PaneId;
+use heca_core::runtime::PaneClosePolicy;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Debug)]
@@ -259,7 +259,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::WorkspacePrev, handle_workspace_prev);
     registry.register(&WmAction::FocusToggleLocal, handle_focus_toggle_local);
     registry.register(&WmAction::FocusToggleGlobal, handle_focus_toggle_global);
-    registry.register(&WmAction::FocusPane { pane_id: PaneId(0) }, handle_focus_pane);
+    registry.register(
+        &WmAction::FocusPane { pane_id: PaneId(0) },
+        handle_focus_pane,
+    );
     registry.register(
         &WmAction::FocusWorkspace { ws_idx: 0 },
         handle_focus_workspace,
@@ -277,11 +280,23 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SwapRight, handle_swap_right);
     registry.register(&WmAction::SwapUp, handle_swap_up);
     registry.register(&WmAction::SwapDown, handle_swap_down);
-    registry.register(&WmAction::MovePaneLeft { pane_id: None }, handle_move_pane_left);
-    registry.register(&WmAction::MovePaneRight { pane_id: None }, handle_move_pane_right);
+    registry.register(
+        &WmAction::MovePaneLeft { pane_id: None },
+        handle_move_pane_left,
+    );
+    registry.register(
+        &WmAction::MovePaneRight { pane_id: None },
+        handle_move_pane_right,
+    );
     registry.register(&WmAction::MoveColumnUp, handle_move_column_up);
     registry.register(&WmAction::MoveColumnDown, handle_move_column_down);
-    registry.register(&WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) }, handle_swap_param);
+    registry.register(
+        &WmAction::Swap {
+            a_id: PaneId(0),
+            b_id: PaneId(0),
+        },
+        handle_swap_param,
+    );
     registry.register(
         &WmAction::Move {
             pane_id: PaneId(0),
@@ -340,7 +355,10 @@ pub fn build_registry() -> ActionRegistry {
         handle_resize,
     );
     registry.register(
-        &WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
+        &WmAction::ResizeColumnBy {
+            col_idx: 0,
+            delta: 0.0,
+        },
         handle_resize_column_by,
     );
     registry.register(
@@ -457,10 +475,7 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::CollapseCurrentColumn,
         handle_collapse_current_column,
     );
-    registry.register(
-        &WmAction::ExpandCurrentColumn,
-        handle_expand_current_column,
-    );
+    registry.register(&WmAction::ExpandCurrentColumn, handle_expand_current_column);
     registry.register(
         &WmAction::ToggleCurrentColumnCollapsed,
         handle_toggle_current_column_collapsed,
@@ -522,7 +537,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::CopySelection, handle_copy_selection);
     registry.register(&WmAction::PasteClipboard, handle_paste_clipboard);
     registry.register(&WmAction::BeginSelection, handle_begin_selection);
-    registry.register(&WmAction::ToggleSelectionEndpoint, handle_toggle_selection_endpoint);
+    registry.register(
+        &WmAction::ToggleSelectionEndpoint,
+        handle_toggle_selection_endpoint,
+    );
 
     registry
 }
@@ -644,7 +662,9 @@ mod tests {
     fn default_selection_mode_bindings_resolve() {
         let config = heca_config::theme::Config::default();
         let (mode_keymaps, _) = build_modes(&config);
-        let keymap = mode_keymaps.get("selection").expect("selection mode exists");
+        let keymap = mode_keymaps
+            .get("selection")
+            .expect("selection mode exists");
 
         assert_eq!(
             keymap.resolve("selection", &KeyCombo::parse("h")),

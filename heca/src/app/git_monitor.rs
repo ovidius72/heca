@@ -40,7 +40,10 @@ impl GitProvider for Git2Provider {
             .unwrap_or_else(|| repo.path().to_path_buf());
 
         let head = repo.head().ok();
-        let branch = head.as_ref().and_then(|head| head.shorthand()).map(str::to_string);
+        let branch = head
+            .as_ref()
+            .and_then(|head| head.shorthand())
+            .map(str::to_string);
         let (ahead, behind) = head
             .as_ref()
             .and_then(|head| head.shorthand().map(str::to_string))
@@ -166,8 +169,12 @@ fn sync_pane_git_from_cwds_impl<P: GitProvider>(
         }
     }
 
-    ctx.cache.pane_state.retain(|pane, _| live_panes.contains(pane));
-    ctx.cache.repos.retain(|root, _| ctx.live_roots.contains(root));
+    ctx.cache
+        .pane_state
+        .retain(|pane, _| live_panes.contains(pane));
+    ctx.cache
+        .repos
+        .retain(|root, _| ctx.live_roots.contains(root));
 }
 
 fn sync_one_pane_git<P: GitProvider>(
@@ -293,10 +300,10 @@ fn sync_one_pane_git<P: GitProvider>(
 
 #[cfg(test)]
 mod tests {
-    use super::{sync_pane_git_from_cwds_impl, GitInfo, GitProvider, GitRuntimeCache, GitSnapshot};
+    use super::{GitInfo, GitProvider, GitRuntimeCache, GitSnapshot, sync_pane_git_from_cwds_impl};
     use heca_core::layout::{
-        workspace::FloatingPane, ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session,
-        SessionId, Size,
+        ColumnWidth, LayoutOptions, Pane, PaneId, Point, Session, SessionId, Size,
+        workspace::FloatingPane,
     };
     use std::cell::Cell;
     use std::collections::HashMap;
@@ -435,10 +442,7 @@ mod tests {
         let mut session = session_with_tiled_pane(PaneId(10));
         {
             let ws = session.active_workspace_mut().expect("workspace");
-            ws.find_pane_mut(PaneId(10))
-                .expect("pane")
-                .runtime
-                .cwd = Some(repo_a.clone());
+            ws.find_pane_mut(PaneId(10)).expect("pane").runtime.cwd = Some(repo_a.clone());
             ws.floating_panes.push(FloatingPane {
                 pane: {
                     let mut pane = Pane::new(PaneId(20), "float");
@@ -557,7 +561,8 @@ mod tests {
         }
         fs::write(&file, "hello\nworld\n").expect("modify file");
         fs::write(temp.path().join("new.txt"), "new\n").expect("new file");
-        repo.status_file(Path::new("note.txt")).expect("status file");
+        repo.status_file(Path::new("note.txt"))
+            .expect("status file");
 
         let snapshot = super::Git2Provider
             .inspect(temp.path())
@@ -568,7 +573,10 @@ mod tests {
             fs::canonicalize(temp.path()).expect("canonical temp path"),
         );
         assert!(
-            matches!(snapshot.info.branch.as_deref(), Some("main") | Some("master")),
+            matches!(
+                snapshot.info.branch.as_deref(),
+                Some("main") | Some("master")
+            ),
             "unexpected branch {:?}",
             snapshot.info.branch,
         );
