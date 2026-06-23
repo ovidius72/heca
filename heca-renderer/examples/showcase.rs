@@ -824,17 +824,26 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         // ScrollRegion (gridui-01): an embeddable vertical scroll viewport —
         // 25 rows in a 180px window → auto-scrollbar + wheel/drag. Pointer
         // coords are translated into content space so the rows stay clickable at
-        // their visual position while scrolled.
-        .child({
-            let mut list = ScrollRegion::new().height(Length::Px(180.0)).width(Length::Px(300.0));
-            for i in 1..=25 {
-                list = list.child(
-                    Item::new(format!("item {i:02}"))
-                        .leading(Icon::new(Glyph::FileCode).color(theme.accent).size(16.0)),
-                );
-            }
-            list
-        })
+        // their visual position while scrolled. (The chrome sidebar itself is
+        // not yet wired to it — that needs scroll-aware DnD hit-testing, a
+        // follow-up.)
+        .child(
+            Flex::column()
+                .gap(8.0)
+                .child(Label::new("SCROLL REGION").color(theme.muted).font_scale(0.8))
+                .child({
+                    let mut list = ScrollRegion::new()
+                        .height(Length::Px(180.0))
+                        .width(Length::Px(300.0));
+                    for i in 1..=25 {
+                        list = list.child(
+                            Item::new(format!("item {i:02}"))
+                                .leading(Icon::new(Glyph::FileCode).color(theme.accent).size(16.0)),
+                        );
+                    }
+                    list
+                }),
+        )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the
