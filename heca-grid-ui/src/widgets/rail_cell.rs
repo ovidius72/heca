@@ -30,8 +30,6 @@ const HOVER_FILL_ALPHA: u8 = 18;
 /// Alpha of the crisp accent border around the active cell — the main "selected"
 /// cue, distinct from a merely tinted/hovered cell.
 const ACTIVE_BORDER_ALPHA: u8 = 190;
-/// Width of the active cell's border (logical px).
-const ACTIVE_BORDER_W: f32 = 1.3;
 /// Glow radius/intensity of the active cell (scaled by the theme's `glow_size`).
 const ACTIVE_GLOW_RADIUS: f32 = 9.0;
 const ACTIVE_GLOW_INTENSITY: f32 = 0.22;
@@ -131,9 +129,9 @@ impl Component for RailCell {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.control_radius())
+            (t.accent, t.glow, t.foreground, t.control_radius(), t.focus_border_width)
         };
         let b = self.base.bounds;
 
@@ -148,7 +146,7 @@ impl Component for RailCell {
             cx.rect(
                 b,
                 accent.with_alpha(ACTIVE_FILL_ALPHA),
-                Some(Border { color: accent.with_alpha(ACTIVE_BORDER_ALPHA), width: ACTIVE_BORDER_W }),
+                Some(Border { color: accent.with_alpha(ACTIVE_BORDER_ALPHA), width: sel_border_w }),
                 cell_radius,
                 Some(Glow { color: glow_c, radius: ACTIVE_GLOW_RADIUS, intensity: ACTIVE_GLOW_INTENSITY }),
             );

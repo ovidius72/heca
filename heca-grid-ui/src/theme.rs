@@ -145,6 +145,13 @@ pub struct Theme {
     pub radius: f32,
     /// Base border width in logical px. Used by container/pane borders.
     pub border_width: f32,
+    /// Width in logical px of the **affordance** outlines — the keyboard focus
+    /// ring ([`PaintCx::corner_brackets`](crate::PaintCx::corner_brackets)) and the
+    /// selected-item highlight. Deliberately independent of [`border_width`](Self::border_width)
+    /// so focus and selection stay visible even with decorative borders turned off
+    /// (`border_width == 0`). Config maps `focus_border_width` here; the default
+    /// keeps it visible.
+    pub focus_border_width: f32,
     /// Glow halo size — scales every glow's falloff radius (`None` = no glow).
     pub glow_size: GlowLevel,
     pub intensity: Intensity,
@@ -205,6 +212,7 @@ impl Theme {
             font_size: 15.0,
             radius: 8.0,
             border_width: 1.0,
+            focus_border_width: 1.5,
             glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,
@@ -233,6 +241,7 @@ impl Theme {
             font_size: 15.0,
             radius: 6.0,
             border_width: 1.0,
+            focus_border_width: 1.5,
             glow_size: GlowLevel::Medium,
             intensity: Intensity::Medium,
             show_focus_border: true,

@@ -434,18 +434,14 @@ const CULL_MARGIN: f64 = 96.0;
 /// measured from the corner (in addition to the rounded arc). The straight
 /// midsection between the two brackets on an edge is dimmed back to a line.
 const BRACKET_ARM_LEN: f32 = 12.0;
-/// Bright corner brackets are drawn thicker than the subtle border for emphasis.
-const BRACKET_WIDTH_MUL: f32 = 2.0;
+/// Bright corner brackets are drawn a touch thicker than the subtle border for
+/// emphasis — an **additive** boost so they don't balloon at large border widths
+/// (a multiplier made them far too heavy at e.g. `border_width = 3`).
+const BRACKET_WIDTH_BOOST: f32 = 1.0;
 /// Alpha of the subtle continuous accent line that traces the whole perimeter of
 /// a [`PaintCx::bracket_frame`] — the dimmed "midsection" the bright corners sit
-/// on top of. ~0.31 leaves a faint accent hairline. Reused for the
-/// `border_width == 0` fallback below so the two cases read consistently.
-const BRACKET_HAIRLINE_ALPHA: u8 = 80;
-/// With box borders off (`border_width == 0`) a container still needs definition,
-/// so [`PaintCx::bracket_frame`] falls back to a thin SOLID uniform hairline at
-/// this width instead of the reticle — whose bright corners vanish when the
-/// stroke collapses to nothing.
-const BRACKET_HAIRLINE_WIDTH: f32 = 1.0;
+/// on top of. ~0.31 leaves a faint accent line.
+const BRACKET_DIM_ALPHA: u8 = 80;
 
 /// Painting context handed to [`Component::paint`]. Wraps the [`Scene`] and the
 /// active [`Theme`], and exposes the shared Tron drawing helpers.
@@ -604,7 +600,9 @@ impl<'a> PaintCx<'a> {
             rect,
             color,
             len: 12.0,
-            thickness: 1.5,
+            // Affordance outline width (focus ring) — its own theme token, so it
+            // stays visible even when decorative borders are off (`border_width == 0`).
+            thickness: self.theme.focus_border_width,
             glow,
         }));
     }
@@ -788,35 +786,26 @@ impl<'a> PaintCx<'a> {
 
     /// Draw the prominent **flat corner-bracket frame** used by container chrome
     /// ([`Pane`](crate::widgets::Pane), [`DockFrame`](crate::widgets::DockFrame)):
-    /// a subtle continuous accent hairline tracing the full rounded perimeter,
-    /// with bright thick accent **corners** (rounded arc + a short straight arm
-    /// along each edge) layered on top — the Tron reticle. DRY: the frame is
-    /// defined once here instead of per-widget.
+    /// a subtle continuous accent line tracing the full rounded perimeter, with
+    /// bright thick accent **corners** (rounded arc + a short straight arm along
+    /// each edge) layered on top — the Tron reticle. DRY: the frame is defined
+    /// once here instead of per-widget.
+    ///
+    /// Width is driven entirely by `theme.border_width`: at `border_width == 0`
+    /// the frame draws **nothing** (no border anywhere), consistent with every
+    /// other widget's border gate.
     pub fn bracket_frame(&mut self, rect: Rectangle) {
         let (accent, radius, border_width) = {
             let t = self.theme;
             (t.accent, t.radius, t.border_width)
         };
-        let b = rect;
-
-        // Box borders off: a container still reads as framed, but via a thin SOLID
-        // uniform hairline around the whole perimeter — not the bracket reticle,
-        // whose bright corners collapse to nothing at width 0 (leaving the old
-        // "empty corners + lingering straight edges" look). Scales back up to the
-        // reticle as soon as `border_width > 0`.
+        // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
+        // widget. A container that needs definition without a border should carry
+        // a fill, not a forced hairline.
         if border_width <= 0.0 {
-            self.rect(
-                b,
-                Color::TRANSPARENT,
-                Some(Border {
-                    color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
-                    width: BRACKET_HAIRLINE_WIDTH,
-                }),
-                radius,
-                None,
-            );
             return;
         }
+        let b = rect;
 
         // Subtle continuous accent line tracing the whole rounded perimeter — the
         // dimmed "midsection" that the bright corners sit on top of.
@@ -824,7 +813,7 @@ impl<'a> PaintCx<'a> {
             b,
             Color::TRANSPARENT,
             Some(Border {
-                color: accent.with_alpha(BRACKET_HAIRLINE_ALPHA),
+                color: accent.with_alpha(BRACKET_DIM_ALPHA),
                 width: border_width,
             }),
             radius,
@@ -838,7 +827,7 @@ impl<'a> PaintCx<'a> {
         // faking the rounding. `keep` is the bright span from each corner (rounded
         // arc + `BRACKET_ARM_LEN`); `m` grows the clip box outward so it also
         // captures the outer border band hugging the corner.
-        let bracket_width = border_width * BRACKET_WIDTH_MUL;
+        let bracket_width = border_width + BRACKET_WIDTH_BOOST;
         let keep = f64::from(radius + BRACKET_ARM_LEN);
         let m = f64::from(bracket_width);
         let (x, y, w, h) = (b.loc.x, b.loc.y, b.size.w, b.size.h);

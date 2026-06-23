@@ -126,8 +126,20 @@ impl Component for Pane {
                 }
             }
             PaneFrame::Bordered => {
-                // Fill + clean border from style.border.
-                let border = self.base.style.border;
+                // A clean border whose WIDTH always comes from the live
+                // `theme.border_width` (the global border control) — read at paint
+                // time so it tracks the control immediately and is gone at
+                // `border_width == 0`. An explicit `.border(color, _)` only supplies
+                // the COLOR; its width is ignored in favour of the theme (so a
+                // build-time width literal can't get "stuck" past a slider change).
+                // No explicit color ⇒ the theme border color.
+                let (tb_color, tb_width) = {
+                    let t = cx.theme();
+                    (t.border, t.border_width)
+                };
+                let color = self.base.style.border.map_or(tb_color, |bd| bd.color);
+                let border = (tb_width > 0.0)
+                    .then_some(crate::scene::Border { color, width: tb_width });
                 if let Some(f) = fill {
                     cx.rect(b, f, border, radius, self.base.style.glow);
                 } else if border.is_some() {

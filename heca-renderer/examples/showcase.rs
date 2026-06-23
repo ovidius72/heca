@@ -161,6 +161,9 @@ fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
         font_size: font_config.size.ui,
         radius: ht.border_radius,
         border_width: ht.border_width,
+        // TODO: map from config `focus_border_width` once added to heca-theme;
+        // for now the affordance outlines keep their visible default.
+        focus_border_width: 1.5,
         glow_size: match ht.glow_size {
             heca_theme::GlowLevel::None => GlowLevel::None,
             heca_theme::GlowLevel::Thin => GlowLevel::Thin,
@@ -297,7 +300,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
             .width(Length::Px(220.0))
             .height(Length::Px(140.0))
             .background(theme.surface)
-            .border(theme.accent, 1.5)
+            .border(theme.border, theme.border_width)
             .glow(theme.glow)
             .child(Label::new(value).color(theme.foreground).font_scale(2.0))
     };
@@ -759,16 +762,17 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .width(Length::Px(100.0))
                         .height(Length::Px(80.0))
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(Label::new("Bordered").font_size(12.0).color(theme.accent)),
                 )
                 .child(
+                    // Bracketed: the self-contained corner reticle (driven by
+                    // `theme.border_width`); no `.border()` — that would compete.
                     Pane::new()
                         .bracketed()
                         .width(Length::Px(100.0))
                         .height(Length::Px(80.0))
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
                 )
         })
@@ -790,7 +794,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(
                             Tag::new("~/projects/heca")
                                 .leading(Icon::new(Glyph::Folder).size(13.0).color(theme.muted))
@@ -816,7 +820,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .padding(8.0)
                         .gap(8.0)
                         .background(theme.surface)
-                        .border(theme.accent, 2.0)
+                        .border(theme.border, theme.border_width)
                         .child(
                             Flex::row()
                                 .width(Length::Px(344.0))
@@ -1347,7 +1351,7 @@ fn build_scene(root: &dyn Component, theme: &Theme, w: f32, h: f32, show_clip_de
                 theme.surface,
                 Some(heca_grid_ui::scene::Border {
                     color: theme.accent,
-                    width: theme.border_width.max(1.0),
+                    width: theme.border_width,
                 }),
                 theme.radius,
                 None,
