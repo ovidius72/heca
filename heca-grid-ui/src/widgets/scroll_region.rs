@@ -149,6 +149,50 @@ impl ScrollRegion {
         self.scroll_to(next as f32);
     }
 
+    /// Scroll minimally so the given rect — read from a descendant's current
+    /// `bounds` (visual/on-screen space) — is fully inside the viewport. If the
+    /// rect is already visible, nothing happens; if it sits above the viewport,
+    /// the view scrolls to put its top at the viewport top; if below, its
+    /// bottom at the viewport bottom. This is the **scroll-into-view** a host
+    /// container (e.g. the sidebar) uses to keep the keyboard cursor in view when
+    /// the selection moves: pass the selected descendant's `base().bounds`.
+    ///
+    /// The rect is in *visual* space (what you read from a component's bounds at
+    /// the current scroll position); the widget recovers the natural position
+    /// internally via its baked shift (`applied_offset`), so the host never has
+    /// to track the scroll offset or do offset math itself. Minimal movement —
+    /// it won't jump if the item is already on screen.
+    pub fn ensure_visible(&mut self, visual_rect: Rectangle) {
+        self.sync_shift();
+        let vp = self.base.bounds;
+        let off = self.applied_offset;
+        let natural_top = visual_rect.loc.y + off;
+        let natural_bot = natural_top + visual_rect.size.h;
+        let cur = self.scroll_offset.get_untracked() as f64;
+        let vp_top = vp.loc.y;
+        let vp_bot = vp.loc.y + vp.size.h;
+        if cur > natural_top - vp_top {
+            // Item's top is above the viewport — scroll up to align tops.
+            self.scroll_to((natural_top - vp_top) as f32);
+        } else if cur < natural_bot - vp_bot {
+            // Item's bottom is below the viewport — scroll down to align bottoms.
+            self.scroll_to((natural_bot - vp_bot) as f32);
+        }
+        // else already fully visible — no scroll.
+    }
+
+    /// Convenience: scroll so the direct child at `index` is fully visible. Use
+    /// this for a list whose selectable units are direct children (e.g. a flat
+    /// list of `Item`s). For a nested selectable unit (a sidebar row inside a
+    /// `DockFrame`/group), use [`ensure_visible`](Self::ensure_visible) with the
+    /// descendant's `bounds` instead. Out-of-range index is a no-op.
+    pub fn scroll_to_child(&mut self, index: usize) {
+        if let Some(child) = self.base.children.get(index) {
+            let rect = child.base().bounds;
+            self.ensure_visible(rect);
+        }
+    }
+
     /// Total content extent along the scroll axis (max child **natural** bottom
     /// relative to this region's top, never less than the viewport height).
     /// Uses `+ applied_offset` to recover natural positions from the shifted
@@ -632,5 +676,54 @@ mod tests {
             r.event(&Event::Key { key: GridKey::Char('x'), pressed: true }),
             Handled::No
         );
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_down_when_item_is_below_viewport() {
+        let mut r = region_with_children(&[60.0, 60.0]); // vp 100, max 20
+        // child[1] natural 60..120, off 0 → visual 60..120, below vp (0..100).
+        r.ensure_visible(Rectangle::new(
+            Point::new(0.0, 60.0),
+            Size::new(200.0, 60.0),
+        ));
+        // Scrolled so the item's bottom (120) aligns with the viewport bottom
+        // (100): offset = 120 - 100 = 20 (= max_offset).
+        assert!((r.scroll_offset.get_untracked() - 20.0_f32).abs() < 1e-6);
+    }
+
+    #[test]
+    fn ensure_visible_scrolls_up_when_item_is_above_viewport() {
+        let mut r = region_with_children(&[60.0, 60.0]);
+        r.scroll_to(20.0); // applied_offset=20; child[0] visual y = 0 - 20 = -20
+        // child[0] visual rect {y:-20, h:60} — top is above the viewport (y=0).
+        r.ensure_visible(Rectangle::new(
+            Point::new(0.0, -20.0),
+            Size::new(200.0, 60.0),
+        ));
+        // Scrolled back so the item's top (natural 0) aligns with viewport top.
+        assert!(r.scroll_offset.get_untracked().abs() < 1e-6);
+    }
+
+    #[test]
+    fn ensure_visible_is_noop_when_item_already_visible() {
+        let mut r = region_with_children(&[60.0, 60.0]);
+        r.scroll_to(0.0);
+        // child[0] natural 0..60 → visual 0..60, fully inside vp 0..100.
+        r.ensure_visible(Rectangle::new(
+            Point::new(0.0, 0.0),
+            Size::new(200.0, 60.0),
+        ));
+        assert!(r.scroll_offset.get_untracked().abs() < 1e-6, "no scroll when already visible");
+    }
+
+    #[test]
+    fn scroll_to_child_brings_a_direct_child_into_view() {
+        let mut r = region_with_children(&[60.0, 60.0]); // max 20
+        r.scroll_to_child(1); // child[1] below → scroll to 20
+        assert!((r.scroll_offset.get_untracked() - 20.0_f32).abs() < 1e-6);
+        // Out-of-range index is a no-op (no panic, no scroll change).
+        let before = r.scroll_offset.get_untracked();
+        r.scroll_to_child(99);
+        assert!((r.scroll_offset.get_untracked() - before).abs() < f32::EPSILON);
     }
 }

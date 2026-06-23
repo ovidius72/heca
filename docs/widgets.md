@@ -487,6 +487,13 @@ at natural) and the next paint re-applies it from scratch.
   `.scroll_to(f32) -> f32` (clamped set **+ bakes the shift into bounds**, returns
   the applied value). Prefer `scroll_to` over raw `scroll_offset().set()` — it
   keeps the shifted bounds (paint/hit-testing/DnD) in sync in the same call.
+- **Scroll-into-view** (for keyboard cursor following): `.ensure_visible(rect)`
+  scrolls minimally so a descendant's current `bounds` (visual space) is fully
+  inside the viewport — a host container calls this when its selection/cursor
+  moves so the selected row stays on screen. `.scroll_to_child(index)` is the
+  convenience for a flat list whose selectable units are direct children. The
+  widget recovers natural positions internally (via its baked shift), so the
+  host never tracks the scroll offset.
 - **Wheel gating**: `Event::Scroll` has no position, so the broadcast router
   can't hit-test it. The region tracks hover via `PointerMoved` and only swallows
   the wheel when hovered (and scrollable); otherwise the event propagates so the
