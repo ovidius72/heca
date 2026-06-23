@@ -185,6 +185,16 @@ pub enum WmAction {
     PaneSelect,
     SwapPane,
     SwapAndFocusPane,
+    /// Enter the "move active column → workspace" letter pick (shows `KeyHint`s over
+    /// workspaces; the picked letter dispatches [`MoveColumnToWorkspace`](WmAction::MoveColumnToWorkspace)).
+    MoveColumnToWorkspacePick,
+    /// Enter the "move active pane → workspace" letter pick (dispatches
+    /// [`MovePaneToWorkspace`](WmAction::MovePaneToWorkspace)).
+    MovePaneToWorkspacePick,
+    /// Enter the "move active pane → column" letter pick (shows `KeyHint`s over the
+    /// active workspace's columns; the picked letter dispatches
+    /// [`MovePaneToColumn`](WmAction::MovePaneToColumn), stacking into that column).
+    MovePaneToColumnPick,
     RenamePane,
     RenameColumn,
 
@@ -336,6 +346,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
         "swap_pane" => Some(WmAction::SwapPane),
+        "move_column_to_workspace_pick" => Some(WmAction::MoveColumnToWorkspacePick),
+        "move_pane_to_workspace_pick" => Some(WmAction::MovePaneToWorkspacePick),
+        "move_pane_to_column_pick" => Some(WmAction::MovePaneToColumnPick),
         "pane_take" => Some(WmAction::PaneTake),
         "pane_take_and_focus" => Some(WmAction::PaneTakeAndFocus),
         "swap_and_focus_pane" => Some(WmAction::SwapAndFocusPane),
@@ -609,6 +622,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::PaneSelect
         | WmAction::SwapPane
         | WmAction::SwapAndFocusPane
+        | WmAction::MoveColumnToWorkspacePick
+        | WmAction::MovePaneToWorkspacePick
+        | WmAction::MovePaneToColumnPick
         | WmAction::FocusToggleLocal
         | WmAction::FocusToggleGlobal
         | WmAction::CreateWorkspace
@@ -856,6 +872,8 @@ mod tests {
                 WmAction::SplitHorizontal, WmAction::SplitVertical,
                 WmAction::ZoomColumn, WmAction::Float, WmAction::ClosePane,
                 WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
+                WmAction::MoveColumnToWorkspacePick, WmAction::MovePaneToWorkspacePick,
+                WmAction::MovePaneToColumnPick,
                 WmAction::FocusToggleLocal, WmAction::FocusToggleGlobal,
                 WmAction::CreateWorkspace, WmAction::RenameWorkspace,
                 WmAction::RenamePane, WmAction::RenameColumn,

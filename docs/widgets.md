@@ -943,9 +943,14 @@ mouse, keyboard, and RPC all light it up identically.
 - **Construct**: `KeyHint::new(child)`.
 - **Builders**: `.hint(Signal<Option<String>>)`, `.placement(HintPlacement)`
   (`TopCenter` for compact square targets | `Center` for large panes | `CenterRight`
-  for wide list rows — keycap pinned to the right edge so the row label stays readable),
-  `.size(px)`. The wrapper is **transparent to a stretching parent**: a wide child row
-  fills its column instead of shrinking to content width.
+  for wide list rows — keycap pinned to the right edge | `TopRight` for tall targets like a
+  workspace dock — right-aligned but anchored to the top edge, pair with `.offset_y` to land
+  on the header row),
+  `.size(px)`, `.color(Color)` (override the keycap tint — default theme `accent`; lets a
+  host distinguish target *kinds*, e.g. workspace picks tinted `warning` vs pane picks),
+  `.offset_y(px)` (nudge the cap down after placement — e.g. drop a `TopCenter` cap onto a
+  tall target's header row). The wrapper is **transparent to a stretching parent**: a wide
+  child row fills its column instead of shrinking to content width.
 - **Accessors**: `.hint_signal() -> Signal<Option<String>>`.
 
 ```rust

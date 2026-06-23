@@ -366,6 +366,18 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::PaneSelect, handle_pane_select);
     registry.register(&WmAction::SwapPane, handle_swap_pane);
     registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
+    registry.register(
+        &WmAction::MoveColumnToWorkspacePick,
+        handle_move_column_to_workspace_pick,
+    );
+    registry.register(
+        &WmAction::MovePaneToWorkspacePick,
+        handle_move_pane_to_workspace_pick,
+    );
+    registry.register(
+        &WmAction::MovePaneToColumnPick,
+        handle_move_pane_to_column_pick,
+    );
     registry.register(&WmAction::PaneTake, handle_pane_take);
     registry.register(&WmAction::PaneTakeAndFocus, handle_pane_take_and_focus);
     registry.register(

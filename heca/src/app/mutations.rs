@@ -89,11 +89,20 @@ pub(crate) fn close_pane_by_id_anywhere(state: &mut AppState, pane_id: PaneId) -
 }
 
 /// Move a pane from one workspace into a new/existing column position in another workspace.
+/// Move a pane from the active workspace into another workspace's column.
+///
+/// `join_existing` decides what `target_col` means when it points at an existing
+/// column: `true` **stacks** the pane into that column (split with its panes — the
+/// "move pane to column" pick); `false` inserts the pane as its **own new column** at
+/// that index (the drag "move pane to workspace" path, which preserves the
+/// pane-as-single-column layout). When `target_col` is past the last column, a new
+/// column is appended either way.
 pub(crate) fn move_pane_to_workspace_column(
     state: &mut AppState,
     pane_id: PaneId,
     target_ws: usize,
     target_col: usize,
+    join_existing: bool,
 ) {
     let current_ws = state.session.active_workspace_idx;
     if current_ws == target_ws {
@@ -113,19 +122,31 @@ pub(crate) fn move_pane_to_workspace_column(
         let pane_id = pane.id;
         state.session.switch_to_workspace(target_ws);
 
-        // Insert the pane into the target workspace. Treat `target_col` as the desired
-        // insertion index for a new column so moving between workspaces preserves
-        // the pane-as-single-column layout (rather than joining an existing column).
-        // Generate a fresh ColumnId before mutably borrowing the workspace.
-        let new_col_id = ColumnId(state.session.next_id());
-        if let Some(ws) = state.session.active_workspace_mut() {
-            let insert_pos = target_col.min(ws.scrolling.columns.len());
-            ws.scrolling.add_column(
-                Some(insert_pos),
-                Column::new(new_col_id, pane, chrome::default_column_width()),
-                true,
-            );
-            state.focused_pane = Some(pane_id);
+        let col_count = state
+            .session
+            .active_workspace()
+            .map(|ws| ws.scrolling.columns.len())
+            .unwrap_or(0);
+        if join_existing && target_col < col_count {
+            // Stack into the existing target column (split with its panes).
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let pane_idx = ws.scrolling.columns[target_col].panes.len();
+                ws.scrolling.add_pane_to_column(target_col, Some(pane_idx), pane, true);
+                state.focused_pane = Some(pane_id);
+            }
+        } else {
+            // Insert the pane as its own new column at `target_col`. Generate a fresh
+            // ColumnId before mutably borrowing the workspace.
+            let new_col_id = ColumnId(state.session.next_id());
+            if let Some(ws) = state.session.active_workspace_mut() {
+                let insert_pos = target_col.min(ws.scrolling.columns.len());
+                ws.scrolling.add_column(
+                    Some(insert_pos),
+                    Column::new(new_col_id, pane, chrome::default_column_width()),
+                    true,
+                );
+                state.focused_pane = Some(pane_id);
+            }
         }
 
         destroy_empty_workspace(state, current_ws);

@@ -34,6 +34,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::app_state::PendingPick;
 use heca_core::layout::PaneId;
 use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate, SignalWith};
@@ -62,6 +63,9 @@ pub(crate) struct PaneRuntimeSignals {
     pub(crate) git: Signal<Option<GitInfo>>,
     /// Source/content kind hosted by the pane (`Terminal` now; `App`/`Plugin` later).
     pub(crate) kind: Signal<ContentKind>,
+    /// User-set custom display name (from rename); `None` while tracking the process.
+    /// Mirrored here so plugins observe renames via the store + `PaneCustomNameChanged`.
+    pub(crate) custom_name: Signal<Option<String>>,
 }
 
 impl PaneRuntimeSignals {
@@ -73,6 +77,7 @@ impl PaneRuntimeSignals {
             exit_code: signal(runtime.exit_code),
             git: signal(runtime.git.clone()),
             kind: signal(runtime.kind.clone()),
+            custom_name: signal(None),
         }
     }
 
@@ -128,6 +133,19 @@ pub struct WorkspacesContainerState {
     /// Targeting pick candidates (letter → pane) for move/swap/take overlays, driving
     /// the universal `KeyHint`s. **Empty = no pick active.** Read via `with_pick_candidates`.
     pub(crate) pick_candidates: Signal<Vec<(char, PaneId)>>,
+    /// Targeting pick candidates (letter → `ws_idx`) for the "move column/pane to
+    /// workspace" overlay, driving the universal `KeyHint`s over each workspace dock.
+    /// **Empty = no pick active.** Read via `with_ws_pick_candidates`. Transient UI
+    /// state, so (unlike pane picks) it emits no event bus notification.
+    pub(crate) ws_pick_candidates: Signal<Vec<(char, usize)>>,
+    /// Targeting pick candidates (letter → `(ws_idx, col_idx)`) for the "move pane to
+    /// column" overlay over every workspace's columns. **Empty = no pick active.**
+    /// Read via `with_col_pick_candidates`. Transient UI state (no event emitted).
+    pub(crate) col_pick_candidates: Signal<Vec<(char, usize, usize)>>,
+    /// The keyboard pick currently in progress (move/select/swap/take), if any. Exposed
+    /// reactively (+ `PendingPickChanged`) so components/plugins can render their own UI
+    /// for the pending action. `None` when idle.
+    pub(crate) pending_pick: Signal<Option<PendingPick>>,
     /// Per-pane reactive mirror of canonical runtime metadata.
     pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
     /// This container's **content** scroll offset (logical px) — scrolls when the
@@ -143,6 +161,9 @@ impl WorkspacesContainerState {
             collapsed_ws: signal(HashSet::new()),
             selection: ChromeSelection::new(),
             pick_candidates: signal(Vec::new()),
+            ws_pick_candidates: signal(Vec::new()),
+            col_pick_candidates: signal(Vec::new()),
+            pending_pick: signal(None),
             panes: signal(HashMap::new()),
             scroll: signal(0.0),
         }
@@ -170,6 +191,18 @@ impl WorkspacesContainerState {
     pub fn with_pick_candidates<R>(&self, f: impl FnOnce(&[(char, PaneId)]) -> R) -> R {
         self.pick_candidates.with(|c| f(c))
     }
+    /// Borrow the workspace pick candidates without cloning the Vec.
+    pub fn with_ws_pick_candidates<R>(&self, f: impl FnOnce(&[(char, usize)]) -> R) -> R {
+        self.ws_pick_candidates.with(|c| f(c))
+    }
+    /// Borrow the column pick candidates without cloning the Vec.
+    pub fn with_col_pick_candidates<R>(&self, f: impl FnOnce(&[(char, usize, usize)]) -> R) -> R {
+        self.col_pick_candidates.with(|c| f(c))
+    }
+    /// The in-progress keyboard pick (move/select/swap/take), if any.
+    pub fn pending_pick(&self) -> Option<PendingPick> {
+        self.pending_pick.get_untracked()
+    }
     // Consumed by Phase 7 pane-info widgets; exercised by tests today, hence
     // `#[allow(dead_code)]` until a widget binds it.
     #[allow(dead_code)]
@@ -190,6 +223,14 @@ impl WorkspacesContainerState {
                 git: r.git.get_untracked(),
                 kind: r.kind.get_untracked(),
             })
+        })
+    }
+
+    /// A pane's user-set custom name (from rename), mirrored into the store; `None`
+    /// while it tracks the process name or the pane has no mirrored entry.
+    pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
+        self.with_pane_runtime(pane, |runtime| {
+            runtime.and_then(|r| r.custom_name.get_untracked())
         })
     }
 
@@ -227,7 +268,45 @@ impl WorkspacesContainerState {
             candidates: Vec::new(),
         });
     }
-    pub(crate) fn set_pane_runtime(&self, pane: PaneId, runtime: &PaneRuntime) -> bool {
+    pub fn set_ws_pick_candidates(&self, candidates: Vec<(char, usize)>) {
+        if self.ws_pick_candidates.get_untracked() == candidates {
+            return;
+        }
+        self.ws_pick_candidates.set(candidates);
+    }
+    pub fn clear_ws_pick_candidates(&self) {
+        if self.ws_pick_candidates.get_untracked().is_empty() {
+            return;
+        }
+        self.ws_pick_candidates.update(|c| c.clear());
+    }
+    pub fn set_col_pick_candidates(&self, candidates: Vec<(char, usize, usize)>) {
+        if self.col_pick_candidates.get_untracked() == candidates {
+            return;
+        }
+        self.col_pick_candidates.set(candidates);
+    }
+    pub fn clear_col_pick_candidates(&self) {
+        if self.col_pick_candidates.get_untracked().is_empty() {
+            return;
+        }
+        self.col_pick_candidates.update(|c| c.clear());
+    }
+    /// Set the in-progress pick (`None` clears it). Guarded — emits
+    /// [`ChromeEvent::PendingPickChanged`] only on a real change.
+    pub fn set_pending_pick(&self, pick: Option<PendingPick>) {
+        if self.pending_pick.get_untracked() == pick {
+            return;
+        }
+        self.pending_pick.set(pick);
+        self.events.emit(ChromeEvent::PendingPickChanged { pick });
+    }
+    pub(crate) fn set_pane_runtime(
+        &self,
+        pane: PaneId,
+        runtime: &PaneRuntime,
+        custom_name: Option<&str>,
+    ) -> bool {
         // Bulk path (per-frame from `sync_pane_runtime_state`): ONE `panes.update`
         // to ensure the entry + read the per-field signal handles (Copy) and the
         // current values into outer locals. The `.set()`s + emits run OUTSIDE the
@@ -236,6 +315,7 @@ impl WorkspacesContainerState {
         // `.set()` inside it that fires a `panes`-reading effect would panic).
         let mut sigs: Option<PaneRuntimeSignals> = None;
         let mut cur: Option<PaneRuntime> = None;
+        let mut cur_custom: Option<String> = None;
         self.panes.update(|panes| {
             let entry = panes
                 .entry(pane)
@@ -249,6 +329,7 @@ impl WorkspacesContainerState {
                 git: entry.git.get_untracked(),
                 kind: entry.kind.get_untracked(),
             });
+            cur_custom = entry.custom_name.get_untracked();
         });
         let sigs = sigs.expect("entry ensured above");
         let cur = cur.expect("entry ensured above");
@@ -280,6 +361,13 @@ impl WorkspacesContainerState {
         }
         if cur.kind != runtime.kind {
             sigs.kind.set(runtime.kind.clone());
+            changed = true;
+        }
+        let next_custom = custom_name.map(|s| s.to_string());
+        if cur_custom != next_custom {
+            sigs.custom_name.set(next_custom.clone());
+            self.events
+                .emit(ChromeEvent::PaneCustomNameChanged { pane, name: next_custom });
             changed = true;
         }
         changed
@@ -644,12 +732,13 @@ mod tests {
             kind: ContentKind::Terminal,
         };
 
-        s.workspaces.set_pane_runtime(pane, &runtime);
+        s.workspaces.set_pane_runtime(pane, &runtime, Some("my pane"));
 
         let mirrored = s
             .workspaces
             .with_pane_runtime(pane, |runtime| runtime.expect("pane runtime").snapshot());
         assert_eq!(mirrored, runtime);
+        assert_eq!(s.workspaces.pane_custom_name(pane), Some("my pane".to_string()));
     }
 
     #[test]

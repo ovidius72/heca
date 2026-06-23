@@ -354,17 +354,62 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "pane_select",
             label: "Quick-Select Pane",
-            description: "Show letter labels on all panes; press a letter to focus it.",
+            description: "Press a letter to focus it.",
             category: ActionCategory::Pane,
             default_binding: "q",
         },
 
+        // Pick-mode prompts (`description`) double as the in-progress pick text shown
+        // in `InputMode::pending_pick()` — single source of truth, not duplicated. The
+        // "+ focus" variants make the focus-follow difference explicit.
+        ActionDescriptor {
+            name: "swap_pane",
+            label: "Quick-Swap Pane",
+            description: "Select a pane to swap with — focus stays where it is.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+m",
+        },
         ActionDescriptor {
             name: "swap_and_focus_pane",
             label: "Swap and Focus",
-            description: "Like Quick-Swap, but focus the target after swapping.",
+            description: "Select a pane to swap with, then follow focus to it.",
             category: ActionCategory::Pane,
             default_binding: "m",
+        },
+        ActionDescriptor {
+            name: "pane_take",
+            label: "Take Pane",
+            description: "Select a pane to pull into the active column — focus stays where it is.",
+            category: ActionCategory::Pane,
+            default_binding: "t",
+        },
+        ActionDescriptor {
+            name: "pane_take_and_focus",
+            label: "Take and Focus",
+            description: "Select a pane to pull into the active column, then focus it.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+t",
+        },
+        ActionDescriptor {
+            name: "move_pane_to_workspace_pick",
+            label: "Move Pane to Workspace",
+            description: "Select a workspace to move the active pane to.",
+            category: ActionCategory::Layout,
+            default_binding: "g",
+        },
+        ActionDescriptor {
+            name: "move_column_to_workspace_pick",
+            label: "Move Column to Workspace",
+            description: "Select a workspace to move the active column to.",
+            category: ActionCategory::Layout,
+            default_binding: "c",
+        },
+        ActionDescriptor {
+            name: "move_pane_to_column_pick",
+            label: "Move Pane to Column",
+            description: "Select a column to move the active pane into.",
+            category: ActionCategory::Layout,
+            default_binding: "Shift+c",
         },
         ActionDescriptor {
             name: "rename_pane",

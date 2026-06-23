@@ -17,6 +17,23 @@
 
 ---
 
+## Architecture principles (apply to every task)
+
+- **All state that fires an action or updates content MUST flow through `AppState` / the
+  reactive chrome store — never be local-only.** Any behavior that changes app state or
+  triggers an action has to be **dispatched through `AppState`** (mirrored into the reactive
+  store + emitted on the `ChromeEvent` bus + exposed via the host API) so that **plugins and
+  other components can listen and react** (e.g. render their own custom widget). Make it
+  **signal-aware**: store the value in a `Signal`, guard the setter (emit only on real change),
+  and add a `ChromeEvent` + a `StateView` selector.
+  - Reference implementation: the **KeyHint pending-pick description** — `InputMode::pending_pick()`
+    → `WorkspacesContainerState.pending_pick` signal → `ChromeEvent::PendingPickChanged` →
+    `host.pending_pick()`. Also the **pane custom name** (`PaneCustomNameChanged` / `host.pane_custom_name`).
+  - Anti-pattern: computing a value only for an internal render path (the way the pick prompt
+    used to live only in `status_mode_parts`). If a plugin can't observe it, it's not done.
+
+---
+
 ## Terminal
 
 > Source: `terminal-implementation.md`
@@ -824,6 +841,18 @@ The widgets and the drag framework already exist; these are the leftover hook-up
   is what dropping on a column/pane card is for). The drop indicator already handled workspace targets
   (column-drag path), so it lights up for pane drags too.
   Files: `heca/src/mouse/surface_left.rs`, `heca/src/chrome/mod.rs`
+
+### [ ] Phase: Right-click context menu · `app-11`
+Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename actions.
+
+- [ ] **app-task-32** — Right-click contextual menu for chrome actions. A new `ContextMenu` widget in
+  `heca-grid-ui` (a floating, keyboard-navigable list of action entries, reusing `Surface`/`Item`/the
+  overlay/scissor plumbing), opened on right-click hit-test over a sidebar pane / column / workspace (and
+  later a content pane). Entries route through the existing `ActionRegistry` (rename, move-to-workspace,
+  move-to-column, close, delete, …) so mouse + keyboard + RPC stay one code path. Needs: the widget +
+  showcase + `docs/widgets.md`; right-click hit-testing in `heca/src/mouse/`; an open/close `InputMode` or
+  overlay state; per-target entry sets. Design first (scope the widget + menu model) before building.
+  Files: `heca-grid-ui/src/widgets/` (new), `heca/src/mouse/`, `heca/src/chrome/`
 
 ---
 

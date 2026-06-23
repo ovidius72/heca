@@ -161,6 +161,7 @@ fn program_glyph(icon: ProgramIcon) -> Glyph {
 fn pane_info_view(
     programs: &ProgramsConfig,
     fallback_name: &str,
+    custom_name: Option<&str>,
     runtime: Option<&PaneRuntime>,
 ) -> PaneInfoView {
     let raw = runtime
@@ -169,9 +170,15 @@ fn pane_info_view(
         .unwrap_or(fallback_name);
     let program = programs.resolve(raw);
     let git = runtime.and_then(|pane| pane.git.as_ref());
+    // A user-set custom name wins over the process-derived program name; the icon
+    // still tracks the running program.
+    let title = match custom_name {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => program.name.into_owned(),
+    };
     PaneInfoView {
         icon: program_glyph(program.icon),
-        title: program.name.into_owned(),
+        title,
         status: runtime
             .map(|pane| pane.status.clone())
             .unwrap_or(ProcessStatus::Idle),
@@ -220,9 +227,14 @@ fn home_relative_path(path: &std::path::Path) -> String {
 /// the pane's runtime, reusing the same catalog projection as the sidebar card.
 /// Segments with no data (e.g. git outside a repo) are skipped; returns `None`
 /// when nothing is produced. Used by the terminal pane shell (`app::terminal_render`).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pane-info projection threads program/name/runtime + layout context explicitly; grouping into a struct is a later chrome refactor"
+)]
 pub(crate) fn build_pane_info_bar(
     programs: &ProgramsConfig,
     fallback_name: &str,
+    custom_name: Option<&str>,
     runtime: Option<&PaneRuntime>,
     segments: &[heca_config::appearance::PaneSegment],
     theme: &GuiTheme,
@@ -231,7 +243,7 @@ pub(crate) fn build_pane_info_bar(
 ) -> Option<Tag> {
     use heca_config::appearance::PaneSegment;
 
-    let view = pane_info_view(programs, fallback_name, runtime);
+    let view = pane_info_view(programs, fallback_name, custom_name, runtime);
     let git = runtime.and_then(|pane| pane.git.as_ref());
 
     // Collect the produced (icon, text) segments, noting the location (the long,
@@ -510,6 +522,8 @@ fn pane_action_spec(
 pub(crate) struct PaneHeaderContent<'a> {
     pub(crate) programs: &'a ProgramsConfig,
     pub(crate) fallback_name: &'a str,
+    /// User-set override name (wins over the process-derived title), if any.
+    pub(crate) custom_name: Option<&'a str>,
     pub(crate) runtime: Option<&'a PaneRuntime>,
     pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
     pub(crate) actions: &'a [heca_config::appearance::PaneAction],
@@ -539,7 +553,8 @@ fn pane_action_visible_when_floating(action: heca_config::appearance::PaneAction
 /// the retained tree must be rebuilt (vs. just re-laid-out). Cheap per-frame string
 /// build (≤20 panes); avoids deriving `Hash` on the projection enums.
 pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f32) -> String {
-    let view = pane_info_view(content.programs, content.fallback_name, content.runtime);
+    let view =
+        pane_info_view(content.programs, content.fallback_name, content.custom_name, content.runtime);
     let cwd = content
         .runtime
         .and_then(|r| r.cwd.as_ref())
@@ -601,6 +616,7 @@ pub(crate) fn build_pane_header(
     let bar = build_pane_info_bar(
         content.programs,
         content.fallback_name,
+        content.custom_name,
         content.runtime,
         content.segments,
         theme,
@@ -704,6 +720,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
         ws_idx: usize,
         col_idx: usize,
         name: String,
+        custom_name: Option<String>,
         runtime: Option<PaneRuntime>,
         zoomed: bool,
         floating: bool,
@@ -718,12 +735,12 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
         let (ws_idx, col_idx) = crate::find_pane_location(&state.session, pane_id)
             .map(|(ws, col, _)| (ws, col))
             .unwrap_or((active_ws, 0));
-        let (name, runtime) = state
+        let (name, custom_name, runtime) = state
             .session
             .active_workspace()
             .and_then(|ws| ws.find_pane(pane_id))
-            .map(|p| (p.title.clone(), Some(p.runtime.clone())))
-            .unwrap_or_else(|| (String::new(), None));
+            .map(|p| (p.title.clone(), p.custom_name.clone(), Some(p.runtime.clone())))
+            .unwrap_or_else(|| (String::new(), None, None));
         // Floating panes aren't in any column (`find_pane_location` returns None);
         // detect them directly so the bar hides tiled-only buttons + flags float active.
         let floating = state
@@ -743,6 +760,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             ws_idx,
             col_idx,
             name,
+            custom_name,
             runtime,
             zoomed,
             floating,
@@ -759,6 +777,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
         let content = PaneHeaderContent {
             programs: &state.programs,
             fallback_name: &input.name,
+            custom_name: input.custom_name.as_deref(),
             runtime: input.runtime.as_ref(),
             segments: &segments,
             actions: &actions,
@@ -952,7 +971,7 @@ fn pane_card(
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
     let runtime = runtime_snapshot(ws_state, pane_id);
-    let info = pane_info_view(programs, &pane.name, runtime.as_ref());
+    let info = pane_info_view(programs, &pane.name, pane.custom_name.as_deref(), runtime.as_ref());
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
     // is drawn by `Row` from its `active` signal, not baked into the background. This
     // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
@@ -1190,7 +1209,16 @@ fn column_view(
     // Bind the column bar's active signal (lit iff it holds the active pane).
     let pane_ids = c.panes.iter().map(|p| p.pane_id).collect::<Vec<_>>();
     signals.col_active.push((pane_ids, col.state()));
-    let (watch, _repaint) = RepaintWatch::new(col);
+    // Wrap the column in the universal `KeyHint` so a "move pane → column" pick can
+    // stamp this column's letter over it (tinted `success`, distinct from pane/workspace
+    // picks). Driven each frame in `sync_chrome_signals`.
+    let col_hint = signal::<Option<String>>(None);
+    signals.col_hint.push((ws_idx, c.col_idx, col_hint));
+    let hinted = KeyHint::new(col)
+        .hint(col_hint)
+        .color(theme.success)
+        .placement(HintPlacement::CenterRight);
+    let (watch, _repaint) = RepaintWatch::new(hinted);
     watch
 }
 
@@ -1295,7 +1323,22 @@ fn build_workspaces_container(
             ));
         }
         dock = dock.child(cols);
-        col = col.child(dock);
+        // Wrap the whole workspace dock in the universal `KeyHint` so a
+        // "move column/pane → workspace" pick can stamp this workspace's letter over
+        // it. The keycap is tinted `warning` (not accent) so a workspace target reads
+        // distinctly from a pane target. The hint signal is driven each frame in
+        // `sync_chrome_signals` from the active pick candidates.
+        let ws_hint = signal::<Option<String>>(None);
+        signals.ws_hint.push((ws_idx, ws_hint));
+        col = col.child(
+            KeyHint::new(dock)
+                .hint(ws_hint)
+                .color(theme.warning)
+                // Top-right (like the pane cards' right-aligned keycap), nudged down
+                // onto the workspace title row so it lines up with the name.
+                .placement(HintPlacement::TopRight)
+                .offset_y((theme.font_size * 0.45) as f64),
+        );
     }
     col
 }
@@ -1729,7 +1772,7 @@ fn chrome_status(state: &crate::app_state::AppState) -> String {
         .session
         .active_workspace()
         .and_then(|ws| ws.active_pane())
-        .map(|p| p.title.as_str())
+        .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");
     let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
     format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint)
@@ -1817,6 +1860,16 @@ pub(crate) struct ChromeSignals {
     /// (candidates + key consumption) already lives in the action/input layer; this
     /// only projects it into the retained Dock.
     pub(crate) pane_hint: Vec<(PaneId, Signal<Option<String>>)>,
+    /// Each workspace [`DockFrame`]'s [`KeyHint`] pick-letter signal, keyed by `ws_idx`.
+    /// Driven each frame from the active "move column/pane to workspace" pick candidates
+    /// (mirrors [`pane_hint`](ChromeSignals::pane_hint)); the keycap is tinted differently
+    /// (theme `warning`) so a workspace target reads distinctly from a pane target.
+    pub(crate) ws_hint: Vec<(usize, Signal<Option<String>>)>,
+    /// Each column [`MarkerGroup`]'s [`KeyHint`] pick-letter signal, keyed by
+    /// `(ws_idx, col_idx)`. Driven from the active "move pane to column" pick candidates
+    /// (only the active workspace's columns light up); tinted `success` to read distinctly
+    /// from pane (accent) and workspace (warning) picks.
+    pub(crate) col_hint: Vec<(usize, usize, Signal<Option<String>>)>,
     /// Per-pane runtime display signals for the fixed pane-info rows.
     pub(crate) pane_info: Vec<(PaneId, PaneInfoSignals)>,
     /// The status-bar label's text signal.
@@ -1841,7 +1894,8 @@ fn pick_keycap(
         .map(|(ch, _)| ch.to_string())
 }
 
-fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+/// Find a pane's sidebar entry across all workspaces (tiled + floating).
+fn find_pane_entry(tree: &SidebarTree, pane_id: PaneId) -> Option<&SidebarPaneEntry> {
     tree.workspaces
         .iter()
         .flat_map(|ws| {
@@ -1851,8 +1905,18 @@ fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
                 .chain(ws.floating_panes.iter())
         })
         .find(|pane| pane.pane_id == pane_id)
+}
+
+fn pane_fallback_name(tree: &SidebarTree, pane_id: PaneId) -> &str {
+    find_pane_entry(tree, pane_id)
         .map(|pane| pane.name.as_str())
         .unwrap_or_else(|| unreachable!("pane {pane_id:?} must exist in sidebar tree"))
+}
+
+/// The pane's user-set override name (from rename), if any — wins over the process
+/// title. `None` while the pane tracks its process.
+fn pane_custom_name(tree: &SidebarTree, pane_id: PaneId) -> Option<&str> {
+    find_pane_entry(tree, pane_id).and_then(|pane| pane.custom_name.as_deref())
 }
 
 fn sync_pane_runtime_state(
@@ -1872,12 +1936,17 @@ fn sync_pane_runtime_state(
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
                 live_panes.insert(pane.id);
-                changed |= workspaces.set_pane_runtime(pane.id, &pane.runtime);
+                changed |=
+                    workspaces.set_pane_runtime(pane.id, &pane.runtime, pane.custom_name.as_deref());
             }
         }
         for float in &ws.floating_panes {
             live_panes.insert(float.pane.id);
-            changed |= workspaces.set_pane_runtime(float.pane.id, &float.pane.runtime);
+            changed |= workspaces.set_pane_runtime(
+                float.pane.id,
+                &float.pane.runtime,
+                float.pane.custom_name.as_deref(),
+            );
         }
     }
     workspaces.retain_panes(&live_panes);
@@ -1899,6 +1968,32 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     } else {
         state.chrome_state.workspaces.set_pick_candidates(next_candidates);
     }
+    let next_ws_candidates = state
+        .input_mode
+        .ws_candidates()
+        .map(|c| c.to_vec())
+        .unwrap_or_default();
+    if next_ws_candidates.is_empty() {
+        state.chrome_state.workspaces.clear_ws_pick_candidates();
+    } else {
+        state.chrome_state.workspaces.set_ws_pick_candidates(next_ws_candidates);
+    }
+    let next_col_candidates = state
+        .input_mode
+        .col_candidates()
+        .map(|c| c.to_vec())
+        .unwrap_or_default();
+    if next_col_candidates.is_empty() {
+        state.chrome_state.workspaces.clear_col_pick_candidates();
+    } else {
+        state.chrome_state.workspaces.set_col_pick_candidates(next_col_candidates);
+    }
+    // Mirror the in-progress pick (its kind + prompt) into the store so components and
+    // plugins can react to the pending action (e.g. a custom prompt overlay).
+    state
+        .chrome_state
+        .workspaces
+        .set_pending_pick(state.input_mode.pending_pick());
     // Phase 2: bridge backend-detected runtime → canonical `Pane.runtime` + emit
     // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
     crate::app::process_monitor::sync_pane_runtime_from_backends(state);
@@ -1950,11 +2045,38 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             changed = true;
         }
     }
+    // Project the active "move to workspace" pick candidates onto each workspace's
+    // KeyHint keycap (letter → `ws_idx`). Same mechanism as the pane hints above.
+    let ws_candidates = state.chrome_state.workspaces.with_ws_pick_candidates(|c| c.to_vec());
+    for (ws_idx, sig) in &retained.signals.ws_hint {
+        let next = ws_candidates
+            .iter()
+            .find(|(_, w)| w == ws_idx)
+            .map(|(ch, _)| ch.to_string());
+        if sig.get_untracked() != next {
+            sig.set(next);
+            changed = true;
+        }
+    }
+    // Project the active "move pane to column" candidates onto every column's KeyHint
+    // (letter → `(ws_idx, col_idx)`), across all workspaces.
+    let col_candidates = state.chrome_state.workspaces.with_col_pick_candidates(|c| c.to_vec());
+    for (ws_idx, col_idx, sig) in &retained.signals.col_hint {
+        let next = col_candidates
+            .iter()
+            .find(|(_, w, c)| w == ws_idx && c == col_idx)
+            .map(|(ch, _, _)| ch.to_string());
+        if sig.get_untracked() != next {
+            sig.set(next);
+            changed = true;
+        }
+    }
     for (pid, sigs) in &retained.signals.pane_info {
         let runtime = runtime_snapshot(&state.chrome_state.workspaces, *pid);
         let next = pane_info_view(
             &state.programs,
             pane_fallback_name(&state.sidebar_tree, *pid),
+            pane_custom_name(&state.sidebar_tree, *pid),
             runtime.as_ref(),
         );
         let pane_active = active == Some(*pid);
@@ -2466,6 +2588,7 @@ mod tests {
                 panes: vec![SidebarPaneEntry {
                     pane_id: heca_core::layout::PaneId(1),
                     name: "pane1".into(),
+                    custom_name: None,
                     state: SidebarItemState::Active,
                 }],
             }],
@@ -2532,6 +2655,7 @@ mod tests {
                 panes: vec![SidebarPaneEntry {
                     pane_id: heca_core::layout::PaneId(7),
                     name: "pane1".into(),
+                    custom_name: None,
                     state: SidebarItemState::Active,
                 }],
             }],
@@ -2707,7 +2831,7 @@ mod tests {
             kind: ContentKind::Terminal,
         };
 
-        let view = pane_info_view(&programs, "shell", Some(&runtime));
+        let view = pane_info_view(&programs, "shell", None, Some(&runtime));
 
         assert_eq!(view.icon, Glyph::FileCode);
         assert_eq!(view.title, "Neovim");
@@ -2727,7 +2851,7 @@ mod tests {
             ..PaneRuntime::default()
         };
 
-        let view = pane_info_view(&programs, "pane", Some(&runtime));
+        let view = pane_info_view(&programs, "pane", None, Some(&runtime));
 
         assert_eq!(view.icon, Glyph::Terminal);
         assert_eq!(view.title, "zsh");
@@ -2821,6 +2945,7 @@ mod tests {
             PaneHeaderContent {
                 programs,
                 fallback_name: "shell",
+                custom_name: None,
                 runtime: Some(rt),
                 segments,
                 actions,

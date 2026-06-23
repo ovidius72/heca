@@ -95,6 +95,31 @@ pub enum InputMode {
         candidates: Vec<(char, PaneId)>,
         focus_after: bool,
     },
+    /// Move-to-workspace letter pick: each workspace is assigned a letter (shown as a
+    /// universal `KeyHint` over its sidebar dock); the next keypress moves `target`
+    /// (the active column or pane, captured on entry) into that workspace.
+    WorkspacePick {
+        candidates: Vec<(char, usize)>,
+        target: WorkspacePickTarget,
+    },
+    /// Move-to-column letter pick: each column (across all workspaces) is assigned a
+    /// letter (shown as a `KeyHint` over its sidebar column); the next keypress moves
+    /// the active pane into that `(ws_idx, col_idx)` column (stacking with its panes).
+    ColumnPick {
+        candidates: Vec<(char, usize, usize)>,
+        pane_id: PaneId,
+    },
+}
+
+/// What a [`InputMode::WorkspacePick`] moves into the picked workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkspacePickTarget {
+    /// A column, captured by its **full address** (`ws_idx` + `col_idx`) at pick entry,
+    /// so resolution is correct even if the active workspace drifts mid-pick. For
+    /// `MoveColumnToWorkspace`.
+    Column { ws_idx: usize, col_idx: usize },
+    /// A specific pane (by stable id), for `MovePaneToWorkspace`.
+    Pane(PaneId),
 }
 
 impl InputMode {
@@ -106,6 +131,80 @@ impl InputMode {
             _ => None,
         }
     }
+
+    /// Workspace pick candidates (letter → `ws_idx`) while a `WorkspacePick` is active.
+    pub fn ws_candidates(&self) -> Option<&[(char, usize)]> {
+        match self {
+            InputMode::WorkspacePick { candidates, .. } => Some(candidates),
+            _ => None,
+        }
+    }
+
+    /// Column pick candidates (letter → `(ws_idx, col_idx)`) while a `ColumnPick` is active.
+    pub fn col_candidates(&self) -> Option<&[(char, usize, usize)]> {
+        match self {
+            InputMode::ColumnPick { candidates, .. } => Some(candidates),
+            _ => None,
+        }
+    }
+
+    /// The keyboard pick currently in progress (move / select / swap / take), if any —
+    /// a structured description of the pending action. Mirrored into the reactive chrome
+    /// store (and emitted as `PendingPickChanged`) so any component or plugin can react
+    /// to it (e.g. render its own prompt overlay). `None` when no pick is active.
+    pub fn pending_pick(&self) -> Option<PendingPick> {
+        // Map the active pick mode to its enter-mode action; the human prompt + label
+        // come from that action's `ActionDescriptor` (the registry is the single source
+        // of truth for action text — no duplicated strings here).
+        let (kind, action_name) = match self {
+            InputMode::PaneSelect { .. } => (PickKind::SelectPane, "pane_select"),
+            InputMode::PaneSwap { focus_after: true, .. } => {
+                (PickKind::SwapPane, "swap_and_focus_pane")
+            }
+            InputMode::PaneSwap { focus_after: false, .. } => (PickKind::SwapPane, "swap_pane"),
+            InputMode::PaneTake { focus_after: true, .. } => {
+                (PickKind::TakePane, "pane_take_and_focus")
+            }
+            InputMode::PaneTake { focus_after: false, .. } => (PickKind::TakePane, "pane_take"),
+            InputMode::WorkspacePick { target: WorkspacePickTarget::Pane(_), .. } => {
+                (PickKind::MovePaneToWorkspace, "move_pane_to_workspace_pick")
+            }
+            InputMode::WorkspacePick { target: WorkspacePickTarget::Column { .. }, .. } => {
+                (PickKind::MoveColumnToWorkspace, "move_column_to_workspace_pick")
+            }
+            InputMode::ColumnPick { .. } => (PickKind::MovePaneToColumn, "move_pane_to_column_pick"),
+            _ => return None,
+        };
+        let desc = crate::actions::ActionRegistry::find(action_name)?;
+        Some(PendingPick { kind, action_name, label: desc.label, prompt: desc.description })
+    }
+}
+
+/// A keyboard pick (target-selection) currently in progress. Exposed reactively so
+/// components/plugins can render their own UI for the pending action. `Copy` — all
+/// fields are static strings sourced from the action's [`ActionDescriptor`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PendingPick {
+    /// Stable machine-readable kind (match on this in plugins).
+    pub kind: PickKind,
+    /// The enter-mode action's **config name** string (e.g. `"move_pane_to_column_pick"`) —
+    /// not a `WmAction` value.
+    pub action_name: &'static str,
+    /// The action's command-palette label (from its `ActionDescriptor`).
+    pub label: &'static str,
+    /// The action's description, used as the pick prompt (from its `ActionDescriptor`).
+    pub prompt: &'static str,
+}
+
+/// The kind of in-progress keyboard pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PickKind {
+    SelectPane,
+    SwapPane,
+    TakePane,
+    MovePaneToWorkspace,
+    MoveColumnToWorkspace,
+    MovePaneToColumn,
 }
 
 

@@ -35,6 +35,18 @@ pub enum ChromeEvent {
     PaneGitChanged {
         pane: PaneId,
     },
+    /// A pane's user-set custom display name (from rename) changed. `name` is the new
+    /// override (`None` = the pane is back to tracking its process name).
+    PaneCustomNameChanged {
+        pane: PaneId,
+        name: Option<String>,
+    },
+    /// A keyboard pick (move/select/swap/take) started, changed, or ended. `pick` is
+    /// the new pending action (`None` = no pick active). Lets components/plugins render
+    /// their own prompt UI for the pending action.
+    PendingPickChanged {
+        pick: Option<crate::app_state::PendingPick>,
+    },
     /// A pane's terminal (PTY child) has exited. `code` is the captured exit code
     /// (from `try_wait`). Emitted once via the per-wake monitor's `take_exit_code`;
     /// the existing auto-close then fires for shell panes (§0.6 — no `Exit` status).
@@ -68,6 +80,8 @@ impl ChromeEvent {
             ChromeEvent::PaneStatusChanged { .. } => "pane.status.changed",
             ChromeEvent::PaneCwdChanged { .. } => "pane.cwd.changed",
             ChromeEvent::PaneGitChanged { .. } => "pane.git.changed",
+            ChromeEvent::PaneCustomNameChanged { .. } => "pane.name.changed",
+            ChromeEvent::PendingPickChanged { .. } => "pick.pending.changed",
             ChromeEvent::PaneExited { .. } => "pane.exited",
             ChromeEvent::WorkspaceCollapsedChanged { .. } => "workspace.collapsed.changed",
             ChromeEvent::WorkspacesScrollChanged { .. } => "workspaces.scroll.changed",

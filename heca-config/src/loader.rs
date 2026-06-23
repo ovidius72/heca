@@ -237,7 +237,7 @@ mod tests {
         assert!(cfg.keys.bindings.contains_key("focus_left"));
         assert!(cfg.keys.bindings.contains_key("split_horizontal"));
         assert!(cfg.keys.bindings.contains_key("zoom_column"));
-        assert!(cfg.keys.bindings.contains_key("rename_column"));
+        assert!(cfg.keys.bindings.contains_key("move_pane_to_column_pick"));
         assert!(cfg.keys.bindings.contains_key("close"));
     }
 

@@ -12,7 +12,7 @@ use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, 
 use crate::app::focus::{focus_pane_by_id, sync_focus};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app::terminal_host::{enter_selection_mode_for_focused_terminal, move_focused_terminal_selection};
-use crate::app_state::{AppState, InputMode, RenameTarget};
+use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::input::{SpawnKind, WmAction};
 use crate::sidebar;
 use crate::{
@@ -441,7 +441,8 @@ pub fn handle_move_pane_to_workspace(state: &mut AppState, action: &WmAction) {
         if state.session.active_workspace_idx != current_ws {
             switch_workspace_tracked(state, current_ws);
         }
-        move_pane_to_workspace_column(state, *pane_id, *ws_idx, current_col);
+        // Move-to-workspace: the pane becomes its own new column (preserve layout).
+        move_pane_to_workspace_column(state, *pane_id, *ws_idx, current_col, false);
     }
     state.needs_redraw = true;
 }
@@ -465,7 +466,8 @@ pub fn handle_move_pane_to_column(state: &mut AppState, action: &WmAction) {
             if state.session.active_workspace_idx != current_ws {
                 switch_workspace_tracked(state, current_ws);
             }
-            move_pane_to_workspace_column(state, *pane_id, *ws_idx, *col_idx);
+            // Move-to-column: stack the pane into the existing target column.
+            move_pane_to_workspace_column(state, *pane_id, *ws_idx, *col_idx, true);
         }
     }
     state.needs_redraw = true;
@@ -789,17 +791,70 @@ pub fn handle_swap_and_focus_pane(state: &mut AppState, _action: &WmAction) {
     }
 }
 
+/// Enter the "move active column → workspace" letter pick: assign a letter to each
+/// workspace (shown as a `KeyHint` over its dock); the next keypress moves the active
+/// column into that workspace. No-ops if there are no workspaces.
+pub fn handle_move_column_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
+    let ws_idx = state.session.active_workspace_idx;
+    let col_idx = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx)
+        .unwrap_or(0);
+    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::WorkspacePick {
+            candidates,
+            target: WorkspacePickTarget::Column { ws_idx, col_idx },
+        };
+        state.needs_redraw = true;
+    }
+}
+
+/// Enter the "move active pane → workspace" letter pick (see
+/// [`handle_move_column_to_workspace_pick`]). No-ops without a focused pane.
+pub fn handle_move_pane_to_workspace_pick(state: &mut AppState, _action: &WmAction) {
+    let Some(pane_id) = state.focused_pane else {
+        return;
+    };
+    let candidates = crate::app::selection::collect_workspace_candidates(&state.session);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::WorkspacePick {
+            candidates,
+            target: WorkspacePickTarget::Pane(pane_id),
+        };
+        state.needs_redraw = true;
+    }
+}
+
+/// Enter the "move active pane → column" letter pick: assign a letter to each column
+/// in the active workspace (shown as a `KeyHint` over its sidebar column); the next
+/// keypress moves the active pane into that column (stacking with its panes). No-ops
+/// without a focused pane or columns.
+pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction) {
+    let Some(pane_id) = state.focused_pane else {
+        return;
+    };
+    let candidates = crate::app::selection::collect_column_candidates(&state.session);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::ColumnPick { candidates, pane_id };
+        state.needs_redraw = true;
+    }
+}
+
 pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = focused_pane_id(state) {
-        let current_title = state
+        // Seed with the existing custom name (so editing a rename keeps it); empty when
+        // the pane is still tracking the process name.
+        let current_name = state
             .session
             .active_workspace()
             .and_then(|ws| ws.find_pane(pane_id))
-            .map(|p| p.title.clone())
+            .and_then(|p| p.custom_name.clone())
             .unwrap_or_default();
         state.input_mode = InputMode::Rename {
             target: RenameTarget::Pane(pane_id),
-            buffer: current_title,
+            buffer: current_name,
         };
         state.needs_redraw = true;
     }

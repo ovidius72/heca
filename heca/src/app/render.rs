@@ -43,16 +43,16 @@ fn terminal_font_families_from(
 
 /// Human-readable status mode label and suffix for the status bar.
 pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
+    // For pick modes the prompt suffix is sourced from the action's `ActionDescriptor`
+    // (via `pending_pick`) so the text lives in one place — the action registry.
+    let pick_suffix =
+        || input_mode.pending_pick().map(|p| format!(" — {}", p.prompt)).unwrap_or_default();
     match input_mode {
         InputMode::Normal => ("NORMAL", String::new()),
         InputMode::Prefix => ("PREFIX", String::new()),
-        InputMode::PaneSelect { .. } => ("SELECT", String::new()),
+        InputMode::PaneSelect { .. } => ("SELECT", pick_suffix()),
         InputMode::PaneSwap { focus_after, .. } => {
-            if *focus_after {
-                ("SWAP+FOCUS", String::new())
-            } else {
-                ("SWAP", String::new())
-            }
+            (if *focus_after { "SWAP+FOCUS" } else { "SWAP" }, pick_suffix())
         }
         InputMode::SidebarNav => ("SIDEBAR", String::new()),
         InputMode::Rename { buffer, .. } => ("RENAME", format!(": {}_", buffer)),
@@ -60,12 +60,16 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
         InputMode::ConfirmDelete { message, .. } => ("CONFIRM", format!(" {} ", message)),
         InputMode::PaneTake { focus_after, .. } => {
-            if *focus_after {
-                ("TAKE+", " pick a pane → ".to_string())
-            } else {
-                ("TAKE", " pick a pane → ".to_string())
-            }
+            (if *focus_after { "TAKE+" } else { "TAKE" }, pick_suffix())
         }
+        InputMode::WorkspacePick { target, .. } => {
+            let label = match target {
+                crate::app_state::WorkspacePickTarget::Column { .. } => "MOVE COL",
+                crate::app_state::WorkspacePickTarget::Pane(_) => "MOVE PANE",
+            };
+            (label, pick_suffix())
+        }
+        InputMode::ColumnPick { .. } => ("MOVE PANE", pick_suffix()),
         InputMode::Selection => ("SELECTION", String::new()),
     }
 }
@@ -1056,7 +1060,7 @@ mod tests {
                 candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
                 focus_after: true,
             }),
-            ("TAKE+", " pick a pane → ".to_string())
+            ("TAKE+", " — Select a pane to pull into the active column, then focus it.".to_string())
         );
 
         assert_eq!(
