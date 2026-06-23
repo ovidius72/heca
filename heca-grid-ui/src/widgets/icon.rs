@@ -62,9 +62,6 @@ pub enum Glyph {
     XSquare,
     FrameCorners,
     Cards,
-    Atom,
-    Sigma,
-    Bandaids,
 }
 
 impl Glyph {
@@ -106,9 +103,6 @@ impl Glyph {
             Glyph::XSquare => 0xe4fa,
             Glyph::FrameCorners => 0xe626,
             Glyph::Cards => 0xe0f8,
-            Glyph::Atom => 0xe5e4,
-            Glyph::Sigma => 0xe834,
-            Glyph::Bandaids => 0xe0b2,
         }
     }
 
@@ -277,9 +271,6 @@ impl Glyph {
             0xe4fa => Glyph::XSquare,
             0xe626 => Glyph::FrameCorners,
             0xe0f8 => Glyph::Cards,
-            0xe5e4 => Glyph::Atom,
-            0xe834 => Glyph::Sigma,
-            0xe0b2 => Glyph::Bandaids,
             // Unknown Phosphor codepoints fall back to the generic terminal glyph so
             // callers still get a stable icon instead of a missing-glyph square.
             _ => Glyph::Terminal,

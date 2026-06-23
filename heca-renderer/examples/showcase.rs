@@ -243,11 +243,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Right-click anywhere to open it at the cursor. Entries carry an icon and a
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut("prefix+$"))
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut("λ $"))
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
         .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
         .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut("prefix+x"));
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut("λ x"));
     let menu_open = menu.open_signal();
     let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control
@@ -1161,23 +1161,25 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .child(Label::new("swap (Shift)").color(theme.muted).font_scale(0.8)),
                         ),
                 );
-            // Prefix-as-symbol: how `prefix+f` reads when the "prefix" word is a
-            // Phosphor icon instead. Four candidate glyphs side by side.
-            let prefix_sample = |sym: Glyph, name: &str| {
-                Flex::row()
-                    .align(Align::Center)
-                    .gap(7.0)
-                    .child(Icon::new(sym).size(18.0).color(theme.accent))
-                    .child(Label::new("+ F").color(theme.foreground).bold(true))
-                    .child(Flex::row().width(Length::Px(8.0)))
-                    .child(Label::new(name).color(theme.muted).font_scale(0.78))
-            };
+            // Prefix-as-symbol: the keybinding "prefix" is *displayed* as λ (a plain
+            // Geist Mono glyph — no icon/Nerd font needed). The config/parse token
+            // stays "prefix+…"; only the rendered shortcut uses λ.
             let prefix_demo = Flex::column()
-                .gap(10.0)
-                .child(Label::new("PREFIX AS SYMBOL — prefix+f").color(theme.muted).font_scale(0.82))
-                .child(prefix_sample(Glyph::Sigma, "sigma"))
-                .child(prefix_sample(Glyph::Atom, "atom"))
-                .child(prefix_sample(Glyph::Bandaids, "bandaids"));
+                .gap(8.0)
+                .child(Label::new("PREFIX AS SYMBOL — λ").color(theme.muted).font_scale(0.82))
+                .child(
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(18.0)
+                        .child(Label::new("λ f").color(theme.foreground).bold(true))
+                        .child(Label::new("λ q").color(theme.foreground).bold(true))
+                        .child(Label::new("λ ⇧c").color(theme.foreground).bold(true)),
+                )
+                .child(
+                    Label::new("(config token stays \"prefix+…\")")
+                        .color(theme.muted)
+                        .font_scale(0.74),
+                );
             let panes_col = Flex::column()
                 .width(Length::Px(380.0))
                 .gap(16.0)
