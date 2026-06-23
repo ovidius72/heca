@@ -117,6 +117,13 @@ const APP_TITLE: &str = "heca-grid-ui showcase";
 /// Single source of truth — change it here, not at each call site.
 const PREFIX_SYMBOL: &str = "λ";
 
+/// Render a keybinding string for **display**: the `prefix` token becomes
+/// [`PREFIX_SYMBOL`]. Pass the real combo (the config/parse form, e.g. `"prefix+f"`)
+/// — the stored binding is unchanged; only the rendered text substitutes the symbol.
+fn display_shortcut(combo: &str) -> String {
+    combo.replace("prefix", PREFIX_SYMBOL)
+}
+
 /// Theme names loadable via `heca_theme::load_theme`, in cycle order.
 const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 
@@ -247,11 +254,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Right-click anywhere to open it at the cursor. Entries carry an icon and a
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(format!("{PREFIX_SYMBOL} $")))
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(display_shortcut("prefix+$")))
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
         .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
         .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(format!("{PREFIX_SYMBOL} x")));
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(display_shortcut("prefix+x")));
     let menu_open = menu.open_signal();
     let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control
@@ -1175,9 +1182,9 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     Flex::row()
                         .align(Align::Center)
                         .gap(18.0)
-                        .child(Label::new(format!("{PREFIX_SYMBOL} f")).color(theme.foreground).bold(true))
-                        .child(Label::new(format!("{PREFIX_SYMBOL} q")).color(theme.foreground).bold(true))
-                        .child(Label::new(format!("{PREFIX_SYMBOL} ⇧c")).color(theme.foreground).bold(true)),
+                        .child(Label::new(display_shortcut("prefix+f")).color(theme.foreground).bold(true))
+                        .child(Label::new(display_shortcut("prefix+q")).color(theme.foreground).bold(true))
+                        .child(Label::new(display_shortcut("prefix+Shift+c")).color(theme.foreground).bold(true)),
                 )
                 .child(
                     Label::new("(config token stays \"prefix+…\")")
