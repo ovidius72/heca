@@ -168,8 +168,12 @@ pub(crate) fn paint_terminal_pane_shell(
         is_active,
     } = shell;
     let theme = terminal_pane_gui_theme(state, border_color, border_width, border_radius);
-    let mut pane = UiPane::new()
-        .bordered()
+    // Frame style is configurable (`pane_border_style`); width/color come from the
+    // pane shell theme above (border_width already drives the global control).
+    let mut pane = crate::chrome::apply_pane_frame(
+        UiPane::new(),
+        state.appearance.effective_pane_border_style(),
+    )
         .width(heca_grid_ui::Length::Px(w))
         .height(heca_grid_ui::Length::Px(h))
         .padding(content_inset)

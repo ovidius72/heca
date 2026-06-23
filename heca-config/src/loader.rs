@@ -300,6 +300,20 @@ color = "#112233"
         assert_eq!(cfg.keys.mode[0].bindings.len(), 1);
     }
 
+    /// Guard: the committed `example.config.toml` must always parse against the
+    /// live schema, so users can copy/paste it and start from there. If a config
+    /// field is renamed/retyped without updating the example, this fails.
+    #[test]
+    fn example_config_toml_parses_against_the_live_schema() {
+        let toml = include_str!("../../example.config.toml");
+        let cfg: Config = toml::from_str(toml)
+            .expect("example.config.toml must deserialize against the current Config schema");
+        // Sanity: a few documented default values round-trip from the file.
+        assert_eq!(cfg.settings.theme, "grid_tron");
+        assert_eq!(cfg.keys.prefix, "ctrl+b");
+        assert_eq!(cfg.appearance, crate::appearance::AppearanceConfig::default());
+    }
+
     #[test]
     fn terminal_color_overrides_apply_via_apply_overrides() {
         let mut theme = theme::load("mocha");

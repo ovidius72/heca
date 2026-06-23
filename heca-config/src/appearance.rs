@@ -72,6 +72,20 @@ pub enum PaneAction {
     Float,
 }
 
+/// Frame decoration style for a container surface (panes, sidebar). Maps onto the
+/// grid-ui `PaneFrame` in the app layer. Serialised `snake_case` in TOML (e.g.
+/// `pane_border_style = "bracketed"`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BorderStyle {
+    /// No border — background fill only.
+    None,
+    /// A clean continuous border.
+    Bordered,
+    /// The accent corner-bracket reticle (bright rounded corners + a dimmed line).
+    Bracketed,
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Default-value helpers (used by serde attributes on AppearanceConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -130,6 +144,10 @@ const MAX_BLUR_PX: f32 = 48.0;
 pub const MIN_SIDEBAR_WIDTH: f32 = 160.0;
 pub const MAX_SIDEBAR_WIDTH: f32 = 560.0;
 const DEFAULT_SIDEBAR_WIDTH: f32 = 300.0;
+
+/// Default width of affordance outlines (focus ring + selection) when
+/// `focus_border_width` is unset — kept visible regardless of the global border.
+const DEFAULT_FOCUS_BORDER_WIDTH: f32 = 1.5;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  AppearanceConfig
@@ -256,6 +274,24 @@ pub struct AppearanceConfig {
     /// `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`.
     #[serde(default)]
     pub sidebar_width: Option<f32>,
+
+    // ── Border style per surface ──
+    /// Frame style for terminal panes. `None` → [`BorderStyle::Bordered`]
+    /// (current default). Values: `none | bordered | bracketed`.
+    #[serde(default)]
+    pub pane_border_style: Option<BorderStyle>,
+    /// Frame style for the sidebar shell. `None` → [`BorderStyle::Bracketed`]
+    /// (current default). Values: `none | bordered | bracketed`. The sidebar
+    /// border *width* follows the theme/global border width (it is painted with
+    /// the shared chrome theme, so it has no independent width knob).
+    #[serde(default)]
+    pub sidebar_border_style: Option<BorderStyle>,
+    /// Width (logical px) of the **affordance** outlines — the keyboard focus ring
+    /// and the selected-item highlight. Independent of the decorative border width,
+    /// so focus/selection stay visible even with borders off. `None` → `1.5`.
+    #[serde(default)]
+    pub focus_border_width: Option<f32>,
+
     // ── Pane info bar (segmented pill inside the pane, with action buttons) ──
     /// Segments shown on the left of the pane info bar, in order. Empty hides the
     /// left side. See [`PaneSegment`].
@@ -444,6 +480,28 @@ impl AppearanceConfig {
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH)
     }
 
+    // ── Border style / affordance resolvers ──
+
+    /// Effective terminal-pane frame style. Config override → [`BorderStyle::Bordered`]
+    /// (the current default look).
+    pub fn effective_pane_border_style(&self) -> BorderStyle {
+        self.pane_border_style.unwrap_or(BorderStyle::Bordered)
+    }
+
+    /// Effective sidebar-shell frame style. Config override → [`BorderStyle::Bracketed`]
+    /// (the current default look).
+    pub fn effective_sidebar_border_style(&self) -> BorderStyle {
+        self.sidebar_border_style.unwrap_or(BorderStyle::Bracketed)
+    }
+
+    /// Effective affordance-outline width (focus ring + selection highlight).
+    /// Config override → `1.5`, clamped to `[0, 10]`. Independent of the
+    /// decorative border width so focus/selection stay visible at `border_width = 0`.
+    pub fn effective_focus_border_width(&self) -> f32 {
+        self.focus_border_width
+            .unwrap_or(DEFAULT_FOCUS_BORDER_WIDTH)
+            .clamp(0.0, 10.0)
+    }
 }
 
 impl Default for AppearanceConfig {
@@ -470,6 +528,9 @@ impl Default for AppearanceConfig {
             pane_padding: None,
             sidebar_gap: None,
             sidebar_width: None,
+            pane_border_style: None,
+            sidebar_border_style: None,
+            focus_border_width: None,
             pane_title_segments: default_pane_title_segments(),
             pane_title_actions: default_pane_title_actions(),
         }
@@ -770,6 +831,37 @@ theme = "mocha"
             cfg.effective_pane_floating_border_color(&mocha),
             Color::new(1, 2, 3, 255)
         );
+    }
+
+    #[test]
+    fn border_style_parses_snake_case_and_resolves_defaults() {
+        let cfg: AppearanceConfig = toml::from_str(
+            "pane_border_style = \"bracketed\"\nsidebar_border_style = \"none\"",
+        )
+        .expect("border styles should parse snake_case");
+        assert_eq!(cfg.pane_border_style, Some(BorderStyle::Bracketed));
+        assert_eq!(cfg.sidebar_border_style, Some(BorderStyle::None));
+        assert_eq!(cfg.effective_pane_border_style(), BorderStyle::Bracketed);
+        assert_eq!(cfg.effective_sidebar_border_style(), BorderStyle::None);
+
+        // Defaults match the current app look: panes bordered, sidebar bracketed.
+        let dflt = AppearanceConfig::default();
+        assert_eq!(dflt.effective_pane_border_style(), BorderStyle::Bordered);
+        assert_eq!(dflt.effective_sidebar_border_style(), BorderStyle::Bracketed);
+    }
+
+    #[test]
+    fn focus_border_width_resolves_and_clamps() {
+        // Unset: focus defaults to 1.5 (visible regardless of the decorative border).
+        let dflt = AppearanceConfig::default();
+        assert!((dflt.effective_focus_border_width() - 1.5).abs() < f32::EPSILON);
+
+        // Explicit value passes through; out-of-range clamps to [0, 10].
+        let cfg = AppearanceConfig {
+            focus_border_width: Some(99.0),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_focus_border_width(), 10.0);
     }
 
     #[test]
