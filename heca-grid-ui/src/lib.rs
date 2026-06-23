@@ -80,9 +80,9 @@ pub mod prelude {
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeVariant, Button,
-        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge,
+        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, ContextMenu, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
-        LabelSide, MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
+        LabelSide, MarkerGroup, MenuEntry, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
     };
 }

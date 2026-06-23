@@ -207,6 +207,9 @@ struct BuiltUi {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Context-menu open state + anchor; right-click opens it at the cursor.
+    menu_open: Signal<bool>,
+    menu_anchor: Signal<Point>,
     /// Host-owned toast render list; `t` pushes one, the stack reports dismiss.
     toasts: Signal<Vec<ToastSpec>>,
 }
@@ -235,6 +238,18 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .command(Command::new("Git: commit", || println!("[showcase] git commit")).icon(Glyph::GitCommit))
         .command(Command::new("Settings", || println!("[showcase] settings")).icon(Glyph::Gear).key("⌘,"));
     let palette_open = palette.open_signal();
+
+    // Right-click context menu: the pointer counterpart to the keyboard picks.
+    // Right-click anywhere to open it at the cursor. Entries carry an icon and a
+    // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
+    let menu = ContextMenu::new()
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut("prefix+$"))
+        .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
+        .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
+        .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut("prefix+x"));
+    let menu_open = menu.open_signal();
+    let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control
     // values — so the selects stay in sync if the tree is rebuilt (on font change).
     let radius_opts = [0.0f32, 4.0, 8.0, 16.0];
@@ -1193,6 +1208,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         })
         // The command palette overlays everything when open (Ctrl+K).
         .child(palette)
+        // The right-click context menu overlays at the cursor when open.
+        .child(menu)
         // The toast stack overlays a corner (presentation only; app owns the list).
         .child(toast_stack);
     BuiltUi {
@@ -1203,6 +1220,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         rail_letters,
         attention_req,
         palette_open,
+        menu_open,
+        menu_anchor,
         toasts,
     }
 }
@@ -1345,6 +1364,9 @@ struct GpuState {
     attention_req: Signal<bool>,
     /// Command-palette open state; `Ctrl+K` opens it.
     palette_open: Signal<bool>,
+    /// Context-menu open state + anchor; right-click opens it at the cursor.
+    menu_open: Signal<bool>,
+    menu_anchor: Signal<Point>,
     /// Host-owned toast render list; `t` pushes one.
     toasts: Signal<Vec<ToastSpec>>,
     /// Whether Ctrl is currently held (for chord shortcuts like Ctrl+K).
@@ -1471,6 +1493,8 @@ impl GpuState {
             rail_letters,
             attention_req,
             palette_open,
+            menu_open,
+            menu_anchor,
             toasts,
         } =
             built;
@@ -1495,6 +1519,8 @@ impl GpuState {
             clip_demo: false,
             attention_req,
             palette_open,
+            menu_open,
+            menu_anchor,
             toasts,
             ctrl: false,
             meta: false,
@@ -1657,6 +1683,8 @@ impl GpuState {
                 rail_letters,
                 attention_req,
                 palette_open,
+                menu_open,
+                menu_anchor,
                 toasts,
             } = built;
             self.ui = ui;
@@ -1666,6 +1694,8 @@ impl GpuState {
             self.rail_letters = rail_letters;
             self.attention_req = attention_req;
             self.palette_open = palette_open;
+            self.menu_open = menu_open;
+            self.menu_anchor = menu_anchor;
             self.toasts = toasts;
             self.focus.clear(&mut self.ui);
             self.scroll_y = 0.0;
@@ -1884,6 +1914,18 @@ impl ApplicationHandler for App {
                     .focus
                     .dispatch(&mut state.ui, &Event::PointerPressed { pos: state.cursor });
                 state.layout_dirty = true; // a click can change content/size
+                state.window.request_redraw();
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } => {
+                // Right-click opens the context menu at the cursor (the host decides
+                // *where* and *when*; the widget just renders + captures input).
+                state.menu_anchor.set(state.cursor);
+                state.menu_open.set(true);
+                state.layout_dirty = true;
                 state.window.request_redraw();
             }
             WindowEvent::MouseWheel { delta, .. } => {
