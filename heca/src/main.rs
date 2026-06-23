@@ -8,6 +8,7 @@ mod input;
 mod keymap;
 mod mouse;
 mod rpc;
+mod shortcut;
 mod sidebar;
 
 use app::events::handle_window_event;
