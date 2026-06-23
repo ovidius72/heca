@@ -32,7 +32,9 @@
 //! distinct scrollbar color token and horizontal scrolling are future work.
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{paint_child, route_event, Base, Component, Event, Handled, PaintCx};
+use crate::component::{
+    paint_child, route_event, Base, Component, Event, GridKey, Handled, PaintCx,
+};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::style::Direction;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -60,6 +62,12 @@ const THUMB_HOVER_ALPHA: u8 = 200;
 /// previous build multiplied by a fixed line count × font, which made each notch
 /// jump ~75% of a small viewport and overshoot.)
 const WHEEL_STEP_FRAC: f64 = 0.1;
+/// Keyboard scroll step as a fraction of the viewport per press. Matches the
+/// wheel step so keyboard and wheel feel consistent (one arrow/j/k press ≈ one
+/// wheel notch). `Home`/`End` jump to top/bottom; PageUp/PageDown are future work
+/// (`GridKey` has no page keys yet — they'd need adding to the enum + host
+/// mapping).
+const KEY_STEP_FRAC: f64 = 0.1;
 
 /// An embeddable vertical scroll viewport hosting a column of children.
 ///
@@ -132,6 +140,13 @@ impl ScrollRegion {
         self.scroll_offset.set(v);
         self.sync_shift();
         v
+    }
+
+    /// Scroll by `delta` content px (signed: positive = down), clamped to
+    /// `[0, max_offset]`. The keyboard handler and wheel both go through here.
+    fn scroll_by(&mut self, delta: f64) {
+        let next = self.scroll_offset.get_untracked() as f64 + delta;
+        self.scroll_to(next as f32);
     }
 
     /// Total content extent along the scroll axis (max child **natural** bottom
@@ -228,6 +243,12 @@ impl Component for ScrollRegion {
         &mut self.base
     }
 
+    /// Participates in keyboard focus so the host can focus it (click or Tab)
+    /// and deliver scroll keys (`Event::Key` goes to the focused component only).
+    fn focusable(&self) -> bool {
+        true
+    }
+
     /// Layout just re-computed every bound to its natural position — clear the
     /// baked shift so the next `sync_shift` re-applies it from scratch instead
     /// of compounding. (Post-order: children already assigned.)
@@ -249,6 +270,13 @@ impl Component for ScrollRegion {
                 paint_child(child.as_ref(), cx);
             }
         });
+        // Focus ring (keyboard focus only — focus-visible) so the user sees
+        // which region receives scroll keys. Mirrors Button/Input's focus
+        // affordance; drawn in viewport space (not clipped, not scrolled).
+        if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+            cx.corner_brackets(vp, cx.theme().accent);
+        }
+
         // Scrollbar thumb on top, in viewport space (not scrolled with content).
         // Theme-driven hover affordance (mirrors MarkerGroup's grip bar): the
         // thumb is a dim accent at rest, brightens when its grab lane is hovered,
@@ -349,6 +377,40 @@ impl Component for ScrollRegion {
                 // that started inside should still get its matching release even
                 // if the cursor drifted out before release.
                 route_event(&mut self.base.children, ev)
+            }
+            Event::Key { key, pressed: true } => {
+                // `Event::Key` is delivered to the focused component only
+                // (FocusManager), so reaching here means this region is focused;
+                // a focused *child* would receive its keys directly via its own
+                // `event`, never through us. Scroll keys move the viewport by a
+                // fraction of its height (matching the wheel step); `Home`/`End`
+                // jump to top/bottom. `j`/`k` match with or without Ctrl, so both
+                // `j`/`k` and `Ctrl+j`/`Ctrl+k` scroll (Ctrl+K is host-bound to the
+                // command palette in the showcase, so it won't reach here - use
+                // `k`/`Ctrl+J`/arrows there; the chord is configurable in the app).
+                if !self.base.focused.get_untracked() {
+                    return Handled::No;
+                }
+                let step = KEY_STEP_FRAC * self.base.bounds.size.h;
+                match *key {
+                    GridKey::ArrowUp | GridKey::Char('k') => {
+                        self.scroll_by(-step);
+                        Handled::Yes
+                    }
+                    GridKey::ArrowDown | GridKey::Char('j') => {
+                        self.scroll_by(step);
+                        Handled::Yes
+                    }
+                    GridKey::Home => {
+                        self.scroll_to(0.0);
+                        Handled::Yes
+                    }
+                    GridKey::End => {
+                        self.scroll_to(self.max_offset() as f32);
+                        Handled::Yes
+                    }
+                    _ => Handled::No,
+                }
             }
             _ => route_event(&mut self.base.children, ev),
         }
@@ -503,5 +565,72 @@ mod tests {
         let step = WHEEL_STEP_FRAC * r.base.bounds.size.h;
         // 10% of viewport per line of delta — gentle, proportional.
         assert!((step - 10.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn keyboard_arrows_jk_scroll_when_focused() {
+        // Focus-gated keyboard scroll: ArrowDown/j move down by KEY_STEP_FRAC * vp,
+        // ArrowUp/k move up, Home/End jump to top/bottom. Keys are delivered to
+        // the focused component only, so the gate is `base.focused`.
+        let mut r = region_with_children(&[60.0, 60.0]); // vp 100, max_offset 20
+        r.base.focused.set(true);
+        let step = KEY_STEP_FRAC * r.base.bounds.size.h; // 10
+
+        // Not focused → keys do nothing (gate).
+        r.base.focused.set(false);
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::ArrowDown, pressed: true }),
+            Handled::No
+        );
+        assert!(r.scroll_offset.get_untracked().abs() < f32::EPSILON);
+
+        // Focused → ArrowDown scrolls one step.
+        r.base.focused.set(true);
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::ArrowDown, pressed: true }),
+            Handled::Yes
+        );
+        assert!((r.scroll_offset.get_untracked() - step as f32).abs() < 1e-6);
+
+        // `j` scrolls down another step (same as ArrowDown, with or without Ctrl).
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::Char('j'), pressed: true }),
+            Handled::Yes
+        );
+        assert!((r.scroll_offset.get_untracked() - 2.0 * step as f32).abs() < 1e-6);
+
+        // `k` scrolls up one step.
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::Char('k'), pressed: true }),
+            Handled::Yes
+        );
+        assert!((r.scroll_offset.get_untracked() - step as f32).abs() < 1e-6);
+
+        // ArrowUp scrolls up to the top (clamped at 0).
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::ArrowUp, pressed: true }),
+            Handled::Yes
+        );
+        assert!(r.scroll_offset.get_untracked().abs() < f32::EPSILON);
+
+        // End jumps to max_offset (20).
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::End, pressed: true }),
+            Handled::Yes
+        );
+        assert!((r.scroll_offset.get_untracked() - 20.0_f32).abs() < 1e-6);
+
+        // Home jumps back to 0.
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::Home, pressed: true }),
+            Handled::Yes
+        );
+        assert!(r.scroll_offset.get_untracked().abs() < f32::EPSILON);
+
+        // A non-scroll key is not consumed (falls through to the host).
+        assert_eq!(
+            r.event(&Event::Key { key: GridKey::Char('x'), pressed: true }),
+            Handled::No
+        );
     }
 }

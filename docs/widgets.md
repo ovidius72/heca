@@ -494,12 +494,22 @@ at natural) and the next paint re-applies it from scratch.
   scroll regions need host-side hit-testing (future).
 - **Interaction** (built-in): the wheel advances the offset by ~10% of the
   viewport per notch (viewport-proportional, so a small sidebar doesn't
-  overshoot); the auto-shown scrollbar **thumb is draggable**.
+  overshoot); the auto-shown scrollbar **thumb is draggable**; and when the
+  region is **focused** (click it or Tab to it), **keyboard scroll** works —
+  `ArrowUp`/`ArrowDown` and `j`/`k` (with or without `Ctrl`) move by one step
+  (~10% of the viewport), `Home`/`End` jump to top/bottom. A focus ring
+  (corner brackets) shows which region receives the keys. `Event::Key` is
+  delivered to the focused component only, so the gate is simply `focused`; a
+  focused child (e.g. an `Input`) receives its keys directly and never has them
+  stolen. PageUp/PageDown are future work (`GridKey` has no page keys yet).
+  Note: in the showcase `Ctrl+K` is host-bound to the command palette, so use
+  `k`/`Ctrl+J`/arrows there; the chord is configurable in the app.
 - **Traits**: `LayoutExt`, `Parent`.
 - **v1**: vertical-only; the thumb is a theme-**accent** grip that brightens on
   hover/drag (mirroring `MarkerGroup`'s grip bar) and sits in a wider invisible
-  grab lane (16px) so a thin 8px thumb is easy to click. Horizontal scroll and a
-  dedicated scrollbar color token are future work.
+  grab lane (16px) so a thin 8px thumb is easy to click; the thumb radius reads
+  the `Theme::control_radius()` token (no hardcoded radius). Horizontal scroll
+  and a dedicated scrollbar color token are future work.
 
 ```rust
 let mut list = ScrollRegion::new().height(Length::Px(180.0)).width(Length::Px(300.0));
