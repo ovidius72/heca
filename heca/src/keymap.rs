@@ -122,14 +122,16 @@ impl KeymapRegistry {
 
     /// Remove a binding from a mode.
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[allow(dead_code)]
     pub fn unbind(&mut self, mode: &str, combo: &KeyCombo) -> Option<WmAction> {
         self.modes.get_mut(mode)?.remove(combo)
     }
 
     /// Rebind an existing key to a new key within the same mode.
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")
+    )]
     pub fn rebind(&mut self, mode: &str, old: &KeyCombo, new: KeyCombo) {
         if let Some(map) = self.modes.get_mut(mode)
             && let Some(action) = map.remove(old)
@@ -145,14 +147,14 @@ impl KeymapRegistry {
 
     /// Return all bindings for a mode.
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")]
     pub fn bindings_in_mode(&self, mode: &str) -> Option<&HashMap<KeyCombo, WmAction>> {
         self.modes.get(mode)
     }
 
     /// Check whether a mode exists (has any bindings).
     // Transitional: will be used for config reload / RPC in Phase 5.
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "used by tests and reserved for config reload and RPC workflows")]
     pub fn has_mode(&self, mode: &str) -> bool {
         self.modes.contains_key(mode)
     }

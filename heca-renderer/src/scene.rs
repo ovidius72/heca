@@ -158,7 +158,9 @@ pub fn enqueue_scene(
                 let (x, y, w, h) = xywh(r);
                 let rect = [x, y, w, h];
                 // Intersect with the enclosing clip so nested clips never exceed it.
-                let eff = clip_stack.last().map_or(rect, |&prev| intersect_clip(prev, rect));
+                let eff = clip_stack
+                    .last()
+                    .map_or(rect, |&prev| intersect_clip(prev, rect));
                 clip_stack.push(eff);
                 grid.set_clip(Some(eff));
                 text.set_clip(Some(eff));
@@ -249,7 +251,7 @@ fn draw_scanlines(grid: &mut GridRenderer, s: &ScanlineCmd) {
 
 #[cfg(test)]
 mod tests {
-    use super::{glow_alpha_scale_for_background, intersect_clip, LIGHT_BG_GLOW_ALPHA_SCALE};
+    use super::{LIGHT_BG_GLOW_ALPHA_SCALE, glow_alpha_scale_for_background, intersect_clip};
 
     #[test]
     fn intersect_clip_returns_the_overlapping_region() {
@@ -269,7 +271,11 @@ mod tests {
         let a = [0.0, 0.0, 10.0, 10.0];
         let b = [50.0, 50.0, 10.0, 10.0];
         let r = intersect_clip(a, b);
-        assert_eq!((r[2], r[3]), (0.0, 0.0), "disjoint clips intersect to nothing");
+        assert_eq!(
+            (r[2], r[3]),
+            (0.0, 0.0),
+            "disjoint clips intersect to nothing"
+        );
     }
 
     #[test]

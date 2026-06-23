@@ -77,7 +77,7 @@ impl Session {
             workspace_switch: WorkspaceSwitch::None,
             viewport_size,
             scale,
-            options: options.clone(),
+            options,
             next_id: 1,
         };
 

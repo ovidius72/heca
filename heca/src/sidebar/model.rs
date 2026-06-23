@@ -35,7 +35,6 @@ impl SidebarItem {
     pub fn is_selectable(&self) -> bool {
         !matches!(self, SidebarItem::FloatingPane { .. })
     }
-
 }
 
 /// A pane entry in the sidebar tree.
@@ -316,8 +315,7 @@ impl SidebarTree {
 
     fn is_navigable_collapsed(&self, idx: usize) -> bool {
         self.flat_items.get(idx).is_some_and(|item| {
-            item.kind() != SidebarItemKind::Column
-                && item.kind() != SidebarItemKind::FloatingPane
+            item.kind() != SidebarItemKind::Column && item.kind() != SidebarItemKind::FloatingPane
         })
     }
 
@@ -366,9 +364,9 @@ impl SidebarTree {
     }
 
     fn workspace_flat_index(&self, ws_idx: usize) -> Option<usize> {
-        self.flat_items
-            .iter()
-            .position(|item| matches!(item, SidebarItem::Workspace { ws_idx: item_ws } if *item_ws == ws_idx))
+        self.flat_items.iter().position(
+            |item| matches!(item, SidebarItem::Workspace { ws_idx: item_ws } if *item_ws == ws_idx),
+        )
     }
 
     fn column_flat_index(&self, ws_idx: usize, col_idx: usize) -> Option<usize> {
@@ -386,8 +384,12 @@ impl SidebarTree {
     fn current_item_in_workspace(&self, ws_idx: usize) -> bool {
         match self.current_item() {
             Some(SidebarItem::Workspace { ws_idx: item_ws }) => *item_ws == ws_idx,
-            Some(SidebarItem::Column { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
-            Some(SidebarItem::FloatingPane { ws_idx: item_ws, .. }) => *item_ws == ws_idx,
+            Some(SidebarItem::Column {
+                ws_idx: item_ws, ..
+            }) => *item_ws == ws_idx,
+            Some(SidebarItem::FloatingPane {
+                ws_idx: item_ws, ..
+            }) => *item_ws == ws_idx,
             Some(SidebarItem::Pane { pane_id }) => self
                 .pane_location(*pane_id)
                 .is_some_and(|(item_ws, _)| item_ws == ws_idx),
@@ -413,7 +415,11 @@ impl SidebarTree {
     /// the flat list, and adjust the cursor (when `changed_ws` just became collapsed
     /// and the cursor was inside it, move it to the workspace header). Collapse is
     /// owned by `chrome_state`; this only mirrors it for navigation/rendering.
-    pub fn apply_ws_collapsed(&mut self, set: &std::collections::HashSet<usize>, changed_ws: Option<usize>) {
+    pub fn apply_ws_collapsed(
+        &mut self,
+        set: &std::collections::HashSet<usize>,
+        changed_ws: Option<usize>,
+    ) {
         // Decide the cursor move BEFORE the flat list changes (indices shift on sync).
         let move_cursor_to_parent = changed_ws.is_some_and(|ws_idx| {
             set.contains(&ws_idx)

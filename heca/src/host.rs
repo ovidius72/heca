@@ -34,7 +34,9 @@ pub struct App {
 impl App {
     /// Build a host handle over the app's shared chrome state.
     pub fn new(state: &SharedChromeState) -> Self {
-        Self { state: state.clone() }
+        Self {
+            state: state.clone(),
+        }
     }
 
     /// Subscribe to a typed event by **name** (e.g. `"pane.status.changed"`) or
@@ -130,7 +132,9 @@ mod tests {
         let all: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
         let t = typed.clone();
-        let _typed = app.on("pane.active.changed", move |e| t.borrow_mut().push(e.name().into()));
+        let _typed = app.on("pane.active.changed", move |e| {
+            t.borrow_mut().push(e.name().into())
+        });
         let a = all.clone();
         let _all = app.on("*", move |e| a.borrow_mut().push(e.name().into()));
 
@@ -173,7 +177,9 @@ mod tests {
 
         // Seed the pane runtime, then change its status via the store write path.
         let pane = PaneId(3);
-        app.state.workspaces.set_pane_status(pane, ProcessStatus::Running);
+        app.state
+            .workspaces
+            .set_pane_status(pane, ProcessStatus::Running);
 
         assert_eq!(
             observed.borrow().as_slice(),

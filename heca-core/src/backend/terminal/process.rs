@@ -96,9 +96,7 @@ fn process_name(pid: libc::pid_t) -> Option<String> {
         ) -> libc::c_int;
     }
     let mut buf = vec![0u8; PROC_PIDPATHINFO_MAXSIZE];
-    let n = unsafe {
-        proc_pidpath(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32)
-    };
+    let n = unsafe { proc_pidpath(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
     if n <= 0 {
         return None;
     }

@@ -71,7 +71,11 @@ pub struct Attention {
 impl Attention {
     /// An attention effect with the default per-pulse duration (~220ms).
     pub fn new() -> Self {
-        Self { amount: 0.0, duration: 0.22, pulses_left: 0 }
+        Self {
+            amount: 0.0,
+            duration: 0.22,
+            pulses_left: 0,
+        }
     }
 
     /// Start `pulses` flashes (clamped to at least 1).

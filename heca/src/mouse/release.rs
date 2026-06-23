@@ -25,11 +25,9 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
         // a sidebar target, fall back to normal move semantics.
         // Otherwise, swap with the content-area target pane.
         super::interactive::reset_interactive_move_offset(state);
-        if let Some(target_id) = super::hit_test::hit_test_pane_excluding(
-            state,
-            state.mouse.pos,
-            Some(source_id),
-        ) {
+        if let Some(target_id) =
+            super::hit_test::hit_test_pane_excluding(state, state.mouse.pos, Some(source_id))
+        {
             crate::handlers::handle_swap_param(
                 state,
                 &WmAction::Swap {
@@ -37,7 +35,11 @@ pub(super) fn handle_interactive_move_release(state: &mut AppState, pos: (f32, f
                     b_id: target_id,
                 },
             );
-        } else if super::target::surface_interactive_move_drop(state, DragSurfaceId::LeftSidebar, pos) {
+        } else if super::target::surface_interactive_move_drop(
+            state,
+            DragSurfaceId::LeftSidebar,
+            pos,
+        ) {
             // Sidebar drop handled as a move.
         } else if let Some(hint) = state.mouse.insert_hint.take() {
             // Fallback: move semantics in the content area.
@@ -68,7 +70,14 @@ pub(super) fn handle_sidebar_drag_release(
     swap: bool,
     pos: (f32, f32),
 ) {
-    super::target::surface_accept_drop(state, DragSurfaceId::LeftSidebar, pane_id, original_ws, swap, pos);
+    super::target::surface_accept_drop(
+        state,
+        DragSurfaceId::LeftSidebar,
+        pane_id,
+        original_ws,
+        swap,
+        pos,
+    );
 }
 
 /// Handle release during an active sidebar **column** drag (F4.5 step 2).
@@ -87,7 +96,8 @@ pub(super) fn handle_sidebar_column_drag_release(
     swap: bool,
     pos: (f32, f32),
 ) {
-    let target = crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Column);
+    let target =
+        crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Column);
     state.mouse.drag_ctx.cancel_all();
 
     let Some((item, side)) = target else {
@@ -95,26 +105,44 @@ pub(super) fn handle_sidebar_column_drag_release(
     };
 
     let action = match item {
-        ChromeDragItem::Column { ws: dst_ws, col: dst_col } => {
+        ChromeDragItem::Column {
+            ws: dst_ws,
+            col: dst_col,
+        } => {
             if swap {
                 if dst_ws == src_ws && dst_col == src_col {
                     return; // swap with self
                 }
-                WmAction::SwapColumns { a_ws: src_ws, a_col: src_col, b_ws: dst_ws, b_col: dst_col }
+                WmAction::SwapColumns {
+                    a_ws: src_ws,
+                    a_col: src_col,
+                    b_ws: dst_ws,
+                    b_col: dst_col,
+                }
             } else {
                 if dst_ws == src_ws && dst_col == src_col {
                     return; // dropped on itself
                 }
                 let before = side == DropSide::Before; // Onto/After both insert after
                 let dst_idx = column_move_dst_idx(src_ws, src_col, dst_ws, dst_col, before);
-                WmAction::MoveColumn { src_ws, src_col, dst_ws, dst_idx, focus: true }
+                WmAction::MoveColumn {
+                    src_ws,
+                    src_col,
+                    dst_ws,
+                    dst_idx,
+                    focus: true,
+                }
             }
         }
         // Drop on a workspace → move the column to the end of that workspace
         // (usize::MAX clamps to the end inside the handler). Swap is meaningless here.
-        ChromeDragItem::Workspace { ws: dst_ws } => {
-            WmAction::MoveColumn { src_ws, src_col, dst_ws, dst_idx: usize::MAX, focus: true }
-        }
+        ChromeDragItem::Workspace { ws: dst_ws } => WmAction::MoveColumn {
+            src_ws,
+            src_col,
+            dst_ws,
+            dst_idx: usize::MAX,
+            focus: true,
+        },
         // The source-aware filter never yields a pane target for a column drag.
         ChromeDragItem::Pane(_) => return,
     };
@@ -140,8 +168,16 @@ fn column_move_dst_idx(
     before: bool,
 ) -> usize {
     if src_ws == dst_ws {
-        let target_final = if src_col < dst_col { dst_col - 1 } else { dst_col };
-        if before { target_final } else { target_final + 1 }
+        let target_final = if src_col < dst_col {
+            dst_col - 1
+        } else {
+            dst_col
+        };
+        if before {
+            target_final
+        } else {
+            target_final + 1
+        }
     } else if before {
         dst_col
     } else {
@@ -152,7 +188,9 @@ fn column_move_dst_idx(
 /// Handle release during sidebar drag starting (threshold not exceeded).
 ///
 /// If a pending click action was stored, dispatch it. Otherwise, just clear the drag state.
-pub(super) fn handle_sidebar_drag_starting_release(state: &mut AppState) -> Option<(WmAction, InteractionSource)> {
+pub(super) fn handle_sidebar_drag_starting_release(
+    state: &mut AppState,
+) -> Option<(WmAction, InteractionSource)> {
     let click_action = state.mouse.pending_click_action.take();
     state.mouse.drag_ctx.cancel_all();
 

@@ -17,8 +17,8 @@ use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Border, TextAlign};
 use crate::style::Length;
-use std::time::Instant;
 use heca_core::layout::{Point, Rectangle, Size};
+use std::time::Instant;
 
 /// Default field width (logical px); override via [`LayoutExt::width`].
 const DEFAULT_WIDTH: f32 = 240.0;
@@ -162,7 +162,11 @@ impl Input {
     }
 
     fn caret_visible(&self) -> bool {
-        let phase = self.blink_origin.elapsed().as_secs_f32().rem_euclid(BLINK_PERIOD);
+        let phase = self
+            .blink_origin
+            .elapsed()
+            .as_secs_f32()
+            .rem_euclid(BLINK_PERIOD);
         phase < BLINK_PERIOD / 2.0
     }
 
@@ -456,7 +460,14 @@ impl Component for Input {
         let focused = self.base.focused.get_untracked();
         let (surface, accent, muted, foreground, radius, bw) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.muted, t.foreground, t.control_radius(), t.border_width)
+            (
+                t.surface,
+                t.accent,
+                t.muted,
+                t.foreground,
+                t.control_radius(),
+                t.border_width,
+            )
         };
         let b = self.base.bounds;
         let fs = self.base.font;
@@ -599,9 +610,17 @@ impl Component for Input {
             return None;
         }
         // Time until the caret flips: the next half-`BLINK_PERIOD` boundary.
-        let phase = self.blink_origin.elapsed().as_secs_f32().rem_euclid(BLINK_PERIOD);
+        let phase = self
+            .blink_origin
+            .elapsed()
+            .as_secs_f32()
+            .rem_euclid(BLINK_PERIOD);
         let half = BLINK_PERIOD / 2.0;
-        Some(if phase < half { half - phase } else { BLINK_PERIOD - phase })
+        Some(if phase < half {
+            half - phase
+        } else {
+            BLINK_PERIOD - phase
+        })
     }
 }
 

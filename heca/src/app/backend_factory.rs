@@ -131,7 +131,9 @@ fn terminal_backend_options(
         selection_bg: theme
             .terminal_selection_background
             .map(|color| [color.r, color.g, color.b, color.a]),
-        ansi: theme.terminal_ansi.map(|colors| colors.map(|color| [color.r, color.g, color.b, color.a])),
+        ansi: theme
+            .terminal_ansi
+            .map(|colors| colors.map(|color| [color.r, color.g, color.b, color.a])),
         brights: theme
             .terminal_brights
             .map(|colors| colors.map(|color| [color.r, color.g, color.b, color.a])),
@@ -163,13 +165,7 @@ fn create_terminal_backend_with_options(
     options: TerminalBackendOptions,
 ) -> Box<dyn PaneBackend> {
     let (cell_w, cell_h) = cell_size;
-    match TerminalBackend::with_options(
-        cols,
-        rows,
-        cell_w,
-        cell_h,
-        options,
-    ) {
+    match TerminalBackend::with_options(cols, rows, cell_w, cell_h, options) {
         Ok(backend) => Box::new(backend),
         Err(_err) => {
             #[cfg(debug_assertions)]

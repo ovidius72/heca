@@ -18,8 +18,8 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{paint_child, Base, Component, PaintCx};
-use crate::reactive::{signal, Signal, SignalGet};
+use crate::component::{Base, Component, PaintCx, paint_child};
+use crate::reactive::{Signal, SignalGet, signal};
 use crate::scene::{Glow, TextAlign};
 use crate::style::{Direction, Length};
 use heca_core::layout::{Point, Rectangle, Size};
@@ -154,18 +154,16 @@ impl KeyHint {
             .max(font + 2.0 * pad_y);
         let h = font + 2.0 * pad_y;
         let (x, y) = match self.placement {
-            HintPlacement::TopCenter => {
-                (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET)
-            }
-            HintPlacement::Center => {
-                (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + (b.size.h - h) / 2.0)
-            }
-            HintPlacement::CenterRight => {
-                (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + (b.size.h - h) / 2.0)
-            }
-            HintPlacement::TopRight => {
-                (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET)
-            }
+            HintPlacement::TopCenter => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET),
+            HintPlacement::Center => (
+                b.loc.x + (b.size.w - w) / 2.0,
+                b.loc.y + (b.size.h - h) / 2.0,
+            ),
+            HintPlacement::CenterRight => (
+                b.loc.x + b.size.w - w - RIGHT_INSET,
+                b.loc.y + (b.size.h - h) / 2.0,
+            ),
+            HintPlacement::TopRight => (b.loc.x + b.size.w - w - RIGHT_INSET, b.loc.y + TOP_INSET),
         };
         Rectangle::new(Point::new(x, y + self.offset_y), Size::new(w, h))
     }
@@ -189,7 +187,9 @@ impl Component for KeyHint {
         }
 
         // Keycap overlay — only while the host has set a hint.
-        let Some(text) = self.hint.get_untracked() else { return };
+        let Some(text) = self.hint.get_untracked() else {
+            return;
+        };
         if text.is_empty() {
             return;
         }
@@ -210,9 +210,20 @@ impl Component for KeyHint {
             keycap_c.with_alpha(KEYCAP_ALPHA),
             None,
             radius,
-            Some(Glow { color: keycap_glow, radius: 6.0, intensity: KEYCAP_GLOW }),
+            Some(Glow {
+                color: keycap_glow,
+                radius: 6.0,
+                intensity: KEYCAP_GLOW,
+            }),
         );
-        cx.text(cap, &text, background, self.hint_font(), TextAlign::Center, true);
+        cx.text(
+            cap,
+            &text,
+            background,
+            self.hint_font(),
+            TextAlign::Center,
+            true,
+        );
     }
 }
 

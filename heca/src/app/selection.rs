@@ -95,7 +95,10 @@ pub(crate) fn collect_column_candidates(session: &Session) -> Vec<(char, usize, 
 }
 
 /// Find the (workspace_index, column_index, pane_index) containing a pane.
-pub(crate) fn find_pane_location(session: &Session, pane_id: PaneId) -> Option<(usize, usize, usize)> {
+pub(crate) fn find_pane_location(
+    session: &Session,
+    pane_id: PaneId,
+) -> Option<(usize, usize, usize)> {
     for (ws_idx, ws) in session.workspaces.iter().enumerate() {
         for (col_idx, col) in ws.scrolling.columns.iter().enumerate() {
             if let Some(pane_idx) = col.panes.iter().position(|p| p.id == pane_id) {

@@ -64,10 +64,6 @@ impl std::str::FromStr for SpawnKind {
 // Note: WmAction does NOT derive Hash because f64 fields in parameterized
 // variants do not implement Hash. The registry uses discriminant-based
 // dispatch, so Hash is unnecessary.
-// Parameterized variants are currently only constructed in tests and via RPC
-// (Phase 4). The `dead_code` lint fires on the binary; suppress it until
-// the ActionRegistry wires them in (Phase 2).
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum WmAction {
     // ── Navigation (unit) ──
@@ -300,7 +296,6 @@ pub enum WmAction {
 /// Two instances share a discriminant iff they are the same variant,
 /// regardless of field values.
 // Used by ActionRegistry (Phase 2) for handler dispatch.
-#[allow(dead_code)]
 pub fn action_discriminant(action: &WmAction) -> std::mem::Discriminant<WmAction> {
     std::mem::discriminant(action)
 }
@@ -857,78 +852,173 @@ mod tests {
         fn each_variant() -> Vec<WmAction> {
             vec![
                 // Navigation
-                WmAction::FocusLeft, WmAction::FocusRight,
-                WmAction::FocusUp, WmAction::FocusDown,
-                WmAction::NextPane, WmAction::PrevPane,
+                WmAction::FocusLeft,
+                WmAction::FocusRight,
+                WmAction::FocusUp,
+                WmAction::FocusDown,
+                WmAction::NextPane,
+                WmAction::PrevPane,
                 // Swap
-                WmAction::SwapLeft, WmAction::SwapRight,
-                WmAction::SwapUp, WmAction::SwapDown,
-                WmAction::MovePaneLeft { pane_id: None }, WmAction::MovePaneRight { pane_id: None },
-                WmAction::MoveColumnUp, WmAction::MoveColumnDown,
+                WmAction::SwapLeft,
+                WmAction::SwapRight,
+                WmAction::SwapUp,
+                WmAction::SwapDown,
+                WmAction::MovePaneLeft { pane_id: None },
+                WmAction::MovePaneRight { pane_id: None },
+                WmAction::MoveColumnUp,
+                WmAction::MoveColumnDown,
                 // Resize
-                WmAction::ResizeIncrease, WmAction::ResizeDecrease,
-                WmAction::PaneHeightIncrease, WmAction::PaneHeightDecrease,
+                WmAction::ResizeIncrease,
+                WmAction::ResizeDecrease,
+                WmAction::PaneHeightIncrease,
+                WmAction::PaneHeightDecrease,
                 // Pane management
-                WmAction::SplitHorizontal, WmAction::SplitVertical,
-                WmAction::ZoomColumn, WmAction::Float, WmAction::ClosePane,
-                WmAction::PaneSelect, WmAction::SwapPane, WmAction::SwapAndFocusPane,
-                WmAction::MoveColumnToWorkspacePick, WmAction::MovePaneToWorkspacePick,
+                WmAction::SplitHorizontal,
+                WmAction::SplitVertical,
+                WmAction::ZoomColumn,
+                WmAction::Float,
+                WmAction::ClosePane,
+                WmAction::PaneSelect,
+                WmAction::SwapPane,
+                WmAction::SwapAndFocusPane,
+                WmAction::MoveColumnToWorkspacePick,
+                WmAction::MovePaneToWorkspacePick,
                 WmAction::MovePaneToColumnPick,
-                WmAction::FocusToggleLocal, WmAction::FocusToggleGlobal,
-                WmAction::CreateWorkspace, WmAction::RenameWorkspace,
-                WmAction::RenamePane, WmAction::RenameColumn,
-                WmAction::WorkspaceNext, WmAction::WorkspacePrev,
+                WmAction::FocusToggleLocal,
+                WmAction::FocusToggleGlobal,
+                WmAction::CreateWorkspace,
+                WmAction::RenameWorkspace,
+                WmAction::RenamePane,
+                WmAction::RenameColumn,
+                WmAction::WorkspaceNext,
+                WmAction::WorkspacePrev,
                 // Sidebar (mode-internal + global toggles)
-                WmAction::SidebarFocus, WmAction::SidebarUp, WmAction::SidebarDown,
-                WmAction::SidebarLeftNav, WmAction::SidebarRightNav,
+                WmAction::SidebarFocus,
+                WmAction::SidebarUp,
+                WmAction::SidebarDown,
+                WmAction::SidebarLeftNav,
+                WmAction::SidebarRightNav,
                 WmAction::SidebarExpandToggle,
-                WmAction::SidebarCreateWorkspace, WmAction::SidebarCreateColumn,
-                WmAction::SidebarSplitInColumn, WmAction::SidebarZoomSelectedColumn,
+                WmAction::SidebarCreateWorkspace,
+                WmAction::SidebarCreateColumn,
+                WmAction::SidebarSplitInColumn,
+                WmAction::SidebarZoomSelectedColumn,
                 WmAction::SidebarDeleteSelected,
-                WmAction::CollapseCurrentWorkspace, WmAction::ExpandCurrentWorkspace,
+                WmAction::CollapseCurrentWorkspace,
+                WmAction::ExpandCurrentWorkspace,
                 WmAction::ToggleCurrentWorkspaceCollapsed,
-                WmAction::CollapseCurrentColumn, WmAction::ExpandCurrentColumn,
+                WmAction::CollapseCurrentColumn,
+                WmAction::ExpandCurrentColumn,
                 WmAction::ToggleCurrentColumnCollapsed,
-                WmAction::SidebarLeft, WmAction::SidebarRight,
+                WmAction::SidebarLeft,
+                WmAction::SidebarRight,
                 // System
                 WmAction::CommandPalette,
                 // Selection (host capability, Task 02)
                 WmAction::EnterSelectionMode,
-                WmAction::SelectionLeft, WmAction::SelectionRight,
-                WmAction::SelectionUp, WmAction::SelectionDown,
+                WmAction::SelectionLeft,
+                WmAction::SelectionRight,
+                WmAction::SelectionUp,
+                WmAction::SelectionDown,
                 WmAction::ClearSelection,
-                WmAction::CopySelection, WmAction::PasteClipboard,
-                WmAction::BeginSelection, WmAction::ToggleSelectionEndpoint,
+                WmAction::CopySelection,
+                WmAction::PasteClipboard,
+                WmAction::BeginSelection,
+                WmAction::ToggleSelectionEndpoint,
                 // Take (panes + quick-take)
-                WmAction::PaneTake, WmAction::PaneTakeAndFocus,
+                WmAction::PaneTake,
+                WmAction::PaneTakeAndFocus,
                 // Parameterized variants
                 WmAction::FocusPane { pane_id: PaneId(0) },
                 WmAction::FocusWorkspace { ws_idx: 0 },
-                WmAction::Swap { a_id: PaneId(0), b_id: PaneId(0) },
-                WmAction::Move { pane_id: PaneId(0), target_col: 0 },
-                WmAction::MovePaneToWorkspace { pane_id: PaneId(0), ws_idx: 0 },
-                WmAction::MovePaneToColumn { pane_id: PaneId(0), ws_idx: 0, col_idx: 0 },
-                WmAction::MoveColumnToWorkspace { col_idx: 0, ws_idx: 0, focus: false },
-                WmAction::MoveColumn { src_ws: 0, src_col: 0, dst_ws: 0, dst_idx: 0, focus: false },
-                WmAction::SwapColumns { a_ws: 0, a_col: 0, b_ws: 0, b_col: 0 },
-                WmAction::Resize { target: ResizeTarget::Column, axis: ResizeAxis::X, amount: 0.0 },
-                WmAction::ResizeColumnBy { col_idx: 0, delta: 0.0 },
-                WmAction::ResizePaneHeightBy { col_idx: 0, pane_idx: 0, delta: 0.0 },
-                WmAction::ResizeTo { target: ResizeTarget::Column, width: 0.0, height: 0.0 },
-                WmAction::FloatAt { pane_id: PaneId(0), x: 0.0, y: 0.0, width: 0.0, height: 0.0 },
+                WmAction::Swap {
+                    a_id: PaneId(0),
+                    b_id: PaneId(0),
+                },
+                WmAction::Move {
+                    pane_id: PaneId(0),
+                    target_col: 0,
+                },
+                WmAction::MovePaneToWorkspace {
+                    pane_id: PaneId(0),
+                    ws_idx: 0,
+                },
+                WmAction::MovePaneToColumn {
+                    pane_id: PaneId(0),
+                    ws_idx: 0,
+                    col_idx: 0,
+                },
+                WmAction::MoveColumnToWorkspace {
+                    col_idx: 0,
+                    ws_idx: 0,
+                    focus: false,
+                },
+                WmAction::MoveColumn {
+                    src_ws: 0,
+                    src_col: 0,
+                    dst_ws: 0,
+                    dst_idx: 0,
+                    focus: false,
+                },
+                WmAction::SwapColumns {
+                    a_ws: 0,
+                    a_col: 0,
+                    b_ws: 0,
+                    b_col: 0,
+                },
+                WmAction::Resize {
+                    target: ResizeTarget::Column,
+                    axis: ResizeAxis::X,
+                    amount: 0.0,
+                },
+                WmAction::ResizeColumnBy {
+                    col_idx: 0,
+                    delta: 0.0,
+                },
+                WmAction::ResizePaneHeightBy {
+                    col_idx: 0,
+                    pane_idx: 0,
+                    delta: 0.0,
+                },
+                WmAction::ResizeTo {
+                    target: ResizeTarget::Column,
+                    width: 0.0,
+                    height: 0.0,
+                },
+                WmAction::FloatAt {
+                    pane_id: PaneId(0),
+                    x: 0.0,
+                    y: 0.0,
+                    width: 0.0,
+                    height: 0.0,
+                },
                 WmAction::ClosePaneById { pane_id: PaneId(0) },
-                WmAction::RenameTarget { pane_id: PaneId(0), name: String::new() },
+                WmAction::RenameTarget {
+                    pane_id: PaneId(0),
+                    name: String::new(),
+                },
                 WmAction::SpawnCommand {
                     command: String::new(),
                     kind: SpawnKind::Terminal,
                     float: false,
                     close_policy: PaneClosePolicy::default(),
                 },
-                WmAction::EnterMode { name: String::new() },
-                WmAction::AddPaneToColumn { ws_idx: 0, col_idx: 0 },
-                WmAction::DeleteColumn { ws_idx: 0, col_idx: 0 },
+                WmAction::EnterMode {
+                    name: String::new(),
+                },
+                WmAction::AddPaneToColumn {
+                    ws_idx: 0,
+                    col_idx: 0,
+                },
+                WmAction::DeleteColumn {
+                    ws_idx: 0,
+                    col_idx: 0,
+                },
                 WmAction::DeleteWorkspace { ws_idx: 0 },
-                WmAction::TakePane { pane_id: PaneId(0), focus_after: false },
+                WmAction::TakePane {
+                    pane_id: PaneId(0),
+                    focus_after: false,
+                },
                 WmAction::ReloadConfig,
             ]
         }
@@ -944,7 +1034,10 @@ mod tests {
         // Exercise all parameterized variants so they are not flagged as dead code.
         let _ = WmAction::FocusPane { pane_id: PaneId(1) };
         let _ = WmAction::FocusWorkspace { ws_idx: 0 };
-        let _ = WmAction::Swap { a_id: PaneId(1), b_id: PaneId(2) };
+        let _ = WmAction::Swap {
+            a_id: PaneId(1),
+            b_id: PaneId(2),
+        };
         let _ = WmAction::Move {
             pane_id: PaneId(1),
             target_col: 0,

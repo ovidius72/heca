@@ -5,24 +5,28 @@
 //! unit variants ignore the `_action` parameter.
 
 use crate::app::backend_factory::{
-    create_command_backend_for_state, create_terminal_backend_for_state, terminal_grid_for_workspace,
+    create_command_backend_for_state, create_terminal_backend_for_state,
+    terminal_grid_for_workspace,
 };
-use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
-use crate::app::pane_ops::{swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column};
 use crate::app::focus::{focus_pane_by_id, sync_focus};
+use crate::app::interaction::{focused_pane_id, pane_is_floating};
+use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
+use crate::app::pane_ops::{
+    swap_panes_cross_workspace, swap_panes_diff_columns, swap_panes_same_column,
+};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
-use crate::app::terminal_host::{enter_selection_mode_for_focused_terminal, move_focused_terminal_selection};
+use crate::app::terminal_host::{
+    enter_selection_mode_for_focused_terminal, move_focused_terminal_selection,
+};
 use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
+use crate::chrome;
 use crate::input::{SpawnKind, WmAction};
 use crate::sidebar;
 use crate::{
-    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location,
-    move_pane_to_column, move_pane_to_workspace_column, pane_name, switch_workspace_tracked,
-    update_session_viewport,
+    collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, move_pane_to_column,
+    move_pane_to_workspace_column, pane_name, switch_workspace_tracked, update_session_viewport,
 };
-use crate::chrome;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, FocusDomain, Pane as LayoutPane, PaneId};
-use crate::app::interaction::{pane_is_floating, focused_pane_id};
 
 // ── Navigation ──
 
@@ -131,12 +135,10 @@ pub fn handle_split_horizontal(state: &mut AppState, _action: &WmAction) {
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     let backend_id = PaneId(next_id);
     state.session.add_pane(pane, None, true);
-    state
-        .backends
-        .insert_for_pane(
-            backend_id,
-            create_terminal_backend_for_state(state, cols, rows),
-        );
+    state.backends.insert_for_pane(
+        backend_id,
+        create_terminal_backend_for_state(state, cols, rows),
+    );
     after_layout_change(state);
 }
 
@@ -154,12 +156,10 @@ pub fn handle_split_vertical(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         ws.scrolling.add_pane_to_column(col_idx, None, pane, true);
     }
-    state
-        .backends
-        .insert_for_pane(
-            backend_id,
-            create_terminal_backend_for_state(state, cols, rows),
-        );
+    state.backends.insert_for_pane(
+        backend_id,
+        create_terminal_backend_for_state(state, cols, rows),
+    );
     after_layout_change(state);
 }
 
@@ -577,11 +577,7 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
         let wa = ws.scrolling.working_area;
 
         if is_flt {
-            if let Some(idx) = ws
-                .floating_panes
-                .iter()
-                .position(|f| f.pane.id == pane_id)
-            {
+            if let Some(idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
                 let float = ws.floating_panes.remove(idx);
                 let orig_col = float.original_column_idx;
                 let orig_pane = float.original_pane_idx;
@@ -611,7 +607,11 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
                 } else {
                     ws.scrolling.add_column(
                         None,
-                        Column::new(ColumnId(pane_id.0), float.pane, chrome::default_column_width()),
+                        Column::new(
+                            ColumnId(pane_id.0),
+                            float.pane,
+                            chrome::default_column_width(),
+                        ),
                         true,
                     );
                 }
@@ -837,7 +837,10 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     };
     let candidates = crate::app::selection::collect_column_candidates(&state.session);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::ColumnPick { candidates, pane_id };
+        state.input_mode = InputMode::ColumnPick {
+            candidates,
+            pane_id,
+        };
         state.needs_redraw = true;
     }
 }
@@ -894,17 +897,17 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
             crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id)
         && let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx)
     {
-            ws.deactivate_floating_panes();
-            ws.floating_panes
-                .push(heca_core::layout::workspace::FloatingPane {
-                    pane: removed,
-                    position: heca_core::layout::types::Point::new(*x, *y),
-                    size: heca_core::layout::types::Size::new(*width, *height),
-                    is_active: true,
-                    original_column_idx: Some(col_idx),
-                    original_pane_idx: Some(pane_idx),
-                });
-            ws.focus_domain = FocusDomain::Floating;
+        ws.deactivate_floating_panes();
+        ws.floating_panes
+            .push(heca_core::layout::workspace::FloatingPane {
+                pane: removed,
+                position: heca_core::layout::types::Point::new(*x, *y),
+                size: heca_core::layout::types::Size::new(*width, *height),
+                is_active: true,
+                original_column_idx: Some(col_idx),
+                original_pane_idx: Some(pane_idx),
+            });
+        ws.focus_domain = FocusDomain::Floating;
     }
     after_layout_change(state);
 }
@@ -920,9 +923,7 @@ pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
         return;
     };
     if let Some(ws) = state.session.active_workspace_mut() {
-        if let Some((ci, pi)) =
-            crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id)
-        {
+        if let Some((ci, pi)) = crate::app::pane_ops::find_pane_indices_in_workspace(ws, *pane_id) {
             if let Some(removed) = ws.scrolling.remove_pane(ci, pi) {
                 state.backends.remove_for_pane(removed.id);
             }
@@ -982,12 +983,10 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
             .add_pane_to_column(capped_col, None, pane, true);
     }
     let (cols, rows) = terminal_grid_for_workspace(state, target_ws);
-    state
-        .backends
-        .insert_for_pane(
-            backend_id,
-            create_terminal_backend_for_state(state, cols, rows),
-        );
+    state.backends.insert_for_pane(
+        backend_id,
+        create_terminal_backend_for_state(state, cols, rows),
+    );
     after_layout_change(state);
 }
 
@@ -1134,31 +1133,29 @@ fn pane_is_already_active_column_tail(state: &AppState, pane_id: PaneId) -> bool
     };
     let active_col = ws.scrolling.active_column_idx;
     active_col < ws.scrolling.columns.len()
-        && ws.scrolling.columns[active_col]
-            .panes
-            .last()
-            .map(|p| p.id)
-            == Some(pane_id)
+        && ws.scrolling.columns[active_col].panes.last().map(|p| p.id) == Some(pane_id)
 }
 
 fn remove_take_pane_source(
     state: &mut AppState,
     pane_id: PaneId,
 ) -> Option<(usize, heca_core::layout::column::Pane)> {
-    let tiled = crate::find_pane_location(&state.session, pane_id).and_then(|(src_ws, src_col, src_idx)| {
-        state
-            .session
-            .workspaces
-            .get_mut(src_ws)
-            .and_then(|ws| {
-                if src_col < ws.scrolling.columns.len() {
-                    ws.scrolling.remove_pane(src_col, src_idx)
-                } else {
-                    None
-                }
-            })
-            .map(|pane| (src_ws, pane))
-    });
+    let tiled = crate::find_pane_location(&state.session, pane_id).and_then(
+        |(src_ws, src_col, src_idx)| {
+            state
+                .session
+                .workspaces
+                .get_mut(src_ws)
+                .and_then(|ws| {
+                    if src_col < ws.scrolling.columns.len() {
+                        ws.scrolling.remove_pane(src_col, src_idx)
+                    } else {
+                        None
+                    }
+                })
+                .map(|pane| (src_ws, pane))
+        },
+    );
     tiled.or_else(|| remove_take_pane_from_floating(state, pane_id))
 }
 
@@ -1227,12 +1224,10 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     let next_id = state.session.next_id();
     let pane = LayoutPane::new(PaneId(next_id), pane_name(PaneId(next_id)));
     state.session.add_pane(pane, None, true);
-        state
-            .backends
-            .insert_for_pane(
-                PaneId(next_id),
-                create_terminal_backend_for_state(state, cols, rows),
-            );
+    state.backends.insert_for_pane(
+        PaneId(next_id),
+        create_terminal_backend_for_state(state, cols, rows),
+    );
     while state.last_visited_pane_per_ws.len() <= new_idx {
         state.last_visited_pane_per_ws.push(None);
     }
@@ -1279,8 +1274,12 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    state.chrome_state.set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
-    state.chrome_state.set_left_size(crate::chrome::DEFAULT_SIDEBAR_WIDTH);
+    state
+        .chrome_state
+        .set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
+    state
+        .chrome_state
+        .set_left_size(crate::chrome::DEFAULT_SIDEBAR_WIDTH);
     state.input_mode = InputMode::SidebarNav;
     update_session_viewport(state);
     after_layout_change(state);
@@ -1288,7 +1287,8 @@ pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible()
+            || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_up_collapsed();
         } else {
@@ -1300,7 +1300,8 @@ pub fn handle_sidebar_up(state: &mut AppState, _action: &WmAction) {
 
 pub fn handle_sidebar_down(state: &mut AppState, _action: &WmAction) {
     if matches!(state.input_mode, InputMode::SidebarNav) {
-        let is_collapsed = !state.chrome_state.left_visible() || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
+        let is_collapsed = !state.chrome_state.left_visible()
+            || state.chrome_state.left_size() < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD;
         if is_collapsed {
             state.sidebar_tree.cursor_down_collapsed();
         } else {
@@ -1344,7 +1345,9 @@ pub fn handle_sidebar_expand_toggle(state: &mut AppState, _action: &WmAction) {
             Some(sidebar::SidebarItem::Pane { .. })
             | Some(sidebar::SidebarItem::FloatingPane { .. }) => {}
             _ => {
-                state.sidebar_tree.toggle_expand(&state.chrome_state.workspaces);
+                state
+                    .sidebar_tree
+                    .toggle_expand(&state.chrome_state.workspaces);
             }
         }
         state.needs_redraw = true;
@@ -1367,9 +1370,8 @@ fn sidebar_selected_column_target(state: &AppState) -> Option<(usize, usize)> {
     let item = state.sidebar_tree.current_item()?;
     match item {
         sidebar::SidebarItem::Column { ws_idx, col_idx } => Some((*ws_idx, *col_idx)),
-        sidebar::SidebarItem::Pane { pane_id } => {
-            find_pane_location(&state.session, *pane_id).map(|(ws_idx, col_idx, _)| (ws_idx, col_idx))
-        }
+        sidebar::SidebarItem::Pane { pane_id } => find_pane_location(&state.session, *pane_id)
+            .map(|(ws_idx, col_idx, _)| (ws_idx, col_idx)),
         sidebar::SidebarItem::Workspace { .. } | sidebar::SidebarItem::FloatingPane { .. } => None,
     }
 }
@@ -1513,7 +1515,10 @@ pub(crate) fn apply_ws_collapse(state: &mut AppState, ws_idx: usize, collapse: O
         Some(c) => state.chrome_state.workspaces.set_ws_collapsed(ws_idx, c),
         None => state.chrome_state.workspaces.toggle_ws_collapsed(ws_idx),
     }
-    let set = state.chrome_state.workspaces.with_collapsed_ws(|s| s.clone());
+    let set = state
+        .chrome_state
+        .workspaces
+        .with_collapsed_ws(|s| s.clone());
     state.sidebar_tree.apply_ws_collapsed(&set, Some(ws_idx));
 }
 
@@ -1619,12 +1624,10 @@ pub fn handle_spawn_command(state: &mut AppState, action: &WmAction) {
     } else {
         state.session.add_pane(pane, None, true);
     }
-    state
-        .backends
-        .insert_for_pane(
-            PaneId(next_id),
-            create_command_backend_for_state(state, cols, rows, command),
-        );
+    state.backends.insert_for_pane(
+        PaneId(next_id),
+        create_command_backend_for_state(state, cols, rows, command),
+    );
     after_layout_change(state);
 }
 
@@ -1692,7 +1695,9 @@ pub fn handle_selection_down(state: &mut AppState, _action: &WmAction) {
 /// This avoids accidental loss of an in-progress selection.
 pub fn handle_begin_selection(state: &mut AppState, _action: &WmAction) {
     if state.selection.is_caret() {
-        state.selection.begin_selection_from_caret(SelectionSource::KeyboardMode);
+        state
+            .selection
+            .begin_selection_from_caret(SelectionSource::KeyboardMode);
         state.needs_redraw = true;
     }
     // If selection already exists: no-op. Document the policy — user must
@@ -1744,7 +1749,11 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         }
 
         // Get the terminal snapshot for the owning pane.
-        let snapshot = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+        let snapshot = match state
+            .backends
+            .get(pane_id)
+            .and_then(|b| b.terminal_snapshot())
+        {
             Some(s) => s,
             None => return, // No snapshot — safe no-op.
         };

@@ -11,13 +11,11 @@ mod rpc;
 mod shortcut;
 mod sidebar;
 
-use app::events::handle_window_event;
 use app::events::AppEvent;
-use app::interaction::dispatch_intent;
+use app::events::handle_window_event;
 pub(crate) use app::focus::switch_workspace_tracked;
+use app::interaction::dispatch_intent;
 use app::lifecycle::{handle_about_to_wait, poll_backends};
-use app::terminal_metrics::refresh_terminal_cell_size;
-use heca_core::layout::PaneId;
 pub(crate) use app::mutations::{
     destroy_empty_workspace, move_column_to_workspace, move_pane_to_column,
     move_pane_to_workspace_column,
@@ -26,8 +24,10 @@ use app::registry::{build_keymap, build_modes, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
+use app::terminal_metrics::refresh_terminal_cell_size;
 use app_state::AppState;
 use heca_config::theme::AppConfig;
+use heca_core::layout::PaneId;
 use input::WmAction;
 use std::collections::HashMap;
 use winit::application::ApplicationHandler;
@@ -129,6 +129,7 @@ impl HecaApp {
                 .text_renderer
                 .set_font_family(self.app_config.config.font.family.ui_normal());
             refresh_terminal_cell_size(state);
+            state.terminal_layers.clear();
             state.prefix_combo = keymap::KeyCombo::parse(&self.app_config.config.keys.prefix);
             state.pane_action_hints = crate::chrome::PaneActionHints::from_keys(
                 &self.app_config.config.keys,
@@ -136,14 +137,17 @@ impl HecaApp {
             );
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
-            state.shell_integration_enabled =
-                self.app_config.config.settings.shell_integration;
+            state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
             // Pane gap and chrome geometry changes must reflow the real viewport
             // path so cached column widths, pane sizes, and working areas stay
             // coherent after reload.
-            let pane_gap = self.app_config.config.appearance.effective_pane_gap(&self.app_config.theme) as f64;
+            let pane_gap = self
+                .app_config
+                .config
+                .appearance
+                .effective_pane_gap(&self.app_config.theme) as f64;
             if (state.session.options.gaps - pane_gap).abs() > f64::EPSILON {
                 state.session.options.gaps = pane_gap;
                 for ws in &mut state.session.workspaces {

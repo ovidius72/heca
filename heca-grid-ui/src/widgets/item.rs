@@ -235,7 +235,15 @@ impl Component for Item {
         let active = self.active.get_untracked();
         let (accent, glow_c, foreground, muted_c, border_c, ctrl_radius, bw) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.muted, t.border, t.control_radius(), t.border_width)
+            (
+                t.accent,
+                t.glow,
+                t.foreground,
+                t.muted,
+                t.border,
+                t.control_radius(),
+                t.border_width,
+            )
         };
         let b = self.base.bounds;
 
@@ -252,9 +260,21 @@ impl Component for Item {
         );
         let sel_radius = ctrl_radius.min((sel.size.h / 2.0) as f32);
         if active {
-            cx.rect(sel, accent.with_alpha(ACTIVE_FILL_ALPHA), None, sel_radius, None);
+            cx.rect(
+                sel,
+                accent.with_alpha(ACTIVE_FILL_ALPHA),
+                None,
+                sel_radius,
+                None,
+            );
         } else if self.hovered.get_untracked() {
-            cx.rect(sel, foreground.with_alpha(HOVER_FILL_ALPHA), None, sel_radius, None);
+            cx.rect(
+                sel,
+                foreground.with_alpha(HOVER_FILL_ALPHA),
+                None,
+                sel_radius,
+                None,
+            );
         }
 
         // Active indicator — depends on marker.
@@ -265,10 +285,7 @@ impl Component for Item {
                     let bar_h = b.size.h * ACTIVE_BAR_FRAC;
                     let bar_y = b.loc.y + (b.size.h - bar_h) / 2.0;
                     cx.rect(
-                        Rectangle::new(
-                            Point::new(b.loc.x, bar_y),
-                            Size::new(ACTIVE_BAR_W, bar_h),
-                        ),
+                        Rectangle::new(Point::new(b.loc.x, bar_y), Size::new(ACTIVE_BAR_W, bar_h)),
                         accent,
                         None,
                         (ACTIVE_BAR_W / 2.0) as f32,
@@ -284,10 +301,7 @@ impl Component for Item {
                     let pip_x = b.loc.x + PAD_H / 2.0 - CHECK_SIZE / 2.0;
                     let pip_y = b.loc.y + (b.size.h - CHECK_SIZE) / 2.0;
                     cx.rect(
-                        Rectangle::new(
-                            Point::new(pip_x, pip_y),
-                            Size::new(CHECK_SIZE, CHECK_SIZE),
-                        ),
+                        Rectangle::new(Point::new(pip_x, pip_y), Size::new(CHECK_SIZE, CHECK_SIZE)),
                         accent,
                         None,
                         (CHECK_SIZE / 2.0) as f32,
@@ -333,7 +347,10 @@ impl Component for Item {
             cx.rect(
                 frame,
                 crate::color::Color::TRANSPARENT,
-                Some(crate::scene::Border { color: border_c, width: bw }),
+                Some(crate::scene::Border {
+                    color: border_c,
+                    width: bw,
+                }),
                 ctrl_radius,
                 None,
             );

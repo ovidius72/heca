@@ -130,7 +130,10 @@ impl ChromeEventBus {
             filter: filter.into(),
             handler: Box::new(handler),
         });
-        ChromeSubscription { bus: self.clone(), id: Cell::new(Some(id)) }
+        ChromeSubscription {
+            bus: self.clone(),
+            id: Cell::new(Some(id)),
+        }
     }
 
     pub fn emit(&self, event: ChromeEvent) {

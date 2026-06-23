@@ -3,13 +3,13 @@
 //! UI dimensions, timing defaults, layout proportions, and render parameters
 //! that were previously scattered as magic numbers across the codebase.
 
-mod state;
 mod events;
+mod state;
 pub use events::{ChromeEvent, ChromeEventBus, ChromeRegion, ChromeSubscription};
 pub use state::{SharedChromeState, WorkspacesContainerState};
 
-use heca_core::layout::types::{Point, Rectangle, Size};
 use heca_core::layout::ColumnWidth;
+use heca_core::layout::types::{Point, Rectangle, Size};
 use std::time::Duration;
 
 // ── Chrome metrics ──
@@ -90,26 +90,28 @@ impl ChromeConfig {
             };
         let w = (window_width - x - right_reserved.min((window_width - x).max(0.0))).max(0.0);
         let h = (window_height - self.tab_bar_height - self.status_bar_height).max(0.0);
-        Rectangle::new(Point::new(x as f64, y as f64), Size::new(w as f64, h as f64))
+        Rectangle::new(
+            Point::new(x as f64, y as f64),
+            Size::new(w as f64, h as f64),
+        )
     }
 }
 
 // ── Grid-UI chrome scene builder ──────────────────────────────────────────────
 
 use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
+use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
-    KeyHint, Label, MarkerGroup, Pane, Row, StatusDot, Surface, Tag, Tooltip, TooltipSide,
-    Visibility,
+    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label,
+    MarkerGroup, Pane, Row, StatusDot, Surface, Tag, Tooltip, TooltipSide, Visibility,
 };
-use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
 
@@ -182,13 +184,15 @@ fn pane_info_view(
         status: runtime
             .map(|pane| pane.status.clone())
             .unwrap_or(ProcessStatus::Idle),
-        git_branch: git
-            .map(|info| info.branch.clone().unwrap_or_else(|| "detached".to_string())),
+        git_branch: git.map(|info| {
+            info.branch
+                .clone()
+                .unwrap_or_else(|| "detached".to_string())
+        }),
         git_added: git.and_then(|info| (info.added > 0).then(|| format!("+{}", info.added))),
         git_modified: git
             .and_then(|info| (info.modified > 0).then(|| format!("~{}", info.modified))),
-        git_deleted: git
-            .and_then(|info| (info.deleted > 0).then(|| format!("-{}", info.deleted))),
+        git_deleted: git.and_then(|info| (info.deleted > 0).then(|| format!("-{}", info.deleted))),
     }
 }
 
@@ -339,7 +343,10 @@ fn header_button_cell(font: f32) -> f32 {
 }
 
 /// Total width the action-button cluster occupies (0 when there are no actions).
-pub(crate) fn header_buttons_width(actions: &[heca_config::appearance::PaneAction], font: f32) -> f32 {
+pub(crate) fn header_buttons_width(
+    actions: &[heca_config::appearance::PaneAction],
+    font: f32,
+) -> f32 {
     if actions.is_empty() {
         return 0.0;
     }
@@ -496,13 +503,17 @@ fn pane_action_spec(
         ),
         PaneAction::MoveLeft => (
             Glyph::ArrowLineLeft,
-            WmAction::MovePaneLeft { pane_id: Some(pane_id) },
+            WmAction::MovePaneLeft {
+                pane_id: Some(pane_id),
+            },
             "Move left",
             false,
         ),
         PaneAction::MoveRight => (
             Glyph::ArrowLineRight,
-            WmAction::MovePaneRight { pane_id: Some(pane_id) },
+            WmAction::MovePaneRight {
+                pane_id: Some(pane_id),
+            },
             "Move right",
             false,
         ),
@@ -553,8 +564,12 @@ fn pane_action_visible_when_floating(action: heca_config::appearance::PaneAction
 /// the retained tree must be rebuilt (vs. just re-laid-out). Cheap per-frame string
 /// build (≤20 panes); avoids deriving `Hash` on the projection enums.
 pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f32) -> String {
-    let view =
-        pane_info_view(content.programs, content.fallback_name, content.custom_name, content.runtime);
+    let view = pane_info_view(
+        content.programs,
+        content.fallback_name,
+        content.custom_name,
+        content.runtime,
+    );
     let cwd = content
         .runtime
         .and_then(|r| r.cwd.as_ref())
@@ -612,7 +627,14 @@ pub(crate) fn build_pane_header(
         .collect();
     let buttons_w = header_buttons_width(&visible_actions, font);
     // The bar yields width to the button cluster first.
-    let bar_max = (avail_w - buttons_w - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 }).max(0.0);
+    let bar_max = (avail_w
+        - buttons_w
+        - if buttons_w > 0.0 {
+            HEADER_BUTTON_GAP
+        } else {
+            0.0
+        })
+    .max(0.0);
     let bar = build_pane_info_bar(
         content.programs,
         content.fallback_name,
@@ -662,26 +684,30 @@ pub(crate) fn build_pane_header(
             };
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
-            let button = IconButton::new(Icon::new(glyph).color(icon_color).size(header_icon_size(font)))
-                .cell(cell)
-                .tone(tone)
-                .active(is_active)
-                .on_click(move || {
-                    use crate::app::interaction::{InteractionIntent, InteractionSource};
-                    // Active-targeted actions (zoom/float) act on the focused pane, so
-                    // focus this pane first — the events are queued and processed in
-                    // order on the UI thread, so the action lands on this pane.
-                    if needs_focus {
-                        let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                            source: InteractionSource::MouseContent,
-                            intent: InteractionIntent::FocusPane { pane_id },
-                        });
-                    }
+            let button = IconButton::new(
+                Icon::new(glyph)
+                    .color(icon_color)
+                    .size(header_icon_size(font)),
+            )
+            .cell(cell)
+            .tone(tone)
+            .active(is_active)
+            .on_click(move || {
+                use crate::app::interaction::{InteractionIntent, InteractionSource};
+                // Active-targeted actions (zoom/float) act on the focused pane, so
+                // focus this pane first — the events are queued and processed in
+                // order on the UI thread, so the action lands on this pane.
+                if needs_focus {
                     let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
                         source: InteractionSource::MouseContent,
-                        intent: InteractionIntent::ActivateAction(wm_action.clone()),
+                        intent: InteractionIntent::FocusPane { pane_id },
                     });
+                }
+                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                    source: InteractionSource::MouseContent,
+                    intent: InteractionIntent::ActivateAction(wm_action.clone()),
                 });
+            });
             row = row.child(Tooltip::new(button, tip).side(TooltipSide::Bottom));
         }
         Some(row)
@@ -689,7 +715,10 @@ pub(crate) fn build_pane_header(
 
     let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
     let root = match (bar, buttons) {
-        (Some(bar), Some(buttons)) => root.justify(Justify::SpaceBetween).child(bar).child(buttons),
+        (Some(bar), Some(buttons)) => root
+            .justify(Justify::SpaceBetween)
+            .child(bar)
+            .child(buttons),
         (Some(bar), None) => root.justify(Justify::Start).child(bar),
         (None, Some(buttons)) => root.justify(Justify::End).child(buttons),
         (None, None) => return None,
@@ -739,7 +768,13 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             .session
             .active_workspace()
             .and_then(|ws| ws.find_pane(pane_id))
-            .map(|p| (p.title.clone(), p.custom_name.clone(), Some(p.runtime.clone())))
+            .map(|p| {
+                (
+                    p.title.clone(),
+                    p.custom_name.clone(),
+                    Some(p.runtime.clone()),
+                )
+            })
             .unwrap_or_else(|| (String::new(), None, None));
         // Floating panes aren't in any column (`find_pane_location` returns None);
         // detect them directly so the bar hides tiled-only buttons + flags float active.
@@ -813,12 +848,17 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             }
         }
         if let Some(header) = state.pane_headers.get_mut(&input.pane_id) {
-            LayoutEngine::new()
-                .base_font(font)
-                .compute(&mut header.root, Size::new(input.avail_w as f64, band as f64));
+            LayoutEngine::new().base_font(font).compute(
+                &mut header.root,
+                Size::new(input.avail_w as f64, band as f64),
+            );
             let bar_h = header.root.base().bounds.size.h as f32;
             let bar_y = input.y + f64::from(((band - bar_h) / 2.0).max(0.0)) as f32;
-            translate_tree(&mut header.root, (input.x + HEADER_MARGIN) as f64, bar_y as f64);
+            translate_tree(
+                &mut header.root,
+                (input.x + HEADER_MARGIN) as f64,
+                bar_y as f64,
+            );
         }
     }
     state.pane_headers.retain(|id, _| seen.contains(id));
@@ -852,7 +892,8 @@ pub(crate) fn dispatch_pane_header_press(
         .find(|(_, h)| rect_contains(h.root.base().bounds, point))
         .map(|(id, _)| *id)?;
     let header = state.pane_headers.get_mut(&hit)?;
-    let consumed = header.root.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes;
+    let consumed =
+        header.root.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes;
     Some((hit, consumed))
 }
 
@@ -912,7 +953,14 @@ impl RepaintWatch {
         base.style.direction = heca_grid_ui::Direction::Column;
         base.children.push(Box::new(child));
         let request = signal(0_u64);
-        (Self { base, request, seen: 0 }, request)
+        (
+            Self {
+                base,
+                request,
+                seen: 0,
+            },
+            request,
+        )
     }
 }
 
@@ -971,7 +1019,12 @@ fn pane_card(
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
     let runtime = runtime_snapshot(ws_state, pane_id);
-    let info = pane_info_view(programs, &pane.name, pane.custom_name.as_deref(), runtime.as_ref());
+    let info = pane_info_view(
+        programs,
+        &pane.name,
+        pane.custom_name.as_deref(),
+        runtime.as_ref(),
+    );
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
     // is drawn by `Row` from its `active` signal, not baked into the background. This
     // keeps styling fully signal-driven (active flips in place via `sync_chrome_signals`,
@@ -982,12 +1035,15 @@ fn pane_card(
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
     let icon_widget = Icon::new(info.icon).size(14.0).color(theme.foreground);
     let icon_signal = icon_widget.glyph_signal();
-    let active_title_label = Label::new(info.title.clone()).color(theme.accent).bold(true);
+    let active_title_label = Label::new(info.title.clone())
+        .color(theme.accent)
+        .bold(true);
     let active_title_signal = active_title_label.text_signal();
     let active_title = Visibility::new(active_title_label, active);
     let active_title_visible = active_title.visible_signal();
-    let inactive_title_label =
-        Label::new(info.title.clone()).color(theme.foreground).bold(true);
+    let inactive_title_label = Label::new(info.title.clone())
+        .color(theme.foreground)
+        .bold(true);
     let inactive_title_signal = inactive_title_label.text_signal();
     let inactive_title = Visibility::new(inactive_title_label, !active);
     let inactive_title_visible = inactive_title.visible_signal();
@@ -1006,8 +1062,9 @@ fn pane_card(
     .font_scale(0.8);
     let branch_display_signal = branch_label_widget.text_signal();
     let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
-    let add_label_widget =
-        Label::new(info.git_added.clone().unwrap_or_default()).color(theme.success).font_scale(0.8);
+    let add_label_widget = Label::new(info.git_added.clone().unwrap_or_default())
+        .color(theme.success)
+        .font_scale(0.8);
     let add_label = add_label_widget.text_signal();
     let add_segment = Visibility::new(
         Flex::row()
@@ -1031,8 +1088,9 @@ fn pane_card(
         info.git_modified.is_some(),
     );
     let modified_text_visible_signal = modified_segment.visible_signal();
-    let deleted_label_widget =
-        Label::new(info.git_deleted.clone().unwrap_or_default()).color(theme.danger).font_scale(0.8);
+    let deleted_label_widget = Label::new(info.git_deleted.clone().unwrap_or_default())
+        .color(theme.danger)
+        .font_scale(0.8);
     let deleted_label = deleted_label_widget.text_signal();
     let deleted_segment = Visibility::new(
         Flex::row()
@@ -1111,7 +1169,11 @@ fn pane_card(
             )
     };
     let card = Row::new()
-        .background(theme.foreground.with_alpha(alpha_u8(theme.card_background_alpha)))
+        .background(
+            theme
+                .foreground
+                .with_alpha(alpha_u8(theme.card_background_alpha)),
+        )
         .highlight(theme.accent)
         .radius(theme.control_radius())
         .padding(6.0)
@@ -1157,8 +1219,11 @@ fn pane_card(
             git_deleted: deleted_label,
         },
     ));
-    let (watch, _repaint) =
-        RepaintWatch::new(KeyHint::new(card).hint(hint).placement(HintPlacement::CenterRight));
+    let (watch, _repaint) = RepaintWatch::new(
+        KeyHint::new(card)
+            .hint(hint)
+            .placement(HintPlacement::CenterRight),
+    );
     watch
 }
 
@@ -1188,7 +1253,10 @@ fn column_view(
     // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
     // gutter is the only surface not covered by a child pane card, so innermost-first
     // hit-testing routes a grip press → column and a card press → pane, for free.
-    let drag_id = drag.register(ChromeDragItem::Column { ws: ws_idx, col: c.col_idx });
+    let drag_id = drag.register(ChromeDragItem::Column {
+        ws: ws_idx,
+        col: c.col_idx,
+    });
     let mut col = MarkerGroup::new()
         .active(active)
         .gap(3.0)
@@ -1266,9 +1334,9 @@ fn build_workspaces_container(
             .gap(4.0) // tighten the workspace header → body spacing
             .expanded(!ws_state.is_ws_collapsed(ws_idx))
             .on_toggle(move |_| {
-                emit(crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed {
-                    ws_idx,
-                });
+                emit(
+                    crate::app::interaction::InteractionIntent::ToggleWorkspaceCollapsed { ws_idx },
+                );
             })
             .header(
                 Flex::row()
@@ -1475,7 +1543,15 @@ fn chrome_root(
     right_sidebar: Option<Flex>,
     signals: &mut ChromeSignals,
 ) -> Flex {
-    let ChromeFrame { w, h, tab_bar_height, status_bar_height, status, side_bg, fg } = *frame;
+    let ChromeFrame {
+        w,
+        h,
+        tab_bar_height,
+        status_bar_height,
+        status,
+        side_bg,
+        fg,
+    } = *frame;
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
     // The status label's text is bound so mode/focus changes update it in place.
     let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
@@ -1527,8 +1603,7 @@ pub(crate) fn paint_chrome_root(root: &mut Flex, w: f32, h: f32, theme: &GuiThem
         .base_font(theme.font_size)
         .compute(root, Size::new(w as f64, h as f64));
     {
-        let mut cx =
-            PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
+        let mut cx = PaintCx::new(&mut scene, theme).with_viewport(Size::new(w as f64, h as f64));
         root.paint(&mut cx);
     }
     scene
@@ -1555,7 +1630,9 @@ pub(crate) fn paint_drag_overlay(
     let (source, swap) = match &surf.phase {
         DragPhase::Dragging { payload } => match payload {
             crate::app_state::AppDragPayload::Pane { swap, .. } => (DragSourceKind::Pane, *swap),
-            crate::app_state::AppDragPayload::Column { swap, .. } => (DragSourceKind::Column, *swap),
+            crate::app_state::AppDragPayload::Column { swap, .. } => {
+                (DragSourceKind::Column, *swap)
+            }
         },
         _ => return,
     };
@@ -1576,7 +1653,10 @@ pub(crate) fn paint_drag_overlay(
     // mirroring the legacy hand-drawn ghost so the two paths look identical).
     if let Some(label) = &surf.ghost_label {
         let rect = Rectangle::new(
-            Point::new((label.x + 10.0) as f64, (label.y - label.height / 2.0) as f64),
+            Point::new(
+                (label.x + 10.0) as f64,
+                (label.y - label.height / 2.0) as f64,
+            ),
             Size::new(label.width as f64, label.height as f64),
         );
         cx.drag_ghost(rect, &label.text, swap);
@@ -1614,12 +1694,7 @@ fn alpha_u8(a: f32) -> u8 {
 /// config/theme model stores the base color string and alpha separately.
 fn shadow_to_gui(shadow: &heca_config::theme::Shadow) -> Color {
     match shadow.color.parse::<heca_config::theme::Color>() {
-        Ok(color) => Color::new(
-            color.r,
-            color.g,
-            color.b,
-            alpha_u8(shadow.alpha),
-        ),
+        Ok(color) => Color::new(color.r, color.g, color.b, alpha_u8(shadow.alpha)),
         Err(_) => Color::TRANSPARENT,
     }
 }
@@ -1700,8 +1775,7 @@ fn chrome_bar_color_for(
     theme: &heca_config::theme::Theme,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    top_bottom_pane_background_color(theme)
-        .with_alpha(alpha_u8(appearance.chrome_opacity()))
+    top_bottom_pane_background_color(theme).with_alpha(alpha_u8(appearance.chrome_opacity()))
 }
 
 fn sidebar_shell_background_color_for(
@@ -1715,8 +1789,7 @@ fn chrome_shell_surface_color_for(
     theme: &heca_config::theme::Theme,
     appearance: &heca_config::appearance::AppearanceConfig,
 ) -> Color {
-    chrome_surface_color(theme)
-        .with_alpha(alpha_u8(appearance.opacity()))
+    chrome_surface_color(theme).with_alpha(alpha_u8(appearance.opacity()))
 }
 
 fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
@@ -1724,11 +1797,17 @@ fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
 }
 
 fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    sidebar_shell_background_color_for(left_sidebar_background_color(&state.theme), &state.appearance)
+    sidebar_shell_background_color_for(
+        left_sidebar_background_color(&state.theme),
+        &state.appearance,
+    )
 }
 
 fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    sidebar_shell_background_color_for(right_sidebar_background_color(&state.theme), &state.appearance)
+    sidebar_shell_background_color_for(
+        right_sidebar_background_color(&state.theme),
+        &state.appearance,
+    )
 }
 
 fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
@@ -1767,7 +1846,13 @@ fn chrome_status(state: &crate::app_state::AppState) -> String {
     let pane_count = state
         .session
         .active_workspace()
-        .map(|ws| ws.scrolling.columns.iter().map(|c| c.panes.len()).sum::<usize>())
+        .map(|ws| {
+            ws.scrolling
+                .columns
+                .iter()
+                .map(|c| c.panes.len())
+                .sum::<usize>()
+        })
         .unwrap_or(0);
     let focus_title = state
         .session
@@ -1776,7 +1861,10 @@ fn chrome_status(state: &crate::app_state::AppState) -> String {
         .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");
     let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
-    format!("{} panes | {} | {}{}", pane_count, focus_title, mode_str, rename_hint)
+    format!(
+        "{} panes | {} | {}{}",
+        pane_count, focus_title, mode_str, rename_hint
+    )
 }
 
 /// A **retained** chrome tree + the signature of the state that produced it. The
@@ -1925,7 +2013,7 @@ fn sync_pane_runtime_state(
     workspaces: &WorkspacesContainerState,
 ) -> bool {
     use std::collections::HashSet;
-    // TODO(reactivity): this is a per-frame full-sync push of every pane's runtime
+    // TODO(pane-runtime-tasks:F3): this is a per-frame full-sync push of every pane's runtime
     // state into the store — the same push model Phase 0 is moving away from. It
     // is change-guarded (the setters only `.set()`/emit on real change, so there
     // are no spurious events or repaints), but it still borrows `panes` once per
@@ -1937,8 +2025,11 @@ fn sync_pane_runtime_state(
         for col in &ws.scrolling.columns {
             for pane in &col.panes {
                 live_panes.insert(pane.id);
-                changed |=
-                    workspaces.set_pane_runtime(pane.id, &pane.runtime, pane.custom_name.as_deref());
+                changed |= workspaces.set_pane_runtime(
+                    pane.id,
+                    &pane.runtime,
+                    pane.custom_name.as_deref(),
+                );
             }
         }
         for float in &ws.floating_panes {
@@ -1958,7 +2049,10 @@ fn sync_pane_runtime_state(
 /// retained tree reads it. `InputMode` remains the source of truth for keyboard
 /// pick flows; the store is the reactive UI mirror.
 pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool {
-    state.chrome_state.workspaces.set_active_pane(state.focused_pane);
+    state
+        .chrome_state
+        .workspaces
+        .set_active_pane(state.focused_pane);
     let next_candidates = state
         .input_mode
         .candidates()
@@ -1967,7 +2061,10 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     if next_candidates.is_empty() {
         state.chrome_state.workspaces.clear_pick_candidates();
     } else {
-        state.chrome_state.workspaces.set_pick_candidates(next_candidates);
+        state
+            .chrome_state
+            .workspaces
+            .set_pick_candidates(next_candidates);
     }
     let next_ws_candidates = state
         .input_mode
@@ -1977,7 +2074,10 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     if next_ws_candidates.is_empty() {
         state.chrome_state.workspaces.clear_ws_pick_candidates();
     } else {
-        state.chrome_state.workspaces.set_ws_pick_candidates(next_ws_candidates);
+        state
+            .chrome_state
+            .workspaces
+            .set_ws_pick_candidates(next_ws_candidates);
     }
     let next_col_candidates = state
         .input_mode
@@ -1987,7 +2087,10 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     if next_col_candidates.is_empty() {
         state.chrome_state.workspaces.clear_col_pick_candidates();
     } else {
-        state.chrome_state.workspaces.set_col_pick_candidates(next_col_candidates);
+        state
+            .chrome_state
+            .workspaces
+            .set_col_pick_candidates(next_col_candidates);
     }
     // Mirror the in-progress pick (its kind + prompt) into the store so components and
     // plugins can react to the pending action (e.g. a custom prompt overlay).
@@ -2038,7 +2141,10 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     // live in the `InputMode` / action layer (`app/input.rs`); this only mirrors the
     // letters into the retained Dock. The currently focused pane is never a target,
     // so it shows no keycap (matches the legacy hand-drawn sidebar's behavior).
-    let candidates = state.chrome_state.workspaces.with_pick_candidates(|c| c.to_vec());
+    let candidates = state
+        .chrome_state
+        .workspaces
+        .with_pick_candidates(|c| c.to_vec());
     for (pid, sig) in &retained.signals.pane_hint {
         let next = pick_keycap(*pid, active, Some(&candidates));
         if sig.get_untracked() != next {
@@ -2048,7 +2154,10 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     }
     // Project the active "move to workspace" pick candidates onto each workspace's
     // KeyHint keycap (letter → `ws_idx`). Same mechanism as the pane hints above.
-    let ws_candidates = state.chrome_state.workspaces.with_ws_pick_candidates(|c| c.to_vec());
+    let ws_candidates = state
+        .chrome_state
+        .workspaces
+        .with_ws_pick_candidates(|c| c.to_vec());
     for (ws_idx, sig) in &retained.signals.ws_hint {
         let next = ws_candidates
             .iter()
@@ -2061,7 +2170,10 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     }
     // Project the active "move pane to column" candidates onto every column's KeyHint
     // (letter → `(ws_idx, col_idx)`), across all workspaces.
-    let col_candidates = state.chrome_state.workspaces.with_col_pick_candidates(|c| c.to_vec());
+    let col_candidates = state
+        .chrome_state
+        .workspaces
+        .with_col_pick_candidates(|c| c.to_vec());
     for (ws_idx, col_idx, sig) in &retained.signals.col_hint {
         let next = col_candidates
             .iter()
@@ -2097,9 +2209,18 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             (sigs.title_active_visible, pane_active),
             (sigs.title_inactive_visible, !pane_active),
             (sigs.status_idle_visible, next.status == ProcessStatus::Idle),
-            (sigs.status_running_visible, next.status == ProcessStatus::Running),
-            (sigs.status_success_visible, next.status == ProcessStatus::Success),
-            (sigs.status_error_visible, next.status == ProcessStatus::Error),
+            (
+                sigs.status_running_visible,
+                next.status == ProcessStatus::Running,
+            ),
+            (
+                sigs.status_success_visible,
+                next.status == ProcessStatus::Success,
+            ),
+            (
+                sigs.status_error_visible,
+                next.status == ProcessStatus::Error,
+            ),
         ] {
             if signal.get_untracked() != visible {
                 signal.set(visible);
@@ -2123,7 +2244,11 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         }
         for (visible_signal, label_signal, value) in [
             (sigs.git_added_visible, sigs.git_added, next.git_added),
-            (sigs.git_modified_visible, sigs.git_modified, next.git_modified),
+            (
+                sigs.git_modified_visible,
+                sigs.git_modified,
+                next.git_modified,
+            ),
             (sigs.git_deleted_visible, sigs.git_deleted, next.git_deleted),
         ] {
             let visible = value.is_some();
@@ -2224,10 +2349,7 @@ pub(crate) fn build_chrome_root(
 /// Feed a pointer-press into the retained chrome tree so widget callbacks can route
 /// sidebar intents through the app event loop. The tree is discarded afterwards so
 /// incidental local widget state cannot drift away from the canonical store.
-pub(crate) fn chrome_dispatch_press(
-    state: &mut crate::app_state::AppState,
-    pos: (f32, f32),
-) {
+pub(crate) fn chrome_dispatch_press(state: &mut crate::app_state::AppState, pos: (f32, f32)) {
     if let Some(tree) = state.chrome_tree.as_mut() {
         tree.root.event(&Event::PointerPressed {
             pos: Point::new(pos.0 as f64, pos.1 as f64),
@@ -2283,10 +2405,16 @@ pub(crate) enum DragSourceKind {
 fn target_accepted_by(source: DragSourceKind, item: &ChromeDragItem) -> bool {
     match source {
         DragSourceKind::Pane => {
-            matches!(item, ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. })
+            matches!(
+                item,
+                ChromeDragItem::Pane(_) | ChromeDragItem::Workspace { .. }
+            )
         }
         DragSourceKind::Column => {
-            matches!(item, ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. })
+            matches!(
+                item,
+                ChromeDragItem::Column { .. } | ChromeDragItem::Workspace { .. }
+            )
         }
     }
 }
@@ -2300,7 +2428,11 @@ fn resolve_sidebar_drop(
     source: DragSourceKind,
 ) -> Option<(ChromeDragItem, heca_grid_ui::drag::DropHit)> {
     let tree = state.chrome_tree.as_ref()?;
-    let accept = |id| tree.drag_items.get(id).is_some_and(|it| target_accepted_by(source, it));
+    let accept = |id| {
+        tree.drag_items
+            .get(id)
+            .is_some_and(|it| target_accepted_by(source, it))
+    };
     let hit = heca_grid_ui::drag::resolve_at_filtered(
         &tree.root,
         Point::new(pos.0 as f64, pos.1 as f64),
@@ -2335,7 +2467,11 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     chrome.right_sidebar_width.to_bits().hash(&mut hsh);
     chrome.sidebar_gap.to_bits().hash(&mut hsh);
     state.theme.name.hash(&mut hsh);
-    for c in [state.theme.accent, state.theme.foreground, state.theme.border] {
+    for c in [
+        state.theme.accent,
+        state.theme.foreground,
+        state.theme.border,
+    ] {
         (c.r, c.g, c.b, c.a).hash(&mut hsh);
     }
     state.theme.border_radius.to_bits().hash(&mut hsh);
@@ -2399,8 +2535,14 @@ mod tests {
         // No pick active → no keycap.
         assert_eq!(pick_keycap(p1, Some(p3), None), None);
         // Candidate pane → its letter.
-        assert_eq!(pick_keycap(p1, Some(p3), Some(&cands)), Some("a".to_string()));
-        assert_eq!(pick_keycap(p2, Some(p3), Some(&cands)), Some("s".to_string()));
+        assert_eq!(
+            pick_keycap(p1, Some(p3), Some(&cands)),
+            Some("a".to_string())
+        );
+        assert_eq!(
+            pick_keycap(p2, Some(p3), Some(&cands)),
+            Some("s".to_string())
+        );
         // Non-candidate pane → none.
         assert_eq!(pick_keycap(p3, Some(p1), Some(&cands)), None);
         // The focused pane is never a target, even if listed as a candidate.
@@ -2523,8 +2665,14 @@ mod tests {
             right_sidebar_background_color(&latte),
             app_color_to_gui(latte.effective_right_sidebar_background())
         );
-        assert_eq!(chrome_surface_color(&latte), app_color_to_gui(latte.surface));
-        assert_ne!(left_sidebar_background_color(&latte), chrome_surface_color(&latte));
+        assert_eq!(
+            chrome_surface_color(&latte),
+            app_color_to_gui(latte.surface)
+        );
+        assert_ne!(
+            left_sidebar_background_color(&latte),
+            chrome_surface_color(&latte)
+        );
     }
 
     #[test]
@@ -2540,7 +2688,8 @@ mod tests {
             sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance)
         );
         assert_eq!(
-            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance).r,
+            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance)
+                .r,
             theme.effective_left_sidebar_background().r
         );
     }
@@ -2599,7 +2748,9 @@ mod tests {
         let theme = GuiTheme::grid_tron();
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
-        chrome.workspaces.set_active_pane(Some(heca_core::layout::PaneId(1)));
+        chrome
+            .workspaces
+            .set_active_pane(Some(heca_core::layout::PaneId(1)));
         // The shell wraps a bracketed Pane that holds [header, WorkspacesContainer];
         // the container hosts a dock per workspace (so the tree's text is visible).
         let shell = super::build_sidebar_shell(
@@ -2708,14 +2859,15 @@ mod tests {
                 true,
                 ColumnWidth::Proportion(0.5),
             );
-            ws.floating_panes.push(heca_core::layout::workspace::FloatingPane {
-                pane: heca_core::layout::Pane::new(PaneId(20), "git"),
-                position: Point::new(50.0, 50.0),
-                size: Size::new(400.0, 300.0),
-                is_active: true,
-                original_column_idx: None,
-                original_pane_idx: None,
-            });
+            ws.floating_panes
+                .push(heca_core::layout::workspace::FloatingPane {
+                    pane: heca_core::layout::Pane::new(PaneId(20), "git"),
+                    position: Point::new(50.0, 50.0),
+                    size: Size::new(400.0, 300.0),
+                    is_active: true,
+                    original_column_idx: None,
+                    original_pane_idx: None,
+                });
             ws.find_pane_mut(PaneId(10)).expect("tiled pane").runtime = PaneRuntime {
                 program: Some("nvim".into()),
                 status: ProcessStatus::Running,
@@ -2744,9 +2896,9 @@ mod tests {
 
         sync_pane_runtime_state(&session, &chrome.workspaces);
 
-        let tiled = chrome
-            .workspaces
-            .with_pane_runtime(PaneId(10), |runtime| runtime.expect("tiled runtime").snapshot());
+        let tiled = chrome.workspaces.with_pane_runtime(PaneId(10), |runtime| {
+            runtime.expect("tiled runtime").snapshot()
+        });
         let floating = chrome.workspaces.with_pane_runtime(PaneId(20), |runtime| {
             runtime.expect("floating runtime").snapshot()
         });
@@ -2890,7 +3042,13 @@ mod tests {
 
         let (g, a, _, focus) = super::pane_action_spec(PaneAction::Split, pid, 2, 3);
         assert_eq!(g, Glyph::SquareSplitVertical);
-        assert_eq!(a, WmAction::AddPaneToColumn { ws_idx: 2, col_idx: 3 });
+        assert_eq!(
+            a,
+            WmAction::AddPaneToColumn {
+                ws_idx: 2,
+                col_idx: 3
+            }
+        );
         assert!(!focus);
 
         // Active-targeted actions use the requested icons + need focus-first.
@@ -2914,8 +3072,12 @@ mod tests {
         assert!(super::pane_action_visible_when_floating(PaneAction::Close));
         assert!(!super::pane_action_visible_when_floating(PaneAction::Split));
         assert!(!super::pane_action_visible_when_floating(PaneAction::Zoom));
-        assert!(!super::pane_action_visible_when_floating(PaneAction::MoveLeft));
-        assert!(!super::pane_action_visible_when_floating(PaneAction::MoveRight));
+        assert!(!super::pane_action_visible_when_floating(
+            PaneAction::MoveLeft
+        ));
+        assert!(!super::pane_action_visible_when_floating(
+            PaneAction::MoveRight
+        ));
     }
 
     #[test]
@@ -2934,7 +3096,7 @@ mod tests {
             ..PaneRuntime::default()
         };
         let hints = PaneActionHints::default();
-        #[allow(clippy::too_many_arguments)]
+        #[expect(clippy::too_many_arguments, reason = "test helper keeps pane-header inputs explicit for focused assertions")]
         fn content<'a>(
             programs: &'a ProgramsConfig,
             segments: &'a [heca_config::appearance::PaneSegment],
@@ -2957,32 +3119,59 @@ mod tests {
                 hints,
             }
         }
-        let base = pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 300.0);
+        let base = pane_header_key(
+            &content(&programs, &segments, &actions, &runtime, &hints, 0),
+            15.0,
+            300.0,
+        );
         // Same inputs ⇒ same key (no needless rebuild).
         assert_eq!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 300.0)
+            pane_header_key(
+                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                15.0,
+                300.0
+            )
         );
         // A different column ⇒ different key (re-bakes the split action's col_idx).
         assert_ne!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 1), 15.0, 300.0)
+            pane_header_key(
+                &content(&programs, &segments, &actions, &runtime, &hints, 1),
+                15.0,
+                300.0
+            )
         );
         // A different branch ⇒ different key (rebuild).
         let mut other = runtime.clone();
-        other.git = Some(GitInfo { branch: Some("dev".into()), ..GitInfo::default() });
+        other.git = Some(GitInfo {
+            branch: Some("dev".into()),
+            ..GitInfo::default()
+        });
         assert_ne!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &other, &hints, 0), 15.0, 300.0)
+            pane_header_key(
+                &content(&programs, &segments, &actions, &other, &hints, 0),
+                15.0,
+                300.0
+            )
         );
         // A large width change ⇒ different key (re-truncate); tiny jitter ⇒ same bucket.
         assert_ne!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 120.0)
+            pane_header_key(
+                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                15.0,
+                120.0
+            )
         );
         assert_eq!(
             base,
-            pane_header_key(&content(&programs, &segments, &actions, &runtime, &hints, 0), 15.0, 295.0)
+            pane_header_key(
+                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                15.0,
+                295.0
+            )
         );
     }
 

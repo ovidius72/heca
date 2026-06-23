@@ -161,7 +161,10 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
 pub(crate) fn update_hover(state: &mut AppState) {
     let (sx, sw, sidebar_top, sidebar_bottom) = sidebar_bounds(state);
     let pos = state.mouse.pos;
-    let left = state.mouse.drag_ctx.surface_mut(DragSurfaceId::LeftSidebar)
+    let left = state
+        .mouse
+        .drag_ctx
+        .surface_mut(DragSurfaceId::LeftSidebar)
         .expect("LeftSidebar pre-populated in DragContext::default");
     if pos.0 >= sx && pos.0 <= sx + sw && pos.1 >= sidebar_top && pos.1 <= sidebar_bottom {
         let sidebar_h = sidebar_bottom - sidebar_top;
@@ -195,7 +198,12 @@ pub(crate) fn update_hover(state: &mut AppState) {
 
 /// Check if the left sidebar can accept a drop of the given source pane
 /// onto the target item (by flat index).
-pub(crate) fn can_accept(state: &AppState, _source_pane_id: PaneId, target_fi: usize, _swap: bool) -> bool {
+pub(crate) fn can_accept(
+    state: &AppState,
+    _source_pane_id: PaneId,
+    target_fi: usize,
+    _swap: bool,
+) -> bool {
     // Floating panes cannot be drop targets (they float over the content area).
     !matches!(
         state.sidebar_tree.flat_items.get(target_fi),
@@ -219,19 +227,20 @@ pub(crate) fn accept_drop(
     // so only pane targets count; dropping a pane onto a column/workspace falls through
     // to "re-add to the active workspace" (pane→column placement is a later enhancement).
     //
-    let target = crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
-        .and_then(|(item, side)| match item {
-            crate::chrome::ChromeDragItem::Pane(pid) => {
-                Some((crate::sidebar::SidebarItem::Pane { pane_id: pid }, side))
-            }
-            // Dropping a pane on a workspace's header/empty area moves it INTO that
-            // workspace — the only way to reach an *empty* workspace (which has no pane
-            // card to aim at). Columns can't be empty, so they need no pane-drop target.
-            crate::chrome::ChromeDragItem::Workspace { ws } => {
-                Some((crate::sidebar::SidebarItem::Workspace { ws_idx: ws }, side))
-            }
-            crate::chrome::ChromeDragItem::Column { .. } => None,
-        });
+    let target =
+        crate::chrome::sidebar_drop_target(state, pos, crate::chrome::DragSourceKind::Pane)
+            .and_then(|(item, side)| match item {
+                crate::chrome::ChromeDragItem::Pane(pid) => {
+                    Some((crate::sidebar::SidebarItem::Pane { pane_id: pid }, side))
+                }
+                // Dropping a pane on a workspace's header/empty area moves it INTO that
+                // workspace — the only way to reach an *empty* workspace (which has no pane
+                // card to aim at). Columns can't be empty, so they need no pane-drop target.
+                crate::chrome::ChromeDragItem::Workspace { ws } => {
+                    Some((crate::sidebar::SidebarItem::Workspace { ws_idx: ws }, side))
+                }
+                crate::chrome::ChromeDragItem::Column { .. } => None,
+            });
 
     // Now clear all drag state.
     state.mouse.drag_ctx.cancel_all();
@@ -240,13 +249,21 @@ pub(crate) fn accept_drop(
     // Swap applies only to a pane-on-pane drop; a workspace target falls through to a
     // plain move into that workspace.
     if swap
-        && let Some((crate::sidebar::SidebarItem::Pane { pane_id: target_pid }, _side)) = &target
+        && let Some((
+            crate::sidebar::SidebarItem::Pane {
+                pane_id: target_pid,
+            },
+            _side,
+        )) = &target
     {
         let target_pid = *target_pid;
         if target_pid != pane_id {
             crate::handlers::handle_swap_param(
                 state,
-                &WmAction::Swap { a_id: pane_id, b_id: target_pid },
+                &WmAction::Swap {
+                    a_id: pane_id,
+                    b_id: target_pid,
+                },
             );
             crate::app::mutations::after_layout_change(state);
         }
@@ -272,14 +289,19 @@ pub(crate) fn accept_drop(
 
     match target {
         // Dropped onto a pane card → place relative to it.
-        Some((crate::sidebar::SidebarItem::Pane { pane_id: target_pid }, side))
-            if target_pid != pane_id =>
-        {
+        Some((
+            crate::sidebar::SidebarItem::Pane {
+                pane_id: target_pid,
+            },
+            side,
+        )) if target_pid != pane_id => {
             place_pane_at_sidebar_target(
                 state,
                 original_ws,
                 removed_pane,
-                crate::sidebar::SidebarItem::Pane { pane_id: target_pid },
+                crate::sidebar::SidebarItem::Pane {
+                    pane_id: target_pid,
+                },
                 side,
             );
         }
@@ -299,10 +321,7 @@ pub(crate) fn accept_drop(
         && let Some((ci, pi)) = crate::app::pane_ops::find_pane_indices_in_workspace(ws, pane_id)
     {
         let new_rects = ws.scrolling.panes_with_positions();
-        if let Some((_, new_rect)) = new_rects
-            .into_iter()
-            .find(|(pid, _)| *pid == pane_id)
-        {
+        if let Some((_, new_rect)) = new_rects.into_iter().find(|(pid, _)| *pid == pane_id) {
             let dx = old_rect.loc.x - new_rect.loc.x;
             let dy = old_rect.loc.y - new_rect.loc.y;
             ws.scrolling.columns[ci].panes[pi].animate_move_from(
@@ -332,13 +351,18 @@ fn place_pane_at_sidebar_target(
         .unwrap_or(ColumnWidth::Proportion(0.85));
 
     match item {
-        crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
-            if let Some((t_ws, t_col, t_pi)) =
-                crate::find_pane_location(&state.session, target_pid)
+        crate::sidebar::SidebarItem::Pane {
+            pane_id: target_pid,
+        } => {
+            if let Some((t_ws, t_col, t_pi)) = crate::find_pane_location(&state.session, target_pid)
             {
                 let new_col_id = ColumnId(state.session.next_id());
                 // Before → insert above the target; Onto/After → below it.
-                let pane_idx = if side == DropSide::Before { t_pi } else { t_pi + 1 };
+                let pane_idx = if side == DropSide::Before {
+                    t_pi
+                } else {
+                    t_pi + 1
+                };
                 let position = heca_core::layout::types::PaneInsertTarget::InColumn {
                     col_idx: t_col,
                     pane_idx,
@@ -397,7 +421,10 @@ fn place_pane_at_sidebar_target(
             let new_col_id = ColumnId(state.session.next_id());
             if let Some(ws) = state.session.workspaces.get_mut(original_ws) {
                 let active_col = ws.scrolling.active_column_idx;
-                let pane_idx = ws.scrolling.columns.get(active_col)
+                let pane_idx = ws
+                    .scrolling
+                    .columns
+                    .get(active_col)
                     .map(|c| c.panes.len())
                     .unwrap_or(0);
                 let _ = insert_pane_at_position(
@@ -461,7 +488,9 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
     let shift_held = state.modifiers.shift_key();
 
     match item {
-        crate::sidebar::SidebarItem::Pane { pane_id: target_pid } if shift_held => {
+        crate::sidebar::SidebarItem::Pane {
+            pane_id: target_pid,
+        } if shift_held => {
             // Swap: delegate to shared swap handler.
             // The source pane is still in the layout (interactive move keeps it there).
             crate::handlers::handle_swap_param(
@@ -484,7 +513,9 @@ pub(crate) fn handle_interactive_move_drop(state: &mut AppState, pos: (f32, f32)
             };
 
             match item {
-                crate::sidebar::SidebarItem::Pane { pane_id: target_pid } => {
+                crate::sidebar::SidebarItem::Pane {
+                    pane_id: target_pid,
+                } => {
                     // Move: insert source pane after the target pane.
                     if let Some((ws_idx, col_idx, pane_idx)) =
                         crate::find_pane_location(&state.session, target_pid)

@@ -95,7 +95,11 @@ impl Workspace {
             float.is_active = is_target;
             found |= is_target;
         }
-        self.focus_domain = if found { FocusDomain::Floating } else { FocusDomain::Tiled };
+        self.focus_domain = if found {
+            FocusDomain::Floating
+        } else {
+            FocusDomain::Tiled
+        };
         found
     }
 
@@ -304,7 +308,10 @@ mod tests {
     #[test]
     fn has_panes_true_when_tiled_panes_exist() {
         let ws = workspace_with_pane(1);
-        assert!(ws.has_panes(), "workspace with tiled pane should have_panes()");
+        assert!(
+            ws.has_panes(),
+            "workspace with tiled pane should have_panes()"
+        );
     }
 
     #[test]
@@ -323,7 +330,10 @@ mod tests {
             original_column_idx: None,
             original_pane_idx: None,
         });
-        assert!(ws.has_panes(), "workspace with only floating pane should have_panes()");
+        assert!(
+            ws.has_panes(),
+            "workspace with only floating pane should have_panes()"
+        );
     }
 
     #[test]
@@ -352,10 +362,17 @@ mod tests {
         ws.floating_panes.remove(idx);
 
         // Domain should switch to Tiled when no floating panes remain
-        assert!(ws.floating_panes.is_empty(), "floating panes should be empty after removal");
+        assert!(
+            ws.floating_panes.is_empty(),
+            "floating panes should be empty after removal"
+        );
         ws.deactivate_floating_panes();
         ws.focus_domain = FocusDomain::Tiled;
-        assert_eq!(ws.focus_domain, FocusDomain::Tiled, "domain should be Tiled after deactivating floats");
+        assert_eq!(
+            ws.focus_domain,
+            FocusDomain::Tiled,
+            "domain should be Tiled after deactivating floats"
+        );
         // Tiled panes still exist
         assert!(ws.has_panes(), "workspace should still have tiled panes");
     }
@@ -382,13 +399,20 @@ mod tests {
         ws.floating_panes.remove(idx);
 
         // Domain should stay Floating since other floats exist
-        assert!(!ws.floating_panes.is_empty(), "should still have floating panes after removing one");
+        assert!(
+            !ws.floating_panes.is_empty(),
+            "should still have floating panes after removing one"
+        );
         // Only switch domain when floating_panes is empty
         if ws.floating_panes.is_empty() {
             ws.deactivate_floating_panes();
             ws.focus_domain = FocusDomain::Tiled;
         }
-        assert_eq!(ws.focus_domain, FocusDomain::Floating, "domain should stay Floating with remaining floats");
+        assert_eq!(
+            ws.focus_domain,
+            FocusDomain::Floating,
+            "domain should stay Floating with remaining floats"
+        );
     }
 
     #[test]
@@ -438,7 +462,10 @@ mod tests {
         ws.deactivate_floating_panes();
 
         // All floating panes should have is_active = false
-        assert!(ws.floating_panes.iter().all(|f| !f.is_active), "all floating panes should be deactivated");
+        assert!(
+            ws.floating_panes.iter().all(|f| !f.is_active),
+            "all floating panes should be deactivated"
+        );
     }
 
     #[test]
@@ -454,16 +481,25 @@ mod tests {
         ws.floating_panes.remove(idx);
 
         // Workspace still has tiled pane
-        assert!(ws.has_panes(), "workspace should still have panes after removing float");
+        assert!(
+            ws.has_panes(),
+            "workspace should still have panes after removing float"
+        );
 
         // Now remove the only tiled pane (also removes the column)
         let removed = ws.scrolling.remove_pane(0, 0);
         assert!(removed.is_some(), "should remove the tiled pane");
 
         // Workspace should be completely empty
-        assert!(!ws.has_panes(), "workspace should be empty after removing all panes");
+        assert!(
+            !ws.has_panes(),
+            "workspace should be empty after removing all panes"
+        );
         assert!(ws.scrolling.is_empty(), "scrolling should be empty");
-        assert!(ws.floating_panes.is_empty(), "floating panes should be empty");
+        assert!(
+            ws.floating_panes.is_empty(),
+            "floating panes should be empty"
+        );
     }
 
     // ── Floating pane resize-follows-window ──
@@ -487,15 +523,31 @@ mod tests {
 
         let f = &ws.floating_panes[0];
         // Size doubles (coverage preserved at 95%).
-        assert!((f.size.w - fw * 2.0).abs() < 0.01, "width should scale 2x: got {}", f.size.w);
-        assert!((f.size.h - fh * 2.0).abs() < 0.01, "height should scale 2x: got {}", f.size.h);
+        assert!(
+            (f.size.w - fw * 2.0).abs() < 0.01,
+            "width should scale 2x: got {}",
+            f.size.w
+        );
+        assert!(
+            (f.size.h - fh * 2.0).abs() < 0.01,
+            "height should scale 2x: got {}",
+            f.size.h
+        );
         // Position stays centered (relative position preserved).
         let new_w = new_wa.size.w;
         let new_h = new_wa.size.h;
         let expected_x = new_wa.loc.x + (new_w - f.size.w) / 2.0;
         let expected_y = new_wa.loc.y + (new_h - f.size.h) / 2.0;
-        assert!((f.position.x - expected_x).abs() < 0.01, "x should stay centered: got {}", f.position.x);
-        assert!((f.position.y - expected_y).abs() < 0.01, "y should stay centered: got {}", f.position.y);
+        assert!(
+            (f.position.x - expected_x).abs() < 0.01,
+            "x should stay centered: got {}",
+            f.position.x
+        );
+        assert!(
+            (f.position.y - expected_y).abs() < 0.01,
+            "y should stay centered: got {}",
+            f.position.y
+        );
     }
 
     #[test]
@@ -505,7 +557,13 @@ mod tests {
         let before_size = ws.floating_panes[0].size;
         // Same size → no rescale (guards against drift from repeated no-op updates).
         ws.update_working_area(ws.scrolling.working_area);
-        assert_eq!(ws.floating_panes[0].position, before, "position must not drift on no-op");
-        assert_eq!(ws.floating_panes[0].size, before_size, "size must not drift on no-op");
+        assert_eq!(
+            ws.floating_panes[0].position, before,
+            "position must not drift on no-op"
+        );
+        assert_eq!(
+            ws.floating_panes[0].size, before_size,
+            "size must not drift on no-op"
+        );
     }
 }

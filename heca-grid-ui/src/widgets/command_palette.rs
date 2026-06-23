@@ -19,11 +19,11 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::scene::{Glow, TextAlign};
 use crate::widgets::{Glyph, Input};
-use std::cell::{Cell, RefCell};
 use heca_core::layout::{Point, Rectangle, Size};
+use std::cell::{Cell, RefCell};
 
 /// One command in a [`CommandPalette`].
 pub struct Command {
@@ -36,7 +36,12 @@ pub struct Command {
 impl Command {
     /// A command with `label` that runs `on_run` when selected.
     pub fn new(label: impl Into<String>, on_run: impl Fn() + 'static) -> Self {
-        Self { label: label.into(), icon: None, key: None, on_run: Box::new(on_run) }
+        Self {
+            label: label.into(),
+            icon: None,
+            key: None,
+            on_run: Box::new(on_run),
+        }
     }
 
     /// An optional leading icon.
@@ -86,7 +91,13 @@ fn fuzzy(query: &str, text: &str, case_sensitive: bool) -> Option<(i32, Vec<usiz
         return Some((0, Vec::new()));
     }
     let t: Vec<char> = text.chars().collect();
-    let norm = |c: char| if case_sensitive { c } else { c.to_ascii_lowercase() };
+    let norm = |c: char| {
+        if case_sensitive {
+            c
+        } else {
+            c.to_ascii_lowercase()
+        }
+    };
     let mut qi = 0;
     let mut hits = Vec::with_capacity(q.len());
     let mut score = 0i32;
@@ -190,7 +201,11 @@ impl CommandPalette {
             .iter()
             .enumerate()
             .filter_map(|(i, c)| {
-                fuzzy(&query, &c.label, case_sensitive).map(|(score, hits)| Match { cmd: i, score, hits })
+                fuzzy(&query, &c.label, case_sensitive).map(|(score, hits)| Match {
+                    cmd: i,
+                    score,
+                    hits,
+                })
             })
             .collect();
         // Stable sort by score desc (filter_map preserved original order for ties).
@@ -261,21 +276,42 @@ impl CommandPalette {
         let query_h = line + 2.0 * QUERY_PAD_Y;
         let row_h = line + 2.0 * ROW_PAD_Y;
         let visible = self.visible_rows(n_results.max(1));
-        let list_h = if n_results == 0 { row_h } else { visible as f64 * row_h };
+        let list_h = if n_results == 0 {
+            row_h
+        } else {
+            visible as f64 * row_h
+        };
 
-        let cap = if vp.w.is_finite() { (vp.w * PANEL_W_FRAC).clamp(PANEL_MIN_W, PANEL_MAX_W) } else { PANEL_MAX_W };
+        let cap = if vp.w.is_finite() {
+            (vp.w * PANEL_W_FRAC).clamp(PANEL_MIN_W, PANEL_MAX_W)
+        } else {
+            PANEL_MAX_W
+        };
         let panel_w = cap;
         let panel_h = PAD + query_h + PAD + list_h + PAD;
-        let (vw, vh) = if vp.w.is_finite() { (vp.w, vp.h) } else { (panel_w, panel_h) };
+        let (vw, vh) = if vp.w.is_finite() {
+            (vp.w, vp.h)
+        } else {
+            (panel_w, panel_h)
+        };
         let px = (vw - panel_w) / 2.0;
         let py = vh * TOP_FRAC;
         let panel = Rectangle::new(Point::new(px, py), Size::new(panel_w, panel_h));
-        let query = Rectangle::new(Point::new(px + PAD, py + PAD), Size::new(panel_w - 2.0 * PAD, query_h));
+        let query = Rectangle::new(
+            Point::new(px + PAD, py + PAD),
+            Size::new(panel_w - 2.0 * PAD, query_h),
+        );
         let list_top = query.loc.y + query_h + PAD;
         (panel, query, list_top, row_h, visible)
     }
 
-    fn row_rect(&self, panel: Rectangle, list_top: f64, row_h: f64, visible_idx: usize) -> Rectangle {
+    fn row_rect(
+        &self,
+        panel: Rectangle,
+        list_top: f64,
+        row_h: f64,
+        visible_idx: usize,
+    ) -> Rectangle {
         Rectangle::new(
             Point::new(panel.loc.x + PAD, list_top + visible_idx as f64 * row_h),
             Size::new(panel.size.w - 2.0 * PAD, row_h),
@@ -312,7 +348,16 @@ impl Component for CommandPalette {
         self.viewport.set(cx.viewport());
         let (background, surface, accent, glow_c, foreground, muted, ctrl_radius, radius) = {
             let t = cx.theme();
-            (t.background, t.surface, t.accent, t.glow, t.foreground, t.muted, t.control_radius(), t.radius)
+            (
+                t.background,
+                t.surface,
+                t.accent,
+                t.glow,
+                t.foreground,
+                t.muted,
+                t.control_radius(),
+                t.radius,
+            )
         };
         let font = self.base.font;
         let adv = (font * MONO_ADVANCE_RATIO) as f64;
@@ -324,7 +369,11 @@ impl Component for CommandPalette {
         cx.with_overlay(|cx| {
             // Scrim + panel.
             let vp = self.viewport.get();
-            let scrim = if vp.w.is_finite() { Rectangle::new(Point::new(0.0, 0.0), vp) } else { panel };
+            let scrim = if vp.w.is_finite() {
+                Rectangle::new(Point::new(0.0, 0.0), vp)
+            } else {
+                panel
+            };
             cx.rect(scrim, background.with_alpha(140), None, 0.0, None);
             let panel_border = cx.border(accent.with_alpha(200));
             cx.rect(
@@ -332,7 +381,11 @@ impl Component for CommandPalette {
                 surface,
                 panel_border,
                 radius,
-                Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
+                Some(Glow {
+                    color: glow_c,
+                    radius: 12.0,
+                    intensity: 0.3,
+                }),
             );
 
             // Query line: a real Input, positioned + focused + painted manually
@@ -350,7 +403,14 @@ impl Component for CommandPalette {
                     Point::new(query.loc.x + ROW_PAD_X, query.loc.y),
                     Size::new(query.size.w - 2.0 * ROW_PAD_X, query.size.h),
                 );
-                cx.text(q_text, &self.placeholder, muted, font, TextAlign::Start, false);
+                cx.text(
+                    q_text,
+                    &self.placeholder,
+                    muted,
+                    font,
+                    TextAlign::Start,
+                    false,
+                );
             }
 
             // Result rows (the visible scroll window).
@@ -365,7 +425,10 @@ impl Component for CommandPalette {
                     cx.rect(row, accent.with_alpha(30), row_border, ctrl_radius, None);
                     // Left accent bar.
                     cx.rect(
-                        Rectangle::new(Point::new(row.loc.x, row.loc.y + row.size.h * 0.2), Size::new(2.5, row.size.h * 0.6)),
+                        Rectangle::new(
+                            Point::new(row.loc.x, row.loc.y + row.size.h * 0.2),
+                            Size::new(2.5, row.size.h * 0.6),
+                        ),
                         accent,
                         None,
                         1.0,
@@ -377,18 +440,43 @@ impl Component for CommandPalette {
                 if let Some(g) = cmd.icon {
                     if let Some(ch) = g.primary_char() {
                         let isz = font * 1.05;
-                        let irect = Rectangle::new(Point::new(text_x, row.loc.y), Size::new(isz as f64, row.size.h));
-                        cx.icon(irect, &ch.to_string(), if is_sel { accent } else { muted }, isz);
+                        let irect = Rectangle::new(
+                            Point::new(text_x, row.loc.y),
+                            Size::new(isz as f64, row.size.h),
+                        );
+                        cx.icon(
+                            irect,
+                            &ch.to_string(),
+                            if is_sel { accent } else { muted },
+                            isz,
+                        );
                     }
                     text_x += font as f64 * 1.05 + ICON_GAP;
                 }
                 // Label, then over-draw matched chars in accent.
-                let lbl_rect = Rectangle::new(Point::new(text_x, row.loc.y), Size::new(row.size.w, row.size.h));
-                cx.text(lbl_rect, &cmd.label, if is_sel { foreground } else { muted.lerp(foreground, 0.7) }, font, TextAlign::Start, false);
+                let lbl_rect = Rectangle::new(
+                    Point::new(text_x, row.loc.y),
+                    Size::new(row.size.w, row.size.h),
+                );
+                cx.text(
+                    lbl_rect,
+                    &cmd.label,
+                    if is_sel {
+                        foreground
+                    } else {
+                        muted.lerp(foreground, 0.7)
+                    },
+                    font,
+                    TextAlign::Start,
+                    false,
+                );
                 for &hi in &m.hits {
                     if let Some(ch) = cmd.label.chars().nth(hi) {
                         let hx = text_x + hi as f64 * adv;
-                        let hrect = Rectangle::new(Point::new(hx, row.loc.y), Size::new(adv + 2.0, row.size.h));
+                        let hrect = Rectangle::new(
+                            Point::new(hx, row.loc.y),
+                            Size::new(adv + 2.0, row.size.h),
+                        );
                         cx.text(hrect, &ch.to_string(), accent, font, TextAlign::Start, true);
                     }
                 }
@@ -541,13 +629,26 @@ mod tests {
 
     #[test]
     fn fuzzy_matches_subsequence_and_scores_consecutive_higher() {
-        assert!(fuzzy("xyz", "abc", false).is_none(), "non-subsequence misses");
-        assert!(fuzzy("ace", "abcde", false).is_some(), "scattered subsequence matches");
-        assert_eq!(fuzzy("ce", "abcde", false).unwrap().1, vec![2, 4], "reports matched indices");
+        assert!(
+            fuzzy("xyz", "abc", false).is_none(),
+            "non-subsequence misses"
+        );
+        assert!(
+            fuzzy("ace", "abcde", false).is_some(),
+            "scattered subsequence matches"
+        );
+        assert_eq!(
+            fuzzy("ce", "abcde", false).unwrap().1,
+            vec![2, 4],
+            "reports matched indices"
+        );
 
         let consecutive = fuzzy("ab", "abxx", false).unwrap().0;
         let scattered = fuzzy("ab", "axbx", false).unwrap().0;
-        assert!(consecutive > scattered, "a consecutive run outranks a scattered match");
+        assert!(
+            consecutive > scattered,
+            "a consecutive run outranks a scattered match"
+        );
 
         // Empty query trivially matches (whole list shows).
         assert!(fuzzy("", "anything", false).is_some());

@@ -25,7 +25,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component};
-use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
+use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Direction, Length};
 use crate::widgets::Orientation;
 

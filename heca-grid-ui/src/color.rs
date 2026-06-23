@@ -48,7 +48,10 @@ impl Color {
     /// Return a copy with the alpha channel set from a `0.0..=1.0` fraction (clamped).
     /// Convenience for theme alpha tokens that live as `f32`.
     pub fn with_alpha_f32(self, a: f32) -> Self {
-        Self { a: (a.clamp(0.0, 1.0) * 255.0).round() as u8, ..self }
+        Self {
+            a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
+            ..self
+        }
     }
 
     /// Linear interpolation between two colors. `t` is clamped to `0.0..=1.0`.

@@ -3,8 +3,8 @@
 //! This module owns the temporary drag visuals rendered on top of pane content.
 
 use crate::app_state::{AppState, InteractiveMovePhase};
-use heca_core::layout::types::PaneInsertTarget;
 use heca_core::layout::Rectangle;
+use heca_core::layout::types::PaneInsertTarget;
 
 use super::hit_test_pane_excluding;
 
@@ -26,7 +26,10 @@ pub(crate) fn render_detached_pane(state: &mut AppState, pane_area: Rectangle) {
         .draw_rect(px, py, pw, ph, [0.118, 0.118, 0.180, 0.7]);
 
     let pane_name = &det.pane.title;
-    let name_size = (pw.min(ph) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(crate::chrome::PANE_NAME_SIZE_MIN, crate::chrome::PANE_NAME_SIZE_MAX);
+    let name_size = (pw.min(ph) * crate::chrome::PANE_NAME_SIZE_FACTOR).clamp(
+        crate::chrome::PANE_NAME_SIZE_MIN,
+        crate::chrome::PANE_NAME_SIZE_MAX,
+    );
     let name_w = name_size * pane_name.len() as f32 * 0.6;
     let name_x = px + (pw - name_w) / 2.0;
     let name_y = py + (ph - name_size) / 2.0;
@@ -203,7 +206,11 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
     let pa_h = pane_area.size.h as f32;
     // Exclude the dragged source pane so it doesn't highlight itself.
     let exclude_id = match state.mouse.interactive_move {
-        Some(InteractiveMovePhase::Moving { swap: true, pane_id, .. }) => Some(pane_id),
+        Some(InteractiveMovePhase::Moving {
+            swap: true,
+            pane_id,
+            ..
+        }) => Some(pane_id),
         _ => None,
     };
     let target_id = match hit_test_pane_excluding(state, state.mouse.pos, exclude_id) {
@@ -236,8 +243,16 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
 
     let col_x = ws.scrolling.column_x(col_idx) - ws.scrolling.view_pos();
     let pane_y = ws.scrolling.pane_y_in_column(col_idx, pane_idx);
-    let col_w = ws.scrolling.column_widths.get(col_idx).copied().unwrap_or(0.0);
-    let pane_h = ws.scrolling.columns.get(col_idx)
+    let col_w = ws
+        .scrolling
+        .column_widths
+        .get(col_idx)
+        .copied()
+        .unwrap_or(0.0);
+    let pane_h = ws
+        .scrolling
+        .columns
+        .get(col_idx)
         .and_then(|c| c.pane_sizes.get(pane_idx))
         .map(|s| s.h)
         .unwrap_or(0.0);
@@ -257,12 +272,14 @@ fn render_swap_target_hint(state: &mut AppState, pane_area: Rectangle) {
     let rh = rh.min(ca_b - ry).max(4.0);
 
     let accent = state.theme.accent.to_f32x4();
-    state.primitive_renderer.draw_rect(
-        rx, ry, rw, rh,
-        [accent[0], accent[1], accent[2], 0.15],
-    );
+    state
+        .primitive_renderer
+        .draw_rect(rx, ry, rw, rh, [accent[0], accent[1], accent[2], 0.15]);
     state.primitive_renderer.draw_border(
-        rx, ry, rw, rh,
+        rx,
+        ry,
+        rw,
+        rh,
         [accent[0], accent[1], accent[2], 0.6],
         4.0,
     );

@@ -22,7 +22,7 @@
 
 use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::color::Color;
-use crate::component::{paint_child, Base, Component, PaintCx};
+use crate::component::{Base, Component, PaintCx, paint_child};
 use crate::reactive::SignalGet;
 use crate::style::Direction;
 

@@ -152,7 +152,10 @@ impl Default for KeysConfig {
         );
         bindings.insert(
             "focus_right".to_string(),
-            Many(vec!["prefix+l".to_string(), "prefix+ArrowRight".to_string()]),
+            Many(vec![
+                "prefix+l".to_string(),
+                "prefix+ArrowRight".to_string(),
+            ]),
         );
         bindings.insert(
             "focus_up".to_string(),
@@ -308,10 +311,7 @@ impl Default for KeysConfig {
         // `copy_selection` has a default keymap binding so the action is
         // immediately reachable from the keyboard. The handler is a Phase 10
         // placeholder; the binding exists for configurability.
-        bindings.insert(
-            "copy_selection".to_string(),
-            Single("prefix+y".to_string()),
-        );
+        bindings.insert("copy_selection".to_string(), Single("prefix+y".to_string()));
         // `paste_clipboard` has two default bindings so the action is
         // reachable regardless of platform: Super+V (macOS Cmd+V) and
         // Ctrl+Shift+V (Linux/Windows). Users can unbind or rebind in config.

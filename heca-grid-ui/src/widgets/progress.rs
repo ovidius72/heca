@@ -6,7 +6,7 @@
 use crate::builders::LayoutExt;
 use crate::component::{Base, Component, PaintCx};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Glow};
+use crate::scene::Glow;
 use crate::style::Length;
 use heca_core::layout::{Rectangle, Size};
 

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::color::Color;
+use serde::{Deserialize, Serialize};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  ModifierKey
@@ -180,8 +180,7 @@ mod tests {
 
     #[test]
     fn test_terminal_foreground_override_parses() {
-        let s: SettingsConfig =
-            toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
+        let s: SettingsConfig = toml::from_str("terminal-foreground = \"#4c4f69\"").unwrap();
         assert!(s.terminal_foreground.is_some());
     }
 }

@@ -128,9 +128,7 @@ impl FontFamilyGroup {
     /// the surface-appropriate embedded family via [`FontFamilies::ui_normal`]
     /// / [`FontFamilies::terminal_normal`] so a group with no `normal` still
     /// resolves to the correct bundled font for its surface.
-    pub fn resolve<'a>(
-        &'a self, bold: bool, italic: bool, fallback_normal: &'a str,
-    ) -> &'a str {
+    pub fn resolve<'a>(&'a self, bold: bool, italic: bool, fallback_normal: &'a str) -> &'a str {
         let normal = self.normal.as_deref().unwrap_or(fallback_normal);
         match (bold, italic) {
             (true, true) => self
@@ -305,10 +303,22 @@ mod tests {
     #[test]
     fn resolve_falls_back_to_normal() {
         let g = FontFamilyGroup::terminal_default();
-        assert_eq!(g.resolve(false, false, "Maple Mono Normal NF"), "Maple Mono Normal NF");
-        assert_eq!(g.resolve(true, false, "Maple Mono Normal NF"), "Maple Mono Normal NF");
-        assert_eq!(g.resolve(false, true, "Maple Mono Normal NF"), "Maple Mono Normal NF");
-        assert_eq!(g.resolve(true, true, "Maple Mono Normal NF"), "Maple Mono Normal NF");
+        assert_eq!(
+            g.resolve(false, false, "Maple Mono Normal NF"),
+            "Maple Mono Normal NF"
+        );
+        assert_eq!(
+            g.resolve(true, false, "Maple Mono Normal NF"),
+            "Maple Mono Normal NF"
+        );
+        assert_eq!(
+            g.resolve(false, true, "Maple Mono Normal NF"),
+            "Maple Mono Normal NF"
+        );
+        assert_eq!(
+            g.resolve(true, true, "Maple Mono Normal NF"),
+            "Maple Mono Normal NF"
+        );
         assert!(!g.has_distinct_italic());
     }
 
@@ -316,8 +326,16 @@ mod tests {
     fn resolve_uses_surface_fallback_when_normal_unset() {
         // `normal` omitted but the table is present: resolve must use the
         // surface-appropriate embedded fallback, NOT the other surface's font.
-        let g = FontFamilyGroup { normal: None, bold: None, italic: None, bold_italic: None };
-        assert_eq!(g.resolve(false, false, "Maple Mono Normal NF"), "Maple Mono Normal NF");
+        let g = FontFamilyGroup {
+            normal: None,
+            bold: None,
+            italic: None,
+            bold_italic: None,
+        };
+        assert_eq!(
+            g.resolve(false, false, "Maple Mono Normal NF"),
+            "Maple Mono Normal NF"
+        );
         assert_eq!(g.resolve(true, true, "Geist Mono"), "Geist Mono");
     }
 
@@ -383,7 +401,10 @@ terminal = 14.0
         let cfg: FontConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.family.ui_normal(), "Iosevka");
         assert_eq!(cfg.family.ui.bold.as_deref(), Some("Iosevka Bold"));
-        assert_eq!(cfg.family.terminal.italic.as_deref(), Some("Iosevka Term Italic"));
+        assert_eq!(
+            cfg.family.terminal.italic.as_deref(),
+            Some("Iosevka Term Italic")
+        );
         assert_eq!(cfg.size.ui, 16.0);
         assert_eq!(cfg.size.terminal, 14.0);
         cfg.validate().unwrap();
@@ -414,7 +435,10 @@ bold = "Maple Mono Bold NF"
 "#;
         let cfg: FontConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.family.terminal_normal(), "Maple Mono Normal NF");
-        assert_eq!(cfg.family.terminal.bold.as_deref(), Some("Maple Mono Bold NF"));
+        assert_eq!(
+            cfg.family.terminal.bold.as_deref(),
+            Some("Maple Mono Bold NF")
+        );
         cfg.validate().unwrap();
     }
 

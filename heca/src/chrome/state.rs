@@ -37,7 +37,7 @@ use std::path::PathBuf;
 use crate::app_state::PendingPick;
 use heca_core::layout::PaneId;
 use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
-use heca_grid_ui::reactive::{signal, Signal, SignalGet, SignalUpdate, SignalWith};
+use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
 use heca_grid_ui::widgets::RegionMode;
 
 use super::{ChromeEvent, ChromeEventBus, ChromeRegion};
@@ -104,7 +104,10 @@ pub(crate) struct RegionState {
 
 impl RegionState {
     fn new(mode: RegionMode, size: f32) -> Self {
-        Self { mode: signal(mode), size: signal(size) }
+        Self {
+            mode: signal(mode),
+            size: signal(size),
+        }
     }
 }
 
@@ -116,7 +119,9 @@ pub(crate) struct ChromeSelection {
 
 impl ChromeSelection {
     fn new() -> Self {
-        Self { active_pane: signal(None) }
+        Self {
+            active_pane: signal(None),
+        }
     }
 }
 
@@ -150,7 +155,6 @@ pub struct WorkspacesContainerState {
     pub(crate) panes: Signal<HashMap<PaneId, PaneRuntimeSignals>>,
     /// This container's **content** scroll offset (logical px) — scrolls when the
     /// container has too many items. (The shell's dock-list scroll is separate.)
-    #[allow(dead_code)]
     pub(crate) scroll: Signal<f32>,
 }
 
@@ -170,9 +174,19 @@ impl WorkspacesContainerState {
     }
 
     // ── Reads ──
-    pub fn active_pane(&self) -> Option<PaneId> { self.selection.active_pane.get() }
-    #[allow(dead_code)]
-    pub fn scroll(&self) -> f32 { self.scroll.get() }
+    pub fn active_pane(&self) -> Option<PaneId> {
+        self.selection.active_pane.get()
+    }
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
+        )
+    )]
+    pub fn scroll(&self) -> f32 {
+        self.scroll.get()
+    }
 
     /// Is workspace `ws_idx` collapsed? (Borrows — no clone.)
     pub fn is_ws_collapsed(&self, ws_idx: usize) -> bool {
@@ -183,7 +197,13 @@ impl WorkspacesContainerState {
         self.collapsed_ws.with(f)
     }
     /// Is a targeting pick active? (Borrows — no clone.)
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "pane-pick widgets do not bind this helper yet; covered by state tests today"
+        )
+    )]
     pub fn pick_active(&self) -> bool {
         self.pick_candidates.with(|c| !c.is_empty())
     }
@@ -203,10 +223,11 @@ impl WorkspacesContainerState {
     pub fn pending_pick(&self) -> Option<PendingPick> {
         self.pending_pick.get_untracked()
     }
-    // Consumed by Phase 7 pane-info widgets; exercised by tests today, hence
-    // `#[allow(dead_code)]` until a widget binds it.
-    #[allow(dead_code)]
-    pub(crate) fn with_pane_runtime<R>(&self, pane: PaneId, f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R) -> R {
+    pub(crate) fn with_pane_runtime<R>(
+        &self,
+        pane: PaneId,
+        f: impl FnOnce(Option<&PaneRuntimeSignals>) -> R,
+    ) -> R {
         self.panes.with(|panes| f(panes.get(&pane)))
     }
 
@@ -242,13 +263,20 @@ impl WorkspacesContainerState {
         self.selection.active_pane.set(pane);
         self.events.emit(ChromeEvent::PaneActiveChanged { pane });
     }
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "reserved for future widget-owned container scrolling; covered by state tests today"
+        )
+    )]
     pub fn set_scroll(&self, offset: f32) {
         if (self.scroll.get_untracked() - offset).abs() <= f32::EPSILON {
             return;
         }
         self.scroll.set(offset);
-        self.events.emit(ChromeEvent::WorkspacesScrollChanged { offset });
+        self.events
+            .emit(ChromeEvent::WorkspacesScrollChanged { offset });
     }
     pub fn set_pick_candidates(&self, candidates: Vec<(char, PaneId)>) {
         if self.pick_candidates.get_untracked() == candidates {
@@ -341,8 +369,10 @@ impl WorkspacesContainerState {
         }
         if cur.status != runtime.status {
             sigs.status.set(runtime.status.clone());
-            self.events
-                .emit(ChromeEvent::PaneStatusChanged { pane, status: runtime.status.clone() });
+            self.events.emit(ChromeEvent::PaneStatusChanged {
+                pane,
+                status: runtime.status.clone(),
+            });
             changed = true;
         }
         if cur.cwd != runtime.cwd {
@@ -366,8 +396,10 @@ impl WorkspacesContainerState {
         let next_custom = custom_name.map(|s| s.to_string());
         if cur_custom != next_custom {
             sigs.custom_name.set(next_custom.clone());
-            self.events
-                .emit(ChromeEvent::PaneCustomNameChanged { pane, name: next_custom });
+            self.events.emit(ChromeEvent::PaneCustomNameChanged {
+                pane,
+                name: next_custom,
+            });
             changed = true;
         }
         changed
@@ -375,7 +407,13 @@ impl WorkspacesContainerState {
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+        )
+    )]
     pub(crate) fn set_pane_program(&self, pane: PaneId, program: Option<String>) {
         // Decide inside the borrow; `.set()` + emit OUTSIDE it (reactive hazard fix).
         let mut sig: Option<Signal<Option<String>>> = None;
@@ -395,7 +433,13 @@ impl WorkspacesContainerState {
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+        )
+    )]
     pub(crate) fn set_pane_status(&self, pane: PaneId, status: ProcessStatus) {
         let mut sig: Option<Signal<ProcessStatus>> = None;
         self.panes.update(|panes| {
@@ -408,13 +452,20 @@ impl WorkspacesContainerState {
         });
         if let Some(sig) = sig {
             sig.set(status.clone());
-            self.events.emit(ChromeEvent::PaneStatusChanged { pane, status });
+            self.events
+                .emit(ChromeEvent::PaneStatusChanged { pane, status });
         }
     }
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+        )
+    )]
     pub(crate) fn set_pane_cwd(&self, pane: PaneId, cwd: Option<PathBuf>) {
         let mut sig: Option<Signal<Option<PathBuf>>> = None;
         self.panes.update(|panes| {
@@ -433,7 +484,10 @@ impl WorkspacesContainerState {
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+    )]
     pub(crate) fn set_pane_exit_code(&self, pane: PaneId, exit_code: Option<i32>) {
         let mut sig: Option<Signal<Option<i32>>> = None;
         self.panes.update(|panes| {
@@ -451,7 +505,13 @@ impl WorkspacesContainerState {
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+        )
+    )]
     pub(crate) fn set_pane_git(&self, pane: PaneId, git: Option<GitInfo>) {
         let mut sig: Option<Signal<Option<GitInfo>>> = None;
         self.panes.update(|panes| {
@@ -470,7 +530,10 @@ impl WorkspacesContainerState {
     // Per-field write API for Phase 2's process monitor. `set_pane_runtime` is
     // the bulk path used in prod today; these are exercised by tests and will
     // be called individually once detection lands (Phase 2+).
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "per-field process runtime writes are still test-only until monitor wiring lands"
+    )]
     pub(crate) fn set_pane_kind(&self, pane: PaneId, kind: ContentKind) {
         let mut sig: Option<Signal<ContentKind>> = None;
         self.panes.update(|panes| {
@@ -486,7 +549,8 @@ impl WorkspacesContainerState {
         }
     }
     pub(crate) fn retain_panes(&self, keep: &HashSet<PaneId>) {
-        self.panes.update(|panes| panes.retain(|pane, _| keep.contains(pane)));
+        self.panes
+            .update(|panes| panes.retain(|pane, _| keep.contains(pane)));
     }
     /// Set a workspace's collapsed state explicitly.
     pub fn set_ws_collapsed(&self, ws_idx: usize, collapsed: bool) {
@@ -501,7 +565,8 @@ impl WorkspacesContainerState {
                 s.remove(&ws_idx);
             }
         });
-        self.events.emit(ChromeEvent::WorkspaceCollapsedChanged { ws_idx, collapsed });
+        self.events
+            .emit(ChromeEvent::WorkspaceCollapsedChanged { ws_idx, collapsed });
     }
     /// Toggle a workspace's collapsed state.
     pub fn toggle_ws_collapsed(&self, ws_idx: usize) {
@@ -514,7 +579,8 @@ impl WorkspacesContainerState {
                 collapsed = true;
             }
         });
-        self.events.emit(ChromeEvent::WorkspaceCollapsedChanged { ws_idx, collapsed });
+        self.events
+            .emit(ChromeEvent::WorkspaceCollapsedChanged { ws_idx, collapsed });
     }
 }
 
@@ -535,7 +601,13 @@ impl SharedChromeState {
     /// `SidebarState` defaults during migration). Signals are created here — requires
     /// the reactive runtime, available on the UI thread at `AppState` construction.
     pub fn new(left_width: f32, left_visible: bool, right_width: f32, right_visible: bool) -> Self {
-        let mode = |visible: bool| if visible { RegionMode::Expanded } else { RegionMode::Hidden };
+        let mode = |visible: bool| {
+            if visible {
+                RegionMode::Expanded
+            } else {
+                RegionMode::Hidden
+            }
+        };
         let events = ChromeEventBus::default();
         Self {
             events: events.clone(),
@@ -545,17 +617,37 @@ impl SharedChromeState {
         }
     }
 
-    pub fn events(&self) -> ChromeEventBus { self.events.clone() }
+    pub fn events(&self) -> ChromeEventBus {
+        self.events.clone()
+    }
 
     // ── Region (shell) reads/writes — RegionMode/f32 are Copy → `.get()` is cheap ──
-    #[expect(dead_code, reason = "region mode accessors are part of the shell state API; only visibility is consumed today")]
-    pub fn left_mode(&self) -> RegionMode { self.left.mode.get() }
-    pub fn left_size(&self) -> f32 { self.left.size.get() }
-    pub fn left_visible(&self) -> bool { !matches!(self.left.mode.get(), RegionMode::Hidden) }
-    #[expect(dead_code, reason = "region mode accessors are part of the shell state API; only visibility is consumed today")]
-    pub fn right_mode(&self) -> RegionMode { self.right.mode.get() }
-    pub fn right_size(&self) -> f32 { self.right.size.get() }
-    pub fn right_visible(&self) -> bool { !matches!(self.right.mode.get(), RegionMode::Hidden) }
+    #[expect(
+        dead_code,
+        reason = "region mode accessors are part of the shell state API; only visibility is consumed today"
+    )]
+    pub fn left_mode(&self) -> RegionMode {
+        self.left.mode.get()
+    }
+    pub fn left_size(&self) -> f32 {
+        self.left.size.get()
+    }
+    pub fn left_visible(&self) -> bool {
+        !matches!(self.left.mode.get(), RegionMode::Hidden)
+    }
+    #[expect(
+        dead_code,
+        reason = "region mode accessors are part of the shell state API; only visibility is consumed today"
+    )]
+    pub fn right_mode(&self) -> RegionMode {
+        self.right.mode.get()
+    }
+    pub fn right_size(&self) -> f32 {
+        self.right.size.get()
+    }
+    pub fn right_visible(&self) -> bool {
+        !matches!(self.right.mode.get(), RegionMode::Hidden)
+    }
 
     pub fn set_left_mode(&self, mode: RegionMode) {
         if self.left.mode.get_untracked() == mode {
@@ -649,7 +741,8 @@ mod tests {
     fn pick_candidates_active_and_clear() {
         let s = state();
         assert!(!s.workspaces.pick_active());
-        s.workspaces.set_pick_candidates(vec![('a', PaneId(1)), ('b', PaneId(2))]);
+        s.workspaces
+            .set_pick_candidates(vec![('a', PaneId(1)), ('b', PaneId(2))]);
         assert!(s.workspaces.pick_active());
         assert_eq!(s.workspaces.with_pick_candidates(|c| c.len()), 2);
         s.workspaces.clear_pick_candidates();
@@ -677,9 +770,16 @@ mod tests {
         let a = state();
         let b = a.clone();
         a.workspaces.set_scroll(99.0);
-        assert_eq!(b.workspaces.scroll(), 99.0, "clone must alias the same signal store");
+        assert_eq!(
+            b.workspaces.scroll(),
+            99.0,
+            "clone must alias the same signal store"
+        );
         b.workspaces.toggle_ws_collapsed(3);
-        assert!(a.workspaces.is_ws_collapsed(3), "collapse via clone must be seen by original");
+        assert!(
+            a.workspaces.is_ws_collapsed(3),
+            "collapse via clone must be seen by original"
+        );
     }
 
     #[test]
@@ -732,13 +832,17 @@ mod tests {
             kind: ContentKind::Terminal,
         };
 
-        s.workspaces.set_pane_runtime(pane, &runtime, Some("my pane"));
+        s.workspaces
+            .set_pane_runtime(pane, &runtime, Some("my pane"));
 
         let mirrored = s
             .workspaces
             .with_pane_runtime(pane, |runtime| runtime.expect("pane runtime").snapshot());
         assert_eq!(mirrored, runtime);
-        assert_eq!(s.workspaces.pane_custom_name(pane), Some("my pane".to_string()));
+        assert_eq!(
+            s.workspaces.pane_custom_name(pane),
+            Some("my pane".to_string())
+        );
     }
 
     #[test]
@@ -755,8 +859,10 @@ mod tests {
         s.workspaces.set_pane_program(pane, Some("bash".into()));
         s.workspaces.set_pane_status(pane, ProcessStatus::Running);
         s.workspaces.set_pane_status(pane, ProcessStatus::Running);
-        s.workspaces.set_pane_cwd(pane, Some(PathBuf::from("/repo")));
-        s.workspaces.set_pane_cwd(pane, Some(PathBuf::from("/repo")));
+        s.workspaces
+            .set_pane_cwd(pane, Some(PathBuf::from("/repo")));
+        s.workspaces
+            .set_pane_cwd(pane, Some(PathBuf::from("/repo")));
         s.workspaces.set_pane_git(
             pane,
             Some(GitInfo {
