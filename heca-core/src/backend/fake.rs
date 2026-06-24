@@ -143,6 +143,10 @@ impl PaneBackend for FakeBackend {
                 shape: TerminalCursorShape::Bar,
             },
             lines,
+            viewport_offset: 0,
+            at_bottom: true,
+            scrollback_rows: self.rows,
+            viewport_top_stable_row: 0,
         };
         snapshot.debug_assert_valid();
         Some(snapshot)

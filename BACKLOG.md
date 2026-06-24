@@ -40,7 +40,7 @@
 > Real PTY terminal using `portable-pty` + `wezterm-term` + `cosmic-text` is live. Core (Phases 0–5) is shipped.
 > Remaining: advanced fidelity, test coverage, selection/clipboard, pane-shell integration.
 
-### [~] Phase: Terminal damage-preservation foundation · `terminal-00`
+### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
 
 - [x] **terminal-task-00** — Preserve terminal damage through the app path.
@@ -61,22 +61,25 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
   `heca-core/src/backend/snapshot.rs`
   Status: done on `feature/terminal-followups`; backend now derives/coalesces changed visible rows and falls back conservatively to `Full` for uncertain structural transitions.
 
-- [~] **terminal-task-00b** — Add retained terminal-content foundation.
+- [x] **terminal-task-00b** — Add retained terminal-content foundation.
   Introduce the minimum retained-content mechanism required so unchanged rows stay
   visible while only dirty rows are redrawn. Keep this scoped to terminal panes;
   do not silently broaden it into general compositor optimization in the same
   task.
   Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`,
   `heca-renderer/*` only if a terminal-specific retained surface is needed
-  Status: retained layer/cache, row-band copy logic, and renderer damage entrypoints are in place, but live retained presentation is currently guarded to clean frames only after a resize/typing regression. Finish the damaged-frame presentation path before marking done.
+  Status: done. Runtime validation (2026-06-24) confirmed all five scenarios pass —
+  resize keeps glyphs crisp, typed text appears immediately, idle scrollback stays
+  correct, panes don't bleed, and style reload repaints fully. See
+  `runtime-validation-terminal-00b.md` for the scenario list that was run.
 
-- [~] **terminal-task-00c** — Verify the prerequisite itself.
+- [x] **terminal-task-00c** — Verify the prerequisite itself.
   Add focused tests for backend row-range damage production, app-path damage
   propagation, and retained-content correctness when only dirty rows are
   redrawn.
   Files: `heca-core/src/backend/terminal.rs`, `heca-renderer/src/terminal.rs`,
-  app-side tests where feasible
-  Status: partial. Focused backend/terminal-render checks exist and current `heca` targeted tests are green, but retained-content correctness under live damaged-row presentation is not fully covered yet.
+  `heca/src/app/terminal_render.rs`
+  Status: done. Backend row-range damage (`terminal_backend_output_produces_row_damage`) is green. App-path retained-presentation coverage is now solid: the damage policy was extracted into the pure `retained_damage_to_apply(...)` seam (skip on `None`, upgrade to `Full` on resize/style change, passthrough `Rows`/`Full` otherwise) with 6 policy tests, plus `retained_terminal_texture_size` (scale/ceil/min-1) and `terminal_layer_render_key` (stability + font-size/alpha/family change detection) tests, plus the existing `terminal_damage_copy_bands` band-conversion/clamp tests. `cargo test -p heca app::terminal_render` = 23/23, `-p heca-core` 67/67, clippy 0 warnings. Runtime validation of the retained presentation itself is the only `00b` sign-off left.
 
 ### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
 Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.
@@ -87,6 +90,92 @@ Render only changed terminal rows instead of the full pane every frame. This pha
   says `Full`.
   Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/snapshot.rs`
   Related: compositor damage-region optimization (`app-task-22`)
+
+### [ ] Phase: Host terminal scrollback viewport · `terminal-01a`
+Runtime validation shows terminal output is live and resize is stable again, but the host still has no scrollback viewport model. Wheel input is only forwarded as terminal mouse events, PageUp/PageDown are only forwarded as terminal key input, and selection-mode movement clamps to the currently visible snapshot rows. At a normal shell prompt that means scrollback appears dead.
+
+- [~] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection.
+  Introduce terminal viewport/scrollback state so the host can render historical
+  rows instead of always projecting the live bottom viewport. Damage semantics:
+  viewport motion produces `TerminalDamage::Full` for now (incremental viewport
+  damage is a SEPARATE phase, `terminal-task-01` — do NOT fold it in).
+  Files: `heca-core/src/backend/terminal.rs`,
+  `heca-core/src/backend/terminal/engine.rs`,
+  `heca-core/src/backend/snapshot.rs`,
+  `heca/src/app/terminal_host.rs`,
+  `heca/src/app/render.rs`
+  Status: design LOCKED via `/grill-me` on 2026-06-24 (see
+  `handoff-terminal-01a-scrollback.md` for the full decision contract). Hybrid
+  ownership: `TerminalEngine` owns `viewport_offset` + projects via `TerminalSnapshot`
+  (adds `viewport_offset`/`at_bottom`/`scrollback_rows`); AppState mirrors into the
+  chrome store + `ChromeEvent::TerminalViewportChanged` + `host.terminal_viewport(pane_id)`.
+  Selection model moves to stable-row coords (refactor of `SelectionRegion::HostGrid`).
+  Implementation not yet started — slice 1 (backend viewport model) is the next step.
+  **Slice 1 DONE (2026-06-24):** backend viewport model landed (no UI/actions yet).
+  - `TerminalEngine` owns `viewport_offset` (0 = live bottom) + `viewport_changed` flag;
+    `scroll_viewport(delta)`/`scroll_to_top()`/`scroll_to_bottom()`/`take_viewport_changed()`;
+    `visible_lines()` projects bottom-minus-offset clamped to
+    `[0, scrollback_rows - visible_rows]`; `resize()` re-clamps after wezterm reflow.
+  - `TerminalSnapshot` gained `viewport_offset`/`at_bottom`/`scrollback_rows` (+ `debug_assert_valid` checks).
+  - `PaneBackend` trait gained `scroll_viewport`/`scroll_to_top`/`scroll_to_bottom` (default no-op);
+    `TerminalBackend` delegates + `take_terminal_damage` forces `Full` on viewport motion (Q6).
+  - `HecaTerminalConfig::scrollback_size()` overridden from `terminal_scrollback_lines`; wired
+    `SettingsConfig` field + `config.default.toml` + `AppState.terminal_scrollback_lines` →
+    `backend_factory` → `TerminalBackendOptions.scrollback_size` → engine.
+  - Tests: viewport clamping, at_bottom, snap-to-top/bottom, history projection, resize re-clamp,
+    scrollback_size override, plus a `reconcile_viewport_offset` unit test for the alt-screen shrink case.
+    Review fixes (round 1): stored-offset drift fixed via `reconcile_viewport_offset()` called at the
+    end of `TerminalBackend::update()` (write-back clamp + arms `viewport_changed` so the correction
+    surfaces as `Full` damage); the read-clamp in `visible_lines()` stays as defense. Test helper
+    `max_offset()` now calls the engine's own `max_viewport_offset()` (no snapshot round-trip / magic
+    cell size). `scrollback_size_override` assertion tightened to the formula `scrollback_size + rows`.
+    Gates: `cargo test -p heca-core` 67/67 (single-threaded; the parallel `terminal_backend_process_input_reaches_shell`
+    failure is the known pre-existing flaky PTY-timing test, passes 3/3 in isolation), `-p heca-config` 70/70,
+    `-p heca` 247/247, `cargo clippy --workspace --all-targets --all-features` 0 warnings.
+  **Slice 2 DONE (2026-06-24):** selection model stable-row refactor (Q4) landed.
+  - Renamed `SelectionRegion::HostGrid anchor_row/focus_row` → `anchor_stable_row/focus_stable_row`
+    (`usize` → `isize`) so selections survive viewport scroll in scrollback history.
+  - Renamed `Caret::row` → `Caret::stable_row` (`isize`).
+  - Added `visible_row_to_stable_row()` helper in `terminal_host.rs`.
+  - `build_selection_overlay` takes `&TerminalSnapshot` instead of `cols`, uses stable→visible
+    row conversion via `viewport_top_stable_row`.
+  - `enter_selection_mode_for_focused_terminal` and `move_focused_terminal_selection` convert
+    cursor row to stable row.
+  - `forward_mouse_move` converts mouse coords to stable rows.
+  - Added `lines_in_stable_range` to `PaneBackend` trait + `TerminalBackend` for fetching
+    arbitrary scrollback rows by stable range.
+  - `handle_copy_selection` fetches lines via `lines_in_stable_range` and passes `base_stable`
+    to `extract_selection_text`.
+  - Caret rendering: both caret-only and selection-endpoint draw at the LEFT edge of the cell,
+    eliminating the visual bar-position jump when pressing `v`/Space.
+  - Block cursor reverted to thin 2px bar (user preference).
+  - `render.rs` call sites updated to pass snapshot instead of `cols`.
+  - Gates: `cargo test -p heca` 259/259, `-p heca-core` 67/67, `cargo clippy` 0 warnings.
+    Commit `bc66d31`, pushed to `feature/terminal-followups`, rebased onto `origin/main`.
+  Next: slice 3 (actions + wheel + keybindings + config, `terminal_mouse`/`terminal_wheel_scroll_lines`).
+
+- [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+  **⚠️ Before starting: read `handoff-terminal-scrollback.md` (the single source of truth
+  for all scrollback work done so far — decisions, architecture, file inventory, tests).**
+  Define the policy boundary between host scrollback navigation and backend/TUI
+  mouse forwarding. Normal shell/history use must scroll the host viewport;
+  mouse-enabled TUIs must still receive raw wheel input when appropriate;
+  keyboard selection must be able to move beyond the currently visible rows by
+  scrolling the viewport.
+  Files: `heca/src/app/events.rs`,
+  `heca/src/app/terminal_host.rs`,
+  `heca/src/handlers.rs`,
+  `heca/src/app/interaction.rs`
+  Status: design LOCKED via `/grill-me` on 2026-06-24. Policy:
+  • Wheel → host scrollback unless `is_mouse_grabbed()`; Shift+wheel → always scrollback; default 3 rows/notch (`terminal_wheel_scroll_lines`).
+  • Plain PageUp/PageDown → forward to PTY (tmux pass-through; do NOT intercept).
+  • `prefix+PageUp`/`prefix+PageDown` → enter `InputMode::Selection` + scroll one page (tmux copy-mode model).
+  • Wheel-up at a non-grabbed prompt also enters `InputMode::Selection` + scrolls (tmux `mouse on`).
+  • New terminal-only `terminal_mouse` setting (default true) gates the wheel-enters-scrollback behavior (NOT the global `mouse`, which chrome depends on).
+  • Selection-mode edge movement auto-scrolls the viewport (stable-row coords).
+  • Five new `WmAction` variants: `ScrollbackPage{direction}`, `ScrollbackLine{direction,amount}`, `ScrollbackToTop`, `ScrollbackToBottom`, `ExitScrollback` — all `FocusedPaneLocal`, full 11-step treatment + RPC + default bindings in `keybindings.default.toml` (NOT `keys.rs` — defaults moved to TOML in PR #185).
+  • Three GUI affordances (animated viewport offset + scrollbar widget + scrolled-up indicator) as generic `heca-grid-ui` widgets.
+  See `handoff-terminal-scrollback.md` §6 for the detailed slice 3 implementation guide.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.

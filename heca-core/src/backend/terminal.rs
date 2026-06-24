@@ -8,7 +8,7 @@ mod pty;
 
 use super::{
     BackendAlert, BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType,
-    TerminalDamage, TerminalPaletteDefaults, TerminalRowRange, TerminalSnapshot,
+    TerminalDamage, TerminalLine, TerminalPaletteDefaults, TerminalRowRange, TerminalSnapshot,
 };
 use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
 use engine::TerminalEngine;
@@ -57,7 +57,6 @@ enum LaunchTarget<'a> {
 
 /// Optional terminal-backend spawn behavior layered on top of the required
 /// grid size and cell metrics.
-#[derive(Default)]
 pub struct TerminalBackendOptions {
     /// Terminal palette defaults injected into the emulation engine.
     pub palette_defaults: Option<TerminalPaletteDefaults>,
@@ -65,6 +64,27 @@ pub struct TerminalBackendOptions {
     pub wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Optional shell wrapper assets that inject OSC shell integration.
     pub shell_integration: Option<ShellIntegrationAssets>,
+    /// Host terminal scrollback capacity in rows (`wezterm-term` scrollback).
+    /// `0` keeps wezterm-term's trait default (3500).
+    pub scrollback_size: usize,
+}
+
+impl TerminalBackendOptions {
+    /// Default host terminal scrollback capacity in rows. Mirrors wezterm-term's
+    /// `TerminalConfiguration::scrollback_size()` default so behaviour is
+    /// unchanged when the caller does not care.
+    pub const DEFAULT_SCROLLBACK_SIZE: usize = 3500;
+}
+
+impl Default for TerminalBackendOptions {
+    fn default() -> Self {
+        Self {
+            palette_defaults: None,
+            wake_on_output: None,
+            shell_integration: None,
+            scrollback_size: Self::DEFAULT_SCROLLBACK_SIZE,
+        }
+    }
 }
 
 /// A backend that runs a real shell inside a PTY and models its state via
@@ -159,6 +179,7 @@ impl TerminalBackend {
                 palette_defaults,
                 wake_on_output,
                 shell_integration: None,
+                scrollback_size: TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
             },
         )
     }
@@ -173,10 +194,10 @@ impl TerminalBackend {
         Self::with_launch_target(
             cols,
             rows,
-            cell_w,
-            cell_h,
+            (cell_w, cell_h),
             options.palette_defaults,
             options.wake_on_output,
+            options.scrollback_size,
             LaunchTarget::Shell(ShellLaunch {
                 integration: options.shell_integration,
                 override_path: None,
@@ -197,10 +218,10 @@ impl TerminalBackend {
         Self::with_launch_target(
             cols,
             rows,
-            cell_w,
-            cell_h,
+            (cell_w, cell_h),
             options.palette_defaults,
             options.wake_on_output,
+            options.scrollback_size,
             LaunchTarget::Command(CommandLaunch { command }),
         )
     }
@@ -208,12 +229,13 @@ impl TerminalBackend {
     fn with_launch_target(
         cols: usize,
         rows: usize,
-        cell_w: f32,
-        cell_h: f32,
+        cell_size: (f32, f32),
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
+        scrollback_size: usize,
         launch: LaunchTarget<'_>,
     ) -> Result<Self, PtyError> {
+        let (cell_w, cell_h) = cell_size;
         let (pty, auto_close_on_exit) = match launch {
             LaunchTarget::Shell(shell) => {
                 let pty = match shell.override_path {
@@ -237,7 +259,7 @@ impl TerminalBackend {
                 false,
             ),
         };
-        let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults)?;
+        let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults, scrollback_size)?;
 
         // Seed `last_fg_check` one debounce in the past so the very first `update`
         // wake re-samples the foreground immediately (no 250 ms blind start).
@@ -362,10 +384,10 @@ impl TerminalBackend {
         Self::with_launch_target(
             cols,
             rows,
-            cell_w,
-            cell_h,
+            (cell_w, cell_h),
             palette_defaults,
             wake_on_output,
+            TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
             LaunchTarget::Shell(shell),
         )
     }
@@ -525,6 +547,13 @@ impl PaneBackend for TerminalBackend {
             }
         }
 
+        // Re-clamp the host viewport after draining output. PTY output is the
+        // only path that shrinks scrollback without a resize (alt-screen entry,
+        // `\x1b[2J` clears), so reconciling here keeps the stored `viewport_offset`
+        // self-consistent before any downstream `snapshot()` read and surfaces the
+        // correction as `TerminalDamage::Full` via `viewport_changed`.
+        self.engine.reconcile_viewport_offset();
+
         had_data
     }
 
@@ -537,8 +566,13 @@ impl PaneBackend for TerminalBackend {
     fn take_terminal_damage(&mut self) -> TerminalDamage {
         let current_seqno = self.engine.current_seqno();
         let viewport_top = self.engine.visible_top_stable_row();
+        // Q6: host viewport motion produces `TerminalDamage::Full` for the
+        // retained terminal layer (incremental viewport damage is the separate
+        // `terminal-01` phase). Drain the flag so only motion since the last read
+        // arms the next frame.
+        let viewport_changed = self.engine.take_viewport_changed();
 
-        let damage = if self.force_full_damage {
+        let damage = if self.force_full_damage || viewport_changed {
             TerminalDamage::Full
         } else if self.last_damage_seqno == Some(current_seqno)
             && self.last_damage_viewport_top == Some(viewport_top)
@@ -587,6 +621,27 @@ impl PaneBackend for TerminalBackend {
 
     fn take_exit_code(&mut self) -> Option<i32> {
         self.pending_exit.take()
+    }
+
+    fn scroll_viewport(&mut self, delta_rows: i32) {
+        self.engine.scroll_viewport(delta_rows);
+    }
+
+    fn scroll_to_top(&mut self) {
+        self.engine.scroll_to_top();
+    }
+
+    fn scroll_to_bottom(&mut self) {
+        self.engine.scroll_to_bottom();
+    }
+
+    fn lines_in_stable_range(
+        &self,
+        start: isize,
+        end: isize,
+        cols: usize,
+    ) -> Vec<TerminalLine> {
+        self.engine.lines_in_stable_range(start, end, cols)
     }
 }
 

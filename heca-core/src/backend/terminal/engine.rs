@@ -6,7 +6,7 @@ use super::super::{
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use std::io::{Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use wezterm_surface::CursorVisibility;
 use wezterm_term::color::{ColorAttribute, ColorPalette};
 use wezterm_term::input::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -72,11 +72,16 @@ impl AlertHandler for BellHandler {
 #[derive(Debug)]
 struct HecaTerminalConfig {
     palette: ColorPalette,
+    scrollback_size: usize,
 }
 
 impl TerminalConfiguration for HecaTerminalConfig {
     fn color_palette(&self) -> ColorPalette {
         self.palette.clone()
+    }
+
+    fn scrollback_size(&self) -> usize {
+        self.scrollback_size
     }
 }
 
@@ -85,6 +90,21 @@ pub(super) struct TerminalEngine {
     cols: usize,
     rows: usize,
     pending_bell: Arc<AtomicBool>,
+    /// Host viewport offset in rows above the live bottom.
+    ///
+    /// `0` = pinned to the live bottom (the default, matching the pre-`terminal-01a`
+    /// behaviour of always projecting the bottom viewport). `N` = `N` rows of
+    /// history are visible below the cursor row. Clamped to
+    /// `[0, scrollback_rows - visible_rows]`.
+    ///
+    /// The engine is the rendering source of truth for this value (Q1 hybrid
+    /// ownership); the app mirrors it into the chrome store for observability.
+    viewport_offset: usize,
+    /// Set whenever `viewport_offset` changes, so the next damage read forces a
+    /// full retained-layer re-render with the new viewport rows (Q6: viewport
+    /// motion produces `TerminalDamage::Full`; incremental viewport damage is
+    /// the separate `terminal-01` phase).
+    viewport_changed: bool,
 }
 
 impl TerminalEngine {
@@ -93,10 +113,11 @@ impl TerminalEngine {
         rows: usize,
         writer: SharedWriter,
         palette_defaults: Option<TerminalPaletteDefaults>,
+        scrollback_size: usize,
     ) -> Result<Self, super::PtyError> {
         let mut terminal = Terminal::new(
             terminal_size(cols, rows),
-            terminal_config(palette_defaults),
+            terminal_config(palette_defaults, scrollback_size),
             "heca",
             env!("CARGO_PKG_VERSION"),
             Box::new(writer),
@@ -111,6 +132,8 @@ impl TerminalEngine {
             cols,
             rows,
             pending_bell,
+            viewport_offset: 0,
+            viewport_changed: false,
         })
     }
 
@@ -122,6 +145,14 @@ impl TerminalEngine {
         self.cols = cols;
         self.rows = rows;
         self.terminal.resize(terminal_size(cols, rows));
+        // A resize reflows scrollback (visible rows change, history moves), which
+        // changes the max valid offset. Re-clamp AFTER the wezterm resize so the
+        // boundary reflects the reflowed scrollback, never pointing past the new top.
+        let max_offset = self.max_viewport_offset();
+        if self.viewport_offset > max_offset {
+            self.viewport_offset = max_offset;
+            self.viewport_changed = true;
+        }
     }
 
     pub(super) fn advance_bytes(&mut self, bytes: &[u8]) {
@@ -133,6 +164,109 @@ impl TerminalEngine {
             vec![BackendAlert::Bell]
         } else {
             Vec::new()
+        }
+    }
+
+    /// Current host viewport offset in rows above the live bottom.
+    ///
+    /// Test-only inspection helper; production reads the viewport from the
+    /// `TerminalSnapshot` (the rendering source of truth per Q1).
+    #[cfg(test)]
+    pub(super) fn viewport_offset(&self) -> usize {
+        self.viewport_offset
+    }
+
+    /// Whether the viewport is pinned to the live bottom (`viewport_offset == 0`).
+    ///
+    /// Test-only inspection helper; production reads `at_bottom` from the
+    /// `TerminalSnapshot`.
+    #[cfg(test)]
+    pub(super) fn at_bottom(&self) -> bool {
+        self.viewport_offset == 0
+    }
+
+    /// Test-only setter that bypasses the clamp, used to construct a stale stored
+    /// offset for `reconcile_viewport_offset` unit tests (the write paths all clamp
+    /// on entry, so stale state can only arise from a scrollback shrink).
+    #[cfg(test)]
+    pub(super) fn set_viewport_offset_for_test(&mut self, offset: usize) {
+        self.viewport_offset = offset;
+    }
+
+    /// Maximum valid viewport offset = total retained rows minus the visible
+    /// row count. Returns `0` when there is no scrollback yet.
+    fn max_viewport_offset(&self) -> usize {
+        let screen = self.terminal.screen();
+        let visible_count = self.rows.min(screen.physical_rows.max(1));
+        screen.scrollback_rows().saturating_sub(visible_count)
+    }
+
+    /// Scroll the host viewport by `delta_rows`.
+    ///
+    /// Positive values move toward history (offset increases); negative values
+    /// move toward the live bottom (offset decreases). The offset is clamped to
+    /// `[0, max_viewport_offset()]`. No-op if the clamped value does not change.
+    pub(super) fn scroll_viewport(&mut self, delta_rows: i32) {
+        let target = if delta_rows >= 0 {
+            self.viewport_offset
+                .saturating_add(delta_rows.try_into().unwrap_or(usize::MAX))
+        } else {
+            self.viewport_offset
+                .saturating_sub((-delta_rows).try_into().unwrap_or(usize::MAX))
+        };
+        let clamped = target.min(self.max_viewport_offset());
+        if clamped != self.viewport_offset {
+            self.viewport_offset = clamped;
+            self.viewport_changed = true;
+        }
+    }
+
+    /// Jump the viewport to the top of scrollback (maximum offset).
+    pub(super) fn scroll_to_top(&mut self) {
+        let max_offset = self.max_viewport_offset();
+        if self.viewport_offset != max_offset {
+            self.viewport_offset = max_offset;
+            self.viewport_changed = true;
+        }
+    }
+
+    /// Snap the viewport to the live bottom (`viewport_offset = 0`).
+    pub(super) fn scroll_to_bottom(&mut self) {
+        if self.viewport_offset != 0 {
+            self.viewport_offset = 0;
+            self.viewport_changed = true;
+        }
+    }
+
+    /// Drain the viewport-changed flag. Returns `true` when the viewport moved
+    /// since the last call, which the host must treat as `TerminalDamage::Full`
+    /// for the retained terminal layer (Q6).
+    pub(super) fn take_viewport_changed(&mut self) -> bool {
+        std::mem::take(&mut self.viewport_changed)
+    }
+
+    /// Re-clamp the stored `viewport_offset` to the current scrollback boundary and
+    /// write the correction back.
+    ///
+    /// Scrollback can shrink without a resize (alt-screen entry / `\x1b[2J` clears
+    /// drop `scrollback_rows` to near zero), which would otherwise leave the stored
+    /// offset pointing past the new top. This keeps the engine's stored state
+    /// self-consistent — the single source of truth — rather than silently reading a
+    /// corrected value in `visible_lines` while the stored field drifts. Any
+    /// correction arms `viewport_changed` so it surfaces as `TerminalDamage::Full`
+    /// through the damage system.
+    ///
+    /// Called at the end of [`TerminalBackend::update`] (right after PTY output is
+    /// drained, where alt-screen/clear transitions happen), so the stored offset is
+    /// consistent before any downstream `snapshot()` read.
+    pub(super) fn reconcile_viewport_offset(&mut self) -> bool {
+        let max_offset = self.max_viewport_offset();
+        if self.viewport_offset > max_offset {
+            self.viewport_offset = max_offset;
+            self.viewport_changed = true;
+            true
+        } else {
+            false
         }
     }
 
@@ -170,7 +304,8 @@ impl TerminalEngine {
         let blank_line = TerminalLine {
             cells: vec![blank; cols],
         };
-        let lines = self.visible_lines(cols, rows, &palette, &blank_line);
+        let (lines, scrollback_rows, viewport_offset) =
+            self.visible_lines(cols, rows, &palette, &blank_line);
 
         let cursor = self.terminal.cursor_pos();
         let snapshot = TerminalSnapshot {
@@ -188,9 +323,57 @@ impl TerminalEngine {
                 shape: map_cursor_shape(cursor.shape),
             },
             lines,
+            viewport_offset,
+            at_bottom: viewport_offset == 0,
+            scrollback_rows,
+            viewport_top_stable_row: self.visible_top_stable_row(),
         };
         snapshot.debug_assert_valid();
         snapshot
+    }
+
+    /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
+    /// [`TerminalLine`]s, padded/truncated to `cols`.
+    ///
+    /// Host-grid selections live in stable-row coordinates; copying a selection
+    /// that spans history requires fetching content by stable row rather than
+    /// indexing the visible snapshot. Each stable row maps 1:1 to a physical
+    /// (ring-buffer) index via wezterm's `stable_row_to_phys`; phys indices
+    /// ascend monotonically with stable rows, so the clamped range maps to an
+    /// ascending phys range consumed by `lines_in_phys_range`.
+    ///
+    /// Rows outside the current retained range yield `None` and are emitted as
+    /// blank lines so the returned count always matches `end - start + 1`.
+    pub(super) fn lines_in_stable_range(
+        &self,
+        start: isize,
+        end: isize,
+        cols: usize,
+    ) -> Vec<TerminalLine> {
+        let screen = self.terminal.screen();
+        let palette = self.terminal.palette();
+        let blank = blank_cell(&palette);
+        let blank_line = TerminalLine {
+            cells: vec![blank.clone(); cols],
+        };
+        if start > end || cols == 0 {
+            return Vec::new();
+        }
+        let mut out: Vec<TerminalLine> = Vec::with_capacity((end - start + 1) as usize);
+        for stable in start..=end {
+            match screen.stable_row_to_phys(stable) {
+                Some(phys) => {
+                    let phys_lines = screen.lines_in_phys_range(phys..phys + 1);
+                    if let Some(mut line) = phys_lines.into_iter().next() {
+                        out.push(snapshot_line(&mut line, cols, &palette, &blank_line));
+                    } else {
+                        out.push(blank_line.clone());
+                    }
+                }
+                None => out.push(blank_line.clone()),
+            }
+        }
+        out
     }
 
     pub(super) fn current_seqno(&self) -> usize {
@@ -222,10 +405,19 @@ impl TerminalEngine {
         rows: usize,
         palette: &ColorPalette,
         blank_line: &TerminalLine,
-    ) -> Vec<TerminalLine> {
+    ) -> (Vec<TerminalLine>, usize, usize) {
         let screen = self.terminal.screen();
         let visible_count = rows.min(screen.physical_rows.max(1));
-        let visible_end = screen.scrollback_rows().max(visible_count);
+        let total = screen.scrollback_rows();
+        let max_offset = total.saturating_sub(visible_count);
+        // Defensive read-clamp: `reconcile_viewport_offset` (called at the end of
+        // `update`) keeps the stored offset within bounds, so this normally does
+        // nothing. It stays as a belt-and-suspenders guarantee that a snapshot is
+        // always visually correct even if a read happens outside the update path.
+        let offset = self.viewport_offset.min(max_offset);
+        // `total` is the bottom of the live viewport; subtract `offset` to walk
+        // `offset` rows up into history, then take `visible_count` rows below.
+        let visible_end = total.saturating_sub(offset);
         let visible_start = visible_end.saturating_sub(visible_count);
         let mut lines = Vec::with_capacity(rows);
 
@@ -241,7 +433,7 @@ impl TerminalEngine {
             lines.push(blank_line.clone());
         }
 
-        lines
+        (lines, total, offset)
     }
 }
 
@@ -271,20 +463,20 @@ fn snapshot_line(
     TerminalLine { cells }
 }
 
-fn terminal_config(palette_defaults: Option<TerminalPaletteDefaults>) -> Arc<HecaTerminalConfig> {
-    static DEFAULT_CONFIG: OnceLock<Arc<HecaTerminalConfig>> = OnceLock::new();
-    match palette_defaults {
-        Some(defaults) => Arc::new(HecaTerminalConfig {
-            palette: palette_with_defaults(defaults),
-        }),
-        None => DEFAULT_CONFIG
-            .get_or_init(|| {
-                Arc::new(HecaTerminalConfig {
-                    palette: ColorPalette::default(),
-                })
-            })
-            .clone(),
-    }
+fn terminal_config(
+    palette_defaults: Option<TerminalPaletteDefaults>,
+    scrollback_size: usize,
+) -> Arc<HecaTerminalConfig> {
+    // Engines are created once per pane, so a fresh `Arc` per engine is cheap and
+    // keeps the `scrollback_size` override correct (a shared `OnceLock` cache would
+    // pin the first-seen size and silently ignore later overrides).
+    Arc::new(HecaTerminalConfig {
+        palette: match palette_defaults {
+            Some(defaults) => palette_with_defaults(defaults),
+            None => ColorPalette::default(),
+        },
+        scrollback_size,
+    })
 }
 
 fn palette_with_defaults(defaults: TerminalPaletteDefaults) -> ColorPalette {
@@ -523,7 +715,9 @@ mod tests {
     #[test]
     fn snapshot_preserves_background_colored_blank_cells_after_clear() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine = TerminalEngine::new(6, 2, writer, None).expect("engine should initialize");
+        let mut engine =
+            TerminalEngine::new(6, 2, writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+                .expect("engine should initialize");
 
         engine.advance_bytes(b"\x1b[48;2;30;30;46m\x1b[2J");
 
@@ -546,8 +740,8 @@ mod tests {
     #[test]
     fn bell_alert_is_captured_once() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine =
-            TerminalEngine::new(80, 24, writer, None).expect("terminal engine should initialize");
+        let mut engine = TerminalEngine::new(80, 24, writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+            .expect("terminal engine should initialize");
 
         engine.advance_bytes(b"\x07");
         assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
@@ -580,5 +774,214 @@ mod tests {
             map_underline_style(wezterm_term::Underline::Dashed),
             TerminalUnderlineStyle::Dashed
         );
+    }
+
+    /// Build an engine with enough scrollback to make viewport motion observable.
+    fn viewport_engine(cols: usize, rows: usize, scrollback_size: usize) -> TerminalEngine {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        TerminalEngine::new(cols, rows, writer, None, scrollback_size)
+            .expect("viewport test engine should initialize")
+    }
+
+    /// Fill the scrollback with `count` distinct printable lines so the viewport
+    /// has real history to scroll into. Each line is `cols` cells wide.
+    fn fill_scrollback(engine: &mut TerminalEngine, cols: usize, count: usize) {
+        for i in 0..count {
+            // Print a marker followed by spaces, then a newline so each line lands
+            // in scrollback as the next output row scrolls up.
+            let marker = format!("L{i:03}");
+            let mut line = marker.into_bytes();
+            line.truncate(cols);
+            while line.len() < cols {
+                line.push(b' ');
+            }
+            engine.advance_bytes(&line);
+            engine.advance_bytes(b"\r\n");
+        }
+    }
+
+    /// Read the current max valid viewport offset directly from the engine's own
+    /// clamp logic (`scrollback_rows - visible_rows`). Deriving the expected
+    /// boundary from the live engine avoids hardcoding fragile row counts (the
+    /// exact retained-row total depends on wezterm's scroll timing).
+    fn max_offset(engine: &TerminalEngine) -> usize {
+        engine.max_viewport_offset()
+    }
+
+    #[test]
+    fn viewport_starts_pinned_to_bottom_with_zero_offset() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+
+        assert_eq!(engine.viewport_offset(), 0, "fresh engine pins to live bottom");
+        assert!(engine.at_bottom(), "at_bottom is true at offset 0");
+        assert!(!engine.take_viewport_changed(), "no motion yet ⇒ no viewport damage");
+
+        let snapshot = engine.snapshot((8.0, 14.0));
+        assert_eq!(snapshot.viewport_offset, 0);
+        assert!(snapshot.at_bottom);
+        assert!(
+            snapshot.scrollback_rows > 4,
+            "scrollback_rows should retain history above the visible rows"
+        );
+        assert_eq!(
+            snapshot.scrollback_rows.saturating_sub(4),
+            max_offset(&engine),
+            "snapshot scrollback_rows minus visible equals the max offset"
+        );
+    }
+
+    #[test]
+    fn scroll_viewport_clamps_to_max_offset_and_sets_damage_flag() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        let max_offset = max_offset(&engine);
+        assert!(max_offset > 0, "fixture should produce some scrollback history");
+
+        engine.scroll_viewport(3);
+        assert_eq!(engine.viewport_offset(), 3);
+        assert!(!engine.at_bottom());
+        assert!(engine.take_viewport_changed(), "motion sets the viewport-changed flag");
+        assert!(!engine.take_viewport_changed(), "flag drains once");
+
+        // Overscroll clamps to max_offset.
+        engine.scroll_viewport(100);
+        assert_eq!(engine.viewport_offset(), max_offset);
+        assert!(engine.take_viewport_changed());
+
+        // Scrolling back down clamps at bottom (offset 0).
+        engine.scroll_viewport(-100);
+        assert_eq!(engine.viewport_offset(), 0);
+        assert!(engine.at_bottom());
+        assert!(engine.take_viewport_changed());
+
+        // No-op scrolls (already at boundary) do not arm damage.
+        engine.scroll_viewport(-1);
+        assert_eq!(engine.viewport_offset(), 0);
+        assert!(!engine.take_viewport_changed(), "clamped no-op must not arm damage");
+    }
+
+    #[test]
+    fn scroll_to_top_and_bottom_jump_the_viewport() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        let max_offset = max_offset(&engine);
+        assert!(max_offset > 0);
+
+        engine.scroll_to_top();
+        assert_eq!(engine.viewport_offset(), max_offset);
+        assert!(engine.take_viewport_changed());
+
+        engine.scroll_to_top();
+        assert!(!engine.take_viewport_changed(), "already-at-top no-op must not arm damage");
+
+        engine.scroll_to_bottom();
+        assert_eq!(engine.viewport_offset(), 0);
+        assert!(engine.at_bottom());
+        assert!(engine.take_viewport_changed());
+
+        engine.scroll_to_bottom();
+        assert!(!engine.take_viewport_changed(), "already-at-bottom no-op must not arm damage");
+    }
+
+    #[test]
+    fn snapshot_projects_history_rows_when_viewport_is_scrolled() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        // Scrolling up 4 rows should reveal history rows instead of the live bottom.
+        engine.scroll_viewport(4);
+        let snapshot = engine.snapshot((8.0, 14.0));
+        assert_eq!(snapshot.viewport_offset, 4);
+        assert!(!snapshot.at_bottom);
+        assert_eq!(snapshot.lines.len(), 4, "snapshot still reports exactly `rows` lines");
+        snapshot.debug_assert_valid();
+    }
+
+    #[test]
+    fn resize_re_clamps_viewport_offset_when_scrollback_shrinks() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        let total = engine.snapshot((8.0, 14.0)).scrollback_rows;
+        engine.scroll_to_top();
+        assert_eq!(engine.viewport_offset(), total.saturating_sub(4));
+        let _ = engine.take_viewport_changed();
+
+        // Grow visible rows so max_offset shrinks; the stored offset must clamp.
+        engine.resize(20, 8);
+        assert_eq!(
+            engine.viewport_offset(),
+            total.saturating_sub(8),
+            "resize must re-clamp offset to new max (total - visible 8)"
+        );
+        assert!(engine.take_viewport_changed(), "re-clamp on resize arms damage");
+    }
+
+    #[test]
+    fn scrollback_size_override_replaces_default_capacity() {
+        // Drive the engine with a non-default scrollback size and confirm it is
+        // plumbed through `HecaTerminalConfig` by filling past the wezterm default
+        // (3500) up to the override. Total retained rows should be bounded by the
+        // formula `scrollback_size + visible_rows` (the override caps history).
+        let scrollback_size = 50;
+        let rows = 2;
+        let mut engine = viewport_engine(10, rows, scrollback_size);
+        fill_scrollback(&mut engine, 10, 80);
+        let snapshot = engine.snapshot((8.0, 14.0));
+        assert_eq!(snapshot.rows, rows);
+        assert_eq!(snapshot.lines.len(), rows);
+        assert!(
+            snapshot.scrollback_rows <= scrollback_size + rows,
+            "scrollback_size override should cap retained history at scrollback_size + visible_rows"
+        );
+    }
+
+    #[test]
+    fn reconcile_viewport_offset_snaps_to_bottom_when_scrollback_shrinks() {
+        // The drift fix targets the case where scrollback shrinks without a resize
+        // (alt-screen entry / clear dropping `scrollback_rows`), leaving the stored
+        // offset pointing past the new top. `scroll_viewport`/`scroll_to_top`/resize
+        // all clamp on write, so the only way to construct a stale stored offset is
+        // to set it directly — this exercises `reconcile_viewport_offset` as a unit,
+        // decoupled from wezterm escape-sequence semantics.
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 10);
+        let top = max_offset(&engine);
+        assert!(top > 0, "fixture should produce scrollback history");
+
+        // Force the stored offset past the boundary (simulating a shrink that
+        // hasn't been reconciled yet).
+        engine.set_viewport_offset_for_test(top + 5);
+        assert_eq!(engine.viewport_offset(), top + 5);
+        let _ = engine.take_viewport_changed();
+
+        let changed = engine.reconcile_viewport_offset();
+        assert_eq!(
+            engine.viewport_offset(),
+            top,
+            "reconcile must write the stored offset back to the current max"
+        );
+        assert!(
+            changed,
+            "reconcile must report a correction when the stored offset was stale"
+        );
+        assert!(engine.take_viewport_changed(), "correction arms viewport damage");
+
+        // A second reconcile on already-consistent state is a no-op.
+        assert!(!engine.reconcile_viewport_offset());
+        assert!(!engine.take_viewport_changed());
+
+        // When scrollback has fully collapsed (max_offset == 0), reconcile snaps to
+        // the live bottom — the alt-screen case.
+        engine.set_viewport_offset_for_test(3);
+        // Collapse max_offset to 0 by clearing scrollback via the alt screen.
+        engine.advance_bytes(b"\x1b[?1049h");
+        let collapsed = max_offset(&engine);
+        if collapsed == 0 {
+            assert!(engine.reconcile_viewport_offset(), "alt-screen shrink must correct");
+            assert_eq!(engine.viewport_offset(), 0, "reconcile snaps to bottom on alt screen");
+            assert!(engine.take_viewport_changed());
+        }
+        // Leave the alt screen so the shared default-config cache / other tests are unaffected.
+        engine.advance_bytes(b"\x1b[?1049l");
     }
 }

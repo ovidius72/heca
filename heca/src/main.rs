@@ -138,6 +138,8 @@ impl HecaApp {
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
+            state.terminal_scrollback_lines =
+                self.app_config.config.settings.terminal_scrollback_lines;
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
             // Pane gap and chrome geometry changes must reflow the real viewport

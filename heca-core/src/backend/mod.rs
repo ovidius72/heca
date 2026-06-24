@@ -275,4 +275,41 @@ pub trait PaneBackend: Send {
     fn take_exit_code(&mut self) -> Option<i32> {
         None
     }
+
+    /// Scroll the host terminal viewport by `delta_rows`.
+    ///
+    /// Positive values scroll toward history (the viewport moves up, revealing
+    /// older rows); negative values scroll toward the live bottom. The offset is
+    /// clamped to `[0, scrollback_rows - visible_rows]`. A non-zero offset means
+    /// the pane is no longer pinned to the live bottom.
+    ///
+    /// Only terminal backends with a host scrollback viewport implement this
+    /// (see `terminal-01a`). The default is a no-op for backends without host
+    /// scrollback (e.g. `FakeBackend`).
+    fn scroll_viewport(&mut self, _delta_rows: i32) {}
+
+    /// Jump the host terminal viewport to the top of scrollback (maximum offset).
+    /// Default: no-op.
+    fn scroll_to_top(&mut self) {}
+
+    /// Snap the host terminal viewport to the live bottom (`viewport_offset = 0`).
+    /// Default: no-op.
+    fn scroll_to_bottom(&mut self) {}
+
+    /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
+    /// terminal lines, each capped to `cols` cells.
+    ///
+    /// Host-grid selections are stored in stable-row coordinates (anchored to
+    /// content, surviving viewport scroll), so copying a selection that spans
+    /// history must fetch content by stable row rather than index the visible
+    /// snapshot. Only terminal backends with a host scrollback viewport implement
+    /// this; the default returns an empty vec for backends without scrollback.
+    fn lines_in_stable_range(
+        &self,
+        _start: isize,
+        _end: isize,
+        _cols: usize,
+    ) -> Vec<TerminalLine> {
+        Vec::new()
+    }
 }

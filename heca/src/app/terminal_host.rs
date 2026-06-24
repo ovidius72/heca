@@ -106,8 +106,14 @@ pub(crate) fn forward_mouse_move(state: &mut AppState, pos: (f32, f32)) {
     {
         if let Some(SelectionOwner::Pane(owner_id)) = state.selection.owner()
             && let Some((row, col)) = cell_coords_at_position(state, owner_id, pos)
+            && let Some(snapshot) = state
+                .backends
+                .get(owner_id)
+                .and_then(|backend| backend.terminal_snapshot())
         {
-            state.selection.update_focus(row, col);
+            state
+                .selection
+                .update_focus(visible_row_to_stable_row(&snapshot, row), col);
             state.needs_redraw = true;
         }
         return;
@@ -355,7 +361,7 @@ pub(crate) fn enter_selection_mode_for_focused_terminal(state: &mut AppState) ->
     // The user begins selection explicitly with `v` or `Space`.
     state.selection.set_caret(
         SelectionOwner::Pane(pane_id),
-        snapshot.cursor.row,
+        visible_row_to_stable_row(&snapshot, snapshot.cursor.row),
         snapshot.cursor.col,
     );
     state.input_mode = InputMode::Selection;
@@ -379,56 +385,59 @@ pub(crate) fn move_focused_terminal_selection(
         return false;
     };
 
-    let max_row = snapshot.rows.saturating_sub(1);
     let max_col = snapshot.cols.saturating_sub(1);
 
-    // Handle caret-only state: move the caret, don't start a selection.
+    // Handle caret-only state: move the caret in stable-row space.
     if state.selection.is_caret() {
-        if let Some((row, col)) = state.selection.caret_pos() {
-            let next_row = row.saturating_add_signed(row_delta).min(max_row);
+        if let Some((stable_row, col)) = state.selection.caret_pos() {
+            let next_stable = stable_row.saturating_add(row_delta);
             let next_col = col.saturating_add_signed(col_delta).min(max_col);
-            state.selection.move_caret(next_row, next_col);
+            state.selection.move_caret(next_stable, next_col);
             state.needs_redraw = true;
             return true;
         }
         return false;
     }
 
-    // Handle active selection: update the focus end.
-    let (anchor_row, anchor_col, focus_row, focus_col) = match state.selection.active() {
-        Some(active) if active.owner == SelectionOwner::Pane(pane_id) => match active.region {
-            SelectionRegion::HostGrid {
-                anchor_row,
-                anchor_col,
-                focus_row,
-                focus_col,
-            } => (anchor_row, anchor_col, focus_row, focus_col),
-            SelectionRegion::BackendNative => {
-                return false;
+    // Handle active selection: update the focus end in stable-row space.
+    let (anchor_stable_row, anchor_col, focus_stable_row, focus_col) =
+        match state.selection.active() {
+            Some(active) if active.owner == SelectionOwner::Pane(pane_id) => match active.region {
+                SelectionRegion::HostGrid {
+                    anchor_stable_row,
+                    anchor_col,
+                    focus_stable_row,
+                    focus_col,
+                } => (anchor_stable_row, anchor_col, focus_stable_row, focus_col),
+                SelectionRegion::BackendNative => {
+                    return false;
+                }
+            },
+            _ => {
+                let cursor_stable = visible_row_to_stable_row(&snapshot, snapshot.cursor.row);
+                (
+                    cursor_stable,
+                    snapshot.cursor.col,
+                    cursor_stable,
+                    snapshot.cursor.col,
+                )
             }
-        },
-        _ => (
-            snapshot.cursor.row,
-            snapshot.cursor.col,
-            snapshot.cursor.row,
-            snapshot.cursor.col,
-        ),
-    };
+        };
 
-    let next_row = focus_row.saturating_add_signed(row_delta).min(max_row);
+    let next_stable = focus_stable_row.saturating_add(row_delta);
     let next_col = focus_col.saturating_add_signed(col_delta).min(max_col);
 
     state.selection.begin(
         SelectionOwner::Pane(pane_id),
         SelectionSource::KeyboardMode,
         SelectionRegion::HostGrid {
-            anchor_row,
+            anchor_stable_row,
             anchor_col,
-            focus_row,
+            focus_stable_row,
             focus_col,
         },
     );
-    state.selection.update_focus(next_row, next_col);
+    state.selection.update_focus(next_stable, next_col);
     state.input_mode = InputMode::Selection;
     state.needs_redraw = true;
     true
@@ -476,18 +485,30 @@ fn begin_terminal_selection_at(
     col: usize,
     source: SelectionSource,
 ) {
+    let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())
+    else {
+        return;
+    };
+    let stable_row = visible_row_to_stable_row(&snapshot, row);
     state.selection.begin(
         SelectionOwner::Pane(pane_id),
         source,
         SelectionRegion::HostGrid {
-            anchor_row: row,
+            anchor_stable_row: stable_row,
             anchor_col: col,
-            focus_row: row,
+            focus_stable_row: stable_row,
             focus_col: col,
         },
     );
     state.input_mode = InputMode::Selection;
     state.needs_redraw = true;
+}
+
+fn visible_row_to_stable_row(snapshot: &heca_core::backend::TerminalSnapshot, row: usize) -> isize {
+    snapshot.viewport_top_stable_row + row as isize
 }
 
 fn started_interactive_move(
