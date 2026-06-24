@@ -155,6 +155,8 @@ Runtime validation shows terminal output is live and resize is stable again, but
   Next: slice 3 (actions + wheel + keybindings + config, `terminal_mouse`/`terminal_wheel_scroll_lines`).
 
 - [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+  **⚠️ Before starting: read `handoff-terminal-scrollback.md` (the single source of truth
+  for all scrollback work done so far — decisions, architecture, file inventory, tests).**
   Define the policy boundary between host scrollback navigation and backend/TUI
   mouse forwarding. Normal shell/history use must scroll the host viewport;
   mouse-enabled TUIs must still receive raw wheel input when appropriate;
@@ -173,7 +175,7 @@ Runtime validation shows terminal output is live and resize is stable again, but
   • Selection-mode edge movement auto-scrolls the viewport (stable-row coords).
   • Five new `WmAction` variants: `ScrollbackPage{direction}`, `ScrollbackLine{direction,amount}`, `ScrollbackToTop`, `ScrollbackToBottom`, `ExitScrollback` — all `FocusedPaneLocal`, full 11-step treatment + RPC + default bindings in `keybindings.default.toml` (NOT `keys.rs` — defaults moved to TOML in PR #185).
   • Three GUI affordances (animated viewport offset + scrollbar widget + scrolled-up indicator) as generic `heca-grid-ui` widgets.
-  See `handoff-terminal-01a-scrollback.md` for the full contract + slice plan.
+  See `handoff-terminal-scrollback.md` §6 for the detailed slice 3 implementation guide.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.
