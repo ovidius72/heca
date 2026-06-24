@@ -275,6 +275,20 @@ impl ActionRegistry {
             default_binding: "z",
         },
         ActionDescriptor {
+            name: "scroll_view_left",
+            label: "Scroll View Left",
+            description: "Pan the horizontal view left to reach off-screen / overflowing columns.",
+            category: ActionCategory::Layout,
+            default_binding: "Shift+ArrowLeft",
+        },
+        ActionDescriptor {
+            name: "scroll_view_right",
+            label: "Scroll View Right",
+            description: "Pan the horizontal view right to reach off-screen / overflowing columns.",
+            category: ActionCategory::Layout,
+            default_binding: "Shift+ArrowRight",
+        },
+        ActionDescriptor {
             name: "resize_increase",
             label: "Increase Column Width",
             description: "Widen the active column.",

@@ -492,6 +492,11 @@ translucently over it. This works identically on Linux, Windows, and macOS — n
 OS vibrancy required (vibrancy is an optional platform backdrop material, off by
 default).
 
+`[appearance]` is organized as a flat app-wide section plus three nested
+per-surface tables — `[appearance.terminal]`, `[appearance.pane]`,
+`[appearance.sidebar]`. Border fields inherit: a surface value wins; unset →
+the global `[appearance]` value; unset → the theme.
+
 ```toml
 [appearance]
 # z=0 background layer (the frosted gradient behind everything)
@@ -500,20 +505,21 @@ background_transparency  = 0    # 0..=100 — 0 = opaque (default); >0 = translu
 # background_gradient_top    = "#1e1e2e"   # optional; unset → theme.background
 # background_gradient_bottom = "#181825"   # optional; unset → derived darker shade
 
+[appearance.terminal]
 # Tiled panes: frost = z=0 showing through the translucent terminal surface.
-terminal_transparency = 0             # 0..=100 — surface alpha over z=0
-
+transparency = 0             # 0..=100 — surface alpha over z=0
 # Floating panes: their own REAL blur of the tiled content behind them.
-terminal_floating_transparency = 0
-terminal_floating_blur          = 0    # 0..=100
+floating_transparency = 0
+floating_blur         = 0    # 0..=100
 ```
 
 **How frost is produced:**
 - **Tiled panes** — set `background_blur > 0` (frosts the gradient) +
-  `terminal_transparency > 0` (lets it show through the terminal surface). There
-  is **no per-terminal tiled blur knob** — the z=0 layer is the frost source.
-- **Floating panes** — set `terminal_floating_blur > 0` +
-  `terminal_floating_transparency > 0`; the blurred tiled content is stamped
+  `[appearance.terminal] transparency > 0` (lets it show through the terminal
+  surface). There is **no per-terminal tiled blur knob** — the z=0 layer is the
+  frost source.
+- **Floating panes** — set `[appearance.terminal] floating_blur > 0` +
+  `floating_transparency > 0`; the blurred tiled content is stamped
   behind the floating pane at full opacity (no sharp text leak).
 
 > **Migration:** the old `terminal_blur` and `terminal_frost_color` knobs are
@@ -590,24 +596,36 @@ When `shell_integration = false`, heca spawns a bare interactive shell and you c
 
 Each pane shows a small **info bar** along its top: configurable **segments** on the
 left (what the pane is) and **action buttons** on the right. Both are configured
-under `[appearance]` as ordered lists — order in the list is the order shown
+under `[appearance.pane]` as ordered lists — order in the list is the order shown
 (left → right). An empty list hides that side; if **both** are empty the bar (and
 its reserved space) disappears entirely.
 
 ```toml
-[appearance]
+[appearance.pane]
 # Left side — what to show, in order. A segment with no data for a pane is skipped
 # (e.g. git segments outside a repo).
-pane_title_segments = ["location", "app_name", "git_branch", "git_status"]
+title_segments = ["location", "app_name", "git_branch", "git_status"]
 
 # Right side — action buttons, in order. Each button's tooltip shows its real
 # configured keybinding.
-pane_title_actions = ["split", "close"]
+title_actions = ["split", "close"]
 
-sidebar_width = 300           # Sidebar width in px (clamped 160..=560)
+[appearance.sidebar]
+# Sidebar shell appearance (independent of the panes; all optional):
+width            = 300          # Sidebar width in px (clamped 160..=560)
+border_style     = "bordered"   # none | bordered | bracketed
+border_width     = 1.0          # frame width px; unset → global border_width
+border_radius    = 12.0         # corner radius px; unset → global/theme radius
+border_color     = "#40e0ff"    # bordered-frame color; unset → global border_color
+background_color = "#0b0f14"     # shell fill; unset → theme sidebar surface
 ```
 
-**Supported segments** (`pane_title_segments`):
+With `border_style = "bordered"`, the frame is drawn at `border_width` in
+`border_color` (which falls back to the global `[appearance] border_color`). With
+`"bracketed"` it uses the theme accent corner-reticle, now sized by the same
+`border_width` + `border_radius`. `border_width = 0` removes the border.
+
+**Supported segments** (`[appearance.pane] title_segments`):
 
 | Value         | Shows                                                        |
 |---------------|-------------------------------------------------------------|
@@ -618,7 +636,7 @@ sidebar_width = 300           # Sidebar width in px (clamped 160..=560)
 
 Default: `["location", "app_name"]`.
 
-**Supported actions** (`pane_title_actions`):
+**Supported actions** (`[appearance.pane] title_actions`):
 
 | Value        | Button does                          |
 |--------------|--------------------------------------|

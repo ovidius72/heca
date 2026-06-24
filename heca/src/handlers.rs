@@ -184,6 +184,24 @@ pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Pan the horizontal view left/right by a quarter of the viewport, to reach
+/// column overflow / content scrolled past an edge. View-only (no focus change).
+pub fn handle_scroll_view_left(state: &mut AppState, _action: &WmAction) {
+    scroll_view_by(state, -1.0);
+}
+
+pub fn handle_scroll_view_right(state: &mut AppState, _action: &WmAction) {
+    scroll_view_by(state, 1.0);
+}
+
+fn scroll_view_by(state: &mut AppState, sign: f64) {
+    if let Some(ws) = state.session.active_workspace_mut() {
+        let step = ws.scrolling.working_area.size.w * 0.25;
+        ws.scrolling.scroll_view(sign * step);
+    }
+    after_layout_change(state);
+}
+
 pub fn handle_pane_height_increase(state: &mut AppState, _action: &WmAction) {
     if let Some(ws) = state.session.active_workspace_mut() {
         let col_idx = ws.scrolling.active_column_idx;

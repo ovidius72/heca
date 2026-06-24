@@ -442,8 +442,7 @@ fn bar_font(state: &AppState) -> f32 {
 /// Whether the pane info bar renders anything right now — segments **or** action
 /// buttons. Drives both the reserved top strip and the header band/paint.
 fn pane_info_bar_shown(state: &AppState) -> bool {
-    !state.appearance.pane_title_segments.is_empty()
-        || !state.appearance.pane_title_actions.is_empty()
+    state.appearance.pane_info_bar_visible()
 }
 
 /// Extra **top** content padding (logical px) reserved for the pane info bar, so

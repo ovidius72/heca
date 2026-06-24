@@ -172,10 +172,15 @@ impl Column {
         let mut height_left = available_height;
         let mut auto_count = pane_count;
 
+        // Per-pane floor: MIN_PANE_HEIGHT, but degrade gracefully when the column
+        // genuinely can't fit every pane at the min (tiny window / many panes) —
+        // never let a pane collapse to a ~1px sliver and disappear (#4).
+        let min_h = MIN_PANE_HEIGHT.min(available_height / pane_count as f64).max(1.0);
+
         // First pass: assign fixed heights, count auto panes.
         for (i, pane) in self.panes.iter().enumerate() {
             if let Some(fixed_h) = pane.preferred_height {
-                let h = fixed_h.min(height_left.max(1.0));
+                let h = fixed_h.clamp(min_h, height_left.max(min_h));
                 sizes[i].h = h;
                 height_left -= h;
                 auto_count -= 1;
@@ -184,7 +189,7 @@ impl Column {
 
         // Second pass: distribute remaining height to auto panes.
         if auto_count > 0 {
-            let auto_height = (height_left / auto_count as f64).max(1.0);
+            let auto_height = (height_left / auto_count as f64).max(min_h);
             for (i, pane) in self.panes.iter().enumerate() {
                 if pane.preferred_height.is_none() {
                     sizes[i].h = auto_height;
@@ -246,7 +251,12 @@ impl Column {
                 .filter(|h| *h > 0.0)
                 .unwrap_or(200.0)
         });
-        let max_h = (working_height - gaps * 2.0).max(MIN_PANE_HEIGHT);
+        // Cap growth so every OTHER pane can still keep at least MIN_PANE_HEIGHT —
+        // otherwise growing one pane squeezes its neighbours toward nothing (#4).
+        let n = self.panes.len() as f64;
+        let total_gaps = gaps * (n + 1.0);
+        let reserved_for_others = (n - 1.0) * MIN_PANE_HEIGHT;
+        let max_h = (working_height - total_gaps - reserved_for_others).max(MIN_PANE_HEIGHT);
         let new_h = (current + delta).clamp(MIN_PANE_HEIGHT, max_h);
         self.panes[pane_idx].preferred_height = Some(new_h);
         self.compute_pane_sizes(working_height, gaps);

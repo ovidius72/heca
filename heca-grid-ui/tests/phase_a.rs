@@ -2796,6 +2796,36 @@ fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
 }
 
 #[test]
+fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
+    // `bracket_frame_with` sizes the reticle from the passed width/radius, not the
+    // theme — the seam that lets a bracketed sidebar honor `sidebar_border_width`
+    // even when the global/theme border is 0. (Issue 1.)
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0; // global borders OFF
+    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
+
+    // Theme says 0, but an explicit width of 3 still draws the reticle.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame_with(rect, 3.0, 8.0);
+    }
+    let bright_corners = scene.iter().filter(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    )).count();
+    assert_eq!(bright_corners, 4, "explicit width draws the reticle even when theme.border_width == 0");
+
+    // An explicit width of 0 draws nothing, regardless of the theme.
+    theme.border_width = 5.0;
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame_with(rect, 0.0, 8.0);
+    }
+    assert!(scene.is_empty(), "explicit width 0 draws no reticle even with theme border on");
+}
+
+#[test]
 fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // A default `Bordered` Pane with NO explicit `.border()` derives its border
     // from `theme.border_width` (the global border control): a theme-colored
@@ -2845,6 +2875,59 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     assert!(
         border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.accent, 9.0))).is_empty(),
         "border_width == 0 leaves the Bordered pane with no visible border, even with an explicit .border()",
+    );
+}
+
+#[test]
+fn bordered_pane_border_width_override_is_independent_of_theme() {
+    // `.border_width(w)` pins a Bordered pane's frame width regardless of the
+    // global `theme.border_width` — the seam that lets the sidebar shell carry its
+    // own thickness (`[appearance] sidebar_border_width`). Color still resolves
+    // from `.border(color, _)` when set, else `theme.border`.
+    use heca_grid_ui::{Color, Component, Pane};
+    let border_rects = |theme: &Theme, override_w: Option<f32>, explicit: Option<Color>| -> Vec<heca_grid_ui::scene::RectCmd> {
+        let mut p = Pane::new()
+            .background(theme.surface)
+            .border_width(override_w)
+            .width(Length::Px(120.0))
+            .height(Length::Px(80.0));
+        if let Some(c) = explicit {
+            p = p.border(c, 0.0);
+        }
+        LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, theme);
+            p.paint(&mut cx);
+        }
+        scene.iter().filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+            _ => None,
+        }).collect()
+    };
+
+    let mut theme = Theme::grid_tron();
+
+    // Theme borders OFF, but the override forces a 3px frame in theme.border.
+    theme.border_width = 0.0;
+    let forced = border_rects(&theme, Some(3.0), None);
+    assert!(
+        forced.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 3.0)),
+        "override draws its own width even when the global border is off",
+    );
+
+    // Override width + explicit color: width = override, color = explicit.
+    let colored = border_rects(&theme, Some(3.0), Some(theme.accent));
+    assert!(
+        colored.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 3.0)),
+        "override sets width; explicit .border() sets color",
+    );
+
+    // override = 0 ⇒ no border, even with the global border ON.
+    theme.border_width = 5.0;
+    assert!(
+        border_rects(&theme, Some(0.0), None).is_empty(),
+        "override of 0 removes the border regardless of the global width",
     );
 }
 

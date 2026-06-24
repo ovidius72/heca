@@ -733,8 +733,8 @@ pub(crate) fn build_pane_header(
 /// pane's tree only when its content key changes; re-lays-out + repositions every
 /// frame; prunes panes that disappeared.
 pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
-    let segments = state.appearance.pane_title_segments.clone();
-    let actions = state.appearance.pane_title_actions.clone();
+    let segments = state.appearance.pane.title_segments.clone();
+    let actions = state.appearance.pane.title_actions.clone();
     if segments.is_empty() && actions.is_empty() {
         state.pane_headers.clear();
         return;
@@ -1431,6 +1431,8 @@ fn build_sidebar_shell(
     ws_state: &WorkspacesContainerState,
     sidebar_gap: f32,
     border_style: heca_config::appearance::BorderStyle,
+    border_width: f32,
+    border_radius: f32,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
 ) -> Flex {
@@ -1459,6 +1461,8 @@ fn build_sidebar_shell(
                 .padding(sidebar_gap)
                 .child(
                     apply_pane_frame(Pane::new(), border_style)
+                        .border_width(border_width)
+                        .radius(border_radius)
                         .width(Length::Px(inner_w))
                         .height(Length::Px(inner_h))
                         .padding(10.0)
@@ -1478,6 +1482,10 @@ fn build_sidebar_shell(
         )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "chrome shell assembly still threads retained-tree state explicitly during the Phase 0 migration"
+)]
 fn build_right_sidebar_shell(
     right_w: f32,
     sidebar_h: f32,
@@ -1485,6 +1493,8 @@ fn build_right_sidebar_shell(
     theme: &GuiTheme,
     sidebar_gap: f32,
     border_style: heca_config::appearance::BorderStyle,
+    border_width: f32,
+    border_radius: f32,
 ) -> Flex {
     let inner_w = (right_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1509,6 +1519,8 @@ fn build_right_sidebar_shell(
                 .padding(sidebar_gap)
                 .child(
                     apply_pane_frame(Pane::new(), border_style)
+                        .border_width(border_width)
+                        .radius(border_radius)
                         .width(Length::Px(inner_w))
                         .height(Length::Px(inner_h))
                         .padding(10.0)
@@ -1763,14 +1775,6 @@ fn top_bottom_pane_background_color(theme: &heca_config::theme::Theme) -> Color 
     app_color_to_gui(theme.effective_top_bottom_pane_background())
 }
 
-fn left_sidebar_background_color(theme: &heca_config::theme::Theme) -> Color {
-    app_color_to_gui(theme.effective_left_sidebar_background())
-}
-
-fn right_sidebar_background_color(theme: &heca_config::theme::Theme) -> Color {
-    app_color_to_gui(theme.effective_right_sidebar_background())
-}
-
 fn chrome_bar_color_for(
     theme: &heca_config::theme::Theme,
     appearance: &heca_config::appearance::AppearanceConfig,
@@ -1797,17 +1801,15 @@ fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
 }
 
 fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    sidebar_shell_background_color_for(
-        left_sidebar_background_color(&state.theme),
-        &state.appearance,
-    )
+    let base = state.theme.effective_left_sidebar_background();
+    let resolved = state.appearance.effective_sidebar_background_color(base);
+    sidebar_shell_background_color_for(app_color_to_gui(resolved), &state.appearance)
 }
 
 fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
-    sidebar_shell_background_color_for(
-        right_sidebar_background_color(&state.theme),
-        &state.appearance,
-    )
+    let base = state.theme.effective_right_sidebar_background();
+    let resolved = state.appearance.effective_sidebar_background_color(base);
+    sidebar_shell_background_color_for(app_color_to_gui(resolved), &state.appearance)
 }
 
 fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
@@ -2336,6 +2338,8 @@ pub(crate) fn build_chrome_root(
             &state.chrome_state.workspaces,
             state.appearance.effective_sidebar_gap(&state.theme),
             state.appearance.effective_sidebar_border_style(),
+            state.appearance.effective_sidebar_border_width(&state.theme),
+            state.appearance.effective_sidebar_border_radius(&state.theme),
             &mut signals,
             &mut drag_items,
         ))
@@ -2352,6 +2356,8 @@ pub(crate) fn build_chrome_root(
             &theme,
             state.appearance.effective_sidebar_gap(&state.theme),
             state.appearance.effective_sidebar_border_style(),
+            state.appearance.effective_sidebar_border_width(&state.theme),
+            state.appearance.effective_sidebar_border_radius(&state.theme),
         ))
     } else {
         None
@@ -2510,6 +2516,25 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     // (The border WIDTH is read at paint via `chrome_gui_theme`, so it live-reloads
     // without a rebuild.)
     state.appearance.effective_sidebar_border_style().hash(&mut hsh);
+    // The sidebar border WIDTH/RADIUS and background are baked into the retained
+    // tree at build time (per-widget Pane overrides + the shell fill), so a config
+    // reload that changes them must rebuild the tree.
+    state
+        .appearance
+        .effective_sidebar_border_width(&state.theme)
+        .to_bits()
+        .hash(&mut hsh);
+    state
+        .appearance
+        .effective_sidebar_border_radius(&state.theme)
+        .to_bits()
+        .hash(&mut hsh);
+    {
+        let c = left_sidebar_shell_background_color(state);
+        (c.r, c.g, c.b, c.a).hash(&mut hsh);
+        let c = right_sidebar_shell_background_color(state);
+        (c.r, c.g, c.b, c.a).hash(&mut hsh);
+    }
     // The active workspace (which gets the accent wash + count badge) is structural
     // enough to rebuild on a workspace SWITCH — but pane-to-pane focus *within* a
     // workspace must NOT rebuild: pane/column `active` + the status text are bound
@@ -2691,19 +2716,11 @@ mod tests {
         );
         assert_eq!(chrome_surface_color(&tron), app_color_to_gui(tron.surface));
         assert_eq!(
-            left_sidebar_background_color(&latte),
-            app_color_to_gui(latte.effective_left_sidebar_background())
-        );
-        assert_eq!(
-            right_sidebar_background_color(&latte),
-            app_color_to_gui(latte.effective_right_sidebar_background())
-        );
-        assert_eq!(
             chrome_surface_color(&latte),
             app_color_to_gui(latte.surface)
         );
         assert_ne!(
-            left_sidebar_background_color(&latte),
+            app_color_to_gui(latte.effective_left_sidebar_background()),
             chrome_surface_color(&latte)
         );
     }
@@ -2716,13 +2733,13 @@ mod tests {
             ..Default::default()
         };
 
+        let left_bg = app_color_to_gui(theme.effective_left_sidebar_background());
         assert_ne!(
             chrome_bar_color_for(&theme, &appearance),
-            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance)
+            sidebar_shell_background_color_for(left_bg, &appearance)
         );
         assert_eq!(
-            sidebar_shell_background_color_for(left_sidebar_background_color(&theme), &appearance)
-                .r,
+            sidebar_shell_background_color_for(left_bg, &appearance).r,
             theme.effective_left_sidebar_background().r
         );
     }
@@ -2797,6 +2814,8 @@ mod tests {
             &chrome.workspaces,
             8.0,
             heca_config::appearance::BorderStyle::Bracketed,
+            1.0,
+            12.0,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
         );
@@ -2821,6 +2840,72 @@ mod tests {
         assert!(
             !container.base().children.is_empty(),
             "WorkspacesContainer must host a dock per workspace",
+        );
+    }
+
+    #[test]
+    fn bordered_sidebar_paints_border_color_at_configured_width() {
+        // Regression: with `sidebar_border_style = "bordered"`, the shell must paint
+        // a visible frame in the (global) border color at the configured
+        // `sidebar_border_width`. Previously the bordered sidebar drew nothing /
+        // ignored the color because its width was theme-locked.
+        use crate::app_state::SidebarItemState;
+        use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
+        use heca_grid_ui::DrawCommand;
+
+        let mut tree = SidebarTree::new();
+        tree.workspaces.push(SidebarWsEntry {
+            ws_idx: 0,
+            name: "ws1".into(),
+            collapsed: false,
+            state: SidebarItemState::Active,
+            columns: vec![SidebarColEntry {
+                col_idx: 0,
+                collapsed: false,
+                panes: vec![SidebarPaneEntry {
+                    pane_id: heca_core::layout::PaneId(1),
+                    name: "pane1".into(),
+                    custom_name: None,
+                    state: SidebarItemState::Active,
+                }],
+            }],
+            floating_panes: Vec::new(),
+        });
+
+        // A distinct border color so we can prove it reached the painted frame.
+        let mut theme = GuiTheme::grid_tron();
+        theme.border = Color::new(0x40, 0xe0, 0xff, 0xff);
+        let border_w = 4.0_f32;
+
+        let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
+        let chrome = SharedChromeState::new(280.0, true, 260.0, false);
+        let mut shell = super::build_sidebar_shell(
+            &tree,
+            &heca_config::programs::ProgramsConfig::default(),
+            280.0,
+            600.0,
+            theme.background,
+            &theme,
+            &emit_intent,
+            &chrome.workspaces,
+            8.0,
+            heca_config::appearance::BorderStyle::Bordered,
+            border_w,
+            12.0,
+            &mut super::ChromeSignals::default(),
+            &mut super::DragItemRegistry::default(),
+        );
+
+        let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);
+        let found = scene.iter().any(|c| match c {
+            DrawCommand::Rect(r) => r
+                .border
+                .is_some_and(|b| b.color == theme.border && (b.width - border_w).abs() < 0.01),
+            _ => false,
+        });
+        assert!(
+            found,
+            "bordered sidebar must paint a {border_w}px frame in the configured border color",
         );
     }
 
@@ -2863,6 +2948,8 @@ mod tests {
             &chrome.workspaces,
             8.0,
             heca_config::appearance::BorderStyle::Bracketed,
+            1.0,
+            12.0,
             &mut super::ChromeSignals::default(),
             &mut drag,
         );

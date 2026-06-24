@@ -222,7 +222,14 @@ impl ScrollingSpace {
     /// Activate a column and animate the view to bring it into view.
     /// NIRI behavior: focus changes scroll the viewport.
     pub fn activate_column(&mut self, idx: usize) {
-        if idx >= self.columns.len() || self.active_column_idx == idx {
+        if idx >= self.columns.len() {
+            return;
+        }
+        if self.active_column_idx == idx {
+            // Already the active column — but it may have been scrolled/resized
+            // out of view, so still re-fit it (#3: re-focusing a stranded column
+            // must reveal it instead of doing nothing).
+            self.ensure_active_column_visible();
             return;
         }
 
@@ -534,6 +541,45 @@ impl ScrollingSpace {
         true
     }
 
+    /// Scroll the view (statically) so the active column is on-screen. Mirrors the
+    /// re-fit that [`update_working_area`](Self::update_working_area) does on a
+    /// window resize — used after a manual column resize that pushes the active
+    /// column's edge off the viewport, and when re-focusing an already-active
+    /// column that was scrolled out of view (#3). A column wider than the viewport
+    /// is left-aligned; use [`scroll_view`](Self::scroll_view) to pan across its
+    /// overflow. No-op while a view animation/gesture is in flight.
+    pub fn ensure_active_column_visible(&mut self) {
+        if !self.columns.is_empty() && self.view_offset.is_static() {
+            let offset = self.compute_view_offset_for_column(self.active_column_idx, None);
+            self.view_offset = ViewOffset::Static(offset);
+        }
+    }
+
+    /// Pan the view horizontally by `delta` logical px (positive = reveal content
+    /// to the **right**), clamped to the content bounds so it never scrolls the
+    /// whole layout off-screen. Lets the user reach column overflow / content
+    /// scrolled past an edge (#3). Snaps statically for responsiveness; no-op when
+    /// all columns already fit the viewport.
+    pub fn scroll_view(&mut self, delta: f64) {
+        if self.columns.is_empty() {
+            return;
+        }
+        let vw = self.working_area.size.w;
+        let last = self.columns.len() - 1;
+        let first_left = self.column_x(0);
+        let last_right = self.column_x(last) + self.column_widths.get(last).copied().unwrap_or(0.0);
+        // Everything fits → nothing to scroll.
+        if last_right - first_left <= vw {
+            return;
+        }
+        // view_pos() is the left edge of the viewport in column space.
+        let min_view = first_left; // column 0 left-aligned
+        let max_view = last_right - vw; // last column right-aligned
+        let new_view = (self.view_pos() + delta).clamp(min_view, max_view);
+        let new_offset = new_view - self.column_x(self.active_column_idx);
+        self.view_offset = ViewOffset::Static(new_offset);
+    }
+
     /// Resize the active column by a delta (positive = wider, negative = narrower).
     /// NIRI behavior: only the active column changes. Other columns keep their widths.
     /// If the total exceeds the viewport, the view scrolls horizontally.
@@ -575,6 +621,11 @@ impl ScrollingSpace {
             } else {
                 col.width
             };
+            // A column grows at most to the full visible width (`p = 1.0` ⇒
+            // `available_width`) and never beyond — no off-screen, weird super-wide
+            // columns. The view scrolls to keep the resized column fully visible
+            // (see the `ensure_active_column_visible` call below), so its right
+            // divider stays reachable while dragging instead of stalling at the edge.
             let new_width = match base_width {
                 ColumnWidth::Proportion(p) => {
                     ColumnWidth::Proportion((p + delta).clamp(min_prop, 1.0))
@@ -594,6 +645,12 @@ impl ScrollingSpace {
         // those fight a smooth per-pixel drag.
         let new_rel = self.column_x(idx) - self.view_pos();
         self.view_offset.offset(new_rel - old_rel);
+        // If the resize pushed the active column's far edge off-screen, scroll to
+        // keep it reachable (#3) — only when resizing the active column, so a
+        // divider drag on another column doesn't yank the view.
+        if idx == self.active_column_idx {
+            self.ensure_active_column_visible();
+        }
     }
 
     /// Resize the height of pane `pane_idx` within column `col_idx` by `delta`
@@ -1196,7 +1253,7 @@ mod tests {
     #[test]
     fn resize_column_clamps_and_ignores_out_of_range() {
         let mut space = space_with_columns(2);
-        space.resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0)
+        space.resize_column(0, 10.0); // huge delta clamps to the full-width cap (1.0 = viewport)
         assert_eq!(space.columns[0].width, ColumnWidth::Proportion(1.0));
         // A huge negative delta clamps to the min-width proportion (small, non-zero).
         space.resize_column(1, -10.0);
@@ -1260,5 +1317,71 @@ mod tests {
         assert!(space.columns[0].is_zoomed());
         assert!(!space.columns[1].is_zoomed());
         assert_eq!(space.columns[1].width, ColumnWidth::Proportion(0.6));
+    }
+
+    #[test]
+    fn scroll_view_pans_and_clamps_to_content_bounds() {
+        // Three ~half-viewport columns overflow the 1000px viewport, so the view
+        // can pan — but only within the content (never scrolls the layout away).
+        let mut space = space_with_columns(3);
+        space.update_all_column_widths();
+        let vw = space.working_area.size.w;
+
+        // Pan hard left, then again → second is a no-op (already at the left bound).
+        space.scroll_view(-vw * 10.0);
+        let left_bound = space.view_pos();
+        space.scroll_view(-vw * 10.0);
+        assert!(
+            (space.view_pos() - left_bound).abs() < 1.0,
+            "clamped at the left content bound"
+        );
+
+        // Pan hard right, then again → clamped at the right bound.
+        space.scroll_view(vw * 10.0);
+        let right_bound = space.view_pos();
+        space.scroll_view(vw * 10.0);
+        assert!(
+            (space.view_pos() - right_bound).abs() < 1.0,
+            "clamped at the right content bound"
+        );
+        assert!(
+            right_bound > left_bound,
+            "the right bound is further right than the left bound"
+        );
+    }
+
+    #[test]
+    fn scroll_view_is_noop_when_all_columns_fit() {
+        let mut space = test_scrolling_space();
+        space.add_column(None, test_column(1, ColumnWidth::Proportion(0.5)), true);
+        space.update_all_column_widths();
+        let before = space.view_pos();
+        space.scroll_view(500.0);
+        assert!(
+            (space.view_pos() - before).abs() < f64::EPSILON,
+            "a single column that fits the viewport does not scroll"
+        );
+    }
+
+    #[test]
+    fn refocusing_active_column_refits_a_scrolled_view() {
+        // After panning the view away, re-activating the already-active column must
+        // scroll it back into view (#3: focusing a stranded column reveals it).
+        let mut space = space_with_columns(3);
+        space.update_all_column_widths();
+        let active = space.active_column_idx;
+        let fitted = space.view_pos();
+        // Pan far away so the active column is off-screen.
+        space.scroll_view(-space.working_area.size.w * 10.0);
+        assert!(
+            (space.view_pos() - fitted).abs() > 1.0,
+            "precondition: the view has moved away from the active column"
+        );
+        // Re-activating the same column re-fits it.
+        space.activate_column(active);
+        assert!(
+            space.view_offset.is_static(),
+            "ensure-visible snaps the view statically"
+        );
     }
 }

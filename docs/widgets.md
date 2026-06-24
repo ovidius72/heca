@@ -407,16 +407,24 @@ A generic container for sidebars/panels with three **frame modes** (`PaneFrame`)
 selectable via `.frame(..)` / `.frameless()` / `.bordered()` / `.bracketed()`:
 
 - **`None`** — background fill only.
+- **`None`** — background fill only.
 - **`Bordered`** (default) — a clean continuous border. Width comes from
-  `theme.border_width` (read at paint, so the global border control governs it);
-  color from an explicit `.border(color, _)` or else `theme.border`.
+  `theme.border_width` (read at paint, so the global border control governs it)
+  **unless** an explicit `.border_width(w)` override is set on the pane; color
+  from an explicit `.border(color, _)` or else `theme.border`.
 - **`Bracketed`** — the self-contained corner-bracket reticle (`PaintCx::bracket_frame`):
   bright rounded `theme.accent` corners over a dimmed continuous line, sharing the
   theme corner radius. It does **not** also draw `style.border`.
 
-All widths follow `theme.border_width` (`0` ⇒ no frame). Reads `theme.radius` /
-`theme.border_width` / `theme.accent`. In the app the frame mode is configurable
-per surface (`[appearance] pane_border_style` / `sidebar_border_style`).
+Border width follows `theme.border_width` (`0` ⇒ no frame) unless overridden per
+pane with `.border_width(w)` — used to let one surface (e.g. a self-themed sidebar
+shell) carry its own thickness independent of the global control. Reads
+`theme.radius` (or `.radius(r)`) / `theme.border_width` / `theme.accent`. In the
+app the frame mode + width + radius are configurable per surface under the nested
+appearance tables (`[appearance.pane]` / `[appearance.sidebar]`, each with
+`border_style` / `border_width` / `border_color` / `border_radius`), and a
+bracketed surface sizes its reticle from the same per-surface width/radius via
+`bracket_frame_with`.
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
