@@ -3131,7 +3131,6 @@ mod tests {
             ..PaneRuntime::default()
         };
         let hints = PaneActionHints::default();
-        #[expect(clippy::too_many_arguments, reason = "test helper keeps pane-header inputs explicit for focused assertions")]
         fn content<'a>(
             programs: &'a ProgramsConfig,
             segments: &'a [heca_config::appearance::PaneSegment],

@@ -100,28 +100,6 @@ impl ProgramMeta {
         self.disabled.unwrap_or(false)
     }
 
-    fn with_terminal_icon() -> Self {
-        Self {
-            icon: Some(DEFAULT_TERMINAL_ICON),
-            ..Self::default()
-        }
-    }
-
-    fn named(name: &str, processes: &[&str], icon: ProgramIcon, color: Option<Color>) -> Self {
-        Self {
-            name: Some(name.to_string()),
-            processes: Some(
-                processes
-                    .iter()
-                    .map(|process| (*process).to_string())
-                    .collect(),
-            ),
-            icon: Some(icon),
-            color,
-            ..Self::default()
-        }
-    }
-
     fn merge_with(&mut self, override_meta: ProgramMeta) {
         let ProgramMeta {
             disabled,
@@ -194,6 +172,18 @@ impl ProgramsConfig {
         }
     }
 
+    /// Build a catalog directly from a raw entry map (no merge over the built-in
+    /// defaults). This is the recursion-free path used by [`ProgramsConfig::default`]
+    /// to seed itself from the embedded catalog.
+    fn from_entries(entries: HashMap<String, ProgramMeta>) -> Self {
+        let mut config = Self {
+            entries,
+            aliases: HashMap::new(),
+        };
+        config.rebuild_aliases();
+        config
+    }
+
     fn from_overrides(overrides: HashMap<String, ProgramMeta>) -> Self {
         let mut config = Self::default();
         for (raw, override_meta) in overrides {
@@ -234,78 +224,12 @@ impl ProgramsConfig {
 }
 
 impl Default for ProgramsConfig {
+    /// The built-in catalog is parsed from the embedded `config.default.toml`
+    /// `[program]` table — that file is the single source of truth. Uses the
+    /// recursion-free [`ProgramsConfig::from_entries`] path so the catalog's own
+    /// `Deserialize` (which merges over `default()`) is never re-entered.
     fn default() -> Self {
-        let mut entries = HashMap::new();
-        for shell in ["sh", "bash", "zsh", "fish"] {
-            entries.insert(shell.to_string(), ProgramMeta::with_terminal_icon());
-        }
-        entries.insert(
-            "claude".to_string(),
-            ProgramMeta::named("Claude", &["claude"], ProgramIcon::Terminal, None),
-        );
-        entries.insert(
-            "codex".to_string(),
-            ProgramMeta::named("Codex", &["codex"], ProgramIcon::Terminal, None),
-        );
-        entries.insert(
-            "helix".to_string(),
-            ProgramMeta::named(
-                "Helix",
-                &["helix"],
-                ProgramIcon::FileCode,
-                Some(Color::new(163, 190, 140, 255)),
-            ),
-        );
-        entries.insert(
-            "nvim".to_string(),
-            ProgramMeta::named(
-                "Neovim",
-                &["v", "nvim"],
-                ProgramIcon::FileCode,
-                Some(Color::new(137, 180, 250, 255)),
-            ),
-        );
-        entries.insert(
-            "opencode".to_string(),
-            ProgramMeta::named("OpenCode", &["opencode"], ProgramIcon::Terminal, None),
-        );
-        entries.insert(
-            "pi".to_string(),
-            ProgramMeta::named("Pi", &["pi"], ProgramIcon::Terminal, None),
-        );
-        entries.insert(
-            "ranger".to_string(),
-            ProgramMeta::named(
-                "Ranger",
-                &["ranger"],
-                ProgramIcon::FolderOpen,
-                Some(Color::new(148, 226, 213, 255)),
-            ),
-        );
-        entries.insert(
-            "vim".to_string(),
-            ProgramMeta::named(
-                "Vim",
-                &["v", "vim"],
-                ProgramIcon::FileCode,
-                Some(Color::new(166, 227, 161, 255)),
-            ),
-        );
-        entries.insert(
-            "yazi".to_string(),
-            ProgramMeta::named(
-                "Yazi",
-                &["yazi"],
-                ProgramIcon::FolderOpen,
-                Some(Color::new(116, 199, 236, 255)),
-            ),
-        );
-        let mut config = Self {
-            entries,
-            aliases: HashMap::new(),
-        };
-        config.rebuild_aliases();
-        config
+        Self::from_entries(crate::loader::parse_default_program_entries())
     }
 }
 
