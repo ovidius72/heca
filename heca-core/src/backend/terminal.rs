@@ -8,7 +8,7 @@ mod pty;
 
 use super::{
     BackendAlert, BackendKeyEvent, BackendMouseEvent, BackendRenderData, PaneBackend, PaneType,
-    TerminalDamage, TerminalPaletteDefaults, TerminalRowRange, TerminalSnapshot,
+    TerminalDamage, TerminalLine, TerminalPaletteDefaults, TerminalRowRange, TerminalSnapshot,
 };
 use crate::runtime::{ContentKind, PaneRuntime, ProcessStatus};
 use engine::TerminalEngine;
@@ -633,6 +633,15 @@ impl PaneBackend for TerminalBackend {
 
     fn scroll_to_bottom(&mut self) {
         self.engine.scroll_to_bottom();
+    }
+
+    fn lines_in_stable_range(
+        &self,
+        start: isize,
+        end: isize,
+        cols: usize,
+    ) -> Vec<TerminalLine> {
+        self.engine.lines_in_stable_range(start, end, cols)
     }
 }
 

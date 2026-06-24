@@ -295,4 +295,21 @@ pub trait PaneBackend: Send {
     /// Snap the host terminal viewport to the live bottom (`viewport_offset = 0`).
     /// Default: no-op.
     fn scroll_to_bottom(&mut self) {}
+
+    /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
+    /// terminal lines, each capped to `cols` cells.
+    ///
+    /// Host-grid selections are stored in stable-row coordinates (anchored to
+    /// content, surviving viewport scroll), so copying a selection that spans
+    /// history must fetch content by stable row rather than index the visible
+    /// snapshot. Only terminal backends with a host scrollback viewport implement
+    /// this; the default returns an empty vec for backends without scrollback.
+    fn lines_in_stable_range(
+        &self,
+        _start: isize,
+        _end: isize,
+        _cols: usize,
+    ) -> Vec<TerminalLine> {
+        Vec::new()
+    }
 }

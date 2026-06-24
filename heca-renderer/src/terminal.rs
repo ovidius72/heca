@@ -224,26 +224,21 @@ impl<'a> TerminalRenderer<'a> {
         // Two visual modes:
         // - Caret-only (no selection): thin 2px bar at 0.8 alpha — the user
         //   hasn't started selecting yet, so the caret is subtle but visible.
-        // - Selection endpoint: wider 4px bar at 0.9 alpha — the user is
+        // - Selection endpoint: thicker 4px bar at 0.9 alpha — the user is
         //   actively growing a selection and needs to see exactly which end
         //   will move when they press h/j/k/l or after toggling with `o`.
+        //
+        // Both modes draw at the left edge of the cell so there is no visual
+        // jump when pressing `v` to transition from caret-only to selection.
         if let Some(caret) = &overlay.caret {
             let visible_row = caret.row.min(fitted_rows.saturating_sub(1));
             let visible_col = caret.col.min(fitted_cols.saturating_sub(1));
             let y = rect.y + visible_row as f32 * cell_h;
-            let (caret_w, caret_alpha, x) = if caret.is_selection_endpoint {
-                // Selection endpoint: draw at the RIGHT boundary of the focus
-                // cell so it visually marks the end of the selected range.
-                // 4px wide, 0.9 alpha, right-aligned to the cell edge.
-                let w = 4.0;
-                let x = rect.x + (visible_col + 1) as f32 * cell_w - w;
-                (w, 0.9, x)
+            let x = rect.x + visible_col as f32 * cell_w;
+            let (caret_w, caret_alpha) = if caret.is_selection_endpoint {
+                (4.0, 0.9)
             } else {
-                // Caret-only (no selection): thin 2px bar at the LEFT edge of
-                // the cell, like a normal text cursor.
-                let w = 2.0;
-                let x = rect.x + visible_col as f32 * cell_w;
-                (w, 0.8, x)
+                (2.0, 0.8)
             };
             let caret_color = [
                 overlay.color[0],

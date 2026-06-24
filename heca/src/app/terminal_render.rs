@@ -690,9 +690,9 @@ pub(crate) fn render_terminal_mount(
 pub(crate) fn selection_overlay_for_pane(
     state: &AppState,
     pane_id: PaneId,
-    cols: usize,
+    snapshot: &TerminalSnapshot,
 ) -> Option<SelectionOverlay> {
-    build_selection_overlay(&state.selection, pane_id, cols, &state.theme.accent)
+    build_selection_overlay(&state.selection, pane_id, snapshot, &state.theme.accent)
 }
 
 fn pane_content_rect(
@@ -752,17 +752,31 @@ fn rect_to_text_box(rect: Rectangle) -> TextBox {
 pub(super) fn build_selection_overlay(
     selection: &SelectionState,
     pane_id: PaneId,
-    cols: usize,
+    snapshot: &TerminalSnapshot,
     accent: &Color,
 ) -> Option<SelectionOverlay> {
-    if cols == 0 {
+    if snapshot.cols == 0 || snapshot.rows == 0 {
         return None;
     }
 
-    if let SelectionState::Caret { owner, row, col } = selection {
+    let stable_to_visible = |stable_row: isize| -> Option<usize> {
+        let visible = stable_row - snapshot.viewport_top_stable_row;
+        usize::try_from(visible)
+            .ok()
+            .filter(|row| *row < snapshot.rows)
+    };
+
+    if let SelectionState::Caret {
+        owner,
+        stable_row,
+        col,
+        ..
+    } = selection
+    {
         if *owner != SelectionOwner::Pane(pane_id) {
             return None;
         }
+        let row = stable_to_visible(*stable_row)?;
         let color = [
             accent.r as f32 / 255.0,
             accent.g as f32 / 255.0,
@@ -771,7 +785,7 @@ pub(super) fn build_selection_overlay(
         ];
         return Some(
             SelectionOverlay::new(vec![], color).with_caret(CaretIndicator {
-                row: *row,
+                row,
                 col: *col,
                 is_selection_endpoint: false,
             }),
@@ -784,9 +798,9 @@ pub(super) fn build_selection_overlay(
     }
     match &active.region {
         SelectionRegion::HostGrid {
-            anchor_row,
+            anchor_stable_row,
             anchor_col,
-            focus_row,
+            focus_stable_row,
             focus_col,
         } => {
             let color = [
@@ -795,58 +809,61 @@ pub(super) fn build_selection_overlay(
                 accent.b as f32 / 255.0,
                 0.25,
             ];
-            let last_col = cols.saturating_sub(1);
-            let mut spans = Vec::new();
-            if anchor_row == focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: *anchor_col.min(focus_col),
-                    end_col: (*anchor_col.max(focus_col)).min(last_col),
-                });
-            } else if anchor_row < focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: (*anchor_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*anchor_row + 1)..*focus_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
-                }
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: 0,
-                    end_col: (*focus_col).min(last_col),
-                });
+            let last_col = snapshot.cols.saturating_sub(1);
+            let start_stable = (*anchor_stable_row).min(*focus_stable_row);
+            let end_stable = (*anchor_stable_row).max(*focus_stable_row);
+            let start_col = if anchor_stable_row < focus_stable_row {
+                *anchor_col
+            } else if focus_stable_row < anchor_stable_row {
+                *focus_col
             } else {
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: (*focus_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*focus_row + 1)..*anchor_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
+                (*anchor_col).min(*focus_col)
+            };
+            let end_col = if focus_stable_row > anchor_stable_row {
+                *focus_col
+            } else if anchor_stable_row > focus_stable_row {
+                *anchor_col
+            } else {
+                (*anchor_col).max(*focus_col)
+            };
+
+            let visible_start = snapshot.viewport_top_stable_row.max(start_stable);
+            let visible_end = (snapshot.viewport_top_stable_row + snapshot.rows as isize - 1)
+                .min(end_stable);
+            let mut spans = Vec::new();
+            if visible_start <= visible_end {
+                for stable_row in visible_start..=visible_end {
+                    let row = stable_to_visible(stable_row)
+                        .expect("visible stable row must convert to a visible row");
+                    let (s, e) = if start_stable == end_stable {
+                        (start_col.min(last_col), end_col.min(last_col))
+                    } else if stable_row == start_stable {
+                        (start_col.min(last_col), last_col)
+                    } else if stable_row == end_stable {
+                        (0, end_col.min(last_col))
+                    } else {
+                        (0, last_col)
+                    };
+                    if s <= e {
+                        spans.push(SelectionOverlaySpan {
+                            row,
+                            start_col: s,
+                            end_col: e,
+                        });
+                    }
                 }
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: 0,
-                    end_col: (*anchor_col).min(last_col),
-                });
             }
-            Some(
-                SelectionOverlay::new(spans, color).with_caret(CaretIndicator {
-                    row: *focus_row,
-                    col: *focus_col,
-                    is_selection_endpoint: true,
-                }),
-            )
+
+            let caret = stable_to_visible(*focus_stable_row).map(|row| CaretIndicator {
+                row,
+                col: *focus_col,
+                is_selection_endpoint: true,
+            });
+            let overlay = SelectionOverlay::new(spans, color);
+            Some(match caret {
+                Some(caret) => overlay.with_caret(caret),
+                None => overlay,
+            })
         }
         SelectionRegion::BackendNative => None,
     }
@@ -885,6 +902,30 @@ mod tests {
             viewport_offset: 0,
             at_bottom: true,
             scrollback_rows: rows,
+            viewport_top_stable_row: 0,
+        }
+    }
+
+    fn selection_snapshot(cols: usize, rows: usize, top_stable: isize) -> TerminalSnapshot {
+        TerminalSnapshot {
+            cols,
+            rows,
+            cell_w: 8.0,
+            cell_h: 12.0,
+            default_fg: [1.0; 4],
+            default_bg: [0.0, 0.0, 0.0, 1.0],
+            cursor_color: [1.0; 4],
+            cursor: heca_core::backend::TerminalCursor {
+                col: 0,
+                row: 0,
+                visible: true,
+                shape: heca_core::backend::TerminalCursorShape::Block,
+            },
+            lines: Vec::new(),
+            viewport_offset: 0,
+            at_bottom: true,
+            scrollback_rows: rows,
+            viewport_top_stable_row: top_stable,
         }
     }
 
@@ -897,7 +938,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -907,11 +949,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(7)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 3,
-                focus_row: 2,
+                focus_stable_row: 2,
                 focus_col: 3,
-            },
+        },
         );
         let accent = Color {
             r: 100,
@@ -919,8 +961,9 @@ mod tests {
             b: 200,
             a: 255,
         };
+        let snap = selection_snapshot(20, 10, 0);
         // Query with a different pane id -> None
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -937,7 +980,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -947,11 +991,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 3,
-                focus_row: 2,
+                focus_stable_row: 2,
                 focus_col: 3,
-            },
+        },
         );
         selection.update_focus(5, 9);
         let accent = Color {
@@ -960,7 +1004,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent);
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent);
         assert!(overlay.is_some());
         let overlay = overlay.unwrap();
         assert_eq!(overlay.spans.len(), 4);
@@ -984,11 +1029,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 8,
+                anchor_stable_row: 8,
                 anchor_col: 12,
-                focus_row: 8,
+                focus_stable_row: 8,
                 focus_col: 12,
-            },
+        },
         );
         selection.update_focus(4, 3);
         let accent = Color {
@@ -997,7 +1042,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         assert_eq!(overlay.spans.len(), 5);
         assert_eq!(overlay.spans[0].row, 4);
         assert_eq!(overlay.spans[0].start_col, 3);
@@ -1017,7 +1063,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         // Caret-only state: no selection spans.
         assert!(overlay.spans.is_empty());
         // But we get a caret indicator at the caret position.
@@ -1041,7 +1088,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 20, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -1051,11 +1099,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 0,
-                focus_row: 4,
+                focus_stable_row: 4,
                 focus_col: 5,
-            },
+        },
         );
         let accent = Color {
             r: 100,
@@ -1063,7 +1111,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         // Active selection: should have both selection spans and a focus-end caret.
         assert!(!overlay.spans.is_empty());
         let caret = overlay

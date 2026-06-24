@@ -326,9 +326,54 @@ impl TerminalEngine {
             viewport_offset,
             at_bottom: viewport_offset == 0,
             scrollback_rows,
+            viewport_top_stable_row: self.visible_top_stable_row(),
         };
         snapshot.debug_assert_valid();
         snapshot
+    }
+
+    /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
+    /// [`TerminalLine`]s, padded/truncated to `cols`.
+    ///
+    /// Host-grid selections live in stable-row coordinates; copying a selection
+    /// that spans history requires fetching content by stable row rather than
+    /// indexing the visible snapshot. Each stable row maps 1:1 to a physical
+    /// (ring-buffer) index via wezterm's `stable_row_to_phys`; phys indices
+    /// ascend monotonically with stable rows, so the clamped range maps to an
+    /// ascending phys range consumed by `lines_in_phys_range`.
+    ///
+    /// Rows outside the current retained range yield `None` and are emitted as
+    /// blank lines so the returned count always matches `end - start + 1`.
+    pub(super) fn lines_in_stable_range(
+        &self,
+        start: isize,
+        end: isize,
+        cols: usize,
+    ) -> Vec<TerminalLine> {
+        let screen = self.terminal.screen();
+        let palette = self.terminal.palette();
+        let blank = blank_cell(&palette);
+        let blank_line = TerminalLine {
+            cells: vec![blank.clone(); cols],
+        };
+        if start > end || cols == 0 {
+            return Vec::new();
+        }
+        let mut out: Vec<TerminalLine> = Vec::with_capacity((end - start + 1) as usize);
+        for stable in start..=end {
+            match screen.stable_row_to_phys(stable) {
+                Some(phys) => {
+                    let phys_lines = screen.lines_in_phys_range(phys..phys + 1);
+                    if let Some(mut line) = phys_lines.into_iter().next() {
+                        out.push(snapshot_line(&mut line, cols, &palette, &blank_line));
+                    } else {
+                        out.push(blank_line.clone());
+                    }
+                }
+                None => out.push(blank_line.clone()),
+            }
+        }
+        out
     }
 
     pub(super) fn current_seqno(&self) -> usize {
