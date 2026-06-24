@@ -49,6 +49,7 @@ pub(crate) fn create_terminal_backend_for_state(
         &state.theme,
         Some(&state.event_proxy),
         state.shell_integration_enabled,
+        state.terminal_scrollback_lines,
     );
     create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options)
 }
@@ -62,7 +63,12 @@ pub(crate) fn create_command_backend_for_state(
     // Direct command panes spawn a concrete program inside the PTY; shell
     // integration is intentionally disabled because OSC prompt/cwd hooks are a
     // shell concern and would only add noise here.
-    let options = terminal_backend_options(&state.theme, Some(&state.event_proxy), false);
+    let options = terminal_backend_options(
+        &state.theme,
+        Some(&state.event_proxy),
+        false,
+        state.terminal_scrollback_lines,
+    );
     create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)
 }
 
@@ -88,8 +94,10 @@ pub(crate) fn create_terminal_backend(
     cell_size: (f32, f32),
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
     shell_integration_enabled: bool,
+    scrollback_size: usize,
 ) -> Box<dyn PaneBackend> {
-    let options = terminal_backend_options(theme, event_proxy, shell_integration_enabled);
+    let options =
+        terminal_backend_options(theme, event_proxy, shell_integration_enabled, scrollback_size);
     create_terminal_backend_with_options(cols, rows, cell_size, options)
 }
 
@@ -97,6 +105,7 @@ fn terminal_backend_options(
     theme: &Theme,
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
     shell_integration_enabled: bool,
+    scrollback_size: usize,
 ) -> TerminalBackendOptions {
     let wake_on_output = event_proxy.map(|proxy| {
         let proxy = proxy.clone();
@@ -155,6 +164,7 @@ fn terminal_backend_options(
         },
         wake_on_output,
         shell_integration,
+        scrollback_size,
     }
 }
 

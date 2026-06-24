@@ -91,20 +91,47 @@ Render only changed terminal rows instead of the full pane every frame. This pha
 ### [ ] Phase: Host terminal scrollback viewport · `terminal-01a`
 Runtime validation shows terminal output is live and resize is stable again, but the host still has no scrollback viewport model. Wheel input is only forwarded as terminal mouse events, PageUp/PageDown are only forwarded as terminal key input, and selection-mode movement clamps to the currently visible snapshot rows. At a normal shell prompt that means scrollback appears dead.
 
-- [ ] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection.
+- [~] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection.
   Introduce terminal viewport/scrollback state so the host can render historical
-  rows instead of always projecting the live bottom viewport. Keep damage
-  semantics conservative at first: viewport motion may fall back to `Full` until
-  dirty-row rendering understands viewport offsets.
+  rows instead of always projecting the live bottom viewport. Damage semantics:
+  viewport motion produces `TerminalDamage::Full` for now (incremental viewport
+  damage is a SEPARATE phase, `terminal-task-01` — do NOT fold it in).
   Files: `heca-core/src/backend/terminal.rs`,
   `heca-core/src/backend/terminal/engine.rs`,
   `heca-core/src/backend/snapshot.rs`,
   `heca/src/app/terminal_host.rs`,
   `heca/src/app/render.rs`
-  Status: newly tracked from runtime validation on 2026-06-24. Current gap:
-  terminal snapshots always expose the live visible viewport only.
+  Status: design LOCKED via `/grill-me` on 2026-06-24 (see
+  `handoff-terminal-01a-scrollback.md` for the full decision contract). Hybrid
+  ownership: `TerminalEngine` owns `viewport_offset` + projects via `TerminalSnapshot`
+  (adds `viewport_offset`/`at_bottom`/`scrollback_rows`); AppState mirrors into the
+  chrome store + `ChromeEvent::TerminalViewportChanged` + `host.terminal_viewport(pane_id)`.
+  Selection model moves to stable-row coords (refactor of `SelectionRegion::HostGrid`).
+  Implementation not yet started — slice 1 (backend viewport model) is the next step.
+  **Slice 1 DONE (2026-06-24):** backend viewport model landed (no UI/actions yet).
+  - `TerminalEngine` owns `viewport_offset` (0 = live bottom) + `viewport_changed` flag;
+    `scroll_viewport(delta)`/`scroll_to_top()`/`scroll_to_bottom()`/`take_viewport_changed()`;
+    `visible_lines()` projects bottom-minus-offset clamped to
+    `[0, scrollback_rows - visible_rows]`; `resize()` re-clamps after wezterm reflow.
+  - `TerminalSnapshot` gained `viewport_offset`/`at_bottom`/`scrollback_rows` (+ `debug_assert_valid` checks).
+  - `PaneBackend` trait gained `scroll_viewport`/`scroll_to_top`/`scroll_to_bottom` (default no-op);
+    `TerminalBackend` delegates + `take_terminal_damage` forces `Full` on viewport motion (Q6).
+  - `HecaTerminalConfig::scrollback_size()` overridden from `terminal_scrollback_lines`; wired
+    `SettingsConfig` field + `config.default.toml` + `AppState.terminal_scrollback_lines` →
+    `backend_factory` → `TerminalBackendOptions.scrollback_size` → engine.
+  - Tests: viewport clamping, at_bottom, snap-to-top/bottom, history projection, resize re-clamp,
+    scrollback_size override, plus a `reconcile_viewport_offset` unit test for the alt-screen shrink case.
+    Review fixes (round 1): stored-offset drift fixed via `reconcile_viewport_offset()` called at the
+    end of `TerminalBackend::update()` (write-back clamp + arms `viewport_changed` so the correction
+    surfaces as `Full` damage); the read-clamp in `visible_lines()` stays as defense. Test helper
+    `max_offset()` now calls the engine's own `max_viewport_offset()` (no snapshot round-trip / magic
+    cell size). `scrollback_size_override` assertion tightened to the formula `scrollback_size + rows`.
+    Gates: `cargo test -p heca-core` 67/67 (single-threaded; the parallel `terminal_backend_process_input_reaches_shell`
+    failure is the known pre-existing flaky PTY-timing test, passes 3/3 in isolation), `-p heca-config` 70/70,
+    `-p heca` 247/247, `cargo clippy --workspace --all-targets --all-features` 0 warnings.
+  Next: slice 2 (selection model stable-row refactor, Q4).
 
-- [ ] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+- [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
   Define the policy boundary between host scrollback navigation and backend/TUI
   mouse forwarding. Normal shell/history use must scroll the host viewport;
   mouse-enabled TUIs must still receive raw wheel input when appropriate;
@@ -114,8 +141,16 @@ Runtime validation shows terminal output is live and resize is stable again, but
   `heca/src/app/terminal_host.rs`,
   `heca/src/handlers.rs`,
   `heca/src/app/interaction.rs`
-  Status: newly tracked from runtime validation on 2026-06-24. Current gap:
-  shell prompt wheel/PageUp/PageDown and selection-mode scrolling do not work.
+  Status: design LOCKED via `/grill-me` on 2026-06-24. Policy:
+  • Wheel → host scrollback unless `is_mouse_grabbed()`; Shift+wheel → always scrollback; default 3 rows/notch (`terminal_wheel_scroll_lines`).
+  • Plain PageUp/PageDown → forward to PTY (tmux pass-through; do NOT intercept).
+  • `prefix+PageUp`/`prefix+PageDown` → enter `InputMode::Selection` + scroll one page (tmux copy-mode model).
+  • Wheel-up at a non-grabbed prompt also enters `InputMode::Selection` + scrolls (tmux `mouse on`).
+  • New terminal-only `terminal_mouse` setting (default true) gates the wheel-enters-scrollback behavior (NOT the global `mouse`, which chrome depends on).
+  • Selection-mode edge movement auto-scrolls the viewport (stable-row coords).
+  • Five new `WmAction` variants: `ScrollbackPage{direction}`, `ScrollbackLine{direction,amount}`, `ScrollbackToTop`, `ScrollbackToBottom`, `ExitScrollback` — all `FocusedPaneLocal`, full 11-step treatment + RPC + default bindings in `keybindings.default.toml` (NOT `keys.rs` — defaults moved to TOML in PR #185).
+  • Three GUI affordances (animated viewport offset + scrollbar widget + scrolled-up indicator) as generic `heca-grid-ui` widgets.
+  See `handoff-terminal-01a-scrollback.md` for the full contract + slice plan.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.

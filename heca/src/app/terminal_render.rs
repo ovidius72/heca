@@ -852,6 +852,9 @@ mod tests {
                 shape: heca_core::backend::TerminalCursorShape::Block,
             },
             lines: Vec::new(),
+            viewport_offset: 0,
+            at_bottom: true,
+            scrollback_rows: rows,
         }
     }
 

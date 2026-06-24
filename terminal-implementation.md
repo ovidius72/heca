@@ -1366,6 +1366,65 @@ This section must be updated:
 > PageUp/PageDown as PTY key input, while `move_focused_terminal_selection(...)` clamps movement to
 > `terminal_snapshot().rows`. A dedicated host scrollback phase is now tracked in `BACKLOG.md` as
 > `terminal-01a`.
+>
+> **RECONCILE (2026-06-24, `/grill-me` design lock for `terminal-01a` + config single-source sync):**
+> the full host-scrollback-viewport design was locked via `/grill-me` and is captured in
+> `handoff-terminal-01a-scrollback.md` (READ THAT FILE — it is the authoritative contract for the
+> phase, superseding the prose here for scrollback specifics). Summary of locked decisions:
+> - **Q1 hybrid ownership:** `TerminalEngine` owns `viewport_offset` + projects via `TerminalSnapshot`
+>   (adds `viewport_offset`/`at_bottom`/`scrollback_rows`); AppState mirrors into the chrome store +
+>   `ChromeEvent::TerminalViewportChanged` + `host.terminal_viewport(pane_id)` (one writer, many readers).
+> - **Q2 wheel:** scrollback unless `is_mouse_grabbed()`; Shift+wheel always scrollback; default 3 rows/notch.
+> - **Q3-revised (tmux-style, user override):** plain PageUp/PageDown forward to PTY (do NOT intercept);
+>   `prefix+PageUp`/`prefix+PageDown` enter `InputMode::Selection` + scroll one page; wheel-up at a
+>   non-grabbed prompt also enters Selection mode + scrolls (tmux `mouse on`).
+> - **Q4 selection:** edge movement auto-scrolls the viewport; `SelectionRegion::HostGrid` moves from
+>   visible-row to **stable-row + col** coords (real refactor).
+> - **Q5 snap:** forwarded key input snaps to bottom; new output snaps only if already at bottom;
+>   explicit `ScrollToBottom`/indicator-click/reaching-bottom also snap. Config knobs deferred.
+> - **Q6 damage:** viewport motion → `TerminalDamage::Full` (incremental viewport damage is the
+>   SEPARATE `terminal-01` phase — do NOT fold it in).
+> - **Q7 GUI/UX (user directive "exploit the GUI"):** animated viewport offset (easing via `tick(dt)`),
+>   theme-driven `heca-grid-ui` scrollbar widget (clickable/draggable to jump), and scrolled-up
+>   indicator badge with click-to-snap-to-bottom — all generic catalog widgets.
+> - **Q8 actions:** five new `WmAction` variants (`ScrollbackPage{direction}`, `ScrollbackLine{direction,amount}`,
+>   `ScrollbackToTop`, `ScrollbackToBottom`, `ExitScrollback`), all `FocusedPaneLocal`, full 11-step
+>   registry treatment + RPC. `prefix+s` stays the selection-mode entry (do NOT use `prefix+[` = `prev_pane`).
+> - **`terminal_mouse`:** new terminal-only setting (default true) gates wheel-enters-scrollback;
+>   the global `settings.mouse` is NOT reused (chrome depends on it).
+>
+> **Config/keybinding single-source refactoring (PR #185 / commit `3dfc458`, merged into this branch
+> 2026-06-24 as `1f54d91`):** default keybindings + default settings moved OUT of Rust into versioned
+> TOML files. `keybindings.default.toml` (embedded via `include_str!`, parsed by `parse_default_keys()`,
+> `KeysConfig::default()` calls it) is now the single source for ALL default keybindings —
+> `heca-config/src/keys.rs` dropped from ~700 → 204 lines (types only). `config.default.toml` (renamed
+> from `example.config.toml`) holds `[settings]`/`[appearance]`/`[font]`/`[program]` defaults. `Config::default()`
+> = `embedded_base().try_into()`. `load_config_file()` deep-merges user `config.toml` + `keybindings.toml`
+> over the embedded base (tables merge per-key; arrays replace). **Flat bindings (`name = "combo"`)
+> CANNOT carry args** (`KeybindingMap` has no args field); **mode bindings (`[[keys.mode.bindings]]`) DO
+> support `args`**. So scrollback flat bindings use unit action names (`scrollback_page_up` etc.) mapped
+> by `action_from_name` to the parameterized `WmAction` variants. The plan file
+> `HANDOFF-config-single-source.md` is the *plan*; the *actual code* is the source of truth — read the
+> actual files. The `terminal-00` handoff does NOT mention this; `handoff-terminal-01a-scrollback.md` does.
+
+> **RECONCILE (2026-06-24, slice 1 of `terminal-01a` DONE):** the backend viewport model
+> landed with no UI/actions yet. `TerminalEngine` owns `viewport_offset` (0 = live bottom) +
+> a `viewport_changed` flag, with `scroll_viewport(delta)` / `scroll_to_top()` /
+> `scroll_to_bottom()` / `take_viewport_changed()`; `visible_lines()` now projects
+> bottom-minus-offset clamped to `[0, scrollback_rows - visible_rows]`, and `resize()` re-clamps
+> the offset after the wezterm reflow. `TerminalSnapshot` carries `viewport_offset` / `at_bottom` /
+> `scrollback_rows` (validated in `debug_assert_valid`). `PaneBackend` gained
+> `scroll_viewport` / `scroll_to_top` / `scroll_to_bottom` (default no-op); `TerminalBackend`
+> delegates and its `take_terminal_damage` forces `TerminalDamage::Full` on viewport motion (Q6).
+> `HecaTerminalConfig::scrollback_size()` is now overridden from the new
+> `SettingsConfig::terminal_scrollback_lines` (default 3500, alias `terminal-scrollback-lines`),
+> wired end-to-end: `config.default.toml` → `SettingsConfig` → `AppState.terminal_scrollback_lines`
+> → `backend_factory::terminal_backend_options` → `TerminalBackendOptions.scrollback_size` →
+> `TerminalEngine::new` → `HecaTerminalConfig`. Tests added: viewport clamping, at_bottom, snap
+> jumps, history projection, resize re-clamp, scrollback_size override. Gates green:
+> `cargo test -p heca-core` 66/66, `-p heca-config` 70/70, `-p heca` 247/247,
+> `cargo clippy --workspace --all-targets --all-features` 0 warnings. Next: slice 2
+> (selection model stable-row refactor, Q4).
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed

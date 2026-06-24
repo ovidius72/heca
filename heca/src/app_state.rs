@@ -608,6 +608,10 @@ pub struct AppState {
     pub auto_scroll_edge: bool,
     /// Whether newly spawned terminal panes should auto-inject shell integration.
     pub shell_integration_enabled: bool,
+    /// Host terminal scrollback capacity (rows) threaded from
+    /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
+    /// backends so the engine retains the configured amount of history.
+    pub terminal_scrollback_lines: usize,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

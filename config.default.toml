@@ -42,6 +42,11 @@ interactive_move_modifier = "Super"
 # cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
+# Host terminal scrollback capacity in rows (history retained above the
+# visible viewport). The host scrollback viewport scrolls within this range.
+# Mirrors wezterm-term's default of 3500 when unset.
+terminal_scrollback_lines = 3500
+
 # Terminal color palette overrides (all optional → fall back to the theme).
 # terminal_foreground          = "#c6f0ff"
 # terminal_background          = "#060a0e"
