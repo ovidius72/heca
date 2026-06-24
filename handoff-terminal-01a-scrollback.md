@@ -452,7 +452,7 @@ routing tests (tiled allows, floating allows — these are pane-local).
 
 ## 7. Slice plan (small, behavior-preserving slices, stop for review between)
 
-### Slice 1 — Backend viewport model (no UI/actions yet)
+### [x] Slice 1 — Backend viewport model (no UI/actions yet) — DONE
 - `TerminalEngine`: `viewport_offset: usize` (0 = bottom), animated target field,
   `scroll_viewport(delta)`, `scroll_to_top()`, `scroll_to_bottom()`,
   `viewport_changed` flag, `visible_lines()` projects bottom-minus-offset clamped
@@ -468,7 +468,7 @@ routing tests (tiled allows, floating allows — these are pane-local).
   override.
 - Gate: `cargo check` + `cargo test -p heca-core` green. Stop for review.
 
-### Slice 2 — Selection model stable-row refactor (Q4)
+### [x] Slice 2 — Selection model stable-row refactor (Q4) — DONE
 - `SelectionRegion::HostGrid`: `anchor_row`/`focus_row` → stable-row (isize or
   StableRowIndex alias); col stays visible (cols don't scroll).
 - `move_focused_terminal_selection`: move caret in stable-row space; on edge

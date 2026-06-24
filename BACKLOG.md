@@ -132,7 +132,27 @@ Runtime validation shows terminal output is live and resize is stable again, but
     Gates: `cargo test -p heca-core` 67/67 (single-threaded; the parallel `terminal_backend_process_input_reaches_shell`
     failure is the known pre-existing flaky PTY-timing test, passes 3/3 in isolation), `-p heca-config` 70/70,
     `-p heca` 247/247, `cargo clippy --workspace --all-targets --all-features` 0 warnings.
-  Next: slice 2 (selection model stable-row refactor, Q4).
+  **Slice 2 DONE (2026-06-24):** selection model stable-row refactor (Q4) landed.
+  - Renamed `SelectionRegion::HostGrid anchor_row/focus_row` → `anchor_stable_row/focus_stable_row`
+    (`usize` → `isize`) so selections survive viewport scroll in scrollback history.
+  - Renamed `Caret::row` → `Caret::stable_row` (`isize`).
+  - Added `visible_row_to_stable_row()` helper in `terminal_host.rs`.
+  - `build_selection_overlay` takes `&TerminalSnapshot` instead of `cols`, uses stable→visible
+    row conversion via `viewport_top_stable_row`.
+  - `enter_selection_mode_for_focused_terminal` and `move_focused_terminal_selection` convert
+    cursor row to stable row.
+  - `forward_mouse_move` converts mouse coords to stable rows.
+  - Added `lines_in_stable_range` to `PaneBackend` trait + `TerminalBackend` for fetching
+    arbitrary scrollback rows by stable range.
+  - `handle_copy_selection` fetches lines via `lines_in_stable_range` and passes `base_stable`
+    to `extract_selection_text`.
+  - Caret rendering: both caret-only and selection-endpoint draw at the LEFT edge of the cell,
+    eliminating the visual bar-position jump when pressing `v`/Space.
+  - Block cursor reverted to thin 2px bar (user preference).
+  - `render.rs` call sites updated to pass snapshot instead of `cols`.
+  - Gates: `cargo test -p heca` 259/259, `-p heca-core` 67/67, `cargo clippy` 0 warnings.
+    Commit `bc66d31`, pushed to `feature/terminal-followups`, rebased onto `origin/main`.
+  Next: slice 3 (actions + wheel + keybindings + config, `terminal_mouse`/`terminal_wheel_scroll_lines`).
 
 - [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
   Define the policy boundary between host scrollback navigation and backend/TUI

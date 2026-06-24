@@ -1423,8 +1423,20 @@ This section must be updated:
 > `TerminalEngine::new` → `HecaTerminalConfig`. Tests added: viewport clamping, at_bottom, snap
 > jumps, history projection, resize re-clamp, scrollback_size override. Gates green:
 > `cargo test -p heca-core` 66/66, `-p heca-config` 70/70, `-p heca` 247/247,
-> `cargo clippy --workspace --all-targets --all-features` 0 warnings. Next: slice 2
-> (selection model stable-row refactor, Q4).
+> `cargo clippy --workspace --all-targets --all-features` 0 warnings.
+>
+> **RECONCILE (2026-06-24, slice 2 of `terminal-01a` DONE):** the selection model stable-row
+> refactor landed with cursor rendering fixes. `SelectionRegion::HostGrid anchor_row/focus_row`
+> renamed to `anchor_stable_row/focus_stable_row` (`usize` → `isize`); `Caret::row` →
+> `Caret::stable_row`. `visible_row_to_stable_row()` helper added in `terminal_host.rs`;
+> `build_selection_overlay` takes `&TerminalSnapshot` instead of `cols`, using stable→visible
+> row conversion via `viewport_top_stable_row`. `lines_in_stable_range` added to `PaneBackend`
+> trait + `TerminalBackend` for fetching scrollback rows by stable range;
+> `handle_copy_selection` fetches via this method. Caret rendering unified to LEFT edge of the
+> cell (both caret-only and selection-endpoint), eliminating the visual bar-position jump.
+> Block cursor reverted to thin 2px bar (user preference). Gates:
+> `cargo test -p heca` 259/259, `-p heca-core` 67/67, `cargo clippy` 0 warnings.
+> Committed `bc66d31`, pushed to `feature/terminal-followups`, rebased onto `origin/main`.
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
