@@ -657,7 +657,7 @@ impl AppState {
     /// the translucent terminal surface, so this is simply the surface alpha
     /// used when compositing the terminal over z=0. See `render_frame`.
     pub fn terminal_surface_opacity(&self) -> f32 {
-        if self.appearance.terminal_transparency > 0 {
+        if self.appearance.terminal.transparency > 0 {
             self.appearance.terminal_opacity()
         } else {
             1.0
@@ -669,7 +669,7 @@ impl AppState {
     /// `terminal_floating_transparency`. Default `0` -> `1.0` (opaque, readable)
     /// so floating panes stay solid while tiled panes are frosted.
     pub fn terminal_floating_surface_opacity(&self) -> f32 {
-        if self.appearance.terminal_floating_transparency > 0 {
+        if self.appearance.terminal.floating_transparency > 0 {
             self.appearance.terminal_floating_opacity()
         } else {
             1.0

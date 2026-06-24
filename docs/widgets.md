@@ -420,9 +420,11 @@ Border width follows `theme.border_width` (`0` ⇒ no frame) unless overridden p
 pane with `.border_width(w)` — used to let one surface (e.g. a self-themed sidebar
 shell) carry its own thickness independent of the global control. Reads
 `theme.radius` (or `.radius(r)`) / `theme.border_width` / `theme.accent`. In the
-app the frame mode + width + radius are configurable per surface (`[appearance]
-pane_border_style` / `sidebar_border_style` / `sidebar_border_width` /
-`sidebar_border_radius`).
+app the frame mode + width + radius are configurable per surface under the nested
+appearance tables (`[appearance.pane]` / `[appearance.sidebar]`, each with
+`border_style` / `border_width` / `border_color` / `border_radius`), and a
+bracketed surface sizes its reticle from the same per-surface width/radius via
+`bracket_frame_with`.
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**

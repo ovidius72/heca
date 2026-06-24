@@ -733,8 +733,8 @@ pub(crate) fn build_pane_header(
 /// pane's tree only when its content key changes; re-lays-out + repositions every
 /// frame; prunes panes that disappeared.
 pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
-    let segments = state.appearance.pane_title_segments.clone();
-    let actions = state.appearance.pane_title_actions.clone();
+    let segments = state.appearance.pane.title_segments.clone();
+    let actions = state.appearance.pane.title_actions.clone();
     if segments.is_empty() && actions.is_empty() {
         state.pane_headers.clear();
         return;

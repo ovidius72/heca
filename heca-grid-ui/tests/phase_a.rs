@@ -2796,6 +2796,36 @@ fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
 }
 
 #[test]
+fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
+    // `bracket_frame_with` sizes the reticle from the passed width/radius, not the
+    // theme — the seam that lets a bracketed sidebar honor `sidebar_border_width`
+    // even when the global/theme border is 0. (Issue 1.)
+    let mut theme = Theme::grid_tron();
+    theme.border_width = 0.0; // global borders OFF
+    let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
+
+    // Theme says 0, but an explicit width of 3 still draws the reticle.
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame_with(rect, 3.0, 8.0);
+    }
+    let bright_corners = scene.iter().filter(|c| matches!(
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+    )).count();
+    assert_eq!(bright_corners, 4, "explicit width draws the reticle even when theme.border_width == 0");
+
+    // An explicit width of 0 draws nothing, regardless of the theme.
+    theme.border_width = 5.0;
+    let mut scene = Scene::new();
+    {
+        let mut cx = PaintCx::new(&mut scene, &theme);
+        cx.bracket_frame_with(rect, 0.0, 8.0);
+    }
+    assert!(scene.is_empty(), "explicit width 0 draws no reticle even with theme border on");
+}
+
+#[test]
 fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // A default `Bordered` Pane with NO explicit `.border()` derives its border
     // from `theme.border_width` (the global border control): a theme-colored

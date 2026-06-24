@@ -172,11 +172,15 @@ impl Component for Pane {
                 // drawn by `bracket_frame` (bright rounded corners + a dimmed
                 // continuous line) — matching Modal/Toast. Drawing a full
                 // `style.border` here too would wash the reticle into a plain
-                // border (indistinguishable from `Bordered`).
+                // border (indistinguishable from `Bordered`). The per-widget
+                // `.border_width(w)`/`.radius(r)` overrides size the reticle (else
+                // the theme drives it), so a self-themed surface (e.g. the sidebar)
+                // controls its bracket thickness + corner rounding too.
                 if let Some(f) = fill {
                     cx.rect(b, f, None, radius, self.base.style.glow);
                 }
-                cx.bracket_frame(b);
+                let width = self.border_width.unwrap_or(cx.theme().border_width);
+                cx.bracket_frame_with(b, width, radius);
             }
         }
 

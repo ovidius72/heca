@@ -150,26 +150,149 @@ const DEFAULT_SIDEBAR_WIDTH: f32 = 300.0;
 const DEFAULT_FOCUS_BORDER_WIDTH: f32 = 1.5;
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  Per-surface appearance (nested `[appearance.terminal/pane/sidebar]` tables)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Terminal **content** surface translucency/blur (`[appearance.terminal]`). The
+/// pane *frame* (border/radius/gap) lives in [`PaneAppearance`] — this owns only
+/// the see-through-ness of the terminal surface itself.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TerminalAppearance {
+    /// Tiled terminal-pane transparency, `0..=100` (`0` opaque, `100`
+    /// see-through). Surface alpha composited over the z=0 background.
+    #[serde(default = "default_terminal_transparency")]
+    pub transparency: u8,
+    /// Floating terminal-pane transparency, `0..=100` (`0` opaque). Independent of
+    /// the tiled `transparency`, so floating panes can stay readable while tiled
+    /// panes are frosted. Default `0` (opaque).
+    #[serde(default = "default_terminal_floating_transparency")]
+    pub floating_transparency: u8,
+    /// Floating terminal-pane real-blur strength, `0..=100` (`0` = off).
+    /// Independent of the z=0 `background_blur`. Default `0` (no blur).
+    #[serde(default = "default_terminal_floating_blur")]
+    pub floating_blur: u8,
+}
+
+impl Default for TerminalAppearance {
+    fn default() -> Self {
+        Self {
+            transparency: default_terminal_transparency(),
+            floating_transparency: default_terminal_floating_transparency(),
+            floating_blur: default_terminal_floating_blur(),
+        }
+    }
+}
+
+/// Pane frame + info-bar appearance (`[appearance.pane]`). Every border field is
+/// optional; when unset it inherits the global `[appearance]` default, which in
+/// turn falls back to the theme. (Surface → global → theme.)
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PaneAppearance {
+    /// Frame style. `None` → [`BorderStyle::Bordered`]. `none | bordered | bracketed`.
+    #[serde(default)]
+    pub border_style: Option<BorderStyle>,
+    /// Border width (logical px). `None` → global `border_width` → theme. Clamped `[0, 10]`.
+    #[serde(default)]
+    pub border_width: Option<f32>,
+    /// Inactive/unfocused border color. `None` → global `border_color` → `theme.border` @50%.
+    #[serde(default)]
+    pub border_color: Option<Color>,
+    /// Corner radius (logical px). `None` → global `border_radius` → theme. Clamped `[0, 20]`.
+    #[serde(default)]
+    pub border_radius: Option<f32>,
+    /// Focused/active border color. `None` → `theme.accent`.
+    #[serde(default)]
+    pub active_border_color: Option<Color>,
+    /// Floating-pane border color (all floating panes, so they read as a distinct
+    /// layer). `None` → `theme.float_accent`.
+    #[serde(default)]
+    pub floating_border_color: Option<Color>,
+    /// Gap between tiled panes (logical px). `None` → 8.0.
+    #[serde(default)]
+    pub gap: Option<f32>,
+    /// Internal padding (content inset from the border, logical px). `None` → theme
+    /// `pane_padding`. Clamped `[0, 20]`.
+    #[serde(default)]
+    pub padding: Option<f32>,
+    /// Info-bar segments (left), in order. Empty hides the left side. See [`PaneSegment`].
+    #[serde(default = "default_pane_title_segments")]
+    pub title_segments: Vec<PaneSegment>,
+    /// Info-bar action buttons (right), in order. Empty hides the right side. See [`PaneAction`].
+    #[serde(default = "default_pane_title_actions")]
+    pub title_actions: Vec<PaneAction>,
+}
+
+impl Default for PaneAppearance {
+    fn default() -> Self {
+        Self {
+            border_style: None,
+            border_width: None,
+            border_color: None,
+            border_radius: None,
+            active_border_color: None,
+            floating_border_color: None,
+            gap: None,
+            padding: None,
+            title_segments: default_pane_title_segments(),
+            title_actions: default_pane_title_actions(),
+        }
+    }
+}
+
+/// Sidebar shell appearance (`[appearance.sidebar]`). Border fields unset →
+/// global `[appearance]` default → theme. (Surface → global → theme.)
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SidebarAppearance {
+    /// Frame style. `None` → [`BorderStyle::Bracketed`]. `none | bordered | bracketed`.
+    #[serde(default)]
+    pub border_style: Option<BorderStyle>,
+    /// Border width (logical px). `None` → global `border_width` → theme. Clamped `[0, 10]`.
+    #[serde(default)]
+    pub border_width: Option<f32>,
+    /// Border color (the `bordered` frame). `None` → global `border_color` → `theme.border`.
+    #[serde(default)]
+    pub border_color: Option<Color>,
+    /// Corner radius (logical px). `None` → global `border_radius` → theme. Clamped `[0, 40]`.
+    #[serde(default)]
+    pub border_radius: Option<f32>,
+    /// Shell background fill. `None` → the theme-derived sidebar surface color. The
+    /// window/chrome transparency still applies on top.
+    #[serde(default)]
+    pub background_color: Option<Color>,
+    /// Gap between the sidebar and the content area (logical px). `None` → 12.0.
+    #[serde(default)]
+    pub gap: Option<f32>,
+    /// Sidebar width (logical px). `None` → 300; clamped to `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`.
+    #[serde(default)]
+    pub width: Option<f32>,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  AppearanceConfig
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Read-only appearance contract shared by all rendering layers — none owns it.
 ///
-/// Four intuitive, cross-platform controls:
+/// Layout: app-wide knobs live at the top (`[appearance]`); per-surface chrome
+/// lives in three nested sub-tables — [`TerminalAppearance`] (`[appearance.terminal]`),
+/// [`PaneAppearance`] (`[appearance.pane]`), [`SidebarAppearance`]
+/// (`[appearance.sidebar]`).
+///
+/// App-wide controls:
 /// - `transparency` — how see-through the app is (`0` opaque, `100` fully
 ///   transparent). Portable (window/surface alpha).
-/// - `blur` — the **in-app** frosted-glass blur amount behind translucent panels
+/// - `blur` — the **in-app** frosted-glass blur behind translucent panels
 ///   (palette/sidebar). Portable (our own GPU pass, F3). `0` = off.
 /// - `vibrancy` — the **OS backdrop** material (blurs the desktop *behind* the
-///   window). Not numeric, not portable: macOS materials, Windows acrylic, Linux
-///   no-op. [`Vibrancy::None`] = off.
-/// - `terminal_transparency` — terminal-pane surface translucency control,
-///   independent from the global chrome/window knobs above.
-/// - pane chrome — border width, colors, radius, gap. These override the theme
-///   when set; leaving them unset inherits from the theme automatically.
+///   window). Not numeric, not portable. [`Vibrancy::None`] = off.
+/// - `background_*` — the z=0 frosted gradient layer panes composite over.
+/// - `glow_size` / `intensity` — effect tokens (override the theme).
+/// - `border_width` / `border_color` / `border_radius` — global border defaults
+///   every surface inherits; `focus_border_width` — affordance-outline width.
 ///
-/// All fields are `Copy`. Missing `[appearance]` sections fall back to these
-/// defaults (everything off → identical to an opaque app).
+/// Inheritance for surface border fields: surface value → global `[appearance]`
+/// default → theme. Missing `[appearance]` (and any sub-table) falls back to
+/// these defaults (everything off → identical to an opaque app).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppearanceConfig {
     /// Window/app transparency amount, `0..=100` (`0` opaque, `100` see-through).
@@ -180,24 +303,6 @@ pub struct AppearanceConfig {
     /// distinct from the OS `vibrancy` backdrop.
     #[serde(default = "default_blur")]
     pub blur: u8,
-
-    /// Terminal pane transparency amount, `0..=100` (`0` opaque, `100`
-    /// see-through). Independent from the global window/chrome transparency.
-    #[serde(default = "default_terminal_transparency")]
-    pub terminal_transparency: u8,
-
-    /// Floating terminal pane transparency amount, `0..=100` (`0` opaque, `100`
-    /// see-through). Independent from the tiled `terminal_transparency` so
-    /// floating panes can stay readable (opaque) while tiled panes are frosted.
-    /// Default `0` (opaque) — floating panes are solid windows.
-    #[serde(default = "default_terminal_floating_transparency")]
-    pub terminal_floating_transparency: u8,
-
-    /// Floating terminal pane real-blur strength, `0..=100` (`0` = off).
-    /// Independent from the z=0 `background_blur`. Default `0` (no real blur —
-    /// floating panes are solid); set > 0 to frost floating panes too.
-    #[serde(default = "default_terminal_floating_blur")]
-    pub terminal_floating_blur: u8,
 
     /// OS backdrop material ([`Vibrancy::None`] = off). Platform-dependent.
     #[serde(default = "default_vibrancy")]
@@ -241,99 +346,45 @@ pub struct AppearanceConfig {
     #[serde(default)]
     pub intensity: Option<Intensity>,
 
-    // ── Pane chrome ──
-    // All default to `None` (= inherit from theme). Set explicitly in
-    // config.toml to override the theme-derived value.
-    /// Pane border stroke width (logical px). `None` → inherits `theme.border_width`.
-    #[serde(default)]
-    pub pane_border_width: Option<f32>,
-    /// Pane border color for inactive/unfocused panes. `None` → inherits `theme.border` at 50% alpha.
-    #[serde(default)]
-    pub pane_border_color: Option<Color>,
-    /// Pane corner radius. `None` → inherits `theme.border_radius`.
-    #[serde(default)]
-    pub pane_border_radius: Option<f32>,
-    /// Pane border color when focused/active. `None` → inherits `theme.accent`.
-    #[serde(default)]
-    pub pane_active_border_color: Option<Color>,
-    /// Pane border color for floating panes (applies to all floating panes,
-    /// active or inactive, so they read as a distinct layer). `None` → inherits
-    /// `theme.float_accent`. Set to distinguish floating panes from tiled ones.
-    #[serde(default)]
-    pub pane_floating_border_color: Option<Color>,
-    /// Gap between panes (logical px). `None` → 8.0 (built-in layout default).
-    #[serde(default)]
-    pub pane_gap: Option<f32>,
-    /// Internal padding inside panes (logical px). `None` → 4.0; clamped to `[0, 20]`.
-    #[serde(default)]
-    pub pane_padding: Option<f32>,
-    /// Gap between sidebar and content area (logical px). `None` → 12.0.
-    #[serde(default)]
-    pub sidebar_gap: Option<f32>,
-    /// Sidebar (left + right panel) width in logical px. `None` → 300; clamped to
-    /// `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`.
-    #[serde(default)]
-    pub sidebar_width: Option<f32>,
-
-    // ── Border style per surface ──
-    /// Frame style for terminal panes. `None` → [`BorderStyle::Bordered`]
-    /// (current default). Values: `none | bordered | bracketed`.
-    #[serde(default)]
-    pub pane_border_style: Option<BorderStyle>,
-    /// Frame style for the sidebar shell. `None` → [`BorderStyle::Bracketed`]
-    /// (current default). Values: `none | bordered | bracketed`.
-    #[serde(default)]
-    pub sidebar_border_style: Option<BorderStyle>,
-    /// Sidebar shell border width (logical px). `None` → the global
-    /// `border_width` (theme fallback). Lets the sidebar frame be thicker/thinner
-    /// than the rest of the chrome. With `sidebar_border_style = "bordered"`, this
-    /// is the width drawn in `border_color`; `0` removes the sidebar border.
-    /// Clamped to `[0, 10]`.
-    #[serde(default)]
-    pub sidebar_border_width: Option<f32>,
-    /// Sidebar shell background color. `None` → the theme-derived sidebar surface
-    /// color. Overrides the fill behind the sidebar frame (both left and right
-    /// sidebars). The configured window/chrome transparency still applies on top.
-    #[serde(default)]
-    pub sidebar_background_color: Option<Color>,
-    /// Sidebar shell corner radius (logical px). `None` → the theme
-    /// `border_radius`. Clamped to `[0, 40]`.
-    #[serde(default)]
-    pub sidebar_border_radius: Option<f32>,
-    /// **Global** decorative border width (logical px) — overrides the theme's
-    /// `border_width` for every surface (chrome, sidebar, and the default panes
-    /// inherit). `None` → the theme value. This is the app-wide equivalent of the
-    /// showcase's BORDER control. `pane_border_width` overrides this for panes.
+    // ── Global border defaults (every surface inherits these when its own field
+    //    is unset; each in turn falls back to the theme). ──
+    /// **Global** decorative border width (logical px). The app-wide BORDER
+    /// control: the chrome and every surface (`pane`/`sidebar`) inherit it when
+    /// their own `border_width` is unset. `None` → the theme value.
     #[serde(default)]
     pub border_width: Option<f32>,
-    /// **Global** decorative border color — overrides the theme's `border` color
-    /// for the chrome/sidebar `bordered` frame (and the panes' default). `None` →
-    /// the theme's (subtle) border color. Set this to e.g. the accent for a more
-    /// intense, visible border. (The `bracketed` reticle uses the theme accent.)
+    /// **Global** decorative border color — the `bordered` frame color inherited by
+    /// the chrome and surfaces when their own `border_color` is unset. `None` → the
+    /// theme's (subtle) border color. (The `bracketed` reticle uses the theme accent.)
     #[serde(default)]
     pub border_color: Option<Color>,
+    /// **Global** corner radius (logical px) inherited by surfaces when their own
+    /// `border_radius` is unset. `None` → the theme `border_radius`.
+    #[serde(default)]
+    pub border_radius: Option<f32>,
     /// Width (logical px) of the **affordance** outlines — the keyboard focus ring
     /// and the selected-item highlight. Independent of the decorative border width,
     /// so focus/selection stay visible even with borders off. `None` → `1.5`.
     #[serde(default)]
     pub focus_border_width: Option<f32>,
 
-    // ── Pane info bar (segmented pill inside the pane, with action buttons) ──
-    /// Segments shown on the left of the pane info bar, in order. Empty hides the
-    /// left side. See [`PaneSegment`].
-    #[serde(default = "default_pane_title_segments")]
-    pub pane_title_segments: Vec<PaneSegment>,
-    /// Action buttons shown on the right of the pane info bar, in order. Empty
-    /// hides the right side. See [`PaneAction`].
-    #[serde(default = "default_pane_title_actions")]
-    pub pane_title_actions: Vec<PaneAction>,
+    // ── Per-surface sub-tables ──
+    /// Terminal **content** translucency/blur (`[appearance.terminal]`).
+    #[serde(default)]
+    pub terminal: TerminalAppearance,
+    /// Pane frame + info-bar appearance (`[appearance.pane]`).
+    #[serde(default)]
+    pub pane: PaneAppearance,
+    /// Sidebar shell appearance (`[appearance.sidebar]`).
+    #[serde(default)]
+    pub sidebar: SidebarAppearance,
 }
 
 impl AppearanceConfig {
     /// Whether the pane info bar shows at all (any segment or action configured).
     /// When false, the pane reserves no extra top padding for it.
     pub fn pane_info_bar_visible(&self) -> bool {
-        !self.pane_title_segments.is_empty() || !self.pane_title_actions.is_empty()
+        !self.pane.title_segments.is_empty() || !self.pane.title_actions.is_empty()
     }
 }
 
@@ -366,23 +417,23 @@ impl AppearanceConfig {
         (self.blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
     }
 
-    /// Terminal pane surface opacity in `0.0..=1.0` (`terminal_transparency = 0`
-    /// → `1.0` opaque).
+    /// Terminal pane surface opacity in `0.0..=1.0`
+    /// (`[appearance.terminal] transparency = 0` → `1.0` opaque).
     pub fn terminal_opacity(&self) -> f32 {
-        1.0 - (self.terminal_transparency.min(100) as f32) / 100.0
+        1.0 - (self.terminal.transparency.min(100) as f32) / 100.0
     }
 
     /// Floating terminal-pane surface opacity in `0.0..=1.0`
-    /// (`terminal_floating_transparency = 0` → `1.0` opaque). Independent from
-    /// the tiled `terminal_opacity()` so floating panes can stay readable.
+    /// (`[appearance.terminal] floating_transparency = 0` → `1.0` opaque).
+    /// Independent from the tiled `terminal_opacity()` so floating panes can stay readable.
     pub fn terminal_floating_opacity(&self) -> f32 {
-        1.0 - (self.terminal_floating_transparency.min(100) as f32) / 100.0
+        1.0 - (self.terminal.floating_transparency.min(100) as f32) / 100.0
     }
 
     /// Floating terminal-pane real-blur radius in logical px (`0.0` =
     /// off). Independent from the z=0 `background_blur`.
     pub fn terminal_floating_blur_radius(&self) -> f32 {
-        (self.terminal_floating_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
+        (self.terminal.floating_blur.min(100) as f32) / 100.0 * MAX_BLUR_PX
     }
 
     /// The OS backdrop material to apply, or `None` when disabled.
@@ -457,46 +508,72 @@ impl AppearanceConfig {
         self.border_color.unwrap_or(theme.border)
     }
 
-    /// Effective pane border width. Config `pane_border_width` override → the
-    /// global `border_width` (theme fallback), clamped to `[0, 10]`.
+    /// Effective **global** corner radius: config `border_radius` override → theme
+    /// `border_radius`. The fallback surfaces inherit when their own radius is unset.
+    pub fn effective_border_radius(&self, theme: &Theme) -> f32 {
+        self.border_radius.unwrap_or(theme.border_radius)
+    }
+
+    /// Effective pane border width: `[appearance.pane] border_width` → global
+    /// `border_width` → theme, clamped to `[0, 10]`.
     pub fn effective_pane_border_width(&self, theme: &Theme) -> f32 {
-        self.pane_border_width
+        self.pane
+            .border_width
             .unwrap_or_else(|| self.effective_border_width(theme))
             .clamp(0.0, 10.0)
     }
 
-    /// Effective inactive pane border color. Config override → theme `border` at 50% alpha.
+    /// Effective inactive pane border color: `[appearance.pane] border_color` →
+    /// global `border_color` → theme `border` at 50% alpha.
     pub fn effective_pane_border_color(&self, theme: &Theme) -> Color {
-        self.pane_border_color
+        self.pane
+            .border_color
+            .or(self.border_color)
             .unwrap_or_else(|| theme.border.with_alpha(128))
     }
 
-    /// Effective pane corner radius. Config override → theme `border_radius`,
-    /// clamped to `[0, 20]`. Higher radii make the rounded content-clip (stencil)
-    /// eat into terminal content at the corners; capping keeps the clip gentle
-    /// so cells/text aren't cut off.
+    /// Effective pane corner radius: `[appearance.pane] border_radius` → global
+    /// `border_radius` → theme, clamped to `[0, 20]`. Higher radii make the rounded
+    /// content-clip (stencil) eat into terminal content at the corners; capping
+    /// keeps the clip gentle so cells/text aren't cut off.
     pub fn effective_pane_border_radius(&self, theme: &Theme) -> f32 {
-        self.pane_border_radius
-            .unwrap_or(theme.border_radius)
+        self.pane
+            .border_radius
+            .unwrap_or_else(|| self.effective_border_radius(theme))
             .clamp(0.0, 20.0)
     }
 
     /// Effective active pane border color. Config override → theme `accent`.
     pub fn effective_pane_active_border_color(&self, theme: &Theme) -> Color {
-        self.pane_active_border_color.unwrap_or(theme.accent)
+        self.pane.active_border_color.unwrap_or(theme.accent)
     }
 
     /// Effective floating pane border color (applies to all floating panes,
     /// active or inactive, so they read as a distinct layer). Config override →
     /// `theme.float_accent`.
     pub fn effective_pane_floating_border_color(&self, theme: &Theme) -> Color {
-        self.pane_floating_border_color
-            .unwrap_or(theme.float_accent)
+        self.pane.floating_border_color.unwrap_or(theme.float_accent)
     }
 
-    /// Effective pane gap. Config override → 8.0 (built-in layout default).
-    pub fn effective_pane_gap(&self, _theme: &Theme) -> f32 {
-        self.pane_gap.unwrap_or(8.0)
+    /// Effective gap between tiled panes (logical px). Config override → 8.0.
+    ///
+    /// **Border-overlap floor:** when the pane border is visible (style ≠ `none`
+    /// and width > 0), neighbouring panes each draw a full border on their shared
+    /// edge, so a gap smaller than the border width makes the two borders overlap
+    /// (and bleed onto each other). The gap is therefore floored at the effective
+    /// pane border width whenever borders are on — a configured `gap = 0` becomes
+    /// exactly one border width, yielding a clean single divider instead of an
+    /// overlap. With `border_style = "none"` the configured gap is used as-is
+    /// (`gap = 0` gives truly flush panes).
+    pub fn effective_pane_gap(&self, theme: &Theme) -> f32 {
+        let gap = self.pane.gap.unwrap_or(8.0);
+        if self.effective_pane_border_style() != BorderStyle::None {
+            let border = self.effective_pane_border_width(theme);
+            if border > 0.0 {
+                return gap.max(border);
+            }
+        }
+        gap
     }
 
     /// Effective pane internal padding (content inset from the pane border).
@@ -504,20 +581,19 @@ impl AppearanceConfig {
     /// `[0, 20]`. Snug by default now that the rounded content-clip (stencil)
     /// handles corners — a small straight-edge gap no longer overflows.
     pub fn effective_pane_padding(&self, theme: &Theme) -> f32 {
-        self.pane_padding
-            .unwrap_or(theme.pane_padding)
-            .clamp(0.0, 20.0)
+        self.pane.padding.unwrap_or(theme.pane_padding).clamp(0.0, 20.0)
     }
 
     /// Effective sidebar gap. Config override → 12.0.
     pub fn effective_sidebar_gap(&self, _theme: &Theme) -> f32 {
-        self.sidebar_gap.unwrap_or(12.0)
+        self.sidebar.gap.unwrap_or(12.0)
     }
 
     /// Effective sidebar width (logical px), clamped to
     /// `[MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH]`. Config override → 300.
     pub fn effective_sidebar_width(&self) -> f32 {
-        self.sidebar_width
+        self.sidebar
+            .width
             .unwrap_or(DEFAULT_SIDEBAR_WIDTH)
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH)
     }
@@ -527,34 +603,45 @@ impl AppearanceConfig {
     /// Effective terminal-pane frame style. Config override → [`BorderStyle::Bordered`]
     /// (the current default look).
     pub fn effective_pane_border_style(&self) -> BorderStyle {
-        self.pane_border_style.unwrap_or(BorderStyle::Bordered)
+        self.pane.border_style.unwrap_or(BorderStyle::Bordered)
     }
 
     /// Effective sidebar-shell frame style. Config override → [`BorderStyle::Bracketed`]
     /// (the current default look).
     pub fn effective_sidebar_border_style(&self) -> BorderStyle {
-        self.sidebar_border_style.unwrap_or(BorderStyle::Bracketed)
+        self.sidebar.border_style.unwrap_or(BorderStyle::Bracketed)
     }
 
-    /// Effective sidebar-shell border width. Config `sidebar_border_width` →
-    /// the global `border_width` (theme fallback), clamped to `[0, 10]`.
+    /// Effective sidebar-shell border width: `[appearance.sidebar] border_width` →
+    /// global `border_width` → theme, clamped to `[0, 10]`.
     pub fn effective_sidebar_border_width(&self, theme: &Theme) -> f32 {
-        self.sidebar_border_width
+        self.sidebar
+            .border_width
             .unwrap_or_else(|| self.effective_border_width(theme))
             .clamp(0.0, 10.0)
     }
 
-    /// Effective sidebar-shell background color. Config `sidebar_background_color`
-    /// → the theme-derived sidebar surface color passed in by the caller.
-    pub fn effective_sidebar_background_color(&self, theme_surface: Color) -> Color {
-        self.sidebar_background_color.unwrap_or(theme_surface)
+    /// Effective sidebar-shell border color: `[appearance.sidebar] border_color` →
+    /// global `border_color` → theme `border`. Used by the `bordered` sidebar frame.
+    pub fn effective_sidebar_border_color(&self, theme: &Theme) -> Color {
+        self.sidebar
+            .border_color
+            .or(self.border_color)
+            .unwrap_or(theme.border)
     }
 
-    /// Effective sidebar-shell corner radius. Config `sidebar_border_radius` →
-    /// theme `border_radius`, clamped to `[0, 40]`.
+    /// Effective sidebar-shell background color: `[appearance.sidebar]
+    /// background_color` → the theme-derived sidebar surface color passed in.
+    pub fn effective_sidebar_background_color(&self, theme_surface: Color) -> Color {
+        self.sidebar.background_color.unwrap_or(theme_surface)
+    }
+
+    /// Effective sidebar-shell corner radius: `[appearance.sidebar] border_radius`
+    /// → global `border_radius` → theme, clamped to `[0, 40]`.
     pub fn effective_sidebar_border_radius(&self, theme: &Theme) -> f32 {
-        self.sidebar_border_radius
-            .unwrap_or(theme.border_radius)
+        self.sidebar
+            .border_radius
+            .unwrap_or_else(|| self.effective_border_radius(theme))
             .clamp(0.0, 40.0)
     }
 
@@ -573,9 +660,6 @@ impl Default for AppearanceConfig {
         Self {
             transparency: default_transparency(),
             blur: default_blur(),
-            terminal_transparency: default_terminal_transparency(),
-            terminal_floating_transparency: default_terminal_floating_transparency(),
-            terminal_floating_blur: default_terminal_floating_blur(),
             vibrancy: default_vibrancy(),
             background_gradient_top: None,
             background_gradient_bottom: None,
@@ -583,25 +667,13 @@ impl Default for AppearanceConfig {
             background_transparency: default_background_transparency(),
             glow_size: None,
             intensity: None,
-            pane_border_width: None,
-            pane_border_color: None,
-            pane_border_radius: None,
-            pane_active_border_color: None,
-            pane_floating_border_color: None,
-            pane_gap: None,
-            pane_padding: None,
-            sidebar_gap: None,
-            sidebar_width: None,
-            pane_border_style: None,
-            sidebar_border_style: None,
-            sidebar_border_width: None,
-            sidebar_background_color: None,
-            sidebar_border_radius: None,
             border_width: None,
             border_color: None,
+            border_radius: None,
             focus_border_width: None,
-            pane_title_segments: default_pane_title_segments(),
-            pane_title_actions: default_pane_title_actions(),
+            terminal: TerminalAppearance::default(),
+            pane: PaneAppearance::default(),
+            sidebar: SidebarAppearance::default(),
         }
     }
 }
@@ -619,9 +691,9 @@ mod tests {
         let cfg = AppearanceConfig::default();
         assert_eq!(cfg.transparency, 0);
         assert_eq!(cfg.blur, 0);
-        assert_eq!(cfg.terminal_transparency, 0);
-        assert_eq!(cfg.terminal_floating_transparency, 0);
-        assert_eq!(cfg.terminal_floating_blur, 0);
+        assert_eq!(cfg.terminal.transparency, 0);
+        assert_eq!(cfg.terminal.floating_transparency, 0);
+        assert_eq!(cfg.terminal.floating_blur, 0);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
         assert_eq!(cfg.background_blur, 0);
         assert_eq!(cfg.background_transparency, 0);
@@ -645,12 +717,12 @@ mod tests {
     fn pane_info_bar_defaults_to_location_and_app_with_split_close() {
         let cfg = AppearanceConfig::default();
         assert_eq!(
-            cfg.pane_title_segments,
+            cfg.pane.title_segments,
             vec![PaneSegment::Location, PaneSegment::AppName]
         );
         // Move-left/right are omitted by default (mouse drag already moves panes).
         assert_eq!(
-            cfg.pane_title_actions,
+            cfg.pane.title_actions,
             vec![PaneAction::Split, PaneAction::Close]
         );
         assert!(cfg.pane_info_bar_visible());
@@ -659,11 +731,11 @@ mod tests {
     #[test]
     fn pane_info_segments_and_actions_parse_snake_case() {
         let cfg: AppearanceConfig = toml::from_str(
-            "pane_title_segments = [\"location\", \"app_name\", \"git_branch\", \"git_status\"]\npane_title_actions = [\"split\", \"close\"]",
+            "[pane]\ntitle_segments = [\"location\", \"app_name\", \"git_branch\", \"git_status\"]\ntitle_actions = [\"split\", \"close\"]",
         )
         .unwrap();
         assert_eq!(
-            cfg.pane_title_segments,
+            cfg.pane.title_segments,
             vec![
                 PaneSegment::Location,
                 PaneSegment::AppName,
@@ -672,7 +744,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            cfg.pane_title_actions,
+            cfg.pane.title_actions,
             vec![PaneAction::Split, PaneAction::Close]
         );
     }
@@ -680,7 +752,7 @@ mod tests {
     #[test]
     fn empty_pane_info_bar_is_not_visible() {
         let cfg: AppearanceConfig =
-            toml::from_str("pane_title_segments = []\npane_title_actions = []").unwrap();
+            toml::from_str("[pane]\ntitle_segments = []\ntitle_actions = []").unwrap();
         assert!(!cfg.pane_info_bar_visible());
     }
 
@@ -689,7 +761,10 @@ mod tests {
         let cfg = AppearanceConfig {
             transparency: 25,
             blur: 50,
-            terminal_transparency: 40,
+            terminal: TerminalAppearance {
+                transparency: 40,
+                ..Default::default()
+            },
             vibrancy: Vibrancy::Sidebar,
             ..Default::default()
         };
@@ -842,11 +917,11 @@ intensity = "off""#,
     #[test]
     fn partial_toml_fills_defaults() {
         let cfg: AppearanceConfig =
-            toml::from_str("transparency = 30\nterminal_transparency = 15\n")
+            toml::from_str("transparency = 30\n[terminal]\ntransparency = 15\n")
                 .expect("partial appearance toml should parse");
         assert_eq!(cfg.transparency, 30);
         assert_eq!(cfg.blur, 0);
-        assert_eq!(cfg.terminal_transparency, 15);
+        assert_eq!(cfg.terminal.transparency, 15);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
     }
 
@@ -884,9 +959,11 @@ theme = "mocha"
     fn floating_terminal_knobs_are_independent_of_tiled() {
         // Tiled translucent while floating defaults to opaque.
         let cfg = AppearanceConfig {
-            terminal_transparency: 95,
-            terminal_floating_transparency: 0,
-            terminal_floating_blur: 0,
+            terminal: TerminalAppearance {
+                transparency: 95,
+                floating_transparency: 0,
+                floating_blur: 0,
+            },
             ..Default::default()
         };
         assert!((cfg.terminal_opacity() - 0.05).abs() < 1e-6);
@@ -895,8 +972,11 @@ theme = "mocha"
 
         // Floating knobs can be set independently of the tiled ones.
         let cfg = AppearanceConfig {
-            terminal_floating_transparency: 50,
-            terminal_floating_blur: 25,
+            terminal: TerminalAppearance {
+                floating_transparency: 50,
+                floating_blur: 25,
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert!((cfg.terminal_floating_opacity() - 0.5).abs() < 1e-6);
@@ -916,7 +996,10 @@ theme = "mocha"
 
         // Config override wins.
         let cfg = AppearanceConfig {
-            pane_floating_border_color: Some(Color::new(1, 2, 3, 255)),
+            pane: PaneAppearance {
+                floating_border_color: Some(Color::new(1, 2, 3, 255)),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(
@@ -928,11 +1011,11 @@ theme = "mocha"
     #[test]
     fn border_style_parses_snake_case_and_resolves_defaults() {
         let cfg: AppearanceConfig = toml::from_str(
-            "pane_border_style = \"bracketed\"\nsidebar_border_style = \"none\"",
+            "[pane]\nborder_style = \"bracketed\"\n[sidebar]\nborder_style = \"none\"",
         )
         .expect("border styles should parse snake_case");
-        assert_eq!(cfg.pane_border_style, Some(BorderStyle::Bracketed));
-        assert_eq!(cfg.sidebar_border_style, Some(BorderStyle::None));
+        assert_eq!(cfg.pane.border_style, Some(BorderStyle::Bracketed));
+        assert_eq!(cfg.sidebar.border_style, Some(BorderStyle::None));
         assert_eq!(cfg.effective_pane_border_style(), BorderStyle::Bracketed);
         assert_eq!(cfg.effective_sidebar_border_style(), BorderStyle::None);
 
@@ -963,7 +1046,10 @@ theme = "mocha"
         // Sidebar-specific override wins over the global, and is clamped to [0, 10].
         let cfg = AppearanceConfig {
             border_width: Some(4.0),
-            sidebar_border_width: Some(99.0),
+            sidebar: SidebarAppearance {
+                border_width: Some(99.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(cfg.effective_sidebar_border_width(&mocha), 10.0);
@@ -987,8 +1073,11 @@ theme = "mocha"
 
         // Config override wins (radius clamped to [0, 40]).
         let cfg = AppearanceConfig {
-            sidebar_background_color: Some(Color::new(1, 2, 3, 255)),
-            sidebar_border_radius: Some(99.0),
+            sidebar: SidebarAppearance {
+                background_color: Some(Color::new(1, 2, 3, 255)),
+                border_radius: Some(99.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(
@@ -1011,10 +1100,13 @@ theme = "mocha"
         assert_eq!(g.effective_border_width(&theme), 3.0);
         assert_eq!(g.effective_pane_border_width(&theme), 3.0);
 
-        // pane_border_width overrides the global for panes only.
+        // pane.border_width overrides the global for panes only.
         let p = AppearanceConfig {
             border_width: Some(3.0),
-            pane_border_width: Some(1.0),
+            pane: PaneAppearance {
+                border_width: Some(1.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(p.effective_border_width(&theme), 3.0);
@@ -1041,9 +1133,12 @@ theme = "mocha"
 
         // Explicit config values above the cap clamp down into range.
         let over = AppearanceConfig {
-            pane_border_width: Some(999.0),
-            pane_border_radius: Some(88.0),
-            pane_padding: Some(999.0),
+            pane: PaneAppearance {
+                border_width: Some(999.0),
+                border_radius: Some(88.0),
+                padding: Some(999.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(over.effective_pane_border_width(&theme), 10.0);
@@ -1052,9 +1147,12 @@ theme = "mocha"
 
         // Negative values clamp to the lower bound (0).
         let under = AppearanceConfig {
-            pane_border_width: Some(-5.0),
-            pane_border_radius: Some(-2.0),
-            pane_padding: Some(-1.0),
+            pane: PaneAppearance {
+                border_width: Some(-5.0),
+                border_radius: Some(-2.0),
+                padding: Some(-1.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(under.effective_pane_border_width(&theme), 0.0);
@@ -1074,13 +1172,56 @@ theme = "mocha"
 
         // In-range values pass through unchanged.
         let mid = AppearanceConfig {
-            pane_border_width: Some(4.0),
-            pane_border_radius: Some(15.0),
-            pane_padding: Some(8.0),
+            pane: PaneAppearance {
+                border_width: Some(4.0),
+                border_radius: Some(15.0),
+                padding: Some(8.0),
+                ..Default::default()
+            },
             ..Default::default()
         };
         assert_eq!(mid.effective_pane_border_width(&theme), 4.0);
         assert_eq!(mid.effective_pane_border_radius(&theme), 15.0);
         assert_eq!(mid.effective_pane_padding(&theme), 8.0);
+    }
+
+    #[test]
+    fn pane_gap_floored_at_border_width_only_when_borders_visible() {
+        let theme = crate::theme::Theme::default();
+
+        // Borders ON (default style "bordered"): gap 0 floors up to the border
+        // width so the two adjacent pane borders don't overlap on the shared edge.
+        let zero = AppearanceConfig {
+            pane: PaneAppearance {
+                gap: Some(0.0),
+                border_width: Some(3.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(zero.effective_pane_gap(&theme), 3.0);
+
+        // A gap wider than the border is left untouched.
+        let wide = AppearanceConfig {
+            pane: PaneAppearance {
+                gap: Some(12.0),
+                border_width: Some(3.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(wide.effective_pane_gap(&theme), 12.0);
+
+        // border_style = "none": no border is drawn, so gap 0 stays truly flush.
+        let flush = AppearanceConfig {
+            pane: PaneAppearance {
+                gap: Some(0.0),
+                border_style: Some(BorderStyle::None),
+                border_width: Some(3.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(flush.effective_pane_gap(&theme), 0.0);
     }
 }

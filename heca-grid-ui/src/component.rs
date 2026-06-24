@@ -791,14 +791,22 @@ impl<'a> PaintCx<'a> {
     /// each edge) layered on top — the Tron reticle. DRY: the frame is defined
     /// once here instead of per-widget.
     ///
-    /// Width is driven entirely by `theme.border_width`: at `border_width == 0`
-    /// the frame draws **nothing** (no border anywhere), consistent with every
-    /// other widget's border gate.
+    /// Width/radius come from `theme.border_width`/`theme.radius`: at
+    /// `border_width == 0` the frame draws **nothing** (no border anywhere),
+    /// consistent with every other widget's border gate. For a surface that
+    /// carries its own width/radius (e.g. a self-themed sidebar shell), use
+    /// [`bracket_frame_with`](Self::bracket_frame_with).
     pub fn bracket_frame(&mut self, rect: Rectangle) {
-        let (accent, radius, border_width) = {
-            let t = self.theme;
-            (t.accent, t.radius, t.border_width)
-        };
+        let (radius, border_width) = (self.theme.radius, self.theme.border_width);
+        self.bracket_frame_with(rect, border_width, radius);
+    }
+
+    /// [`bracket_frame`](Self::bracket_frame) with an explicit `border_width` and
+    /// corner `radius`, independent of the theme — so one surface can size its own
+    /// reticle (the per-widget `Pane::border_width`/radius overrides). The accent
+    /// color still comes from the theme. `border_width <= 0.0` ⇒ no frame.
+    pub fn bracket_frame_with(&mut self, rect: Rectangle, border_width: f32, radius: f32) {
+        let accent = self.theme.accent;
         // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
         // widget. A container that needs definition without a border should carry
         // a fill, not a forced hairline.

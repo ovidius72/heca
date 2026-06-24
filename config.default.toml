@@ -83,33 +83,40 @@ terminal_scrollback_lines = 3500
 # ui       = 15.0
 # terminal = 14.0
 
-# ─────────────────────────────────────────────────────────────────────────────
-[appearance]
-# ─────────────────────────────────────────────────────────────────────────────
-# Each numeric knob below is 0..=100 unless noted; 0 = off (default).
+# ═════════════════════════════════════════════════════════════════════════════
+#  APPEARANCE
+# ═════════════════════════════════════════════════════════════════════════════
+# Layout:
+#   [appearance]          → app-wide knobs + GLOBAL border defaults
+#   [appearance.terminal] → terminal CONTENT translucency/blur
+#   [appearance.pane]     → pane FRAME (border/radius/gap/padding) + info bar
+#   [appearance.sidebar]  → sidebar shell frame + background
+#
+# Inheritance for the border fields: a surface value (e.g. [appearance.pane]
+# border_width) wins; if unset it falls back to the GLOBAL [appearance]
+# border_width; if that is unset too, the active theme decides. So you set a value
+# once at [appearance] and every surface follows, or override per surface.
+#
+# Numeric "amount" knobs (transparency/blur) are 0..=100; 0 = off (default).
+# Lengths (border_width, *_radius, gap, padding, width) are in logical pixels.
 
-# Window / chrome transparency + in-app frosted blur.
-#   transparency : how see-through the whole app is (0 opaque … 100 transparent)
-#   blur         : in-app frosted-glass blur behind translucent panels (0 = off)
+[appearance]
+# ── Window / app-wide translucency + frost ──
+# transparency : how see-through the WHOLE app is (0 opaque … 100 transparent).
+# blur         : in-app frosted-glass blur behind translucent panels (palette,
+#                sidebar). Our own GPU pass; 0 = off.
 transparency = 0
 blur = 0
 
-# z=0 background layer — heca's own frosted gradient (the bottom-most layer panes
-# composite over). Cross-platform frost WITHOUT OS vibrancy.
-#   background_blur          : blur strength of the gradient (0 sharp … 100 max)
-#   background_transparency  : 0 opaque (default) … 100 see-through to the desktop
+# z=0 background layer — heca's own frosted gradient drawn as the bottom-most
+# layer that panes composite over (cross-platform frost, no OS vibrancy needed).
+# background_blur         : gradient blur strength (0 sharp … 100 max).
+# background_transparency : 0 opaque (default) … 100 see-through to the desktop.
 background_blur = 0
 background_transparency = 0
 # Optional gradient color overrides (unset → theme.background + a darker shade):
 # background_gradient_top    = "#1e1e2e"
 # background_gradient_bottom = "#181825"
-
-# Terminal-pane translucency (tiled panes; surface alpha over the z=0 layer).
-terminal_transparency = 0
-
-# Floating panes: independent translucency + real blur (default opaque, no blur).
-terminal_floating_transparency = 0
-terminal_floating_blur = 0
 
 # OS backdrop material (blurs the desktop BEHIND the window). Not portable:
 # macOS NSVisualEffect materials, Windows acrylic/mica (best-effort), Linux no-op.
@@ -118,68 +125,102 @@ terminal_floating_blur = 0
 # vibrancy = "under_window_background"
 
 # Effect tokens — override the theme; unset → inherit the theme value.
-#   glow_size : owns glow presence + halo radius + strength. none|thin|medium|large
-#   intensity : owns the scanline/CRT overlay opacity only. off|low|medium|heavy
+# glow_size : owns glow presence + halo radius + strength. none|thin|medium|large
+# intensity : owns the scanline/CRT overlay opacity only. off|low|medium|heavy
 # glow_size = "medium"
 # intensity = "medium"
 
-# ── Border style per surface ──
-# Frame decoration, independent of width. One of: none | bordered | bracketed.
-#   pane_border_style    : terminal panes  (default "bordered")
-#   sidebar_border_style : the sidebar shell (default "bracketed")
-# pane_border_style    = "bordered"
-# sidebar_border_style = "bracketed"
-
-# ── Sidebar shell appearance (all optional → inherit theme / global border) ──
-# The sidebar (left + right) is self-themeable, independent of the panes:
-#   sidebar_border_width   : frame width, px. Unset → global border_width (theme).
-#                            With sidebar_border_style = "bordered", this is the
-#                            width drawn in border_color. 0 removes the border.
-#   sidebar_border_radius  : corner radius, px. Unset → theme border_radius.
-#   sidebar_background_color : shell fill. Unset → theme sidebar surface color.
-# sidebar_border_width     = 1.0
-# sidebar_border_radius    = 12.0
-# sidebar_background_color = "#0b0f14"
-
-# ── Border / affordance widths ──
-# Global decorative border width — the app-wide equivalent of the showcase's
-# BORDER control. Overrides the theme for every surface (chrome, sidebar, and the
-# panes inherit it). 0 removes the decorative border everywhere. Unset → theme.
-# `pane_border_width` below overrides this for panes only.
-# border_width = 1.0
-# Global decorative border COLOR — overrides the theme's (subtle) border color for
-# the chrome/sidebar `bordered` frame. Set to e.g. the accent for an intense,
-# clearly visible border. Unset → the theme's border color.
-# (The `bracketed` reticle uses the theme accent regardless.)
-# border_color = "#40e0ff"
-# Affordance outlines (keyboard focus ring + selected-item highlight) use their
-# own width so they stay visible even with borders off.
-#   focus_border_width : focus ring + selection outline width, px (default 1.5)
+# ── GLOBAL border defaults (every surface inherits these when its own field is
+#    unset; each then falls back to the theme) ──
+# border_width  : decorative border width, px. The app-wide BORDER control. The
+#                 chrome + every surface inherit it. 0 removes borders everywhere.
+# border_color  : the `bordered` frame color (chrome + surfaces). Set to e.g. the
+#                 accent for a bright, visible border. (The `bracketed` reticle
+#                 always uses the theme accent.)
+# border_radius : corner radius, px, inherited by surfaces.
+# border_width  = 1.0
+# border_color  = "#40e0ff"
+# border_radius = 12.0
+# Affordance outlines (keyboard focus ring + selected-item highlight) keep their
+# OWN width so they stay visible even with borders off (default 1.5).
 # focus_border_width = 1.5
 
-# ── Pane chrome (all optional → inherit the theme when unset) ──
-# pane_border_width        = 2.0    # px; 0 = no border. Clamped to [0, 10].
-# pane_border_radius       = 20.0   # px; clamped to [0, 20].
-# pane_padding             = 4.0    # content inset; clamped to [0, 20].
-# pane_gap                 = 8.0    # gap between tiled panes
-# pane_border_color        = "#313244"   # inactive pane border
-# pane_active_border_color = "#89b4fa"   # focused pane border
-# pane_floating_border_color = "#89b4fa" # floating panes (active or not)
+# ─────────────────────────────────────────────────────────────────────────────
+[appearance.terminal]
+# ─────────────────────────────────────────────────────────────────────────────
+# Translucency/blur of the terminal CONTENT surface (the pane frame lives under
+# [appearance.pane]). All 0..=100; 0 = opaque/off.
+# transparency          : tiled terminal-pane translucency (surface over z=0).
+# floating_transparency : floating-pane translucency (independent of tiled, so
+#                         floating panes can stay readable while tiled are frosted).
+# floating_blur         : floating-pane real blur strength.
+transparency = 0
+floating_transparency = 0
+floating_blur = 0
 
-# ── Sidebar geometry ──
-# sidebar_gap   = 12.0   # gap between sidebar and content
-# sidebar_width = 300    # logical px; clamped to 160..=560
-
-# ── Pane info bar (segmented pill inside the pane top + action buttons) ──
-# Left side — segments, in order ([] hides them):
-#   "location" | "app_name" | "git_branch" | "git_status"
-# pane_title_segments = ["location", "app_name"]
-# Right side — action buttons, in order ([] hides them):
-#   "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
-# Default is split + close (panes are already movable by mouse drag). Each
-# button's tooltip shows its real configured keybinding.
-# pane_title_actions = ["split", "close"]
+# ─────────────────────────────────────────────────────────────────────────────
+[appearance.pane]
+# ─────────────────────────────────────────────────────────────────────────────
+# The tiled/floating pane FRAME + the in-pane info bar. Border fields unset →
+# global [appearance] default → theme.
+# border_style : frame decoration. none | bordered | bracketed. Default "bordered".
+# border_width : frame width, px (0 = no border). Clamped [0, 10].
+# border_color : inactive/unfocused frame color.
+# border_radius: corner radius, px. Clamped [0, 20] (keeps the content clip gentle).
+# active_border_color   : focused-pane frame color (default theme accent).
+# floating_border_color : floating-pane frame color (default theme float accent).
+# gap     : gap between tiled panes, px (default 8.0). NOTE: when the pane border
+#           is visible (border_style != "none" and border_width > 0) the gap is
+#           floored at the border width, because adjacent panes each draw a full
+#           border on their shared edge — a smaller gap would make the two borders
+#           overlap. So `gap = 0` with borders on becomes one border width (a clean
+#           single divider); with border_style = "none", `gap = 0` is truly flush.
+# padding : content inset from the frame, px (default 4.0). Clamped [0, 20].
+# border_style          = "bordered"
+# border_width          = 2.0
+# border_color          = "#313244"
+# border_radius         = 20.0
+# active_border_color   = "#89b4fa"
+# floating_border_color = "#89b4fa"
+# gap                   = 8.0
+# padding               = 4.0
+#
+# Info bar (segmented pill inside the pane top + action buttons on the right):
+# title_segments : left side, in order. [] hides it.
+#                  "location" | "app_name" | "git_branch" | "git_status"
+#                  (a segment with no data for a pane — e.g. git outside a repo —
+#                   is skipped). Default ["location", "app_name"].
+# title_actions  : right side, in order. [] hides it.
+#                  "split" | "close" | "zoom" | "float" | "move_left" | "move_right"
+#                  Default ["split", "close"] (panes are already movable by drag).
+#                  Each button's tooltip shows its real configured keybinding.
 # Both empty ⇒ no bar and no reserved top padding.
+# title_segments = ["location", "app_name"]
+# title_actions  = ["split", "close"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+[appearance.sidebar]
+# ─────────────────────────────────────────────────────────────────────────────
+# The sidebar shell (left + right), self-themeable independently of the panes.
+# Border fields unset → global [appearance] default → theme.
+# border_style    : none | bordered | bracketed. Default "bracketed".
+#                   - "bordered"  → a clean frame in border_color at border_width.
+#                   - "bracketed" → the accent corner-reticle (sized by
+#                                   border_width + border_radius too).
+# border_width    : frame width, px. 0 removes the border. Clamped [0, 10].
+# border_color    : the `bordered` frame color.
+# border_radius   : corner radius, px. Clamped [0, 40].
+# background_color: shell fill (unset → theme sidebar surface). Transparency still
+#                   applies on top.
+# gap             : gap between the sidebar and the content area, px (default 12.0).
+# width           : sidebar width, px. Clamped [160, 560] (default 300).
+# border_style     = "bracketed"
+# border_width     = 1.0
+# border_color     = "#40e0ff"
+# border_radius    = 12.0
+# background_color = "#0b0f14"
+# gap              = 12.0
+# width            = 300
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Program catalog — [program.<id>]

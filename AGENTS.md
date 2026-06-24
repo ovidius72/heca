@@ -373,8 +373,8 @@ args = { target = "column", axis = "x", amount = "-50" }
 
 Each pane renders an in-pane **info bar**: ordered **segments** (left, "what the
 pane is") and **action buttons** (right). Both are driven by config lists under
-`[appearance]` — `pane_title_segments` and `pane_title_actions` (NOT `pane_segments`
-/ `pane_actions`). Order in the list = render order. Empty list hides that side;
+`[appearance.pane]` — `title_segments` and `title_actions` (fields of
+`PaneAppearance`). Order in the list = render order. Empty list hides that side;
 both empty ⇒ no bar and no reserved space. User-facing list of supported values
 lives in `README.md` ("Pane Info Bar"); keep it in sync when you change the enums.
 
@@ -568,8 +568,8 @@ try z=0 without macOS vibrancy first).
   grid-ui chrome → present`. z=0 is pre-stencil so the tiled content-clip never
   clips the background.
 - **Translucency channel (grill-me Q1, Option A):** theme `terminal_background`
-  values are **opaque**; `terminal_transparency` → `surface_alpha` is the **only**
-  translucency channel. Never ship a theme `terminal_background` with alpha 0
+  values are **opaque**; `[appearance.terminal] transparency` → `surface_alpha` is
+  the **only** translucency channel. Never ship a theme `terminal_background` with alpha 0
   (the `latte` `#e6e9ef00` bug) — that bypasses the knob and re-introduces the
   "no blur/transparency" regression.
 - **Removed knobs:** `terminal_blur`, `terminal_frost_color`, `terminal_frost_opacity()`,
