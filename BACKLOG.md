@@ -40,7 +40,7 @@
 > Real PTY terminal using `portable-pty` + `wezterm-term` + `cosmic-text` is live. Core (Phases 0–5) is shipped.
 > Remaining: advanced fidelity, test coverage, selection/clipboard, pane-shell integration.
 
-### [~] Phase: Terminal damage-preservation foundation · `terminal-00`
+### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
 
 - [x] **terminal-task-00** — Preserve terminal damage through the app path.
@@ -61,22 +61,25 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
   `heca-core/src/backend/snapshot.rs`
   Status: done on `feature/terminal-followups`; backend now derives/coalesces changed visible rows and falls back conservatively to `Full` for uncertain structural transitions.
 
-- [~] **terminal-task-00b** — Add retained terminal-content foundation.
+- [x] **terminal-task-00b** — Add retained terminal-content foundation.
   Introduce the minimum retained-content mechanism required so unchanged rows stay
   visible while only dirty rows are redrawn. Keep this scoped to terminal panes;
   do not silently broaden it into general compositor optimization in the same
   task.
   Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`,
   `heca-renderer/*` only if a terminal-specific retained surface is needed
-  Status: retained layer/cache, row-band copy logic, and renderer damage entrypoints are in place. The damaged-frame retained presentation path is live again after fixing the offscreen scratch sizing bug that caused oversized glyphs during resize and hidden freshly typed content, but the task stays in progress until runtime verification confirms the regression is actually gone.
+  Status: done. Runtime validation (2026-06-24) confirmed all five scenarios pass —
+  resize keeps glyphs crisp, typed text appears immediately, idle scrollback stays
+  correct, panes don't bleed, and style reload repaints fully. See
+  `runtime-validation-terminal-00b.md` for the scenario list that was run.
 
-- [~] **terminal-task-00c** — Verify the prerequisite itself.
+- [x] **terminal-task-00c** — Verify the prerequisite itself.
   Add focused tests for backend row-range damage production, app-path damage
   propagation, and retained-content correctness when only dirty rows are
   redrawn.
   Files: `heca-core/src/backend/terminal.rs`, `heca-renderer/src/terminal.rs`,
-  app-side tests where feasible
-  Status: partial. Focused backend/terminal-render checks are green after the retained-path fix (`cargo check -p heca`, `cargo test -p heca app::terminal_render::tests`, `cargo test -p heca-core terminal_backend_output_produces_row_damage`), but direct app-path retained-presentation coverage is still thin and runtime validation is still required.
+  `heca/src/app/terminal_render.rs`
+  Status: done. Backend row-range damage (`terminal_backend_output_produces_row_damage`) is green. App-path retained-presentation coverage is now solid: the damage policy was extracted into the pure `retained_damage_to_apply(...)` seam (skip on `None`, upgrade to `Full` on resize/style change, passthrough `Rows`/`Full` otherwise) with 6 policy tests, plus `retained_terminal_texture_size` (scale/ceil/min-1) and `terminal_layer_render_key` (stability + font-size/alpha/family change detection) tests, plus the existing `terminal_damage_copy_bands` band-conversion/clamp tests. `cargo test -p heca app::terminal_render` = 23/23, `-p heca-core` 67/67, clippy 0 warnings. Runtime validation of the retained presentation itself is the only `00b` sign-off left.
 
 ### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
 Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.

@@ -95,14 +95,14 @@ pub(crate) fn sync_retained_terminal_layers(
             layer.render_key = render_key;
         }
 
-        let damage = if resized || style_changed {
-            TerminalDamage::Full
-        } else {
-            mount.damage.clone()
-        };
-        if matches!(damage, TerminalDamage::None) {
+        // The retained layer holds the last frame's content. The decision below
+        // is the whole point of the retained-content foundation (`terminal-00b`):
+        // when there is nothing to do we skip the update entirely so unchanged
+        // rows stay visible, and only dirty rows are re-rendered otherwise —
+        // except a resize or style change is structural and forces a full repaint.
+        let Some(damage) = retained_damage_to_apply(resized, style_changed, &mount.damage) else {
             continue;
-        }
+        };
 
         render_terminal_layer_update(
             state,
@@ -113,6 +113,32 @@ pub(crate) fn sync_retained_terminal_layers(
             window_logical_size,
             window_physical_size,
         );
+    }
+}
+
+/// Decide what damage to re-render into a retained terminal layer this frame.
+///
+/// Returns `None` to skip the update entirely — the retained layer already
+/// holds the last frame's content, so unchanged rows stay visible and only the
+/// dirty rows need repainting. Returns `Some(Full)` when the layer was resized or
+/// its style render-key changed (a structural change forces every row to be
+/// repainted, otherwise the resized/retinted grid would show stale content).
+/// Otherwise the backend's per-frame damage passes through unchanged, so only
+/// the rows it reports are redrawn.
+///
+/// This is the pure policy behind `sync_retained_terminal_layers`; extracting it
+/// keeps the retained-presentation contract unit-testable without a GPU.
+fn retained_damage_to_apply(
+    resized: bool,
+    style_changed: bool,
+    mount_damage: &TerminalDamage,
+) -> Option<TerminalDamage> {
+    if resized || style_changed {
+        return Some(TerminalDamage::Full);
+    }
+    match mount_damage {
+        TerminalDamage::None => None,
+        other => Some(other.clone()),
     }
 }
 
@@ -828,13 +854,17 @@ pub(super) fn build_selection_overlay(
 
 #[cfg(test)]
 mod tests {
-    use super::{TerminalCopyBand, build_selection_overlay, terminal_damage_copy_bands};
+    use super::{
+        TerminalCopyBand, build_selection_overlay, retained_damage_to_apply,
+        retained_terminal_texture_size, terminal_damage_copy_bands, terminal_layer_render_key,
+    };
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
     };
     use heca_config::theme::Color;
-    use heca_core::backend::{TerminalDamage, TerminalSnapshot};
+    use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
     use heca_core::layout::PaneId;
+    use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 
     fn snapshot(rows: usize, cell_h: f32) -> TerminalSnapshot {
         TerminalSnapshot {
@@ -1071,8 +1101,153 @@ mod tests {
 
     #[test]
     fn terminal_damage_copy_bands_clamps_rows_to_visible_height() {
-        let damage = TerminalDamage::Rows(vec![heca_core::backend::TerminalRowRange::new(2, 8)]);
+        let damage = TerminalDamage::Rows(vec![TerminalRowRange::new(2, 8)]);
         let bands = terminal_damage_copy_bands(&damage, &snapshot(4, 12.0), 48.0, 1.0, 48);
         assert_eq!(bands, vec![TerminalCopyBand { y: 24, height: 24 }]);
+    }
+
+    // --- `terminal-00c` app-path retained-presentation coverage -----------------
+    //
+    // The retained-content foundation (`terminal-00b`) keeps the last frame's
+    // content in a per-pane layer and only re-renders dirty rows. These tests
+    // pin the pure policy that protects unchanged rows: `retained_damage_to_apply`
+    // decides skip / Full / passthrough, `retained_terminal_texture_size` sizes
+    // the offscreen scratch, and `terminal_layer_render_key` detects style changes.
+
+    fn style(font_size: f32, surface_alpha: f32) -> TerminalStyle<'static> {
+        TerminalStyle {
+            font_size,
+            families: TerminalFontFamilies {
+                normal: "Maple Mono Normal NF",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha,
+        }
+    }
+
+    #[test]
+    fn retained_damage_skips_when_backend_reports_none_and_no_structural_change() {
+        // No resize, no style change, backend reports nothing dirty: the retained
+        // layer already holds the previous frame, so the update is skipped entirely
+        // (unchanged rows stay visible — never cleared).
+        assert_eq!(retained_damage_to_apply(false, false, &TerminalDamage::None), None);
+    }
+
+    #[test]
+    fn retained_damage_passes_dirty_rows_through_when_stable() {
+        // Stable layer + backend row damage: only the reported rows are redrawn.
+        let rows = TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]);
+        assert_eq!(
+            retained_damage_to_apply(false, false, &rows),
+            Some(TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]))
+        );
+    }
+
+    #[test]
+    fn retained_damage_passes_full_through_when_stable() {
+        assert_eq!(
+            retained_damage_to_apply(false, false, &TerminalDamage::Full),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_upgrades_to_full_on_resize_even_if_backend_reports_none() {
+        // A resize is structural: even if the backend has no row damage this frame,
+        // every row must be repainted or the resized grid shows stale content.
+        assert_eq!(
+            retained_damage_to_apply(true, false, &TerminalDamage::None),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_upgrades_to_full_on_style_change() {
+        // A font/alpha/style change repaints the whole layer.
+        assert_eq!(
+            retained_damage_to_apply(false, true, &TerminalDamage::None),
+            Some(TerminalDamage::Full)
+        );
+        assert_eq!(
+            retained_damage_to_apply(false, true, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 2)])),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_resize_dominates_style_and_backend_damage() {
+        // Both structural triggers present: still exactly one Full (not Rows).
+        assert_eq!(
+            retained_damage_to_apply(true, true, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 1)])),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_terminal_texture_size_scales_and_rounds_up() {
+        use heca_core::layout::{Point, Rectangle, Size};
+        let rect = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        // scale 2.0 → 200x80, ceiled.
+        let sz = retained_terminal_texture_size(rect, 2.0);
+        assert_eq!((sz.width, sz.height), (200, 80));
+        // Fractional physical pixels round up (.ceil) so partial rows aren't lost.
+        let sz = retained_terminal_texture_size(
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(10.5, 5.25)),
+            2.0,
+        );
+        assert_eq!((sz.width, sz.height), (21, 11));
+    }
+
+    #[test]
+    fn retained_terminal_texture_size_never_zero_for_positive_rect() {
+        use heca_core::layout::{Point, Rectangle, Size};
+        // A sub-pixel pane still yields at least 1x1 so the texture is valid.
+        let sz = retained_terminal_texture_size(
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(0.1, 0.1)),
+            1.0,
+        );
+        assert_eq!((sz.width, sz.height), (1, 1));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_is_stable_for_identical_style() {
+        assert_eq!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.8)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_font_size() {
+        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(15.0, 0.8)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_surface_alpha() {
+        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.6)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_font_family() {
+        let a = TerminalStyle {
+            font_size: 14.0,
+            families: TerminalFontFamilies {
+                normal: "Mono A",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha: 0.8,
+        };
+        let b = TerminalStyle {
+            font_size: 14.0,
+            families: TerminalFontFamilies {
+                normal: "Mono B",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha: 0.8,
+        };
+        assert_ne!(terminal_layer_render_key(&a), terminal_layer_render_key(&b));
     }
 }
