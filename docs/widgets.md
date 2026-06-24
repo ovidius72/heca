@@ -248,14 +248,15 @@ hierarchy, or `.font_size(x)` to pin a specific size.
 Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
 default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
-`font_family`, `font_size`, `radius`, `border_width`, `glow_size` (`GlowLevel`),
-`intensity`, `show_focus_border`, `icon_secondary_alpha`, `active_wash_alpha`,
-`card_background_alpha`.
+`font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`,
+`glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
+`active_wash_alpha`, `card_background_alpha`.
 
 | Token | Type | Drives |
 |-------|------|--------|
 | `radius` | `f32` | Base corner radius. Boxes use it directly; small controls use `control_radius()` (= `radius × 0.5`); pills (Badge/Toggle/ProgressBar) round at `radius × 2` clamped to their capsule. `0` ⇒ square. |
-| `border_width` | `f32` | Border stroke width for every box/pill widget. `0` ⇒ no border. |
+| `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
+| `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus ring (`corner_brackets`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
@@ -402,11 +403,20 @@ Card::new("POWER").background(theme.surface).border(theme.accent, 1.5)
 
 ### Pane
 
-A bracket-framed container for sidebars/panels: a dark surface with a subtle accent border
-and **rounded corner brackets** (no glow/shadow); children stack inside (default column).
-The brackets are segments of a theme-`radius` rounded border with the straight midsections
-dimmed, so the corners share the border's radius exactly. Reads `theme.radius` /
-`theme.border_width`.
+A generic container for sidebars/panels with three **frame modes** (`PaneFrame`),
+selectable via `.frame(..)` / `.frameless()` / `.bordered()` / `.bracketed()`:
+
+- **`None`** — background fill only.
+- **`Bordered`** (default) — a clean continuous border. Width comes from
+  `theme.border_width` (read at paint, so the global border control governs it);
+  color from an explicit `.border(color, _)` or else `theme.border`.
+- **`Bracketed`** — the self-contained corner-bracket reticle (`PaintCx::bracket_frame`):
+  bright rounded `theme.accent` corners over a dimmed continuous line, sharing the
+  theme corner radius. It does **not** also draw `style.border`.
+
+All widths follow `theme.border_width` (`0` ⇒ no frame). Reads `theme.radius` /
+`theme.border_width` / `theme.accent`. In the app the frame mode is configurable
+per surface (`[appearance] pane_border_style` / `sidebar_border_style`).
 
 - **Construct**: `Pane::new()` (column) / `Pane::row()`.
 - **No built-in title.** The pane is a frame + child container only. The app's pane-info **header**
