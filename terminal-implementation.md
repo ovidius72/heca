@@ -1347,6 +1347,25 @@ This section must be updated:
 > clean frames while still updating the cache in the background on damaged frames. `3A.4` is also
 > partial: focused validation exists, but retained-content correctness under damaged-frame
 > presentation still needs direct coverage before `3.5` / `terminal-01` can be considered safe.
+>
+> **RECONCILE (2026-06-24):** the retained damaged-frame presentation path was re-enabled after
+> fixing the offscreen scratch sizing bug in `terminal_render`/`app_state`: the shared scratch
+> texture now matches each pane's exact physical size instead of reusing an oversized target that
+> cropped the copied update bands. That bug was the concrete explanation for the earlier resize
+> regression (oversized glyphs while resizing, typed text disappearing until a later frame). `3A.3`
+> remains **partial** until runtime review confirms the regression is actually gone. `3A.4`
+> remains **partial** because compile + focused test coverage are green, but direct app-path
+> retained-presentation verification is still thinner than the backend/renderer helper coverage.
+>
+> **RECONCILE (2026-06-24, later runtime validation):** resize now looks good on the restored
+> retained path, so the concrete glyph-scale regression appears fixed. The next runtime gap is
+> broader terminal scrollback/navigation: wheel scrolling at a shell prompt does not work, PageUp
+> / PageDown do not scroll host history, and selection mode cannot scroll beyond the currently
+> visible rows. The reason is architectural, not just a missing keybinding: the host still has no
+> terminal viewport/scrollback model. Today the app forwards wheel as PTY mouse input and forwards
+> PageUp/PageDown as PTY key input, while `move_focused_terminal_selection(...)` clamps movement to
+> `terminal_snapshot().rows`. A dedicated host scrollback phase is now tracked in `BACKLOG.md` as
+> `terminal-01a`.
 
 - Stack decision: `portable-pty + wezterm-term + cosmic-text`
 - Execution state: real PTY-backed terminal panes are live by default; dedicated terminal rendering, structured input, redraw wakeups, atlas-renderer sync, measured terminal-cell sizing, and GUI-native terminal symbol/decorations are all landed
@@ -1359,7 +1378,7 @@ This section must be updated:
   - pane-runtime-state initiative (Phases 8.3/8.4) shipped + archived
   - selection model + action wiring (Phase 9.1/9.2) landed
   - `frappe`→`latte` theme-unification (PR #160) and its terminal-bg-alpha interaction
-  - `terminal-00` prerequisite work: app-path damage preservation, backend visible-row damage, and a guarded retained terminal-content foundation
+  - `terminal-00` prerequisite work: app-path damage preservation, backend visible-row damage, exact-size retained scratch updates, and live damaged-frame retained presentation pending runtime verification
 
 ### Latest Decisions
 
@@ -1452,6 +1471,10 @@ This section must be updated:
 - measured terminal-cell sizing plus the shared terminal symbol/decorations renderer materially improved Yazi and `nvim`, but broader live validation is still needed across more TUIs and fonts before Phase 3 can close
 - structured keyboard forwarding is landed, but live verification is still needed for modifier-heavy terminal apps and function-key behavior
 - terminal mouse forwarding is landed in the app/backend path, but live verification is still needed for `nvim` mouse mode, wheel behavior, and drag/move interaction boundaries
+- host-side terminal scrollback/navigation is not implemented yet:
+  - wheel is forwarded as PTY mouse input only
+  - PageUp/PageDown are forwarded as PTY key input only
+  - selection-mode movement clamps to the current visible snapshot and cannot scroll the viewport
 - terminal style fidelity is much improved, but live verification is still needed for broad colorscheme parity across more themes and TUIs
 - retained terminal-content groundwork exists, but presenting the retained layer during damaged frames currently regresses resize-time glyph scale and can temporarily hide fresh typing; the live path is guarded to clean frames until that is fixed
 - italic styling is supported, but the embedded terminal fallback currently includes only Maple Mono Normal NF regular/bold assets; without an installed italic face or a configured `[font.family.terminal].italic`, italic runs synthesize an oblique from the normal family
@@ -1519,17 +1542,16 @@ This section must be updated:
 
 ### Next Recommended Task
 
-- Finish `3A.3` honestly before attempting `3.5` / `terminal-01`:
-  - debug why live retained-layer presentation on damaged frames causes oversized glyphs while resizing and temporarily hidden freshly typed text
-  - keep the work scoped to terminal panes; do not broaden it into general compositor damage optimization
-  - preserve the current safety fallback until the damaged-frame path is demonstrably correct
-- Complete `3A.4`:
-  - add direct app-path damage propagation coverage where feasible
-  - add retained-content correctness coverage for damaged-row redraw assumptions
-  - keep focused validation green as the retained path changes
-- Only after `3A.3`/`3A.4` are complete:
-  - make dirty-row rendering (`3.5` / `terminal-01`) the real live path
-  - then return to broader terminal visual/cell-fidelity validation across TUIs/fonts
+- Finish the remaining `3A.3` / `3A.4` runtime verification notes:
+  - resize looks good again on the restored retained path
+  - keep typed-prompt / multi-pane validation in mind while touching terminal input or viewport code
+- Start the newly tracked host scrollback phase (`terminal-01a`) before claiming terminal runtime UX is healthy:
+  - add a host-managed terminal viewport/scrollback model instead of always projecting the live bottom viewport
+  - route wheel / PageUp / PageDown / selection-mode edge movement through that model
+  - preserve TUI mouse forwarding where appropriate instead of replacing it blindly
+- After host scrollback exists:
+  - re-run runtime validation for shell prompt history, long output scrollback, selection mode, and mouse-enabled TUIs
+  - then continue toward dirty-row rendering (`3.5` / `terminal-01`) with viewport-aware damage semantics
 
 ### Planned Post-Merge Terminal Backlog
 

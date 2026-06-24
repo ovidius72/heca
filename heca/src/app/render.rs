@@ -500,8 +500,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         {
             let selection_overlay =
                 selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
-            if mount.damage.is_empty()
-                && blit_retained_terminal_layer(
+            if blit_retained_terminal_layer(
                 state,
                 pane.pane_id,
                 &mut encoder,
@@ -720,8 +719,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             if let Some(mount) = pane.mount.as_ref() {
                 let selection_overlay =
                     selection_overlay_for_pane(state, pane.pane_id, mount.snapshot.cols);
-                if mount.damage.is_empty()
-                    && blit_retained_terminal_layer(
+                if blit_retained_terminal_layer(
                     state,
                     pane.pane_id,
                     &mut encoder,

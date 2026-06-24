@@ -457,7 +457,7 @@ impl RetainedTerminalScratch {
         }
     }
 
-    pub fn ensure_at_least(
+    pub fn ensure_size(
         &mut self,
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
@@ -465,7 +465,7 @@ impl RetainedTerminalScratch {
         height: u32,
     ) {
         let next_size = (width.max(1), height.max(1));
-        if self.physical_size.0 >= next_size.0 && self.physical_size.1 >= next_size.1 {
+        if self.physical_size == next_size {
             return;
         }
         let (texture, view) = make_terminal_texture(

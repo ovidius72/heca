@@ -59,7 +59,12 @@ pub(crate) fn sync_retained_terminal_layers(
         };
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
-        state.terminal_layer_scratch.ensure_at_least(
+        // The offscreen scratch must match the pane's exact physical size. A
+        // larger reused target would render the terminal at the wrong pixel
+        // density and then crop the top-left subset during the copy into the
+        // retained layer, which showed up as oversized glyphs while resizing and
+        // hidden freshly typed content when damaged frames were presented live.
+        state.terminal_layer_scratch.ensure_size(
             &state.device,
             state.surface_config.format,
             physical_size.width,

@@ -68,7 +68,7 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
   task.
   Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`,
   `heca-renderer/*` only if a terminal-specific retained surface is needed
-  Status: retained layer/cache, row-band copy logic, and renderer damage entrypoints are in place, but live retained presentation is currently guarded to clean frames only after a resize/typing regression. Finish the damaged-frame presentation path before marking done.
+  Status: retained layer/cache, row-band copy logic, and renderer damage entrypoints are in place. The damaged-frame retained presentation path is live again after fixing the offscreen scratch sizing bug that caused oversized glyphs during resize and hidden freshly typed content, but the task stays in progress until runtime verification confirms the regression is actually gone.
 
 - [~] **terminal-task-00c** — Verify the prerequisite itself.
   Add focused tests for backend row-range damage production, app-path damage
@@ -76,7 +76,7 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
   redrawn.
   Files: `heca-core/src/backend/terminal.rs`, `heca-renderer/src/terminal.rs`,
   app-side tests where feasible
-  Status: partial. Focused backend/terminal-render checks exist and current `heca` targeted tests are green, but retained-content correctness under live damaged-row presentation is not fully covered yet.
+  Status: partial. Focused backend/terminal-render checks are green after the retained-path fix (`cargo check -p heca`, `cargo test -p heca app::terminal_render::tests`, `cargo test -p heca-core terminal_backend_output_produces_row_damage`), but direct app-path retained-presentation coverage is still thin and runtime validation is still required.
 
 ### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
 Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.
@@ -87,6 +87,35 @@ Render only changed terminal rows instead of the full pane every frame. This pha
   says `Full`.
   Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/snapshot.rs`
   Related: compositor damage-region optimization (`app-task-22`)
+
+### [ ] Phase: Host terminal scrollback viewport · `terminal-01a`
+Runtime validation shows terminal output is live and resize is stable again, but the host still has no scrollback viewport model. Wheel input is only forwarded as terminal mouse events, PageUp/PageDown are only forwarded as terminal key input, and selection-mode movement clamps to the currently visible snapshot rows. At a normal shell prompt that means scrollback appears dead.
+
+- [ ] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection.
+  Introduce terminal viewport/scrollback state so the host can render historical
+  rows instead of always projecting the live bottom viewport. Keep damage
+  semantics conservative at first: viewport motion may fall back to `Full` until
+  dirty-row rendering understands viewport offsets.
+  Files: `heca-core/src/backend/terminal.rs`,
+  `heca-core/src/backend/terminal/engine.rs`,
+  `heca-core/src/backend/snapshot.rs`,
+  `heca/src/app/terminal_host.rs`,
+  `heca/src/app/render.rs`
+  Status: newly tracked from runtime validation on 2026-06-24. Current gap:
+  terminal snapshots always expose the live visible viewport only.
+
+- [ ] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+  Define the policy boundary between host scrollback navigation and backend/TUI
+  mouse forwarding. Normal shell/history use must scroll the host viewport;
+  mouse-enabled TUIs must still receive raw wheel input when appropriate;
+  keyboard selection must be able to move beyond the currently visible rows by
+  scrolling the viewport.
+  Files: `heca/src/app/events.rs`,
+  `heca/src/app/terminal_host.rs`,
+  `heca/src/handlers.rs`,
+  `heca/src/app/interaction.rs`
+  Status: newly tracked from runtime validation on 2026-06-24. Current gap:
+  shell prompt wheel/PageUp/PageDown and selection-mode scrolling do not work.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.
