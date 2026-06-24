@@ -1,11 +1,15 @@
-# heca Example Config
-# ===================
-# Copy this file to ~/.config/heca/config.toml (Linux/macOS) or
-# %APPDATA%\heca\config.toml (Windows) and adjust only what you need.
+# heca — Default Config
+# ======================
+# This file holds heca's DEFAULT, non-keybinding configuration. It is embedded
+# into the binary and parsed at startup, so every value below is always valid and
+# complete by construction. Keybindings live in a separate file:
+# `keybindings.default.toml`.
 #
-# Every key below shows its DEFAULT value. Lines that are commented out (`#`)
-# are optional overrides — uncomment to change them. Anything you omit falls
-# back to the default shown, so a minimal config is perfectly fine.
+# To customize: copy this file to ~/.config/heca/config.toml (Linux/macOS) or
+# %APPDATA%\heca\config.toml (Windows) and change only what you need. Anything you
+# omit falls back to the default shown here, so a minimal config is perfectly fine.
+# Your config is deep-merged over these defaults (tables merge per-key; arrays are
+# replaced wholesale).
 #
 # Color values are "#rrggbb" (or "#rrggbbaa" where alpha is supported).
 
@@ -27,12 +31,12 @@ window_height = 800
 # Auto-scroll the workspace view when the pointer nears the left/right edge.
 auto_scroll_edge = true
 
+# Center a single column even when it already fits in the viewport.
+always_center_single_column = false
+
 # Modifier held to start an interactive pane drag with the mouse.
 # One of: "Super" (default) | "Alt" | "Ctrl" | "Shift".
 interactive_move_modifier = "Super"
-
-# Center a single column even when it already fits in the viewport.
-always_center_single_column = false
 
 # Auto-inject shell hooks that emit OSC 133 / OSC 7 for per-command status and
 # cwd updates. Disable to spawn a bare shell instead.
@@ -164,60 +168,75 @@ terminal_floating_blur = 0
 # Both empty ⇒ no bar and no reserved top padding.
 
 # ─────────────────────────────────────────────────────────────────────────────
-[keys]
+# Program catalog — [program.<id>]
 # ─────────────────────────────────────────────────────────────────────────────
-# Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
-prefix = "ctrl+b"
+# Maps running processes to a display name + icon + color (shown in the pane info
+# bar / sidebar card). The entries below are the built-in defaults. Override one,
+# add `processes = [...]` aliases, or `disabled = true` to drop a mapping.
+#
+# `icon` is a semantic Phosphor name, one of:
+#   terminal | file_code | folder | folder_open | git_branch | gear | search
+# Unknown programs fall back to their raw process name + the terminal icon.
 
-# Rebind built-in actions: `bindings = { action = "keys" }`. (Actions are the
-# window-manager commands; see the docs for the full list.)
-# [keys.bindings]
-# split_right = "prefix+d"
-# close_pane  = "prefix+x"
+# ── Shells (terminal icon, name falls back to the raw process) ──
+[program.sh]
+icon = "terminal"
+[program.bash]
+icon = "terminal"
+[program.zsh]
+icon = "terminal"
+[program.fish]
+icon = "terminal"
 
-# Disable a built-in binding entirely.
-# [keys.unbind]
-# "prefix+z" = true
-
-# Launch a program on a key. `kind = "terminal"` runs it inside a pane;
-# `float = true` opens it floating; `close_pane = true` closes the pane on exit;
-# `keep_on_error` / `keep_on_success` keep the pane open after the program ends.
-[[keys.command]]
-keys = "prefix+g"
-command = "lazygit"
-float = true
-close_pane = true
-
-[[keys.command]]
-keys = "Alt+Enter"
-command = "alacritty"
-kind = "terminal"
-
-# Custom key MODES (a sub-mode entered via a trigger, with its own bindings).
-# `sticky = true` keeps the mode active until Esc; otherwise it fires one action.
-# [[keys.mode]]
-# name = "resize"
-# trigger = "prefix+r"
-# sticky = true
-# [[keys.mode.bindings]]
-# action = "resize_grow"
-# keys = "l"
-
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Editors ──
 [program.nvim]
-# ─────────────────────────────────────────────────────────────────────────────
-# The process catalog maps running processes to a display name + icon + color
-# (shown in the pane info bar / sidebar). Built-in entries are seeded in code for
-# common shells plus: nvim, vim, helix, yazi, ranger, claude, codex, opencode, pi.
-# Use `[program.<id>]` to override one, add aliases, or disable it.
 name = "Neovim"
 processes = ["v", "nvim"]
 icon = "file_code"
-description = "modal editor"
 color = "#89b4fa"
 
-# Remove a built-in entry and fall back to the raw process name + terminal icon.
-# [program.ranger]
-# disabled = true
+[program.vim]
+name = "Vim"
+processes = ["v", "vim"]
+icon = "file_code"
+color = "#a6e3a1"
 
-# Unknown programs fall back to their raw name and the default terminal icon.
+[program.helix]
+name = "Helix"
+processes = ["helix"]
+icon = "file_code"
+color = "#a3be8c"
+
+# ── File managers ──
+[program.yazi]
+name = "Yazi"
+processes = ["yazi"]
+icon = "folder_open"
+color = "#74c7ec"
+
+[program.ranger]
+name = "Ranger"
+processes = ["ranger"]
+icon = "folder_open"
+color = "#94e2d5"
+
+# ── AI / agent CLIs ──
+[program.claude]
+name = "Claude"
+processes = ["claude"]
+icon = "terminal"
+
+[program.codex]
+name = "Codex"
+processes = ["codex"]
+icon = "terminal"
+
+[program.opencode]
+name = "OpenCode"
+processes = ["opencode"]
+icon = "terminal"
+
+[program.pi]
+name = "Pi"
+processes = ["pi"]
+icon = "terminal"

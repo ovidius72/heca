@@ -1,6 +1,6 @@
 # Keybindings Reference
 
-This file documents ALL configurable keybindings in heca. See `default-keybindings.toml` for the repo reference copy and copy the bindings you want into your `~/.config/heca/config.toml`.
+This file documents ALL configurable keybindings in heca. See `keybindings.default.toml` for the embedded default copy and copy the bindings you want into your `~/.config/heca/keybindings.toml`.
 
 ## Syntax
 

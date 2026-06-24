@@ -236,10 +236,12 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 
 ## Configuration
 
-heca loads config from `~/.config/heca/config.toml` (Linux/macOS) or `%APPDATA%\heca\config.toml` (Windows).
-This repo now includes:
-- `example.config.toml` — example general config (`settings`, `appearance`, `programs`, `[[keys.command]]`, prefix)
-- `default-keybindings.toml` — keybindings-only reference
+heca loads config from `~/.config/heca/config.toml` (general settings) and
+`~/.config/heca/keybindings.toml` (keybindings) — `%APPDATA%\heca\…` on Windows.
+Both are optional and deep-merged over the built-in defaults, which live in two
+versioned, embedded files (the single source of truth — copy and edit them):
+- `config.default.toml` — default `[settings]`, `[appearance]`, `[font]`, `[program]`
+- `keybindings.default.toml` — default `[keys]` (prefix, bindings, modes)
 
 ### Minimal Config
 
@@ -731,7 +733,7 @@ For the full policy table (all six policy categories) and how to classify a new 
 
 ### Default Keybindings
 
-See [`default-keybindings.toml`](default-keybindings.toml) for a complete reference of all default keybindings that can be customized.
+See [`keybindings.default.toml`](keybindings.default.toml) for a complete reference of all default keybindings that can be customized.
 
 ### Customizing Keybindings
 

@@ -36,7 +36,8 @@
 myvim/
 ├── AGENTS.md              ← This file
 ├── README.md              ← User-facing documentation
-├── default-keybindings.toml  ← Complete keybinding reference
+├── config.default.toml        ← Default settings/appearance/font/program (embedded)
+├── keybindings.default.toml   ← Default keybindings (embedded)
 ├── Cargo.toml             ← Workspace root
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/

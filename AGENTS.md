@@ -363,8 +363,9 @@ args = { target = "column", axis = "x", amount = "-50" }
   optional raw-process aliases via `processes = [...]`.
 - `icon` values in the program catalog are semantic Phosphor icon names
   (`terminal`, `file_code`, `folder_open`, `git_branch`, …), not raw glyph strings.
-- Built-in catalog defaults live in `ProgramsConfig::default()`; if you change
-  them, update `README.md` and `example.config.toml` in the same patch.
+- Built-in catalog defaults live in `config.default.toml` `[program]` (the single
+  source — `ProgramsConfig::default()` parses it); if you change them, update
+  `README.md` in the same patch.
 - Users remove a built-in program mapping with `disabled = true`. Do not invent
   empty-string semantics for inherited defaults.
 
@@ -386,7 +387,7 @@ Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "
 2. Render it in the segment match in `heca/src/chrome/mod.rs` (around the
    `PaneSegment::Location =>` arm) — pull from the pane's `PaneRuntime` projection;
    a segment with no data must be **skipped** (no empty pill).
-3. Update `README.md` (supported-segments table) + `example.config.toml`.
+3. Update `README.md` (supported-segments table) + `config.default.toml`.
 
 **To add a new action kind:**
 1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
@@ -398,7 +399,7 @@ Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "
 3. Per the action checklist, the action must already be reachable from keyboard +
    RPC; the button just adds the mouse/UI path.
 4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),
-   `README.md` (supported-actions table), and `example.config.toml`.
+   `README.md` (supported-actions table), and `config.default.toml`.
 
 ### Planned parameterized binding contract
 
@@ -467,11 +468,21 @@ args = { kind = "terminal", program = "nvim", argv = ["."], float = true, width 
 
 ### Config Loading
 
-1. `~/.config/heca/config.toml` (user config, optional)
-2. Built-in defaults from `heca-config/src/theme.rs`
-3. User config **overrides** defaults (same key replaces)
-4. `keys.unbind` removes specific defaults
-5. Default modes are **always merged** with user modes (user modes override same name)
+Defaults are the **embedded** `config.default.toml` (settings/appearance/font/
+program) + `keybindings.default.toml` (keys) — the single source of truth, parsed
+at every startup (`heca-config/src/loader.rs`). User files are deep-merged on top:
+
+1. Embedded defaults (`config.default.toml` ⊕ `keybindings.default.toml`)
+2. `~/.config/heca/config.toml` (user general config, optional)
+3. `~/.config/heca/keybindings.toml` (user keybindings, optional)
+
+Deep-merge rules: tables merge **per-key** (a partial user file overrides only the
+values it sets and keeps every other default); scalars and **arrays are replaced**
+wholesale (so a user `[[keys.command]]`/`[[keys.mode]]` list replaces the default
+list). `keys.unbind` removes specific bindings. The three built-in modes
+(resize/sidebar/selection) are **always merged back** by name in the app layer
+(`build_modes`), so defining your own mode never drops sidebar/selection nav.
+`prefix+Shift+r` reloads both files at runtime.
 
 ### Unbinding Keybindings
 
@@ -660,7 +671,8 @@ The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widget
 myvim/
 ├── AGENTS.md              ← This file
 ├── README.md              ← User-facing documentation
-├── default-keybindings.toml  ← Complete keybinding reference
+├── config.default.toml        ← Default settings/appearance/font/program (embedded, single source)
+├── keybindings.default.toml   ← Default keybindings (embedded, single source)
 ├── Cargo.toml             ← Workspace root
 ├── heca/                  ← Main binary (event loop, app state, rendering)
 │   ├── src/
@@ -824,7 +836,7 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
   - raw text-entry primitives for explicit text-input modes
 - Do not match raw feature keys like `h/j/k/l`, arrows, `y`, `p`, etc. inside mode handlers unless they are resolved through the mode keymap and action system.
 - Important app-wide rule: design actions so they are reachable through mouse/UI, keyboard/action dispatch, and RPC whenever that capability makes sense on those surfaces.
-- Default keybindings in `heca-config/src/theme.rs`: add new bindings here.
+- Default keybindings live in `keybindings.default.toml` (embedded single source): add new bindings here.
 
 ### Adding New Actions
 
@@ -834,11 +846,11 @@ The project deliberately uses tmux-style prefix architecture (`Ctrl+B → key`).
 4. Add priority in `action_priority()`
 5. Create handler in `heca/src/handlers.rs`
 6. Register in `build_registry()` in `heca/src/app/registry.rs`
-7. Add default binding in `heca-config/src/theme.rs`
+7. Add default binding in `keybindings.default.toml` (the embedded default keymap)
 8. Add descriptor in `ActionRegistry::ALL` in `heca/src/actions.rs`
 9. Add RPC parser support in `heca/src/rpc.rs`
 10. Make sure the capability is not trapped behind one surface: route it through the action model so it can be reached from mouse/UI, keyboard/action dispatch, and RPC whenever appropriate.
-11. Document examples in `README.md` and `default-keybindings.toml`
+11. Document examples in `README.md` and `keybindings.default.toml`
 
 For planned richer actions like `zoom_column`, `float_active_at`, and `spawn_pane`, prefer domain-friendly arguments over ad hoc strings. Example target shape:
 
@@ -1054,7 +1066,7 @@ Planning / rules:
 
 Default keybinding reference:
 
-- `default-keybindings.toml`
+- `keybindings.default.toml`
 - `README.md`
 
 Sidebar/action implementation files:
@@ -1142,7 +1154,7 @@ After that:
 1. Use the NIRI layout engine, not BSP (`pane.rs` is dead reference code).
 2. Always use `Rectangle` from `layout/types.rs`, not `Rect` from `types.rs`.
 3. **Every WM action goes through `registry.execute()`** — no direct function calls in event handlers.
-4. Add new keybindings to both `heca-config/src/theme.rs` (defaults) and `heca/src/input.rs` (action enum + parser + priority); every keybinding and theme variable must be configurable from `config.toml`.
+4. Add new keybindings to both `keybindings.default.toml` (defaults) and `heca/src/input.rs` (action enum + parser + priority); every keybinding and theme variable must be configurable from `config.toml`/`keybindings.toml`.
 5. Test prefix mode: verify both plain key and Ctrl-modified key bindings work.
 6. Do NOT remove or refactor layout code without consulting the NIRI skill.
 7. **NEVER add `#[allow(dead_code)]` without a clear reason.** Remove dead code instead. If a lint must be suppressed, add a `//` comment explaining why right above the attribute.

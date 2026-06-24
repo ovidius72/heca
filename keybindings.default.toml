@@ -1,0 +1,284 @@
+# heca — Default Keybindings
+# ===========================
+# This file holds heca's DEFAULT keybindings (only the `[keys]` section). It is
+# embedded into the binary and parsed at startup, so the bindings below are always
+# valid and complete by construction. Non-keybinding settings live in a separate
+# file: `config.default.toml`.
+#
+# To customize: copy this file to ~/.config/heca/keybindings.toml (Linux/macOS) or
+# %APPDATA%\heca\keybindings.toml (Windows) and change only what you need. Your
+# file is deep-merged over these defaults:
+#   • flat bindings + [keys.unbind] merge per-key (override one, keep the rest);
+#   • [[keys.command]] and [[keys.mode]] arrays REPLACE the default list wholesale
+#     — re-list the defaults you still want, or rely on heca's built-in modes
+#     (resize/sidebar/selection are always merged back in at runtime by name).
+#
+# Combo syntax:
+#   "prefix+h"        → prefix key (Ctrl+B) then h
+#   "prefix+Shift+q"  → prefix key then Shift+q
+#   "prefix+Ctrl+h"   → prefix key then Ctrl+h
+#   "Alt+Enter"       → global Alt+Enter (no prefix needed)
+#   "Super+v"         → global Super+v (no prefix needed)
+# Modifiers: Ctrl, Shift, Alt, Super (also accepts Win/Cmd).
+# Named keys: Enter, Tab, Escape, Backspace, ArrowLeft/Right/Up/Down.
+
+[keys]
+# Prefix key triggers prefix mode for all `prefix+...` bindings (tmux-style).
+prefix = "ctrl+b"
+
+# ── Navigation (within workspace) ──
+focus_left  = ["prefix+h", "prefix+ArrowLeft"]
+focus_right = ["prefix+l", "prefix+ArrowRight"]
+focus_up    = ["prefix+k", "prefix+ArrowUp"]
+focus_down  = ["prefix+j", "prefix+ArrowDown"]
+
+# ── Splits ──
+split_horizontal = "prefix+Enter"   # New column to the right
+split_vertical   = "prefix+v"       # New pane in current column
+zoom_column      = "prefix+z"       # Toggle active column full-width
+
+# ── Resize (column width / pane height) ──
+resize_increase      = "prefix+="
+resize_decrease      = "prefix+-"
+pane_height_increase = "prefix+Shift+="
+pane_height_decrease = "prefix+Shift+-"
+
+# ── Pane operations ──
+close = "prefix+x"   # Close active pane
+float = "prefix+f"   # Toggle pane floating
+
+# ── Quick select / swap ──
+pane_select         = "prefix+q"        # Letters on panes, pick to focus
+swap_pane           = "prefix+Shift+m"  # Letters, swap panes (stay here)
+swap_and_focus_pane = "prefix+m"        # Letters, swap panes (follow)
+
+# ── Move pane/column to a picked target (KeyHint overlay) ──
+move_column_to_workspace_pick = "prefix+c"        # Move active column → picked workspace
+move_pane_to_workspace_pick   = "prefix+g"        # Move active pane → picked workspace
+move_pane_to_column_pick      = "prefix+Shift+c"  # Move active pane → picked column
+pane_take                     = "prefix+t"        # Take target pane to bottom of active column
+pane_take_and_focus           = "prefix+Shift+t"  # Take + focus the moved pane
+
+# ── Pane cycling (within column) ──
+next_pane = "prefix+]"
+prev_pane = "prefix+["
+
+# ── Sidebars ──
+sidebar_left          = "prefix+b"    # Toggle left sidebar
+sidebar_right         = "prefix+."    # Toggle right sidebar
+sidebar_focus         = "prefix+e"    # Focus sidebar (enter nav mode)
+sidebar_expand_toggle = "prefix+Tab"  # Expand/collapse selected sidebar node
+# Sidebar-tree UI collapse state (works even when the sidebar is hidden):
+toggle_current_workspace_collapsed = "prefix+<"
+toggle_current_column_collapsed    = "prefix+("
+
+# ── Workspace navigation ──
+workspace_prev = ["prefix+u", "prefix+Ctrl+p"]
+workspace_next = ["prefix+d", "prefix+Ctrl+n"]
+
+# ── Focus toggle ──
+focus_toggle_local  = "prefix+i"        # Toggle last pane (same workspace)
+focus_toggle_global = "prefix+Shift+l"  # Toggle last pane (cross-workspace)
+
+# ── Workspace / naming ──
+create_workspace = "prefix+w"        # Create new workspace + pane
+rename_workspace = "prefix+Shift+w"  # Rename current workspace
+rename_pane      = "prefix+$"        # Rename current pane/tab
+# `rename_column` has no default binding (prefix+Shift+c is reused for
+# move-pane-to-column); the action stays available to bind manually.
+
+# ── Move / swap (adjacent) ──
+move_pane_left  = "prefix+Ctrl+["
+move_pane_right = "prefix+Ctrl+]"
+move_column_up   = "prefix+Ctrl+Shift+k"
+move_column_down = "prefix+Ctrl+Shift+j"
+swap_left  = "prefix+Ctrl+h"
+swap_right = "prefix+Ctrl+l"
+swap_up    = "prefix+Ctrl+k"
+swap_down  = "prefix+Ctrl+j"
+
+# ── System ──
+command_palette = "prefix+p"        # Open command palette
+reload_config   = "prefix+Shift+r"  # Reload config at runtime
+
+# ── Selection (host capability, reusable across pane types) ──
+enter_selection_mode = "prefix+s"        # Enter selection mode (caret-only)
+clear_selection      = "prefix+Shift+s"  # Clear selection; exit selection mode
+copy_selection       = "prefix+y"        # Copy selection to clipboard
+# Paste: Super+V (macOS Cmd+V), Ctrl+Shift+V (Linux/Windows), plus a prefix combo.
+paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
+
+# Remove a default binding so its key is free (the action stays available to
+# rebind under [keys]). Example:
+# [keys.unbind]
+# "prefix+f" = true
+
+# Launch a program on a key. `kind = "terminal"` runs it inside a pane;
+# `float = true` opens it floating; `close_pane = true` closes the pane on exit;
+# `keep_on_error` / `keep_on_success` keep the pane open after the program ends.
+# NOTE: defining ANY [[keys.command]] in your config replaces this whole list.
+# [[keys.command]]
+# keys = "prefix+g"
+# command = "lazygit"
+# float = true
+# close_pane = true
+#
+# [[keys.command]]
+# keys = "Alt+Enter"
+# command = "alacritty"
+# kind = "terminal"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom modes — [[keys.mode]]
+# ─────────────────────────────────────────────────────────────────────────────
+# A mode is a sub-keymap entered via a trigger; `sticky = true` stays active until
+# Esc. The three modes below (resize, sidebar, selection) are heca's built-ins.
+# heca always merges these built-ins back in at runtime BY NAME, so redefining one
+# only extends/overrides its bindings — you will not lose sidebar/selection
+# navigation by adding your own mode.
+
+# ── resize ── (prefix+r → sticky resize mode)
+[[keys.mode]]
+name = "resize"
+trigger = "prefix+r"
+sticky = true
+[[keys.mode.bindings]]
+action = "resize"
+keys = "h"
+args = { target = "column", axis = "x", amount = "-50" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "l"
+args = { target = "column", axis = "x", amount = "50" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "j"
+args = { target = "pane", axis = "y", amount = "-40" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "k"
+args = { target = "pane", axis = "y", amount = "40" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Left"
+args = { target = "column", axis = "x", amount = "-50" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Right"
+args = { target = "column", axis = "x", amount = "50" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Down"
+args = { target = "pane", axis = "y", amount = "-40" }
+[[keys.mode.bindings]]
+action = "resize"
+keys = "Up"
+args = { target = "pane", axis = "y", amount = "40" }
+
+# ── sidebar ── (entered via sidebar_focus / mouse; no trigger of its own)
+[[keys.mode]]
+name = "sidebar"
+trigger = ""
+sticky = true
+[[keys.mode.bindings]]
+action = "sidebar_up"
+keys = "k"
+[[keys.mode.bindings]]
+action = "sidebar_down"
+keys = "j"
+[[keys.mode.bindings]]
+action = "sidebar_up"
+keys = "Up"
+[[keys.mode.bindings]]
+action = "sidebar_down"
+keys = "Down"
+[[keys.mode.bindings]]
+action = "sidebar_up"
+keys = "ArrowUp"
+[[keys.mode.bindings]]
+action = "sidebar_down"
+keys = "ArrowDown"
+[[keys.mode.bindings]]
+action = "sidebar_left_nav"
+keys = "h"
+[[keys.mode.bindings]]
+action = "sidebar_right_nav"
+keys = "l"
+[[keys.mode.bindings]]
+action = "sidebar_left_nav"
+keys = "Left"
+[[keys.mode.bindings]]
+action = "sidebar_right_nav"
+keys = "Right"
+[[keys.mode.bindings]]
+action = "sidebar_left_nav"
+keys = "ArrowLeft"
+[[keys.mode.bindings]]
+action = "sidebar_right_nav"
+keys = "ArrowRight"
+[[keys.mode.bindings]]
+action = "sidebar_create_workspace"
+keys = "w"
+[[keys.mode.bindings]]
+action = "sidebar_create_column"
+keys = "c"
+[[keys.mode.bindings]]
+action = "sidebar_split_in_column"
+keys = "v"
+[[keys.mode.bindings]]
+action = "sidebar_zoom_selected_column"
+keys = "z"
+[[keys.mode.bindings]]
+action = "sidebar_delete_selected"
+keys = "d"
+[[keys.mode.bindings]]
+action = "sidebar_expand_toggle"
+keys = "Tab"
+[[keys.mode.bindings]]
+action = "sidebar_right_nav"
+keys = "Space"
+[[keys.mode.bindings]]
+action = "sidebar_left"
+keys = "b"
+
+# ── selection ── (entered via enter_selection_mode; no trigger of its own)
+[[keys.mode]]
+name = "selection"
+trigger = ""
+sticky = true
+[[keys.mode.bindings]]
+action = "selection_left"
+keys = "h"
+[[keys.mode.bindings]]
+action = "selection_right"
+keys = "l"
+[[keys.mode.bindings]]
+action = "selection_up"
+keys = "k"
+[[keys.mode.bindings]]
+action = "selection_down"
+keys = "j"
+[[keys.mode.bindings]]
+action = "selection_left"
+keys = "ArrowLeft"
+[[keys.mode.bindings]]
+action = "selection_right"
+keys = "ArrowRight"
+[[keys.mode.bindings]]
+action = "selection_up"
+keys = "ArrowUp"
+[[keys.mode.bindings]]
+action = "selection_down"
+keys = "ArrowDown"
+[[keys.mode.bindings]]
+action = "copy_selection"
+keys = "y"
+[[keys.mode.bindings]]
+action = "begin_selection"
+keys = "v"
+[[keys.mode.bindings]]
+action = "begin_selection"
+keys = "Space"
+[[keys.mode.bindings]]
+action = "toggle_selection_endpoint"
+keys = "o"
