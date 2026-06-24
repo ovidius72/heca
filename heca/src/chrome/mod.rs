@@ -1838,6 +1838,13 @@ pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     // above by `app_theme_to_gui_theme` wins.
     theme.glow_size = glow_level_to_gui(state.appearance.effective_glow_size(&state.theme));
     theme.intensity = intensity_to_gui(state.appearance.effective_intensity(&state.theme));
+    // Global decorative border width (config `border_width`, theme fallback) — the
+    // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
+    // chrome + sidebar frame width.
+    theme.border_width = state.appearance.effective_border_width(&state.theme);
+    // Global decorative border color (config `border_color`, theme fallback) —
+    // drives the chrome/sidebar `bordered` frame. Read at paint, so it live-reloads.
+    theme.border = app_color_to_gui(state.appearance.effective_border_color(&state.theme));
     // Affordance outlines (focus ring + selection) get their own configurable
     // width, independent of the decorative border so they stay visible at
     // `border_width = 0`.
@@ -2498,6 +2505,11 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     state.theme.border_radius.to_bits().hash(&mut hsh);
     state.appearance.chrome_opacity().to_bits().hash(&mut hsh);
     state.appearance.opacity().to_bits().hash(&mut hsh);
+    // The sidebar frame STYLE is a build-time structural choice (it picks the Pane
+    // frame), so a config reload that changes it must rebuild the retained tree.
+    // (The border WIDTH is read at paint via `chrome_gui_theme`, so it live-reloads
+    // without a rebuild.)
+    state.appearance.effective_sidebar_border_style().hash(&mut hsh);
     // The active workspace (which gets the accent wash + count badge) is structural
     // enough to rebuild on a workspace SWITCH — but pane-to-pane focus *within* a
     // workspace must NOT rebuild: pane/column `active` + the status text are bound

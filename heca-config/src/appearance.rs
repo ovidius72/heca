@@ -75,7 +75,7 @@ pub enum PaneAction {
 /// Frame decoration style for a container surface (panes, sidebar). Maps onto the
 /// grid-ui `PaneFrame` in the app layer. Serialised `snake_case` in TOML (e.g.
 /// `pane_border_style = "bracketed"`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BorderStyle {
     /// No border — background fill only.
@@ -286,6 +286,18 @@ pub struct AppearanceConfig {
     /// the shared chrome theme, so it has no independent width knob).
     #[serde(default)]
     pub sidebar_border_style: Option<BorderStyle>,
+    /// **Global** decorative border width (logical px) — overrides the theme's
+    /// `border_width` for every surface (chrome, sidebar, and the default panes
+    /// inherit). `None` → the theme value. This is the app-wide equivalent of the
+    /// showcase's BORDER control. `pane_border_width` overrides this for panes.
+    #[serde(default)]
+    pub border_width: Option<f32>,
+    /// **Global** decorative border color — overrides the theme's `border` color
+    /// for the chrome/sidebar `bordered` frame (and the panes' default). `None` →
+    /// the theme's (subtle) border color. Set this to e.g. the accent for a more
+    /// intense, visible border. (The `bracketed` reticle uses the theme accent.)
+    #[serde(default)]
+    pub border_color: Option<Color>,
     /// Width (logical px) of the **affordance** outlines — the keyboard focus ring
     /// and the selected-item highlight. Independent of the decorative border width,
     /// so focus/selection stay visible even with borders off. `None` → `1.5`.
@@ -417,12 +429,25 @@ impl AppearanceConfig {
     // Config.toml `[appearance]` overrides take precedence; `None` inherits
     // from the theme automatically.
 
-    /// Effective pane border width. Config override → theme `border_width`,
-    /// clamped to `[0, 10]` so the border stays a reasonable frame regardless of
-    /// config/theme values.
+    /// Effective **global** decorative border width: config `border_width`
+    /// override → theme `border_width`, clamped to `[0, 10]`. Used by the chrome /
+    /// sidebar and as the fallback for panes. The app-wide equivalent of the
+    /// showcase BORDER control.
+    pub fn effective_border_width(&self, theme: &Theme) -> f32 {
+        self.border_width.unwrap_or(theme.border_width).clamp(0.0, 10.0)
+    }
+
+    /// Effective **global** decorative border color: config `border_color`
+    /// override → theme `border`. Used by the chrome / sidebar `bordered` frame.
+    pub fn effective_border_color(&self, theme: &Theme) -> Color {
+        self.border_color.unwrap_or(theme.border)
+    }
+
+    /// Effective pane border width. Config `pane_border_width` override → the
+    /// global `border_width` (theme fallback), clamped to `[0, 10]`.
     pub fn effective_pane_border_width(&self, theme: &Theme) -> f32 {
         self.pane_border_width
-            .unwrap_or(theme.border_width)
+            .unwrap_or_else(|| self.effective_border_width(theme))
             .clamp(0.0, 10.0)
     }
 
@@ -533,6 +558,8 @@ impl Default for AppearanceConfig {
             sidebar_width: None,
             pane_border_style: None,
             sidebar_border_style: None,
+            border_width: None,
+            border_color: None,
             focus_border_width: None,
             pane_title_segments: default_pane_title_segments(),
             pane_title_actions: default_pane_title_actions(),
@@ -874,6 +901,29 @@ theme = "mocha"
         let dflt = AppearanceConfig::default();
         assert_eq!(dflt.effective_pane_border_style(), BorderStyle::Bordered);
         assert_eq!(dflt.effective_sidebar_border_style(), BorderStyle::Bracketed);
+    }
+
+    #[test]
+    fn global_border_width_drives_chrome_and_pane_fallback() {
+        let theme = crate::theme::Theme::default();
+        // Unset: global + pane both fall back to the theme width.
+        let dflt = AppearanceConfig::default();
+        assert_eq!(dflt.effective_border_width(&theme), theme.border_width);
+        assert_eq!(dflt.effective_pane_border_width(&theme), theme.border_width);
+
+        // Global override drives both chrome and the pane fallback.
+        let g = AppearanceConfig { border_width: Some(3.0), ..Default::default() };
+        assert_eq!(g.effective_border_width(&theme), 3.0);
+        assert_eq!(g.effective_pane_border_width(&theme), 3.0);
+
+        // pane_border_width overrides the global for panes only.
+        let p = AppearanceConfig {
+            border_width: Some(3.0),
+            pane_border_width: Some(1.0),
+            ..Default::default()
+        };
+        assert_eq!(p.effective_border_width(&theme), 3.0);
+        assert_eq!(p.effective_pane_border_width(&theme), 1.0);
     }
 
     #[test]
