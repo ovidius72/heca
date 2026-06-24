@@ -124,9 +124,18 @@ terminal_floating_blur = 0
 # sidebar_border_style = "bracketed"
 
 # ── Border / affordance widths ──
-# A border width of 0 removes the decorative border everywhere. Affordance
-# outlines (keyboard focus ring + selected-item highlight) use their own width
-# so they stay visible even with borders off.
+# Global decorative border width — the app-wide equivalent of the showcase's
+# BORDER control. Overrides the theme for every surface (chrome, sidebar, and the
+# panes inherit it). 0 removes the decorative border everywhere. Unset → theme.
+# `pane_border_width` below overrides this for panes only.
+# border_width = 1.0
+# Global decorative border COLOR — overrides the theme's (subtle) border color for
+# the chrome/sidebar `bordered` frame. Set to e.g. the accent for an intense,
+# clearly visible border. Unset → the theme's border color.
+# (The `bracketed` reticle uses the theme accent regardless.)
+# border_color = "#40e0ff"
+# Affordance outlines (keyboard focus ring + selected-item highlight) use their
+# own width so they stay visible even with borders off.
 #   focus_border_width : focus ring + selection outline width, px (default 1.5)
 # focus_border_width = 1.5
 

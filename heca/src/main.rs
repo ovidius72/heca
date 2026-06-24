@@ -155,7 +155,14 @@ impl HecaApp {
                 }
             }
             update_session_viewport(state);
+            // Force a full chrome rebuild so STRUCTURAL config (border style, pane
+            // info bar, etc.) re-applies — the retained tree is otherwise only
+            // rebuilt when `chrome_signature` changes, which can miss config edits.
+            state.chrome_tree = None;
             state.needs_redraw = true;
+            // Reload runs in `about_to_wait`; request an explicit redraw so the
+            // reloaded config takes effect immediately instead of on the next input.
+            state.window.request_redraw();
         }
     }
 
