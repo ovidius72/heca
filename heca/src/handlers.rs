@@ -1742,11 +1742,17 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
             None => return, // No active selection — safe no-op.
         };
         let SelectionOwner::Pane(pane_id) = active.owner;
-        // Only host-grid selections are extractable for now.
-        match &active.region {
-            SelectionRegion::HostGrid { .. } => {}
+        let (start_stable, end_stable) = match &active.region {
+            SelectionRegion::HostGrid {
+                anchor_stable_row,
+                focus_stable_row,
+                ..
+            } => (
+                (*anchor_stable_row).min(*focus_stable_row),
+                (*anchor_stable_row).max(*focus_stable_row),
+            ),
             SelectionRegion::BackendNative => return, // Unsupported — safe no-op.
-        }
+        };
 
         // Get the terminal snapshot for the owning pane.
         let snapshot = match state
@@ -1759,9 +1765,19 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         };
 
         // Extract text using the shared extraction logic.
+        //
+        // Fetch the selection rows by stable-row range so history rows are
+        // copyable even when they are no longer in the visible viewport.
+        let lines = state
+            .backends
+            .get(pane_id)
+            .map(|b| b.lines_in_stable_range(start_stable, end_stable, snapshot.cols))
+            .unwrap_or_default();
+
         match crate::app::selection_model::extract_selection_text(
             &state.selection,
-            &snapshot.lines,
+            &lines,
+            start_stable,
             snapshot.cols,
             snapshot.default_bg,
         ) {

@@ -59,7 +59,12 @@ pub(crate) fn sync_retained_terminal_layers(
         };
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
-        state.terminal_layer_scratch.ensure_at_least(
+        // The offscreen scratch must match the pane's exact physical size. A
+        // larger reused target would render the terminal at the wrong pixel
+        // density and then crop the top-left subset during the copy into the
+        // retained layer, which showed up as oversized glyphs while resizing and
+        // hidden freshly typed content when damaged frames were presented live.
+        state.terminal_layer_scratch.ensure_size(
             &state.device,
             state.surface_config.format,
             physical_size.width,
@@ -90,14 +95,14 @@ pub(crate) fn sync_retained_terminal_layers(
             layer.render_key = render_key;
         }
 
-        let damage = if resized || style_changed {
-            TerminalDamage::Full
-        } else {
-            mount.damage.clone()
-        };
-        if matches!(damage, TerminalDamage::None) {
+        // The retained layer holds the last frame's content. The decision below
+        // is the whole point of the retained-content foundation (`terminal-00b`):
+        // when there is nothing to do we skip the update entirely so unchanged
+        // rows stay visible, and only dirty rows are re-rendered otherwise —
+        // except a resize or style change is structural and forces a full repaint.
+        let Some(damage) = retained_damage_to_apply(resized, style_changed, &mount.damage) else {
             continue;
-        }
+        };
 
         render_terminal_layer_update(
             state,
@@ -108,6 +113,32 @@ pub(crate) fn sync_retained_terminal_layers(
             window_logical_size,
             window_physical_size,
         );
+    }
+}
+
+/// Decide what damage to re-render into a retained terminal layer this frame.
+///
+/// Returns `None` to skip the update entirely — the retained layer already
+/// holds the last frame's content, so unchanged rows stay visible and only the
+/// dirty rows need repainting. Returns `Some(Full)` when the layer was resized or
+/// its style render-key changed (a structural change forces every row to be
+/// repainted, otherwise the resized/retinted grid would show stale content).
+/// Otherwise the backend's per-frame damage passes through unchanged, so only
+/// the rows it reports are redrawn.
+///
+/// This is the pure policy behind `sync_retained_terminal_layers`; extracting it
+/// keeps the retained-presentation contract unit-testable without a GPU.
+fn retained_damage_to_apply(
+    resized: bool,
+    style_changed: bool,
+    mount_damage: &TerminalDamage,
+) -> Option<TerminalDamage> {
+    if resized || style_changed {
+        return Some(TerminalDamage::Full);
+    }
+    match mount_damage {
+        TerminalDamage::None => None,
+        other => Some(other.clone()),
     }
 }
 
@@ -659,9 +690,9 @@ pub(crate) fn render_terminal_mount(
 pub(crate) fn selection_overlay_for_pane(
     state: &AppState,
     pane_id: PaneId,
-    cols: usize,
+    snapshot: &TerminalSnapshot,
 ) -> Option<SelectionOverlay> {
-    build_selection_overlay(&state.selection, pane_id, cols, &state.theme.accent)
+    build_selection_overlay(&state.selection, pane_id, snapshot, &state.theme.accent)
 }
 
 fn pane_content_rect(
@@ -721,17 +752,31 @@ fn rect_to_text_box(rect: Rectangle) -> TextBox {
 pub(super) fn build_selection_overlay(
     selection: &SelectionState,
     pane_id: PaneId,
-    cols: usize,
+    snapshot: &TerminalSnapshot,
     accent: &Color,
 ) -> Option<SelectionOverlay> {
-    if cols == 0 {
+    if snapshot.cols == 0 || snapshot.rows == 0 {
         return None;
     }
 
-    if let SelectionState::Caret { owner, row, col } = selection {
+    let stable_to_visible = |stable_row: isize| -> Option<usize> {
+        let visible = stable_row - snapshot.viewport_top_stable_row;
+        usize::try_from(visible)
+            .ok()
+            .filter(|row| *row < snapshot.rows)
+    };
+
+    if let SelectionState::Caret {
+        owner,
+        stable_row,
+        col,
+        ..
+    } = selection
+    {
         if *owner != SelectionOwner::Pane(pane_id) {
             return None;
         }
+        let row = stable_to_visible(*stable_row)?;
         let color = [
             accent.r as f32 / 255.0,
             accent.g as f32 / 255.0,
@@ -740,7 +785,7 @@ pub(super) fn build_selection_overlay(
         ];
         return Some(
             SelectionOverlay::new(vec![], color).with_caret(CaretIndicator {
-                row: *row,
+                row,
                 col: *col,
                 is_selection_endpoint: false,
             }),
@@ -753,9 +798,9 @@ pub(super) fn build_selection_overlay(
     }
     match &active.region {
         SelectionRegion::HostGrid {
-            anchor_row,
+            anchor_stable_row,
             anchor_col,
-            focus_row,
+            focus_stable_row,
             focus_col,
         } => {
             let color = [
@@ -764,58 +809,61 @@ pub(super) fn build_selection_overlay(
                 accent.b as f32 / 255.0,
                 0.25,
             ];
-            let last_col = cols.saturating_sub(1);
-            let mut spans = Vec::new();
-            if anchor_row == focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: *anchor_col.min(focus_col),
-                    end_col: (*anchor_col.max(focus_col)).min(last_col),
-                });
-            } else if anchor_row < focus_row {
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: (*anchor_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*anchor_row + 1)..*focus_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
-                }
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: 0,
-                    end_col: (*focus_col).min(last_col),
-                });
+            let last_col = snapshot.cols.saturating_sub(1);
+            let start_stable = (*anchor_stable_row).min(*focus_stable_row);
+            let end_stable = (*anchor_stable_row).max(*focus_stable_row);
+            let start_col = if anchor_stable_row < focus_stable_row {
+                *anchor_col
+            } else if focus_stable_row < anchor_stable_row {
+                *focus_col
             } else {
-                spans.push(SelectionOverlaySpan {
-                    row: *focus_row,
-                    start_col: (*focus_col).min(last_col),
-                    end_col: last_col,
-                });
-                for row in (*focus_row + 1)..*anchor_row {
-                    spans.push(SelectionOverlaySpan {
-                        row,
-                        start_col: 0,
-                        end_col: last_col,
-                    });
+                (*anchor_col).min(*focus_col)
+            };
+            let end_col = if focus_stable_row > anchor_stable_row {
+                *focus_col
+            } else if anchor_stable_row > focus_stable_row {
+                *anchor_col
+            } else {
+                (*anchor_col).max(*focus_col)
+            };
+
+            let visible_start = snapshot.viewport_top_stable_row.max(start_stable);
+            let visible_end = (snapshot.viewport_top_stable_row + snapshot.rows as isize - 1)
+                .min(end_stable);
+            let mut spans = Vec::new();
+            if visible_start <= visible_end {
+                for stable_row in visible_start..=visible_end {
+                    let row = stable_to_visible(stable_row)
+                        .expect("visible stable row must convert to a visible row");
+                    let (s, e) = if start_stable == end_stable {
+                        (start_col.min(last_col), end_col.min(last_col))
+                    } else if stable_row == start_stable {
+                        (start_col.min(last_col), last_col)
+                    } else if stable_row == end_stable {
+                        (0, end_col.min(last_col))
+                    } else {
+                        (0, last_col)
+                    };
+                    if s <= e {
+                        spans.push(SelectionOverlaySpan {
+                            row,
+                            start_col: s,
+                            end_col: e,
+                        });
+                    }
                 }
-                spans.push(SelectionOverlaySpan {
-                    row: *anchor_row,
-                    start_col: 0,
-                    end_col: (*anchor_col).min(last_col),
-                });
             }
-            Some(
-                SelectionOverlay::new(spans, color).with_caret(CaretIndicator {
-                    row: *focus_row,
-                    col: *focus_col,
-                    is_selection_endpoint: true,
-                }),
-            )
+
+            let caret = stable_to_visible(*focus_stable_row).map(|row| CaretIndicator {
+                row,
+                col: *focus_col,
+                is_selection_endpoint: true,
+            });
+            let overlay = SelectionOverlay::new(spans, color);
+            Some(match caret {
+                Some(caret) => overlay.with_caret(caret),
+                None => overlay,
+            })
         }
         SelectionRegion::BackendNative => None,
     }
@@ -823,13 +871,17 @@ pub(super) fn build_selection_overlay(
 
 #[cfg(test)]
 mod tests {
-    use super::{TerminalCopyBand, build_selection_overlay, terminal_damage_copy_bands};
+    use super::{
+        TerminalCopyBand, build_selection_overlay, retained_damage_to_apply,
+        retained_terminal_texture_size, terminal_damage_copy_bands, terminal_layer_render_key,
+    };
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
     };
     use heca_config::theme::Color;
-    use heca_core::backend::{TerminalDamage, TerminalSnapshot};
+    use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
     use heca_core::layout::PaneId;
+    use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
 
     fn snapshot(rows: usize, cell_h: f32) -> TerminalSnapshot {
         TerminalSnapshot {
@@ -847,6 +899,33 @@ mod tests {
                 shape: heca_core::backend::TerminalCursorShape::Block,
             },
             lines: Vec::new(),
+            viewport_offset: 0,
+            at_bottom: true,
+            scrollback_rows: rows,
+            viewport_top_stable_row: 0,
+        }
+    }
+
+    fn selection_snapshot(cols: usize, rows: usize, top_stable: isize) -> TerminalSnapshot {
+        TerminalSnapshot {
+            cols,
+            rows,
+            cell_w: 8.0,
+            cell_h: 12.0,
+            default_fg: [1.0; 4],
+            default_bg: [0.0, 0.0, 0.0, 1.0],
+            cursor_color: [1.0; 4],
+            cursor: heca_core::backend::TerminalCursor {
+                col: 0,
+                row: 0,
+                visible: true,
+                shape: heca_core::backend::TerminalCursorShape::Block,
+            },
+            lines: Vec::new(),
+            viewport_offset: 0,
+            at_bottom: true,
+            scrollback_rows: rows,
+            viewport_top_stable_row: top_stable,
         }
     }
 
@@ -859,7 +938,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -869,11 +949,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(7)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 3,
-                focus_row: 2,
+                focus_stable_row: 2,
                 focus_col: 3,
-            },
+        },
         );
         let accent = Color {
             r: 100,
@@ -881,8 +961,9 @@ mod tests {
             b: 200,
             a: 255,
         };
+        let snap = selection_snapshot(20, 10, 0);
         // Query with a different pane id -> None
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -899,7 +980,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 10, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -909,11 +991,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 3,
-                focus_row: 2,
+                focus_stable_row: 2,
                 focus_col: 3,
-            },
+        },
         );
         selection.update_focus(5, 9);
         let accent = Color {
@@ -922,7 +1004,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent);
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent);
         assert!(overlay.is_some());
         let overlay = overlay.unwrap();
         assert_eq!(overlay.spans.len(), 4);
@@ -946,11 +1029,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::MouseDrag,
             SelectionRegion::HostGrid {
-                anchor_row: 8,
+                anchor_stable_row: 8,
                 anchor_col: 12,
-                focus_row: 8,
+                focus_stable_row: 8,
                 focus_col: 12,
-            },
+        },
         );
         selection.update_focus(4, 3);
         let accent = Color {
@@ -959,7 +1042,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         assert_eq!(overlay.spans.len(), 5);
         assert_eq!(overlay.spans[0].row, 4);
         assert_eq!(overlay.spans[0].start_col, 3);
@@ -979,7 +1063,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         // Caret-only state: no selection spans.
         assert!(overlay.spans.is_empty());
         // But we get a caret indicator at the caret position.
@@ -1003,7 +1088,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        assert!(build_selection_overlay(&selection, PaneId(1), 20, &accent).is_none());
+        let snap = selection_snapshot(20, 10, 0);
+        assert!(build_selection_overlay(&selection, PaneId(1), &snap, &accent).is_none());
     }
 
     #[test]
@@ -1013,11 +1099,11 @@ mod tests {
             SelectionOwner::Pane(PaneId(1)),
             SelectionSource::KeyboardMode,
             SelectionRegion::HostGrid {
-                anchor_row: 2,
+                anchor_stable_row: 2,
                 anchor_col: 0,
-                focus_row: 4,
+                focus_stable_row: 4,
                 focus_col: 5,
-            },
+        },
         );
         let accent = Color {
             r: 100,
@@ -1025,7 +1111,8 @@ mod tests {
             b: 200,
             a: 255,
         };
-        let overlay = build_selection_overlay(&selection, PaneId(1), 20, &accent).unwrap();
+        let snap = selection_snapshot(20, 10, 0);
+        let overlay = build_selection_overlay(&selection, PaneId(1), &snap, &accent).unwrap();
         // Active selection: should have both selection spans and a focus-end caret.
         assert!(!overlay.spans.is_empty());
         let caret = overlay
@@ -1063,8 +1150,153 @@ mod tests {
 
     #[test]
     fn terminal_damage_copy_bands_clamps_rows_to_visible_height() {
-        let damage = TerminalDamage::Rows(vec![heca_core::backend::TerminalRowRange::new(2, 8)]);
+        let damage = TerminalDamage::Rows(vec![TerminalRowRange::new(2, 8)]);
         let bands = terminal_damage_copy_bands(&damage, &snapshot(4, 12.0), 48.0, 1.0, 48);
         assert_eq!(bands, vec![TerminalCopyBand { y: 24, height: 24 }]);
+    }
+
+    // --- `terminal-00c` app-path retained-presentation coverage -----------------
+    //
+    // The retained-content foundation (`terminal-00b`) keeps the last frame's
+    // content in a per-pane layer and only re-renders dirty rows. These tests
+    // pin the pure policy that protects unchanged rows: `retained_damage_to_apply`
+    // decides skip / Full / passthrough, `retained_terminal_texture_size` sizes
+    // the offscreen scratch, and `terminal_layer_render_key` detects style changes.
+
+    fn style(font_size: f32, surface_alpha: f32) -> TerminalStyle<'static> {
+        TerminalStyle {
+            font_size,
+            families: TerminalFontFamilies {
+                normal: "Maple Mono Normal NF",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha,
+        }
+    }
+
+    #[test]
+    fn retained_damage_skips_when_backend_reports_none_and_no_structural_change() {
+        // No resize, no style change, backend reports nothing dirty: the retained
+        // layer already holds the previous frame, so the update is skipped entirely
+        // (unchanged rows stay visible — never cleared).
+        assert_eq!(retained_damage_to_apply(false, false, &TerminalDamage::None), None);
+    }
+
+    #[test]
+    fn retained_damage_passes_dirty_rows_through_when_stable() {
+        // Stable layer + backend row damage: only the reported rows are redrawn.
+        let rows = TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]);
+        assert_eq!(
+            retained_damage_to_apply(false, false, &rows),
+            Some(TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]))
+        );
+    }
+
+    #[test]
+    fn retained_damage_passes_full_through_when_stable() {
+        assert_eq!(
+            retained_damage_to_apply(false, false, &TerminalDamage::Full),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_upgrades_to_full_on_resize_even_if_backend_reports_none() {
+        // A resize is structural: even if the backend has no row damage this frame,
+        // every row must be repainted or the resized grid shows stale content.
+        assert_eq!(
+            retained_damage_to_apply(true, false, &TerminalDamage::None),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_upgrades_to_full_on_style_change() {
+        // A font/alpha/style change repaints the whole layer.
+        assert_eq!(
+            retained_damage_to_apply(false, true, &TerminalDamage::None),
+            Some(TerminalDamage::Full)
+        );
+        assert_eq!(
+            retained_damage_to_apply(false, true, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 2)])),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_damage_resize_dominates_style_and_backend_damage() {
+        // Both structural triggers present: still exactly one Full (not Rows).
+        assert_eq!(
+            retained_damage_to_apply(true, true, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 1)])),
+            Some(TerminalDamage::Full)
+        );
+    }
+
+    #[test]
+    fn retained_terminal_texture_size_scales_and_rounds_up() {
+        use heca_core::layout::{Point, Rectangle, Size};
+        let rect = Rectangle::new(Point::new(0.0, 0.0), Size::new(100.0, 40.0));
+        // scale 2.0 → 200x80, ceiled.
+        let sz = retained_terminal_texture_size(rect, 2.0);
+        assert_eq!((sz.width, sz.height), (200, 80));
+        // Fractional physical pixels round up (.ceil) so partial rows aren't lost.
+        let sz = retained_terminal_texture_size(
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(10.5, 5.25)),
+            2.0,
+        );
+        assert_eq!((sz.width, sz.height), (21, 11));
+    }
+
+    #[test]
+    fn retained_terminal_texture_size_never_zero_for_positive_rect() {
+        use heca_core::layout::{Point, Rectangle, Size};
+        // A sub-pixel pane still yields at least 1x1 so the texture is valid.
+        let sz = retained_terminal_texture_size(
+            Rectangle::new(Point::new(0.0, 0.0), Size::new(0.1, 0.1)),
+            1.0,
+        );
+        assert_eq!((sz.width, sz.height), (1, 1));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_is_stable_for_identical_style() {
+        assert_eq!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.8)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_font_size() {
+        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(15.0, 0.8)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_surface_alpha() {
+        assert_ne!(terminal_layer_render_key(&style(14.0, 0.8)), terminal_layer_render_key(&style(14.0, 0.6)));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_font_family() {
+        let a = TerminalStyle {
+            font_size: 14.0,
+            families: TerminalFontFamilies {
+                normal: "Mono A",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha: 0.8,
+        };
+        let b = TerminalStyle {
+            font_size: 14.0,
+            families: TerminalFontFamilies {
+                normal: "Mono B",
+                bold: None,
+                italic: None,
+                bold_italic: None,
+            },
+            surface_alpha: 0.8,
+        };
+        assert_ne!(terminal_layer_render_key(&a), terminal_layer_render_key(&b));
     }
 }

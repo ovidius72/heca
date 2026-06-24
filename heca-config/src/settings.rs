@@ -53,6 +53,15 @@ fn default_shell_integration() -> bool {
     true
 }
 
+/// Default host terminal scrollback capacity in rows.
+///
+/// Mirrors `wezterm-term`'s `TerminalConfiguration::scrollback_size()` default
+/// so behaviour is unchanged when the user does not set
+/// `terminal_scrollback_lines` in `config.toml`.
+fn default_terminal_scrollback_lines() -> usize {
+    3500
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -111,6 +120,14 @@ pub struct SettingsConfig {
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
+    /// Host terminal scrollback capacity in rows.
+    ///
+    /// This is the number of history rows the terminal engine retains above the
+    /// visible viewport. The host scrollback viewport (see `terminal-01a`) scrolls
+    /// within `[0, terminal_scrollback_lines]`. Mirrors wezterm-term's default of
+    /// 3500 when unset.
+    #[serde(default = "default_terminal_scrollback_lines", alias = "terminal-scrollback-lines")]
+    pub terminal_scrollback_lines: usize,
 }
 
 impl Default for SettingsConfig {
@@ -133,6 +150,7 @@ impl Default for SettingsConfig {
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
             shell_integration: default_shell_integration(),
+            terminal_scrollback_lines: default_terminal_scrollback_lines(),
         }
     }
 }
@@ -161,6 +179,7 @@ mod tests {
         assert_eq!(s.interactive_move_modifier, ModifierKey::Super);
         assert!(!s.always_center_single_column);
         assert!(s.shell_integration);
+        assert_eq!(s.terminal_scrollback_lines, 3500);
     }
 
     #[test]
