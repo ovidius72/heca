@@ -852,6 +852,20 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .background(theme.surface)
                         .child(Label::new("Bracketed").font_size(12.0).color(theme.accent)),
                 )
+                .child(
+                    // Bordered with a per-pane width override: independent of the
+                    // global BORDER control (`theme.border_width`). Used by the
+                    // self-themed sidebar shell (`[appearance] sidebar_border_width`).
+                    Pane::new()
+                        .bordered()
+                        .border_width(3.0)
+                        .radius(10.0)
+                        .width(Length::Px(100.0))
+                        .height(Length::Px(80.0))
+                        .background(theme.surface)
+                        .border(theme.accent, 0.0)
+                        .child(Label::new("Border 3px").font_size(12.0).color(theme.accent)),
+                )
         })
         // In-pane info bar: a `Tag` chip composed *inside* the pane top (the app's
         // pane-info header). The `Pane` carries no built-in title — the bar is a

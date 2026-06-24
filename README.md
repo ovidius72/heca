@@ -605,7 +605,17 @@ pane_title_segments = ["location", "app_name", "git_branch", "git_status"]
 pane_title_actions = ["split", "close"]
 
 sidebar_width = 300           # Sidebar width in px (clamped 160..=560)
+
+# Sidebar shell appearance (independent of the panes; all optional):
+sidebar_border_style     = "bordered"  # none | bordered | bracketed
+sidebar_border_width     = 1.0         # frame width px; unset → global border_width
+sidebar_border_radius    = 12.0        # corner radius px; unset → theme radius
+sidebar_background_color = "#0b0f14"   # shell fill; unset → theme sidebar surface
 ```
+
+With `sidebar_border_style = "bordered"`, the frame is drawn at `sidebar_border_width`
+in the global `border_color` (so set `border_color` to color it). With `"bracketed"`
+it uses the theme accent corner-reticle. `sidebar_border_width = 0` removes the border.
 
 **Supported segments** (`pane_title_segments`):
 

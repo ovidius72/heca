@@ -2848,6 +2848,59 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     );
 }
 
+#[test]
+fn bordered_pane_border_width_override_is_independent_of_theme() {
+    // `.border_width(w)` pins a Bordered pane's frame width regardless of the
+    // global `theme.border_width` — the seam that lets the sidebar shell carry its
+    // own thickness (`[appearance] sidebar_border_width`). Color still resolves
+    // from `.border(color, _)` when set, else `theme.border`.
+    use heca_grid_ui::{Color, Component, Pane};
+    let border_rects = |theme: &Theme, override_w: Option<f32>, explicit: Option<Color>| -> Vec<heca_grid_ui::scene::RectCmd> {
+        let mut p = Pane::new()
+            .background(theme.surface)
+            .border_width(override_w)
+            .width(Length::Px(120.0))
+            .height(Length::Px(80.0));
+        if let Some(c) = explicit {
+            p = p.border(c, 0.0);
+        }
+        LayoutEngine::new().compute(&mut p, Size::new(200.0, 200.0));
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, theme);
+            p.paint(&mut cx);
+        }
+        scene.iter().filter_map(|c| match c {
+            DrawCommand::Rect(r) if r.border.is_some_and(|b| b.width > 0.0) => Some(*r),
+            _ => None,
+        }).collect()
+    };
+
+    let mut theme = Theme::grid_tron();
+
+    // Theme borders OFF, but the override forces a 3px frame in theme.border.
+    theme.border_width = 0.0;
+    let forced = border_rects(&theme, Some(3.0), None);
+    assert!(
+        forced.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 3.0)),
+        "override draws its own width even when the global border is off",
+    );
+
+    // Override width + explicit color: width = override, color = explicit.
+    let colored = border_rects(&theme, Some(3.0), Some(theme.accent));
+    assert!(
+        colored.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 3.0)),
+        "override sets width; explicit .border() sets color",
+    );
+
+    // override = 0 ⇒ no border, even with the global border ON.
+    theme.border_width = 5.0;
+    assert!(
+        border_rects(&theme, Some(0.0), None).is_empty(),
+        "override of 0 removes the border regardless of the global width",
+    );
+}
+
 /// Paint `w` under `border_width == 0` and return every visible (width>0) Rect
 /// border stroke it emitted.
 fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f32> {

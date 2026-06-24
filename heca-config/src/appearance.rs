@@ -281,11 +281,25 @@ pub struct AppearanceConfig {
     #[serde(default)]
     pub pane_border_style: Option<BorderStyle>,
     /// Frame style for the sidebar shell. `None` → [`BorderStyle::Bracketed`]
-    /// (current default). Values: `none | bordered | bracketed`. The sidebar
-    /// border *width* follows the theme/global border width (it is painted with
-    /// the shared chrome theme, so it has no independent width knob).
+    /// (current default). Values: `none | bordered | bracketed`.
     #[serde(default)]
     pub sidebar_border_style: Option<BorderStyle>,
+    /// Sidebar shell border width (logical px). `None` → the global
+    /// `border_width` (theme fallback). Lets the sidebar frame be thicker/thinner
+    /// than the rest of the chrome. With `sidebar_border_style = "bordered"`, this
+    /// is the width drawn in `border_color`; `0` removes the sidebar border.
+    /// Clamped to `[0, 10]`.
+    #[serde(default)]
+    pub sidebar_border_width: Option<f32>,
+    /// Sidebar shell background color. `None` → the theme-derived sidebar surface
+    /// color. Overrides the fill behind the sidebar frame (both left and right
+    /// sidebars). The configured window/chrome transparency still applies on top.
+    #[serde(default)]
+    pub sidebar_background_color: Option<Color>,
+    /// Sidebar shell corner radius (logical px). `None` → the theme
+    /// `border_radius`. Clamped to `[0, 40]`.
+    #[serde(default)]
+    pub sidebar_border_radius: Option<f32>,
     /// **Global** decorative border width (logical px) — overrides the theme's
     /// `border_width` for every surface (chrome, sidebar, and the default panes
     /// inherit). `None` → the theme value. This is the app-wide equivalent of the
@@ -522,6 +536,28 @@ impl AppearanceConfig {
         self.sidebar_border_style.unwrap_or(BorderStyle::Bracketed)
     }
 
+    /// Effective sidebar-shell border width. Config `sidebar_border_width` →
+    /// the global `border_width` (theme fallback), clamped to `[0, 10]`.
+    pub fn effective_sidebar_border_width(&self, theme: &Theme) -> f32 {
+        self.sidebar_border_width
+            .unwrap_or_else(|| self.effective_border_width(theme))
+            .clamp(0.0, 10.0)
+    }
+
+    /// Effective sidebar-shell background color. Config `sidebar_background_color`
+    /// → the theme-derived sidebar surface color passed in by the caller.
+    pub fn effective_sidebar_background_color(&self, theme_surface: Color) -> Color {
+        self.sidebar_background_color.unwrap_or(theme_surface)
+    }
+
+    /// Effective sidebar-shell corner radius. Config `sidebar_border_radius` →
+    /// theme `border_radius`, clamped to `[0, 40]`.
+    pub fn effective_sidebar_border_radius(&self, theme: &Theme) -> f32 {
+        self.sidebar_border_radius
+            .unwrap_or(theme.border_radius)
+            .clamp(0.0, 40.0)
+    }
+
     /// Effective affordance-outline width (focus ring + selection highlight).
     /// Config override → `1.5`, clamped to `[0, 10]`. Independent of the
     /// decorative border width so focus/selection stay visible at `border_width = 0`.
@@ -558,6 +594,9 @@ impl Default for AppearanceConfig {
             sidebar_width: None,
             pane_border_style: None,
             sidebar_border_style: None,
+            sidebar_border_width: None,
+            sidebar_background_color: None,
+            sidebar_border_radius: None,
             border_width: None,
             border_color: None,
             focus_border_width: None,
@@ -901,6 +940,62 @@ theme = "mocha"
         let dflt = AppearanceConfig::default();
         assert_eq!(dflt.effective_pane_border_style(), BorderStyle::Bordered);
         assert_eq!(dflt.effective_sidebar_border_style(), BorderStyle::Bracketed);
+    }
+
+    #[test]
+    fn sidebar_border_width_resolves_config_then_global_then_theme() {
+        let mocha = crate::theme::catppuccin_mocha();
+
+        // Unset → falls back to the global border_width (here the theme value).
+        let dflt = AppearanceConfig::default();
+        assert_eq!(
+            dflt.effective_sidebar_border_width(&mocha),
+            dflt.effective_border_width(&mocha)
+        );
+
+        // Global border_width set, sidebar unset → sidebar inherits the global.
+        let cfg = AppearanceConfig {
+            border_width: Some(4.0),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_sidebar_border_width(&mocha), 4.0);
+
+        // Sidebar-specific override wins over the global, and is clamped to [0, 10].
+        let cfg = AppearanceConfig {
+            border_width: Some(4.0),
+            sidebar_border_width: Some(99.0),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_sidebar_border_width(&mocha), 10.0);
+    }
+
+    #[test]
+    fn sidebar_background_and_radius_resolve_config_then_fallback() {
+        let mocha = crate::theme::catppuccin_mocha();
+        let theme_surface = Color::new(9, 9, 9, 255);
+
+        // Unset → the theme-derived surface passed in / the theme radius.
+        let dflt = AppearanceConfig::default();
+        assert_eq!(
+            dflt.effective_sidebar_background_color(theme_surface),
+            theme_surface
+        );
+        assert_eq!(
+            dflt.effective_sidebar_border_radius(&mocha),
+            mocha.border_radius
+        );
+
+        // Config override wins (radius clamped to [0, 40]).
+        let cfg = AppearanceConfig {
+            sidebar_background_color: Some(Color::new(1, 2, 3, 255)),
+            sidebar_border_radius: Some(99.0),
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.effective_sidebar_background_color(theme_surface),
+            Color::new(1, 2, 3, 255)
+        );
+        assert_eq!(cfg.effective_sidebar_border_radius(&mocha), 40.0);
     }
 
     #[test]

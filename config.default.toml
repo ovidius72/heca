@@ -122,10 +122,19 @@ terminal_floating_blur = 0
 # Frame decoration, independent of width. One of: none | bordered | bracketed.
 #   pane_border_style    : terminal panes  (default "bordered")
 #   sidebar_border_style : the sidebar shell (default "bracketed")
-# The sidebar border WIDTH follows the global/theme border width (it has no
-# separate width knob); the pane width is `pane_border_width` below.
 # pane_border_style    = "bordered"
 # sidebar_border_style = "bracketed"
+
+# ── Sidebar shell appearance (all optional → inherit theme / global border) ──
+# The sidebar (left + right) is self-themeable, independent of the panes:
+#   sidebar_border_width   : frame width, px. Unset → global border_width (theme).
+#                            With sidebar_border_style = "bordered", this is the
+#                            width drawn in border_color. 0 removes the border.
+#   sidebar_border_radius  : corner radius, px. Unset → theme border_radius.
+#   sidebar_background_color : shell fill. Unset → theme sidebar surface color.
+# sidebar_border_width     = 1.0
+# sidebar_border_radius    = 12.0
+# sidebar_background_color = "#0b0f14"
 
 # ── Border / affordance widths ──
 # Global decorative border width — the app-wide equivalent of the showcase's
