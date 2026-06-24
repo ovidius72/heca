@@ -178,6 +178,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SplitHorizontal
         | WmAction::SplitVertical
         | WmAction::ZoomColumn
+        | WmAction::ScrollViewLeft
+        | WmAction::ScrollViewRight
         | WmAction::ResizeIncrease
         | WmAction::ResizeDecrease
         | WmAction::PaneHeightIncrease

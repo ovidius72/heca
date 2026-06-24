@@ -37,6 +37,10 @@ split_horizontal = "prefix+Enter"   # New column to the right
 split_vertical   = "prefix+v"       # New pane in current column
 zoom_column      = "prefix+z"       # Toggle active column full-width
 
+# ── Horizontal view scroll (pan to reach off-screen / overflowing columns) ──
+scroll_view_left  = "prefix+Shift+ArrowLeft"
+scroll_view_right = "prefix+Shift+ArrowRight"
+
 # ── Resize (column width / pane height) ──
 resize_increase      = "prefix+="
 resize_decrease      = "prefix+-"

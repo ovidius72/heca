@@ -94,6 +94,10 @@ pub enum WmAction {
     ResizeDecrease,
     PaneHeightIncrease,
     PaneHeightDecrease,
+    /// Pan the horizontal view left/right (reveal column overflow / off-screen
+    /// content). View-only — does not move focus or change the layout.
+    ScrollViewLeft,
+    ScrollViewRight,
     SwapLeft,
     SwapRight,
     SwapUp,
@@ -314,6 +318,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "split_horizontal" => Some(WmAction::SplitHorizontal),
         "split_vertical" => Some(WmAction::SplitVertical),
         "zoom_column" => Some(WmAction::ZoomColumn),
+        "scroll_view_left" => Some(WmAction::ScrollViewLeft),
+        "scroll_view_right" => Some(WmAction::ScrollViewRight),
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
         "resize_increase" => Some(WmAction::ResizeIncrease),
@@ -612,6 +618,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
         | WmAction::ZoomColumn
+        | WmAction::ScrollViewLeft
+        | WmAction::ScrollViewRight
         | WmAction::Float
         | WmAction::ClosePane
         | WmAction::PaneSelect
