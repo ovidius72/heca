@@ -1870,6 +1870,92 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+// ── Scrollback (host terminal viewport) ──
+
+/// Get the approximate viewport page size for the focused terminal pane, in rows.
+/// Falls back to a sensible default (24) when no snapshot is available.
+fn focused_terminal_page_rows(state: &AppState) -> usize {
+    state.focused_pane.and_then(|pane_id| {
+        state
+            .backends
+            .get(pane_id)
+            .and_then(|b| b.terminal_snapshot())
+            .map(|s| s.rows)
+    }).unwrap_or(24)
+}
+
+/// Scroll the focused terminal pane's viewport by `delta` rows.
+/// Positive = toward history (up); negative = toward live bottom (down).
+fn scroll_focused_viewport(state: &mut AppState, delta: i32) {
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_viewport(delta);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
+    let page_rows = focused_terminal_page_rows(state);
+    scroll_focused_viewport(state, page_rows as i32);
+    // Enter selection mode so the user can navigate the scrollback
+    // with selection keys and exit explicitly.
+    let _ = enter_selection_mode_for_focused_terminal(state);
+}
+
+pub fn handle_scrollback_page_down(state: &mut AppState, _action: &WmAction) {
+    let page_rows = focused_terminal_page_rows(state);
+    scroll_focused_viewport(state, -(page_rows as i32));
+    let _ = enter_selection_mode_for_focused_terminal(state);
+}
+
+pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) {
+    let WmAction::ScrollbackLineUp { amount } = action else {
+        return;
+    };
+    // `amount` is in notches; multiply by the user-configurable lines-per-notch.
+    let lines = (amount * state.terminal_wheel_scroll_lines) as i32;
+    scroll_focused_viewport(state, lines);
+}
+
+pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) {
+    let WmAction::ScrollbackLineDown { amount } = action else {
+        return;
+    };
+    // `amount` is in notches; multiply by the user-configurable lines-per-notch.
+    let lines = (amount * state.terminal_wheel_scroll_lines) as i32;
+    scroll_focused_viewport(state, -lines);
+}
+
+pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_to_top();
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_to_bottom();
+    }
+    // Clear any active selection and exit selection mode.
+    state.selection.clear();
+    if matches!(state.input_mode, InputMode::Selection) {
+        state.input_mode = InputMode::Normal;
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_exit_scrollback(state: &mut AppState, action: &WmAction) {
+    // Exit scrollback is semantically identical to scroll-to-bottom + clear
+    // selection + exit selection mode. Delegate to keep the two in lockstep.
+    handle_scrollback_to_bottom(state, action);
+}
+
 // ── Config ──
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {

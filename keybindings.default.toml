@@ -112,6 +112,17 @@ copy_selection       = "prefix+y"        # Copy selection to clipboard
 # Paste: Super+V (macOS Cmd+V), Ctrl+Shift+V (Linux/Windows), plus a prefix combo.
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
 
+# ── Scrollback (host terminal viewport) ──
+# prefix+PageUp/PageDown → full page scroll + enter selection mode.
+scrollback_page_up   = "prefix+PageUp"
+scrollback_page_down = "prefix+PageDown"
+# Line-scroll bindings (amount matches terminal_wheel_scroll_lines default 3).
+scrollback_line_up   = "prefix+Shift+Up"
+scrollback_line_down = "prefix+Shift+Down"
+# Top / bottom of scrollback.
+scrollback_to_top    = "prefix+Shift+g"
+scrollback_to_bottom = "prefix+Shift+End"
+
 # Remove a default binding so its key is free (the action stays available to
 # rebind under [keys]). Example:
 # [keys.unbind]
@@ -286,3 +297,29 @@ keys = "Space"
 [[keys.mode.bindings]]
 action = "toggle_selection_endpoint"
 keys = "o"
+
+# Scrollback bindings within selection mode (copy-mode style):
+# u/d = half-page, Ctrl+u/d = full page, g/G = top/bottom, Esc = exit.
+[[keys.mode.bindings]]
+action = "scrollback_line_up"
+keys = "u"
+args = { amount = "12" }
+[[keys.mode.bindings]]
+action = "scrollback_line_down"
+keys = "d"
+args = { amount = "12" }
+[[keys.mode.bindings]]
+action = "scrollback_page_up"
+keys = "Ctrl+u"
+[[keys.mode.bindings]]
+action = "scrollback_page_down"
+keys = "Ctrl+d"
+[[keys.mode.bindings]]
+action = "scrollback_to_top"
+keys = "g"
+[[keys.mode.bindings]]
+action = "scrollback_to_bottom"
+keys = "Shift+g"
+[[keys.mode.bindings]]
+action = "exit_scrollback"
+keys = "Escape"

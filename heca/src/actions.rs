@@ -589,6 +589,56 @@ impl ActionRegistry {
             category: ActionCategory::System,
             default_binding: "Shift+r",
         },
+        // ── Scrollback (host terminal viewport) ──
+        ActionDescriptor {
+            name: "scrollback_page_up",
+            label: "Scrollback Page Up",
+            description: "Scroll the terminal viewport up by one page and enter selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "PageUp",
+        },
+        ActionDescriptor {
+            name: "scrollback_page_down",
+            label: "Scrollback Page Down",
+            description: "Scroll the terminal viewport down by one page and enter selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "PageDown",
+        },
+        ActionDescriptor {
+            name: "scrollback_line_up",
+            label: "Scrollback Line Up",
+            description: "Scroll the terminal viewport up by a configurable number of lines.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+Up",
+        },
+        ActionDescriptor {
+            name: "scrollback_line_down",
+            label: "Scrollback Line Down",
+            description: "Scroll the terminal viewport down by a configurable number of lines.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+Down",
+        },
+        ActionDescriptor {
+            name: "scrollback_to_top",
+            label: "Scrollback to Top",
+            description: "Jump the terminal viewport to the top of scrollback history.",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+        },
+        ActionDescriptor {
+            name: "scrollback_to_bottom",
+            label: "Scrollback to Bottom",
+            description: "Snap the terminal viewport to the live bottom (latest output).",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+        },
+        ActionDescriptor {
+            name: "exit_scrollback",
+            label: "Exit Scrollback",
+            description: "Snap to the live bottom, clear selection, and exit selection mode.",
+            category: ActionCategory::Pane,
+            default_binding: "Escape",
+        },
         // ── Selection (host capability) ──
         ActionDescriptor {
             name: "enter_selection_mode",

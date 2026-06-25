@@ -65,6 +65,9 @@ pub(crate) fn handle_keyboard_input(
             if let Some(pane_id) = state.focused_pane
                 && let Some(backend) = state.backends.get_mut(pane_id)
             {
+                // Snap to live bottom when user sends keyboard input (Q5).
+                backend.scroll_to_bottom();
+
                 let handled = winit_key_to_backend_event(ctx.logical_key, state.modifiers)
                     .is_some_and(|event| backend.process_key_event(&event));
                 let input_bytes =
@@ -634,14 +637,14 @@ fn handle_selection_mode(
     if is_escape {
         // Route through the action architecture — no direct selection-state
         // mutation here, consistent with the "no registry bypasses" rule.
-        // We set the mode to Normal first so the dispatched handler runs
-        // against a consistent state.
+        // ExitScrollback snaps the viewport to bottom, clears selection,
+        // and exits Selection mode.
         state.input_mode = InputMode::Normal;
         dispatch_action(
             state,
             registry,
             InteractionSource::Keyboard,
-            &WmAction::ClearSelection,
+            &WmAction::ExitScrollback,
         );
     } else if is_enter {
         // Enter confirms the selection and returns to Normal.

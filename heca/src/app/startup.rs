@@ -353,6 +353,8 @@ pub(crate) async fn init_state(
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
         terminal_scrollback_lines: app_config.config.settings.terminal_scrollback_lines,
+        terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
+        terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),

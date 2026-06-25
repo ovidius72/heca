@@ -312,4 +312,23 @@ pub trait PaneBackend: Send {
     ) -> Vec<TerminalLine> {
         Vec::new()
     }
+
+    /// Whether the hosted application has enabled terminal mouse reporting.
+    ///
+    /// When `true`, mouse events (clicks, wheel) should be forwarded to the
+    /// terminal instead of being intercepted by heca's host chrome (e.g. for
+    /// scrollback navigation). Terminal backends delegate to wezterm's
+    /// `TerminalState::is_mouse_grabbed()`; non-terminal backends return
+    /// `false`.
+    fn is_mouse_grabbed(&self) -> bool {
+        false
+    }
+
+    /// Whether the host viewport is pinned to the live bottom
+    /// (`viewport_offset == 0`). Terminal backends with host scrollback
+    /// implement this; non-terminal backends default to `true` (no history
+    /// to scroll into).
+    fn at_bottom(&self) -> bool {
+        true
+    }
 }

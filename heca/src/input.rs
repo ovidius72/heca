@@ -259,6 +259,19 @@ pub enum WmAction {
         name: String,
     },
 
+    // ── Scrollback (host terminal viewport) ──
+    ScrollbackPageUp,
+    ScrollbackPageDown,
+    ScrollbackLineUp {
+        amount: usize,
+    },
+    ScrollbackLineDown {
+        amount: usize,
+    },
+    ScrollbackToTop,
+    ScrollbackToBottom,
+    ExitScrollback,
+
     // ── Selection (host capability, reusable across pane types) ──
     EnterSelectionMode,
     SelectionLeft,
@@ -409,6 +422,17 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         }),
         "delete_workspace" => Some(WmAction::DeleteWorkspace { ws_idx: 0 }),
         "reload_config" => Some(WmAction::ReloadConfig),
+        // Scrollback
+        "scrollback_page_up" => Some(WmAction::ScrollbackPageUp),
+        "scrollback_page_down" => Some(WmAction::ScrollbackPageDown),
+        "scrollback_to_top" => Some(WmAction::ScrollbackToTop),
+        "scrollback_to_bottom" => Some(WmAction::ScrollbackToBottom),
+        "exit_scrollback" => Some(WmAction::ExitScrollback),
+        // `amount` is in notches; the handler multiplies by the user-configurable
+        // `terminal_wheel_scroll_lines` before scrolling.  Default = 1 notch.
+        "scrollback_line_up" => Some(WmAction::ScrollbackLineUp { amount: 1 }),
+        "scrollback_line_down" => Some(WmAction::ScrollbackLineDown { amount: 1 }),
+
         "enter_selection_mode" => Some(WmAction::EnterSelectionMode),
         "selection_left" => Some(WmAction::SelectionLeft),
         "selection_right" => Some(WmAction::SelectionRight),
@@ -553,6 +577,14 @@ pub fn build_action(
         "delete_workspace" => Some(WmAction::DeleteWorkspace {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
+        // Scrollback (parameterized)
+        "scrollback_line_up" => Some(WmAction::ScrollbackLineUp {
+            amount: get_usize(args, "amount").unwrap_or(1),
+        }),
+        "scrollback_line_down" => Some(WmAction::ScrollbackLineDown {
+            amount: get_usize(args, "amount").unwrap_or(1),
+        }),
+
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
             kind: get_enum(args, "kind").unwrap_or(SpawnKind::Terminal),
@@ -665,7 +697,15 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::CopySelection
         | WmAction::PasteClipboard
         | WmAction::BeginSelection
-        | WmAction::ToggleSelectionEndpoint => 1,
+        | WmAction::ToggleSelectionEndpoint
+        // Scrollback (same priority as selection — pane-management-class)
+        | WmAction::ScrollbackPageUp
+        | WmAction::ScrollbackPageDown
+        | WmAction::ScrollbackLineUp { .. }
+        | WmAction::ScrollbackLineDown { .. }
+        | WmAction::ScrollbackToTop
+        | WmAction::ScrollbackToBottom
+        | WmAction::ExitScrollback => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
         WmAction::FocusPane { .. }
@@ -922,6 +962,14 @@ mod tests {
                 WmAction::SidebarRight,
                 // System
                 WmAction::CommandPalette,
+                // Scrollback
+                WmAction::ScrollbackPageUp,
+                WmAction::ScrollbackPageDown,
+                WmAction::ScrollbackLineUp { amount: 1 },
+                WmAction::ScrollbackLineDown { amount: 1 },
+                WmAction::ScrollbackToTop,
+                WmAction::ScrollbackToBottom,
+                WmAction::ExitScrollback,
                 // Selection (host capability, Task 02)
                 WmAction::EnterSelectionMode,
                 WmAction::SelectionLeft,
@@ -1031,7 +1079,9 @@ mod tests {
             ]
         }
 
-        // Smoke: every variant compiles and returns a priority.
+        // Parameterized scrollback variants need explicit inclusion
+        // since the unit list above uses `amount: 3` which is a unit-like
+        // pattern for the variant.
         for action in each_variant() {
             let _ = action_priority(&action);
         }
@@ -1113,6 +1163,46 @@ mod tests {
         let _ = WmAction::RenameColumn;
         let _ = WmAction::PaneTake;
         let _ = WmAction::PaneTakeAndFocus;
+        // Scrollback
+        let _ = WmAction::ScrollbackPageUp;
+        let _ = WmAction::ScrollbackPageDown;
+        let _ = WmAction::ScrollbackLineUp { amount: 1 };
+        let _ = WmAction::ScrollbackLineDown { amount: 5 };
+        let _ = WmAction::ScrollbackToTop;
+        let _ = WmAction::ScrollbackToBottom;
+        let _ = WmAction::ExitScrollback;
+    }
+
+    #[test]
+    fn test_scrollback_action_from_name() {
+        assert_eq!(
+            action_from_name("scrollback_page_up"),
+            Some(WmAction::ScrollbackPageUp)
+        );
+        assert_eq!(
+            action_from_name("scrollback_page_down"),
+            Some(WmAction::ScrollbackPageDown)
+        );
+        assert_eq!(
+            action_from_name("scrollback_to_top"),
+            Some(WmAction::ScrollbackToTop)
+        );
+        assert_eq!(
+            action_from_name("scrollback_to_bottom"),
+            Some(WmAction::ScrollbackToBottom)
+        );
+        assert_eq!(
+            action_from_name("exit_scrollback"),
+            Some(WmAction::ExitScrollback)
+        );
+        assert_eq!(
+            action_from_name("scrollback_line_up"),
+            Some(WmAction::ScrollbackLineUp { amount: 1 })
+        );
+        assert_eq!(
+            action_from_name("scrollback_line_down"),
+            Some(WmAction::ScrollbackLineDown { amount: 1 })
+        );
     }
 
     #[test]

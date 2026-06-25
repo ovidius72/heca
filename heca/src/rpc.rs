@@ -422,6 +422,15 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "clear-selection" => Ok(WmAction::ClearSelection),
         "copy-selection" => Ok(WmAction::CopySelection),
         "paste-clipboard" => Ok(WmAction::PasteClipboard),
+        // Scrollback (host capability, Slice 3). Reachable from RPC, keyboard,
+        // and mouse/UI dispatch.
+        "scrollback-page-up" | "scroll-page-up" => Ok(WmAction::ScrollbackPageUp),
+        "scrollback-page-down" | "scroll-page-down" => Ok(WmAction::ScrollbackPageDown),
+        "scrollback-line-up" | "scroll-line-up" => Ok(WmAction::ScrollbackLineUp { amount: 1 }),
+        "scrollback-line-down" | "scroll-line-down" => Ok(WmAction::ScrollbackLineDown { amount: 1 }),
+        "scrollback-to-top" | "scroll-to-top" => Ok(WmAction::ScrollbackToTop),
+        "scrollback-to-bottom" | "scroll-to-bottom" => Ok(WmAction::ScrollbackToBottom),
+        "exit-scrollback" => Ok(WmAction::ExitScrollback),
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
 }
@@ -807,6 +816,63 @@ mod tests {
         assert_eq!(
             parse_rpc_command("paste-clipboard"),
             Ok(WmAction::PasteClipboard)
+        );
+    }
+
+    #[test]
+    fn test_scrollback_commands() {
+        // Scrollback (Slice 3) must be reachable from RPC, not just keyboard.
+        assert_eq!(
+            parse_rpc_command("scrollback-page-up"),
+            Ok(WmAction::ScrollbackPageUp)
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-page-up"),
+            Ok(WmAction::ScrollbackPageUp)
+        );
+        assert_eq!(
+            parse_rpc_command("scrollback-page-down"),
+            Ok(WmAction::ScrollbackPageDown)
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-page-down"),
+            Ok(WmAction::ScrollbackPageDown)
+        );
+        assert_eq!(
+            parse_rpc_command("scrollback-line-up"),
+            Ok(WmAction::ScrollbackLineUp { amount: 1 })
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-line-up"),
+            Ok(WmAction::ScrollbackLineUp { amount: 1 })
+        );
+        assert_eq!(
+            parse_rpc_command("scrollback-line-down"),
+            Ok(WmAction::ScrollbackLineDown { amount: 1 })
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-line-down"),
+            Ok(WmAction::ScrollbackLineDown { amount: 1 })
+        );
+        assert_eq!(
+            parse_rpc_command("scrollback-to-top"),
+            Ok(WmAction::ScrollbackToTop)
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-to-top"),
+            Ok(WmAction::ScrollbackToTop)
+        );
+        assert_eq!(
+            parse_rpc_command("scrollback-to-bottom"),
+            Ok(WmAction::ScrollbackToBottom)
+        );
+        assert_eq!(
+            parse_rpc_command("scroll-to-bottom"),
+            Ok(WmAction::ScrollbackToBottom)
+        );
+        assert_eq!(
+            parse_rpc_command("exit-scrollback"),
+            Ok(WmAction::ExitScrollback)
         );
     }
 

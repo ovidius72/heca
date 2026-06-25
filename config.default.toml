@@ -47,6 +47,15 @@ shell_integration = true
 # Mirrors wezterm-term's default of 3500 when unset.
 terminal_scrollback_lines = 3500
 
+# Enable terminal mouse for host scrollback: when true, wheel scrolls the host
+# scrollback viewport instead of forwarding to the terminal (unless the app
+# has grabbed mouse). Shift+wheel always scrolls the host viewport.
+# Terminal-ONLY — does not affect `settings.mouse` (chrome interaction).
+terminal_mouse = true
+
+# Number of scrollback rows per wheel notch.
+terminal_wheel_scroll_lines = 3
+
 # Terminal color palette overrides (all optional → fall back to the theme).
 # terminal_foreground          = "#c6f0ff"
 # terminal_background          = "#060a0e"

@@ -177,12 +177,15 @@ impl TerminalEngine {
     }
 
     /// Whether the viewport is pinned to the live bottom (`viewport_offset == 0`).
-    ///
-    /// Test-only inspection helper; production reads `at_bottom` from the
-    /// `TerminalSnapshot`.
-    #[cfg(test)]
     pub(super) fn at_bottom(&self) -> bool {
         self.viewport_offset == 0
+    }
+
+    /// Whether the hosted application has enabled terminal mouse reporting modes
+    /// (X10/SGR/any-event). When `true`, wheel and click events should be forwarded
+    /// to the terminal instead of being handled by heca's host chrome.
+    pub(super) fn is_mouse_grabbed(&self) -> bool {
+        self.terminal.is_mouse_grabbed()
     }
 
     /// Test-only setter that bypasses the clamp, used to construct a stale stored
