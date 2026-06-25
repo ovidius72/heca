@@ -240,6 +240,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 state.terminal_cell_size,
             )
         });
+        // Sync viewport state into the chrome store for GUI reactivity.
+        if let Some(ref m) = mount {
+            state.chrome_state.workspaces.set_pane_viewport(
+                *pane_id,
+                m.snapshot.viewport_offset,
+                m.snapshot.at_bottom,
+                m.snapshot.scrollback_rows,
+            );
+        }
         tiled_panes.push(PaneRenderState {
             pane_id: *pane_id,
             x: px,
@@ -279,6 +288,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     state.terminal_cell_size,
                 )
             });
+            // Sync viewport state into the chrome store for GUI reactivity.
+            if let Some(ref m) = mount {
+                state.chrome_state.workspaces.set_pane_viewport(
+                    float.pane.id,
+                    m.snapshot.viewport_offset,
+                    m.snapshot.at_bottom,
+                    m.snapshot.scrollback_rows,
+                );
+            }
             floating_panes.push(PaneRenderState {
                 pane_id: float.pane.id,
                 x: fx,

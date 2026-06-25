@@ -172,9 +172,15 @@ Runtime validation shows terminal output is live and resize is stable again, but
   - Interaction policy: all scrollback actions → `FocusedPaneLocal`.
   - Review fixes: `is_mouse_grabbed()` API (🔴), RPC (🟠), amount=notches consistency, dedup, flaky toast test.
   - Gates: `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0.
-  Next: slice 4 (AppState chrome mirror + reactive store).
 
-- [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+- [x] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
+  **DONE + reviewed 2026-06-25** (slice 3). All locked decisions met after review fixes:
+  `is_mouse_grabbed()` added through `PaneBackend`/engine so the wheel gate is
+  `shift_held || (terminal_mouse_enabled && !is_mouse_grabbed)` (TUIs keep their wheel);
+  wheel-up enters `InputMode::Selection` (Q3); RPC commands added; snap-to-bottom on key
+  input (Q5). Gate: `heca` 262, `heca-core` 70, `heca-config` 73, clippy 0. Residual nits
+  (non-blocking): RPC line-amount default (1) vs flat-binding default (3); snap-on-output
+  branch is a no-op when already at bottom.
   **Before starting: read `handoff-terminal-scrollback.md` — a DETAILED WORKING NOTE
   (file inventory, slice-by-slice guide) kept only until scrollback lands, then deleted.
   It is NOT authoritative: the durable plan + decisions + deferrals live in THIS backlog
@@ -199,6 +205,57 @@ Runtime validation shows terminal output is live and resize is stable again, but
   • Five new `WmAction` variants: `ScrollbackPage{direction}`, `ScrollbackLine{direction,amount}`, `ScrollbackToTop`, `ScrollbackToBottom`, `ExitScrollback` — all `FocusedPaneLocal`, full 11-step treatment + RPC + default bindings in `keybindings.default.toml` (NOT `keys.rs` — defaults moved to TOML in PR #185).
   • Three GUI affordances (animated viewport offset + scrollbar widget + scrolled-up indicator) as generic `heca-grid-ui` widgets.
   See `handoff-terminal-scrollback.md` §6 for the detailed slice 3 implementation guide.
+
+- [x] **terminal-task-01c** — Mirror terminal viewport state into the reactive chrome store (slice 4).
+  **Slice 4 DONE (2026-06-25):** terminal viewport state mirrored into the chrome store.
+  - Added `viewport_offset`/`at_bottom`/`scrollback_rows` signals to `PaneRuntimeSignals`.
+  - Added `WorkspacesContainerState::set_pane_viewport()` — idempotent, emits
+    `TerminalViewportChanged` only on real change.
+  - Added `ChromeEvent::TerminalViewportChanged { pane, viewport_offset, at_bottom,
+    scrollback_rows }`.
+  - Viewport sync in `render.rs` from each `prepare_terminal_mount` result (tiled +
+    floating).
+  - Host API: `TerminalViewport` struct + `StateView::terminal_viewport(pane_id)` read
+    selector.
+  - 3 new tests: defaults, emit-on-change (4 events not 8), preinit-without-runtime.
+  - Gates: `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125,
+    clippy 0.
+  Next: slice 5 (animated viewport offset).
+  **Plumbing only — no user-visible behavior.** Prepares slices 5 (animated offset) and 6
+  (scrollbar + "N lines above" badge), which read this state. Per-pane, mirror the
+  `TerminalSnapshot` viewport fields (`viewport_offset` / `at_bottom` / `scrollback_rows`)
+  into `SharedChromeState` so chrome/GUI can react.
+  Deliverables:
+  • Add the per-pane viewport fields to `SharedChromeState` — INTEGRATE into the existing
+    per-pane `PaneRuntime` mirror, do NOT add a parallel structure.
+  • Sync them from where the snapshot is read each frame (`terminal_host.rs` mount) via the
+    store's `set_*` chokepoint, **only on real change** (guard the setter).
+  • Emit `ChromeEvent::TerminalViewportChanged { pane_id, … }` (`chrome/events.rs`) from the
+    mutation chokepoint.
+  • Add host read accessor `host.terminal_viewport(pane_id)` (`host.rs`), consistent with the
+    `app.state.*` / `app.on(...)` pattern (plugins read via selector/event, never the signals).
+  • Tests (update + event fire ONLY on change; no-op emits nothing) + clippy 0. No GUI check.
+  Constraints: follow the `SharedChromeState` contract (signal-backed, write via `set_*`
+  chokepoint that emits events, read via selector); container/pane-namespaced. Decision Q1 is
+  locked — engine owns `viewport_offset`, snapshot projects, THIS task only mirrors into the
+  store (do not move ownership).
+  Files: `heca/src/chrome/state.rs`, `heca/src/chrome/events.rs`, `heca/src/host.rs`,
+  `heca/src/app/terminal_host.rs`
+  Ref: `handoff-terminal-scrollback.md` §6b + §9 (working note only — this backlog is authoritative).
+
+- [ ] **terminal-task-01d** — Animated viewport offset (slice 5).
+  Ease the viewport offset via `tick(dt)` so scroll jumps glide instead of snapping. Builds on
+  the slice-4 store mirror. Ref: handoff Q7 (animated offset row).
+
+- [ ] **terminal-task-01e** — Scrollback GUI widgets (slice 6).
+  Two generic `heca-grid-ui` widgets reading the slice-4 store state: a clickable/draggable
+  **scrollbar** (jump to any viewport position) and a **scrolled-up indicator badge**
+  ("N lines above"; click = snap to bottom). Domain-neutral, theme-driven; update showcase +
+  `docs/widgets.md` (grid-ui rule). Ref: handoff Q7.
+
+- [ ] **terminal-task-01f** — Docs + final review + commit (slice 7).
+  Update user-facing docs (README scrollback section, config keys), final review, land the
+  feature. Once merged, the `handoff-terminal-scrollback.md` working note can be deleted.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.

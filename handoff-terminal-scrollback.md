@@ -31,8 +31,8 @@ Design locked via `/grill-me` on 2026-06-24. Split into 7 implementation slices.
 |-------|--------|-------|-------|
 | **1 — Backend viewport model** | ✅ DONE | `engine.rs`, `terminal.rs`, `snapshot.rs`, `backend/mod.rs`, `settings.rs`, `config.default.toml`, `app_state.rs`, `backend_factory.rs`, `startup.rs`, `main.rs`, `fake.rs`, `terminal_render.rs` (test snapshot) | `heca-core` 67/67, `heca-config` 70/70, `heca` 247/247, clippy 0 |
 | **2 — Stable-row selection refactor** | ✅ DONE | `selection_model.rs`, `terminal_host.rs`, `terminal_render.rs`, `handlers.rs`, `backend/mod.rs`, `terminal.rs`, `fake.rs`, `snapshot.rs`, `render.rs` | `heca` 259/259, `heca-core` 67/67, clippy 0 |
-| **3 — Actions + wheel + keybindings** | ⬜ NEXT | — | — |
-| **4 — AppState chrome mirror** | ⬜ | — | — |
+| **3 — Actions + wheel + keybindings** | ✅ DONE | `input.rs`, `handlers.rs`, `actions.rs`, `registry.rs`, `interaction.rs`, `terminal_host.rs`, `rpc.rs`, `settings.rs`, `config.default.toml`, `keybindings.default.toml`, `app_state.rs`, `main.rs`, `startup.rs`, `backend/mod.rs`, `backend/terminal.rs`, `backend/terminal/engine.rs` | `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
+| **4 — AppState chrome mirror** | ✅ DONE | `state.rs`, `events.rs`, `host.rs`, `render.rs` | `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
 | **5 — Animated viewport offset** | ⬜ | — | — |
 | **6 — GUI widgets** | ⬜ | — | — |
 | **7 — Docs + review + commit** | ⬜ | — | — |
@@ -263,14 +263,9 @@ and flat `[keys]` for prefix bindings. NEVER add them to `keys.rs`.
 
 ## 6b. Slice 4 — What to do next
 
-### AppState chrome mirror + reactive store
+### AppState chrome mirror ✅ DONE (2026-06-25)
 
-See `handoff-terminal-scrollback.md` §1 table for full scope. Key deliverables:
-
-- Mirror `viewport_offset`/`at_bottom`/`scrollback_rows` into the reactive chrome store.
-- `ChromeEvent::TerminalViewportChanged` for chome listeners.
-- `host.terminal_viewport(pane_id)` accessor.
-- Tests + clippy.
+[slice 3 completed. Next: slice 5]
 
 ---
 
