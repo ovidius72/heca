@@ -247,6 +247,15 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
         | WmAction::RenameTarget { .. }
+        // Scrollback operates on the focused pane and is allowed in both
+        // tiled and floating domains.
+        | WmAction::ScrollbackPageUp
+        | WmAction::ScrollbackPageDown
+        | WmAction::ScrollbackLineUp { .. }
+        | WmAction::ScrollbackLineDown { .. }
+        | WmAction::ScrollbackToTop
+        | WmAction::ScrollbackToBottom
+        | WmAction::ExitScrollback
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::EnterSelectionMode
@@ -837,6 +846,14 @@ mod tests {
             WmAction::RenameWorkspace,
             WmAction::CommandPalette,
             WmAction::ReloadConfig,
+            // Scrollback
+            WmAction::ScrollbackPageUp,
+            WmAction::ScrollbackPageDown,
+            WmAction::ScrollbackLineUp { amount: 3 },
+            WmAction::ScrollbackLineDown { amount: 3 },
+            WmAction::ScrollbackToTop,
+            WmAction::ScrollbackToBottom,
+            WmAction::ExitScrollback,
             // Selection (host capability, Task 02).
             WmAction::EnterSelectionMode,
             WmAction::ClearSelection,
@@ -944,6 +961,18 @@ mod tests {
         );
         assert_eq!(
             action_policy(&WmAction::ClosePane),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ScrollbackPageUp),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ScrollbackToBottom),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ExitScrollback),
             ActionPolicy::FocusedPaneLocal
         );
         assert_eq!(
@@ -1327,7 +1356,8 @@ mod tests {
         );
     }
 
-    /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane, selection actions) are still allowed.
+    /// When floating, FocusedPaneLocal actions (Float, ClosePane, RenamePane,
+    /// scrollback, selection actions) are still allowed.
     #[test]
     fn floating_allows_focused_pane_local_via_keyboard() {
         let mut session = test_session();
@@ -1337,6 +1367,12 @@ mod tests {
             WmAction::Float,
             WmAction::ClosePane,
             WmAction::RenamePane,
+            // scrollback
+            WmAction::ScrollbackPageUp,
+            WmAction::ScrollbackPageDown,
+            WmAction::ScrollbackToTop,
+            WmAction::ScrollbackToBottom,
+            WmAction::ExitScrollback,
             // Selection (host capability, Task 02) — allowed in both domains.
             WmAction::EnterSelectionMode,
             WmAction::SelectionLeft,

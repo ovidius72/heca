@@ -62,6 +62,14 @@ fn default_terminal_scrollback_lines() -> usize {
     3500
 }
 
+fn default_terminal_mouse() -> bool {
+    true
+}
+
+fn default_terminal_wheel_scroll_lines() -> usize {
+    3
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -128,6 +136,21 @@ pub struct SettingsConfig {
     /// 3500 when unset.
     #[serde(default = "default_terminal_scrollback_lines", alias = "terminal-scrollback-lines")]
     pub terminal_scrollback_lines: usize,
+
+    /// Enable terminal mouse support for host scrollback: when `true`, wheel events
+    /// scroll the host scrollback viewport instead of forwarding to the terminal
+    /// (unless the terminal application has grabbed the mouse). Shift+wheel always
+    /// scrolls the host viewport regardless.
+    ///
+    /// This is terminal-ONLY — it does not affect `settings.mouse` (which controls
+    /// chrome interaction like click-to-focus and drag-to-move).
+    #[serde(default = "default_terminal_mouse", alias = "terminal-mouse")]
+    pub terminal_mouse: bool,
+
+    /// Number of scrollback rows per wheel notch when the host scrollback viewport
+    /// is active (i.e. the wheel scrolls the host viewport, not the terminal).
+    #[serde(default = "default_terminal_wheel_scroll_lines", alias = "terminal-wheel-scroll-lines")]
+    pub terminal_wheel_scroll_lines: usize,
 }
 
 impl Default for SettingsConfig {
@@ -151,6 +174,8 @@ impl Default for SettingsConfig {
             always_center_single_column: default_always_center_single_column(),
             shell_integration: default_shell_integration(),
             terminal_scrollback_lines: default_terminal_scrollback_lines(),
+            terminal_mouse: default_terminal_mouse(),
+            terminal_wheel_scroll_lines: default_terminal_wheel_scroll_lines(),
         }
     }
 }
@@ -180,6 +205,8 @@ mod tests {
         assert!(!s.always_center_single_column);
         assert!(s.shell_integration);
         assert_eq!(s.terminal_scrollback_lines, 3500);
+        assert!(s.terminal_mouse);
+        assert_eq!(s.terminal_wheel_scroll_lines, 3);
     }
 
     #[test]

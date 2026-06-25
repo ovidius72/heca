@@ -529,6 +529,21 @@ pub fn build_registry() -> ActionRegistry {
         handle_enter_mode,
     );
 
+    // ── Scrollback (host terminal viewport) ──
+    registry.register(&WmAction::ScrollbackPageUp, handle_scrollback_page_up);
+    registry.register(&WmAction::ScrollbackPageDown, handle_scrollback_page_down);
+    registry.register(
+        &WmAction::ScrollbackLineUp { amount: 3 },
+        handle_scrollback_line_up,
+    );
+    registry.register(
+        &WmAction::ScrollbackLineDown { amount: 3 },
+        handle_scrollback_line_down,
+    );
+    registry.register(&WmAction::ScrollbackToTop, handle_scrollback_to_top);
+    registry.register(&WmAction::ScrollbackToBottom, handle_scrollback_to_bottom);
+    registry.register(&WmAction::ExitScrollback, handle_exit_scrollback);
+
     // ── Selection (host capability) ──
     registry.register(&WmAction::EnterSelectionMode, handle_enter_selection_mode);
     registry.register(&WmAction::SelectionLeft, handle_selection_left);

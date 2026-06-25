@@ -3026,9 +3026,10 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
         let mut cx = PaintCx::new(&mut scene, &theme);
         t.paint(&mut cx);
     }
-    // The flash is a white overlay rect (see PaintCx::flash).
+    // The flash is drawn in the theme's foreground color (see PaintCx::flash).
+    let fg = theme.foreground;
     let flash = scene.iter().find_map(|c| match c {
-        DrawCommand::Rect(r) if r.fill.r == 255 && r.fill.g == 255 && r.fill.b == 255 && r.fill.a > 0 => Some(*r),
+        DrawCommand::Rect(r) if r.fill.r == fg.r && r.fill.g == fg.g && r.fill.b == fg.b && r.fill.a > 0 => Some(*r),
         _ => None,
     }).expect("an action press emits a press-flash rect");
     assert!(

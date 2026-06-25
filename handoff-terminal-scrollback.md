@@ -213,55 +213,64 @@ and flat `[keys]` for prefix bindings. NEVER add them to `keys.rs`.
 
 ---
 
-## 6. Slice 3 — What to do next
+## 6. Slice 3 — Actions + wheel + keybindings ✅ DONE (2026-06-25)
 
-### Actions + wheel + keybindings + interaction policy
+### What was implemented
 
-**1. Five `WmAction` variants** in `heca/src/input.rs`:
-- `ScrollbackPageUp` / `ScrollbackPageDown` (unit)
-- `ScrollbackLineUp { amount: usize }` / `ScrollbackLineDown { amount: usize }`
-- `ScrollbackToTop` / `ScrollbackToBottom`
-- `ExitScrollback`
+**7 `WmAction` variants** in `heca/src/input.rs`:
+- `ScrollbackPageUp` / `ScrollbackPageDown` (unit) — page scroll + enter Selection.
+- `ScrollbackLineUp { amount: usize }` / `ScrollbackLineDown { amount: usize }` —
+  `amount` = notches; handler multiplies by `terminal_wheel_scroll_lines`.
+- `ScrollbackToTop` / `ScrollbackToBottom` — jump viewport extremes.
+- `ExitScrollback` — snap to bottom + clear selection + exit `InputMode::Selection`.
 
-**2. Implement handlers** in `heca/src/handlers.rs`:
-- Each calls `backend.scroll_viewport(...)` on the focused pane's backend.
-- `ScrollbackToBottom` also clears selection + exits selection mode.
-- `ExitScrollback` snaps to bottom + exits `InputMode::Selection`.
-
-**3. Register in `build_registry`** (`heca/src/app/registry.rs`) — full 11-step
-checklist per AGENTS.md.
-
-**4. Classify in `action_policy()`** (`heca/src/app/interaction.rs`):
-- All scrollback actions → `FocusedPaneLocal`.
-- `ExitScrollback` → `FocusedPaneLocal`.
-
-**5. Default bindings** in `keybindings.default.toml`:
-- `prefix+PageUp` / `prefix+PageDown` → scroll one page + enter Selection mode.
-- Prefix bindings for line scroll, top, bottom (assign keys).
-- Selection-mode bindings (mode `selection`): `u`/`d` = half-page, `Ctrl+u`/`Ctrl+d`
-  = full page, `g`/`G` = top/bottom, `Esc` = exit scrollback.
-- DO NOT bind to plain PageUp/PageDown (forwarded to PTY).
-- DO NOT bind to `prefix+s` (already selection-mode entry; use `prefix+PageUp`).
-
-**6. Config** (`heca-config/src/settings.rs` + `config.default.toml`):
+**Config** (`heca-config/src/settings.rs` + `config.default.toml`):
 - `terminal_mouse: bool` (default `true`) — gates wheel-enters-scrollback.
 - `terminal_wheel_scroll_lines: usize` (default 3).
 
-**7. Wheel routing** (`heca/src/app/events.rs` or `terminal_host.rs`):
-- Dispatch `ScrollbackLine` after `terminal_mouse && (!is_mouse_grabbed || shift_held)` check.
-- Reset prefix timeout on scroll events like keyboard input.
+**Wheel routing** (`heca/src/app/terminal_host.rs`):
+- `is_mouse_grabbed()` added to `PaneBackend` trait (delegates to wezterm's
+  `TerminalState::is_mouse_grabbed()`). Gating:
+  `shift_held || (terminal_mouse_enabled && !backend.is_mouse_grabbed())`.
+- Q3: wheel-up at live bottom enters `InputMode::Selection`.
+- PixelDelta → line conversion uses cell size from backend, falls back to 14 px.
 
-**8. Snap-to-bottom policy** (Q5):
-- On forwarded key input → `backend.scroll_to_bottom()`.
-- In update loop, on new output → `backend.scroll_to_bottom()` only if `at_bottom`.
+**Snap-to-bottom policy** (Q5):
+- Key input: `app/input.rs` snaps before forwarding.
+- New output: `TerminalBackend::update()` snaps only if already at bottom.
 
-**9. Tests:**
-- `action_policy` assertion for each new variant.
-- Default binding resolution.
-- Wheel routing both branches.
-- Snap-to-bottom on input/output.
+**RPC** (`heca/src/rpc.rs`): 13 new scrollback commands with tests (34 RPC tests).
 
-**10. Gate:** clippy clean + all tests green.
+**Default bindings** (`keybindings.default.toml`):
+- `prefix+PageUp/Down` → page scroll + Selection mode.
+- `prefix+Shift+Up/Down` → line scroll (1 notch).
+- `prefix+Shift+g` → top, `prefix+Shift+End` → bottom.
+- Selection-mode: `u`/`d` half-page, `Ctrl+u`/`Ctrl+d` full page, `g`/`G` top/bottom, `Esc` exit.
+
+**Interaction policy:** All scrollback actions → `FocusedPaneLocal`.
+
+**Review fixes (2026-06-25):**
+- `is_mouse_grabbed()` added to `PaneBackend` trait + `TerminalEngine` + `TerminalBackend`.
+- Wheel gating respects terminal mouse grab (🔴 fix).
+- RPC support added (🟠).
+- `amount` semantics changed from lines to notches; handler multiplies by config.
+- `handle_exit_scrollback` deduplicated → delegates to `handle_scrollback_to_bottom`.
+- Pre-existing flaky toast test fixed (hardcoded white → theme foreground).
+
+**Gate:** `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0.
+
+---
+
+## 6b. Slice 4 — What to do next
+
+### AppState chrome mirror + reactive store
+
+See `handoff-terminal-scrollback.md` §1 table for full scope. Key deliverables:
+
+- Mirror `viewport_offset`/`at_bottom`/`scrollback_rows` into the reactive chrome store.
+- `ChromeEvent::TerminalViewportChanged` for chome listeners.
+- `host.terminal_viewport(pane_id)` accessor.
+- Tests + clippy.
 
 ---
 
@@ -291,18 +300,14 @@ All slices are on a single feature branch (NOT merged to main yet).
 
 ---
 
-## 9. Key files to read before starting slice 3
+## 9. Key files to read before starting slice 4
 
 | File | Why |
 |------|-----|
-| `heca/src/input.rs` | `WmAction` enum — add new variants here |
-| `heca/src/handlers.rs` | Action handlers — add scrollback handlers here |
-| `heca/src/app/interaction.rs` | `action_policy()` — classify new actions |
-| `heca/src/app/registry.rs` | `build_registry()` — register handlers |
-| `heca/src/app/terminal_host.rs` | `move_focused_terminal_selection` — add auto-scroll |
-| `heca/src/app/events.rs` | Wheel input routing |
-| `keybindings.default.toml` | Default bindings — add scrollback bindings here |
-| `config.default.toml` | Default config — add terminal_mouse/wheel_lines here |
-| `heca-config/src/settings.rs` | `SettingsConfig` — add new fields |
+| `heca/src/app/terminal_host.rs` | Terminal mount — mirror viewport state to chrome store |
+| `heca/src/app/render.rs` | Viewport info rendered in chrome |
+| `heca/src/app_state.rs` | `ChromeEvent::TerminalViewportChanged` → chrome store |
+| `heca-grid-ui/src/` | Widgets for scrollback indicator/scrolled-up badge |
+| `handoff-terminal-scrollback.md` | This file — architecture + remaining slices |
 | `BACKLOG.md` | Track progress |
 | `AGENTS.md` | All project rules (mandatory read) |

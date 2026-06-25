@@ -612,6 +612,12 @@ pub struct AppState {
     /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
     /// backends so the engine retains the configured amount of history.
     pub terminal_scrollback_lines: usize,
+    /// Terminal-only mouse support for host scrollback wheel routing.
+    /// When true, wheel scrolls the host scrollback viewport unless the terminal
+    /// app has grabbed the mouse. Does not affect `mouse_enabled` (chrome).
+    pub terminal_mouse_enabled: bool,
+    /// Number of scrollback rows per wheel notch.
+    pub terminal_wheel_scroll_lines: usize,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

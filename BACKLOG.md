@@ -84,6 +84,15 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
 ### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
 Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.
 
+> **Deliberately deferred — SEPARATE from the scrollback feature.** This is a pure
+> performance optimization, not a prerequisite for scrollback. The scrollback work
+> (`terminal-01a`/`01b`) intentionally forces `TerminalDamage::Full` on every
+> viewport movement (a full pane repaint while scrolling) and is fully usable that
+> way; `terminal-01` only makes that movement cheaper. Do it AFTER the scrollback
+> feature lands and the app is otherwise stable. Sibling of the frame-wide
+> compositor damage optimization `app-task-22` (phase `app-07`) — same "repaint
+> only what changed" spirit, different layer (terminal rows vs the whole scene).
+
 - [ ] **terminal-task-01** — Implement dirty-row rendering in `heca-renderer/src/terminal.rs`.
   Consume the already-plumbed `TerminalDamage` and redraw only dirty visible rows
   into the retained terminal content path. Fall back to full redraw when damage
@@ -152,11 +161,25 @@ Runtime validation shows terminal output is live and resize is stable again, but
   - `render.rs` call sites updated to pass snapshot instead of `cols`.
   - Gates: `cargo test -p heca` 259/259, `-p heca-core` 67/67, `cargo clippy` 0 warnings.
     Commit `bc66d31`, pushed to `feature/terminal-followups`, rebased onto `origin/main`.
-  Next: slice 3 (actions + wheel + keybindings + config, `terminal_mouse`/`terminal_wheel_scroll_lines`).
+  **Slice 3 DONE (2026-06-25):** actions, wheel routing, keybindings, interaction policy, and RPC.
+  - 7 `WmAction` variants added (`PageUp`/`PageDown`/`LineUp`/`LineDown`/`ToTop`/`ToBottom`/`ExitScrollback`).
+  - Config: `terminal_mouse` (bool, default true), `terminal_wheel_scroll_lines` (usize, default 3).
+  - Wheel routing: `is_mouse_grabbed()` on `PaneBackend` trait; gating: `shift_held || (terminal_mouse && !grab)`.
+  - Q3: wheel-up at live bottom enters `InputMode::Selection`.
+  - Q5 snap-to-bottom on key input (always) + new output (only if already at bottom).
+  - RPC: 13 new scrollback commands with tests.
+  - Default bindings: prefix+PageUp/Down, prefix+Shift+Up/Down, prefix+Shift+g/End; selection-mode u/d/g/G/Esc.
+  - Interaction policy: all scrollback actions → `FocusedPaneLocal`.
+  - Review fixes: `is_mouse_grabbed()` API (🔴), RPC (🟠), amount=notches consistency, dedup, flaky toast test.
+  - Gates: `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0.
+  Next: slice 4 (AppState chrome mirror + reactive store).
 
 - [~] **terminal-task-01b** — Route wheel, PageUp/PageDown, and selection-mode edge movement through the host scrollback policy.
-  **⚠️ Before starting: read `handoff-terminal-scrollback.md` (the single source of truth
-  for all scrollback work done so far — decisions, architecture, file inventory, tests).**
+  **Before starting: read `handoff-terminal-scrollback.md` — a DETAILED WORKING NOTE
+  (file inventory, slice-by-slice guide) kept only until scrollback lands, then deleted.
+  It is NOT authoritative: the durable plan + decisions + deferrals live in THIS backlog
+  (the policy below + the `terminal-01` deferral note above). If the two ever disagree,
+  the backlog wins.**
   Define the policy boundary between host scrollback navigation and backend/TUI
   mouse forwarding. Normal shell/history use must scroll the host viewport;
   mouse-enabled TUIs must still receive raw wheel input when appropriate;

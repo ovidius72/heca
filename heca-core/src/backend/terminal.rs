@@ -554,6 +554,18 @@ impl PaneBackend for TerminalBackend {
         // correction as `TerminalDamage::Full` via `viewport_changed`.
         self.engine.reconcile_viewport_offset();
 
+        // Snap-to-bottom policy (Q5): when new terminal output arrives and the
+        // viewport is already at the live bottom (`at_bottom() == true` after
+        // `reconcile_viewport_offset`), defensively re-snap so the growing
+        // live region stays visible. The call is a no-op when already at offset 0
+        // (the common case) but guards against future code paths that may move
+        // the offset during reconciliation without marking the viewport dirty.
+        // If the user has scrolled up, `at_bottom()` returns `false` and we do
+        // NOT steal their viewport position — they'll snap back on key input.
+        if had_data && self.engine.at_bottom() {
+            self.engine.scroll_to_bottom();
+        }
+
         had_data
     }
 
@@ -621,6 +633,14 @@ impl PaneBackend for TerminalBackend {
 
     fn take_exit_code(&mut self) -> Option<i32> {
         self.pending_exit.take()
+    }
+
+    fn is_mouse_grabbed(&self) -> bool {
+        self.engine.is_mouse_grabbed()
+    }
+
+    fn at_bottom(&self) -> bool {
+        self.engine.at_bottom()
     }
 
     fn scroll_viewport(&mut self, delta_rows: i32) {

@@ -9,6 +9,10 @@ use crate::app::backend_store::BackendStore;
 use crate::app::interaction::{InteractionSource, dispatch_action};
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app_state::{AppState, InputMode, InteractiveMovePhase};
+
+/// Default cell height in logical pixels for PixelDelta → line conversion
+/// fallback when the terminal backend cannot be queried for real cell metrics.
+const DEFAULT_CELL_H: f64 = 14.0;
 use crate::input::WmAction;
 use heca_core::backend::{
     BackendModifiers, BackendMouseButton, BackendMouseEvent, BackendMouseEventKind, PaneBackend,
@@ -258,16 +262,81 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     let Some(target) = terminal_target_at_position(state, pos) else {
         return;
     };
-    for button in wheel_buttons(delta) {
-        let Some(event) =
-            build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
-        else {
-            continue;
-        };
-        if let Some(backend) = state.backends.get_mut(target.pane_id) {
-            let _ = backend.process_mouse_event(&event);
+
+    // ── Host scrollback routing ──
+    //
+    // Wheel → host scrollback UNLESS the terminal has mouse-grab active.
+    // Shift+wheel → always host scrollback (bypasses any grab).
+    //
+    // Q2 policy:
+    //   `shift_held`         → always host scroll (bypasses grab)
+    //   `terminal_mouse && !grab` → host scroll
+    //   `terminal_mouse && grab`  → forward to terminal
+    //   `!terminal_mouse`         → forward to terminal
+    //
+    // Q3: scrolling up at the live bottom enters Selection mode so further
+    // scroll keys (u/d/Ctrl-u/Ctrl-d/g/G) work immediately without requiring
+    // a separate `prefix+q` or `esc` toggle.
+    let shift_held = state.modifiers.shift_key();
+    let wants_mouse = state
+        .backends
+        .get(target.pane_id)
+        .is_some_and(|b| b.is_mouse_grabbed());
+    let do_host_scroll = shift_held || (state.terminal_mouse_enabled && !wants_mouse);
+
+    if !do_host_scroll {
+        // Forward wheel to the terminal backend.
+        for button in wheel_buttons(delta) {
+            let Some(event) =
+                build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
+            else {
+                continue;
+            };
+            if let Some(backend) = state.backends.get_mut(target.pane_id) {
+                let _ = backend.process_mouse_event(&event);
+            }
+        }
+        return;
+    }
+
+    let lines = state.terminal_wheel_scroll_lines;
+    // Determine number of notches/steps from the scroll delta.
+    let notches = match delta {
+        MouseScrollDelta::LineDelta(_, y) => y as f64,
+        MouseScrollDelta::PixelDelta(p) => {
+            let cell_h = state
+                .backends
+                .get(target.pane_id)
+                .map(|b| b.cell_size().1 as f64)
+                .unwrap_or(DEFAULT_CELL_H);
+            if p.y.abs() > 0.0 && cell_h > 0.0 {
+                p.y / cell_h
+            } else {
+                0.0
+            }
+        }
+    };
+    let total = (notches.abs().ceil() as usize) * lines;
+    if total == 0 {
+        return;
+    }
+    let delta_i32: i32 = if notches > 0.0 {
+        total as i32
+    } else {
+        -(total as i32)
+    };
+
+    if let Some(backend) = state.backends.get_mut(target.pane_id) {
+        let was_at_bottom = backend.at_bottom();
+        backend.scroll_viewport(delta_i32);
+        // Q3: scrolling up from the live bottom enters Selection mode.
+        if notches > 0.0 && was_at_bottom {
+            state.input_mode = InputMode::Selection;
         }
     }
+    state.needs_redraw = true;
+    // Reset prefix timeout on scroll (like keyboard input).
+    state.prefix_entered_at = None;
 }
 
 pub(crate) fn notify_focus_changed(
