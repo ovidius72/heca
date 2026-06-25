@@ -261,11 +261,33 @@ and flat `[keys]` for prefix bindings. NEVER add them to `keys.rs`.
 
 ---
 
-## 6b. Slice 4 — What to do next
+## 6b. Slice 4 — AppState chrome mirror ✅ DONE (2026-06-25)
 
-### AppState chrome mirror ✅ DONE (2026-06-25)
+Terminal viewport state now mirrored into the reactive chrome store.
+- 3 viewport signals (`viewport_offset`/`at_bottom`/`scrollback_rows`) on `PaneRuntimeSignals`
+- `WorkspacesContainerState::set_pane_viewport()` — idempotent, emits `TerminalViewportChanged` only on real change
+- `ChromeEvent::TerminalViewportChanged { pane, viewport_offset, at_bottom, scrollback_rows }`
+- Sync in `render.rs` from each `prepare_terminal_mount` result (tiled + floating)
+- Host API: `TerminalViewport` struct + `StateView::terminal_viewport(pane_id)` read selector
+- Gates: `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0
 
-[slice 3 completed. Next: slice 5]
+## 6c. Slice 5 — What to do next
+
+### Animated viewport offset
+
+Ease the viewport offset via `tick(dt)` so scroll jumps glide instead of snapping.
+Builds on the slice-4 store mirror. Uses the existing easing infrastructure from
+`heca-core/src/layout/animation.rs`.
+
+Key decisions needed (Q7 in handoff §2):
+- Easing function: spring physics vs simple lerp
+- Duration / animation speed
+- Per-pane vs global animation state
+- Interaction with wheel scroll (should wheel also animate?)
+- What happens on rapid successive scrolls (interrupt vs queue)
+
+Files: `heca/src/handlers.rs`, `heca-core/src/layout/animation.rs`, `heca/src/chrome/state.rs`
+Ref: backlog `terminal-task-01d`, handoff Q7 animated offset row
 
 ---
 
