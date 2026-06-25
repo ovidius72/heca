@@ -225,6 +225,51 @@ When in sidebar mode (`Ctrl+B → e` or clicking the current workspace-tree side
 | `Enter` | Activate selected item (focus pane/workspace) |
 | `Escape` | Exit sidebar mode |
 
+### Terminal Scrollback & Selection
+
+heca provides a **host-managed scrollback viewport** — when you scroll up at a
+normal shell prompt, you are scrolling the host's viewport into terminal history,
+not sending escape sequences to the PTY. This gives you tmux-style scrollback
+navigation without a terminal multiplexer.
+
+**Mouse-grab awareness:** when a TUI program (vim, htop, less, lazygit) enables
+mouse reporting, the host automatically forwards wheel events to the program.
+Shift+wheel always scrolls the host viewport, bypassing any mouse grab.
+
+| Command | Default Binding | Description |
+|---------|----------------|-------------|
+| Scroll up one page | `prefix+PageUp` | Scroll viewport up by one terminal page and enter Selection mode |
+| Scroll down one page | `prefix+PageDown` | Scroll viewport down by one page, enter Selection mode |
+| Scroll up one notch | `prefix+Shift+Up` | Scroll by `terminal_wheel_scroll_lines` rows (default 3) |
+| Scroll down one notch | `prefix+Shift+Down` | Scroll by `terminal_wheel_scroll_lines` rows |
+| Scroll to top | `prefix+Shift+g` | Jump to the top of scrollback history |
+| Scroll to bottom | `prefix+Shift+End` | Jump to the live bottom (snap) |
+
+**Selection mode** (entered automatically by `prefix+PageUp/Down` or by scrolling
+up with the wheel at a non-grabbed prompt):
+
+| Key | Action |
+|-----|--------|
+| `h` / `l` / `j` / `k` or arrow keys | Move cursor left / right / up / down |
+| `y` | Copy selection to clipboard |
+| `u` / `d` | Scroll viewport up / down by half-page |
+| `Ctrl+u` / `Ctrl+d` | Scroll viewport up / down by one page |
+| `g` | Jump to top of scrollback history |
+| `Shift+g` | Snap to live bottom and exit selection mode |
+| `Esc` | Exit scrollback (snap to bottom + clear selection) |
+
+**Plain** `PageUp` / `PageDown` (without prefix) are forwarded to the terminal
+PTY unchanged — heca does not intercept them. This preserves tmux-by-muscle-memory
+pass-through.
+
+**Wheel:**
+- At a normal shell prompt → scrolls host scrollback viewport by
+  `terminal_wheel_scroll_lines` rows per notch (configurable).
+- Over a mouse-grabbed TUI (vim, htop, less, etc.) → forwarded to the terminal
+  as mouse events.
+- **Shift+wheel** → always scrolls host viewport, bypassing any mouse grab.
+- Scrolling up from the live bottom automatically enters Selection mode.
+
 ### System
 
 | Command | Default Binding | Description |
@@ -555,6 +600,8 @@ focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
+terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
+terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 ```
 
 ### Fonts
@@ -841,6 +888,14 @@ keys = "h"
 action = "focus_right"
 keys = "l"
 ```
+
+**Selection mode** is a built-in sticky mode entered automatically by
+`prefix+PageUp/Down` or by scrolling up with the wheel at a non-grabbed prompt.
+It provides tmux copy-mode-like navigation keys: `h`/`j`/`k`/`l` for cursor
+movement, `y` to copy, `u`/`d` for half-page scroll, `Ctrl+u`/`Ctrl+d` for
+full-page scroll, `g`/`Shift+g` for top/bottom, and `Esc` to exit (snap to
+bottom + clear selection). The trigger field is ignored because Selection mode
+is entered via actions, not a keybinding trigger.
 
 **Sticky vs Non-sticky modes:**
 - **Sticky** (`sticky = true`): Stay in mode until `Escape` or `Enter`. Resize mode is sticky.
