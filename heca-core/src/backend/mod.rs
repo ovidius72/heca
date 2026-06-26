@@ -276,6 +276,13 @@ pub trait PaneBackend: Send {
         None
     }
 
+    /// Advance any ongoing viewport animation. Called once per frame. Returns
+    /// `true` while an animation is still running (caller should keep requesting
+    /// frames). Default: no-op (no animation support).
+    fn tick_animation(&mut self) -> bool {
+        false
+    }
+
     /// Scroll the host terminal viewport by `delta_rows`.
     ///
     /// Positive values scroll toward history (the viewport moves up, revealing
@@ -288,13 +295,31 @@ pub trait PaneBackend: Send {
     /// scrollback (e.g. `FakeBackend`).
     fn scroll_viewport(&mut self, _delta_rows: i32) {}
 
+    /// Scroll the viewport with animation (for discrete keyboard jumps).
+    /// Default: delegrates to `scroll_viewport` (immediate fallback).
+    fn scroll_viewport_animated(&mut self, delta_rows: i32) {
+        self.scroll_viewport(delta_rows);
+    }
+
     /// Jump the host terminal viewport to the top of scrollback (maximum offset).
     /// Default: no-op.
     fn scroll_to_top(&mut self) {}
 
+    /// Animate to the top of scrollback.
+    /// Default: delegates to `scroll_to_top` (immediate fallback).
+    fn scroll_to_top_animated(&mut self) {
+        self.scroll_to_top();
+    }
+
     /// Snap the host terminal viewport to the live bottom (`viewport_offset = 0`).
     /// Default: no-op.
     fn scroll_to_bottom(&mut self) {}
+
+    /// Animate to the live bottom.
+    /// Default: delegates to `scroll_to_bottom` (immediate fallback).
+    fn scroll_to_bottom_animated(&mut self) {
+        self.scroll_to_bottom();
+    }
 
     /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
     /// terminal lines, each capped to `cols` cells.

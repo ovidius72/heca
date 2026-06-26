@@ -66,7 +66,24 @@ pub(crate) fn handle_keyboard_input(
                 && let Some(backend) = state.backends.get_mut(pane_id)
             {
                 // Snap to live bottom when user sends keyboard input (Q5).
-                backend.scroll_to_bottom();
+                // Skip modifier-only keys (Shift, Ctrl, Alt alone) so that
+                // e.g. Shift+click mouse selection works after scrolling
+                // with direct bindings.
+                let is_modifier_only = ctx.key_text.is_empty()
+                    && matches!(
+                        ctx.logical_key,
+                        Key::Named(
+                            NamedKey::Shift
+                                | NamedKey::Control
+                                | NamedKey::Alt
+                                | NamedKey::Super
+                                | NamedKey::Hyper
+                                | NamedKey::Meta
+                        )
+                    );
+                if !is_modifier_only {
+                    backend.scroll_to_bottom();
+                }
 
                 let handled = winit_key_to_backend_event(ctx.logical_key, state.modifiers)
                     .is_some_and(|event| backend.process_key_event(&event));

@@ -655,6 +655,22 @@ impl PaneBackend for TerminalBackend {
         self.engine.scroll_to_bottom();
     }
 
+    fn tick_animation(&mut self) -> bool {
+        self.engine.advance_animation()
+    }
+
+    fn scroll_viewport_animated(&mut self, delta_rows: i32) {
+        self.engine.scroll_viewport_animated(delta_rows);
+    }
+
+    fn scroll_to_top_animated(&mut self) {
+        self.engine.scroll_to_top_animated();
+    }
+
+    fn scroll_to_bottom_animated(&mut self) {
+        self.engine.scroll_to_bottom_animated();
+    }
+
     fn lines_in_stable_range(
         &self,
         start: isize,
@@ -715,7 +731,11 @@ mod tests {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    const TEST_TIMEOUT: Duration = Duration::from_secs(3);
+    // Generous on purpose: tests spawn real shells/TUIs (bash, nvim) whose
+    // first paint can lag under parallel-test CPU contention. 3s flaked ~1 in 3
+    // full-suite runs; 6s keeps these deterministic without slowing the common
+    // path (they usually finish well under a second).
+    const TEST_TIMEOUT: Duration = Duration::from_secs(6);
     const TEST_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
     #[cfg(not(windows))]

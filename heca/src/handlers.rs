@@ -16,7 +16,8 @@ use crate::app::pane_ops::{
 };
 use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionSource};
 use crate::app::terminal_host::{
-    enter_selection_mode_for_focused_terminal, move_focused_terminal_selection,
+    ensure_caret_visible, enter_selection_mode_for_focused_terminal,
+    move_focused_terminal_selection,
 };
 use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::chrome;
@@ -1824,7 +1825,19 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
         }
     }
 
-    // Do NOT clear the selection after copy — the user clears explicitly.
+    // Clear the active selection but stay in selection mode with the caret
+    // at the last focus position. This way the user can immediately navigate
+    // or start a new selection without the Q5 snap-to-bottom triggering.
+    if let Some(active) = state.selection.active()
+        && let SelectionRegion::HostGrid {
+            focus_stable_row, focus_col, ..
+        } = &active.region
+    {
+        let owner = active.owner;
+        state.selection.set_caret(owner, *focus_stable_row, *focus_col);
+    } else {
+        state.selection.clear();
+    }
     state.needs_redraw = true;
 }
 
@@ -1884,29 +1897,22 @@ fn focused_terminal_page_rows(state: &AppState) -> usize {
     }).unwrap_or(24)
 }
 
-/// Scroll the focused terminal pane's viewport by `delta` rows.
-/// Positive = toward history (up); negative = toward live bottom (down).
-fn scroll_focused_viewport(state: &mut AppState, delta: i32) {
-    if let Some(pane_id) = state.focused_pane
-        && let Some(backend) = state.backends.get_mut(pane_id)
-    {
-        backend.scroll_viewport(delta);
+pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
+    let page_rows = focused_terminal_page_rows(state) as isize;
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
     }
+    let _ = move_focused_terminal_selection(state, -page_rows, 0);
     state.needs_redraw = true;
 }
 
-pub fn handle_scrollback_page_up(state: &mut AppState, _action: &WmAction) {
-    let page_rows = focused_terminal_page_rows(state);
-    scroll_focused_viewport(state, page_rows as i32);
-    // Enter selection mode so the user can navigate the scrollback
-    // with selection keys and exit explicitly.
-    let _ = enter_selection_mode_for_focused_terminal(state);
-}
-
 pub fn handle_scrollback_page_down(state: &mut AppState, _action: &WmAction) {
-    let page_rows = focused_terminal_page_rows(state);
-    scroll_focused_viewport(state, -(page_rows as i32));
-    let _ = enter_selection_mode_for_focused_terminal(state);
+    let page_rows = focused_terminal_page_rows(state) as isize;
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
+    }
+    let _ = move_focused_terminal_selection(state, page_rows, 0);
+    state.needs_redraw = true;
 }
 
 pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) {
@@ -1914,8 +1920,12 @@ pub fn handle_scrollback_line_up(state: &mut AppState, action: &WmAction) {
         return;
     };
     // `amount` is in notches; multiply by the user-configurable lines-per-notch.
-    let lines = (amount * state.terminal_wheel_scroll_lines) as i32;
-    scroll_focused_viewport(state, lines);
+    let lines = (amount * state.terminal_wheel_scroll_lines) as isize;
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
+    }
+    let _ = move_focused_terminal_selection(state, -lines, 0);
+    state.needs_redraw = true;
 }
 
 pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) {
@@ -1923,11 +1933,124 @@ pub fn handle_scrollback_line_down(state: &mut AppState, action: &WmAction) {
         return;
     };
     // `amount` is in notches; multiply by the user-configurable lines-per-notch.
-    let lines = (amount * state.terminal_wheel_scroll_lines) as i32;
-    scroll_focused_viewport(state, -lines);
+    let lines = (amount * state.terminal_wheel_scroll_lines) as isize;
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
+    }
+    let _ = move_focused_terminal_selection(state, lines, 0);
+    state.needs_redraw = true;
 }
 
 pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
+    }
+    // Move caret to the oldest scrollback content row.
+    if let Some(pane_id) = state.focused_pane
+        && let Some(ref snapshot) = state
+            .backends
+            .get(pane_id)
+            .and_then(|b| b.terminal_snapshot())
+    {
+        let base = snapshot.viewport_top_stable_row
+            + snapshot.viewport_offset as isize
+            + snapshot.rows as isize;
+        let oldest = base - snapshot.scrollback_rows as isize;
+        if state.selection.is_caret() {
+            state.selection.move_caret(oldest, 0);
+        } else {
+            state.selection.update_focus(oldest, 0);
+        }
+        ensure_caret_visible(state, pane_id, oldest, snapshot);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
+    if !matches!(state.input_mode, InputMode::Selection) {
+        let _ = enter_selection_mode_for_focused_terminal(state);
+    }
+    // Scroll to the live bottom immediately, then move the caret to the
+    // cursor position (newest terminal text, not the adjusted cursor row).
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_to_bottom();
+    }
+    if let Some(pane_id) = state.focused_pane
+        && let Some(ref snapshot) = state
+            .backends
+            .get(pane_id)
+            .and_then(|b| b.terminal_snapshot())
+    {
+        let cursor_stable =
+            snapshot.viewport_top_stable_row + snapshot.cursor.row as isize;
+        if state.selection.is_caret() {
+            state.selection.move_caret(cursor_stable, snapshot.cursor.col);
+        } else {
+            state.selection.update_focus(cursor_stable, snapshot.cursor.col);
+        }
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
+    // Scroll to live bottom, clear selection, and exit selection mode.
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_to_bottom();
+    }
+    state.selection.clear();
+    if matches!(state.input_mode, InputMode::Selection) {
+        state.input_mode = InputMode::Normal;
+    }
+    state.needs_redraw = true;
+}
+
+// ── Direct scroll (no selection mode / caret) ──
+
+pub fn handle_scroll_line_up(state: &mut AppState, _action: &WmAction) {
+    let lines = state.terminal_wheel_scroll_lines as i32;
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_viewport(lines);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scroll_line_down(state: &mut AppState, _action: &WmAction) {
+    let lines = -(state.terminal_wheel_scroll_lines as i32);
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_viewport(lines);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scroll_page_up(state: &mut AppState, _action: &WmAction) {
+    let page_rows = focused_terminal_page_rows(state) as i32;
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_viewport(page_rows);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scroll_page_down(state: &mut AppState, _action: &WmAction) {
+    let page_rows = -(focused_terminal_page_rows(state) as i32);
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+    {
+        backend.scroll_viewport(page_rows);
+    }
+    state.needs_redraw = true;
+}
+
+pub fn handle_scroll_to_top(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
@@ -1936,24 +2059,13 @@ pub fn handle_scrollback_to_top(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
-pub fn handle_scrollback_to_bottom(state: &mut AppState, _action: &WmAction) {
+pub fn handle_scroll_to_bottom(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
         backend.scroll_to_bottom();
     }
-    // Clear any active selection and exit selection mode.
-    state.selection.clear();
-    if matches!(state.input_mode, InputMode::Selection) {
-        state.input_mode = InputMode::Normal;
-    }
     state.needs_redraw = true;
-}
-
-pub fn handle_exit_scrollback(state: &mut AppState, action: &WmAction) {
-    // Exit scrollback is semantically identical to scroll-to-bottom + clear
-    // selection + exit selection mode. Delegate to keep the two in lockstep.
-    handle_scrollback_to_bottom(state, action);
 }
 
 // ── Config ──

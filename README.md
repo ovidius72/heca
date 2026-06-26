@@ -236,31 +236,24 @@ navigation without a terminal multiplexer.
 mouse reporting, the host automatically forwards wheel events to the program.
 Shift+wheel always scrolls the host viewport, bypassing any mouse grab.
 
-| Command | Default Binding | Description |
-|---------|----------------|-------------|
-| Scroll up one page | `prefix+PageUp` | Scroll viewport up by one terminal page and enter Selection mode |
-| Scroll down one page | `prefix+PageDown` | Scroll viewport down by one page, enter Selection mode |
-| Scroll up one notch | `prefix+Shift+Up` | Scroll by `terminal_wheel_scroll_lines` rows (default 3) |
-| Scroll down one notch | `prefix+Shift+Down` | Scroll by `terminal_wheel_scroll_lines` rows |
-| Scroll to top | `prefix+Shift+g` | Jump to the top of scrollback history |
-| Scroll to bottom | `prefix+Shift+End` | Jump to the live bottom (snap) |
+**Selection mode** is heca's copy/scrollback mode (tmux copy-mode style), entered
+with `prefix+s` (caret stays where the terminal cursor was). It is also entered
+automatically when you scroll up with the wheel at a non-grabbed prompt.
 
-**Selection mode** (entered automatically by `prefix+PageUp/Down` or by scrolling
-up with the wheel at a non-grabbed prompt):
+Inside Selection mode:
 
 | Key | Action |
 |-----|--------|
-| `h` / `l` / `j` / `k` or arrow keys | Move cursor left / right / up / down |
-| `y` | Copy selection to clipboard |
+| `h` / `l` / `j` / `k` or arrow keys | Move caret left / right / up / down (the viewport auto-scrolls at edges) |
+| `PageUp` / `PageDown` | Move caret up / down by one page |
 | `u` / `d` | Scroll viewport up / down by half-page |
-| `Ctrl+u` / `Ctrl+d` | Scroll viewport up / down by one page |
+| `Ctrl+u` / `Ctrl+d` | Scroll viewport up / down by one full page |
 | `g` | Jump to top of scrollback history |
-| `Shift+g` | Snap to live bottom and exit selection mode |
-| `Esc` | Exit scrollback (snap to bottom + clear selection) |
-
-**Plain** `PageUp` / `PageDown` (without prefix) are forwarded to the terminal
-PTY unchanged — heca does not intercept them. This preserves tmux-by-muscle-memory
-pass-through.
+| `Shift+g` | Jump to the live bottom (stay in selection mode) |
+| `v` / `Space` | Begin selection (toggle highlighting) |
+| `o` | Toggle selection endpoint |
+| `y` | Copy selection to clipboard |
+| `Esc` | Exit selection mode (snap to bottom + clear selection) |
 
 **Wheel:**
 - At a normal shell prompt → scrolls host scrollback viewport by
@@ -269,6 +262,25 @@ pass-through.
   as mouse events.
 - **Shift+wheel** → always scrolls host viewport, bypassing any mouse grab.
 - Scrolling up from the live bottom automatically enters Selection mode.
+
+### Direct (non-prefix) keybindings
+
+For users who prefer not to use prefix mode, heca provides direct bindings
+that work without the prefix key. These are intercepted before reaching the
+terminal:
+
+| Combo | Action |
+|-------|--------|
+| `Shift+PageUp` | Scroll up by one page (repeatable, no selection mode entry) |
+| `Shift+PageDown` | Scroll down by one page (repeatable) |
+| `Shift+Up` | Scroll up by a few lines (repeatable) |
+| `Shift+Down` | Scroll down by a few lines (repeatable) |
+| `Shift+Home` | Jump to the top of scrollback (repeatable) |
+| `Shift+End` | Jump to the live bottom (repeatable) |
+
+These are intercepted as global keybindings before reaching the terminal.
+They scroll the viewport immediately and stay in Normal mode, so holding
+the key repeats the scroll smoothly without entering Selection mode.
 
 ### System
 

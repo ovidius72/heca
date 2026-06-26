@@ -536,6 +536,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     &mut state.primitive_renderer,
                     mount,
                     selection_overlay,
+                    matches!(state.input_mode, InputMode::Selection),
                 );
             } else {
                 render_terminal_mount(
@@ -755,6 +756,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         &mut state.primitive_renderer,
                         mount,
                         selection_overlay,
+                        matches!(state.input_mode, InputMode::Selection),
                     );
                     state.primitive_renderer.render_clipped(
                         &state.device,

@@ -113,15 +113,25 @@ copy_selection       = "prefix+y"        # Copy selection to clipboard
 paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
 
 # ── Scrollback (host terminal viewport) ──
-# prefix+PageUp/PageDown → full page scroll + enter selection mode.
-scrollback_page_up   = "prefix+PageUp"
-scrollback_page_down = "prefix+PageDown"
-# Line-scroll bindings (amount matches terminal_wheel_scroll_lines default 3).
-scrollback_line_up   = "prefix+Shift+Up"
-scrollback_line_down = "prefix+Shift+Down"
-# Top / bottom of scrollback.
-scrollback_to_top    = "prefix+Shift+g"
-scrollback_to_bottom = "prefix+Shift+End"
+# All scrollback navigation lives inside Selection mode (entered via prefix+s):
+#   j/k/arrows    move caret (auto-scrolls at edges)
+#   u/d           half-page up/down
+#   Ctrl+u/d      full page up/down
+#   g / Shift+g   top / bottom
+#   y             copy selection
+#   v / Space     begin selection
+#   Esc           exit
+# (Wheel-up at a non-grabbed prompt also enters Selection mode — Q3.)
+
+# Direct (non-prefix) bindings for users who don't use prefix mode
+# for scrollback navigation. These scroll immediately and do NOT enter
+# Selection mode (repeatable via key-hold).
+scroll_page_up     = "Shift+PageUp"
+scroll_page_down   = "Shift+PageDown"
+scroll_to_top      = "Shift+Home"
+scroll_to_bottom   = "Shift+End"
+scroll_line_up     = "Shift+Up"
+scroll_line_down   = "Shift+Down"
 
 # Remove a default binding so its key is free (the action stays available to
 # rebind under [keys]). Example:
@@ -286,6 +296,12 @@ keys = "ArrowUp"
 action = "selection_down"
 keys = "ArrowDown"
 [[keys.mode.bindings]]
+action = "scrollback_page_up"
+keys = "PageUp"
+[[keys.mode.bindings]]
+action = "scrollback_page_down"
+keys = "PageDown"
+[[keys.mode.bindings]]
 action = "copy_selection"
 keys = "y"
 [[keys.mode.bindings]]
@@ -318,8 +334,14 @@ keys = "Ctrl+d"
 action = "scrollback_to_top"
 keys = "g"
 [[keys.mode.bindings]]
+action = "scrollback_to_top"
+keys = "Home"
+[[keys.mode.bindings]]
 action = "scrollback_to_bottom"
 keys = "Shift+g"
+[[keys.mode.bindings]]
+action = "scrollback_to_bottom"
+keys = "End"
 [[keys.mode.bindings]]
 action = "exit_scrollback"
 keys = "Escape"

@@ -4,6 +4,7 @@ use super::super::{
     TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
+use crate::layout::animation::{Animation, AnimationConfig};
 use std::io::{Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -105,6 +106,18 @@ pub(super) struct TerminalEngine {
     /// motion produces `TerminalDamage::Full`; incremental viewport damage is
     /// the separate `terminal-01` phase).
     viewport_changed: bool,
+    /// Optional animation for smooth viewport scrolling (slice 5). Discrete jumps
+    /// (page/line/top/bottom) create an Animation; the wheel sets offset directly.
+    /// `advance_animation()` snaps the animated f64 to the nearest integer row
+    /// and updates `viewport_offset` when the rounded value changes. Re-targeted
+    /// (never queued) on consecutive discrete jumps.
+    viewport_anim: Option<Animation>,
+    /// Config used to build viewport animations. Defaults to `AnimationConfig::default()`
+    /// (the same 250ms `ease_out_cubic` `ViewOffset`/`activate_column` use) so terminal
+    /// scroll feels like column scroll. Overridable per-engine (tests use 0ms for
+    /// instant completion, or a long duration to exercise the ongoing path) without
+    /// any real-time `sleep`.
+    viewport_anim_config: AnimationConfig,
 }
 
 impl TerminalEngine {
@@ -134,6 +147,8 @@ impl TerminalEngine {
             pending_bell,
             viewport_offset: 0,
             viewport_changed: false,
+            viewport_anim: None,
+            viewport_anim_config: AnimationConfig::default(),
         })
     }
 
@@ -196,6 +211,15 @@ impl TerminalEngine {
         self.viewport_offset = offset;
     }
 
+    /// Test-only override of the viewport-animation config. Lets animation tests
+    /// exercise the real code path deterministically: a 0ms duration completes on
+    /// the first `advance_animation()` (done path), a long duration stays ongoing
+    /// without any real-time `sleep` (running path).
+    #[cfg(test)]
+    pub(super) fn set_viewport_anim_config_for_test(&mut self, config: AnimationConfig) {
+        self.viewport_anim_config = config;
+    }
+
     /// Maximum valid viewport offset = total retained rows minus the visible
     /// row count. Returns `0` when there is no scrollback yet.
     fn max_viewport_offset(&self) -> usize {
@@ -210,6 +234,8 @@ impl TerminalEngine {
     /// move toward the live bottom (offset decreases). The offset is clamped to
     /// `[0, max_viewport_offset()]`. No-op if the clamped value does not change.
     pub(super) fn scroll_viewport(&mut self, delta_rows: i32) {
+        // Wheel path: apply immediately, clear any ongoing animation.
+        self.viewport_anim = None;
         let target = if delta_rows >= 0 {
             self.viewport_offset
                 .saturating_add(delta_rows.try_into().unwrap_or(usize::MAX))
@@ -241,6 +267,96 @@ impl TerminalEngine {
         }
     }
 
+    // ── Animated scroll (slice 5) ──
+
+    /// Advance the ongoing viewport animation. Snaps the animated `f64` to the
+    /// nearest integer row and updates `viewport_offset` (setting
+    /// `viewport_changed`) when the rounded value moves. Returns `true` while
+    /// the animation is still running (caller should keep requesting frames).
+    pub(super) fn advance_animation(&mut self) -> bool {
+        let Some(anim) = self.viewport_anim.as_ref() else {
+            return false;
+        };
+        if anim.is_done() {
+            let target = anim.target() as usize;
+            if self.viewport_offset != target {
+                self.viewport_offset = target;
+                self.viewport_changed = true;
+            }
+            self.viewport_anim = None;
+            return false;
+        }
+        let current = anim.value();
+        let rounded = current.round() as usize;
+        if rounded != self.viewport_offset {
+            self.viewport_offset = rounded;
+            self.viewport_changed = true;
+        }
+        true
+    }
+
+    /// Scroll the viewport with animation for discrete user jumps.
+    /// Creates (or re-targets) an `Animation` from the current animated value
+    /// to the newly computed clamped target. Never queues — a new jump
+    /// interrupts the previous animation.
+    pub(super) fn scroll_viewport_animated(&mut self, delta_rows: i32) {
+        // Re-target: base the delta on where we're heading (the animation's target),
+        // not where we currently are. A new jump re-creates the Animation from the
+        // current animated value toward the new target (never queues).
+        let base = self
+            .viewport_anim
+            .as_ref()
+            .map_or(self.viewport_offset, |a| a.target() as usize);
+        let current = self
+            .viewport_anim
+            .as_ref()
+            .map_or(self.viewport_offset as f64, |a| a.value());
+        let target = if delta_rows >= 0 {
+            base.saturating_add(delta_rows.try_into().unwrap_or(usize::MAX))
+        } else {
+            base.saturating_sub((-delta_rows).try_into().unwrap_or(usize::MAX))
+        };
+        let clamped = target.min(self.max_viewport_offset());
+        if (current.round() as usize) != clamped {
+            self.viewport_anim = Some(Animation::new(
+                current,
+                clamped as f64,
+                self.viewport_anim_config,
+            ));
+        }
+    }
+
+    /// Animate to the top of scrollback.
+    pub(super) fn scroll_to_top_animated(&mut self) {
+        let current = self
+            .viewport_anim
+            .as_ref()
+            .map_or(self.viewport_offset as f64, |a| a.value());
+        let target = self.max_viewport_offset();
+        if (current.round() as usize) != target {
+            self.viewport_anim = Some(Animation::new(
+                current,
+                target as f64,
+                self.viewport_anim_config,
+            ));
+        }
+    }
+
+    /// Animate to the live bottom (`viewport_offset = 0`).
+    pub(super) fn scroll_to_bottom_animated(&mut self) {
+        let current = self
+            .viewport_anim
+            .as_ref()
+            .map_or(self.viewport_offset as f64, |a| a.value());
+        if (current.round() as usize) != 0 {
+            self.viewport_anim = Some(Animation::new(
+                current,
+                0.0,
+                self.viewport_anim_config,
+            ));
+        }
+    }
+
     /// Drain the viewport-changed flag. Returns `true` when the viewport moved
     /// since the last call, which the host must treat as `TerminalDamage::Full`
     /// for the retained terminal layer (Q6).
@@ -264,10 +380,23 @@ impl TerminalEngine {
     /// consistent before any downstream `snapshot()` read.
     pub(super) fn reconcile_viewport_offset(&mut self) -> bool {
         let max_offset = self.max_viewport_offset();
+        // Clear any ongoing animation — it was targeting an offset past the new
+        // boundary; jumping to the clamped position is the correct resolution.
         if self.viewport_offset > max_offset {
+            self.viewport_anim = None;
             self.viewport_offset = max_offset;
             self.viewport_changed = true;
             true
+        } else if let Some(anim) = &self.viewport_anim {
+            // The animation's target may also be past the new max.
+            if anim.target() as usize > max_offset {
+                self.viewport_anim = None;
+                self.viewport_offset = self.viewport_offset.min(max_offset);
+                self.viewport_changed = true;
+                true
+            } else {
+                false
+            }
         } else {
             false
         }
@@ -384,7 +513,15 @@ impl TerminalEngine {
     }
 
     pub(super) fn visible_top_stable_row(&self) -> isize {
+        // wezterm's `visible_row_to_stable_row(0)` reports the LIVE viewport top
+        // (offset 0). heca scrolls the host viewport by `viewport_offset` rows
+        // ABOVE the live bottom, so the displayed top is that many rows older
+        // (a smaller stable row index). Subtracting the offset makes
+        // `viewport_top_stable_row` track the scrolled content instead of staying
+        // pinned to the live screen — which selection overlays and caret
+        // auto-scroll depend on (terminal-task-01g).
         self.terminal.screen().visible_row_to_stable_row(0)
+            - self.viewport_offset as isize
     }
 
     pub(super) fn changed_visible_rows_since(&self, seqno: usize) -> Vec<usize> {
@@ -885,6 +1022,69 @@ mod tests {
 
         engine.scroll_to_bottom();
         assert!(!engine.take_viewport_changed(), "already-at-bottom no-op must not arm damage");
+    }
+
+    #[test]
+    fn animated_scroll_settles_at_target() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 20);
+        let max = max_offset(&engine);
+        let target = 5.min(max);
+        assert!(target > 0, "fixture must have enough scrollback");
+        // 0ms duration ⇒ animation completes on the first advance (done path),
+        // with no real-time sleep.
+        engine.set_viewport_anim_config_for_test(AnimationConfig {
+            duration_ms: 0,
+            easing: crate::layout::animation::linear,
+        });
+
+        engine.scroll_viewport_animated(target as i32);
+        // Single advance settles: the animation reports done and snaps to target.
+        assert!(!engine.advance_animation(), "0ms animation completes on first advance");
+        assert_eq!(engine.viewport_offset(), target, "offset settles at target");
+        assert!(!engine.advance_animation(), "no animation left after settle");
+    }
+
+    #[test]
+    fn animated_scroll_re_targets_on_new_jump_without_queueing() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 20);
+        let max = max_offset(&engine);
+        let expected = 10.min(max);
+        assert!(expected >= 5, "fixture must have enough scrollback");
+        engine.set_viewport_anim_config_for_test(AnimationConfig {
+            duration_ms: 0,
+            easing: crate::layout::animation::linear,
+        });
+
+        // Jump up 5, then immediately jump up 5 more → should target 10 (re-target,
+        // not 5). The second call bases its delta on the first animation's target.
+        engine.scroll_viewport_animated(5);
+        engine.scroll_viewport_animated(5);
+        assert!(!engine.advance_animation(), "0ms animation completes on first advance");
+        assert_eq!(engine.viewport_offset(), expected, "re-targeted jump lands at 10, not 5");
+    }
+
+    #[test]
+    fn wheel_scroll_does_not_animate_and_clears_ongoing_animation() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 20);
+        let max = max_offset(&engine);
+        assert!(max >= 10, "fixture must have enough scrollback");
+        // A long duration keeps the animation "ongoing" without any sleep, so we
+        // can observe the wheel clearing it.
+        engine.set_viewport_anim_config_for_test(AnimationConfig {
+            duration_ms: 60_000,
+            easing: crate::layout::animation::linear,
+        });
+
+        // Start an animated jump; it is still running (long duration).
+        engine.scroll_viewport_animated(10);
+        assert!(engine.advance_animation(), "long animation is still running");
+        // Wheel scroll (immediate path) clears the animation and applies at once.
+        engine.scroll_viewport(3);
+        assert_eq!(engine.viewport_offset(), 3, "wheel applied immediately");
+        assert!(!engine.advance_animation(), "wheel cleared the animation");
     }
 
     #[test]

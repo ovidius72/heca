@@ -272,6 +272,21 @@ pub enum WmAction {
     ScrollbackToBottom,
     ExitScrollback,
 
+    // ── Direct scroll (no selection mode / caret) ──
+    /// Scroll the viewport up by `terminal_wheel_scroll_lines` rows (immediate).
+    /// Used by direct non-prefix bindings (Shift+Up etc.).
+    ScrollLineUp,
+    /// Scroll the viewport down by `terminal_wheel_scroll_lines` rows (immediate).
+    ScrollLineDown,
+    /// Scroll the viewport up by one page (immediate).
+    ScrollPageUp,
+    /// Scroll the viewport down by one page (immediate).
+    ScrollPageDown,
+    /// Scroll to the top of scrollback (immediate).
+    ScrollToTop,
+    /// Scroll to the live bottom (immediate).
+    ScrollToBottom,
+
     // ── Selection (host capability, reusable across pane types) ──
     EnterSelectionMode,
     SelectionLeft,
@@ -428,6 +443,13 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "scrollback_to_top" => Some(WmAction::ScrollbackToTop),
         "scrollback_to_bottom" => Some(WmAction::ScrollbackToBottom),
         "exit_scrollback" => Some(WmAction::ExitScrollback),
+        // Direct scroll (no selection mode / caret)
+        "scroll_line_up" => Some(WmAction::ScrollLineUp),
+        "scroll_line_down" => Some(WmAction::ScrollLineDown),
+        "scroll_page_up" => Some(WmAction::ScrollPageUp),
+        "scroll_page_down" => Some(WmAction::ScrollPageDown),
+        "scroll_to_top" => Some(WmAction::ScrollToTop),
+        "scroll_to_bottom" => Some(WmAction::ScrollToBottom),
         // `amount` is in notches; the handler multiplies by the user-configurable
         // `terminal_wheel_scroll_lines` before scrolling.  Default = 1 notch.
         "scrollback_line_up" => Some(WmAction::ScrollbackLineUp { amount: 1 }),
@@ -705,7 +727,14 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ScrollbackLineDown { .. }
         | WmAction::ScrollbackToTop
         | WmAction::ScrollbackToBottom
-        | WmAction::ExitScrollback => 1,
+        | WmAction::ExitScrollback
+        // Direct scroll (same priority)
+        | WmAction::ScrollLineUp
+        | WmAction::ScrollLineDown
+        | WmAction::ScrollPageUp
+        | WmAction::ScrollPageDown
+        | WmAction::ScrollToTop
+        | WmAction::ScrollToBottom => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
         WmAction::FocusPane { .. }

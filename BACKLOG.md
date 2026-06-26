@@ -220,7 +220,7 @@ Runtime validation shows terminal output is live and resize is stable again, but
   - 3 new tests: defaults, emit-on-change (4 events not 8), preinit-without-runtime.
   - Gates: `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125,
     clippy 0.
-  Next: slice 5 (animated viewport offset).
+  Next: slice 6 (GUI widgets — scrollbar + scrolled-up indicator).
   **Plumbing only — no user-visible behavior.** Prepares slices 5 (animated offset) and 6
   (scrollbar + "N lines above" badge), which read this state. Per-pane, mirror the
   `TerminalSnapshot` viewport fields (`viewport_offset` / `at_bottom` / `scrollback_rows`)
@@ -243,19 +243,105 @@ Runtime validation shows terminal output is live and resize is stable again, but
   `heca/src/app/terminal_host.rs`
   Ref: `handoff-terminal-scrollback.md` §6b + §9 (working note only — this backlog is authoritative).
 
-- [ ] **terminal-task-01d** — Animated viewport offset (slice 5).
-  Ease the viewport offset via `tick(dt)` so scroll jumps glide instead of snapping. Builds on
-  the slice-4 store mirror. Ref: handoff Q7 (animated offset row).
+- [x] **terminal-task-01d** — Animated viewport offset (slice 5).
+  **Slice 5 DONE (2026-06-25):** discrete scroll jumps now glide via easing.
+  - Added `viewport_anim: Option<Animation>` to `TerminalEngine` (state in engine, Q1).
+  - Reused `Animation`/`AnimationConfig::default()` (250ms ease_out_cubic) from `layout/animation.rs`.
+  - Per-pane: each `TerminalEngine` owns its animation.
+  - Animated variants: `scroll_viewport_animated`, `scroll_to_top_animated`, `scroll_to_bottom_animated` on `PaneBackend` trait (default delegates to immediate).
+  - Wheel path (`scroll_viewport`) applies immediately and **clears** any ongoing animation.
+  - Re-target (no queue): new jump bases delta on the current animation's **target**, creates a new Animation from the current animated value.
+  - Approach A (integer-row step): `advance_animation()` rounds f64 → nearest usize, updates `viewport_offset` on change.
+  - Drive: `tick_animation()` called per-frame in `poll_backends` (lifecycle.rs); `terminal_animating` flag gates `needs_frame` + `ControlFlow::WaitUntil`.
+  - `reconcile_viewport_offset` clears animation when scrollback shrinks past the target.
+  - 3 new tests: re-target (lands at 10 not 5), settles at target, wheel clears animation.
+  - Gates: `heca` 265/265, `heca-core` 76/76, clippy 0.
+  Next: slice 6 (GUI widgets — scrollbar + scrolled-up indicator).
+  
+  Make discrete scroll jumps glide instead of snapping. **Design locked 2026-06-25** (answers to
+  the agent's open questions):
+  • **State location:** in `TerminalEngine` (heca-core), consistent with Q1 (engine owns
+    `viewport_offset`). NOT in `SharedChromeState` (that store is plugin-observable derived state;
+    the animation is transient/per-frame). Engine holds a *target* offset + an animated *current*.
+  • **Curve:** easing, **reuse the existing `Animation`/`AnimationConfig`** from
+    `heca-core/src/layout/animation.rs` (the same primitive `ViewOffset` uses). No spring physics
+    here — spring is a separate future overhaul (niri-parity).
+  • **Duration:** reuse `AnimationConfig::default()` (the one `activate_column`/`ViewOffset` use)
+    so terminal scroll feels like column scroll. Do not invent a new number.
+  • **Scope:** per-pane (each `TerminalEngine` animates its own offset).
+  • **What animates:** only the **discrete jumps** — page up/down, line-key, to-top, to-bottom.
+    The **wheel applies immediately** (no per-notch animation; per-notch easing fights the next
+    notch — same rule as the column-resize drag).
+  • **Rapid consecutive scroll:** **interrupt / re-target** (never queue) — a new jump re-creates
+    the `Animation` from the current animated value toward the new target, exactly like
+    `activate_column`.
+  • **Approach (locked): (A) integer-row step animated** — `visible_lines()` keeps picking whole
+    rows; the animated value rounds to the nearest row each frame. Zero renderer changes, Q6-safe
+    (`Full` damage during the animation is fine). **(B) sub-row pixel-smooth** (renderer shifts
+    content by a fractional row + clips partial rows) is **DEFERRED to a follow-up** — nicer but
+    needs renderer work. Build A now; revisit B as polish.
+  • **Drive:** the app per-frame update must call `tick(dt)` on the terminal backend and request a
+    redraw while the animation is ongoing (mirror how layout animations are driven); viewport
+    motion still emits `Full` damage (Q6).
+  Tests: animation re-targets on a new jump (no queue), settles at the target, wheel does NOT
+  animate. Gate: clippy 0 + tests.
+  Files: `heca-core/src/backend/terminal/engine.rs` (+ `terminal.rs` if `update`/`tick` drives it),
+  the app per-frame update path (`heca/src/main.rs` / `app/render.rs`).
+  Ref: handoff Q7 (working note only — this backlog is authoritative).
 
 - [ ] **terminal-task-01e** — Scrollback GUI widgets (slice 6).
-  Two generic `heca-grid-ui` widgets reading the slice-4 store state: a clickable/draggable
-  **scrollbar** (jump to any viewport position) and a **scrolled-up indicator badge**
-  ("N lines above"; click = snap to bottom). Domain-neutral, theme-driven; update showcase +
-  `docs/widgets.md` (grid-ui rule). Ref: handoff Q7.
+  Two **generic** `heca-grid-ui` widgets that read the slice-4 store state
+  (`viewport_offset`/`at_bottom`/`scrollback_rows` via `host.terminal_viewport(pane)` /
+  `SharedChromeState`):
+  • **Scrollbar** — clickable/draggable thumb; thumb size from `scrollback_rows`, position from
+    `viewport_offset`; dragging jumps to an arbitrary viewport position. Reuse the existing
+    `ScrollRegion` thumb pattern/look where possible (don't reinvent a second thumb).
+  • **Scrolled-up indicator badge** — shows "N lines above" when `!at_bottom`; **click = snap to
+    bottom** (dispatch `ScrollbackToBottom`). Hidden when `at_bottom`.
+  Rules: **domain-neutral + theme-driven** (embed `Base`, read ALL styling from `Theme`, no
+  hardcoded sizes/colors/alphas); the app wires them to the terminal viewport — the widgets stay
+  generic (memory `heca-widgets-in-grid-ui`). Update the **showcase + `docs/widgets.md`** (grid-ui
+  rule). All interaction through `ActionRegistry`.
+  **New action likely needed:** jumping to an arbitrary position needs a parameterized
+  `WmAction::ScrollbackToOffset { rows }` (or `ToFraction`) — full 11-step treatment (the existing
+  actions only do page/line/top/bottom). Badge click reuses `ScrollbackToBottom`.
+  Gate: clippy 0 + widget tests + showcase/docs updated.
+  Files: `heca-grid-ui/src/widgets/` (new widgets) + `heca-renderer/examples/showcase.rs` +
+  `docs/widgets.md`; app wiring in `heca/src/chrome/` / `heca/src/app/render.rs`;
+  `heca/src/input.rs`+`handlers.rs`+`registry.rs`+`interaction.rs`+`rpc.rs`+`keybindings.default.toml`
+  for the new action. Ref: handoff Q7.
 
 - [ ] **terminal-task-01f** — Docs + final review + commit (slice 7).
-  Update user-facing docs (README scrollback section, config keys), final review, land the
-  feature. Once merged, the `handoff-terminal-scrollback.md` working note can be deleted.
+  • Update user-facing docs: README scrollback section (the wheel/PageUp policy, `prefix+PageUp/Down`,
+    selection-mode `u`/`d`/`Ctrl+u`/`Ctrl+d`/`g`/`G`/`Esc`) + the config keys
+    (`terminal_scrollback_lines` / `terminal_mouse` / `terminal_wheel_scroll_lines`) in
+    `config.default.toml` and README.
+  • Final review pass across all scrollback slices + **runtime validation by running the app**
+    (mirror the `terminal-00b` runtime sign-off): scroll up/down, selection follows the text while
+    scrolling (depends on `terminal-task-01g`), copy while scrolled, wheel in a mouse-grabbing TUI
+    still forwards, snap-to-bottom on key input.
+  • Land/merge; then mark the `terminal-01a` phase DONE in this backlog and **delete** the
+    `handoff-terminal-scrollback.md` working note (its durable content already lives here).
+  Gate: `cargo clippy --workspace --all-targets --all-features` 0 + full test suite green.
+
+- [ ] **terminal-task-01g** — BUG: selection highlight does not follow the text while scrolling.
+  Found in review 2026-06-25 (latent slice-1 bug, exposed once slice-3 scrolling worked).
+  Symptom: make a selection in selection mode, then scroll the host viewport — the highlight
+  stays pinned on screen instead of tracking the selected content (tmux copy-mode follows the
+  text; Q4 stable-row coords exist precisely so it should).
+  Root cause: `TerminalEngine::visible_top_stable_row()` returns
+  `screen().visible_row_to_stable_row(0)` — wezterm's LIVE viewport top — and does NOT subtract
+  heca's `viewport_offset`. So `TerminalSnapshot::viewport_top_stable_row` stays constant while
+  the displayed content scrolls; the overlay's stable→visible origin never moves.
+  Fix direction: subtract the offset, e.g.
+  `screen().visible_row_to_stable_row(0) - self.viewport_offset as isize` (scroll up by N ⇒ top
+  row is N older). VERIFY the sign, and that the SAME corrected basis is used both when
+  RECORDING a selection (`visible_row_to_stable_row` in `terminal_host.rs`) and in
+  `lines_in_stable_range` — otherwise copy-while-scrolled grabs the wrong lines too.
+  Tests: "selection highlight follows content across a scroll", "copy while scrolled returns the
+  selected text" (not the live-bottom text). Gate: clippy 0 + tests.
+  Files: `heca-core/src/backend/terminal/engine.rs` (+ verify `terminal.rs` snapshot projection,
+  `heca/src/app/terminal_host.rs` recording path).
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.
