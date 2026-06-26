@@ -34,6 +34,7 @@ Design locked via `/grill-me` on 2026-06-24. Split into 7 implementation slices.
 | **3 — Actions + wheel + keybindings** | ✅ DONE | `input.rs`, `handlers.rs`, `actions.rs`, `registry.rs`, `interaction.rs`, `terminal_host.rs`, `rpc.rs`, `settings.rs`, `config.default.toml`, `keybindings.default.toml`, `app_state.rs`, `main.rs`, `startup.rs`, `backend/mod.rs`, `backend/terminal.rs`, `backend/terminal/engine.rs` | `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
 | **4 — AppState chrome mirror** | ✅ DONE | `state.rs`, `events.rs`, `host.rs`, `render.rs` | `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
 | **5 — Animated viewport offset** | ✅ DONE | `engine.rs`, `terminal.rs`, `backend/mod.rs`, `handlers.rs`, `lifecycle.rs` | `heca` 265/265, `heca-core` 76/76, clippy 0 |
+| **5b — 01g fix + direct bindings + copy UX** | ✅ DONE (2026-06-25) | `engine.rs`, `handlers.rs`, `input.rs`, `interaction.rs`, `registry.rs`, `input.rs`, `terminal_host.rs`, `terminal_render.rs`, `rpc.rs`, `README.md`, `keybindings.default.toml` | `heca` 265/265, `heca-core` 73/73, clippy 0 — PR #189 |
 | **6 — GUI widgets** | ⬜ | — | — |
 | **7 — Docs + review + commit** | ⬜ | — | — |
 

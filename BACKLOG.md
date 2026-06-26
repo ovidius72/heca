@@ -324,24 +324,32 @@ Runtime validation shows terminal output is live and resize is stable again, but
     `handoff-terminal-scrollback.md` working note (its durable content already lives here).
   Gate: `cargo clippy --workspace --all-targets --all-features` 0 + full test suite green.
 
-- [ ] **terminal-task-01g** — BUG: selection highlight does not follow the text while scrolling.
+- [x] **terminal-task-01g** — BUG: selection highlight does not follow the text while scrolling. ✅ DONE (2026-06-25)
   Found in review 2026-06-25 (latent slice-1 bug, exposed once slice-3 scrolling worked).
-  Symptom: make a selection in selection mode, then scroll the host viewport — the highlight
-  stays pinned on screen instead of tracking the selected content (tmux copy-mode follows the
-  text; Q4 stable-row coords exist precisely so it should).
-  Root cause: `TerminalEngine::visible_top_stable_row()` returns
-  `screen().visible_row_to_stable_row(0)` — wezterm's LIVE viewport top — and does NOT subtract
-  heca's `viewport_offset`. So `TerminalSnapshot::viewport_top_stable_row` stays constant while
-  the displayed content scrolls; the overlay's stable→visible origin never moves.
-  Fix direction: subtract the offset, e.g.
-  `screen().visible_row_to_stable_row(0) - self.viewport_offset as isize` (scroll up by N ⇒ top
-  row is N older). VERIFY the sign, and that the SAME corrected basis is used both when
-  RECORDING a selection (`visible_row_to_stable_row` in `terminal_host.rs`) and in
-  `lines_in_stable_range` — otherwise copy-while-scrolled grabs the wrong lines too.
-  Tests: "selection highlight follows content across a scroll", "copy while scrolled returns the
-  selected text" (not the live-bottom text). Gate: clippy 0 + tests.
-  Files: `heca-core/src/backend/terminal/engine.rs` (+ verify `terminal.rs` snapshot projection,
-  `heca/src/app/terminal_host.rs` recording path).
+  **Fixed:** `visible_top_stable_row()` now subtracts `viewport_offset` from wezterm's live
+  viewport top (`screen().visible_row_to_stable_row(0) - self.viewport_offset as isize`).
+  Additional scrollback work bundled in this task:
+  - **Direct bindings (6 new `Scroll*` actions):** `ScrollLineUp/Down`, `ScrollPageUp/Down`,
+    `ScrollToTop/Bottom`. Immediate, repeatable, stay in Normal mode.
+    Global keybindings: `Shift+{Up/Down/PageUp/PageDown/Home/End}`.
+  - **Copy UX:** `y` copies + clears selection + stays in Selection mode with caret at focus
+    position. Shift+drag mouse release auto-copies on release.
+  - **Caret-follow:** `ensure_caret_visible()` in `move_focused_terminal_selection()` —
+    immediate edge-by-edge scroll (tmux style).
+  - **Caret bounds** clamped to absolute scrollback range `[0, scrollback_rows-1]`.
+  - **Cursor hidden** during Selection mode (only `SelectionOverlay.caret` visible).
+  - **PageUp/PageDown/Home/End** bindings in Selection mode.
+  - **Q5 snap fix:** skip snap-to-bottom for modifier-only keys (Shift/Ctrl/Alt alone).
+  - All handlers rewritten: move caret + `ensure_caret_visible`, no `scroll_viewport_animated`.
+  - Entrance guards: scrollback handlers guard `enter_selection_mode_for_focused_terminal`
+    to prevent resetting caret when already in Selection mode.
+  - `scrollback_to_bottom` rewritten: calls `scroll_to_bottom()` before snapshotting so
+    caret lands on the live cursor position. Stays in Selection mode (Esc exits).
+  Gate: `heca` 265/265, `heca-core` 73/73, clippy 0. PR #189 → main.
+  Files: `heca-core/src/backend/terminal/engine.rs` (`visible_top_stable_row`),
+  `heca/src/handlers.rs`, `heca/src/app/input.rs`, `heca/src/app/interaction.rs`,
+  `heca/src/input.rs`, `heca/src/app/registry.rs`, `heca/src/app/terminal_host.rs`,
+  `heca/src/rpc.rs`, `keybindings.default.toml`, `README.md`.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.
