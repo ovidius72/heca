@@ -181,6 +181,7 @@ pub(crate) fn queue_terminal_dynamic_overlays(
     primitive_renderer: &mut PrimitiveRenderer,
     mount: &TerminalMount,
     selection_overlay: Option<SelectionOverlay>,
+    hide_cursor: bool,
 ) {
     let content_box = rect_to_text_box(mount.content_rect);
     let mut terminal_renderer = TerminalRenderer::new(text_renderer, primitive_renderer);
@@ -192,7 +193,11 @@ pub(crate) fn queue_terminal_dynamic_overlays(
             mount.snapshot.cell_h,
         );
     }
-    terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
+    // Hide the host terminal cursor when Selection mode is active so the
+    // selection caret (rendered by the SelectionOverlay) is the only cursor visible.
+    if !hide_cursor {
+        terminal_renderer.render_cursor_overlay(&mount.snapshot, content_box);
+    }
 }
 
 fn retain_live_terminal_layers(state: &mut AppState) {

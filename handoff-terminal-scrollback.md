@@ -31,9 +31,10 @@ Design locked via `/grill-me` on 2026-06-24. Split into 7 implementation slices.
 |-------|--------|-------|-------|
 | **1 — Backend viewport model** | ✅ DONE | `engine.rs`, `terminal.rs`, `snapshot.rs`, `backend/mod.rs`, `settings.rs`, `config.default.toml`, `app_state.rs`, `backend_factory.rs`, `startup.rs`, `main.rs`, `fake.rs`, `terminal_render.rs` (test snapshot) | `heca-core` 67/67, `heca-config` 70/70, `heca` 247/247, clippy 0 |
 | **2 — Stable-row selection refactor** | ✅ DONE | `selection_model.rs`, `terminal_host.rs`, `terminal_render.rs`, `handlers.rs`, `backend/mod.rs`, `terminal.rs`, `fake.rs`, `snapshot.rs`, `render.rs` | `heca` 259/259, `heca-core` 67/67, clippy 0 |
-| **3 — Actions + wheel + keybindings** | ⬜ NEXT | — | — |
-| **4 — AppState chrome mirror** | ⬜ | — | — |
-| **5 — Animated viewport offset** | ⬜ | — | — |
+| **3 — Actions + wheel + keybindings** | ✅ DONE | `input.rs`, `handlers.rs`, `actions.rs`, `registry.rs`, `interaction.rs`, `terminal_host.rs`, `rpc.rs`, `settings.rs`, `config.default.toml`, `keybindings.default.toml`, `app_state.rs`, `main.rs`, `startup.rs`, `backend/mod.rs`, `backend/terminal.rs`, `backend/terminal/engine.rs` | `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
+| **4 — AppState chrome mirror** | ✅ DONE | `state.rs`, `events.rs`, `host.rs`, `render.rs` | `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
+| **5 — Animated viewport offset** | ✅ DONE | `engine.rs`, `terminal.rs`, `backend/mod.rs`, `handlers.rs`, `lifecycle.rs` | `heca` 265/265, `heca-core` 76/76, clippy 0 |
+| **5b — 01g fix + direct bindings + copy UX** | ✅ DONE (2026-06-25) | `engine.rs`, `handlers.rs`, `input.rs`, `interaction.rs`, `registry.rs`, `input.rs`, `terminal_host.rs`, `terminal_render.rs`, `rpc.rs`, `README.md`, `keybindings.default.toml` | `heca` 265/265, `heca-core` 73/73, clippy 0 — PR #189 |
 | **6 — GUI widgets** | ⬜ | — | — |
 | **7 — Docs + review + commit** | ⬜ | — | — |
 
@@ -261,16 +262,40 @@ and flat `[keys]` for prefix bindings. NEVER add them to `keys.rs`.
 
 ---
 
-## 6b. Slice 4 — What to do next
+## 6b. Slice 4 — AppState chrome mirror ✅ DONE (2026-06-25)
 
-### AppState chrome mirror + reactive store
+Terminal viewport state now mirrored into the reactive chrome store.
+- 3 viewport signals (`viewport_offset`/`at_bottom`/`scrollback_rows`) on `PaneRuntimeSignals`
+- `WorkspacesContainerState::set_pane_viewport()` — idempotent, emits `TerminalViewportChanged` only on real change
+- `ChromeEvent::TerminalViewportChanged { pane, viewport_offset, at_bottom, scrollback_rows }`
+- Sync in `render.rs` from each `prepare_terminal_mount` result (tiled + floating)
+- Host API: `TerminalViewport` struct + `StateView::terminal_viewport(pane_id)` read selector
+- Gates: `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0
 
-See `handoff-terminal-scrollback.md` §1 table for full scope. Key deliverables:
+## 6c. Slice 5 — Animated viewport offset ✅ DONE (2026-06-25)
 
-- Mirror `viewport_offset`/`at_bottom`/`scrollback_rows` into the reactive chrome store.
-- `ChromeEvent::TerminalViewportChanged` for chome listeners.
-- `host.terminal_viewport(pane_id)` accessor.
-- Tests + clippy.
+Discrete scroll jumps now glide via easing instead of snapping.
+- `viewport_anim: Option<Animation>` on `TerminalEngine` (state in engine per Q1)
+- Reuses `Animation`/`AnimationConfig::default()` (250ms ease_out_cubic) from `layout/animation.rs`
+- Animated variants on `PaneBackend`: `scroll_viewport_animated`, `scroll_to_top_animated`, `scroll_to_bottom_animated` (default: immediate fallback)
+- Wheel (`scroll_viewport`) applies immediately + **clears** ongoing animation
+- Re-target (no queue): new jump bases delta on animation **target**, creates new Animation from current animated value
+- Approach A (integer-row step): `advance_animation()` rounds f64 → nearest usize
+- Drive: `tick_animation()` per-frame in `poll_backends` (lifecycle.rs); `terminal_animating` gates `needs_frame` + `ControlFlow`
+- `reconcile_viewport_offset` clears animation when scrollback shrinks
+- 3 tests: re-target, settles at target, wheel clears
+- Gates: `heca` 265/265, `heca-core` 76/76, clippy 0
+
+## 6d. Slice 6 — What to do next
+
+### Scrollback GUI widgets
+
+Two generic `heca-grid-ui` widgets reading the slice-4 store state:
+1. **Scrollbar** (clickable/draggable) — jump to any viewport position
+2. **Scrolled-up indicator badge** — "N lines above"; click = snap to bottom
+
+Domain-neutral, theme-driven; update showcase + `docs/widgets.md` (grid-ui rule).
+Ref: backlog `terminal-task-01e`, handoff Q7
 
 ---
 

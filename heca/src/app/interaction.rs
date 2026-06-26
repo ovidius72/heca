@@ -256,6 +256,13 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ScrollbackToTop
         | WmAction::ScrollbackToBottom
         | WmAction::ExitScrollback
+        // Direct scroll (no selection / caret — same policy)
+        | WmAction::ScrollLineUp
+        | WmAction::ScrollLineDown
+        | WmAction::ScrollPageUp
+        | WmAction::ScrollPageDown
+        | WmAction::ScrollToTop
+        | WmAction::ScrollToBottom
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::EnterSelectionMode
@@ -854,6 +861,13 @@ mod tests {
             WmAction::ScrollbackToTop,
             WmAction::ScrollbackToBottom,
             WmAction::ExitScrollback,
+            // Direct scroll
+            WmAction::ScrollLineUp,
+            WmAction::ScrollLineDown,
+            WmAction::ScrollPageUp,
+            WmAction::ScrollPageDown,
+            WmAction::ScrollToTop,
+            WmAction::ScrollToBottom,
             // Selection (host capability, Task 02).
             WmAction::EnterSelectionMode,
             WmAction::ClearSelection,
@@ -1373,6 +1387,13 @@ mod tests {
             WmAction::ScrollbackToTop,
             WmAction::ScrollbackToBottom,
             WmAction::ExitScrollback,
+            // Direct scroll (same policy)
+            WmAction::ScrollLineUp,
+            WmAction::ScrollLineDown,
+            WmAction::ScrollPageUp,
+            WmAction::ScrollPageDown,
+            WmAction::ScrollToTop,
+            WmAction::ScrollToBottom,
             // Selection (host capability, Task 02) — allowed in both domains.
             WmAction::EnterSelectionMode,
             WmAction::SelectionLeft,

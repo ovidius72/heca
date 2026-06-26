@@ -240,6 +240,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 state.terminal_cell_size,
             )
         });
+        // Sync viewport state into the chrome store for GUI reactivity.
+        if let Some(ref m) = mount {
+            state.chrome_state.workspaces.set_pane_viewport(
+                *pane_id,
+                m.snapshot.viewport_offset,
+                m.snapshot.at_bottom,
+                m.snapshot.scrollback_rows,
+            );
+        }
         tiled_panes.push(PaneRenderState {
             pane_id: *pane_id,
             x: px,
@@ -279,6 +288,15 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     state.terminal_cell_size,
                 )
             });
+            // Sync viewport state into the chrome store for GUI reactivity.
+            if let Some(ref m) = mount {
+                state.chrome_state.workspaces.set_pane_viewport(
+                    float.pane.id,
+                    m.snapshot.viewport_offset,
+                    m.snapshot.at_bottom,
+                    m.snapshot.scrollback_rows,
+                );
+            }
             floating_panes.push(PaneRenderState {
                 pane_id: float.pane.id,
                 x: fx,
@@ -518,6 +536,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     &mut state.primitive_renderer,
                     mount,
                     selection_overlay,
+                    matches!(state.input_mode, InputMode::Selection),
                 );
             } else {
                 render_terminal_mount(
@@ -737,6 +756,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         &mut state.primitive_renderer,
                         mount,
                         selection_overlay,
+                        matches!(state.input_mode, InputMode::Selection),
                     );
                     state.primitive_renderer.render_clipped(
                         &state.device,

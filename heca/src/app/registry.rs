@@ -544,6 +544,14 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ScrollbackToBottom, handle_scrollback_to_bottom);
     registry.register(&WmAction::ExitScrollback, handle_exit_scrollback);
 
+    // ── Direct scroll (no selection mode / caret) ──
+    registry.register(&WmAction::ScrollLineUp, handle_scroll_line_up);
+    registry.register(&WmAction::ScrollLineDown, handle_scroll_line_down);
+    registry.register(&WmAction::ScrollPageUp, handle_scroll_page_up);
+    registry.register(&WmAction::ScrollPageDown, handle_scroll_page_down);
+    registry.register(&WmAction::ScrollToTop, handle_scroll_to_top);
+    registry.register(&WmAction::ScrollToBottom, handle_scroll_to_bottom);
+
     // ── Selection (host capability) ──
     registry.register(&WmAction::EnterSelectionMode, handle_enter_selection_mode);
     registry.register(&WmAction::SelectionLeft, handle_selection_left);

@@ -69,6 +69,14 @@ pub enum ChromeEvent {
         region: ChromeRegion,
         size: f32,
     },
+    /// A pane's terminal viewport state (offset/bottom/scrollback-rows) changed.
+    /// Only terminal-backed panes emit this; non-terminal panes never fire it.
+    TerminalViewportChanged {
+        pane: PaneId,
+        viewport_offset: usize,
+        at_bottom: bool,
+        scrollback_rows: usize,
+    },
 }
 
 impl ChromeEvent {
@@ -87,6 +95,7 @@ impl ChromeEvent {
             ChromeEvent::WorkspacesScrollChanged { .. } => "workspaces.scroll.changed",
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
+            ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
         }
     }
 }

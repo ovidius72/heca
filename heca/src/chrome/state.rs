@@ -66,6 +66,13 @@ pub(crate) struct PaneRuntimeSignals {
     /// User-set custom display name (from rename); `None` while tracking the process.
     /// Mirrored here so plugins observe renames via the store + `PaneCustomNameChanged`.
     pub(crate) custom_name: Signal<Option<String>>,
+    /// Terminal viewport offset from the live bottom (rows above bottom). `0` = pinned to bottom.
+    /// The backend owns this value; the store mirrors it for chrome/GUI reactivity.
+    pub(crate) viewport_offset: Signal<usize>,
+    /// Whether the viewport is pinned to the live bottom (`viewport_offset == 0`).
+    pub(crate) at_bottom: Signal<bool>,
+    /// Total retained terminal content rows (history + visible). Drives scrollbar thumb sizing.
+    pub(crate) scrollback_rows: Signal<usize>,
 }
 
 impl PaneRuntimeSignals {
@@ -78,6 +85,9 @@ impl PaneRuntimeSignals {
             git: signal(runtime.git.clone()),
             kind: signal(runtime.kind.clone()),
             custom_name: signal(None),
+            viewport_offset: signal(0),
+            at_bottom: signal(true),
+            scrollback_rows: signal(0),
         }
     }
 
@@ -252,6 +262,18 @@ impl WorkspacesContainerState {
     pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
         self.with_pane_runtime(pane, |runtime| {
             runtime.and_then(|r| r.custom_name.get_untracked())
+        })
+    }
+
+    /// Terminal viewport state for a pane. `None` if the pane has no mirrored entry
+    /// (e.g. non-terminal panes or freshly created panes not yet synced).
+    pub fn terminal_viewport(&self, pane: PaneId) -> Option<crate::host::TerminalViewport> {
+        self.with_pane_runtime(pane, |runtime| {
+            runtime.map(|r| crate::host::TerminalViewport {
+                viewport_offset: r.viewport_offset.get_untracked(),
+                at_bottom: r.at_bottom.get_untracked(),
+                scrollback_rows: r.scrollback_rows.get_untracked(),
+            })
         })
     }
 
@@ -548,6 +570,56 @@ impl WorkspacesContainerState {
             sig.set(kind);
         }
     }
+
+    /// Mirror terminal viewport state from a backend snapshot into the store.
+    ///
+    /// Idempotent: emits `TerminalViewportChanged` only when a value actually
+    /// changes. Returns `true` if any field changed, `false` for a no-op.
+    pub(crate) fn set_pane_viewport(
+        &self,
+        pane: PaneId,
+        viewport_offset: usize,
+        at_bottom: bool,
+        scrollback_rows: usize,
+    ) -> bool {
+        let mut sigs: Option<PaneRuntimeSignals> = None;
+        let mut cur_offset = None;
+        let mut cur_at_bottom = None;
+        let mut cur_rows = None;
+        self.panes.update(|panes| {
+            let entry = panes
+                .entry(pane)
+                .or_insert_with(|| PaneRuntimeSignals::new(&PaneRuntime::default()));
+            sigs = Some(*entry);
+            cur_offset = Some(entry.viewport_offset.get_untracked());
+            cur_at_bottom = Some(entry.at_bottom.get_untracked());
+            cur_rows = Some(entry.scrollback_rows.get_untracked());
+        });
+        let sigs = sigs.expect("entry ensured above");
+        let mut changed = false;
+        if cur_offset != Some(viewport_offset) {
+            sigs.viewport_offset.set(viewport_offset);
+            changed = true;
+        }
+        if cur_at_bottom != Some(at_bottom) {
+            sigs.at_bottom.set(at_bottom);
+            changed = true;
+        }
+        if cur_rows != Some(scrollback_rows) {
+            sigs.scrollback_rows.set(scrollback_rows);
+            changed = true;
+        }
+        if changed {
+            self.events.emit(ChromeEvent::TerminalViewportChanged {
+                pane,
+                viewport_offset,
+                at_bottom,
+                scrollback_rows,
+            });
+        }
+        changed
+    }
+
     pub(crate) fn retain_panes(&self, keep: &HashSet<PaneId>) {
         self.panes
             .update(|panes| panes.retain(|pane, _| keep.contains(pane)));
@@ -897,5 +969,77 @@ mod tests {
                 "pane.git.changed",
             ],
         );
+    }
+
+    #[test]
+    fn terminal_viewport_defaults_are_zeros() {
+        let s = state();
+        let pane = PaneId(10);
+        // A pane that was never written via set_pane_viewport returns None.
+        assert_eq!(s.workspaces.terminal_viewport(pane), None);
+
+        // After a viewport write, it returns the expected values.
+        s.workspaces
+            .set_pane_viewport(pane, 42, false, 200);
+        let vp = s.workspaces.terminal_viewport(pane).unwrap();
+        assert_eq!(
+            vp,
+            crate::host::TerminalViewport {
+                viewport_offset: 42,
+                at_bottom: false,
+                scrollback_rows: 200,
+            }
+        );
+    }
+
+    #[test]
+    fn terminal_viewport_emits_only_on_change() {
+        let s = state();
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let seen_events = seen.clone();
+        let _sub = s.events().subscribe("*", move |event| {
+            seen_events.borrow_mut().push(event.name().to_string());
+        });
+        let pane = PaneId(11);
+
+        // First write -> terminal.viewport.changed emitted.
+        s.workspaces
+            .set_pane_viewport(pane, 10, false, 50);
+        // Identical write -> no event.
+        s.workspaces
+            .set_pane_viewport(pane, 10, false, 50);
+        // Single field change -> event fired.
+        s.workspaces
+            .set_pane_viewport(pane, 11, false, 50);
+        // All fields changed -> single event.
+        s.workspaces
+            .set_pane_viewport(pane, 0, true, 100);
+        // Back to the last values -> event fired (still a change from current).
+        s.workspaces
+            .set_pane_viewport(pane, 11, false, 50);
+
+        assert_eq!(
+            seen.borrow().as_slice(),
+            [
+                "terminal.viewport.changed",
+                "terminal.viewport.changed",
+                "terminal.viewport.changed",
+                "terminal.viewport.changed",
+            ],
+            "expected only 4 events: first write, offset change, all-field change, revert"
+        );
+    }
+
+    #[test]
+    fn terminal_viewport_does_not_require_runtime_preinit() {
+        let s = state();
+        let pane = PaneId(12);
+        // set_pane_viewport on a fresh pane without set_pane_runtime should work.
+        s.workspaces
+            .set_pane_viewport(pane, 5, true, 30);
+        let vp = s.workspaces.terminal_viewport(pane).unwrap();
+        assert_eq!(vp.viewport_offset, 5);
+        assert!(vp.at_bottom);
+        assert_eq!(vp.scrollback_rows, 30);
     }
 }

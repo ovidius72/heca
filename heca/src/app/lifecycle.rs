@@ -18,11 +18,14 @@ pub(crate) struct BackendPollResult {
     pub has_data: bool,
     pub closed_any: bool,
     pub bell_any: bool,
+    pub terminal_animating: bool,
 }
 
 pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     let mut result = BackendPollResult::default();
     for backend in state.backends.values_mut() {
+        let anim = backend.tick_animation();
+        result.terminal_animating |= anim;
         if backend.update() {
             result.has_data = true;
         }
@@ -85,17 +88,19 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
             .request_user_attention(Some(UserAttentionType::Informational));
     }
 
+    let terminal_animating = backend_poll.terminal_animating;
     let needs_frame = state.needs_redraw
         || backend_poll.has_data
         || backend_poll.closed_any
         || chrome_runtime_changed
         || state.session.are_animations_ongoing()
+        || terminal_animating
         || chrome_animating;
     if needs_frame {
         state.window.request_redraw();
     }
 
-    if state.session.are_animations_ongoing() || chrome_animating {
+    if state.session.are_animations_ongoing() || terminal_animating || chrome_animating {
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));

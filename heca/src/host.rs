@@ -24,6 +24,21 @@ use crate::chrome::{ChromeEvent, ChromeSubscription, SharedChromeState};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
 
+/// Terminal viewport state snapshot for a pane.
+///
+/// Only terminal-backed panes have meaningful viewport state; for other panes
+/// (or unmatched pane IDs) [`StateView::terminal_viewport`] returns `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TerminalViewport {
+    /// Host viewport offset in rows above the live bottom.
+    /// `0` = pinned to bottom (live scrollback).
+    pub viewport_offset: usize,
+    /// Whether the viewport is pinned to the live bottom.
+    pub at_bottom: bool,
+    /// Total retained terminal content rows (history + visible).
+    pub scrollback_rows: usize,
+}
+
 /// A first-party handle to the host API. Cheap to clone — the underlying store is
 /// `Rc`/signal-backed — so providers can each hold their own `App`.
 #[derive(Clone)]
@@ -89,6 +104,12 @@ impl StateView<'_> {
     /// name tracks its running process. Observe changes via `PaneCustomNameChanged`.
     pub fn pane_custom_name(&self, pane: PaneId) -> Option<String> {
         self.state.workspaces.pane_custom_name(pane)
+    }
+
+    /// Terminal viewport state for a pane, if mirrored in the store.
+    /// Non-terminal panes or unmirrored panes return `None`.
+    pub fn terminal_viewport(&self, pane: PaneId) -> Option<TerminalViewport> {
+        self.state.workspaces.terminal_viewport(pane)
     }
 
     /// The keyboard pick currently in progress (move/select/swap/take), if any — its
