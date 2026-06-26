@@ -67,6 +67,8 @@ pub struct TerminalBackendOptions {
     /// Host terminal scrollback capacity in rows (`wezterm-term` scrollback).
     /// `0` keeps wezterm-term's trait default (3500).
     pub scrollback_size: usize,
+    /// Enable backend-side viewport easing for animated scroll APIs.
+    pub scroll_animations: bool,
 }
 
 impl TerminalBackendOptions {
@@ -83,6 +85,7 @@ impl Default for TerminalBackendOptions {
             wake_on_output: None,
             shell_integration: None,
             scrollback_size: Self::DEFAULT_SCROLLBACK_SIZE,
+            scroll_animations: true,
         }
     }
 }
@@ -180,6 +183,7 @@ impl TerminalBackend {
                 wake_on_output,
                 shell_integration: None,
                 scrollback_size: TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+                scroll_animations: true,
             },
         )
     }
@@ -198,6 +202,7 @@ impl TerminalBackend {
             options.palette_defaults,
             options.wake_on_output,
             options.scrollback_size,
+            options.scroll_animations,
             LaunchTarget::Shell(ShellLaunch {
                 integration: options.shell_integration,
                 override_path: None,
@@ -222,10 +227,15 @@ impl TerminalBackend {
             options.palette_defaults,
             options.wake_on_output,
             options.scrollback_size,
+            options.scroll_animations,
             LaunchTarget::Command(CommandLaunch { command }),
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "terminal launch wiring threads PTY palette/wake/scrollback/animation policy explicitly; grouping is a later refactor"
+    )]
     fn with_launch_target(
         cols: usize,
         rows: usize,
@@ -233,6 +243,7 @@ impl TerminalBackend {
         palette_defaults: Option<TerminalPaletteDefaults>,
         wake_on_output: Option<Arc<dyn Fn() + Send + Sync>>,
         scrollback_size: usize,
+        scroll_animations: bool,
         launch: LaunchTarget<'_>,
     ) -> Result<Self, PtyError> {
         let (cell_w, cell_h) = cell_size;
@@ -259,7 +270,8 @@ impl TerminalBackend {
                 false,
             ),
         };
-        let engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults, scrollback_size)?;
+        let mut engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults, scrollback_size)?;
+        engine.set_scroll_animations_enabled(scroll_animations);
 
         // Seed `last_fg_check` one debounce in the past so the very first `update`
         // wake re-samples the foreground immediately (no 250 ms blind start).
@@ -388,6 +400,7 @@ impl TerminalBackend {
             palette_defaults,
             wake_on_output,
             TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+            true,
             LaunchTarget::Shell(shell),
         )
     }
@@ -669,6 +682,10 @@ impl PaneBackend for TerminalBackend {
 
     fn scroll_to_bottom_animated(&mut self) {
         self.engine.scroll_to_bottom_animated();
+    }
+
+    fn set_scroll_animations_enabled(&mut self, enabled: bool) {
+        self.engine.set_scroll_animations_enabled(enabled);
     }
 
     fn lines_in_stable_range(

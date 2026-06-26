@@ -2068,6 +2068,24 @@ pub fn handle_scroll_to_bottom(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
+    let WmAction::ScrollToOffset { rows } = action else {
+        return;
+    };
+    if let Some(pane_id) = state.focused_pane
+        && let Some(backend) = state.backends.get_mut(pane_id)
+        && let Some(snapshot) = backend.terminal_snapshot()
+    {
+        let max_offset = snapshot.scrollback_rows.saturating_sub(snapshot.rows);
+        let target = (*rows).min(max_offset);
+        let delta = target as i32 - snapshot.viewport_offset as i32;
+        if delta != 0 {
+            backend.scroll_viewport(delta);
+        }
+    }
+    state.needs_redraw = true;
+}
+
 // ── Config ──
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {

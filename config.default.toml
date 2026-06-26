@@ -56,6 +56,10 @@ terminal_mouse = true
 # Number of scrollback rows per wheel notch.
 terminal_wheel_scroll_lines = 3
 
+# Smooth animation for backend-side discrete terminal viewport jumps.
+# Set false to make animated viewport jumps immediate.
+terminal_scroll_animations = true
+
 # Terminal color palette overrides (all optional → fall back to the theme).
 # terminal_foreground          = "#c6f0ff"
 # terminal_background          = "#060a0e"
@@ -163,9 +167,15 @@ background_transparency = 0
 # floating_transparency : floating-pane translucency (independent of tiled, so
 #                         floating panes can stay readable while tiled are frosted).
 # floating_blur         : floating-pane real blur strength.
+# show_scrollbar        : terminal scrollback scrollbar visibility.
+#                         always | when_needed | never
+# show_scrolled_up_badge : show the "N lines above" badge while scrolled up.
+#                         true | false
 transparency = 0
 floating_transparency = 0
 floating_blur = 0
+show_scrollbar = "when_needed"
+show_scrolled_up_badge = true
 
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.pane]

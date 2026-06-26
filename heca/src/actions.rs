@@ -682,6 +682,13 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "Shift+End",
         },
+        ActionDescriptor {
+            name: "scroll_to_offset",
+            label: "Scroll to Offset",
+            description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
+            category: ActionCategory::Pane,
+            default_binding: "unbound",
+        },
         // ── Selection (host capability) ──
         ActionDescriptor {
             name: "enter_selection_mode",

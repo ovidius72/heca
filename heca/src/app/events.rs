@@ -143,15 +143,17 @@ pub(crate) fn handle_window_event(
             // only sends presses. NOT during a drag: otherwise pane rows would light
             // their hover as if droppable, contradicting the source-aware drop
             // indicator (a column drag targets columns, not the panes inside them).
+            let mut pane_viewport_over = false;
             if !state.mouse.drag_ctx.is_dragging() && !mouse::is_resizing(state) {
                 crate::chrome::chrome_dispatch_move(state, pos);
                 // Feed the move into the retained pane-info-bar headers so the action
                 // buttons' hover affordance lights up (repaint via mark_full_redraw below).
                 crate::chrome::dispatch_pane_header_move(state, pos);
+                pane_viewport_over = crate::chrome::dispatch_pane_viewport_move(state, pos);
             }
-            // Don't forward moves to the terminal while resizing a divider — the
-            // gesture owns the pointer until release.
-            if !mouse::is_resizing(state) {
+            // Don't forward moves to the terminal while resizing a divider or while a
+            // retained viewport widget (badge / scrollbar) owns the pointer.
+            if !mouse::is_resizing(state) && !pane_viewport_over {
                 forward_mouse_move(state, pos);
             }
             // Cursor affordance: Grab over a draggable, Grabbing while dragging.
@@ -179,6 +181,17 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
+            // Terminal viewport widgets (scrollbar / badge) intercept a plain
+            // left-press before divider resize/content forwarding.
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Pressed
+                && !mouse::interactive_move_modifier_held(state)
+                && crate::chrome::dispatch_pane_viewport_press(state, state.mouse.pos)
+            {
+                mouse::update_cursor(state, state.mouse.pos);
+                state.mark_full_redraw();
+                return;
+            }
             // Divider resize: a plain left-press on a column/pane divider starts a
             // resize-drag. Only an actual divider hit consumes — a miss falls
             // through to the normal content/drag paths. A modifier-held press
@@ -188,6 +201,14 @@ pub(crate) fn handle_window_event(
                 && button_state == ElementState::Pressed
                 && !mouse::interactive_move_modifier_held(state)
                 && mouse::resize::on_press(state, state.mouse.pos)
+            {
+                mouse::update_cursor(state, state.mouse.pos);
+                state.mark_full_redraw();
+                return;
+            }
+            if button == winit::event::MouseButton::Left
+                && button_state == ElementState::Released
+                && crate::chrome::dispatch_pane_viewport_release(state, state.mouse.pos)
             {
                 mouse::update_cursor(state, state.mouse.pos);
                 state.mark_full_redraw();

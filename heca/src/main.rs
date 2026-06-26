@@ -143,6 +143,11 @@ impl HecaApp {
             state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;
             state.terminal_wheel_scroll_lines =
                 self.app_config.config.settings.terminal_wheel_scroll_lines;
+            state.terminal_scroll_animations_enabled =
+                self.app_config.config.settings.terminal_scroll_animations;
+            for backend in state.backends.values_mut() {
+                backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
+            }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
             // Pane gap and chrome geometry changes must reflow the real viewport

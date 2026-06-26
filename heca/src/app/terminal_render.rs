@@ -446,7 +446,7 @@ fn bar_font(state: &AppState) -> f32 {
 
 /// Whether the pane info bar renders anything right now — segments **or** action
 /// buttons. Drives both the reserved top strip and the header band/paint.
-fn pane_info_bar_shown(state: &AppState) -> bool {
+pub(crate) fn pane_info_bar_shown(state: &AppState) -> bool {
     state.appearance.pane_info_bar_visible()
 }
 
@@ -609,6 +609,18 @@ pub(crate) fn paint_terminal_pane_shell(
         );
         let mut cx = PaintCx::new(scene, &bar_theme);
         cx.with_clip(clip, |cx| header.root.paint(cx));
+    }
+
+    if let Some(viewport) = state.pane_viewport_widgets.get(&pane_id) {
+        let clip = GuiRectangle::new(
+            GuiPoint::new(x as f64, y as f64),
+            GuiSize::new(w as f64, h as f64),
+        );
+        let mut cx = PaintCx::new(scene, &bar_theme);
+        cx.with_clip(clip, |cx| {
+            viewport.badge.paint(cx);
+            viewport.scrollbar.paint(cx);
+        });
     }
 }
 

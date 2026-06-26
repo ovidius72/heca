@@ -291,6 +291,7 @@ pub(crate) async fn init_state(
             Some(&event_proxy),
             app_config.config.settings.shell_integration,
             app_config.config.settings.terminal_scrollback_lines,
+            app_config.config.settings.terminal_scroll_animations,
         ),
     );
 
@@ -332,6 +333,7 @@ pub(crate) async fn init_state(
         sidebar_tree,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
+        pane_viewport_widgets: std::collections::HashMap::new(),
         pane_action_hints: crate::chrome::PaneActionHints::from_keys(
             &app_config.config.keys,
             &keymap::KeyCombo::parse(&app_config.config.keys.prefix),
@@ -355,6 +357,7 @@ pub(crate) async fn init_state(
         terminal_scrollback_lines: app_config.config.settings.terminal_scrollback_lines,
         terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
         terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,
+        terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),

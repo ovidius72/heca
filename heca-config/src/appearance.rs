@@ -109,6 +109,13 @@ fn default_terminal_floating_transparency() -> u8 {
 fn default_terminal_floating_blur() -> u8 {
     0
 }
+fn default_terminal_show_scrollbar() -> ScrollbarVisibility {
+    ScrollbarVisibility::WhenNeeded
+}
+
+fn default_terminal_show_scrolled_up_badge() -> bool {
+    true
+}
 
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
@@ -153,6 +160,19 @@ const DEFAULT_FOCUS_BORDER_WIDTH: f32 = 1.5;
 //  Per-surface appearance (nested `[appearance.terminal/pane/sidebar]` tables)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// When the terminal scrollback scrollbar should be shown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScrollbarVisibility {
+    /// Always show the scrollbar when the pane has scrollable history.
+    Always,
+    /// Show only while the viewport is scrolled away from the live bottom.
+    #[default]
+    WhenNeeded,
+    /// Never show the scrollbar.
+    Never,
+}
+
 /// Terminal **content** surface translucency/blur (`[appearance.terminal]`). The
 /// pane *frame* (border/radius/gap) lives in [`PaneAppearance`] — this owns only
 /// the see-through-ness of the terminal surface itself.
@@ -171,6 +191,14 @@ pub struct TerminalAppearance {
     /// Independent of the z=0 `background_blur`. Default `0` (no blur).
     #[serde(default = "default_terminal_floating_blur")]
     pub floating_blur: u8,
+    /// Scrollbar visibility for panes with host-managed scrollback.
+    /// `always | when_needed | never`. Default `when_needed`.
+    #[serde(default = "default_terminal_show_scrollbar")]
+    pub show_scrollbar: ScrollbarVisibility,
+    /// Whether to show the "N lines above" badge while scrolled up.
+    /// Default `true`.
+    #[serde(default = "default_terminal_show_scrolled_up_badge")]
+    pub show_scrolled_up_badge: bool,
 }
 
 impl Default for TerminalAppearance {
@@ -179,6 +207,8 @@ impl Default for TerminalAppearance {
             transparency: default_terminal_transparency(),
             floating_transparency: default_terminal_floating_transparency(),
             floating_blur: default_terminal_floating_blur(),
+            show_scrollbar: default_terminal_show_scrollbar(),
+            show_scrolled_up_badge: default_terminal_show_scrolled_up_badge(),
         }
     }
 }
@@ -694,6 +724,8 @@ mod tests {
         assert_eq!(cfg.terminal.transparency, 0);
         assert_eq!(cfg.terminal.floating_transparency, 0);
         assert_eq!(cfg.terminal.floating_blur, 0);
+        assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::WhenNeeded);
+        assert!(cfg.terminal.show_scrolled_up_badge);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
         assert_eq!(cfg.background_blur, 0);
         assert_eq!(cfg.background_transparency, 0);
@@ -922,7 +954,37 @@ intensity = "off""#,
         assert_eq!(cfg.transparency, 30);
         assert_eq!(cfg.blur, 0);
         assert_eq!(cfg.terminal.transparency, 15);
+        assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::WhenNeeded);
+        assert!(cfg.terminal.show_scrolled_up_badge);
         assert_eq!(cfg.vibrancy, Vibrancy::None);
+    }
+
+    #[test]
+    fn terminal_scrollbar_visibility_parses_snake_case() {
+        let cfg: AppearanceConfig = toml::from_str(
+            "[terminal]\nshow_scrollbar = \"always\"\n",
+        )
+        .expect("terminal show_scrollbar should parse");
+        assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Always);
+
+        let cfg: AppearanceConfig = toml::from_str(
+            "[terminal]\nshow_scrollbar = \"never\"\n",
+        )
+        .expect("terminal show_scrollbar should parse never");
+        assert_eq!(cfg.terminal.show_scrollbar, ScrollbarVisibility::Never);
+    }
+
+    #[test]
+    fn terminal_scrolled_up_badge_setting_parses() {
+        let cfg: AppearanceConfig =
+            toml::from_str("[terminal]\nshow_scrolled_up_badge = false\n")
+                .expect("terminal show_scrolled_up_badge should parse");
+        assert!(!cfg.terminal.show_scrolled_up_badge);
+
+        let cfg: AppearanceConfig =
+            toml::from_str("[terminal]\nshow_scrolled_up_badge = true\n")
+                .expect("terminal show_scrolled_up_badge should parse true");
+        assert!(cfg.terminal.show_scrolled_up_badge);
     }
 
     #[test]
@@ -963,6 +1025,7 @@ theme = "mocha"
                 transparency: 95,
                 floating_transparency: 0,
                 floating_blur: 0,
+                ..Default::default()
             },
             ..Default::default()
         };

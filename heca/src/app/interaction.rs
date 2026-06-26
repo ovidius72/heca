@@ -263,6 +263,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
         | WmAction::ScrollToBottom
+        | WmAction::ScrollToOffset { .. }
         // Selection acts on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::EnterSelectionMode
@@ -987,6 +988,10 @@ mod tests {
         );
         assert_eq!(
             action_policy(&WmAction::ExitScrollback),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::ScrollToOffset { rows: 0 }),
             ActionPolicy::FocusedPaneLocal
         );
         assert_eq!(

@@ -50,6 +50,7 @@ pub(crate) fn create_terminal_backend_for_state(
         Some(&state.event_proxy),
         state.shell_integration_enabled,
         state.terminal_scrollback_lines,
+        state.terminal_scroll_animations_enabled,
     );
     create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options)
 }
@@ -68,6 +69,7 @@ pub(crate) fn create_command_backend_for_state(
         Some(&state.event_proxy),
         false,
         state.terminal_scrollback_lines,
+        state.terminal_scroll_animations_enabled,
     );
     create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)
 }
@@ -87,6 +89,10 @@ pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (u
         .unwrap_or(FALLBACK_TERMINAL_GRID)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "terminal backend creation threads theme/event/shell/scrollback/animation policy explicitly; grouping is a later refactor"
+)]
 pub(crate) fn create_terminal_backend(
     cols: usize,
     rows: usize,
@@ -95,9 +101,15 @@ pub(crate) fn create_terminal_backend(
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
     shell_integration_enabled: bool,
     scrollback_size: usize,
+    scroll_animations: bool,
 ) -> Box<dyn PaneBackend> {
-    let options =
-        terminal_backend_options(theme, event_proxy, shell_integration_enabled, scrollback_size);
+    let options = terminal_backend_options(
+        theme,
+        event_proxy,
+        shell_integration_enabled,
+        scrollback_size,
+        scroll_animations,
+    );
     create_terminal_backend_with_options(cols, rows, cell_size, options)
 }
 
@@ -106,6 +118,7 @@ fn terminal_backend_options(
     event_proxy: Option<&EventLoopProxy<AppEvent>>,
     shell_integration_enabled: bool,
     scrollback_size: usize,
+    scroll_animations: bool,
 ) -> TerminalBackendOptions {
     let wake_on_output = event_proxy.map(|proxy| {
         let proxy = proxy.clone();
@@ -165,6 +178,7 @@ fn terminal_backend_options(
         wake_on_output,
         shell_integration,
         scrollback_size,
+        scroll_animations,
     }
 }
 

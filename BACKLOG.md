@@ -289,33 +289,40 @@ Runtime validation shows terminal output is live and resize is stable again, but
   the app per-frame update path (`heca/src/main.rs` / `app/render.rs`).
   Ref: handoff Q7 (working note only — this backlog is authoritative).
 
-- [ ] **terminal-task-01e** — Scrollback GUI widgets (slice 6).
-  Two **generic** `heca-grid-ui` widgets that read the slice-4 store state
-  (`viewport_offset`/`at_bottom`/`scrollback_rows` via `host.terminal_viewport(pane)` /
-  `SharedChromeState`):
-  • **Scrollbar** — clickable/draggable thumb; thumb size from `scrollback_rows`, position from
-    `viewport_offset`; dragging jumps to an arbitrary viewport position. Reuse the existing
-    `ScrollRegion` thumb pattern/look where possible (don't reinvent a second thumb).
-  • **Scrolled-up indicator badge** — shows "N lines above" when `!at_bottom`; **click = snap to
-    bottom** (dispatch `ScrollbackToBottom`). Hidden when `at_bottom`.
-  Rules: **domain-neutral + theme-driven** (embed `Base`, read ALL styling from `Theme`, no
-  hardcoded sizes/colors/alphas); the app wires them to the terminal viewport — the widgets stay
-  generic (memory `heca-widgets-in-grid-ui`). Update the **showcase + `docs/widgets.md`** (grid-ui
-  rule). All interaction through `ActionRegistry`.
-  **New action likely needed:** jumping to an arbitrary position needs a parameterized
-  `WmAction::ScrollbackToOffset { rows }` (or `ToFraction`) — full 11-step treatment (the existing
-  actions only do page/line/top/bottom). Badge click reuses `ScrollbackToBottom`.
-  Gate: clippy 0 + widget tests + showcase/docs updated.
-  Files: `heca-grid-ui/src/widgets/` (new widgets) + `heca-renderer/examples/showcase.rs` +
-  `docs/widgets.md`; app wiring in `heca/src/chrome/` / `heca/src/app/render.rs`;
-  `heca/src/input.rs`+`handlers.rs`+`registry.rs`+`interaction.rs`+`rpc.rs`+`keybindings.default.toml`
-  for the new action. Ref: handoff Q7.
+- [x] **terminal-task-01e** — Scrollback GUI widgets (slice 6). ✅ DONE (2026-06-25)
+  Delivered two **generic** `heca-grid-ui` widgets wired to the slice-4 terminal viewport store:
+  - **`ScrollBar`** — standalone vertical scrollbar widget (click track = jump, drag thumb = jump);
+    app drives `content_extent` / `viewport_extent` / `offset` from
+    `host.terminal_viewport(pane)`.
+  - **`BadgeButton`** — clickable badge/chip used for the scrolled-up indicator (`N lines above`).
+  App wiring:
+  - retained per-pane viewport widgets synced each frame (`state.pane_viewport_widgets`), painted
+    in the terminal pane shell, pointer-dispatched from `events.rs`.
+  - badge sits flush-right **below** the pane info-bar header; scrollbar hugs the pane's right edge
+    while using the terminal content rect for its vertical span.
+  New config / actions:
+  - `[appearance.terminal] show_scrollbar = "always" | "when_needed" | "never"`
+  - `[appearance.terminal] show_scrolled_up_badge = true | false`
+  - `WmAction::ScrollToOffset { rows }` with full registration: action registry, interaction
+    policy, RPC (`direct-scroll-to-offset <rows>`), docs + commented keybinding example.
+  - `[settings] terminal_scroll_animations = true | false` — disables backend-side animated
+    viewport jumps by degrading animated APIs to immediate scroll.
+  Docs / catalog:
+  - updated `docs/widgets.md`, showcase, `config.default.toml`, `README.md`,
+    `keybindings.default.toml`.
+  Verification:
+  - `cargo clippy --workspace --all-targets --all-features` ✅
+  - `cargo test --workspace --all-targets --all-features` ✅
+  - targeted animation tests (`animated_scroll_settles_at_target`,
+    `animated_scroll_re_targets_on_new_jump_without_queueing`) ✅
+  Ref: handoff Q7.
 
 - [ ] **terminal-task-01f** — Docs + final review + commit (slice 7).
-  • Update user-facing docs: README scrollback section (the wheel/PageUp policy, `prefix+PageUp/Down`,
-    selection-mode `u`/`d`/`Ctrl+u`/`Ctrl+d`/`g`/`G`/`Esc`) + the config keys
-    (`terminal_scrollback_lines` / `terminal_mouse` / `terminal_wheel_scroll_lines`) in
-    `config.default.toml` and README.
+  • Final user-facing docs pass: README scrollback section (wheel/PageUp policy, `prefix+PageUp/Down`,
+    selection-mode `u`/`d`/`Ctrl+u`/`Ctrl+d`/`g`/`G`/`Esc`, direct `Shift+...` bindings, GUI
+    scrollbar/badge behavior) + config keys (`terminal_scrollback_lines` / `terminal_mouse` /
+    `terminal_wheel_scroll_lines` / `terminal_scroll_animations` and `[appearance.terminal]`
+    `show_scrollbar` / `show_scrolled_up_badge`) in `config.default.toml` and README.
   • Final review pass across all scrollback slices + **runtime validation by running the app**
     (mirror the `terminal-00b` runtime sign-off): scroll up/down, selection follows the text while
     scrolling (depends on `terminal-task-01g`), copy while scrolled, wheel in a mouse-grabbing TUI

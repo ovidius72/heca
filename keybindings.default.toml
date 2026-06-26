@@ -132,6 +132,17 @@ scroll_to_top      = "Shift+Home"
 scroll_to_bottom   = "Shift+End"
 scroll_line_up     = "Shift+Up"
 scroll_line_down   = "Shift+Down"
+# GUI/RPC-only by default (used by the terminal scrollbar): no flat keybinding
+# form supports args yet, but the action is still configurable in custom modes.
+# Example fixed jump in a user-defined mode:
+# [[keys.mode]]
+# name = "scroll-jump"
+# trigger = "prefix+Shift+j"
+# sticky = false
+# [[keys.mode.bindings]]
+# action = "scroll_to_offset"
+# keys = "1"
+# args = { rows = "200" }
 
 # Remove a default binding so its key is free (the action stays available to
 # rebind under [keys]). Example:

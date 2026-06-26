@@ -296,7 +296,7 @@ pub trait PaneBackend: Send {
     fn scroll_viewport(&mut self, _delta_rows: i32) {}
 
     /// Scroll the viewport with animation (for discrete keyboard jumps).
-    /// Default: delegrates to `scroll_viewport` (immediate fallback).
+    /// Default: delegates to `scroll_viewport` (immediate fallback).
     fn scroll_viewport_animated(&mut self, delta_rows: i32) {
         self.scroll_viewport(delta_rows);
     }
@@ -320,6 +320,10 @@ pub trait PaneBackend: Send {
     fn scroll_to_bottom_animated(&mut self) {
         self.scroll_to_bottom();
     }
+
+    /// Enable or disable backend-side terminal viewport animations.
+    /// When disabled, animated scroll APIs degrade to immediate jumps.
+    fn set_scroll_animations_enabled(&mut self, _enabled: bool) {}
 
     /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
     /// terminal lines, each capped to `cols` cells.

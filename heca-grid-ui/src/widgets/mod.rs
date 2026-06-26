@@ -7,6 +7,7 @@
 
 mod alert;
 mod badge;
+mod badge_button;
 mod button;
 mod card;
 mod checkbox;
@@ -32,6 +33,7 @@ mod rail_cell;
 mod row;
 mod select;
 mod separator;
+mod scroll_bar;
 mod scroll_region;
 mod spinner;
 mod status_dot;
@@ -46,6 +48,7 @@ mod visibility;
 
 pub use alert::{Alert, AlertVariant};
 pub use badge::{Badge, BadgeVariant};
+pub use badge_button::BadgeButton;
 pub use button::{Button, ButtonVariant};
 pub use card::Card;
 pub use checkbox::{Checkbox, LabelSide};
@@ -74,6 +77,7 @@ pub use separator::{Orientation, Separator};
 pub use spinner::Spinner;
 pub use status_dot::{DotStatus, StatusDot};
 pub use surface::Surface;
+pub use scroll_bar::ScrollBar;
 pub use scroll_region::ScrollRegion;
 pub use tabs::Tabs;
 pub use tag::Tag;
