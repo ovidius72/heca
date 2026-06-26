@@ -431,6 +431,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "scrollback-to-top" | "scroll-to-top" => Ok(WmAction::ScrollbackToTop),
         "scrollback-to-bottom" | "scroll-to-bottom" => Ok(WmAction::ScrollbackToBottom),
         "exit-scrollback" => Ok(WmAction::ExitScrollback),
+        // Direct scroll (non-prefix, no selection mode entry).
+        // These use distinct names from the scrollback variants above.
+        "direct-scroll-page-up" => Ok(WmAction::ScrollPageUp),
+        "direct-scroll-page-down" => Ok(WmAction::ScrollPageDown),
+        "direct-scroll-line-up" => Ok(WmAction::ScrollLineUp),
+        "direct-scroll-line-down" => Ok(WmAction::ScrollLineDown),
+        "direct-scroll-to-top" => Ok(WmAction::ScrollToTop),
+        "direct-scroll-to-bottom" => Ok(WmAction::ScrollToBottom),
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
 }
@@ -873,6 +881,31 @@ mod tests {
         assert_eq!(
             parse_rpc_command("exit-scrollback"),
             Ok(WmAction::ExitScrollback)
+        );
+        // Direct scroll (non-prefix, no selection mode entry).
+        assert_eq!(
+            parse_rpc_command("direct-scroll-page-up"),
+            Ok(WmAction::ScrollPageUp)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-page-down"),
+            Ok(WmAction::ScrollPageDown)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-line-up"),
+            Ok(WmAction::ScrollLineUp)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-line-down"),
+            Ok(WmAction::ScrollLineDown)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-to-top"),
+            Ok(WmAction::ScrollToTop)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-to-bottom"),
+            Ok(WmAction::ScrollToBottom)
         );
     }
 
