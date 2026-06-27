@@ -269,8 +269,10 @@ Inside Selection mode:
 - `terminal_mouse` — when `true`, wheel input controls host scrollback unless
   the terminal app has grabbed the mouse.
 - `terminal_wheel_scroll_lines` — rows moved per wheel notch.
-- `terminal_scroll_animations` — enable/disable backend-side easing for animated
-  terminal viewport jumps. `false` makes animated paths immediate.
+- `terminal_scroll_animations` — enable/disable backend-side easing for
+  discrete terminal viewport jumps in Normal mode (for example
+  `Shift+PageUp/PageDown`, `Shift+Home/End`, and the scrolled-up badge click).
+  `false` makes those jumps immediate.
 
 ### Direct (non-prefix) keybindings
 
@@ -288,8 +290,9 @@ terminal:
 | `Shift+End` | Jump to the live bottom (repeatable) |
 
 These are intercepted as global keybindings before reaching the terminal.
-They scroll the viewport immediately and stay in Normal mode, so holding
-the key repeats the scroll smoothly without entering Selection mode.
+They stay in Normal mode, so holding the key repeats the scroll without
+entering Selection mode. Page jumps and top/bottom jumps honor
+`terminal_scroll_animations`; line steps remain immediate.
 
 ### Scrollback GUI
 
@@ -305,7 +308,7 @@ configurable under `[appearance.terminal] show_scrollbar`):
   - `never` — never shown.
 - **Scrolled-up badge** — a clickable chip reading `N lines above` that appears
   at the top-right of the pane while the viewport is scrolled up. Clicking it
-  snaps back to the live bottom (`scroll_to_bottom`).
+  jumps back to the live bottom and honors `terminal_scroll_animations`.
 
 ### System
 
@@ -935,8 +938,8 @@ action = "focus_right"
 keys = "l"
 ```
 
-**Selection mode** is a built-in sticky mode entered automatically by
-`prefix+PageUp/Down` or by scrolling up with the wheel at a non-grabbed prompt.
+**Selection mode** is a built-in sticky mode entered with `prefix+s`, or
+automatically by scrolling up with the wheel at a non-grabbed prompt.
 It provides tmux copy-mode-like navigation keys: `h`/`j`/`k`/`l` for cursor
 movement, `y` to copy, `u`/`d` for half-page scroll, `Ctrl+u`/`Ctrl+d` for
 full-page scroll, `g`/`Shift+g` for top/bottom, and `Esc` to exit (snap to

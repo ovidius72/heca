@@ -301,37 +301,45 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
     }
 
     let lines = state.terminal_wheel_scroll_lines;
-    // Determine number of notches/steps from the scroll delta.
-    let notches = match delta {
-        MouseScrollDelta::LineDelta(_, y) => y as f64,
-        MouseScrollDelta::PixelDelta(p) => {
-            let cell_h = state
-                .backends
-                .get(target.pane_id)
-                .map(|b| b.cell_size().1 as f64)
-                .unwrap_or(DEFAULT_CELL_H);
-            if p.y.abs() > 0.0 && cell_h > 0.0 {
-                p.y / cell_h
-            } else {
-                0.0
-            }
-        }
-    };
-    let total = (notches.abs().ceil() as usize) * lines;
+    // Determine number of host-scroll notches from the dominant wheel axis.
+    // On many platforms Shift+wheel is remapped to horizontal scroll (`x`) with
+    // `y == 0`; the host scrollback policy still wants that gesture to behave as
+    // a vertical history scroll, so we fall back to `x` when there is no usable
+    // vertical component.
+    let signed_notches = host_scroll_notches(
+        delta,
+        state
+            .backends
+            .get(target.pane_id)
+            .map(|b| b.cell_size().1 as f64)
+            .unwrap_or(DEFAULT_CELL_H),
+    );
+    let total = (signed_notches.abs().ceil() as usize) * lines;
     if total == 0 {
         return;
     }
-    let delta_i32: i32 = if notches > 0.0 {
+    let delta_i32: i32 = if signed_notches > 0.0 {
         total as i32
     } else {
         -(total as i32)
     };
 
     if let Some(backend) = state.backends.get_mut(target.pane_id) {
-        let was_at_bottom = backend.at_bottom();
+        let before_offset = backend
+            .terminal_snapshot()
+            .map(|snapshot| snapshot.viewport_offset)
+            .unwrap_or(0);
+        let was_at_bottom = before_offset == 0;
         backend.scroll_viewport(delta_i32);
-        // Q3: scrolling up from the live bottom enters Selection mode.
-        if notches > 0.0 && was_at_bottom {
+        let after_offset = backend
+            .terminal_snapshot()
+            .map(|snapshot| snapshot.viewport_offset)
+            .unwrap_or(before_offset);
+        let moved = after_offset != before_offset;
+        // Q3: scrolling up from the live bottom enters Selection mode, but only
+        // if the host viewport actually moved. Alt-screen/no-history cases like
+        // `less` would otherwise spuriously enter Selection mode on a no-op wheel.
+        if signed_notches > 0.0 && was_at_bottom && moved {
             state.input_mode = InputMode::Selection;
         }
     }
@@ -716,6 +724,26 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
     match delta {
         MouseScrollDelta::LineDelta(x, y) => axis_wheel_buttons(x as f64, y as f64),
         MouseScrollDelta::PixelDelta(pos) => axis_wheel_buttons(pos.x, pos.y),
+    }
+}
+
+fn host_scroll_notches(delta: MouseScrollDelta, cell_h: f64) -> f64 {
+    match delta {
+        MouseScrollDelta::LineDelta(x, y) => {
+            if y.abs() > 0.0 {
+                y as f64
+            } else {
+                x as f64
+            }
+        }
+        MouseScrollDelta::PixelDelta(pos) => {
+            let primary = if pos.y.abs() > 0.0 { pos.y } else { pos.x };
+            if primary.abs() > 0.0 && cell_h > 0.0 {
+                primary / cell_h
+            } else {
+                0.0
+            }
+        }
     }
 }
 
