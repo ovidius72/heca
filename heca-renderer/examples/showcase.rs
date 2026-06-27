@@ -1006,6 +1006,26 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     list
                 }),
         )
+        // ScrollBar + BadgeButton: the standalone scrollback affordances used by
+        // terminal panes — a draggable vertical thumb plus a clickable
+        // "N lines above" chip. Generic widgets; the app wires them to terminal
+        // viewport state.
+        .child(
+            Flex::column()
+                .gap(8.0)
+                .child(Label::new("SCROLLBAR + BADGE BUTTON").color(theme.muted).font_scale(0.8))
+                .child({
+                    let bar = ScrollBar::new().height(Length::Px(180.0));
+                    bar.content_extent_signal().set(240.0);
+                    bar.viewport_extent_signal().set(48.0);
+                    bar.offset_signal().set(96.0);
+                    Flex::row()
+                        .align(Align::Center)
+                        .gap(14.0)
+                        .child(bar)
+                        .child(BadgeButton::accent("144 lines above"))
+                }),
+        )
         // Chrome vocabulary (G1 Grid · G3 ItemGroup · G4 DockFrame · G5
         // ChromeRegion): a sidebar region hosting two DockFrames of grouped rows,
         // beside a PANES dock of composed, state-colored cards. Headers and the

@@ -263,6 +263,15 @@ Inside Selection mode:
 - **Shift+wheel** → always scrolls host viewport, bypassing any mouse grab.
 - Scrolling up from the live bottom automatically enters Selection mode.
 
+**Relevant settings:**
+- `terminal_scrollback_lines` — total host-retained history capacity (rows above
+  the live viewport).
+- `terminal_mouse` — when `true`, wheel input controls host scrollback unless
+  the terminal app has grabbed the mouse.
+- `terminal_wheel_scroll_lines` — rows moved per wheel notch.
+- `terminal_scroll_animations` — enable/disable backend-side easing for animated
+  terminal viewport jumps. `false` makes animated paths immediate.
+
 ### Direct (non-prefix) keybindings
 
 For users who prefer not to use prefix mode, heca provides direct bindings
@@ -281,6 +290,22 @@ terminal:
 These are intercepted as global keybindings before reaching the terminal.
 They scroll the viewport immediately and stay in Normal mode, so holding
 the key repeats the scroll smoothly without entering Selection mode.
+
+### Scrollback GUI
+
+Terminal panes with scrollback history show two GUI affordances (theme-driven,
+configurable under `[appearance.terminal] show_scrollbar`):
+
+- **Scrollbar** — a draggable accent thumb on the right edge of the pane. Drag
+  it to jump to an arbitrary viewport position; clicking the track jumps there
+  immediately. The thumb size reflects how much history is visible. Visibility:
+  - `always` — always shown when there is scrollable history.
+  - `when_needed` (default) — shown only while scrolled away from the live
+    bottom.
+  - `never` — never shown.
+- **Scrolled-up badge** — a clickable chip reading `N lines above` that appears
+  at the top-right of the pane while the viewport is scrolled up. Clicking it
+  snaps back to the live bottom (`scroll_to_bottom`).
 
 ### System
 
@@ -568,6 +593,14 @@ transparency = 0             # 0..=100 — surface alpha over z=0
 # Floating panes: their own REAL blur of the tiled content behind them.
 floating_transparency = 0
 floating_blur         = 0    # 0..=100
+# Scrollback scrollbar visibility for terminal panes with history:
+#   always       — always show the scrollbar
+#   when_needed  — show only while scrolled away from the live bottom (default)
+#   never        — never show
+show_scrollbar = "when_needed"
+# Scrolled-up indicator badge ("N lines above", click snaps to bottom).
+# true | false (default true)
+show_scrolled_up_badge = true
 ```
 
 **How frost is produced:**
@@ -614,6 +647,7 @@ interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
+terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
 ```
 
 ### Fonts

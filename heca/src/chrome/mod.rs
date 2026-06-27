@@ -109,8 +109,9 @@ use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use heca_grid_ui::style::{Align, Justify, Length};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
-    ActiveMarker, Badge, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton, KeyHint, Label,
-    MarkerGroup, Pane, Row, StatusDot, Surface, Tag, Tooltip, TooltipSide, Visibility,
+    ActiveMarker, Badge, BadgeButton, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
+    KeyHint, Label, MarkerGroup, Pane, Row, ScrollBar, StatusDot, Surface, Tag, Tooltip,
+    TooltipSide, Visibility,
 };
 use heca_grid_ui::{Color, Component, Event, LayoutEngine, PaintCx, Scene};
 use std::rc::Rc;
@@ -372,6 +373,15 @@ pub(crate) struct RetainedPaneHeader {
     pub(crate) root: Flex,
     /// Content key (see [`pane_header_key`]) the tree was built from.
     pub(crate) key: String,
+}
+
+/// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge).
+/// Built once per pane, updated/repositioned every frame by
+/// [`sync_pane_viewport_widgets`], painted read-only in `terminal_render`, and
+/// dispatched pointer events in `events.rs`.
+pub(crate) struct RetainedPaneViewportWidgets {
+    pub(crate) scrollbar: ScrollBar,
+    pub(crate) badge: BadgeButton,
 }
 
 /// Tooltip keybind hints for the pane-action buttons, formatted from the user's
@@ -726,6 +736,158 @@ pub(crate) fn build_pane_header(
     Some(root)
 }
 
+const VIEWPORT_BADGE_MARGIN: f32 = 0.0;
+
+fn format_lines_above(lines: usize) -> String {
+    if lines == 1 {
+        "1 line above".to_string()
+    } else {
+        format!("{lines} lines above")
+    }
+}
+
+fn build_pane_viewport_widgets(
+    pane_id: PaneId,
+    event_proxy: &winit::event_loop::EventLoopProxy<crate::app::events::AppEvent>,
+) -> RetainedPaneViewportWidgets {
+    use crate::app::interaction::{InteractionIntent, InteractionSource};
+    let badge_proxy = event_proxy.clone();
+    let mut badge = BadgeButton::accent("0 lines above").on_click(move || {
+        let _ = badge_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: InteractionSource::MouseContent,
+            intent: InteractionIntent::FocusPane { pane_id },
+        });
+        let _ = badge_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+            source: InteractionSource::MouseContent,
+            intent: InteractionIntent::ActivateAction(crate::input::WmAction::ScrollToBottom),
+        });
+    });
+    badge.base_mut().visible.set(false);
+
+    let mut scrollbar = ScrollBar::new();
+    let content_signal = scrollbar.content_extent_signal();
+    let viewport_signal = scrollbar.viewport_extent_signal();
+    let bar_proxy = event_proxy.clone();
+    scrollbar = scrollbar.on_change(move |action| {
+        if let heca_grid_ui::SignalData::Float(offset_top) = action.data {
+            let max = (content_signal.get_untracked() - viewport_signal.get_untracked()).max(0.0);
+            let rows = ((max as f64) - offset_top)
+                .round()
+                .clamp(0.0, max as f64) as usize;
+            let _ = bar_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                source: InteractionSource::MouseContent,
+                intent: InteractionIntent::FocusPane { pane_id },
+            });
+            let _ = bar_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                source: InteractionSource::MouseContent,
+                intent: InteractionIntent::ActivateAction(crate::input::WmAction::ScrollToOffset {
+                    rows,
+                }),
+            });
+        }
+    });
+    scrollbar.base_mut().visible.set(false);
+
+    RetainedPaneViewportWidgets { scrollbar, badge }
+}
+
+/// Build/update/position the retained per-pane terminal viewport widgets for every
+/// visible terminal pane. Unlike pane headers, the tree shape is static, so the
+/// widgets are built once per pane and then driven by signals / relaid out.
+pub(crate) fn sync_pane_viewport_widgets(
+    state: &mut crate::app_state::AppState,
+    panes: &[&crate::app::terminal_render::PaneRenderState],
+) {
+    let font = chrome_gui_theme(state).font_size;
+    let show_mode = state.appearance.terminal.show_scrollbar;
+    let pane_info_bar_shown = state.appearance.pane_info_bar_visible();
+    let mut seen: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
+    for pane in panes {
+        seen.insert(pane.pane_id);
+        let Some(mount) = pane.mount.as_ref() else {
+            state.pane_viewport_widgets.remove(&pane.pane_id);
+            continue;
+        };
+        let widgets = state
+            .pane_viewport_widgets
+            .entry(pane.pane_id)
+            .or_insert_with(|| build_pane_viewport_widgets(pane.pane_id, &state.event_proxy));
+
+        let scrollable = mount.snapshot.scrollback_rows > mount.snapshot.rows;
+        let max_offset = mount
+            .snapshot
+            .scrollback_rows
+            .saturating_sub(mount.snapshot.rows) as f32;
+        widgets
+            .scrollbar
+            .content_extent_signal()
+            .set(mount.snapshot.scrollback_rows as f32);
+        widgets
+            .scrollbar
+            .viewport_extent_signal()
+            .set(mount.snapshot.rows as f32);
+        widgets
+            .scrollbar
+            .offset_signal()
+            .set((max_offset - mount.snapshot.viewport_offset as f32).max(0.0));
+        let scrollbar_visible = match show_mode {
+            heca_config::appearance::ScrollbarVisibility::Always => scrollable,
+            heca_config::appearance::ScrollbarVisibility::WhenNeeded => {
+                scrollable && !mount.snapshot.at_bottom
+            }
+            heca_config::appearance::ScrollbarVisibility::Never => false,
+        };
+        widgets.scrollbar.base_mut().visible.set(scrollbar_visible);
+
+        let badge_visible = state.appearance.terminal.show_scrolled_up_badge
+            && !mount.snapshot.at_bottom
+            && mount.snapshot.viewport_offset > 0;
+        widgets.badge.base_mut().visible.set(badge_visible);
+        widgets
+            .badge
+            .label_signal()
+            .set(format_lines_above(mount.snapshot.viewport_offset));
+
+        let Some(content_rect) = pane.content_rect else {
+            continue;
+        };
+        if scrollbar_visible {
+            widgets.scrollbar.base_mut().style.width =
+                heca_grid_ui::style::Length::Px(8.0);
+            widgets.scrollbar.base_mut().style.height =
+                heca_grid_ui::style::Length::Px(content_rect.size.h as f32);
+            LayoutEngine::new().base_font(font).compute(
+                &mut widgets.scrollbar,
+                Size::new(8.0, content_rect.size.h),
+            );
+            let bar_bounds = widgets.scrollbar.base().bounds;
+            // X hugs the pane's outer right edge; Y/H follow the terminal content
+            // rect so the thumb stays below the header and above the bottom inset.
+            let bar_x = pane.x + pane.w - bar_bounds.size.w as f32;
+            translate_tree(&mut widgets.scrollbar, bar_x as f64, content_rect.loc.y);
+        }
+        if badge_visible {
+            LayoutEngine::new().base_font(font).compute(
+                &mut widgets.badge,
+                Size::new(pane.w as f64, pane.h as f64),
+            );
+            let badge_bounds = widgets.badge.base().bounds;
+            // Align to the pane's outer right edge (flush, like the scrollbar).
+            let badge_x = pane.x + pane.w - badge_bounds.size.w as f32;
+            // Sit *below* the pane info-bar header so it doesn't cover the action
+            // buttons. When the info bar is hidden there is no header to avoid.
+            let header_h = if pane_info_bar_shown {
+                crate::app::terminal_render::title_bar_reserve(font)
+            } else {
+                0.0
+            };
+            let badge_y = pane.y + header_h + VIEWPORT_BADGE_MARGIN;
+            translate_tree(&mut widgets.badge, badge_x as f64, badge_y as f64);
+        }
+    }
+    state.pane_viewport_widgets.retain(|id, _| seen.contains(id));
+}
+
 /// Build/position the retained per-pane info-bar headers for every visible pane.
 /// Runs at the **top** of `render_frame` (before the `scene_view` borrow of
 /// `state.compositor`) so it can mutate `state.pane_headers`; render then paints
@@ -914,6 +1076,68 @@ pub(crate) fn dispatch_pane_header_move(
         }
     }
     over
+}
+
+/// Feed a pointer press into the retained terminal viewport widgets. Returns
+/// `true` when any widget consumed the press (badge click or scrollbar drag).
+pub(crate) fn dispatch_pane_viewport_press(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> bool {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    for widgets in state.pane_viewport_widgets.values_mut() {
+        if widgets.badge.event(&Event::PointerPressed { pos: point }) == heca_grid_ui::Handled::Yes
+            || widgets.scrollbar.event(&Event::PointerPressed { pos: point })
+                == heca_grid_ui::Handled::Yes
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Feed pointer motion into the retained terminal viewport widgets so hover and
+/// scrollbar drags update. Returns `true` if the pointer is over any widget.
+pub(crate) fn dispatch_pane_viewport_move(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> bool {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    let mut over = false;
+    for widgets in state.pane_viewport_widgets.values_mut() {
+        let badge_handled = widgets.badge.event(&Event::PointerMoved { pos: point })
+            == heca_grid_ui::Handled::Yes;
+        let scrollbar_handled = widgets.scrollbar.event(&Event::PointerMoved { pos: point })
+            == heca_grid_ui::Handled::Yes;
+        if badge_handled || scrollbar_handled {
+            over = true;
+        }
+        if (widgets.badge.base().visible.get_untracked()
+            && rect_contains(widgets.badge.base().bounds, point))
+            || (widgets.scrollbar.base().visible.get_untracked()
+                && rect_contains(widgets.scrollbar.base().bounds, point))
+        {
+            over = true;
+        }
+    }
+    over
+}
+
+/// Feed a pointer release into the retained terminal viewport widgets so a
+/// scrollbar drag can end even when released outside its bounds.
+pub(crate) fn dispatch_pane_viewport_release(
+    state: &mut crate::app_state::AppState,
+    pos: (f32, f32),
+) -> bool {
+    let point = Point::new(pos.0 as f64, pos.1 as f64);
+    let mut handled = false;
+    for widgets in state.pane_viewport_widgets.values_mut() {
+        handled |= widgets.badge.event(&Event::PointerReleased { pos: point })
+            == heca_grid_ui::Handled::Yes;
+        handled |= widgets.scrollbar.event(&Event::PointerReleased { pos: point })
+            == heca_grid_ui::Handled::Yes;
+    }
+    handled
 }
 
 fn rect_contains(r: Rectangle, p: Point) -> bool {

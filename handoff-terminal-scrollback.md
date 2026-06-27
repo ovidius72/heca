@@ -35,7 +35,7 @@ Design locked via `/grill-me` on 2026-06-24. Split into 7 implementation slices.
 | **4 — AppState chrome mirror** | ✅ DONE | `state.rs`, `events.rs`, `host.rs`, `render.rs` | `heca` 265/265, `heca-core` 73/73, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0 |
 | **5 — Animated viewport offset** | ✅ DONE | `engine.rs`, `terminal.rs`, `backend/mod.rs`, `handlers.rs`, `lifecycle.rs` | `heca` 265/265, `heca-core` 76/76, clippy 0 |
 | **5b — 01g fix + direct bindings + copy UX** | ✅ DONE (2026-06-25) | `engine.rs`, `handlers.rs`, `input.rs`, `interaction.rs`, `registry.rs`, `input.rs`, `terminal_host.rs`, `terminal_render.rs`, `rpc.rs`, `README.md`, `keybindings.default.toml` | `heca` 265/265, `heca-core` 73/73, clippy 0 — PR #189 |
-| **6 — GUI widgets** | ⬜ | — | — |
+| **6 — GUI widgets** | ✅ DONE (2026-06-25) | `badge_button.rs`, `scroll_bar.rs`, `chrome/mod.rs`, `render.rs`, `events.rs`, `terminal_render.rs`, `appearance.rs`, `settings.rs`, `README.md`, `config.default.toml`, `docs/widgets.md`, `showcase.rs` | workspace tests green, clippy 0 |
 | **7 — Docs + review + commit** | ⬜ | — | — |
 
 ---
@@ -124,6 +124,7 @@ New `SettingsConfig` fields:
 | `terminal_scrollback_lines` | `usize` | 3500 | `terminal-scrollback-lines` |
 | `terminal_mouse` | `bool` | `true` | `terminal-mouse` (slice 3) |
 | `terminal_wheel_scroll_lines` | `usize` | 3 | `terminal-wheel-scroll-lines` (slice 3) |
+| `terminal_scroll_animations` | `bool` | `true` | `terminal-scroll-animations` (slice 6 follow-up) |
 
 `terminal_mouse` is terminal-ONLY (NOT `settings.mouse` which chrome depends on).
 
@@ -286,16 +287,34 @@ Discrete scroll jumps now glide via easing instead of snapping.
 - 3 tests: re-target, settles at target, wheel clears
 - Gates: `heca` 265/265, `heca-core` 76/76, clippy 0
 
-## 6d. Slice 6 — What to do next
+## 6d. Slice 6 — GUI widgets ✅ DONE (2026-06-25)
 
-### Scrollback GUI widgets
+Delivered:
+- `heca-grid-ui::widgets::ScrollBar` — generic vertical scrollbar widget (click track = jump,
+  drag thumb = jump).
+- `heca-grid-ui::widgets::BadgeButton` — clickable chip used for the terminal
+  `N lines above` indicator.
+- retained per-pane viewport widgets wired through the app (`pane_viewport_widgets`), painted in
+  terminal pane chrome and pointer-dispatched from `events.rs`.
+- new config:
+  - `[appearance.terminal] show_scrollbar = "always" | "when_needed" | "never"`
+  - `[appearance.terminal] show_scrolled_up_badge = true | false`
+  - `[settings] terminal_scroll_animations = true | false`
+- new parameterized action + RPC path:
+  - `WmAction::ScrollToOffset { rows }`
+  - `direct-scroll-to-offset <rows>`
+- showcase + `docs/widgets.md` + README/config docs updated.
 
-Two generic `heca-grid-ui` widgets reading the slice-4 store state:
-1. **Scrollbar** (clickable/draggable) — jump to any viewport position
-2. **Scrolled-up indicator badge** — "N lines above"; click = snap to bottom
+## 6e. Slice 7 — What to do next
 
-Domain-neutral, theme-driven; update showcase + `docs/widgets.md` (grid-ui rule).
-Ref: backlog `terminal-task-01e`, handoff Q7
+### Final docs / review / merge
+
+Remaining work:
+1. final runtime validation by actually running the app through the scrollback scenarios
+2. final docs/review sweep for the now-landed config + GUI behavior
+3. merge / close `terminal-01a`, then delete this working note
+
+Ref: backlog `terminal-task-01f`.
 
 ---
 

@@ -118,6 +118,9 @@ pub(super) struct TerminalEngine {
     /// instant completion, or a long duration to exercise the ongoing path) without
     /// any real-time `sleep`.
     viewport_anim_config: AnimationConfig,
+    /// Global on/off switch for backend-side viewport easing. When false, the
+    /// animated APIs degrade to the immediate paths.
+    viewport_anim_enabled: bool,
 }
 
 impl TerminalEngine {
@@ -149,6 +152,7 @@ impl TerminalEngine {
             viewport_changed: false,
             viewport_anim: None,
             viewport_anim_config: AnimationConfig::default(),
+            viewport_anim_enabled: true,
         })
     }
 
@@ -209,6 +213,14 @@ impl TerminalEngine {
     #[cfg(test)]
     pub(super) fn set_viewport_offset_for_test(&mut self, offset: usize) {
         self.viewport_offset = offset;
+    }
+
+    /// Enable or disable backend-side viewport animations.
+    pub(super) fn set_scroll_animations_enabled(&mut self, enabled: bool) {
+        self.viewport_anim_enabled = enabled;
+        if !enabled {
+            self.viewport_anim = None;
+        }
     }
 
     /// Test-only override of the viewport-animation config. Lets animation tests
@@ -300,6 +312,10 @@ impl TerminalEngine {
     /// to the newly computed clamped target. Never queues — a new jump
     /// interrupts the previous animation.
     pub(super) fn scroll_viewport_animated(&mut self, delta_rows: i32) {
+        if !self.viewport_anim_enabled {
+            self.scroll_viewport(delta_rows);
+            return;
+        }
         // Re-target: base the delta on where we're heading (the animation's target),
         // not where we currently are. A new jump re-creates the Animation from the
         // current animated value toward the new target (never queues).
@@ -328,6 +344,10 @@ impl TerminalEngine {
 
     /// Animate to the top of scrollback.
     pub(super) fn scroll_to_top_animated(&mut self) {
+        if !self.viewport_anim_enabled {
+            self.scroll_to_top();
+            return;
+        }
         let current = self
             .viewport_anim
             .as_ref()
@@ -344,6 +364,10 @@ impl TerminalEngine {
 
     /// Animate to the live bottom (`viewport_offset = 0`).
     pub(super) fn scroll_to_bottom_animated(&mut self) {
+        if !self.viewport_anim_enabled {
+            self.scroll_to_bottom();
+            return;
+        }
         let current = self
             .viewport_anim
             .as_ref()
@@ -1063,6 +1087,20 @@ mod tests {
         engine.scroll_viewport_animated(5);
         assert!(!engine.advance_animation(), "0ms animation completes on first advance");
         assert_eq!(engine.viewport_offset(), expected, "re-targeted jump lands at 10, not 5");
+    }
+
+    #[test]
+    fn disabled_animation_degrades_to_immediate_scroll() {
+        let mut engine = viewport_engine(20, 4, 3500);
+        fill_scrollback(&mut engine, 20, 20);
+        let max = max_offset(&engine);
+        let target = 5.min(max);
+        assert!(target > 0, "fixture must have enough scrollback");
+        engine.set_scroll_animations_enabled(false);
+
+        engine.scroll_viewport_animated(target as i32);
+        assert_eq!(engine.viewport_offset(), target, "disabled animation jumps immediately");
+        assert!(!engine.advance_animation(), "no animation left when disabled");
     }
 
     #[test]

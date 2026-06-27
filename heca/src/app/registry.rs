@@ -551,6 +551,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ScrollPageDown, handle_scroll_page_down);
     registry.register(&WmAction::ScrollToTop, handle_scroll_to_top);
     registry.register(&WmAction::ScrollToBottom, handle_scroll_to_bottom);
+    registry.register(
+        &WmAction::ScrollToOffset { rows: 0 },
+        handle_scroll_to_offset,
+    );
 
     // ── Selection (host capability) ──
     registry.register(&WmAction::EnterSelectionMode, handle_enter_selection_mode);

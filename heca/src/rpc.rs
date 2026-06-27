@@ -439,6 +439,14 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "direct-scroll-line-down" => Ok(WmAction::ScrollLineDown),
         "direct-scroll-to-top" => Ok(WmAction::ScrollToTop),
         "direct-scroll-to-bottom" => Ok(WmAction::ScrollToBottom),
+        "direct-scroll-to-offset" => {
+            let rows_str = expect_arg!("rows");
+            let rows = rows_str.parse::<usize>().map_err(|_| RpcError::ParseInt {
+                cmd: cmd.clone(),
+                value: rows_str.to_string(),
+            })?;
+            Ok(WmAction::ScrollToOffset { rows })
+        }
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
 }
@@ -906,6 +914,10 @@ mod tests {
         assert_eq!(
             parse_rpc_command("direct-scroll-to-bottom"),
             Ok(WmAction::ScrollToBottom)
+        );
+        assert_eq!(
+            parse_rpc_command("direct-scroll-to-offset 42"),
+            Ok(WmAction::ScrollToOffset { rows: 42 })
         );
     }
 

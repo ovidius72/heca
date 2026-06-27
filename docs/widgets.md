@@ -19,9 +19,9 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
 - [Getting started](#getting-started) — depend, build a tree, lay out, paint, render, wire events
 - [Foundations](#foundations) — `Base`, `Component`, builder traits, `Style`, [Font sizing](#font-sizing), `Theme`/`GlowLevel`/`Intensity`, `Color`, signals, events, `Action`, `Scene`/`PaintCx`, `Flash`, `Attention`
 - [Widgets](#widgets)
-  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion)
+  - Layout: [`Flex`/`Container`](#flex--container), [`Surface`](#surface), [`Card`](#card), [`Pane`](#pane), [`Grid`](#grid), [`ScrollRegion`](#scrollregion), [`ScrollBar`](#scrollbar)
   - Text: [`Label`](#label)
-  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row)
+  - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
   - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
@@ -790,6 +790,31 @@ let row = Row::new().background(color.with_alpha(22)).radius(theme.control_radiu
     .on_activate(move || select(i));
 ```
 
+### ScrollBar
+
+Standalone **vertical scrollbar** widget. The host supplies a **total content
+extent**, **visible viewport extent**, and current **offset from the top**; the
+widget renders a thumb and reports new offsets as the user clicks or drags.
+Unlike [`ScrollRegion`](#scrollregion), it does **not** own children or clip
+content — it is just the control.
+
+- **Construct**: `ScrollBar::new()`.
+- **Builders**: `.on_change(|Action| ...)` — emits
+  `Action::value("scrollbar-change", SignalData::Float(offset_from_top))`.
+- **Signals**: `.content_extent_signal()`, `.viewport_extent_signal()`,
+  `.offset_signal()`.
+- **Look**: same accent thumb language as `ScrollRegion` (thin glowing grip,
+  brighter on hover/drag).
+- **Use when**: the app already owns scrolling state and only needs a generic
+  drag/click thumb to control it.
+
+```rust
+let mut bar = ScrollBar::new().height(Length::Px(180.0));
+bar.content_extent_signal().set(240.0);   // total rows / px / items
+bar.viewport_extent_signal().set(48.0);  // visible rows / px / items
+bar.offset_signal().set(96.0);           // offset from TOP
+```
+
 ### Badge
 
 Self-sizing neon pill for status/metadata (display-only).
@@ -799,6 +824,22 @@ Self-sizing neon pill for status/metadata (display-only).
 
 ```rust
 Badge::success("ONLINE");  Badge::outline("BETA");
+```
+
+### BadgeButton
+
+Clickable badge/chip — the visual language of [`Badge`](#badge), but interactive
+like a button (hover tint, press flash, focus ring, `Enter`/`Space` activation).
+Useful for compact in-pane controls such as “N lines above”, filters, or small
+mode toggles.
+
+- **Construct**: `BadgeButton::new(label)` (= accent) or
+  `BadgeButton::{accent,neutral,success,warning,danger,outline}(label)`.
+- **Builders**: `.variant(BadgeVariant)`, `.on_click(f)`.
+- **Signals**: `.label_signal()` (live text), `.hovered()`.
+
+```rust
+BadgeButton::accent("144 lines above").on_click(|| jump_to_live_bottom());
 ```
 
 ### StatusDot

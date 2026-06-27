@@ -79,6 +79,10 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     for header in state.pane_headers.values_mut() {
         chrome_animating |= header.root.tick(dt);
     }
+    for widgets in state.pane_viewport_widgets.values_mut() {
+        chrome_animating |= widgets.badge.tick(dt);
+        chrome_animating |= widgets.scrollbar.tick(dt);
+    }
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);

@@ -69,6 +69,9 @@ fn default_terminal_mouse() -> bool {
 fn default_terminal_wheel_scroll_lines() -> usize {
     3
 }
+fn default_terminal_scroll_animations() -> bool {
+    true
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
@@ -151,6 +154,11 @@ pub struct SettingsConfig {
     /// is active (i.e. the wheel scrolls the host viewport, not the terminal).
     #[serde(default = "default_terminal_wheel_scroll_lines", alias = "terminal-wheel-scroll-lines")]
     pub terminal_wheel_scroll_lines: usize,
+
+    /// Enable smooth animation for backend-side discrete terminal viewport jumps.
+    /// When false, animated scroll APIs degrade to immediate scroll.
+    #[serde(default = "default_terminal_scroll_animations", alias = "terminal-scroll-animations")]
+    pub terminal_scroll_animations: bool,
 }
 
 impl Default for SettingsConfig {
@@ -176,6 +184,7 @@ impl Default for SettingsConfig {
             terminal_scrollback_lines: default_terminal_scrollback_lines(),
             terminal_mouse: default_terminal_mouse(),
             terminal_wheel_scroll_lines: default_terminal_wheel_scroll_lines(),
+            terminal_scroll_animations: default_terminal_scroll_animations(),
         }
     }
 }
@@ -207,6 +216,7 @@ mod tests {
         assert_eq!(s.terminal_scrollback_lines, 3500);
         assert!(s.terminal_mouse);
         assert_eq!(s.terminal_wheel_scroll_lines, 3);
+        assert!(s.terminal_scroll_animations);
     }
 
     #[test]

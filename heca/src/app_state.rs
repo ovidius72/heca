@@ -585,6 +585,10 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
+    /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
+    /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
+    /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
+    pub pane_viewport_widgets: HashMap<PaneId, crate::chrome::RetainedPaneViewportWidgets>,
     /// Tooltip keybind hints for the pane-action buttons, resolved from config at
     /// load/reload (so the tooltips show the user's real, rebindable keys).
     pub pane_action_hints: crate::chrome::PaneActionHints,
@@ -618,6 +622,8 @@ pub struct AppState {
     pub terminal_mouse_enabled: bool,
     /// Number of scrollback rows per wheel notch.
     pub terminal_wheel_scroll_lines: usize,
+    /// Whether backend-side discrete terminal viewport animations are enabled.
+    pub terminal_scroll_animations_enabled: bool,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

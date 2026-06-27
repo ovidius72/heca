@@ -286,6 +286,11 @@ pub enum WmAction {
     ScrollToTop,
     /// Scroll to the live bottom (immediate).
     ScrollToBottom,
+    /// Jump the host viewport to an explicit offset in rows above the live bottom.
+    /// Used by the GUI scrollbar / RPC; no default keybinding.
+    ScrollToOffset {
+        rows: usize,
+    },
 
     // ── Selection (host capability, reusable across pane types) ──
     EnterSelectionMode,
@@ -512,6 +517,7 @@ fn get_enum<T: std::str::FromStr>(
 ///   "float_at"            → pane_id: PaneId, x: f64, y: f64, width: f64, height: f64
 ///   "close_pane_by_id"    → pane_id: PaneId
 ///   "rename_target"       → pane_id: PaneId, name: String
+///   "scroll_to_offset"    → rows: usize
 ///   "spawn_command"       → command: String
 pub fn build_action(
     name: &str,
@@ -605,6 +611,9 @@ pub fn build_action(
         }),
         "scrollback_line_down" => Some(WmAction::ScrollbackLineDown {
             amount: get_usize(args, "amount").unwrap_or(1),
+        }),
+        "scroll_to_offset" => Some(WmAction::ScrollToOffset {
+            rows: get_usize(args, "rows")?,
         }),
 
         "spawn_command" => Some(WmAction::SpawnCommand {
@@ -734,7 +743,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ScrollPageUp
         | WmAction::ScrollPageDown
         | WmAction::ScrollToTop
-        | WmAction::ScrollToBottom => 1,
+        | WmAction::ScrollToBottom
+        | WmAction::ScrollToOffset { .. } => 1,
         // Parameterized variants are not resolved from keybindings,
         // but we still match them explicitly to avoid catch-all.
         WmAction::FocusPane { .. }
@@ -1279,6 +1289,18 @@ mod tests {
                     keep_on_success: false,
                 },
             })
+        );
+    }
+
+    #[test]
+    fn test_build_scroll_to_offset() {
+        let args = std::collections::HashMap::from([(
+            "rows".to_string(),
+            "42".to_string(),
+        )]);
+        assert_eq!(
+            build_action("scroll_to_offset", &args),
+            Some(WmAction::ScrollToOffset { rows: 42 })
         );
     }
 }
