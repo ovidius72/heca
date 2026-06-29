@@ -692,6 +692,14 @@ impl PaneBackend for TerminalBackend {
         self.engine.set_link_detection(enabled);
     }
 
+    fn reload_terminal_config(
+        &mut self,
+        palette_defaults: Option<TerminalPaletteDefaults>,
+        scrollback_size: usize,
+    ) {
+        self.engine.reload_config(palette_defaults, scrollback_size);
+        self.force_full_damage = true;
+    }
     fn lines_in_stable_range(
         &self,
         start: isize,

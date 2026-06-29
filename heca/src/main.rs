@@ -24,6 +24,7 @@ use app::registry::{build_keymap, build_modes, build_registry};
 pub(crate) use app::render::update_session_viewport;
 pub(crate) use app::selection::{collect_all_pane_candidates, find_pane_location};
 use app::startup::init_state as build_initial_state;
+use app::backend_factory::terminal_palette_defaults;
 use app::terminal_metrics::refresh_terminal_cell_size;
 use app_state::AppState;
 use heca_config::theme::AppConfig;
@@ -146,9 +147,14 @@ impl HecaApp {
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
+            let palette_defaults = terminal_palette_defaults(&state.theme);
             for backend in state.backends.values_mut() {
                 backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
                 backend.set_link_detection(link_detection);
+                backend.reload_terminal_config(
+                    palette_defaults,
+                    state.terminal_scrollback_lines,
+                );
             }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;

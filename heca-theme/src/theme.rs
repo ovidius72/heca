@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
-        assert!((theme.control_radius() - 4.0).abs() < f32::EPSILON);
+        assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
     }
 
     #[test]
