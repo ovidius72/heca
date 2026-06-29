@@ -517,8 +517,23 @@ Source: `terminal-implementation.md` Phase 11
 - [ ] **terminal-task-17** — Bell handling: capture backend alert, window attention signal, audible/visual bell policy via config.
   Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`, `heca-config`
 
-- [ ] **terminal-task-18** — `OSC 8` hyperlink open-link action: capture links in snapshot, add `WmAction::OpenLink { url }` + handler.
-  Files: `heca-core/src/backend/terminal/snapshot.rs`, `heca/src/input.rs`, `heca/src/handlers.rs`
+- [ ] **terminal-task-18** — `OSC 8` hyperlink **open** (capture already shipped in `terminal-03`).
+  Design LOCKED with user 2026-06-29 — one `WmAction::OpenLink { url }` behind **five surfaces**:
+  - **`WmAction::OpenLink { url }`** + handler → OS opener (`open` macOS / `xdg-open` Linux /
+    `start` Windows). Full "Adding New Actions" checklist + RPC.
+  - **Keyboard / HintKey**: bind **`prefix+Shift+o`** → a vimium-style "follow link" overlay. Needs
+    a **generic rect-targeted hint overlay** (the current `KeyHint` wraps a *widget*; terminal links
+    are content-grid spans). New `InputMode::FollowLink` modeled on `PaneSelect` (a–z labels over
+    the visible `snapshot.hyperlinks` rects); label press → `OpenLink`.
+  - **Mouse**: `Cmd`/`Ctrl`+click on a link span → hit-test → `OpenLink` (plain click still goes to
+    the TUI).
+  - **Selection mode**: **`O`** opens the link under the caret (`o` stays flip-endpoint).
+    Mnemonic: "O opens links" everywhere (prefix+O global, O in selection).
+  - **Context menu**: "Open link" entry when right-clicking a link (the `ContextMenu` widget already
+    exists in heca-grid-ui — see `app-task-33`).
+  - No hardcoded colors/keys; everything via the registry so all surfaces share one path.
+  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca/src/mouse/`,
+  `heca/src/rpc.rs`, `keybindings.default.toml`, `heca-grid-ui/src/widgets/` (hint overlay).
 
 - [ ] **terminal-task-19** — Scrollback search: entry-point action, search overlay (grid-ui `Input` widget), results highlighting.
   Files: `heca/src/input.rs`, `heca-core/src/backend/terminal/engine.rs`, overlay UI via `heca-grid-ui`
