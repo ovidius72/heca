@@ -683,8 +683,10 @@ pub fn handle_float(state: &mut AppState, _action: &WmAction) {
 ///
 /// If the workspace becomes empty after closing and there are multiple
 /// workspaces, the empty one is destroyed and focus switches. If it's
-/// the only workspace, it's left empty — the user can create a new pane
-/// with `prefix+Enter` or `prefix+v`.
+/// the only workspace, it's left empty — the user can repopulate it via
+/// the normal split bindings: `prefix+Enter` (new pane in a new column)
+/// or `prefix+v` (new pane in the current column). In an empty workspace,
+/// either binding effectively creates the first pane again.
 pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = focused_pane_id(state) else {
         return;
@@ -750,8 +752,10 @@ fn close_tiled_pane(state: &mut AppState) {
 }
 
 /// Destroy the active workspace if it's empty and other workspaces exist.
-/// If it's the only workspace, leave it empty — the user can create a new
-/// pane with `prefix+Enter` or `prefix+v`.
+/// If it's the only workspace, leave it empty — the user can repopulate it
+/// via the normal split bindings: `prefix+Enter` (new pane in a new column)
+/// or `prefix+v` (new pane in the current column). In an empty workspace,
+/// either binding effectively creates the first pane again.
 fn close_workspace_if_empty(state: &mut AppState) {
     let current_ws = state.session.active_workspace_idx;
     let ws_is_empty = state
@@ -935,8 +939,10 @@ pub fn handle_float_at(state: &mut AppState, action: &WmAction) {
 ///
 /// Handles both tiled and floating panes. After removal, destroys the
 /// workspace if it's empty and other workspaces remain. If it's the only
-/// workspace, leaves it empty — the user can create a new pane with
-/// `prefix+Enter` or `prefix+v`.
+/// workspace, it stays empty — the user can repopulate it via the normal
+/// split bindings: `prefix+Enter` (new pane in a new column) or `prefix+v`
+/// (new pane in the current column). In an empty workspace, either binding
+/// effectively creates the first pane again.
 pub fn handle_close_pane_by_id(state: &mut AppState, action: &WmAction) {
     let WmAction::ClosePaneById { pane_id } = action else {
         return;
@@ -2035,7 +2041,11 @@ pub fn handle_scroll_page_up(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
-        backend.scroll_viewport(page_rows);
+        // Direct page jumps are the primary user-visible discrete scrollback
+        // jump path in Normal mode, so they should honor
+        // `terminal_scroll_animations`. Caret-follow / selection-mode paths stay
+        // immediate elsewhere to avoid lagging the caret behind the content.
+        backend.scroll_viewport_animated(page_rows);
     }
     state.needs_redraw = true;
 }
@@ -2045,7 +2055,7 @@ pub fn handle_scroll_page_down(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
-        backend.scroll_viewport(page_rows);
+        backend.scroll_viewport_animated(page_rows);
     }
     state.needs_redraw = true;
 }
@@ -2054,7 +2064,7 @@ pub fn handle_scroll_to_top(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
-        backend.scroll_to_top();
+        backend.scroll_to_top_animated();
     }
     state.needs_redraw = true;
 }
@@ -2063,7 +2073,7 @@ pub fn handle_scroll_to_bottom(state: &mut AppState, _action: &WmAction) {
     if let Some(pane_id) = state.focused_pane
         && let Some(backend) = state.backends.get_mut(pane_id)
     {
-        backend.scroll_to_bottom();
+        backend.scroll_to_bottom_animated();
     }
     state.needs_redraw = true;
 }

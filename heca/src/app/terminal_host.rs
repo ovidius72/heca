@@ -287,51 +287,75 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
 
     if !do_host_scroll {
         // Forward wheel to the terminal backend.
-        for button in wheel_buttons(delta) {
-            let Some(event) =
-                build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
-            else {
-                continue;
-            };
-            if let Some(backend) = state.backends.get_mut(target.pane_id) {
-                let _ = backend.process_mouse_event(&event);
-            }
+        forward_wheel_to_terminal(state, target, pos, delta);
+        return;
+    }
+
+    // Host scrollback fallback (`terminal-task-01h`): if the host viewport has
+    // no room to move (the backend is in an alternate screen with no retained
+    // history, e.g. `nvim`/`less`, or the pane simply has no scrollback yet), the
+    // wheel is otherwise wasted. For plain wheel we gracefully forward it to the
+    // terminal so non-grabbed TUIs can still react. For `Shift+wheel` this is a
+    // documented no-op: Shift's contract is "bypass the TUI, host-only", so we
+    // never silently scroll the TUI. wezterm does not expose the main screen's
+    // preserved history while the alt screen is active, so host scrollback in
+    // alt-screen TUIs is an inherent limitation (see README).
+    let host_can_scroll = state
+        .backends
+        .get(target.pane_id)
+        .and_then(|b| b.terminal_snapshot())
+        .is_some_and(|s| s.scrollback_rows > s.rows);
+    if !host_can_scroll {
+        if shift_held {
+            // Documented limitation: Shift+wheel host scrollback is a no-op
+            // while the backend is in an alternate screen (no exposed host
+            // history).
+            return;
         }
+        forward_wheel_to_terminal(state, target, pos, delta);
         return;
     }
 
     let lines = state.terminal_wheel_scroll_lines;
-    // Determine number of notches/steps from the scroll delta.
-    let notches = match delta {
-        MouseScrollDelta::LineDelta(_, y) => y as f64,
-        MouseScrollDelta::PixelDelta(p) => {
-            let cell_h = state
-                .backends
-                .get(target.pane_id)
-                .map(|b| b.cell_size().1 as f64)
-                .unwrap_or(DEFAULT_CELL_H);
-            if p.y.abs() > 0.0 && cell_h > 0.0 {
-                p.y / cell_h
-            } else {
-                0.0
-            }
-        }
-    };
-    let total = (notches.abs().ceil() as usize) * lines;
+    // Determine number of host-scroll notches from the dominant wheel axis.
+    // On many platforms Shift+wheel is remapped to horizontal scroll (`x`) with
+    // `y == 0`; the host scrollback policy still wants that gesture to behave as
+    // a vertical history scroll, so we fall back to `x` when there is no usable
+    // vertical component.
+    let signed_notches = host_scroll_notches(
+        delta,
+        state
+            .backends
+            .get(target.pane_id)
+            .map(|b| b.cell_size().1 as f64)
+            .unwrap_or(DEFAULT_CELL_H),
+    );
+    let total = (signed_notches.abs().ceil() as usize) * lines;
     if total == 0 {
         return;
     }
-    let delta_i32: i32 = if notches > 0.0 {
+    let delta_i32: i32 = if signed_notches > 0.0 {
         total as i32
     } else {
         -(total as i32)
     };
 
     if let Some(backend) = state.backends.get_mut(target.pane_id) {
-        let was_at_bottom = backend.at_bottom();
+        let before_offset = backend
+            .terminal_snapshot()
+            .map(|snapshot| snapshot.viewport_offset)
+            .unwrap_or(0);
+        let was_at_bottom = before_offset == 0;
         backend.scroll_viewport(delta_i32);
-        // Q3: scrolling up from the live bottom enters Selection mode.
-        if notches > 0.0 && was_at_bottom {
+        let after_offset = backend
+            .terminal_snapshot()
+            .map(|snapshot| snapshot.viewport_offset)
+            .unwrap_or(before_offset);
+        let moved = after_offset != before_offset;
+        // Q3: scrolling up from the live bottom enters Selection mode, but only
+        // if the host viewport actually moved. Alt-screen/no-history cases like
+        // `less` would otherwise spuriously enter Selection mode on a no-op wheel.
+        if signed_notches > 0.0 && was_at_bottom && moved {
             state.input_mode = InputMode::Selection;
         }
     }
@@ -716,6 +740,50 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
     match delta {
         MouseScrollDelta::LineDelta(x, y) => axis_wheel_buttons(x as f64, y as f64),
         MouseScrollDelta::PixelDelta(pos) => axis_wheel_buttons(pos.x, pos.y),
+    }
+}
+
+/// Forward a wheel scroll to the terminal backend as press events.
+///
+/// Used by [`forward_mouse_wheel`] both when the policy routes the wheel away
+/// from host scrollback (grabbed TUI / `terminal_mouse = false`) and as a
+/// graceful fallback when the host viewport has no scrollback room (see
+/// `terminal-task-01h`).
+fn forward_wheel_to_terminal(
+    state: &mut AppState,
+    target: TerminalInputTarget,
+    pos: (f32, f32),
+    delta: MouseScrollDelta,
+) {
+    for button in wheel_buttons(delta) {
+        let Some(event) =
+            build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
+        else {
+            continue;
+        };
+        if let Some(backend) = state.backends.get_mut(target.pane_id) {
+            let _ = backend.process_mouse_event(&event);
+        }
+    }
+}
+
+fn host_scroll_notches(delta: MouseScrollDelta, cell_h: f64) -> f64 {
+    match delta {
+        MouseScrollDelta::LineDelta(x, y) => {
+            if y.abs() > 0.0 {
+                y as f64
+            } else {
+                x as f64
+            }
+        }
+        MouseScrollDelta::PixelDelta(pos) => {
+            let primary = if pos.y.abs() > 0.0 { pos.y } else { pos.x };
+            if primary.abs() > 0.0 && cell_h > 0.0 {
+                primary / cell_h
+            } else {
+                0.0
+            }
+        }
     }
 }
 

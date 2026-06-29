@@ -100,10 +100,14 @@ Render only changed terminal rows instead of the full pane every frame. This pha
   Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/snapshot.rs`
   Related: compositor damage-region optimization (`app-task-22`)
 
-### [ ] Phase: Host terminal scrollback viewport · `terminal-01a`
-Runtime validation shows terminal output is live and resize is stable again, but the host still has no scrollback viewport model. Wheel input is only forwarded as terminal mouse events, PageUp/PageDown are only forwarded as terminal key input, and selection-mode movement clamps to the currently visible snapshot rows. At a normal shell prompt that means scrollback appears dead.
+### [x] Phase: Host terminal scrollback viewport · `terminal-01a`
+Host-managed terminal scrollback viewport is now shipped: backend viewport state,
+stable-row selection model, scrollback actions/keybindings/RPC, chrome mirror,
+animated viewport jumps, and GUI widgets all landed. Final runtime review found
+one residual alt-screen wheel-routing issue, tracked separately in
+`terminal-task-01h`.
 
-- [~] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection.
+- [x] **terminal-task-01a** — Add host-managed terminal viewport state and snapshot projection. ✅ DONE (2026-06-27)
   Introduce terminal viewport/scrollback state so the host can render historical
   rows instead of always projecting the live bottom viewport. Damage semantics:
   viewport motion produces `TerminalDamage::Full` for now (incremental viewport
@@ -168,7 +172,7 @@ Runtime validation shows terminal output is live and resize is stable again, but
   - Q3: wheel-up at live bottom enters `InputMode::Selection`.
   - Q5 snap-to-bottom on key input (always) + new output (only if already at bottom).
   - RPC: 13 new scrollback commands with tests.
-  - Default bindings: prefix+PageUp/Down, prefix+Shift+Up/Down, prefix+Shift+g/End; selection-mode u/d/g/G/Esc.
+  - Default bindings: `prefix+s` enters Selection mode; direct scroll bindings use `prefix+Shift+Up/Down`, `prefix+Shift+g/End`; selection-mode keys include `u`/`d`/`g`/`G`/`Esc`.
   - Interaction policy: all scrollback actions → `FocusedPaneLocal`.
   - Review fixes: `is_mouse_grabbed()` API (🔴), RPC (🟠), amount=notches consistency, dedup, flaky toast test.
   - Gates: `heca` 262/262, `heca-core` 70/70, `heca-config` 73/73, `heca-grid-ui` 125/125, clippy 0.
@@ -198,7 +202,7 @@ Runtime validation shows terminal output is live and resize is stable again, but
   Status: design LOCKED via `/grill-me` on 2026-06-24. Policy:
   • Wheel → host scrollback unless `is_mouse_grabbed()`; Shift+wheel → always scrollback; default 3 rows/notch (`terminal_wheel_scroll_lines`).
   • Plain PageUp/PageDown → forward to PTY (tmux pass-through; do NOT intercept).
-  • `prefix+PageUp`/`prefix+PageDown` → enter `InputMode::Selection` + scroll one page (tmux copy-mode model).
+  • `prefix+s` → enter `InputMode::Selection` (caret-only). Wheel-up at a non-grabbed prompt also auto-enters Selection mode.
   • Wheel-up at a non-grabbed prompt also enters `InputMode::Selection` + scrolls (tmux `mouse on`).
   • New terminal-only `terminal_mouse` setting (default true) gates the wheel-enters-scrollback behavior (NOT the global `mouse`, which chrome depends on).
   • Selection-mode edge movement auto-scrolls the viewport (stable-row coords).
@@ -317,19 +321,21 @@ Runtime validation shows terminal output is live and resize is stable again, but
     `animated_scroll_re_targets_on_new_jump_without_queueing`) ✅
   Ref: handoff Q7.
 
-- [ ] **terminal-task-01f** — Docs + final review + commit (slice 7).
-  • Final user-facing docs pass: README scrollback section (wheel/PageUp policy, `prefix+PageUp/Down`,
-    selection-mode `u`/`d`/`Ctrl+u`/`Ctrl+d`/`g`/`G`/`Esc`, direct `Shift+...` bindings, GUI
-    scrollbar/badge behavior) + config keys (`terminal_scrollback_lines` / `terminal_mouse` /
-    `terminal_wheel_scroll_lines` / `terminal_scroll_animations` and `[appearance.terminal]`
-    `show_scrollbar` / `show_scrolled_up_badge`) in `config.default.toml` and README.
-  • Final review pass across all scrollback slices + **runtime validation by running the app**
-    (mirror the `terminal-00b` runtime sign-off): scroll up/down, selection follows the text while
-    scrolling (depends on `terminal-task-01g`), copy while scrolled, wheel in a mouse-grabbing TUI
-    still forwards, snap-to-bottom on key input.
-  • Land/merge; then mark the `terminal-01a` phase DONE in this backlog and **delete** the
-    `handoff-terminal-scrollback.md` working note (its durable content already lives here).
-  Gate: `cargo clippy --workspace --all-targets --all-features` 0 + full test suite green.
+- [x] **terminal-task-01f** — Docs + final review + commit (slice 7). ✅ DONE (2026-06-27)
+  Completed:
+  • final user-facing docs pass across README/config for scrollback settings,
+    `prefix+s` Selection-mode entry, direct `Shift+...` bindings, and GUI scrollbar/badge behavior
+  • final runtime review of the merged feature: selection/caret-follow ✅, copy UX ✅,
+    GUI widgets ✅, snap-to-bottom on key input ✅, `terminal_scroll_animations` restored to a
+    visible effect via local fixes ✅
+  • review leftovers split out instead of blocking closure of the main feature:
+    alt-screen wheel-routing / `Shift+wheel` behavior in `nvim`/`less` is now tracked as
+    follow-up `terminal-task-01h`
+  • working-note cleanup: `terminal-01a` marked done and
+    `handoff-terminal-scrollback.md` removed
+  Validation during review:
+  • `cargo clippy --workspace --all-targets --all-features` ✅
+  • `cargo test --workspace --all-targets --all-features` ✅
 
 - [x] **terminal-task-01g** — BUG: selection highlight does not follow the text while scrolling. ✅ DONE (2026-06-25)
   Found in review 2026-06-25 (latent slice-1 bug, exposed once slice-3 scrolling worked).
@@ -357,6 +363,30 @@ Runtime validation shows terminal output is live and resize is stable again, but
   `heca/src/handlers.rs`, `heca/src/app/input.rs`, `heca/src/app/interaction.rs`,
   `heca/src/input.rs`, `heca/src/app/registry.rs`, `heca/src/app/terminal_host.rs`,
   `heca/src/rpc.rs`, `keybindings.default.toml`, `README.md`.
+
+- [x] **terminal-task-01h** — BUG: wheel routing is ineffective in alt-screen TUIs (`nvim`, `less`). ✅ DONE (2026-06-27)
+  Found in final runtime validation after the scrollback merge. Product decision locked via
+  `/grill-me`:
+  - Plain wheel + host has no scrollback room (`max_offset == 0`, e.g. alt-screen with no
+    retained history) → gracefully forward the wheel to the terminal backend so non-grabbed
+    TUIs (`less`) can still react.
+  - `Shift+wheel` + host cannot scroll → documented no-op. Shift's contract is "bypass the
+    TUI, host-only", so we never silently scroll the TUI.
+  - Alt-screen with pre-existing main-screen history: documented as inherent limitation —
+    wezterm preserves the pre-alt history but does not expose it while the alt screen is
+    active (fields are private on `TerminalState`). Exposing it would require forking
+    wezterm or a heca-level frozen snapshot, both fragile for a marginal win.
+  Earlier review-local fixes (already on main via PR #191):
+  - `Shift+wheel` on the host path uses the dominant wheel axis (`y`, fallback `x`) because
+    many platforms remap `Shift+wheel` into horizontal delta.
+  - Selection mode only auto-enters on wheel-up if the host viewport actually moved.
+  Implementation: `forward_mouse_wheel` peeks `scrollback_rows > rows` to decide
+  host-can-scroll; a new `forward_wheel_to_terminal` helper dedups the terminal-forward path.
+  README documents the alt-screen wheel limitation.
+  Runtime-validated 2026-06-27: `less` plain wheel now scrolls `less`; `nvim` plain wheel
+  scrolls nvim; `Shift+wheel` in alt-screen is a no-op as documented.
+  Files: `heca/src/app/terminal_host.rs`, `README.md`.
+  Gate: clippy 0; `cargo test -p heca` 266/266; `heca-core` flaky PTY tests pass in isolation.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.
