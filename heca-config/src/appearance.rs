@@ -117,6 +117,12 @@ fn default_terminal_show_scrolled_up_badge() -> bool {
     true
 }
 
+/// Default terminal ligatures: `true` (coding-font ligatures like `->`/`=>`/`!=`
+/// render). Set `false` to disable `calt`/`liga`/`clig` for the terminal font.
+fn default_terminal_ligatures() -> bool {
+    true
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -199,6 +205,12 @@ pub struct TerminalAppearance {
     /// Default `true`.
     #[serde(default = "default_terminal_show_scrolled_up_badge")]
     pub show_scrolled_up_badge: bool,
+    /// Coding-font ligatures (`->`, `=>`, `!=`, …) in terminal panes. When
+    /// `false`, `calt`/`liga`/`clig` are disabled in the terminal shaping path so
+    /// each character renders standalone. Default `true`. Terminal font only —
+    /// UI/chrome text is unaffected.
+    #[serde(default = "default_terminal_ligatures")]
+    pub ligatures: bool,
 }
 
 impl Default for TerminalAppearance {
@@ -209,6 +221,7 @@ impl Default for TerminalAppearance {
             floating_blur: default_terminal_floating_blur(),
             show_scrollbar: default_terminal_show_scrollbar(),
             show_scrolled_up_badge: default_terminal_show_scrolled_up_badge(),
+            ligatures: default_terminal_ligatures(),
         }
     }
 }

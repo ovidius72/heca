@@ -713,7 +713,15 @@ the terminal family at any installed font:
 normal = "JetBrainsMono Nerd Font Mono"   # any installed system font is found
 ```
 
-Reload at runtime with `prefix+Shift+r`.
+To turn ligatures off entirely (each character renders standalone), set
+`ligatures = false` under `[appearance.terminal]`:
+
+```toml
+[appearance.terminal]
+ligatures = false   # default true; disables calt/liga/clig for the terminal font
+```
+
+Reload at runtime with `prefix+Shift+r` — the toggle and font both apply live.
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 

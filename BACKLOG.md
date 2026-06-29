@@ -388,7 +388,7 @@ one residual alt-screen wheel-routing issue, tracked separately in
   Files: `heca/src/app/terminal_host.rs`, `README.md`.
   Gate: clippy 0; `cargo test -p heca` 266/266; `heca-core` flaky PTY tests pass in isolation.
 
-### [ ] Phase: Terminal ligature policy · `terminal-02`
+### [x] Phase: Terminal ligature policy · `terminal-02`
 Ligatures in coding fonts (Fira Code `->` `!=` `>=`, Maple Mono, …) are **multi-character** and span multiple terminal cells. heca's terminal renderer currently shapes text **one cell at a time** (`terminal.rs` calls `queue_text_in_line_box_with_style(&cell.text, …)` per cell, and the shaper only ever sees a single cell's text). Because the shaper never sees `->` as one run, **multi-cell ligatures cannot form today** regardless of the `calt`/`liga` OpenType features. So a `terminal_ligatures` setting would be a no-op until the renderer shapes whole row runs together. This phase is re-scoped into two steps: first enable run-level shaping (so ligatures can form), then add the on/off setting.
 
 - [x] **terminal-task-02a** — Enable row-level (run) text shaping in the terminal renderer. **DONE.**
@@ -418,17 +418,18 @@ Ligatures in coding fonts (Fira Code `->` `!=` `>=`, Maple Mono, …) are **mult
   Gate: clippy 0 ✅ + 22 renderer tests ✅ + 74 heca-core ✅ (incl. byte→column mapping, wide
   cells, color-across-boundary). Visual: full arrow ligatures render in a terminal pane.
 
-- [ ] **terminal-task-02** — Add `terminal_ligatures: bool` and wire it to the cosmic-text shaping path.
-  **Gated by `terminal-task-02a`** (without run-level shaping this setting is a no-op, since
-  per-cell shaping already prevents multi-cell ligatures from forming). When `ligatures = false`
-  (default), disable `calt`/`liga` (and `clig`) OpenType features in the terminal shaping attrs
-  via `Attrs::font_features(FontFeatures::disable(...))`. When `true`, leave the font's default
-  features active so run-level ligatures render. Scope: terminal font path only, not UI/chrome.
-  Live reload (`prefix+Shift+r`) must invalidate the terminal shaping cache so the toggle applies
-  without restart.
-  Files: `heca-config/src/appearance.rs` (or `font.rs`), `heca-renderer/src/terminal.rs`,
-  `heca-renderer/src/text.rs`, `config.default.toml`, `README.md`.
-  Update: `theming-documentation.md`, `theming-plan.md`.
+- [x] **terminal-task-02** — Add `terminal_ligatures: bool` and wire it to the shaping path. **DONE.**
+  `[appearance.terminal] ligatures` (default **`true`** — decided with user; ligatures stay on out
+  of the box). `TerminalAppearance.ligatures` → `TerminalStyle.ligatures` (render.rs, all 4 sites)
+  → `queue_terminal_run` → `TerminalRun.ligatures`. When `false`, `build_run_emission` shapes with
+  `Attrs::font_features` disabling `CONTEXTUAL_ALTERNATES`/`STANDARD_LIGATURES`/`CONTEXTUAL_LIGATURES`
+  so each char stands alone. `ligatures` is part of `LabelKey` + `EmitKey` (so toggling re-shapes)
+  and of `terminal_layer_render_key` (so the retained layer re-renders); `reload_config` already
+  clears `terminal_layers`, so `prefix+Shift+r` applies it live. Scope: terminal font path only.
+  Files: `heca-config/src/appearance.rs`, `heca-renderer/src/{terminal,text}.rs`,
+  `heca/src/app/{render,terminal_render}.rs`, `config.default.toml`, `README.md`.
+  Gate: clippy 0 ✅ + tests ✅ (`terminal_ligatures` shaping test: disabling features changes
+  glyphs to standalone; `terminal_layer_render_key_changes_with_ligatures`).
 
 ### [ ] Phase: Richer terminal protocol hooks · `terminal-03`
 Extension points for hyperlinks and inline graphics without redesigning the core render contract.

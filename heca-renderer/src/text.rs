@@ -1,4 +1,7 @@
-use cosmic_text::{Attrs, Buffer, Family, FontSystem, Metrics, Shaping, Style, SwashCache, Weight};
+use cosmic_text::{
+    Attrs, Buffer, Family, FeatureTag, FontFeatures, FontSystem, Metrics, Shaping, Style,
+    SwashCache, Weight,
+};
 use heca_grid_ui::scene::TextAlign;
 use wgpu::util::DeviceExt;
 
@@ -83,6 +86,9 @@ struct TerminalRun {
     /// that column. Lets a ligature span a color boundary while each glyph keeps
     /// its own cell's color.
     col_colors: Vec<[f32; 4]>,
+    /// Whether `calt`/`liga`/`clig` are applied. `false` disables them so the run
+    /// shapes character-by-character (no ligatures).
+    ligatures: bool,
 }
 
 /// One label's draw range: its glyph quads occupy `[first_index, first_index +
@@ -121,6 +127,9 @@ struct LabelKey {
     icon: bool,
     italic: bool,
     font_family: Option<String>,
+    /// Whether `calt`/`liga`/`clig` are applied (terminal runs can disable them).
+    /// Always `true` for the generic UI/chrome path (default features on).
+    ligatures: bool,
 }
 
 /// One placed glyph within a label: its quad (relative to the label's ink-box
@@ -218,6 +227,9 @@ struct EmitKey {
     /// baked into the vertices, so a recolor (e.g. syntax highlighting changing)
     /// must miss the retained-geometry cache and rebuild.
     run_colors_hash: u64,
+    /// Whether ligatures are applied (terminal runs only; `true` otherwise).
+    /// Toggling it changes the shaped glyphs, so it must be part of the identity.
+    ligatures: bool,
 }
 
 /// A label's fully-placed glyph quads in screen space, cached across frames. The
@@ -795,7 +807,7 @@ impl TextRenderer {
     /// used for vertical centering. Used only by the terminal text path.
     #[expect(
         clippy::too_many_arguments,
-        reason = "Terminal run path threads grid metadata (cell width, per-byte columns, per-column colors) explicitly."
+        reason = "Terminal run path threads grid metadata (cell width, per-byte columns, per-column colors, ligature flag) explicitly."
     )]
     pub fn queue_terminal_run(
         &mut self,
@@ -806,6 +818,7 @@ impl TextRenderer {
         cell_w: f32,
         byte_cols: &[u16],
         col_colors: &[[f32; 4]],
+        ligatures: bool,
     ) {
         self.commands.push(TextCommand {
             text: text.to_string(),
@@ -828,6 +841,7 @@ impl TextRenderer {
                 cell_w,
                 byte_cols: byte_cols.to_vec(),
                 col_colors: col_colors.to_vec(),
+                ligatures,
             }),
         });
     }
@@ -868,6 +882,7 @@ impl TextRenderer {
                 run: cmd.run.is_some(),
                 cell_w_bits: cmd.run.as_ref().map_or(0, |r| r.cell_w.to_bits()),
                 run_colors_hash: cmd.run.as_ref().map_or(0, |r| hash_colors(&r.col_colors)),
+                ligatures: cmd.run.as_ref().is_none_or(|r| r.ligatures),
             };
 
             // Retained-geometry miss → place every glyph (shaping itself is cached in
@@ -947,6 +962,7 @@ impl TextRenderer {
             icon: cmd.icon,
             italic: cmd.italic,
             font_family: cmd.font_family.clone(),
+            ligatures: true,
         };
 
         // Shape on a `label_cache` miss; rasterize each glyph into the atlas on its
@@ -1135,6 +1151,7 @@ impl TextRenderer {
             icon: false,
             italic: cmd.italic,
             font_family: cmd.font_family.clone(),
+            ligatures: run.ligatures,
         };
 
         if !self.run_layout_cache.contains_key(&key) {
@@ -1147,7 +1164,7 @@ impl TextRenderer {
                 Weight::NORMAL
             };
             let family = cmd.font_family.as_deref().unwrap_or(&self.font_family);
-            let attrs = Attrs::new()
+            let mut attrs = Attrs::new()
                 .family(Family::Name(family))
                 .weight(weight)
                 .style(if cmd.italic {
@@ -1157,7 +1174,16 @@ impl TextRenderer {
                 });
             // `Shaping::Advanced` runs the full HarfBuzz-style shaper; with the run's
             // whole text visible, `calt`/`liga`/`clig` (on by default in coding fonts)
-            // collapse e.g. `->` into a single ligature glyph.
+            // collapse e.g. `->` into a ligature. When the user disables ligatures,
+            // turn those features off so each character shapes standalone.
+            if !run.ligatures {
+                let mut features = FontFeatures::new();
+                features
+                    .disable(FeatureTag::CONTEXTUAL_ALTERNATES)
+                    .disable(FeatureTag::STANDARD_LIGATURES)
+                    .disable(FeatureTag::CONTEXTUAL_LIGATURES);
+                attrs = attrs.font_features(features);
+            }
             buffer.set_text(&cmd.text, &attrs, Shaping::Advanced, None);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
@@ -1420,6 +1446,7 @@ mod tests {
             run: false,
             cell_w_bits: 0,
             run_colors_hash: 0,
+            ligatures: true,
         };
         assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");
 
