@@ -387,6 +387,13 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "q",
         },
+        ActionDescriptor {
+            name: "follow_link",
+            label: "Follow Link",
+            description: "Press a letter to open the link.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+o",
+        },
         // Pick-mode prompts (`description`) double as the in-progress pick text shown
         // in `InputMode::pending_pick()` — single source of truth, not duplicated. The
         // "+ focus" variants make the focus-follow difference explicit.

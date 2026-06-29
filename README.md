@@ -737,8 +737,16 @@ hyperlink_style = "underline"   # none | color | underline | undercurl (default 
 `none` leaves links looking like normal text; `color` recolors only; `underline`
 and `undercurl` add a straight or wavy line in the link color. Plain-text URLs
 (`echo "https://…"`, log output) are auto-detected as links too; set
-`link_detection = false` to mark only explicit OSC 8 links. (Opening links on
-click is a separate, upcoming feature.)
+`link_detection = false` to mark only explicit OSC 8 links.
+
+**Opening links.** Detected and OSC 8 links open the same way through the OS
+handler (`open` / `xdg-open` / `start`):
+
+- **Mouse** — hold the interactive-move modifier (Cmd by default) and click a
+  link; the cursor turns into a pointer while it is held over one. A plain click
+  still goes to the terminal program.
+- **Keyboard** — `prefix+Shift+o` (`follow_link`) labels every visible link in the
+  focused terminal with a letter; press the letter to open it, or `Esc` to cancel.
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 

@@ -1899,6 +1899,44 @@ pub(crate) fn paint_drag_overlay(
     }
 }
 
+/// Keycap glyph size (logical px) for follow-link hints — compact so a label sits
+/// legibly over a single terminal cell.
+const LINK_HINT_FONT: f32 = 13.0;
+
+/// Paint follow-link keycaps over the focused terminal's hyperlinks while
+/// [`InputMode::FollowLink`](crate::app_state::InputMode::FollowLink) is active.
+/// Drawn into the chrome scene (painted last, on top of pane content) so the
+/// letters sit above the terminal text, reusing the shared
+/// [`paint_keycap`](heca_grid_ui::paint_keycap) visual. terminal-task-18.
+pub(crate) fn paint_link_hints(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let crate::app_state::InputMode::FollowLink {
+        pane_id,
+        candidates,
+    } = &state.input_mode
+    else {
+        return;
+    };
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+    for hint in candidates {
+        let Some((x, y)) =
+            crate::app::terminal_host::cell_screen_pos(state, *pane_id, hint.row, hint.start_col)
+        else {
+            continue;
+        };
+        let label = hint.label.to_string();
+        let size = heca_grid_ui::keycap_size(LINK_HINT_FONT, &label);
+        // Anchor the keycap's top-left at the link's first cell.
+        let cap = Rectangle::new(Point::new(x as f64, y as f64), size);
+        heca_grid_ui::paint_keycap(&mut cx, cap, &label, LINK_HINT_FONT, None);
+    }
+}
+
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
 /// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
 #[cfg(test)]

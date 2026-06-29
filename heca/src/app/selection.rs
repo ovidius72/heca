@@ -13,6 +13,13 @@ const CANDIDATE_ALPHABET: &[char] = &[
     'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
 ];
 
+/// The candidate label for the `idx`-th item in a letter pick (a–z, A–Z), or
+/// `None` past the 52-label cap. Shared so every pick (panes, columns, follow-link)
+/// draws from one alphabet.
+pub(crate) fn candidate_letter(idx: usize) -> Option<char> {
+    CANDIDATE_ALPHABET.get(idx).copied()
+}
+
 pub(crate) fn has_pane_candidate_overflow(session: &Session) -> bool {
     let mut count = 0usize;
     for ws in &session.workspaces {
@@ -111,7 +118,10 @@ pub(crate) fn find_pane_location(
 
 #[cfg(test)]
 mod tests {
-    use super::{PANE_CANDIDATE_LIMIT, collect_all_pane_candidates, has_pane_candidate_overflow};
+    use super::{
+        PANE_CANDIDATE_LIMIT, candidate_letter, collect_all_pane_candidates,
+        has_pane_candidate_overflow,
+    };
     use heca_core::layout::{
         Pane as LayoutPane, PaneId, Session,
         types::{LayoutOptions, SessionId, Size},
@@ -133,5 +143,15 @@ mod tests {
         let candidates = collect_all_pane_candidates(&session);
         assert_eq!(candidates.len(), PANE_CANDIDATE_LIMIT);
         assert!(has_pane_candidate_overflow(&session));
+    }
+
+    #[test]
+    fn candidate_letter_spans_az_then_caps() {
+        assert_eq!(candidate_letter(0), Some('a'));
+        assert_eq!(candidate_letter(25), Some('z'));
+        assert_eq!(candidate_letter(26), Some('A'));
+        assert_eq!(candidate_letter(PANE_CANDIDATE_LIMIT - 1), Some('Z'));
+        // Past the 52-label cap there is no letter.
+        assert_eq!(candidate_letter(PANE_CANDIDATE_LIMIT), None);
     }
 }

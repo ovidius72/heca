@@ -60,6 +60,53 @@ const KEYCAP_ALPHA: u8 = 200;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
 const KEYCAP_GLOW: f32 = 0.45;
 
+/// Size of the keycap chip for `text` at `font` (logical px) — the exact sizing
+/// [`KeyHint`] uses. Exposed so hosts can stamp a standalone keycap over targets
+/// that are not part of a component tree (e.g. terminal hyperlink spans) without
+/// duplicating the formula.
+pub fn keycap_size(font: f32, text: &str) -> Size {
+    let font64 = font as f64;
+    let pad_x = (font * PAD_X_FRAC) as f64;
+    let pad_y = (font * PAD_Y_FRAC) as f64;
+    let glyphs = text.chars().count().max(1) as f64;
+    let w =
+        (glyphs * (font * GLYPH_ADVANCE_FRAC) as f64 + 2.0 * pad_x).max(font64 + 2.0 * pad_y);
+    let h = font64 + 2.0 * pad_y;
+    Size::new(w, h)
+}
+
+/// Paint a standalone keycap — translucent glowing chip with a centered dark
+/// glyph — at `cap` with `text`. The shared hint visual, factored out of
+/// [`KeyHint`] so it can be stamped directly into a scene over targets that are
+/// not widgets (e.g. terminal hyperlink spans, via the host's overlay pass).
+/// `color` overrides the default theme `accent` for both fill and glow.
+pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, color: Option<Color>) {
+    if text.is_empty() {
+        return;
+    }
+    let (accent, glow_c, background, ctrl_radius) = {
+        let t = cx.theme();
+        (t.accent, t.glow, t.background, t.control_radius())
+    };
+    let keycap_c = color.unwrap_or(accent);
+    let keycap_glow = color.unwrap_or(glow_c);
+    let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
+    // Softly-glowing, slightly translucent keycap; dark bold glyph on top for
+    // contrast on dark.
+    cx.rect(
+        cap,
+        keycap_c.with_alpha(KEYCAP_ALPHA),
+        None,
+        radius,
+        Some(Glow {
+            color: keycap_glow,
+            radius: 6.0,
+            intensity: KEYCAP_GLOW,
+        }),
+    );
+    cx.text(cap, text, background, font, TextAlign::Center, true);
+}
+
 /// A transparent wrapper that overlays a glowing key letter on its child while a
 /// host-driven pick/jump hint is active.
 pub struct KeyHint {
@@ -146,13 +193,7 @@ impl KeyHint {
 
     /// The keycap rect for `text` within the target `b`, per placement.
     fn keycap_rect(&self, b: Rectangle, text: &str) -> Rectangle {
-        let font = self.hint_font() as f64;
-        let pad_x = (self.hint_font() * PAD_X_FRAC) as f64;
-        let pad_y = (self.hint_font() * PAD_Y_FRAC) as f64;
-        let glyphs = text.chars().count().max(1) as f64;
-        let w = (glyphs * (self.hint_font() * GLYPH_ADVANCE_FRAC) as f64 + 2.0 * pad_x)
-            .max(font + 2.0 * pad_y);
-        let h = font + 2.0 * pad_y;
+        let Size { w, h } = keycap_size(self.hint_font(), text);
         let (x, y) = match self.placement {
             HintPlacement::TopCenter => (b.loc.x + (b.size.w - w) / 2.0, b.loc.y + TOP_INSET),
             HintPlacement::Center => (
@@ -193,40 +234,36 @@ impl Component for KeyHint {
         if text.is_empty() {
             return;
         }
-        let (accent, glow_c, background, ctrl_radius) = {
-            let t = cx.theme();
-            (t.accent, t.glow, t.background, t.control_radius())
-        };
-        // Default to the theme accent; an explicit `.color()` overrides both fill and
-        // glow so a host can tint a different kind of target distinctly.
-        let keycap_c = self.color.unwrap_or(accent);
-        let keycap_glow = self.color.unwrap_or(glow_c);
+        // An explicit `.color()` overrides the default theme accent (fill + glow)
+        // so a host can tint a different kind of target distinctly.
         let cap = self.keycap_rect(self.base.bounds, &text);
-        let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
-        // Softly-glowing, slightly translucent keycap; dark bold glyph on top for
-        // contrast on dark.
-        cx.rect(
-            cap,
-            keycap_c.with_alpha(KEYCAP_ALPHA),
-            None,
-            radius,
-            Some(Glow {
-                color: keycap_glow,
-                radius: 6.0,
-                intensity: KEYCAP_GLOW,
-            }),
-        );
-        cx.text(
-            cap,
-            &text,
-            background,
-            self.hint_font(),
-            TextAlign::Center,
-            true,
-        );
+        paint_keycap(cx, cap, &text, self.hint_font(), self.color);
     }
 }
 
 impl LayoutExt for KeyHint {}
 impl StyleExt for KeyHint {}
 impl Parent for KeyHint {}
+
+#[cfg(test)]
+mod tests {
+    use super::keycap_size;
+
+    #[test]
+    fn keycap_size_is_positive_and_grows_with_text() {
+        let one = keycap_size(13.0, "a");
+        assert!(one.w > 0.0 && one.h > 0.0);
+        // A wider label needs a wider chip; height is text-length independent.
+        let many = keycap_size(13.0, "abc");
+        assert!(many.w > one.w);
+        assert_eq!(many.h, one.h);
+    }
+
+    #[test]
+    fn keycap_size_scales_with_font() {
+        let small = keycap_size(10.0, "a");
+        let large = keycap_size(20.0, "a");
+        assert!(large.w > small.w);
+        assert!(large.h > small.h);
+    }
+}

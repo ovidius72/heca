@@ -63,7 +63,7 @@ pub use widgets::{
     ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
     LabelSide, MarkerGroup, Modal, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
-    StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,
+    StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, keycap_size, paint_keycap,
 };
 
 /// Common imports for building UIs.

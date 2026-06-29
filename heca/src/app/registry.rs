@@ -384,6 +384,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::Float, handle_float);
     registry.register(&WmAction::ClosePane, handle_close_pane);
     registry.register(&WmAction::PaneSelect, handle_pane_select);
+    registry.register(&WmAction::FollowLink, handle_follow_link);
     registry.register(&WmAction::SwapPane, handle_swap_pane);
     registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
     registry.register(

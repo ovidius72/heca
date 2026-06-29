@@ -784,6 +784,20 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
     }
 }
 
+pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
+    let Some(pane_id) = state.focused_pane else {
+        return;
+    };
+    let candidates = crate::app::terminal_host::collect_link_hints(state, pane_id);
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::FollowLink {
+            pane_id,
+            candidates,
+        };
+        state.needs_redraw = true;
+    }
+}
+
 pub fn handle_swap_pane(state: &mut AppState, _action: &WmAction) {
     if crate::app::selection::has_pane_candidate_overflow(&state.session) {
         handle_sidebar_focus(state, &WmAction::SidebarFocus);
