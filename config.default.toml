@@ -176,6 +176,8 @@ background_transparency = 0
 # hyperlink_style       : OSC 8 hyperlink decoration.
 #                         none | color | underline | undercurl
 # hyperlink_color       : link color (e.g. "#5fafff"); omit to use the theme accent.
+# link_detection        : auto-detect plain-text URLs (echo, logs) as links too,
+#                         not just explicit OSC 8 links. true | false
 transparency = 0
 floating_transparency = 0
 floating_blur = 0
@@ -184,6 +186,7 @@ show_scrolled_up_badge = true
 ligatures = true
 hyperlink_style = "underline"
 # hyperlink_color = "#5fafff"
+link_detection = true
 
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.pane]

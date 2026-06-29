@@ -326,6 +326,9 @@ pub trait PaneBackend: Send {
     /// When disabled, animated scroll APIs degrade to immediate jumps.
     fn set_scroll_animations_enabled(&mut self, _enabled: bool) {}
 
+    /// Enable or disable plain-text URL auto-detection (linkify) in snapshots.
+    fn set_link_detection(&mut self, _enabled: bool) {}
+
     /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
     /// terminal lines, each capped to `cols` cells.
     ///

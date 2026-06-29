@@ -145,8 +145,10 @@ impl HecaApp {
                 self.app_config.config.settings.terminal_wheel_scroll_lines;
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
+            let link_detection = self.app_config.config.appearance.terminal.link_detection;
             for backend in state.backends.values_mut() {
                 backend.set_scroll_animations_enabled(state.terminal_scroll_animations_enabled);
+                backend.set_link_detection(link_detection);
             }
             state.interactive_move_modifier =
                 self.app_config.config.settings.interactive_move_modifier;
