@@ -127,6 +127,9 @@ pub(crate) fn handle_window_event(
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
             mouse::on_modifiers_changed(state);
+            // Refresh the cursor affordance: pressing/releasing Cmd over a link
+            // toggles the pointer cue even without pointer movement.
+            mouse::update_cursor(state, state.mouse.pos);
             state.mark_full_redraw();
         }
         WindowEvent::CursorMoved { position, .. } => {

@@ -545,14 +545,14 @@ Source: `terminal-implementation.md` Phase 11
   > overlay. Selection mode = **`O`** (`o` stays flip-endpoint). Context menu widget ALREADY EXISTS
   > (`heca-grid-ui/src/widgets/context_menu.rs`, full `MenuEntry`/`ContextMenu`).
   > **NEXT, in order — each its own PR:**
-  > 1. **Mouse Cmd+click** (smallest, do first). In `heca/src/mouse.rs` `on_mouse_input`, the
-  >    `(MouseButton::Left, ElementState::Pressed)` arm (~line 100), BEFORE the
-  >    `interactive_move_modifier_held` check: if the modifier is held, `hit_test_pane(state,pos)`
-  >    gives the pane; map `pos`→`(row,col)` with the pane content rect + `backend.cell_size()`
-  >    (reuse the cell-coords helper in `heca/src/app/terminal_host.rs` ~line 605,
-  >    `cell_coords_in_rect`); look up `backend.terminal_snapshot()?.hyperlinks` for a span covering
-  >    `(row,col)`; if found return `(WmAction::OpenLink { url }, InteractionSource::MouseContent)`
-  >    and DON'T start the move. Add a hit-test unit test.
+  > 1. **Mouse Cmd+click** — ✅ **DONE** (branch `feat/terminal-18-mouse-open-link`). Link-first in
+  >    `heca/src/mouse.rs` `on_mouse_input` `(Left, Pressed)` arm, before interactive-move: Cmd held +
+  >    link under cursor → `OpenLink` + consume; else falls through to move/focus. Helper
+  >    `hyperlink_uri_at_position` + pure `hyperlink_at_cell` (start inclusive / end exclusive) in
+  >    `terminal_host.rs` (reuses `cell_coords_at_position`). **Plus hover cursor** (user request): Cmd
+  >    over a link → `CursorIcon::Pointer`, gated on the exact same condition as the click; refreshed
+  >    on `ModifiersChanged` too (`update_cursor` + `link_hover` in `mouse.rs`, call in `events.rs`).
+  >    4 hit-test unit tests; clippy 0 + 274 tests green. Plain click still goes to the TUI.
   > 2. **HintKey overlay** (biggest). `KeyHint` wraps a *widget*; links are content-grid spans, so
   >    build a GENERIC rect-targeted hint overlay (domain-neutral, reuse the keycap draw). New
   >    `InputMode::FollowLink { candidates: Vec<(char,String)> }` modeled on `PaneSelect`; collect
