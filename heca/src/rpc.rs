@@ -447,6 +447,20 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             })?;
             Ok(WmAction::ScrollToOffset { rows })
         }
+        "open-link" => {
+            // The URL is the remainder of the line (URLs are normally one token,
+            // but join defensively in case of stray spaces).
+            let rest: Vec<&str> = parts.collect();
+            if rest.is_empty() {
+                return Err(RpcError::MissingArgument {
+                    cmd: cmd.clone(),
+                    arg: "url".to_string(),
+                });
+            }
+            Ok(WmAction::OpenLink {
+                url: rest.join(" "),
+            })
+        }
         _ => Err(RpcError::UnknownCommand(cmd)),
     }
 }
@@ -970,6 +984,23 @@ mod tests {
         assert!(
             matches!(parse_rpc_command(""), Err(RpcError::UnknownCommand(_)),),
             "expected UnknownCommand for empty input"
+        );
+    }
+
+    #[test]
+    fn test_open_link() {
+        assert_eq!(
+            parse_rpc_command("open-link https://example.com/x"),
+            Ok(WmAction::OpenLink {
+                url: "https://example.com/x".to_string()
+            })
+        );
+        assert!(
+            matches!(
+                parse_rpc_command("open-link"),
+                Err(RpcError::MissingArgument { .. })
+            ),
+            "open-link with no URL is a missing-argument error"
         );
     }
 }

@@ -304,6 +304,14 @@ pub enum WmAction {
     BeginSelection,
     ToggleSelectionEndpoint,
 
+    // ── Hyperlinks (parameterized) ──
+    /// Open an OSC 8 link target in the OS default handler. Constructed
+    /// programmatically (HintKey follow-link, Cmd/Ctrl+click, selection-mode `O`,
+    /// context menu, RPC) — never bound to a key directly.
+    OpenLink {
+        url: String,
+    },
+
     // ── Sidebar-specific (parameterized) ──
     AddPaneToColumn {
         ws_idx: usize,
@@ -770,6 +778,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::DeleteColumn { .. }
         | WmAction::DeleteWorkspace { .. }
         | WmAction::TakePane { .. }
+        | WmAction::OpenLink { .. }
         | WmAction::PaneTake
         | WmAction::PaneTakeAndFocus => 6,
     }

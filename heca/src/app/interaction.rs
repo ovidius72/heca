@@ -294,6 +294,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // ReloadConfig reloads config from disk — no tiled/floating layout impact,
         // so it must stay reachable while a floating pane is active (hot-reload).
         WmAction::ReloadConfig => ActionPolicy::Global,
+        // Opening a URL launches the OS handler — no layout impact, must work from
+        // any focus domain (a link in a floating pane opens too).
+        WmAction::OpenLink { .. } => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
@@ -963,6 +966,9 @@ mod tests {
                 pane_id: PaneId(0),
                 focus_after: false,
             },
+            WmAction::OpenLink {
+                url: "https://example.com".into(),
+            },
         ];
         for action in &param_actions {
             let _policy = action_policy(action);
@@ -999,6 +1005,12 @@ mod tests {
             ActionPolicy::AlwaysAllowed
         );
         assert_eq!(action_policy(&WmAction::ReloadConfig), ActionPolicy::Global);
+        assert_eq!(
+            action_policy(&WmAction::OpenLink {
+                url: "https://example.com".into()
+            }),
+            ActionPolicy::Global
+        );
         assert_eq!(
             action_policy(&WmAction::WorkspaceNext),
             ActionPolicy::WorkspaceLevel
