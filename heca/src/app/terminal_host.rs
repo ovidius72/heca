@@ -727,6 +727,43 @@ fn cell_coords_at_position(
     cell_coords_in_rect(pos, content_rect, cell_w as f64, cell_h as f64)
 }
 
+/// If the pointer at `pos` lands on a captured hyperlink cell within `pane_id`,
+/// return its target URI.
+///
+/// Resolves the cell under the pointer (`cell_coords_at_position`) and looks it
+/// up against the pane's `snapshot.hyperlinks` (OSC 8 + auto-detected, same
+/// pipeline). `start_col` is inclusive and `end_col` is exclusive, matching the
+/// capture/renderer contract. Used by the Cmd+click open-link surface
+/// (`terminal-task-18`).
+pub(crate) fn hyperlink_uri_at_position(
+    state: &AppState,
+    pane_id: PaneId,
+    pos: (f32, f32),
+) -> Option<String> {
+    let (row, col) = cell_coords_at_position(state, pane_id, pos)?;
+    let snapshot = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())?;
+    hyperlink_at_cell(&snapshot.hyperlinks, row, col).map(str::to_owned)
+}
+
+/// Find the hyperlink span covering cell `(row, col)`, if any.
+///
+/// `start_col` is inclusive, `end_col` exclusive (the capture/renderer
+/// contract). The first matching span wins; OSC 8 capture never overlaps spans
+/// and auto-detection skips cells already linked, so at most one matches.
+fn hyperlink_at_cell(
+    hyperlinks: &[heca_core::backend::HyperlinkSpan],
+    row: usize,
+    col: usize,
+) -> Option<&str> {
+    hyperlinks
+        .iter()
+        .find(|span| span.row == row && col >= span.start_col && col < span.end_col)
+        .map(|span| span.uri.as_str())
+}
+
 fn map_mouse_button(button: MouseButton) -> Option<BackendMouseButton> {
     match button {
         MouseButton::Left => Some(BackendMouseButton::Left),
@@ -962,4 +999,65 @@ fn window_logical_size(state: &AppState) -> (f32, f32) {
         phys.width as f32 / state.scale_factor as f32,
         phys.height as f32 / state.scale_factor as f32,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hyperlink_at_cell;
+    use heca_core::backend::HyperlinkSpan;
+
+    fn span(row: usize, start_col: usize, end_col: usize, uri: &str) -> HyperlinkSpan {
+        HyperlinkSpan {
+            row,
+            start_col,
+            end_col,
+            uri: uri.to_owned(),
+        }
+    }
+
+    #[test]
+    fn hit_test_matches_inclusive_start_and_exclusive_end() {
+        let links = [span(2, 4, 9, "https://example.com")];
+        // Inclusive start.
+        assert_eq!(
+            hyperlink_at_cell(&links, 2, 4),
+            Some("https://example.com")
+        );
+        // Interior cell.
+        assert_eq!(
+            hyperlink_at_cell(&links, 2, 8),
+            Some("https://example.com")
+        );
+        // end_col is exclusive: the cell at end_col is not part of the link.
+        assert_eq!(hyperlink_at_cell(&links, 2, 9), None);
+        // Just before the start.
+        assert_eq!(hyperlink_at_cell(&links, 2, 3), None);
+    }
+
+    #[test]
+    fn hit_test_is_row_specific() {
+        let links = [span(2, 4, 9, "https://example.com")];
+        // Right columns, wrong row.
+        assert_eq!(hyperlink_at_cell(&links, 1, 5), None);
+        assert_eq!(hyperlink_at_cell(&links, 3, 5), None);
+    }
+
+    #[test]
+    fn hit_test_picks_the_covering_span_among_several() {
+        let links = [
+            span(0, 0, 3, "http://a"),
+            span(0, 10, 14, "http://b"),
+            span(5, 2, 6, "mailto:x@y.z"),
+        ];
+        assert_eq!(hyperlink_at_cell(&links, 0, 1), Some("http://a"));
+        assert_eq!(hyperlink_at_cell(&links, 0, 12), Some("http://b"));
+        assert_eq!(hyperlink_at_cell(&links, 5, 5), Some("mailto:x@y.z"));
+        // Gap between spans on row 0.
+        assert_eq!(hyperlink_at_cell(&links, 0, 7), None);
+    }
+
+    #[test]
+    fn hit_test_empty_list_is_none() {
+        assert_eq!(hyperlink_at_cell(&[], 0, 0), None);
+    }
 }

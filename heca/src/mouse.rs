@@ -63,6 +63,9 @@ pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
         resize_icon
     } else if crate::chrome::sidebar_drag_source(state, pos).is_some() {
         CursorIcon::Grab
+    } else if link_hover(state, pos) {
+        // Cmd held over a terminal hyperlink → signal the click-to-open affordance.
+        CursorIcon::Pointer
     } else {
         CursorIcon::Default
     };
@@ -70,6 +73,18 @@ pub(crate) fn update_cursor(state: &mut AppState, pos: (f32, f32)) {
         state.current_cursor = icon;
         state.window.set_cursor(icon);
     }
+}
+
+/// Whether the pointer is over a terminal hyperlink while the open modifier
+/// (Cmd, the interactive-move modifier) is held — the exact condition under
+/// which a left-click opens the link. Drives the pointer cursor affordance so
+/// the cue and the action stay in lockstep. terminal-task-18.
+fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
+    interactive_move_modifier_held(state)
+        && hit_test_pane(state, pos)
+            .is_some_and(|pane_id| {
+                crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos).is_some()
+            })
 }
 
 /// Sync the current drag mode with modifier state changes.
@@ -98,6 +113,19 @@ pub fn on_mouse_input(
 
     match (button, button_state) {
         (MouseButton::Left, ElementState::Pressed) => {
+            // Cmd+click on a terminal hyperlink → open it. Link-first: checked
+            // before the interactive-move gesture (Cmd is the move modifier), so
+            // a Cmd+click that lands on a link opens it and consumes the press,
+            // while a Cmd+click off any link falls through to interactive-move.
+            // terminal-task-18 (mouse open-link surface).
+            if interactive_move_modifier_held(state)
+                && let Some(pane_id) = hit_test_pane(state, pos)
+                && let Some(url) =
+                    crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos)
+            {
+                return Some((WmAction::OpenLink { url }, InteractionSource::MouseContent));
+            }
+
             // Meta+click on content pane → start drag from content.
             if !should_intercept_selection_gesture(state, pos, button, button_state)
                 && interactive_move_modifier_held(state)
