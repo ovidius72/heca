@@ -4,7 +4,6 @@ use heca_core::backend::{
     TerminalCursorShape, TerminalDamage, TerminalLine, TerminalRowRange, TerminalSnapshot,
     TerminalUnderlineStyle,
 };
-use heca_grid_ui::scene::TextAlign;
 
 /// Host-level selection overlay parameters for terminal panes.
 ///
@@ -347,12 +346,22 @@ fn render_terminal_lines(
                 bg_start = bg_end;
             }
 
-            for (col, cell) in line.cells.iter().take(visible_cols).enumerate() {
-                let is_blank = cell.text.trim().is_empty();
+            // Text: group consecutive same-style cells into one shaped run so the
+            // shaper sees whole tokens (e.g. `->`) and OpenType ligatures can form.
+            // Underlines and box/powerline symbols stay per-cell (drawn via
+            // primitives). A blank or symbol cell, a style change, or a column gap
+            // flushes the current run; `flush_text_run` queues it cell-snapped.
+            let mut run: Option<TerminalTextRun> = None;
+            let mut col = 0usize;
+            while col < visible_cols {
+                let cell = &line.cells[col];
+                let cw = cell.width.max(1);
                 let x = px + col as f32 * cell_w;
-                let width = (cell.width.max(1) as f32) * cell_w;
+                let width = cw as f32 * cell_w;
 
-                if is_blank {
+                if cell.text.trim().is_empty() {
+                    flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
+                    col += cw;
                     continue;
                 }
 
@@ -365,6 +374,17 @@ fn render_terminal_lines(
                     cell_h,
                     cell.fg,
                 ) {
+                    flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
+                    draw_underline_style(
+                        primitive_renderer,
+                        cell.underline,
+                        x,
+                        y,
+                        width,
+                        cell_h,
+                        cell.fg,
+                    );
+                    col += cw;
                     continue;
                 }
 
@@ -375,25 +395,29 @@ fn render_terminal_lines(
                 // four style slots.
                 let resolved = style.families.resolve(cell.bold, cell.italic);
                 let is_faux_italic = cell.italic && resolved == style.families.normal;
-                text_renderer.queue_text_in_line_box_with_style(
-                    &cell.text,
-                    TextBox {
-                        x,
-                        y,
-                        w: width,
-                        h: cell_h,
-                    },
-                    style.font_size,
-                    TextStyle {
-                        color: cell.fg,
-                        bold: cell.bold,
-                        italic: cell.italic && !is_faux_italic,
-                        faux_italic: is_faux_italic,
-                        font_family: Some(resolved),
-                    },
-                    TextAlign::Start,
-                    false,
-                );
+                let cell_style = TerminalRunStyle {
+                    family: resolved,
+                    bold: cell.bold,
+                    italic: cell.italic && !is_faux_italic,
+                    faux_italic: is_faux_italic,
+                };
+
+                // Group by font style only — NOT foreground color. Ligatures must
+                // form across color boundaries (e.g. a syntax-highlighted operator
+                // whose halves are tinted differently), matching kitty/WezTerm; the
+                // emission then colors each glyph by its own cell.
+                match run.as_mut() {
+                    Some(r) if r.next_col == col && r.style == cell_style => {
+                        r.push_cell(&cell.text, cw, cell.fg);
+                    }
+                    _ => {
+                        flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
+                        let mut r = TerminalTextRun::new(col, cell_style);
+                        r.push_cell(&cell.text, cw, cell.fg);
+                        run = Some(r);
+                    }
+                }
+
                 draw_underline_style(
                     primitive_renderer,
                     cell.underline,
@@ -403,9 +427,112 @@ fn render_terminal_lines(
                     cell_h,
                     cell.fg,
                 );
+                col += cw;
             }
+            flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
         }
     }
+}
+
+/// Style identity for terminal run grouping: consecutive cells sharing it (and
+/// contiguous columns) shape together so OpenType ligatures can form. Only
+/// font-face attributes are included — foreground color is deliberately excluded
+/// so ligatures span color boundaries (the emission colors each glyph per cell).
+#[derive(Clone, Copy, PartialEq, Debug)]
+struct TerminalRunStyle<'a> {
+    family: &'a str,
+    bold: bool,
+    italic: bool,
+    faux_italic: bool,
+}
+
+/// Accumulator for one in-progress terminal text run.
+struct TerminalTextRun<'a> {
+    /// First column of the run (relative to the row), for the run origin x.
+    start_col: usize,
+    /// Next expected column; a gap (skipped blank/wide cell) breaks the run.
+    next_col: usize,
+    /// Column offset of the next cell within the run (sum of prior cell widths).
+    col_off: u16,
+    text: String,
+    /// Per-byte cell-column offset within the run (see `TerminalRun::byte_cols`).
+    byte_cols: Vec<u16>,
+    /// Per-column foreground color within the run; a wide cell fills each of its
+    /// columns. Indexed by run-relative column so the emission can color each
+    /// glyph by the cell it snaps to.
+    col_colors: Vec<[f32; 4]>,
+    style: TerminalRunStyle<'a>,
+}
+
+impl<'a> TerminalTextRun<'a> {
+    fn new(start_col: usize, style: TerminalRunStyle<'a>) -> Self {
+        Self {
+            start_col,
+            next_col: start_col,
+            col_off: 0,
+            text: String::new(),
+            byte_cols: Vec::new(),
+            col_colors: Vec::new(),
+            style,
+        }
+    }
+
+    /// Append one cell's text, tagging each of its bytes with the run-relative
+    /// column it occupies and each column with the cell's color, then advancing
+    /// past its display width.
+    fn push_cell(&mut self, text: &str, cw: usize, fg: [f32; 4]) {
+        for _ in 0..text.len() {
+            self.byte_cols.push(self.col_off);
+        }
+        for _ in 0..cw {
+            self.col_colors.push(fg);
+        }
+        self.text.push_str(text);
+        self.col_off += cw as u16;
+        self.next_col += cw;
+    }
+}
+
+/// Queue the accumulated run (if any) as one shaped, cell-snapped command, then
+/// clear the accumulator.
+fn flush_text_run(
+    text_renderer: &mut TextRenderer,
+    run: &mut Option<TerminalTextRun<'_>>,
+    px: f32,
+    y: f32,
+    cell_w: f32,
+    cell_h: f32,
+    style: TerminalStyle<'_>,
+) {
+    let Some(r) = run.take() else {
+        return;
+    };
+    if r.text.is_empty() {
+        return;
+    }
+    let x = px + r.start_col as f32 * cell_w;
+    text_renderer.queue_terminal_run(
+        &r.text,
+        TextBox {
+            x,
+            y,
+            w: r.col_off as f32 * cell_w,
+            h: cell_h,
+        },
+        style.font_size,
+        TextStyle {
+            // Per-glyph color is supplied via `col_colors`; this is only the
+            // fallback used for any glyph whose column can't be resolved.
+            color: r.col_colors.first().copied().unwrap_or([1.0; 4]),
+            bold: r.style.bold,
+            italic: r.style.italic,
+            faux_italic: r.style.faux_italic,
+            font_family: Some(r.style.family),
+        },
+        cell_w,
+        &r.byte_cols,
+        &r.col_colors,
+    );
 }
 
 fn with_surface_alpha(color: [f32; 4], surface_alpha: f32) -> [f32; 4] {
@@ -795,7 +922,9 @@ fn fitted_grid(rect: TextBox, cell_w: f32, cell_h: f32) -> (usize, usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{TerminalFontFamilies, is_default_bg, with_surface_alpha};
+    use super::{
+        TerminalFontFamilies, TerminalRunStyle, TerminalTextRun, is_default_bg, with_surface_alpha,
+    };
 
     #[test]
     fn with_surface_alpha_scales_alpha_only() {
@@ -869,5 +998,72 @@ mod tests {
         assert_eq!(f.resolve(true, false), "Bold");
         assert_eq!(f.resolve(false, true), "Italic");
         assert_eq!(f.resolve(true, true), "BoldItalic");
+    }
+
+    fn run_style() -> TerminalRunStyle<'static> {
+        TerminalRunStyle {
+            family: "Maple Mono Normal NF",
+            bold: false,
+            italic: false,
+            faux_italic: false,
+        }
+    }
+
+    const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+    const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+
+    #[test]
+    fn run_push_cell_maps_each_byte_to_its_cell_column() {
+        // "->" : two single-width ASCII cells. Each byte maps to its own column,
+        // and the run advances one column per cell. The whole text is what the
+        // shaper sees, so `calt`/`liga` can collapse it into a ligature — which
+        // then snaps back to its first cell at emission.
+        let mut run = TerminalTextRun::new(5, run_style());
+        run.push_cell("-", 1, WHITE);
+        run.push_cell(">", 1, WHITE);
+        assert_eq!(run.text, "->");
+        assert_eq!(run.byte_cols, vec![0, 1]);
+        assert_eq!(run.col_colors, vec![WHITE, WHITE]);
+        assert_eq!(run.col_off, 2);
+        assert_eq!(run.start_col, 5);
+        assert_eq!(run.next_col, 7);
+    }
+
+    #[test]
+    fn run_push_cell_tags_multibyte_and_wide_cells() {
+        // A wide (2-column) CJK cell followed by a single-width cell. The wide
+        // cell's 3 UTF-8 bytes all map to column 0 and it fills 2 color columns;
+        // the next cell starts at column 2 (not 1), keeping the grid snap correct.
+        let mut run = TerminalTextRun::new(0, run_style());
+        run.push_cell("世", 2, WHITE);
+        run.push_cell("x", 1, RED);
+        assert_eq!(run.byte_cols, vec![0, 0, 0, 2]);
+        assert_eq!(run.col_colors, vec![WHITE, WHITE, RED]);
+        assert_eq!(run.col_off, 3);
+        assert_eq!(run.next_col, 3);
+    }
+
+    #[test]
+    fn run_push_cell_keeps_per_column_color_across_a_color_boundary() {
+        // Color is NOT a run boundary: a token tinted differently per cell still
+        // joins one run so its ligature can form; each column keeps its own color.
+        let mut run = TerminalTextRun::new(0, run_style());
+        run.push_cell("=", 1, RED);
+        run.push_cell(">", 1, WHITE);
+        assert_eq!(run.text, "=>");
+        assert_eq!(run.col_colors, vec![RED, WHITE]);
+    }
+
+    #[test]
+    fn run_style_equality_gates_grouping_by_font_only() {
+        // Font-face attributes gate grouping; color does not (it isn't a field).
+        let a = run_style();
+        assert_eq!(a, run_style());
+        let mut bold = run_style();
+        bold.bold = true;
+        assert_ne!(a, bold);
+        let mut italic = run_style();
+        italic.italic = true;
+        assert_ne!(a, italic);
     }
 }

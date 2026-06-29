@@ -693,6 +693,28 @@ face). When set, the renderer uses the named family for that style — so you ca
 point bold/italic at a different installed font without touching the regular
 family.
 
+#### Terminal ligatures
+
+The terminal shapes each row a **run at a time** (consecutive cells sharing a
+font face are shaped together), so a coding font's OpenType ligatures and
+contextual alternates — `=>`, `==`, `>=`, `!=`, `->`, … — render in terminal
+panes. Glyphs are still snapped to the cell grid, and ligatures form across
+foreground-color boundaries (each half keeps its own cell's color), matching how
+kitty/WezTerm behave.
+
+**Which ligatures appear is up to the font** — whatever your terminal font
+ligates under standard shaping (`calt`/`liga`/`clig`); heca enables no font
+features of its own. The embedded default, **Maple Mono Normal NF**, renders the
+full set (`=>` `->` `==` `!=` `>=` `|>` …). To use a different coding font, point
+the terminal family at any installed font:
+
+```toml
+[font.family.terminal]
+normal = "JetBrainsMono Nerd Font Mono"   # any installed system font is found
+```
+
+Reload at runtime with `prefix+Shift+r`.
+
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 
 ### Pane Info Bar

@@ -391,19 +391,32 @@ one residual alt-screen wheel-routing issue, tracked separately in
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures in coding fonts (Fira Code `->` `!=` `>=`, Maple Mono, …) are **multi-character** and span multiple terminal cells. heca's terminal renderer currently shapes text **one cell at a time** (`terminal.rs` calls `queue_text_in_line_box_with_style(&cell.text, …)` per cell, and the shaper only ever sees a single cell's text). Because the shaper never sees `->` as one run, **multi-cell ligatures cannot form today** regardless of the `calt`/`liga` OpenType features. So a `terminal_ligatures` setting would be a no-op until the renderer shapes whole row runs together. This phase is re-scoped into two steps: first enable run-level shaping (so ligatures can form), then add the on/off setting.
 
-- [ ] **terminal-task-02a** — Enable row-level (run) text shaping in the terminal renderer.
-  Today the terminal renderer emits one text command per cell (`queue_text_in_line_box_with_style`
-  per cell in `heca-renderer/src/terminal.rs`), and `TextRenderer::build_emission` shapes each
-  cell's text in isolation. Multi-character ligatures and contextual alternates therefore cannot
-  form. This task introduces run-level shaping: group consecutive cells on a row that share the
-  same style (family/weight/style/fg/bg) into a single shaped run, so the shaper sees the full
-  run text and OpenType `calt`/`liga` can apply. Must preserve per-cell horizontal positioning
-  (terminal grid alignment is sacred — glyphs must still land on cell boundaries) and the
-  retained/damage model. Scope: terminal text path only, not UI/chrome labels.
-  Files: `heca-renderer/src/terminal.rs`, `heca-renderer/src/text.rs` (run shaping + cache key
-  must account for run text, not single-cell text).
-  Gate: clippy 0 + tests; visual check that a ligature font (Fira Code / Maple Mono) now renders
-  `->` `!=` `>=` `==` as ligatures in a terminal pane.
+- [x] **terminal-task-02a** — Enable row-level (run) text shaping in the terminal renderer. **DONE.**
+  The terminal renderer now groups consecutive cells sharing a font face into one shaped run
+  (`render_terminal_lines` in `heca-renderer/src/terminal.rs` builds `TerminalTextRun`s and calls
+  `TextRenderer::queue_terminal_run`); `build_run_emission` in `heca-renderer/src/text.rs` shapes
+  the whole run (`Shaping::Advanced`, default `calt`/`liga`/`clig`) then **snaps every glyph back
+  to its originating cell column** (`run_x + col*cell_w + bearing`) so the monospace grid stays
+  exact even when a ligature spans cells. New `run_layout_cache` mirrors the existing eviction/
+  scale/font-reload invalidation. Backgrounds/underlines/box-drawing symbols stay per-cell.
+  **Decision (changed from original plan):** grouping is by font face only — **NOT** foreground
+  color. Ligatures must form across color boundaries (e.g. a syntax-highlighted operator); the
+  emission colors each glyph by its own cell (per-column `col_colors`, hashed into `EmitKey`).
+  This matches kitty/WezTerm. (Original plan said group by `fg/bg` too — that broke ligatures on
+  any color change, e.g. a red "command-not-found" `=>` at the prompt.)
+  **Shaper bug found + fixed (cosmic-text upgrade 0.14 → 0.19):** with the old `cosmic-text 0.14`
+  (rustybuzz 0.14.1) only `=`-initiated ligatures formed (`=>` `==` `>=` `<=` `::`); `->` `!=` `|>`
+  did NOT — for EVERY font (Maple Mono, JetBrains Mono), proven by shaping the files through four
+  shapers directly: real HarfBuzz forms all; rustybuzz 0.14 fails `->`/`!=`/`|>`; rustybuzz 0.20
+  and cosmic-text 0.19 (now `swash`/`harfrust`) form all. So it was a rustybuzz-0.14 bug, not the
+  font and not the terminal code. Upgraded `heca-renderer` to `cosmic-text 0.19` (contained: API
+  migration in `text.rs` `set_size`/`set_text`/`get_font`, `atlas.rs` unchanged). Verified the
+  embedded default Maple Mono Normal NF now ligates the full set under the project dependency.
+  (Earlier wrong guess that "the font lacks `->`" — corrected by direct multi-shaper testing.)
+  Files: `heca-renderer/src/terminal.rs`, `heca-renderer/src/text.rs`, `heca-renderer/Cargo.toml`,
+  `README.md`.
+  Gate: clippy 0 ✅ + 22 renderer tests ✅ + 74 heca-core ✅ (incl. byte→column mapping, wide
+  cells, color-across-boundary). Visual: full arrow ligatures render in a terminal pane.
 
 - [ ] **terminal-task-02** — Add `terminal_ligatures: bool` and wire it to the cosmic-text shaping path.
   **Gated by `terminal-task-02a`** (without run-level shaping this setting is a no-op, since

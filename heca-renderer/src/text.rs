@@ -62,6 +62,27 @@ struct TextCommand {
     font_family: Option<String>,
     /// Clip rect (logical px) this label is scissored to, if any.
     clip: Option<[f32; 4]>,
+    /// Terminal run metadata. When set, the command is one shaped row-run of
+    /// terminal cells: the shaper sees the whole run text (so OpenType ligatures
+    /// like `->`/`!=` can form), and the emission snaps every glyph back to its
+    /// originating cell column so the monospace grid stays exact. `None` for all
+    /// UI/chrome labels (the generic align/ink-box path).
+    run: Option<TerminalRun>,
+}
+
+/// Per-run terminal layout metadata carried alongside a [`TextCommand`].
+struct TerminalRun {
+    /// Logical cell width; each glyph is snapped to `run_x + col * cell_w`.
+    cell_w: f32,
+    /// Per-byte column offset within the run text: `byte_cols[b]` is the cell
+    /// column (relative to the run start) of the cell that byte `b` belongs to.
+    /// Length equals the run text's byte length. Derived from cell display
+    /// widths, so it is a pure function of the run's cells.
+    byte_cols: Vec<u16>,
+    /// Per-column foreground color: `col_colors[col]` tints the glyph snapped to
+    /// that column. Lets a ligature span a color boundary while each glyph keeps
+    /// its own cell's color.
+    col_colors: Vec<[f32; 4]>,
 }
 
 /// One label's draw range: its glyph quads occupy `[first_index, first_index +
@@ -131,6 +152,37 @@ struct LabelLayout {
     last_used: u64,
 }
 
+/// One placed glyph within a shaped terminal run. Horizontal position is split
+/// into a cell column (snapped to the grid at emission via `col * cell_w`) plus an
+/// intra-cell offset in physical px (the glyph's natural offset from its cell's
+/// pen origin, i.e. side bearing + any within-cell shaping). A ligature is a
+/// single glyph whose `col` is its first cell; it then renders across the cells it
+/// spans without disturbing the grid.
+#[derive(Clone, Copy)]
+struct RunGlyph {
+    /// Cell column offset (relative to the run start) this glyph snaps to.
+    col: u16,
+    /// Intra-cell horizontal offset (physical px) added after the cell snap.
+    off_x: f32,
+    /// Glyph top in physical px relative to the run's line top.
+    top: f32,
+    w: f32,
+    h: f32,
+    uv: [f32; 4],
+}
+
+/// A shaped terminal run's cached layout: per-glyph cell-snapped placement plus
+/// the stable line metrics used to center within the cell box. Emission applies
+/// `cell_w` and the run origin; only a cache miss re-shapes the run.
+struct RunLayout {
+    glyphs: Vec<RunGlyph>,
+    /// Stable line-box metrics (physical px) for baseline-anchored centering.
+    line_top: f32,
+    line_height: f32,
+    /// Last frame this run was used, for eviction of stale (dynamic) text.
+    last_used: u64,
+}
+
 /// Identity of an **emitted** label: the full set of command inputs that determine
 /// its final screen-space geometry — content + box + color + scale. Same key ⇒ byte-
 /// identical quads, so the placed vertices are cached across frames and a static
@@ -157,6 +209,15 @@ struct EmitKey {
     font_family: Option<String>,
     /// Scale factor in `f32::to_bits()` form.
     scale_bits: u32,
+    /// True for terminal row-runs (cell-snapped emission path).
+    run: bool,
+    /// Cell width in `f32::to_bits()` form for terminal runs (`0` otherwise);
+    /// it drives per-glyph cell snapping, so it must be part of the identity.
+    cell_w_bits: u32,
+    /// Hash of a terminal run's per-column colors (`0` otherwise). The colors are
+    /// baked into the vertices, so a recolor (e.g. syntax highlighting changing)
+    /// must miss the retained-geometry cache and rebuild.
+    run_colors_hash: u64,
 }
 
 /// A label's fully-placed glyph quads in screen space, cached across frames. The
@@ -178,6 +239,21 @@ fn align_bits(align: TextAlign) -> u8 {
         TextAlign::Center => 1,
         TextAlign::End => 2,
     }
+}
+
+/// FNV-1a hash of a terminal run's per-column colors, folded into the [`EmitKey`]
+/// so a recolored run (same text/position) misses the retained-geometry cache.
+fn hash_colors(colors: &[[f32; 4]]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for c in colors {
+        for ch in c {
+            h ^= ch.to_bits() as u64;
+            h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    // A genuinely empty run hashes to a non-zero sentinel so it never collides
+    // with the "not a run" `0`.
+    if colors.is_empty() { 1 } else { h }
 }
 
 pub struct TextRenderer {
@@ -213,6 +289,11 @@ pub struct TextRenderer {
     /// Shaped-label layout cache, keyed by [`LabelKey`]. Lets static text skip
     /// per-frame shaping; glyph bitmaps are cached separately in the atlas.
     label_cache: std::collections::HashMap<LabelKey, LabelLayout>,
+    /// Shaped run-layout cache for terminal row-runs, keyed by [`LabelKey`]. Each
+    /// entry stores per-glyph cell-column + intra-cell offsets so the emission can
+    /// snap glyphs to the grid. Separate from `label_cache` because the placement
+    /// model differs (cell-snapped, not ink-box-relative).
+    run_layout_cache: std::collections::HashMap<LabelKey, RunLayout>,
     /// Retained emitted-geometry cache, keyed by [`EmitKey`]. Lets an *unchanged*
     /// label skip per-frame glyph placement — its quads are re-appended verbatim.
     emit_cache: std::collections::HashMap<EmitKey, Emitted>,
@@ -482,6 +563,7 @@ impl TextRenderer {
             atlas,
             atlas_bind_group,
             label_cache: std::collections::HashMap::new(),
+            run_layout_cache: std::collections::HashMap::new(),
             emit_cache: std::collections::HashMap::new(),
             frame: 0,
         }
@@ -506,6 +588,7 @@ impl TextRenderer {
         // latched the atlas "full" and made all new text disappear.
         self.atlas.clear();
         self.label_cache.clear();
+        self.run_layout_cache.clear();
         self.emit_cache.clear();
     }
 
@@ -543,6 +626,7 @@ impl TextRenderer {
         self.font_family = family.to_string();
         // Caches key on text/size/weight, not family — a family swap invalidates both.
         self.label_cache.clear();
+        self.run_layout_cache.clear();
         self.emit_cache.clear();
     }
 
@@ -568,7 +652,6 @@ impl TextRenderer {
         let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
         buffer.set_size(
-            &mut self.font_system,
             Some(scaled_size * 4.0),
             Some(metrics.line_height * 2.0),
         );
@@ -576,7 +659,7 @@ impl TextRenderer {
             .family(Family::Name(font_family))
             .weight(Weight::NORMAL)
             .style(Style::Normal);
-        buffer.set_text(&mut self.font_system, "M", &attrs, Shaping::Advanced);
+        buffer.set_text("M", &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         let mut line_width = None;
@@ -589,7 +672,7 @@ impl TextRenderer {
         }
 
         if let Some(font_id) = font_id
-            && let Some(font) = self.font_system.get_font(font_id)
+            && let Some(font) = self.font_system.get_font(font_id, Weight::NORMAL)
         {
             if let Some(monospace_em_width) = font.monospace_em_width() {
                 line_width = Some(monospace_em_width * scaled_size);
@@ -628,6 +711,7 @@ impl TextRenderer {
             icon: false,
             font_family: None,
             clip: self.current_clip,
+            run: None,
         });
     }
 
@@ -668,6 +752,7 @@ impl TextRenderer {
             icon,
             font_family: None,
             clip: self.current_clip,
+            run: None,
         });
     }
 
@@ -697,6 +782,53 @@ impl TextRenderer {
             icon,
             font_family: style.font_family.map(str::to_string),
             clip: self.current_clip,
+            run: None,
+        });
+    }
+
+    /// Queue one shaped terminal row-run: consecutive same-style cells whose text
+    /// is shaped together so OpenType ligatures/contextual alternates can form.
+    /// `cell_w` (logical) and `byte_cols` (per-byte cell-column offsets) let the
+    /// emission snap every glyph back to its originating cell column, preserving
+    /// the monospace grid even when a ligature collapses several cells into one
+    /// glyph. `rect.x`/`rect.y` are the run origin; `rect.h` is the cell height
+    /// used for vertical centering. Used only by the terminal text path.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Terminal run path threads grid metadata (cell width, per-byte columns, per-column colors) explicitly."
+    )]
+    pub fn queue_terminal_run(
+        &mut self,
+        text: &str,
+        rect: TextBox,
+        font_size: f32,
+        style: TextStyle<'_>,
+        cell_w: f32,
+        byte_cols: &[u16],
+        col_colors: &[[f32; 4]],
+    ) {
+        self.commands.push(TextCommand {
+            text: text.to_string(),
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: rect.h,
+            font_size,
+            color: style.color,
+            bold: style.bold,
+            italic: style.italic,
+            faux_italic: style.faux_italic,
+            align: TextAlign::Start,
+            centered: false,
+            line_box: true,
+            icon: false,
+            font_family: style.font_family.map(str::to_string),
+            clip: self.current_clip,
+            run: Some(TerminalRun {
+                cell_w,
+                byte_cols: byte_cols.to_vec(),
+                col_colors: col_colors.to_vec(),
+            }),
         });
     }
 
@@ -733,6 +865,9 @@ impl TextRenderer {
                 line_box: cmd.line_box,
                 font_family: cmd.font_family.clone(),
                 scale_bits: scale.to_bits(),
+                run: cmd.run.is_some(),
+                cell_w_bits: cmd.run.as_ref().map_or(0, |r| r.cell_w.to_bits()),
+                run_colors_hash: cmd.run.as_ref().map_or(0, |r| hash_colors(&r.col_colors)),
             };
 
             // Retained-geometry miss → place every glyph (shaping itself is cached in
@@ -785,6 +920,8 @@ impl TextRenderer {
             .retain(|_, e| frame.saturating_sub(e.last_used) <= EMIT_EVICT_AFTER);
         self.label_cache
             .retain(|_, l| frame.saturating_sub(l.last_used) <= LABEL_EVICT_AFTER);
+        self.run_layout_cache
+            .retain(|_, l| frame.saturating_sub(l.last_used) <= LABEL_EVICT_AFTER);
 
         (vertices, indices, draws)
     }
@@ -800,6 +937,9 @@ impl TextRenderer {
         scaled_size: f32,
         scale: f32,
     ) -> Emitted {
+        if cmd.run.is_some() {
+            return self.build_run_emission(queue, cmd, scaled_size, scale);
+        }
         let key = LabelKey {
             text: cmd.text.clone(),
             size_bits: scaled_size.to_bits(),
@@ -814,7 +954,7 @@ impl TextRenderer {
         if !self.label_cache.contains_key(&key) {
             let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
             let mut buffer = Buffer::new(&mut self.font_system, metrics);
-            buffer.set_size(&mut self.font_system, Some(10000.0), Some(10000.0));
+            buffer.set_size(Some(10000.0), Some(10000.0));
             let weight = if cmd.bold {
                 Weight::BOLD
             } else {
@@ -833,7 +973,7 @@ impl TextRenderer {
                 } else {
                     Style::Normal
                 });
-            buffer.set_text(&mut self.font_system, &cmd.text, &attrs, Shaping::Advanced);
+            buffer.set_text(&cmd.text, &attrs, Shaping::Advanced, None);
             buffer.shape_until_scroll(&mut self.font_system, false);
 
             // Stable, glyph-independent line metrics for vertical centering so the
@@ -976,6 +1116,193 @@ impl TextRenderer {
         }
     }
 
+    /// Emit one terminal row-run: shape the whole run text together (so OpenType
+    /// ligatures/contextual alternates can form across cells), then snap every
+    /// glyph back to its originating cell column so the monospace grid is exact.
+    /// Shaping is reused from `run_layout_cache` on a hit.
+    fn build_run_emission(
+        &mut self,
+        queue: &wgpu::Queue,
+        cmd: &TextCommand,
+        scaled_size: f32,
+        scale: f32,
+    ) -> Emitted {
+        let run = cmd.run.as_ref().expect("build_run_emission requires run info");
+        let key = LabelKey {
+            text: cmd.text.clone(),
+            size_bits: scaled_size.to_bits(),
+            bold: cmd.bold,
+            icon: false,
+            italic: cmd.italic,
+            font_family: cmd.font_family.clone(),
+        };
+
+        if !self.run_layout_cache.contains_key(&key) {
+            let metrics = Metrics::new(scaled_size, scaled_size * 1.2);
+            let mut buffer = Buffer::new(&mut self.font_system, metrics);
+            buffer.set_size(Some(10000.0), Some(10000.0));
+            let weight = if cmd.bold {
+                Weight::BOLD
+            } else {
+                Weight::NORMAL
+            };
+            let family = cmd.font_family.as_deref().unwrap_or(&self.font_family);
+            let attrs = Attrs::new()
+                .family(Family::Name(family))
+                .weight(weight)
+                .style(if cmd.italic {
+                    Style::Italic
+                } else {
+                    Style::Normal
+                });
+            // `Shaping::Advanced` runs the full HarfBuzz-style shaper; with the run's
+            // whole text visible, `calt`/`liga`/`clig` (on by default in coding fonts)
+            // collapse e.g. `->` into a single ligature glyph.
+            buffer.set_text(&cmd.text, &attrs, Shaping::Advanced, None);
+            buffer.shape_until_scroll(&mut self.font_system, false);
+
+            // First pass: collect raw placements (cell column, pen x, bearing, top).
+            // `glyph.start` is a byte offset into the run text; `byte_cols` maps it to
+            // the cell column the glyph anchors to (a ligature anchors to its first
+            // cell). We keep cosmic's natural pen x only to recover the glyph's offset
+            // *within* its cell — the absolute pen is discarded for the grid snap.
+            let last_col = run.byte_cols.last().copied().unwrap_or(0);
+            let mut line_top = 0.0f32;
+            let mut line_height = 0.0f32;
+            // (col, pen_x, left, top, atlas glyph)
+            let mut raw: Vec<(u16, i32, i32, i32, crate::atlas::AtlasGlyph)> = Vec::new();
+            for layout_run in buffer.layout_runs() {
+                line_top = layout_run.line_top;
+                line_height = layout_run.line_height;
+                for glyph in layout_run.glyphs {
+                    let physical = glyph.physical((0.0, layout_run.line_y), 1.0);
+                    let Some(ag) = self.atlas.glyph(
+                        queue,
+                        &mut self.font_system,
+                        &mut self.swash_cache,
+                        physical.cache_key,
+                    ) else {
+                        continue; // whitespace / no bitmap
+                    };
+                    let col = run
+                        .byte_cols
+                        .get(glyph.start)
+                        .copied()
+                        .unwrap_or(last_col);
+                    let top = physical.y - ag.top;
+                    raw.push((col, physical.x, ag.left, top, ag));
+                }
+            }
+
+            // Per-cell anchor pen: the smallest pen x among glyphs in that cell, so a
+            // glyph's intra-cell offset is `pen_x - anchor + bearing`. For the common
+            // one-glyph-per-cell case this is just the side bearing.
+            let mut anchor: std::collections::HashMap<u16, i32> = std::collections::HashMap::new();
+            for &(col, pen_x, _, _, _) in &raw {
+                anchor
+                    .entry(col)
+                    .and_modify(|a| *a = (*a).min(pen_x))
+                    .or_insert(pen_x);
+            }
+
+            let glyphs = raw
+                .into_iter()
+                .map(|(col, pen_x, left, top, ag)| {
+                    let off_x = (pen_x - anchor.get(&col).copied().unwrap_or(pen_x) + left) as f32;
+                    RunGlyph {
+                        col,
+                        off_x,
+                        top: top as f32,
+                        w: ag.width as f32,
+                        h: ag.height as f32,
+                        uv: ag.uv,
+                    }
+                })
+                .collect();
+
+            self.run_layout_cache.insert(
+                key.clone(),
+                RunLayout {
+                    glyphs,
+                    line_top,
+                    line_height,
+                    last_used: self.frame,
+                },
+            );
+        }
+
+        let layout = self.run_layout_cache.get_mut(&key).expect("just inserted");
+        layout.last_used = self.frame;
+        if layout.glyphs.is_empty() {
+            return Emitted {
+                verts: Vec::new(),
+                bbox: [0.0; 4],
+                last_used: self.frame,
+            };
+        }
+
+        // Vertical: center the stable line box within the cell height, then place each
+        // glyph by its top relative to the line top (matches the generic line-box path,
+        // so baselines don't jump with ascenders/descenders).
+        let line_box_top = cmd.y + (cmd.h - layout.line_height / scale) * 0.5;
+        let cell_w = run.cell_w;
+        let faux_italic_skew = if cmd.faux_italic {
+            (layout.line_height / scale * 0.14).max(1.0)
+        } else {
+            0.0
+        };
+
+        let mut verts: Vec<TextVertex> = Vec::with_capacity(layout.glyphs.len() * 4);
+        let (mut bx0, mut by0) = (f32::MAX, f32::MAX);
+        let (mut bx1, mut by1) = (f32::MIN, f32::MIN);
+        for g in &layout.glyphs {
+            // Grid snap: cell column → exact x, plus the glyph's intra-cell offset.
+            let gx = cmd.x + g.col as f32 * cell_w + g.off_x / scale;
+            let gy = line_box_top + (g.top - layout.line_top) / scale;
+            let gw = g.w / scale;
+            let gh = g.h / scale;
+            let [u0, v0, u1, v1] = g.uv;
+            // Color each glyph by its own cell, so a ligature crossing a color
+            // boundary keeps each half tinted as its source cell.
+            let color = run
+                .col_colors
+                .get(g.col as usize)
+                .copied()
+                .unwrap_or(cmd.color);
+            let top_x = gx + faux_italic_skew * 0.5;
+            let bottom_x = gx - faux_italic_skew * 0.5;
+            verts.push(TextVertex {
+                position: [top_x, gy],
+                texcoord: [u0, v0],
+                color,
+            });
+            verts.push(TextVertex {
+                position: [top_x + gw, gy],
+                texcoord: [u1, v0],
+                color,
+            });
+            verts.push(TextVertex {
+                position: [bottom_x + gw, gy + gh],
+                texcoord: [u1, v1],
+                color,
+            });
+            verts.push(TextVertex {
+                position: [bottom_x, gy + gh],
+                texcoord: [u0, v1],
+                color,
+            });
+            bx0 = bx0.min(bottom_x);
+            by0 = by0.min(gy);
+            bx1 = bx1.max(top_x + gw);
+            by1 = by1.max(gy + gh);
+        }
+        Emitted {
+            verts,
+            bbox: [bx0, by0, bx1 - bx0, by1 - by0],
+            last_used: self.frame,
+        }
+    }
+
     pub fn render(
         &mut self,
         queue: &wgpu::Queue,
@@ -1090,6 +1417,9 @@ mod tests {
             line_box: false,
             font_family: None,
             scale_bits: 2.0f32.to_bits(),
+            run: false,
+            cell_w_bits: 0,
+            run_colors_hash: 0,
         };
         assert_eq!(base, base.clone(), "identical inputs ⇒ a cache hit");
 
