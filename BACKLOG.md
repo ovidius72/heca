@@ -529,6 +529,42 @@ Source: `terminal-implementation.md` Phase 11
   Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`, `heca-config`
 
 - [ ] **terminal-task-18** — `OSC 8` hyperlink **open** (capture already shipped in `terminal-03`).
+
+  > **RESUME HANDOFF (2026-06-29) — read first.**
+  > **MERGED already (in `main`):** `terminal-03` (OSC 8 capture + theme/config-driven rendering:
+  > `[appearance.terminal] hyperlink_style` none|color|underline|undercurl default underline,
+  > `hyperlink_color`→accent) · **#196** the OpenLink FOUNDATION · **#197** linkify
+  > (`terminal-task-26`: plain URLs auto-detected, `link_detection` default true).
+  > **So the shared spine EXISTS:** `WmAction::OpenLink { url }` (`heca/src/input.rs`), handler
+  > `handle_open_link` + OS opener + scheme allowlist (`heca/src/handlers.rs`), policy `Global`
+  > (`interaction.rs`), registered (`registry.rs`), RPC `open-link <url>` (`rpc.rs`). The snapshot
+  > already carries `hyperlinks: Vec<HyperlinkSpan>` (OSC 8 + detected) via `backend.terminal_snapshot()`.
+  > **DECISIONS LOCKED:** mouse = **Cmd+click, link-first** (Cmd is the interactive-move modifier
+  > `interactive_move_modifier` default Super, so: if Cmd held AND the click cell is in a link →
+  > OpenLink + consume; else existing interactive-move). Keyboard = **`prefix+Shift+o`** HintKey
+  > overlay. Selection mode = **`O`** (`o` stays flip-endpoint). Context menu widget ALREADY EXISTS
+  > (`heca-grid-ui/src/widgets/context_menu.rs`, full `MenuEntry`/`ContextMenu`).
+  > **NEXT, in order — each its own PR:**
+  > 1. **Mouse Cmd+click** (smallest, do first). In `heca/src/mouse.rs` `on_mouse_input`, the
+  >    `(MouseButton::Left, ElementState::Pressed)` arm (~line 100), BEFORE the
+  >    `interactive_move_modifier_held` check: if the modifier is held, `hit_test_pane(state,pos)`
+  >    gives the pane; map `pos`→`(row,col)` with the pane content rect + `backend.cell_size()`
+  >    (reuse the cell-coords helper in `heca/src/app/terminal_host.rs` ~line 605,
+  >    `cell_coords_in_rect`); look up `backend.terminal_snapshot()?.hyperlinks` for a span covering
+  >    `(row,col)`; if found return `(WmAction::OpenLink { url }, InteractionSource::MouseContent)`
+  >    and DON'T start the move. Add a hit-test unit test.
+  > 2. **HintKey overlay** (biggest). `KeyHint` wraps a *widget*; links are content-grid spans, so
+  >    build a GENERIC rect-targeted hint overlay (domain-neutral, reuse the keycap draw). New
+  >    `InputMode::FollowLink { candidates: Vec<(char,String)> }` modeled on `PaneSelect`; collect
+  >    visible `snapshot.hyperlinks` → a–z labels at their rects; letter → OpenLink. Bind
+  >    `prefix+Shift+o` in `keybindings.default.toml`. Files: `heca/src/app_state.rs` (InputMode),
+  >    `heca/src/input.rs`, `heca-grid-ui/src/widgets/` (overlay), render + key handling.
+  > 3. **Selection-mode `O`** — bind `O` in the selection mode keymap → OpenLink for the link under
+  >    the caret (needs the selection caret cell + snapshot hyperlinks). Small.
+  > 4. **Context menu "Open link"** — wire the existing `ContextMenu` to right-click on a terminal
+  >    pane: entry "Open link" when the click cell is a link, plus pane actions (split/close/float).
+  >    Right-click currently does resize-fallback in `mouse.rs` — handle carefully. (overlaps `app-task-33`).
+
   Design LOCKED with user 2026-06-29 — one `WmAction::OpenLink { url }` behind **five surfaces**:
   - **`WmAction::OpenLink { url }`** + handler → OS opener (`open` macOS / `xdg-open` Linux /
     `start` Windows). Full "Adding New Actions" checklist + RPC.
