@@ -64,7 +64,7 @@ pub use icon_button::IconButton;
 pub use input::Input;
 pub use item::{ActiveMarker, Item};
 pub use item_group::ItemGroup;
-pub use key_hint::{HintPlacement, KeyHint};
+pub use key_hint::{HintPlacement, KeyHint, keycap_size, paint_keycap};
 pub use label::Label;
 pub use marker_group::MarkerGroup;
 pub use modal::Modal;

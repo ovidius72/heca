@@ -106,6 +106,9 @@ pub(crate) fn handle_keyboard_input(
         InputMode::PaneSelect { candidates } => {
             handle_pane_select_mode(registry, state, &candidates, ctx);
         }
+        InputMode::FollowLink { candidates, .. } => {
+            handle_follow_link_mode(registry, state, &candidates, ctx);
+        }
         InputMode::PaneSwap {
             candidates,
             focus_after,
@@ -384,6 +387,31 @@ fn handle_pane_select_mode(
         );
     }
     state.input_mode = InputMode::Normal;
+}
+
+fn handle_follow_link_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    candidates: &[crate::app_state::LinkHint],
+    ctx: KeyInputContext<'_>,
+) {
+    let candidates = candidates.to_vec();
+    // Any key exits the overlay; a matching letter opens its link. Esc just exits.
+    state.input_mode = InputMode::Normal;
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some(hint) = candidates.iter().find(|h| h.label == ch)
+    {
+        dispatch_action(
+            state,
+            registry,
+            InteractionSource::Keyboard,
+            &WmAction::OpenLink {
+                url: hint.url.clone(),
+            },
+        );
+    }
+    state.needs_redraw = true;
 }
 
 fn handle_pane_swap_mode(

@@ -53,6 +53,7 @@ float = "prefix+f"   # Toggle pane floating
 
 # ── Quick select / swap ──
 pane_select         = "prefix+q"        # Letters on panes, pick to focus
+follow_link         = "prefix+Shift+o"  # Letters on terminal links, pick to open
 swap_pane           = "prefix+Shift+m"  # Letters, swap panes (stay here)
 swap_and_focus_pane = "prefix+m"        # Letters, swap panes (follow)
 

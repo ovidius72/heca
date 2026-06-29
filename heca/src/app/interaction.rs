@@ -297,6 +297,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // Opening a URL launches the OS handler — no layout impact, must work from
         // any focus domain (a link in a floating pane opens too).
         WmAction::OpenLink { .. } => ActionPolicy::Global,
+        // Follow-link overlay targets the focused terminal's links; no layout
+        // impact, so it stays reachable from any focus domain (incl. floating).
+        WmAction::FollowLink => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,

@@ -183,6 +183,9 @@ pub enum WmAction {
     Float,
     ClosePane,
     PaneSelect,
+    /// Enter follow-link mode: assign a letter to each visible terminal hyperlink
+    /// in the focused pane; the next letter opens that link (via `OpenLink`).
+    FollowLink,
     SwapPane,
     SwapAndFocusPane,
     /// Enter the "move active column → workspace" letter pick (shows `KeyHint`s over
@@ -387,6 +390,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "next_pane" => Some(WmAction::NextPane),
         "prev_pane" => Some(WmAction::PrevPane),
         "pane_select" => Some(WmAction::PaneSelect),
+        "follow_link" => Some(WmAction::FollowLink),
         "swap_pane" => Some(WmAction::SwapPane),
         "move_column_to_workspace_pick" => Some(WmAction::MoveColumnToWorkspacePick),
         "move_pane_to_workspace_pick" => Some(WmAction::MovePaneToWorkspacePick),
@@ -694,6 +698,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::Float
         | WmAction::ClosePane
         | WmAction::PaneSelect
+        | WmAction::FollowLink
         | WmAction::SwapPane
         | WmAction::SwapAndFocusPane
         | WmAction::MoveColumnToWorkspacePick
@@ -975,6 +980,7 @@ mod tests {
                 WmAction::Float,
                 WmAction::ClosePane,
                 WmAction::PaneSelect,
+                WmAction::FollowLink,
                 WmAction::SwapPane,
                 WmAction::SwapAndFocusPane,
                 WmAction::MoveColumnToWorkspacePick,

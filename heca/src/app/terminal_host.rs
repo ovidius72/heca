@@ -748,6 +748,58 @@ pub(crate) fn hyperlink_uri_at_position(
     hyperlink_at_cell(&snapshot.hyperlinks, row, col).map(str::to_owned)
 }
 
+/// Build the follow-link candidates for `pane_id`: one labelled keycap per visible
+/// hyperlink span in the current snapshot (OSC 8 + auto-detected, same pipeline),
+/// capped at the shared 52-letter alphabet. Empty when the pane has no terminal
+/// backend or no visible links. terminal-task-18 (keyboard open surface).
+pub(crate) fn collect_link_hints(
+    state: &AppState,
+    pane_id: PaneId,
+) -> Vec<crate::app_state::LinkHint> {
+    let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())
+    else {
+        return Vec::new();
+    };
+    snapshot
+        .hyperlinks
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, span)| {
+            crate::app::selection::candidate_letter(idx).map(|label| crate::app_state::LinkHint {
+                label,
+                row: span.row,
+                start_col: span.start_col,
+                url: span.uri.clone(),
+            })
+        })
+        .collect()
+}
+
+/// Screen position (logical px, top-left) of cell `(row, col)` in `pane_id`'s
+/// terminal content, or `None` if the pane has no resolvable content rect. The
+/// inverse of `cell_coords_at_position`; used to stamp follow-link keycaps over a
+/// link's first cell.
+pub(crate) fn cell_screen_pos(
+    state: &AppState,
+    pane_id: PaneId,
+    row: usize,
+    col: usize,
+) -> Option<(f32, f32)> {
+    let content_rect = content_rect_for_pane(state, pane_id)?;
+    let (cell_w, cell_h) = state
+        .backends
+        .get(pane_id)
+        .map(|backend| backend.cell_size())
+        .unwrap_or(state.terminal_cell_size);
+    Some((
+        content_rect.loc.x as f32 + col as f32 * cell_w,
+        content_rect.loc.y as f32 + row as f32 * cell_h,
+    ))
+}
+
 /// Find the hyperlink span covering cell `(row, col)`, if any.
 ///
 /// `start_col` is inclusive, `end_col` exclusive (the capture/renderer

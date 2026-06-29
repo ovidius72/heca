@@ -65,6 +65,9 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::Normal => ("NORMAL", String::new()),
         InputMode::Prefix => ("PREFIX", String::new()),
         InputMode::PaneSelect { .. } => ("SELECT", pick_suffix()),
+        InputMode::FollowLink { .. } => {
+            ("FOLLOW", " — press a letter to open the link".to_string())
+        }
         InputMode::PaneSwap { focus_after, .. } => (
             if *focus_after { "SWAP+FOCUS" } else { "SWAP" },
             pick_suffix(),
@@ -1131,6 +1134,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     if chrome.left_sidebar_width >= crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
         crate::chrome::paint_drag_overlay(state, &mut chrome_scene, w, h, &chrome_theme);
     }
+    // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
+    // painted into the chrome scene so they sit above pane content. terminal-task-18.
+    crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,

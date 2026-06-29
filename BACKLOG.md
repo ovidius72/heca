@@ -553,12 +553,16 @@ Source: `terminal-implementation.md` Phase 11
   >    over a link → `CursorIcon::Pointer`, gated on the exact same condition as the click; refreshed
   >    on `ModifiersChanged` too (`update_cursor` + `link_hover` in `mouse.rs`, call in `events.rs`).
   >    4 hit-test unit tests; clippy 0 + 274 tests green. Plain click still goes to the TUI.
-  > 2. **HintKey overlay** (biggest). `KeyHint` wraps a *widget*; links are content-grid spans, so
-  >    build a GENERIC rect-targeted hint overlay (domain-neutral, reuse the keycap draw). New
-  >    `InputMode::FollowLink { candidates: Vec<(char,String)> }` modeled on `PaneSelect`; collect
-  >    visible `snapshot.hyperlinks` → a–z labels at their rects; letter → OpenLink. Bind
-  >    `prefix+Shift+o` in `keybindings.default.toml`. Files: `heca/src/app_state.rs` (InputMode),
-  >    `heca/src/input.rs`, `heca-grid-ui/src/widgets/` (overlay), render + key handling.
+  > 2. **HintKey overlay** — ✅ **DONE** (branch `feat/terminal-18-keyboard-open-link`). New enter-mode
+  >    action `WmAction::FollowLink` (`follow_link`, bound `prefix+Shift+o`) + `InputMode::FollowLink
+  >    { pane_id, candidates: Vec<LinkHint> }` (`app_state.rs`) modeled on `PaneSelect`. `LinkHint`
+  >    carries `label`/`row`/`start_col`/`url`. Candidates built by `collect_link_hints` from the
+  >    FOCUSED pane's `snapshot.hyperlinks` (OSC 8 + linkify), a–z A–Z via shared `candidate_letter`
+  >    (52-cap). Key handling `handle_follow_link_mode` → `OpenLink`. Keycap visual REUSED: extracted
+  >    `keycap_size` + `paint_keycap` free fns from `KeyHint` (grid-ui), painted into the chrome scene
+  >    by `chrome::paint_link_hints` (cell→screen via new `terminal_host::cell_screen_pos`). Policy
+  >    Global. Status shows `FOLLOW`. v1 scope = focused pane only. New unit tests (`candidate_letter`,
+  >    `keycap_size`); clippy 0 + all tests green. Full "Adding New Actions" checklist done.
   > 3. **Selection-mode `O`** — bind `O` in the selection mode keymap → OpenLink for the link under
   >    the caret (needs the selection caret cell + snapshot hyperlinks). Small.
   > 4. **Context menu "Open link"** — wire the existing `ContextMenu` to right-click on a terminal
