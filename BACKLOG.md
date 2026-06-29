@@ -81,8 +81,16 @@ Dirty-row rendering depends on retained terminal content. The app currently clea
   `heca/src/app/terminal_render.rs`
   Status: done. Backend row-range damage (`terminal_backend_output_produces_row_damage`) is green. App-path retained-presentation coverage is now solid: the damage policy was extracted into the pure `retained_damage_to_apply(...)` seam (skip on `None`, upgrade to `Full` on resize/style change, passthrough `Rows`/`Full` otherwise) with 6 policy tests, plus `retained_terminal_texture_size` (scale/ceil/min-1) and `terminal_layer_render_key` (stability + font-size/alpha/family change detection) tests, plus the existing `terminal_damage_copy_bands` band-conversion/clamp tests. `cargo test -p heca app::terminal_render` = 23/23, `-p heca-core` 67/67, clippy 0 warnings. Runtime validation of the retained presentation itself is the only `00b` sign-off left.
 
-### [ ] Phase: Dirty-region terminal rendering · `terminal-01`
+### [x] Phase: Dirty-region terminal rendering · `terminal-01`
 Render only changed terminal rows instead of the full pane every frame. This phase assumes `terminal-00` has already made row damage visible and safe by preserving unchanged terminal content across frames.
+
+> **DONE — delivered by the retained foundation (`terminal-00b/00c`); verified 2026-06-29.**
+> The backend emits row damage during normal output (`take_terminal_damage` → `Rows`, coalesced;
+> `Full` only on resize/viewport-move). `retained_damage_to_apply` passes `Rows` through,
+> `render_terminal_layer_update` re-renders only the damaged rows into the scratch and
+> `terminal_damage_copy_bands` copies only those bands into the per-pane retained layer (unchanged
+> rows are never touched), and `render_terminal_lines` iterates only the dirty ranges. Covered by
+> the `retained_damage_*` + `terminal_damage_copy_bands` tests in `terminal_render.rs`.
 
 > **Deliberately deferred — SEPARATE from the scrollback feature.** This is a pure
 > performance optimization, not a prerequisite for scrollback. The scrollback work
@@ -93,10 +101,10 @@ Render only changed terminal rows instead of the full pane every frame. This pha
 > compositor damage optimization `app-task-22` (phase `app-07`) — same "repaint
 > only what changed" spirit, different layer (terminal rows vs the whole scene).
 
-- [ ] **terminal-task-01** — Implement dirty-row rendering in `heca-renderer/src/terminal.rs`.
+- [x] **terminal-task-01** — Implement dirty-row rendering in `heca-renderer/src/terminal.rs`. **DONE.**
   Consume the already-plumbed `TerminalDamage` and redraw only dirty visible rows
   into the retained terminal content path. Fall back to full redraw when damage
-  says `Full`.
+  says `Full`. (Implemented as part of the retained-content foundation; see phase note.)
   Files: `heca-renderer/src/terminal.rs`, `heca-core/src/backend/snapshot.rs`
   Related: compositor damage-region optimization (`app-task-22`)
 
