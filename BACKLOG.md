@@ -546,6 +546,20 @@ Source: `terminal-implementation.md` Phase 11
   Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca/src/mouse/`,
   `heca/src/rpc.rs`, `keybindings.default.toml`, `heca-grid-ui/src/widgets/` (hint overlay).
 
+- [ ] **terminal-task-26** — **URL auto-detection (linkify)**. OSC 8 only marks links a program
+  *explicitly* emits; the common case (`echo "https://google.com"`, log output, …) is **plain text**.
+  Detect URL patterns in the visible terminal text and emit them as `HyperlinkSpan`s — the **same**
+  pipeline as OSC 8 (`terminal-03`), so rendering (`terminal-03`) and every open surface
+  (`terminal-task-18`) work identically for detected and explicit links.
+  - Scan in the engine snapshot beside `collect_row_hyperlinks` (regex or a small hand-rolled
+    scanner); match the open-allowlist schemes (`http(s)`, `ftp(s)`, `file`, `mailto`; optional bare
+    `www.`). Trim trailing punctuation; per-row for v1 (wrapped URLs → two spans, acceptable).
+  - **OSC 8 wins**: never double-link a cell that already carries an explicit OSC 8 link.
+  - Configurable: `[appearance.terminal] link_detection` (default `true`).
+  Files: `heca-core/src/backend/terminal/engine.rs`, `heca-config/src/appearance.rs`,
+  `config.default.toml`, `README.md`.
+  Related: `terminal-03` (HyperlinkSpan pipeline), `terminal-task-18` (open surfaces).
+
 - [ ] **terminal-task-19** — Scrollback search: entry-point action, search overlay (grid-ui `Input` widget), results highlighting.
   Files: `heca/src/input.rs`, `heca-core/src/backend/terminal/engine.rs`, overlay UI via `heca-grid-ui`
 

@@ -495,6 +495,12 @@ pub fn build_registry() -> ActionRegistry {
         handle_spawn_command,
     );
     registry.register(&WmAction::ReloadConfig, handle_reload_config);
+    registry.register(
+        &WmAction::OpenLink {
+            url: String::new(),
+        },
+        handle_open_link,
+    );
 
     // ── Sidebar-specific (parameterized) ──
     registry.register(
