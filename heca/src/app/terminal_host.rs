@@ -287,16 +287,32 @@ pub(crate) fn forward_mouse_wheel(state: &mut AppState, pos: (f32, f32), delta: 
 
     if !do_host_scroll {
         // Forward wheel to the terminal backend.
-        for button in wheel_buttons(delta) {
-            let Some(event) =
-                build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
-            else {
-                continue;
-            };
-            if let Some(backend) = state.backends.get_mut(target.pane_id) {
-                let _ = backend.process_mouse_event(&event);
-            }
+        forward_wheel_to_terminal(state, target, pos, delta);
+        return;
+    }
+
+    // Host scrollback fallback (`terminal-task-01h`): if the host viewport has
+    // no room to move (the backend is in an alternate screen with no retained
+    // history, e.g. `nvim`/`less`, or the pane simply has no scrollback yet), the
+    // wheel is otherwise wasted. For plain wheel we gracefully forward it to the
+    // terminal so non-grabbed TUIs can still react. For `Shift+wheel` this is a
+    // documented no-op: Shift's contract is "bypass the TUI, host-only", so we
+    // never silently scroll the TUI. wezterm does not expose the main screen's
+    // preserved history while the alt screen is active, so host scrollback in
+    // alt-screen TUIs is an inherent limitation (see README).
+    let host_can_scroll = state
+        .backends
+        .get(target.pane_id)
+        .and_then(|b| b.terminal_snapshot())
+        .is_some_and(|s| s.scrollback_rows > s.rows);
+    if !host_can_scroll {
+        if shift_held {
+            // Documented limitation: Shift+wheel host scrollback is a no-op
+            // while the backend is in an alternate screen (no exposed host
+            // history).
+            return;
         }
+        forward_wheel_to_terminal(state, target, pos, delta);
         return;
     }
 
@@ -724,6 +740,30 @@ fn wheel_buttons(delta: MouseScrollDelta) -> Vec<BackendMouseButton> {
     match delta {
         MouseScrollDelta::LineDelta(x, y) => axis_wheel_buttons(x as f64, y as f64),
         MouseScrollDelta::PixelDelta(pos) => axis_wheel_buttons(pos.x, pos.y),
+    }
+}
+
+/// Forward a wheel scroll to the terminal backend as press events.
+///
+/// Used by [`forward_mouse_wheel`] both when the policy routes the wheel away
+/// from host scrollback (grabbed TUI / `terminal_mouse = false`) and as a
+/// graceful fallback when the host viewport has no scrollback room (see
+/// `terminal-task-01h`).
+fn forward_wheel_to_terminal(
+    state: &mut AppState,
+    target: TerminalInputTarget,
+    pos: (f32, f32),
+    delta: MouseScrollDelta,
+) {
+    for button in wheel_buttons(delta) {
+        let Some(event) =
+            build_mouse_event(state, target, pos, BackendMouseEventKind::Press, button)
+        else {
+            continue;
+        };
+        if let Some(backend) = state.backends.get_mut(target.pane_id) {
+            let _ = backend.process_mouse_event(&event);
+        }
     }
 }
 

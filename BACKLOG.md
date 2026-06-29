@@ -364,24 +364,29 @@ one residual alt-screen wheel-routing issue, tracked separately in
   `heca/src/input.rs`, `heca/src/app/registry.rs`, `heca/src/app/terminal_host.rs`,
   `heca/src/rpc.rs`, `keybindings.default.toml`, `README.md`.
 
-- [ ] **terminal-task-01h** — BUG: wheel routing is ineffective in alt-screen TUIs (`nvim`, `less`).
-  Found in final runtime validation after the scrollback merge.
-  Current observed behavior:
-  - prompt shell: `wheel` and `Shift+wheel` both scroll host history ✅
-  - `nvim` with `:set mouse=a`: normal wheel scrolls `nvim` ✅, but `Shift+wheel` is a no-op ⚠️
-  - `less README.md`: both wheel and `Shift+wheel` are ineffective; wheel previously could also
-    spuriously enter Selection mode when no host viewport movement occurred
-  Review-local fixes already proved two sub-issues:
-  - `Shift+wheel` on the host path must use the dominant wheel axis (`y`, fallback `x`) because
-    many platforms remap `Shift+wheel` into horizontal delta
-  - Selection mode should only auto-enter on wheel-up if the host viewport actually moved
-  Remaining work: diagnose the alt-screen / host-history contract and decide the intended UX.
-  Determine whether `Shift+wheel` should expose host scrollback while a backend is in alternate
-  screen, or whether the no-op is an inherent limitation that must be documented explicitly.
-  Deliverable: either a real fix for alt-screen host scrollback or a documented product decision
-  that narrows the promise of `Shift+wheel` in full-screen TUIs.
-  Files: `heca/src/app/terminal_host.rs`, `heca-core/src/backend/terminal.rs`,
-  `heca-core/src/backend/terminal/engine.rs`, `README.md`.
+- [x] **terminal-task-01h** — BUG: wheel routing is ineffective in alt-screen TUIs (`nvim`, `less`). ✅ DONE (2026-06-27)
+  Found in final runtime validation after the scrollback merge. Product decision locked via
+  `/grill-me`:
+  - Plain wheel + host has no scrollback room (`max_offset == 0`, e.g. alt-screen with no
+    retained history) → gracefully forward the wheel to the terminal backend so non-grabbed
+    TUIs (`less`) can still react.
+  - `Shift+wheel` + host cannot scroll → documented no-op. Shift's contract is "bypass the
+    TUI, host-only", so we never silently scroll the TUI.
+  - Alt-screen with pre-existing main-screen history: documented as inherent limitation —
+    wezterm preserves the pre-alt history but does not expose it while the alt screen is
+    active (fields are private on `TerminalState`). Exposing it would require forking
+    wezterm or a heca-level frozen snapshot, both fragile for a marginal win.
+  Earlier review-local fixes (already on main via PR #191):
+  - `Shift+wheel` on the host path uses the dominant wheel axis (`y`, fallback `x`) because
+    many platforms remap `Shift+wheel` into horizontal delta.
+  - Selection mode only auto-enters on wheel-up if the host viewport actually moved.
+  Implementation: `forward_mouse_wheel` peeks `scrollback_rows > rows` to decide
+  host-can-scroll; a new `forward_wheel_to_terminal` helper dedups the terminal-forward path.
+  README documents the alt-screen wheel limitation.
+  Runtime-validated 2026-06-27: `less` plain wheel now scrolls `less`; `nvim` plain wheel
+  scrolls nvim; `Shift+wheel` in alt-screen is a no-op as documented.
+  Files: `heca/src/app/terminal_host.rs`, `README.md`.
+  Gate: clippy 0; `cargo test -p heca` 266/266; `heca-core` flaky PTY tests pass in isolation.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
 Ligatures must be explicitly configurable (default off) and documented.

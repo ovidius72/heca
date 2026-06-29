@@ -262,6 +262,13 @@ Inside Selection mode:
   as mouse events.
 - **Shift+wheel** → always scrolls host viewport, bypassing any mouse grab.
 - Scrolling up from the live bottom automatically enters Selection mode.
+- **Alternate-screen TUIs** (`nvim`, `less`, …): while a program owns the
+  alternate screen, the host has no exposed scrollback history to scroll into.
+  Plain wheel is forwarded to the program in that case (so `less` can still
+  react when it isn't mouse-grabbed); `Shift+wheel` is a no-op because it
+  bypasses the program and there is nothing to scroll host-side. This is an
+  inherent limitation — wezterm preserves the pre-alt-screen history but does
+  not expose it while the alternate screen is active.
 
 **Relevant settings:**
 - `terminal_scrollback_lines` — total host-retained history capacity (rows above
