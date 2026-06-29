@@ -153,6 +153,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Floating panes use independent opacity/blur/border knobs so they can stay
     // readable (opaque by default) while tiled panes are frosted.
     let floating_surface_alpha = state.terminal_floating_surface_opacity();
+    let terminal_ligatures = state.appearance.terminal.ligatures;
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -324,6 +325,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             font_size: terminal_font_config.size.terminal,
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha,
+            ligatures: terminal_ligatures,
         },
         (w, h),
         surface_physical_size,
@@ -335,6 +337,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             font_size: terminal_font_config.size.terminal,
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha: floating_surface_alpha,
+            ligatures: terminal_ligatures,
         },
         (w, h),
         surface_physical_size,
@@ -563,6 +566,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         font_size: state.font_config.size.terminal,
                         families: terminal_font_families_from(&state.font_config.family),
                         surface_alpha,
+                        ligatures: state.appearance.terminal.ligatures,
                     },
                     mount.clone(),
                     selection_overlay,
@@ -790,6 +794,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             font_size: state.font_config.size.terminal,
                             families: terminal_font_families_from(&state.font_config.family),
                             surface_alpha: floating_surface_alpha,
+                            ligatures: state.appearance.terminal.ligatures,
                         },
                         mount.clone(),
                         selection_overlay,

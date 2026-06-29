@@ -225,6 +225,7 @@ fn terminal_layer_render_key(style: &TerminalStyle<'_>) -> u64 {
     style.families.bold.hash(&mut hasher);
     style.families.italic.hash(&mut hasher);
     style.families.bold_italic.hash(&mut hasher);
+    style.ligatures.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -1189,6 +1190,7 @@ mod tests {
                 bold_italic: None,
             },
             surface_alpha,
+            ligatures: true,
         }
     }
 
@@ -1302,6 +1304,7 @@ mod tests {
                 bold_italic: None,
             },
             surface_alpha: 0.8,
+            ligatures: true,
         };
         let b = TerminalStyle {
             font_size: 14.0,
@@ -1312,7 +1315,21 @@ mod tests {
                 bold_italic: None,
             },
             surface_alpha: 0.8,
+            ligatures: true,
         };
         assert_ne!(terminal_layer_render_key(&a), terminal_layer_render_key(&b));
+    }
+
+    #[test]
+    fn terminal_layer_render_key_changes_with_ligatures() {
+        // Toggling ligatures must change the render key so the retained terminal
+        // layer re-renders (the `terminal_ligatures` setting applies live).
+        let on = style(14.0, 0.8);
+        let mut off = style(14.0, 0.8);
+        off.ligatures = false;
+        assert_ne!(
+            terminal_layer_render_key(&on),
+            terminal_layer_render_key(&off)
+        );
     }
 }

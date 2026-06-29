@@ -61,6 +61,9 @@ pub struct TerminalStyle<'a> {
     /// becomes translucent so a frosted backdrop can show through.
     /// Derived from `AppearanceConfig::opacity()`.
     pub surface_alpha: f32,
+    /// Whether coding-font ligatures (`calt`/`liga`/`clig`) are applied when
+    /// shaping terminal runs. `false` disables them so each glyph stands alone.
+    pub ligatures: bool,
 }
 
 /// Per-style font family slots for terminal rendering, mirroring the app's
@@ -532,6 +535,7 @@ fn flush_text_run(
         cell_w,
         &r.byte_cols,
         &r.col_colors,
+        style.ligatures,
     );
 }
 
