@@ -527,6 +527,43 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) must exist fir
 
 - [ ] **terminal-task-22** — Wire Yazi image preview end-to-end. Confirm no infinite spinner.
 
+### [ ] Phase: Per-pane font zoom · `terminal-10`
+Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no
+pane is targeted. Feasibility confirmed 2026-06-29: the per-pane plumbing mostly exists — cell
+size is already per-backend (`backend.cell_size()`, used for mouse/selection mapping), the grid
+is sized per-backend (`sync_terminal_backend_size`), retained layers are per `pane_id` with
+`font_size` already in `terminal_layer_render_key`, and the glyph cache is size-keyed. The font
+size is global today in only three spots: `resolve_terminal_cell_size`/`refresh_terminal_cell_size`
+(`terminal_metrics.rs`) and the single `TerminalStyle.font_size` built in `render.rs`.
+
+Design (agreed with user 2026-06-29):
+- **Keyboard = two distinct bindings/actions** (explicit, no implicit scope resolution): one
+  `prefix`+key for **global** font zoom (app-wide, `app-03`) and a separate `prefix`+key for the
+  **focused pane** — the pane action always targets the currently focused pane. (Plus inc/dec and a
+  reset for each.)
+- **Mouse = `Ctrl`/`Meta`+wheel, pointer-resolved**: over a pane → that pane; over chrome/empty →
+  global.
+- **Composition with `app-03`**: app-wide zoom is the global base; per-pane is an offset/factor on
+  top, so the global binding moves everything and the per-pane binding fine-tunes one pane. The
+  global action IS `app-03`'s — design them together.
+
+- [ ] **terminal-task-23** — Per-pane font-size state (default = global config). Store per `pane_id`
+  (AppState map or `PaneRuntime`); resolve cell size from the pane's size and `set_cell_size` per
+  backend (re-fits cols/rows → PTY reflow, already handled).
+  Files: `heca/src/app/terminal_metrics.rs`, `heca/src/app/terminal_host.rs`, `heca/src/app_state.rs`
+- [ ] **terminal-task-24** — Build `TerminalStyle.font_size` per pane in the render loop (today a
+  single global style feeds all panes); retained layer + size-keyed glyph cache already cope.
+  Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`
+- [ ] **terminal-task-25** — Actions + input. A pane `WmAction` (`PaneFontZoom { delta }` + reset)
+  for the focused pane, and the global zoom action shared with `app-03`. Two keyboard bindings
+  (global vs pane) + mouse `Ctrl`/`Meta`+wheel resolved by pointer (over pane → pane action; over
+  chrome → global action). Intercept the modified wheel at the WM level **before** terminal wheel
+  forwarding. All through `ActionRegistry`, reachable from keyboard + mouse + RPC; follow the
+  "Adding New Actions" checklist.
+  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca/src/mouse/`,
+  `keybindings.default.toml`, `heca/src/rpc.rs`
+  Related: `app-03` (the global branch is app-03's action — design together).
+
 ---
 
 ## Theming
@@ -1263,6 +1300,14 @@ Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename
   showcase + `docs/widgets.md`; right-click hit-testing in `heca/src/mouse/`; an open/close `InputMode` or
   overlay state; per-target entry sets. Design first (scope the widget + menu model) before building.
   Files: `heca-grid-ui/src/widgets/` (new), `heca/src/mouse/`, `heca/src/chrome/`
+
+- [ ] **app-task-33** — Right-click context menu on the **terminal content pane** — the capstone of the
+  terminal arc, done LAST (user request 2026-06-29). Reuses the `ContextMenu` widget from `app-task-32`.
+  Entries route through `ActionRegistry` so mouse/keyboard/RPC stay one code path:
+  **Copy selection** (gated by `terminal-06` text selection), **Paste** (gated by `terminal-07`
+  clipboard), and **pane actions** (split/close/float — already existing `WmAction`s). Build only after
+  `terminal-06` + `terminal-07` land so copy/paste are real and the menu is built once, complete.
+  Files: `heca/src/mouse/`, `heca/src/app/terminal_host.rs`, `heca-grid-ui/src/widgets/` (reuse).
 
 ---
 
