@@ -688,6 +688,10 @@ impl PaneBackend for TerminalBackend {
         self.engine.set_scroll_animations_enabled(enabled);
     }
 
+    fn set_link_detection(&mut self, enabled: bool) {
+        self.engine.set_link_detection(enabled);
+    }
+
     fn lines_in_stable_range(
         &self,
         start: isize,

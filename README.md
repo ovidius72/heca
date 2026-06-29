@@ -735,7 +735,9 @@ hyperlink_style = "underline"   # none | color | underline | undercurl (default 
 ```
 
 `none` leaves links looking like normal text; `color` recolors only; `underline`
-and `undercurl` add a straight or wavy line in the link color. (Opening links on
+and `undercurl` add a straight or wavy line in the link color. Plain-text URLs
+(`echo "https://…"`, log output) are auto-detected as links too; set
+`link_detection = false` to mark only explicit OSC 8 links. (Opening links on
 click is a separate, upcoming feature.)
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.

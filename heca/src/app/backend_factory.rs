@@ -52,7 +52,10 @@ pub(crate) fn create_terminal_backend_for_state(
         state.terminal_scrollback_lines,
         state.terminal_scroll_animations_enabled,
     );
-    create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options)
+    let mut backend =
+        create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options);
+    backend.set_link_detection(state.appearance.terminal.link_detection);
+    backend
 }
 
 pub(crate) fn create_command_backend_for_state(
@@ -71,7 +74,10 @@ pub(crate) fn create_command_backend_for_state(
         state.terminal_scrollback_lines,
         state.terminal_scroll_animations_enabled,
     );
-    create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options)
+    let mut backend =
+        create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options);
+    backend.set_link_detection(state.appearance.terminal.link_detection);
+    backend
 }
 
 pub(crate) fn terminal_grid_for_workspace(state: &AppState, ws_idx: usize) -> (usize, usize) {

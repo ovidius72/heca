@@ -128,6 +128,11 @@ fn default_terminal_hyperlink_style() -> HyperlinkStyle {
     HyperlinkStyle::Underline
 }
 
+/// Default URL auto-detection: `true` (plain-text URLs become clickable links).
+fn default_terminal_link_detection() -> bool {
+    true
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -241,6 +246,10 @@ pub struct TerminalAppearance {
     /// `none`.
     #[serde(default)]
     pub hyperlink_color: Option<Color>,
+    /// Auto-detect plain-text URLs (`echo`, logs, …) and make them links too,
+    /// not just explicit OSC 8 links. Default `true`.
+    #[serde(default = "default_terminal_link_detection")]
+    pub link_detection: bool,
 }
 
 impl Default for TerminalAppearance {
@@ -254,6 +263,7 @@ impl Default for TerminalAppearance {
             ligatures: default_terminal_ligatures(),
             hyperlink_style: default_terminal_hyperlink_style(),
             hyperlink_color: None,
+            link_detection: default_terminal_link_detection(),
         }
     }
 }
