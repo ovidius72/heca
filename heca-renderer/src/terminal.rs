@@ -1,9 +1,23 @@
 use crate::primitive::PrimitiveRenderer;
 use crate::text::{TextBox, TextRenderer, TextStyle};
 use heca_core::backend::{
-    TerminalCursorShape, TerminalDamage, TerminalLine, TerminalRowRange, TerminalSnapshot,
-    TerminalUnderlineStyle,
+    HyperlinkSpan, TerminalCursorShape, TerminalDamage, TerminalLine, TerminalRowRange,
+    TerminalSnapshot, TerminalUnderlineStyle,
 };
+
+/// Hyperlink decoration the renderer applies to OSC 8 link spans. Renderer-side
+/// mirror of `heca_config::appearance::HyperlinkStyle` (kept config-free here).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HyperlinkDecor {
+    /// No special rendering.
+    None,
+    /// Recolor only.
+    Color,
+    /// Recolor + straight underline.
+    Underline,
+    /// Recolor + wavy undercurl.
+    Undercurl,
+}
 
 /// Host-level selection overlay parameters for terminal panes.
 ///
@@ -64,6 +78,11 @@ pub struct TerminalStyle<'a> {
     /// Whether coding-font ligatures (`calt`/`liga`/`clig`) are applied when
     /// shaping terminal runs. `false` disables them so each glyph stands alone.
     pub ligatures: bool,
+    /// Decoration applied to OSC 8 hyperlink spans.
+    pub hyperlink_style: HyperlinkDecor,
+    /// Color used to recolor hyperlink text + its decoration (resolved from
+    /// `[appearance.terminal] hyperlink_color` → `theme.accent`).
+    pub hyperlink_color: [f32; 4],
 }
 
 /// Per-style font family slots for terminal rendering, mirroring the app's
@@ -116,6 +135,8 @@ struct TerminalRenderLayout<'a> {
     rows: usize,
     style: TerminalStyle<'a>,
     rect: TextBox,
+    /// OSC 8 hyperlink spans over the visible grid (recolor + decorate).
+    hyperlinks: &'a [HyperlinkSpan],
 }
 
 impl<'a> TerminalRenderer<'a> {
@@ -147,6 +168,7 @@ impl<'a> TerminalRenderer<'a> {
                 rows: snapshot.rows,
                 style,
                 rect,
+                hyperlinks: &snapshot.hyperlinks,
             },
             None,
         );
@@ -174,6 +196,7 @@ impl<'a> TerminalRenderer<'a> {
                     rows: snapshot.rows,
                     style,
                     rect,
+                    hyperlinks: &snapshot.hyperlinks,
                 },
                 Some(ranges),
             ),
@@ -269,6 +292,7 @@ fn render_terminal_lines(
         rows,
         style,
         rect,
+        hyperlinks,
     } = layout;
     let TextBox {
         x: px,
@@ -349,6 +373,10 @@ fn render_terminal_lines(
                 bg_start = bg_end;
             }
 
+            // OSC 8 hyperlinks on this row (usually none): link cells are recolored
+            // and decorated. Cheap fast-path: only scan per-cell when the row has any.
+            let row_has_links = hyperlinks.iter().any(|span| span.row == row);
+
             // Text: group consecutive same-style cells into one shaped run so the
             // shaper sees whole tokens (e.g. `->`) and OpenType ligatures can form.
             // Underlines and box/powerline symbols stay per-cell (drawn via
@@ -405,18 +433,30 @@ fn render_terminal_lines(
                     faux_italic: is_faux_italic,
                 };
 
+                // Hyperlink cells: recolor the text (and its underline/decoration)
+                // to the link color unless the style is `None`.
+                let is_link = row_has_links
+                    && hyperlinks
+                        .iter()
+                        .any(|s| s.row == row && col >= s.start_col && col < s.end_col);
+                let fg = if is_link && style.hyperlink_style != HyperlinkDecor::None {
+                    style.hyperlink_color
+                } else {
+                    cell.fg
+                };
+
                 // Group by font style only — NOT foreground color. Ligatures must
                 // form across color boundaries (e.g. a syntax-highlighted operator
                 // whose halves are tinted differently), matching kitty/WezTerm; the
                 // emission then colors each glyph by its own cell.
                 match run.as_mut() {
                     Some(r) if r.next_col == col && r.style == cell_style => {
-                        r.push_cell(&cell.text, cw, cell.fg);
+                        r.push_cell(&cell.text, cw, fg);
                     }
                     _ => {
                         flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
                         let mut r = TerminalTextRun::new(col, cell_style);
-                        r.push_cell(&cell.text, cw, cell.fg);
+                        r.push_cell(&cell.text, cw, fg);
                         run = Some(r);
                     }
                 }
@@ -428,8 +468,19 @@ fn render_terminal_lines(
                     y,
                     width,
                     cell_h,
-                    cell.fg,
+                    fg,
                 );
+                if is_link {
+                    draw_hyperlink_decoration(
+                        primitive_renderer,
+                        style.hyperlink_style,
+                        x,
+                        y,
+                        width,
+                        cell_h,
+                        style.hyperlink_color,
+                    );
+                }
                 col += cw;
             }
             flush_text_run(text_renderer, &mut run, px, y, cell_w, cell_h, style);
@@ -612,6 +663,26 @@ fn queue_cursor_overlay(
             primitive_renderer.draw_rect(cursor_x, cursor_y, bar_w, cell_h, cursor_color);
         }
     }
+}
+
+/// Draw the hyperlink decoration for one link cell (straight underline or
+/// undercurl, in the link color). `None`/`Color` draw nothing extra — the recolor
+/// alone marks the link.
+fn draw_hyperlink_decoration(
+    primitive_renderer: &mut PrimitiveRenderer,
+    style: HyperlinkDecor,
+    x: f32,
+    y: f32,
+    width: f32,
+    cell_h: f32,
+    color: [f32; 4],
+) {
+    let underline = match style {
+        HyperlinkDecor::Underline => TerminalUnderlineStyle::Single,
+        HyperlinkDecor::Undercurl => TerminalUnderlineStyle::Curly,
+        HyperlinkDecor::None | HyperlinkDecor::Color => return,
+    };
+    draw_underline_style(primitive_renderer, underline, x, y, width, cell_h, color);
 }
 
 fn draw_underline_style(

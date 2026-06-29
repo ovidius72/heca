@@ -19,7 +19,7 @@ use heca_grid_ui::{
     Point as GuiPoint, Rectangle as GuiRectangle, Scene as GuiScene, Size as GuiSize,
 };
 use heca_renderer::grid::GridRenderer;
-use heca_renderer::terminal::{TerminalFontFamilies, TerminalStyle};
+use heca_renderer::terminal::{HyperlinkDecor, TerminalFontFamilies, TerminalStyle};
 use heca_renderer::text::TextRenderer;
 
 /// Project the terminal font-family group from config into the renderer's
@@ -37,6 +37,17 @@ fn terminal_font_families_from(
         bold: tf.bold.as_deref(),
         italic: tf.italic.as_deref(),
         bold_italic: tf.bold_italic.as_deref(),
+    }
+}
+
+/// Map the config hyperlink decoration onto the renderer's enum.
+fn hyperlink_decor_from(style: heca_config::appearance::HyperlinkStyle) -> HyperlinkDecor {
+    use heca_config::appearance::HyperlinkStyle as S;
+    match style {
+        S::None => HyperlinkDecor::None,
+        S::Color => HyperlinkDecor::Color,
+        S::Underline => HyperlinkDecor::Underline,
+        S::Undercurl => HyperlinkDecor::Undercurl,
     }
 }
 
@@ -154,6 +165,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // readable (opaque by default) while tiled panes are frosted.
     let floating_surface_alpha = state.terminal_floating_surface_opacity();
     let terminal_ligatures = state.appearance.terminal.ligatures;
+    let terminal_hyperlink_style = hyperlink_decor_from(state.appearance.terminal.hyperlink_style);
+    // Link color: config override → theme accent.
+    let terminal_hyperlink_color = state
+        .appearance
+        .terminal
+        .hyperlink_color
+        .unwrap_or(state.theme.accent)
+        .to_f32x4();
 
     let chrome = ChromeConfig {
         tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
@@ -326,6 +345,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha,
             ligatures: terminal_ligatures,
+            hyperlink_style: terminal_hyperlink_style,
+            hyperlink_color: terminal_hyperlink_color,
         },
         (w, h),
         surface_physical_size,
@@ -338,6 +359,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha: floating_surface_alpha,
             ligatures: terminal_ligatures,
+            hyperlink_style: terminal_hyperlink_style,
+            hyperlink_color: terminal_hyperlink_color,
         },
         (w, h),
         surface_physical_size,
@@ -567,6 +590,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         families: terminal_font_families_from(&state.font_config.family),
                         surface_alpha,
                         ligatures: state.appearance.terminal.ligatures,
+                        hyperlink_style: terminal_hyperlink_style,
+                        hyperlink_color: terminal_hyperlink_color,
                     },
                     mount.clone(),
                     selection_overlay,
@@ -795,6 +820,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             families: terminal_font_families_from(&state.font_config.family),
                             surface_alpha: floating_surface_alpha,
                             ligatures: state.appearance.terminal.ligatures,
+                            hyperlink_style: terminal_hyperlink_style,
+                            hyperlink_color: terminal_hyperlink_color,
                         },
                         mount.clone(),
                         selection_overlay,

@@ -439,16 +439,27 @@ Ligatures in coding fonts (Fira Code `->` `!=` `>=`, Maple Mono, …) are **mult
   Gate: clippy 0 ✅ + tests ✅ (`terminal_ligatures` shaping test: disabling features changes
   glyphs to standalone; `terminal_layer_render_key_changes_with_ligatures`).
 
-### [ ] Phase: Richer terminal protocol hooks · `terminal-03`
+### [x] Phase: Richer terminal protocol hooks · `terminal-03`
 Extension points for hyperlinks and inline graphics without redesigning the core render contract.
 
-- [ ] **terminal-task-03** — Add `OSC 8` hyperlink extension points to `TerminalSnapshot`.
-  Add `hyperlinks: Vec<HyperlinkCell>` (optional, empty = ignored by renderer).
-  Files: `heca-core/src/backend/terminal/snapshot.rs`, `heca-renderer/src/terminal.rs`
+- [x] **terminal-task-03** — `OSC 8` hyperlink extension point on `TerminalSnapshot`. **DONE.**
+  Added `HyperlinkSpan { row, start_col, end_col, uri }` + `hyperlinks: Vec<HyperlinkSpan>` (real
+  path: `heca-core/src/backend/snapshot.rs`), captured in the engine (`collect_row_hyperlinks`
+  merges contiguous same-URI cells). **Plus nice rendering** (user request 2026-06-29, beyond the
+  original capture-only scope): link cells are recolored + decorated, theme/config-driven via
+  `[appearance.terminal] hyperlink_style` (`none|color|underline|undercurl`, default `underline`)
+  and `hyperlink_color` (→ `theme.accent`). Renderer enum `HyperlinkDecor`, `TerminalStyle` carries
+  color+style, `render_terminal_lines` recolors/decorates link spans. Click-to-open stays
+  `terminal-task-18`.
+  Files: `heca-core/src/backend/{snapshot,terminal/engine}.rs`, `heca-config/src/appearance.rs`,
+  `heca-renderer/src/terminal.rs`, `heca/src/app/{render,terminal_render}.rs`,
+  `config.default.toml`, `README.md`.
+  Gate: clippy 0 ✅ + tests ✅ (`snapshot_captures_osc8_hyperlink_spans`).
 
-- [ ] **terminal-task-04** — Add inline graphics/image placement stub to `TerminalSnapshot`.
-  Add `graphics: Vec<GraphicsPlacement>` — struct only, no rendering yet. Defines the contract.
-  Files: `heca-core/src/backend/terminal/snapshot.rs`
+- [x] **terminal-task-04** — Inline graphics/image placement stub on `TerminalSnapshot`. **DONE.**
+  Added `GraphicsPlacement { row, col, cols, rows, image_id }` + `graphics: Vec<GraphicsPlacement>`
+  (always empty for now) — the contract stub for `terminal-09`. No capture/rendering yet.
+  Files: `heca-core/src/backend/snapshot.rs`
   Related: `terminal-task-20` (full image rendering for Yazi)
 
 ### [ ] Phase: Backend and renderer tests · `terminal-04`

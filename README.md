@@ -723,6 +723,21 @@ ligatures = false   # default true; disables calt/liga/clig for the terminal fon
 
 Reload at runtime with `prefix+Shift+r` — the toggle and font both apply live.
 
+#### Terminal hyperlinks
+
+OSC 8 hyperlinks emitted by programs are decorated in terminal panes. The
+decoration and color are configurable under `[appearance.terminal]`:
+
+```toml
+[appearance.terminal]
+hyperlink_style = "underline"   # none | color | underline | undercurl (default underline)
+# hyperlink_color = "#5fafff"   # omit → theme accent
+```
+
+`none` leaves links looking like normal text; `color` recolors only; `underline`
+and `undercurl` add a straight or wavy line in the link color. (Opening links on
+click is a separate, upcoming feature.)
+
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 
 ### Pane Info Bar
