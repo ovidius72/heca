@@ -1,7 +1,7 @@
 use super::super::{
     BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
-    BackendMouseEvent, BackendMouseEventKind, TerminalCell, TerminalLine, TerminalPaletteDefaults,
-    TerminalSnapshot, TerminalUnderlineStyle,
+    BackendMouseEvent, BackendMouseEventKind, HyperlinkSpan, TerminalCell, TerminalLine,
+    TerminalPaletteDefaults, TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use crate::layout::animation::{Animation, AnimationConfig};
@@ -460,7 +460,7 @@ impl TerminalEngine {
         let blank_line = TerminalLine {
             cells: vec![blank; cols],
         };
-        let (lines, scrollback_rows, viewport_offset) =
+        let (lines, scrollback_rows, viewport_offset, hyperlinks) =
             self.visible_lines(cols, rows, &palette, &blank_line);
 
         let cursor = self.terminal.cursor_pos();
@@ -483,6 +483,8 @@ impl TerminalEngine {
             at_bottom: viewport_offset == 0,
             scrollback_rows,
             viewport_top_stable_row: self.visible_top_stable_row(),
+            hyperlinks,
+            graphics: Vec::new(),
         };
         snapshot.debug_assert_valid();
         snapshot
@@ -569,7 +571,7 @@ impl TerminalEngine {
         rows: usize,
         palette: &ColorPalette,
         blank_line: &TerminalLine,
-    ) -> (Vec<TerminalLine>, usize, usize) {
+    ) -> (Vec<TerminalLine>, usize, usize, Vec<HyperlinkSpan>) {
         let screen = self.terminal.screen();
         let visible_count = rows.min(screen.physical_rows.max(1));
         let total = screen.scrollback_rows();
@@ -584,12 +586,15 @@ impl TerminalEngine {
         let visible_end = total.saturating_sub(offset);
         let visible_start = visible_end.saturating_sub(visible_count);
         let mut lines = Vec::with_capacity(rows);
+        let mut hyperlinks = Vec::new();
 
-        for mut line in screen
+        for (row, mut line) in screen
             .lines_in_phys_range(visible_start..visible_end)
             .into_iter()
             .take(rows)
+            .enumerate()
         {
+            collect_row_hyperlinks(&line, row, cols, &mut hyperlinks);
             lines.push(snapshot_line(&mut line, cols, palette, blank_line));
         }
 
@@ -597,7 +602,7 @@ impl TerminalEngine {
             lines.push(blank_line.clone());
         }
 
-        (lines, total, offset)
+        (lines, total, offset, hyperlinks)
     }
 }
 
@@ -625,6 +630,50 @@ fn snapshot_line(
     }
 
     TerminalLine { cells }
+}
+
+/// Collect OSC 8 hyperlink spans for one visible row. Consecutive cells that
+/// carry the same link URI are merged into a single span (in cell columns), so a
+/// later phase can underline / open contiguous links without re-scanning.
+fn collect_row_hyperlinks(
+    line: &wezterm_term::Line,
+    row: usize,
+    cols: usize,
+    out: &mut Vec<HyperlinkSpan>,
+) {
+    let mut open: Option<HyperlinkSpan> = None;
+    for cell in line.visible_cells() {
+        let idx = cell.cell_index();
+        if idx >= cols {
+            break;
+        }
+        let end = (idx + cell.width().max(1)).min(cols);
+        match cell.attrs().hyperlink().map(|link| link.uri()) {
+            Some(uri) => match open.as_mut() {
+                // Extend the run only if it is the same link and contiguous.
+                Some(span) if span.uri == uri && span.end_col == idx => span.end_col = end,
+                _ => {
+                    if let Some(span) = open.take() {
+                        out.push(span);
+                    }
+                    open = Some(HyperlinkSpan {
+                        row,
+                        start_col: idx,
+                        end_col: end,
+                        uri: uri.to_string(),
+                    });
+                }
+            },
+            None => {
+                if let Some(span) = open.take() {
+                    out.push(span);
+                }
+            }
+        }
+    }
+    if let Some(span) = open.take() {
+        out.push(span);
+    }
 }
 
 fn terminal_config(
@@ -910,6 +959,31 @@ mod tests {
         engine.advance_bytes(b"\x07");
         assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
         assert!(engine.take_alerts().is_empty());
+    }
+
+    #[test]
+    fn snapshot_captures_osc8_hyperlink_spans() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(
+            80,
+            4,
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
+
+        // OSC 8 hyperlink: open `https://example.com`, write "link", close.
+        engine.advance_bytes(b"\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\");
+
+        let snapshot = engine.snapshot((8.0, 16.0));
+        assert_eq!(snapshot.hyperlinks.len(), 1, "one captured link span");
+        let span = &snapshot.hyperlinks[0];
+        assert_eq!(span.uri, "https://example.com");
+        assert_eq!(span.row, 0);
+        assert_eq!(span.start_col, 0);
+        assert_eq!(span.end_col, 4, "the 4 cells of \"link\" form the span");
+        assert!(snapshot.graphics.is_empty(), "graphics stays an empty stub");
     }
 
     #[test]

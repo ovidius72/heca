@@ -920,6 +920,8 @@ mod tests {
             at_bottom: true,
             scrollback_rows: rows,
             viewport_top_stable_row: 0,
+            hyperlinks: Vec::new(),
+            graphics: Vec::new(),
         }
     }
 
@@ -943,6 +945,8 @@ mod tests {
             at_bottom: true,
             scrollback_rows: rows,
             viewport_top_stable_row: top_stable,
+            hyperlinks: Vec::new(),
+            graphics: Vec::new(),
         }
     }
 
@@ -1191,6 +1195,8 @@ mod tests {
             },
             surface_alpha,
             ligatures: true,
+            hyperlink_style: heca_renderer::terminal::HyperlinkDecor::Underline,
+            hyperlink_color: [0.4, 0.6, 1.0, 1.0],
         }
     }
 
@@ -1305,6 +1311,8 @@ mod tests {
             },
             surface_alpha: 0.8,
             ligatures: true,
+            hyperlink_style: heca_renderer::terminal::HyperlinkDecor::Underline,
+            hyperlink_color: [0.4, 0.6, 1.0, 1.0],
         };
         let b = TerminalStyle {
             font_size: 14.0,
@@ -1316,6 +1324,8 @@ mod tests {
             },
             surface_alpha: 0.8,
             ligatures: true,
+            hyperlink_style: heca_renderer::terminal::HyperlinkDecor::Underline,
+            hyperlink_color: [0.4, 0.6, 1.0, 1.0],
         };
         assert_ne!(terminal_layer_render_key(&a), terminal_layer_render_key(&b));
     }

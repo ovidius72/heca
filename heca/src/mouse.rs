@@ -235,15 +235,11 @@ pub fn on_mouse_input(
         }
         // Right-button fallback for divider resize: hold right-button on a pane to
         // resize along the nearer axis (for when the thin gap fights the terminal).
-        (MouseButton::Right, ElementState::Pressed) => {
-            if resize::on_right_press(state, pos) {
-                return None;
-            }
+        (MouseButton::Right, ElementState::Pressed) if resize::on_right_press(state, pos) => {
+            return None;
         }
-        (MouseButton::Right, ElementState::Released) => {
-            if resize::on_release(state) {
-                return None;
-            }
+        (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
+            return None;
         }
         _ => {}
     }

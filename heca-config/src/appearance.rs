@@ -123,6 +123,11 @@ fn default_terminal_ligatures() -> bool {
     true
 }
 
+/// Default hyperlink decoration: a straight underline (plus the link color).
+fn default_terminal_hyperlink_style() -> HyperlinkStyle {
+    HyperlinkStyle::Underline
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -165,6 +170,23 @@ const DEFAULT_FOCUS_BORDER_WIDTH: f32 = 1.5;
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Per-surface appearance (nested `[appearance.terminal/pane/sidebar]` tables)
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/// How OSC 8 hyperlinks are decorated in terminal panes. The link **color** is a
+/// separate knob (`hyperlink_color`, default `theme.accent`); this picks the
+/// decoration on top of it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HyperlinkStyle {
+    /// No special rendering — links look like normal text.
+    None,
+    /// Recolor only (no line).
+    Color,
+    /// Recolor + straight underline.
+    #[default]
+    Underline,
+    /// Recolor + wavy undercurl.
+    Undercurl,
+}
 
 /// When the terminal scrollback scrollbar should be shown.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +233,14 @@ pub struct TerminalAppearance {
     /// UI/chrome text is unaffected.
     #[serde(default = "default_terminal_ligatures")]
     pub ligatures: bool,
+    /// Decoration for OSC 8 hyperlinks (`none | color | underline | undercurl`).
+    /// Default `underline`. Pairs with `hyperlink_color`.
+    #[serde(default = "default_terminal_hyperlink_style")]
+    pub hyperlink_style: HyperlinkStyle,
+    /// Hyperlink color. `None` → `theme.accent`. Applied for every style except
+    /// `none`.
+    #[serde(default)]
+    pub hyperlink_color: Option<Color>,
 }
 
 impl Default for TerminalAppearance {
@@ -222,6 +252,8 @@ impl Default for TerminalAppearance {
             show_scrollbar: default_terminal_show_scrollbar(),
             show_scrolled_up_badge: default_terminal_show_scrolled_up_badge(),
             ligatures: default_terminal_ligatures(),
+            hyperlink_style: default_terminal_hyperlink_style(),
+            hyperlink_color: None,
         }
     }
 }
