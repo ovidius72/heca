@@ -389,12 +389,33 @@ one residual alt-screen wheel-routing issue, tracked separately in
   Gate: clippy 0; `cargo test -p heca` 266/266; `heca-core` flaky PTY tests pass in isolation.
 
 ### [ ] Phase: Terminal ligature policy · `terminal-02`
-Ligatures must be explicitly configurable (default off) and documented.
+Ligatures in coding fonts (Fira Code `->` `!=` `>=`, Maple Mono, …) are **multi-character** and span multiple terminal cells. heca's terminal renderer currently shapes text **one cell at a time** (`terminal.rs` calls `queue_text_in_line_box_with_style(&cell.text, …)` per cell, and the shaper only ever sees a single cell's text). Because the shaper never sees `->` as one run, **multi-cell ligatures cannot form today** regardless of the `calt`/`liga` OpenType features. So a `terminal_ligatures` setting would be a no-op until the renderer shapes whole row runs together. This phase is re-scoped into two steps: first enable run-level shaping (so ligatures can form), then add the on/off setting.
 
-- [ ] **terminal-task-02** — Add `terminal_ligatures: bool` to theme/config and wire it to the `cosmic-text` shaping path.
-  When off: disable `calt`/`liga` OpenType features in the terminal font path only. Default: `false`.
-  Files: `heca-config/src/theme.rs` (or `appearance.rs`), `heca-renderer/src/terminal.rs`
-  Update: `theming-documentation.md`, `example.config.toml`, `README.md`
+- [ ] **terminal-task-02a** — Enable row-level (run) text shaping in the terminal renderer.
+  Today the terminal renderer emits one text command per cell (`queue_text_in_line_box_with_style`
+  per cell in `heca-renderer/src/terminal.rs`), and `TextRenderer::build_emission` shapes each
+  cell's text in isolation. Multi-character ligatures and contextual alternates therefore cannot
+  form. This task introduces run-level shaping: group consecutive cells on a row that share the
+  same style (family/weight/style/fg/bg) into a single shaped run, so the shaper sees the full
+  run text and OpenType `calt`/`liga` can apply. Must preserve per-cell horizontal positioning
+  (terminal grid alignment is sacred — glyphs must still land on cell boundaries) and the
+  retained/damage model. Scope: terminal text path only, not UI/chrome labels.
+  Files: `heca-renderer/src/terminal.rs`, `heca-renderer/src/text.rs` (run shaping + cache key
+  must account for run text, not single-cell text).
+  Gate: clippy 0 + tests; visual check that a ligature font (Fira Code / Maple Mono) now renders
+  `->` `!=` `>=` `==` as ligatures in a terminal pane.
+
+- [ ] **terminal-task-02** — Add `terminal_ligatures: bool` and wire it to the cosmic-text shaping path.
+  **Gated by `terminal-task-02a`** (without run-level shaping this setting is a no-op, since
+  per-cell shaping already prevents multi-cell ligatures from forming). When `ligatures = false`
+  (default), disable `calt`/`liga` (and `clig`) OpenType features in the terminal shaping attrs
+  via `Attrs::font_features(FontFeatures::disable(...))`. When `true`, leave the font's default
+  features active so run-level ligatures render. Scope: terminal font path only, not UI/chrome.
+  Live reload (`prefix+Shift+r`) must invalidate the terminal shaping cache so the toggle applies
+  without restart.
+  Files: `heca-config/src/appearance.rs` (or `font.rs`), `heca-renderer/src/terminal.rs`,
+  `heca-renderer/src/text.rs`, `config.default.toml`, `README.md`.
+  Update: `theming-documentation.md`, `theming-plan.md`.
 
 ### [ ] Phase: Richer terminal protocol hooks · `terminal-03`
 Extension points for hyperlinks and inline graphics without redesigning the core render contract.
@@ -1268,7 +1289,7 @@ plugin-01 → plugin-02 → plugin-03 → plugin-04 → plugin-05 → plugin-08
           plugin-06 → plugin-07    plugin-09
 
 terminal-01   (independent)
-terminal-02   (independent)
+terminal-02a → terminal-02        (run-level shaping gates the ligature setting)
 terminal-03 → terminal-09        (protocol hooks gate image rendering)
 terminal-04   (independent, do soon)
 terminal-05   (gate: plugin-02 for the formal pane-shell boundary)
