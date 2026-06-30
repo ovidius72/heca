@@ -9,7 +9,7 @@ use crate::app_state::{AppState, InputMode};
 use crate::mouse;
 use heca_core::backend::BackendAlert;
 use heca_grid_ui::Component;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::UserAttentionType;
 
@@ -42,6 +42,41 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
     }
 
     result
+}
+
+/// How long a visual-bell flash takes to fade out. Shared with the render pass
+/// (`chrome::paint_bell_flash`) so the fade fraction matches the schedule.
+pub(crate) const BELL_FLASH_DURATION: Duration = Duration::from_millis(140);
+
+/// Apply the configured bell policy (`[appearance.terminal]`) for a captured bell:
+/// OS window attention (only while unfocused), an on-screen visual flash, and/or an
+/// audible system beep — each independently toggled. terminal-task-17.
+fn apply_bell_policy(state: &mut AppState) {
+    let t = &state.appearance.terminal;
+    let (attention, visual, audible) = (t.bell_attention, t.bell_visual, t.bell_audible);
+    if attention && !state.window_focused {
+        state
+            .window
+            .request_user_attention(Some(UserAttentionType::Informational));
+    }
+    if audible {
+        ring_system_bell();
+    }
+    if visual {
+        state.bell_flash_until = Some(Instant::now() + BELL_FLASH_DURATION);
+        state.mark_full_redraw();
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn ring_system_bell() {
+    // AppKit's alert beep — respects the user's chosen system alert sound/volume.
+    unsafe { objc2_app_kit::NSBeep() };
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ring_system_bell() {
+    // No portable system beep through winit yet; audible bell is a no-op off macOS.
 }
 
 pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut AppState) {
@@ -86,10 +121,15 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);
-    if backend_poll.bell_any && !state.window_focused {
-        state
-            .window
-            .request_user_attention(Some(UserAttentionType::Informational));
+    if backend_poll.bell_any {
+        apply_bell_policy(state);
+    }
+    // A visual-bell flash keeps requesting frames until it fades out.
+    let bell_flashing = state
+        .bell_flash_until
+        .is_some_and(|deadline| Instant::now() < deadline);
+    if !bell_flashing {
+        state.bell_flash_until = None;
     }
 
     let terminal_animating = backend_poll.terminal_animating;
@@ -97,6 +137,7 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || backend_poll.has_data
         || backend_poll.closed_any
         || chrome_runtime_changed
+        || bell_flashing
         || state.session.are_animations_ongoing()
         || terminal_animating
         || chrome_animating;

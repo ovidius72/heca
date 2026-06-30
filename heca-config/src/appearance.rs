@@ -133,6 +133,22 @@ fn default_terminal_link_detection() -> bool {
     true
 }
 
+/// Default bell window-attention policy: `true` (request the OS attention cue —
+/// Dock bounce / taskbar flash — on a bell while the window is unfocused).
+fn default_terminal_bell_attention() -> bool {
+    true
+}
+
+/// Default visual-bell policy: `false` (no on-screen flash).
+fn default_terminal_bell_visual() -> bool {
+    false
+}
+
+/// Default audible-bell policy: `false` (no system beep).
+fn default_terminal_bell_audible() -> bool {
+    false
+}
+
 fn default_vibrancy() -> Vibrancy {
     Vibrancy::None
 }
@@ -250,6 +266,19 @@ pub struct TerminalAppearance {
     /// not just explicit OSC 8 links. Default `true`.
     #[serde(default = "default_terminal_link_detection")]
     pub link_detection: bool,
+    /// On a terminal **bell** (`\a` / `Alert::Bell`), request the OS window
+    /// attention cue (Dock bounce / taskbar flash) while the window is unfocused.
+    /// Default `true`.
+    #[serde(default = "default_terminal_bell_attention")]
+    pub bell_attention: bool,
+    /// On a terminal bell, flash the content area briefly (visual bell). Fires
+    /// regardless of focus. Default `false`.
+    #[serde(default = "default_terminal_bell_visual")]
+    pub bell_visual: bool,
+    /// On a terminal bell, emit a system beep (audible bell). Fires regardless of
+    /// focus. macOS only for now (`NSBeep`); a no-op elsewhere. Default `false`.
+    #[serde(default = "default_terminal_bell_audible")]
+    pub bell_audible: bool,
 }
 
 impl Default for TerminalAppearance {
@@ -264,6 +293,9 @@ impl Default for TerminalAppearance {
             hyperlink_style: default_terminal_hyperlink_style(),
             hyperlink_color: None,
             link_detection: default_terminal_link_detection(),
+            bell_attention: default_terminal_bell_attention(),
+            bell_visual: default_terminal_bell_visual(),
+            bell_audible: default_terminal_bell_audible(),
         }
     }
 }

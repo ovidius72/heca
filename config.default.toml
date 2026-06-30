@@ -178,6 +178,10 @@ background_transparency = 0
 # hyperlink_color       : link color (e.g. "#5fafff"); omit to use the theme accent.
 # link_detection        : auto-detect plain-text URLs (echo, logs) as links too,
 #                         not just explicit OSC 8 links. true | false
+# bell_attention        : on a bell (\a), request the OS attention cue (Dock
+#                         bounce / taskbar flash) while unfocused. true | false
+# bell_visual           : flash the content area briefly on a bell. true | false
+# bell_audible          : system beep on a bell (macOS only for now). true | false
 transparency = 0
 floating_transparency = 0
 floating_blur = 0
@@ -187,6 +191,9 @@ ligatures = true
 hyperlink_style = "underline"
 # hyperlink_color = "#5fafff"
 link_detection = true
+bell_attention = true
+bell_visual = false
+bell_audible = false
 
 # ─────────────────────────────────────────────────────────────────────────────
 [appearance.pane]
