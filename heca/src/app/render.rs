@@ -68,6 +68,10 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::FollowLink { .. } => {
             ("FOLLOW", " — press a letter to open the link".to_string())
         }
+        InputMode::Search => (
+            "SEARCH",
+            " — type to search, Enter to keep, Esc to cancel".to_string(),
+        ),
         InputMode::PaneSwap { focus_after, .. } => (
             if *focus_after { "SWAP+FOCUS" } else { "SWAP" },
             pick_suffix(),
@@ -1145,6 +1149,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
+    // Scrollback-search match highlights + query bar. terminal-task-19.
+    crate::chrome::paint_search(state, &mut chrome_scene, w, h, &chrome_theme);
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,

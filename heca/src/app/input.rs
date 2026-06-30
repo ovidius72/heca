@@ -109,6 +109,9 @@ pub(crate) fn handle_keyboard_input(
         InputMode::FollowLink { candidates } => {
             handle_follow_link_mode(registry, state, &candidates, ctx);
         }
+        InputMode::Search => {
+            handle_search_mode(state, ctx);
+        }
         InputMode::PaneSwap {
             candidates,
             focus_after,
@@ -138,6 +141,35 @@ pub(crate) fn handle_keyboard_input(
         }
         _ => {}
     }
+}
+
+/// Scrollback-search query entry (`InputMode::Search`). Mirrors rename-style buffer
+/// editing: characters/backspace edit the query and re-run the search live; Enter
+/// keeps the matches and returns to selection mode (so `n`/`N` navigate there); Esc
+/// cancels the search. terminal-task-19.
+fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
+    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
+    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
+    let is_backspace = matches!(ctx.logical_key, Key::Named(NamedKey::Backspace));
+
+    if is_escape {
+        state.search = None;
+        state.input_mode = InputMode::Selection;
+    } else if is_enter {
+        // Keep the matches for n/N; just leave query-entry.
+        state.input_mode = InputMode::Selection;
+    } else if is_backspace {
+        if let Some(search) = state.search.as_mut() {
+            search.query.pop();
+        }
+        crate::app::terminal_host::run_scrollback_search(state);
+    } else if ctx.key_text.chars().count() == 1 && !ctx.is_ctrl {
+        if let Some(search) = state.search.as_mut() {
+            search.query.push_str(ctx.key_text);
+        }
+        crate::app::terminal_host::run_scrollback_search(state);
+    }
+    state.needs_redraw = true;
 }
 
 fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {

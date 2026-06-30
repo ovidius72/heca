@@ -525,7 +525,7 @@ Source: terminal design phase 10 (now tracked in this backlog)
 - [ ] **terminal-task-16** — Add `OSC 52` terminal protocol clipboard support.
   Files: `heca-core/src/backend/terminal/engine.rs`
 
-### [ ] Phase: Terminal UX and attention features · `terminal-08`
+### [x] Phase: Terminal UX and attention features · `terminal-08`
 Bell, scrollback search, hyperlinks.
 Source: terminal design phase 11 (now tracked in this backlog)
 
@@ -580,8 +580,18 @@ Source: terminal design phase 11 (now tracked in this backlog)
   `config.default.toml`, `README.md`.
   Related: `terminal-03` (HyperlinkSpan pipeline), `terminal-task-18` (open surfaces).
 
-- [ ] **terminal-task-19** — Scrollback search: entry-point action, search overlay (grid-ui `Input` widget), results highlighting.
-  Files: `heca/src/input.rs`, `heca-core/src/backend/terminal/engine.rs`, overlay UI via `heca-grid-ui`
+- [x] **terminal-task-19** — Scrollback search. **DONE**. Backend `search_scrollback(query, cols)`
+  (engine, case-insensitive substring over the full scrollback stable range; `SearchMatch{stable_row,
+  start_col,end_col}`). Entered with `/` in selection mode (`WmAction::SearchScrollback`); live query
+  edit in `InputMode::Search` re-runs the search each keystroke and jumps the caret to the nearest
+  match (scroll + `ensure_caret_visible`); `n`/`Shift+n` navigate (`SearchNextMatch`/`PrevMatch`);
+  Enter keeps matches, Esc cancels; leaving copy-mode clears it. `AppState.search: Option<SearchState>`.
+  Render: match highlights over the visible viewport (current bolder) + a `/query  n/total` bar at the
+  pane's bottom-right (`chrome::paint_search`). v1 input is a status-style buffer (not the grid-ui
+  `Input` widget) per user preference. Unit test on the backend search; clippy 0 + tests green.
+  Files: `heca-core/src/backend/{mod,terminal,terminal/engine}.rs`, `heca/src/{input,handlers}.rs`,
+  `heca/src/app/{terminal_host,input,render,registry,interaction}.rs`, `heca/src/chrome/mod.rs`,
+  `heca/src/app_state.rs`, `keybindings.default.toml`, `README.md`.
 
 ### [ ] Phase: Terminal image protocols (Yazi preview) · `terminal-09`
 Source: terminal design phase 12 (now tracked in this backlog)
