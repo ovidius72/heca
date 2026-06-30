@@ -748,34 +748,43 @@ pub(crate) fn hyperlink_uri_at_position(
     hyperlink_at_cell(&snapshot.hyperlinks, row, col).map(str::to_owned)
 }
 
-/// Build the follow-link candidates for `pane_id`: one labelled keycap per visible
-/// hyperlink span in the current snapshot (OSC 8 + auto-detected, same pipeline),
-/// capped at the shared 52-letter alphabet. Empty when the pane has no terminal
-/// backend or no visible links. terminal-task-18 (keyboard open surface).
-pub(crate) fn collect_link_hints(
-    state: &AppState,
-    pane_id: PaneId,
-) -> Vec<crate::app_state::LinkHint> {
-    let Some(snapshot) = state
-        .backends
-        .get(pane_id)
-        .and_then(|backend| backend.terminal_snapshot())
-    else {
-        return Vec::new();
-    };
-    snapshot
-        .hyperlinks
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, span)| {
-            crate::app::selection::candidate_letter(idx).map(|label| crate::app_state::LinkHint {
+/// Build the follow-link candidates across **all visible panes**: one labelled
+/// keycap per visible hyperlink span (OSC 8 + auto-detected, same pipeline),
+/// assigned letters sequentially (a–z A–Z, shared 52-letter cap) in visible-pane
+/// order. Each candidate carries its own `pane_id`. Panes fully off-screen and
+/// panes without a terminal backend are skipped. terminal-task-18.
+pub(crate) fn collect_link_hints(state: &AppState) -> Vec<crate::app_state::LinkHint> {
+    let (win_w, win_h) = window_logical_size(state);
+    let mut hints = Vec::new();
+    let mut idx = 0usize;
+    for (pane_id, x, y, w, h) in pane_outer_frames(state) {
+        // Skip panes scrolled fully off-screen — their keycaps would be culled and
+        // would only waste labels.
+        if x + w <= 0.0 || y + h <= 0.0 || x >= win_w || y >= win_h {
+            continue;
+        }
+        let Some(snapshot) = state
+            .backends
+            .get(pane_id)
+            .and_then(|backend| backend.terminal_snapshot())
+        else {
+            continue;
+        };
+        for span in &snapshot.hyperlinks {
+            let Some(label) = crate::app::selection::candidate_letter(idx) else {
+                return hints; // 52-label cap reached.
+            };
+            hints.push(crate::app_state::LinkHint {
                 label,
+                pane_id,
                 row: span.row,
                 start_col: span.start_col,
                 url: span.uri.clone(),
-            })
-        })
-        .collect()
+            });
+            idx += 1;
+        }
+    }
+    hints
 }
 
 /// Screen position (logical px, top-left) of cell `(row, col)` in `pane_id`'s

@@ -745,8 +745,8 @@ handler (`open` / `xdg-open` / `start`):
 - **Mouse** — hold the interactive-move modifier (Cmd by default) and click a
   link; the cursor turns into a pointer while it is held over one. A plain click
   still goes to the terminal program.
-- **Keyboard** — `prefix+Shift+o` (`follow_link`) labels every visible link in the
-  focused terminal with a letter; press the letter to open it, or `Esc` to cancel.
+- **Keyboard** — `prefix+Shift+o` (`follow_link`) labels every visible link across
+  all on-screen panes with a letter; press the letter to open it, or `Esc` to cancel.
 - **Selection mode** — `Shift+o` opens the link under the caret (`o` stays the
   flip-endpoint binding).
 - **Context menu** — right-click a terminal pane for a menu with **Open link**

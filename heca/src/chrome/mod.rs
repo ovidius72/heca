@@ -1923,18 +1923,17 @@ pub(crate) fn paint_link_hints(
     h: f32,
     theme: &GuiTheme,
 ) {
-    let crate::app_state::InputMode::FollowLink {
-        pane_id,
-        candidates,
-    } = &state.input_mode
-    else {
+    let crate::app_state::InputMode::FollowLink { candidates } = &state.input_mode else {
         return;
     };
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     for hint in candidates {
-        let Some((x, y)) =
-            crate::app::terminal_host::cell_screen_pos(state, *pane_id, hint.row, hint.start_col)
-        else {
+        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
+            state,
+            hint.pane_id,
+            hint.row,
+            hint.start_col,
+        ) else {
             continue;
         };
         let label = hint.label.to_string();

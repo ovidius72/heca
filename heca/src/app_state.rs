@@ -113,23 +113,23 @@ pub enum InputMode {
         candidates: Vec<(char, usize, usize)>,
         pane_id: PaneId,
     },
-    /// Follow-link letter pick: each visible terminal hyperlink in `pane_id` is
-    /// assigned a letter (a keycap drawn over the link's first cell); the next
-    /// keypress opens that link via [`WmAction::OpenLink`]. Entered with
-    /// `prefix+Shift+o`. v1 scope: the focused terminal pane only.
+    /// Follow-link letter pick: each visible terminal hyperlink across **all
+    /// visible panes** is assigned a letter (a keycap drawn over the link's first
+    /// cell); the next keypress opens that link via [`WmAction::OpenLink`]. Entered
+    /// with `prefix+Shift+o`. Each candidate carries its own `pane_id`.
     FollowLink {
-        pane_id: PaneId,
         candidates: Vec<LinkHint>,
     },
 }
 
-/// A single follow-link candidate: the letter to press, where to stamp its keycap
-/// (the link's first visible cell — `row` from the viewport top, `start_col`
-/// inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so OSC 8 and
-/// auto-detected (linkify) links are followed identically.
+/// A single follow-link candidate: the letter to press, the pane it lives in, where
+/// to stamp its keycap (the link's first visible cell — `row` from the viewport top,
+/// `start_col` inclusive), and the URL to open. Built from `snapshot.hyperlinks`, so
+/// OSC 8 and auto-detected (linkify) links are followed identically.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkHint {
     pub label: char,
+    pub pane_id: PaneId,
     pub row: usize,
     pub start_col: usize,
     pub url: String,

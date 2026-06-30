@@ -785,15 +785,9 @@ pub fn handle_pane_select(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
-    let Some(pane_id) = state.focused_pane else {
-        return;
-    };
-    let candidates = crate::app::terminal_host::collect_link_hints(state, pane_id);
+    let candidates = crate::app::terminal_host::collect_link_hints(state);
     if !candidates.is_empty() {
-        state.input_mode = InputMode::FollowLink {
-            pane_id,
-            candidates,
-        };
+        state.input_mode = InputMode::FollowLink { candidates };
         state.needs_redraw = true;
     }
 }

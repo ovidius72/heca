@@ -106,7 +106,7 @@ pub(crate) fn handle_keyboard_input(
         InputMode::PaneSelect { candidates } => {
             handle_pane_select_mode(registry, state, &candidates, ctx);
         }
-        InputMode::FollowLink { candidates, .. } => {
+        InputMode::FollowLink { candidates } => {
             handle_follow_link_mode(registry, state, &candidates, ctx);
         }
         InputMode::PaneSwap {
