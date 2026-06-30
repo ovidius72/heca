@@ -711,20 +711,33 @@ Source: `theming-plan.md` Phase 3A
 Replace duplicate Theme/Color/Intensity/GlowLevel in `heca-grid-ui`.
 Source: `theming-plan.md` Phase 3B
 
-> **Re-scope finding (2026-06-30, API audit on `feat/theming-03-grid-ui-port`):**
+> **Re-scope finding (2026-06-30, API audit on `feat/theming-03-grid-ui-port`; refined per review):**
 > `Color` and `Intensity`/`GlowLevel` ARE safely re-exportable from `heca-theme`
 > (heca_theme::Color is a superset of grid-ui's except `with_alpha_f32` — 1 method,
 > 1 callsite in `dock_frame.rs`; add it to `heca_theme::Color` first).
-> **`Theme` is NOT a drop-in re-export.** `heca_grid_ui::Theme` is a GUI-adapter struct with
-> fields the color theme does not own (and must not regain post-`compositor-04c`):
-> `font_family`, `font_size`, `radius`, `focus_border_width`, `shadow: Color` (vs
-> `heca_theme::Theme.shadow: Shadow` struct, `border_radius` vs `radius`, `pane_padding`,
-> `terminal_*`, drag/drop, float, sidebar fonts, gradient). So task-13 as written ("Remove Theme
-> struct — re-export heca_theme::Theme") would break every widget reading
-> `theme.font_family`/`font_size`/`radius`/`focus_border_width`/`shadow`. **New approach:**
-> grid-ui keeps its own `Theme` struct but **composes** `heca_theme::Theme` (embed it + keep
-> the GUI extras) instead of duplicating the color fields; re-export `Color`/`Intensity`/`GlowLevel`.
-> Needs a `/grill-me` on the adapter-theme shape before coding task-13.
+> **`Theme` is NOT a drop-in re-export.** `heca_grid_ui::Theme` is a GUI-adapter struct.
+> Split the field differences precisely (not all are "missing" — some are name/type
+> mismatches):
+> - **True GUI-only fields** (not in `heca_theme::Theme`, and must not be — post-`compositor-04c`):
+>   `font_family`, `font_size`, `focus_border_width`.
+> - **Name/type mismatches** (exist on both sides but differ): `radius` (gui) ↔
+>   `border_radius` (theme); `shadow: Color` (gui) ↔ `shadow: Shadow` struct (theme,
+>   with color+alpha+blur).
+> - **Identical name+type duplicates** (the real dedup targets, ~16 fields):
+>   `accent`, `background`, `surface`, `foreground`, `muted`, `border`, `glow`,
+>   `danger`, `success`, `warning`, `border_width`, `glow_size`, `intensity`,
+>   `show_focus_border`, `icon_secondary_alpha`, `active_wash_alpha`, + `control_radius()`.
+> So task-13 as written ("Remove Theme struct — re-export heca_theme::Theme") would break
+> every widget reading `theme.font_family`/`font_size`/`focus_border_width` + the 40+ callsites
+> reading `theme.radius`/`theme.shadow` (divergent names/types). **New approach:** grid-ui keeps
+> its own `Theme` struct but **composes** `heca_theme::Theme` (embed it + keep the GUI-only
+> extras) instead of duplicating the identical color fields; re-export `Color`/`Intensity`/`GlowLevel`.
+> This **contains/generalizes the wrapper+adapter already landed in `compositor-04c`**
+> (`app_theme_to_gui_theme`/`chrome_gui_theme`) — it does NOT remove that adapter.
+> **`/grill-me` order:** decide field name/type alignment FIRST (rename `radius`→`border_radius`?
+> `shadow: Color` → derive from `Shadow`? keep `focus_border_width` GUI-only?); Deref-vs-delegation
+> for widget access then falls out as a consequence (`Deref<Target=heca_theme::Theme>` only
+> exposes identical name+type fields — it would NOT cover `radius`/`shadow` without reconciliation).
 
 - [ ] **theming-task-11** — Add `heca-theme` dep to `heca-grid-ui/Cargo.toml`.
 
