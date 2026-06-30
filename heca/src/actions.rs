@@ -4,6 +4,7 @@
 //! to named handler functions. It also preserves the static metadata catalog
 //! (labels, categories, default bindings) for the command palette and docs.
 
+use heca_grid_ui::Glyph;
 use std::collections::HashMap;
 
 /// Handler signature for all window-manager actions.
@@ -75,6 +76,11 @@ pub struct ActionDescriptor {
     pub category: ActionCategory,
     /// Default keybinding string (e.g. "h,ArrowLeft").
     pub default_binding: &'static str,
+    /// Centralized action icon. The single source of an action's [`Glyph`] —
+    /// every surface that renders this action (pane-action bar, context menu,
+    /// command palette) reads it from here instead of inventing its own. `None`
+    /// for actions without an assigned icon yet.
+    pub icon: Option<Glyph>,
 }
 
 /// Registry that maps action discriminants to handler functions.
@@ -153,6 +159,7 @@ impl ActionRegistry {
             description: "Move focus to the column on the left.",
             category: ActionCategory::Navigation,
             default_binding: "h",
+            icon: None,
         },
         ActionDescriptor {
             name: "focus_right",
@@ -160,6 +167,7 @@ impl ActionRegistry {
             description: "Move focus to the column on the right.",
             category: ActionCategory::Navigation,
             default_binding: "l",
+            icon: None,
         },
         ActionDescriptor {
             name: "focus_up",
@@ -167,6 +175,7 @@ impl ActionRegistry {
             description: "Move focus to the pane above in the current column.",
             category: ActionCategory::Navigation,
             default_binding: "k",
+            icon: None,
         },
         ActionDescriptor {
             name: "focus_down",
@@ -174,6 +183,7 @@ impl ActionRegistry {
             description: "Move focus to the pane below in the current column.",
             category: ActionCategory::Navigation,
             default_binding: "j",
+            icon: None,
         },
         ActionDescriptor {
             name: "next_pane",
@@ -181,6 +191,7 @@ impl ActionRegistry {
             description: "Cycle focus forward through panes in the active column.",
             category: ActionCategory::Navigation,
             default_binding: "]",
+            icon: None,
         },
         ActionDescriptor {
             name: "prev_pane",
@@ -188,6 +199,7 @@ impl ActionRegistry {
             description: "Cycle focus backward through panes in the active column.",
             category: ActionCategory::Navigation,
             default_binding: "[",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_focus",
@@ -195,6 +207,7 @@ impl ActionRegistry {
             description: "Enter sidebar navigation mode.",
             category: ActionCategory::Navigation,
             default_binding: "e",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_up",
@@ -202,6 +215,7 @@ impl ActionRegistry {
             description: "Move the sidebar selection up.",
             category: ActionCategory::Navigation,
             default_binding: "k",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_down",
@@ -209,6 +223,7 @@ impl ActionRegistry {
             description: "Move the sidebar selection down.",
             category: ActionCategory::Navigation,
             default_binding: "j",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_left_nav",
@@ -216,6 +231,7 @@ impl ActionRegistry {
             description: "Collapse the current tree node or move to parent.",
             category: ActionCategory::Navigation,
             default_binding: "h",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_right_nav",
@@ -223,6 +239,7 @@ impl ActionRegistry {
             description: "Expand the current tree node or activate the selected item.",
             category: ActionCategory::Navigation,
             default_binding: "l",
+            icon: None,
         },
         ActionDescriptor {
             name: "workspace_next",
@@ -230,6 +247,7 @@ impl ActionRegistry {
             description: "Switch to the next workspace.",
             category: ActionCategory::Navigation,
             default_binding: "d",
+            icon: None,
         },
         ActionDescriptor {
             name: "workspace_prev",
@@ -237,6 +255,7 @@ impl ActionRegistry {
             description: "Switch to the previous workspace.",
             category: ActionCategory::Navigation,
             default_binding: "u",
+            icon: None,
         },
         ActionDescriptor {
             name: "focus_toggle_local",
@@ -244,6 +263,7 @@ impl ActionRegistry {
             description: "Toggle between current and last-focused pane in the same workspace.",
             category: ActionCategory::Navigation,
             default_binding: "i",
+            icon: None,
         },
         ActionDescriptor {
             name: "focus_toggle_global",
@@ -251,6 +271,7 @@ impl ActionRegistry {
             description: "Toggle between current and last-visited workspace.",
             category: ActionCategory::Navigation,
             default_binding: "Shift+l",
+            icon: None,
         },
         // ── Layout ──
         ActionDescriptor {
@@ -259,6 +280,7 @@ impl ActionRegistry {
             description: "Create a new column to the right.",
             category: ActionCategory::Layout,
             default_binding: "Enter",
+            icon: Some(Glyph::Plus),
         },
         ActionDescriptor {
             name: "split_vertical",
@@ -266,6 +288,7 @@ impl ActionRegistry {
             description: "Add a new pane below the current one in the same column.",
             category: ActionCategory::Layout,
             default_binding: "v",
+            icon: Some(Glyph::SquareSplitVertical),
         },
         ActionDescriptor {
             name: "zoom_column",
@@ -273,6 +296,7 @@ impl ActionRegistry {
             description: "Toggle the active column between viewport-wide zoom and its previous width.",
             category: ActionCategory::Layout,
             default_binding: "z",
+            icon: Some(Glyph::FrameCorners),
         },
         ActionDescriptor {
             name: "scroll_view_left",
@@ -280,6 +304,7 @@ impl ActionRegistry {
             description: "Pan the horizontal view left to reach off-screen / overflowing columns.",
             category: ActionCategory::Layout,
             default_binding: "Shift+ArrowLeft",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_view_right",
@@ -287,6 +312,7 @@ impl ActionRegistry {
             description: "Pan the horizontal view right to reach off-screen / overflowing columns.",
             category: ActionCategory::Layout,
             default_binding: "Shift+ArrowRight",
+            icon: None,
         },
         ActionDescriptor {
             name: "resize_increase",
@@ -294,6 +320,7 @@ impl ActionRegistry {
             description: "Widen the active column.",
             category: ActionCategory::Layout,
             default_binding: "=",
+            icon: None,
         },
         ActionDescriptor {
             name: "resize_decrease",
@@ -301,6 +328,7 @@ impl ActionRegistry {
             description: "Narrow the active column.",
             category: ActionCategory::Layout,
             default_binding: "-",
+            icon: None,
         },
         ActionDescriptor {
             name: "pane_height_increase",
@@ -308,6 +336,7 @@ impl ActionRegistry {
             description: "Tallens the active pane within its column.",
             category: ActionCategory::Layout,
             default_binding: "Shift+=",
+            icon: None,
         },
         ActionDescriptor {
             name: "pane_height_decrease",
@@ -315,6 +344,7 @@ impl ActionRegistry {
             description: "Shortens the active pane within its column.",
             category: ActionCategory::Layout,
             default_binding: "Shift+-",
+            icon: None,
         },
         ActionDescriptor {
             name: "swap_left",
@@ -322,6 +352,7 @@ impl ActionRegistry {
             description: "Swap the active column with the one to its left.",
             category: ActionCategory::Layout,
             default_binding: "Ctrl+h",
+            icon: None,
         },
         ActionDescriptor {
             name: "swap_right",
@@ -329,6 +360,7 @@ impl ActionRegistry {
             description: "Swap the active column with the one to its right.",
             category: ActionCategory::Layout,
             default_binding: "Ctrl+l",
+            icon: None,
         },
         ActionDescriptor {
             name: "swap_up",
@@ -336,6 +368,7 @@ impl ActionRegistry {
             description: "Swap the active pane with the one above.",
             category: ActionCategory::Layout,
             default_binding: "Ctrl+k",
+            icon: None,
         },
         ActionDescriptor {
             name: "swap_down",
@@ -343,6 +376,7 @@ impl ActionRegistry {
             description: "Swap the active pane with the one below.",
             category: ActionCategory::Layout,
             default_binding: "Ctrl+j",
+            icon: None,
         },
         ActionDescriptor {
             name: "move_pane_left",
@@ -350,6 +384,7 @@ impl ActionRegistry {
             description: "Move the active pane into the column on the left.",
             category: ActionCategory::Layout,
             default_binding: "[",
+            icon: Some(Glyph::ArrowLineLeft),
         },
         ActionDescriptor {
             name: "move_pane_right",
@@ -357,6 +392,7 @@ impl ActionRegistry {
             description: "Move the active pane into the column on the right.",
             category: ActionCategory::Layout,
             default_binding: "]",
+            icon: Some(Glyph::ArrowLineRight),
         },
         ActionDescriptor {
             name: "delete_column",
@@ -364,6 +400,7 @@ impl ActionRegistry {
             description: "Delete the focused column and all its panes.",
             category: ActionCategory::Layout,
             default_binding: "unbound",
+            icon: None,
         },
         // ── Pane ──
         ActionDescriptor {
@@ -372,6 +409,7 @@ impl ActionRegistry {
             description: "Close the active pane.",
             category: ActionCategory::Pane,
             default_binding: "x",
+            icon: Some(Glyph::XSquare),
         },
         ActionDescriptor {
             name: "float",
@@ -379,6 +417,7 @@ impl ActionRegistry {
             description: "Toggle the active pane between tiling and floating.",
             category: ActionCategory::Pane,
             default_binding: "f",
+            icon: Some(Glyph::Cards),
         },
         ActionDescriptor {
             name: "pane_select",
@@ -386,6 +425,16 @@ impl ActionRegistry {
             description: "Press a letter to focus it.",
             category: ActionCategory::Pane,
             default_binding: "q",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "open_link",
+            label: "Open Link",
+            description: "Open the hyperlink in the OS default handler.",
+            category: ActionCategory::Pane,
+            // Constructed with a URL (mouse/HintKey/selection/menu); no global key.
+            default_binding: "",
+            icon: Some(Glyph::ArrowRight),
         },
         ActionDescriptor {
             name: "follow_link",
@@ -393,6 +442,7 @@ impl ActionRegistry {
             description: "Press a letter to open the link.",
             category: ActionCategory::Pane,
             default_binding: "Shift+o",
+            icon: None,
         },
         // Pick-mode prompts (`description`) double as the in-progress pick text shown
         // in `InputMode::pending_pick()` — single source of truth, not duplicated. The
@@ -403,6 +453,7 @@ impl ActionRegistry {
             description: "Select a pane to swap with — focus stays where it is.",
             category: ActionCategory::Pane,
             default_binding: "Shift+m",
+            icon: None,
         },
         ActionDescriptor {
             name: "swap_and_focus_pane",
@@ -410,6 +461,7 @@ impl ActionRegistry {
             description: "Select a pane to swap with, then follow focus to it.",
             category: ActionCategory::Pane,
             default_binding: "m",
+            icon: None,
         },
         ActionDescriptor {
             name: "pane_take",
@@ -417,6 +469,7 @@ impl ActionRegistry {
             description: "Select a pane to pull into the active column — focus stays where it is.",
             category: ActionCategory::Pane,
             default_binding: "t",
+            icon: None,
         },
         ActionDescriptor {
             name: "pane_take_and_focus",
@@ -424,6 +477,7 @@ impl ActionRegistry {
             description: "Select a pane to pull into the active column, then focus it.",
             category: ActionCategory::Pane,
             default_binding: "Shift+t",
+            icon: None,
         },
         ActionDescriptor {
             name: "move_pane_to_workspace_pick",
@@ -431,6 +485,7 @@ impl ActionRegistry {
             description: "Select a workspace to move the active pane to.",
             category: ActionCategory::Layout,
             default_binding: "g",
+            icon: None,
         },
         ActionDescriptor {
             name: "move_column_to_workspace_pick",
@@ -438,6 +493,7 @@ impl ActionRegistry {
             description: "Select a workspace to move the active column to.",
             category: ActionCategory::Layout,
             default_binding: "c",
+            icon: None,
         },
         ActionDescriptor {
             name: "move_pane_to_column_pick",
@@ -445,6 +501,7 @@ impl ActionRegistry {
             description: "Select a column to move the active pane into.",
             category: ActionCategory::Layout,
             default_binding: "Shift+c",
+            icon: None,
         },
         ActionDescriptor {
             name: "rename_pane",
@@ -452,6 +509,7 @@ impl ActionRegistry {
             description: "Rename the active pane/tab.",
             category: ActionCategory::Pane,
             default_binding: "$",
+            icon: None,
         },
         ActionDescriptor {
             name: "rename_column",
@@ -459,6 +517,7 @@ impl ActionRegistry {
             description: "Rename the active column.",
             category: ActionCategory::Layout,
             default_binding: "Shift+c",
+            icon: None,
         },
         // ── Workspace ──
         ActionDescriptor {
@@ -467,6 +526,7 @@ impl ActionRegistry {
             description: "Create a new workspace and switch to it.",
             category: ActionCategory::Workspace,
             default_binding: "w",
+            icon: None,
         },
         ActionDescriptor {
             name: "rename_workspace",
@@ -474,6 +534,7 @@ impl ActionRegistry {
             description: "Rename the current workspace.",
             category: ActionCategory::Workspace,
             default_binding: "Shift+w",
+            icon: None,
         },
         ActionDescriptor {
             name: "delete_workspace",
@@ -481,6 +542,7 @@ impl ActionRegistry {
             description: "Delete a workspace and all its panes (not the last workspace).",
             category: ActionCategory::Workspace,
             default_binding: "unbound",
+            icon: None,
         },
         // ── Chrome ──
         ActionDescriptor {
@@ -489,6 +551,7 @@ impl ActionRegistry {
             description: "Show or hide the left sidebar.",
             category: ActionCategory::Chrome,
             default_binding: "b",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_right",
@@ -496,6 +559,7 @@ impl ActionRegistry {
             description: "Show or hide the right sidebar.",
             category: ActionCategory::Chrome,
             default_binding: ".",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_expand_toggle",
@@ -503,6 +567,7 @@ impl ActionRegistry {
             description: "Expand or collapse the selected sidebar node.",
             category: ActionCategory::Chrome,
             default_binding: "Tab",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_create_workspace",
@@ -510,6 +575,7 @@ impl ActionRegistry {
             description: "Create a new workspace from the current sidebar selection context.",
             category: ActionCategory::Workspace,
             default_binding: "w",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_create_column",
@@ -517,6 +583,7 @@ impl ActionRegistry {
             description: "Create a new column in the selected sidebar workspace context.",
             category: ActionCategory::Layout,
             default_binding: "c",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_split_in_column",
@@ -524,6 +591,7 @@ impl ActionRegistry {
             description: "Add a new pane in the selected sidebar column context.",
             category: ActionCategory::Layout,
             default_binding: "v",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_zoom_selected_column",
@@ -531,6 +599,7 @@ impl ActionRegistry {
             description: "Toggle zoom for the column implied by the current sidebar selection.",
             category: ActionCategory::Layout,
             default_binding: "z",
+            icon: None,
         },
         ActionDescriptor {
             name: "sidebar_delete_selected",
@@ -538,6 +607,7 @@ impl ActionRegistry {
             description: "Delete the selected sidebar item with confirmation.",
             category: ActionCategory::Pane,
             default_binding: "d",
+            icon: None,
         },
         ActionDescriptor {
             name: "collapse_current_workspace",
@@ -545,6 +615,7 @@ impl ActionRegistry {
             description: "Collapse the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "unbound",
+            icon: None,
         },
         ActionDescriptor {
             name: "expand_current_workspace",
@@ -552,6 +623,7 @@ impl ActionRegistry {
             description: "Expand the active workspace row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "unbound",
+            icon: None,
         },
         ActionDescriptor {
             name: "toggle_current_workspace_collapsed",
@@ -559,6 +631,7 @@ impl ActionRegistry {
             description: "Toggle the active workspace row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "<",
+            icon: None,
         },
         ActionDescriptor {
             name: "collapse_current_column",
@@ -566,6 +639,7 @@ impl ActionRegistry {
             description: "Collapse the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "unbound",
+            icon: None,
         },
         ActionDescriptor {
             name: "expand_current_column",
@@ -573,6 +647,7 @@ impl ActionRegistry {
             description: "Expand the focused tiled column row in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "unbound",
+            icon: None,
         },
         ActionDescriptor {
             name: "toggle_current_column_collapsed",
@@ -580,6 +655,7 @@ impl ActionRegistry {
             description: "Toggle the focused tiled column row collapsed state in the sidebar tree UI.",
             category: ActionCategory::Chrome,
             default_binding: "(",
+            icon: None,
         },
         // ── System ──
         ActionDescriptor {
@@ -588,6 +664,7 @@ impl ActionRegistry {
             description: "Open the command palette (not yet implemented).",
             category: ActionCategory::System,
             default_binding: "p",
+            icon: None,
         },
         ActionDescriptor {
             name: "reload_config",
@@ -595,6 +672,7 @@ impl ActionRegistry {
             description: "Reload keymaps, theme, and settings from config.toml without restarting.",
             category: ActionCategory::System,
             default_binding: "Shift+r",
+            icon: None,
         },
         // ── Scrollback (host terminal viewport) ──
         ActionDescriptor {
@@ -603,6 +681,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport up by one page and enter selection mode.",
             category: ActionCategory::Pane,
             default_binding: "PageUp",
+            icon: None,
         },
         ActionDescriptor {
             name: "scrollback_page_down",
@@ -610,6 +689,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport down by one page and enter selection mode.",
             category: ActionCategory::Pane,
             default_binding: "PageDown",
+            icon: None,
         },
         ActionDescriptor {
             name: "scrollback_line_up",
@@ -617,6 +697,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport up by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
             default_binding: "u",
+            icon: None,
         },
         ActionDescriptor {
             name: "scrollback_line_down",
@@ -624,6 +705,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport down by a configurable number of lines (selection mode).",
             category: ActionCategory::Pane,
             default_binding: "d",
+            icon: None,
         },
         ActionDescriptor {
             name: "scrollback_to_top",
@@ -631,6 +713,7 @@ impl ActionRegistry {
             description: "Jump the terminal viewport to the top of scrollback history.",
             category: ActionCategory::Pane,
             default_binding: "g,Home",
+            icon: None,
         },
         ActionDescriptor {
             name: "scrollback_to_bottom",
@@ -638,6 +721,7 @@ impl ActionRegistry {
             description: "Snap the terminal viewport to the live bottom (latest output).",
             category: ActionCategory::Pane,
             default_binding: "Shift+g,End",
+            icon: None,
         },
         ActionDescriptor {
             name: "exit_scrollback",
@@ -645,6 +729,7 @@ impl ActionRegistry {
             description: "Snap to the live bottom, clear selection, and exit selection mode.",
             category: ActionCategory::Pane,
             default_binding: "Escape",
+            icon: None,
         },
         // ── Direct scroll (non-prefix, no selection mode entry) ──
         ActionDescriptor {
@@ -653,6 +738,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport up by one page immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+PageUp",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_page_down",
@@ -660,6 +746,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport down by one page immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+PageDown",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_line_up",
@@ -667,6 +754,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport up by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+Up",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_line_down",
@@ -674,6 +762,7 @@ impl ActionRegistry {
             description: "Scroll the terminal viewport down by a configurable number of lines immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+Down",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_to_top",
@@ -681,6 +770,7 @@ impl ActionRegistry {
             description: "Jump the terminal viewport to the top of scrollback history immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+Home",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_to_bottom",
@@ -688,6 +778,7 @@ impl ActionRegistry {
             description: "Snap the terminal viewport to the live bottom immediately. Stays in Normal mode, repeatable.",
             category: ActionCategory::Pane,
             default_binding: "Shift+End",
+            icon: None,
         },
         ActionDescriptor {
             name: "scroll_to_offset",
@@ -695,6 +786,7 @@ impl ActionRegistry {
             description: "Jump the terminal viewport to an explicit offset in rows above the live bottom. Used by the GUI scrollbar and RPC; no default keybinding.",
             category: ActionCategory::Pane,
             default_binding: "unbound",
+            icon: None,
         },
         // ── Selection (host capability) ──
         ActionDescriptor {
@@ -703,6 +795,7 @@ impl ActionRegistry {
             description: "Enter the host-owned selection input mode. Selection data is driven by surface adapters (mouse, keyboard, RPC).",
             category: ActionCategory::Pane,
             default_binding: "s",
+            icon: None,
         },
         ActionDescriptor {
             name: "selection_left",
@@ -710,6 +803,7 @@ impl ActionRegistry {
             description: "Move the active selection focus one cell left in selection mode.",
             category: ActionCategory::Pane,
             default_binding: "h,ArrowLeft",
+            icon: None,
         },
         ActionDescriptor {
             name: "selection_right",
@@ -717,6 +811,7 @@ impl ActionRegistry {
             description: "Move the active selection focus one cell right in selection mode.",
             category: ActionCategory::Pane,
             default_binding: "l,ArrowRight",
+            icon: None,
         },
         ActionDescriptor {
             name: "selection_up",
@@ -724,6 +819,7 @@ impl ActionRegistry {
             description: "Move the active selection focus one row up in selection mode.",
             category: ActionCategory::Pane,
             default_binding: "k,ArrowUp",
+            icon: None,
         },
         ActionDescriptor {
             name: "selection_down",
@@ -731,6 +827,7 @@ impl ActionRegistry {
             description: "Move the active selection focus one row down in selection mode.",
             category: ActionCategory::Pane,
             default_binding: "j,ArrowDown",
+            icon: None,
         },
         ActionDescriptor {
             name: "clear_selection",
@@ -738,6 +835,7 @@ impl ActionRegistry {
             description: "Clear the active selection and exit selection mode if active.",
             category: ActionCategory::Pane,
             default_binding: "Shift+s",
+            icon: None,
         },
         ActionDescriptor {
             name: "copy_selection",
@@ -745,6 +843,7 @@ impl ActionRegistry {
             description: "Copy the active selection text to the system clipboard.",
             category: ActionCategory::Pane,
             default_binding: "y",
+            icon: None,
         },
         ActionDescriptor {
             name: "paste_clipboard",
@@ -752,6 +851,7 @@ impl ActionRegistry {
             description: "Paste system clipboard content into the focused pane. Placeholder until Phase 10 lands paste integration.",
             category: ActionCategory::Pane,
             default_binding: "unbound",
+            icon: None,
         },
         ActionDescriptor {
             name: "begin_selection",
@@ -759,6 +859,7 @@ impl ActionRegistry {
             description: "Start a selection from the caret position in selection mode. No-op if a selection already exists — clear first to restart.",
             category: ActionCategory::Pane,
             default_binding: "v",
+            icon: None,
         },
         ActionDescriptor {
             name: "toggle_selection_endpoint",
@@ -766,6 +867,7 @@ impl ActionRegistry {
             description: "Swap which end of the selection is active so movement grows from the other side.",
             category: ActionCategory::Pane,
             default_binding: "o",
+            icon: None,
         },
         ActionDescriptor {
             name: "open_link_at_caret",
@@ -773,12 +875,21 @@ impl ActionRegistry {
             description: "Open the hyperlink under the selection caret.",
             category: ActionCategory::Pane,
             default_binding: "Shift+o",
+            icon: None,
         },
     ];
 
     /// Look up an action descriptor by its config name.
     pub fn find(name: &str) -> Option<&'static ActionDescriptor> {
         Self::ALL.iter().find(|d| d.name == name)
+    }
+
+    /// The icon [`Glyph`] for an action, by config name — read straight from the
+    /// action's [`ActionDescriptor::icon`]. The single registry-level source of
+    /// action iconography: every surface (pane-action bar, context menu, command
+    /// palette) resolves icons through here, so none invents its own.
+    pub fn icon(name: &str) -> Option<Glyph> {
+        Self::find(name).and_then(|d| d.icon)
     }
 
     /// Return all actions in a given category.
@@ -876,6 +987,9 @@ mod tests {
 
     #[test]
     fn test_descriptors_are_populated() {
+        // Actions invoked only programmatically / by mouse / by context menu have no
+        // global keybinding, so their `default_binding` is intentionally empty.
+        const UNBOUND: &[&str] = &["open_link"];
         for desc in ActionRegistry::ALL {
             assert!(!desc.name.is_empty(), "name must not be empty");
             assert!(!desc.label.is_empty(), "label must not be empty");
@@ -883,10 +997,13 @@ mod tests {
                 !desc.description.is_empty(),
                 "description must not be empty"
             );
-            assert!(
-                !desc.default_binding.is_empty(),
-                "default_binding must not be empty"
-            );
+            if !UNBOUND.contains(&desc.name) {
+                assert!(
+                    !desc.default_binding.is_empty(),
+                    "default_binding must not be empty for {}",
+                    desc.name
+                );
+            }
             assert!(
                 !desc.category.label().is_empty(),
                 "category label must not be empty"

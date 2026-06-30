@@ -24,6 +24,12 @@ use winit::window::CursorIcon;
 /// the thin divider is reachable over the terminal.
 const GRAB_TOLERANCE: f32 = 6.0;
 
+/// Edge band (logical px) within which a **right-press** falls back to a divider
+/// resize. Outside this band — i.e. in the body of a pane — a right-press opens the
+/// context menu instead. Without this gate the fallback grabbed every right-press
+/// once the layout had more than one pane, so the menu never opened after a split.
+const RIGHT_RESIZE_EDGE_BAND: f32 = 24.0;
+
 /// A laid-out tiled pane reduced to the data the divider hit-test needs:
 /// its layout indices (`col`/`pane`, into the active workspace's
 /// `scrolling.columns`) and its on-screen rect (logical px).
@@ -128,20 +134,19 @@ fn fallback_divider(boxes: &[PaneBox], pos: (f32, f32)) -> Option<ResizeDivider>
     // Distance to the nearer vertical / horizontal edge of the pane.
     let dx = (pos.0 - b.x).min(b.x + b.w - pos.0);
     let dy = (pos.1 - b.y).min(b.y + b.h - pos.1);
-    match (multi_col, multi_pane) {
-        (true, true) => Some(if dx <= dy {
-            ResizeDivider::Column { col: b.col }
-        } else {
-            ResizeDivider::Pane {
-                col: b.col,
-                pane: b.pane,
-            }
-        }),
-        (true, false) => Some(ResizeDivider::Column { col: b.col }),
-        (false, true) => Some(ResizeDivider::Pane {
-            col: b.col,
-            pane: b.pane,
-        }),
+    // Only fall back to resize near a real seam; a press in the pane body opens the
+    // context menu (the seam wins on whichever axis the press is closest to).
+    let near_col = dx <= RIGHT_RESIZE_EDGE_BAND;
+    let near_pane = dy <= RIGHT_RESIZE_EDGE_BAND;
+    let column = ResizeDivider::Column { col: b.col };
+    let pane = ResizeDivider::Pane {
+        col: b.col,
+        pane: b.pane,
+    };
+    match (multi_col && near_col, multi_pane && near_pane) {
+        (true, true) => Some(if dx <= dy { column } else { pane }),
+        (true, false) => Some(column),
+        (false, true) => Some(pane),
         (false, false) => None,
     }
 }
@@ -350,10 +355,12 @@ mod tests {
             fallback_divider(&boxes, (50.0, 94.0)),
             Some(ResizeDivider::Pane { col: 0, pane: 0 })
         );
-        // Single pane in col 1 (no pane divider) but multiple columns → column.
+        // Single pane in col 1 (no pane divider): a press NEAR its left edge → column
+        // resize; a press in the body now misses so the context menu opens instead.
         assert_eq!(
-            fallback_divider(&boxes, (160.0, 100.0)),
+            fallback_divider(&boxes, (120.0, 100.0)),
             Some(ResizeDivider::Column { col: 1 })
         );
+        assert_eq!(fallback_divider(&boxes, (160.0, 100.0)), None);
     }
 }

@@ -504,15 +504,18 @@ fn pane_action_spec(
 ) -> (Glyph, crate::input::WmAction, &'static str, bool) {
     use crate::input::WmAction;
     use heca_config::appearance::PaneAction;
+    // Icons come from the action registry (the single source); the literal is a
+    // defensive fallback only, so the bar and the context menu can never drift.
+    let icon = |name: &str, fallback: Glyph| crate::actions::ActionRegistry::icon(name).unwrap_or(fallback);
     match action {
         PaneAction::Split => (
-            Glyph::SquareSplitVertical,
+            icon("split_vertical", Glyph::SquareSplitVertical),
             WmAction::AddPaneToColumn { ws_idx, col_idx },
             "Add pane",
             false,
         ),
         PaneAction::MoveLeft => (
-            Glyph::ArrowLineLeft,
+            icon("move_pane_left", Glyph::ArrowLineLeft),
             WmAction::MovePaneLeft {
                 pane_id: Some(pane_id),
             },
@@ -520,7 +523,7 @@ fn pane_action_spec(
             false,
         ),
         PaneAction::MoveRight => (
-            Glyph::ArrowLineRight,
+            icon("move_pane_right", Glyph::ArrowLineRight),
             WmAction::MovePaneRight {
                 pane_id: Some(pane_id),
             },
@@ -528,13 +531,18 @@ fn pane_action_spec(
             false,
         ),
         PaneAction::Close => (
-            Glyph::XSquare,
+            icon("close", Glyph::XSquare),
             WmAction::ClosePaneById { pane_id },
             "Close",
             false,
         ),
-        PaneAction::Zoom => (Glyph::FrameCorners, WmAction::ZoomColumn, "Zoom", true),
-        PaneAction::Float => (Glyph::Cards, WmAction::Float, "Float", true),
+        PaneAction::Zoom => (
+            icon("zoom_column", Glyph::FrameCorners),
+            WmAction::ZoomColumn,
+            "Zoom",
+            true,
+        ),
+        PaneAction::Float => (icon("float", Glyph::Cards), WmAction::Float, "Float", true),
     }
 }
 
@@ -1935,6 +1943,36 @@ pub(crate) fn paint_link_hints(
         let cap = Rectangle::new(Point::new(x as f64, y as f64), size);
         heca_grid_ui::paint_keycap(&mut cx, cap, &label, LINK_HINT_FONT, None);
     }
+}
+
+/// Lay out the open right-click context menu (sets the widget's resolved font, used
+/// by its panel sizing). Mutable pass, run **before** the scene-texture borrow so
+/// [`paint_context_menu`] can take a shared `&AppState`. No-op when none is open.
+pub(crate) fn layout_context_menu(state: &mut crate::app_state::AppState, w: f32, h: f32) {
+    let font = chrome_gui_theme(state).font_size;
+    if let Some(menu) = state.context_menu.as_mut() {
+        LayoutEngine::new()
+            .base_font(font)
+            .compute(menu, Size::new(w as f64, h as f64));
+    }
+}
+
+/// Paint the open right-click context menu — the app's first stateful overlay —
+/// into the chrome scene, on top of everything, at its anchored viewport-clamped
+/// panel rect. Run [`layout_context_menu`] first (it sets the font). No-op when no
+/// menu is open. terminal-task-18 / app-task-33.
+pub(crate) fn paint_context_menu(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(menu) = state.context_menu.as_ref() else {
+        return;
+    };
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+    menu.paint(&mut cx);
 }
 
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree

@@ -345,7 +345,9 @@ impl Component for ContextMenu {
                 surface,
                 panel_border,
                 radius,
-                Some(Glow { color: glow_c, radius: 10.0, intensity: 0.28 }),
+                // Match the CommandPalette panel glow so the two overlays read as
+                // one family (radius still scales with the theme `glow_size`).
+                Some(Glow { color: glow_c, radius: 12.0, intensity: 0.3 }),
             );
 
             for (i, e) in self.entries.iter().enumerate() {

@@ -87,6 +87,63 @@ fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
             })
 }
 
+/// Open the right-click context menu for `pane_id` at `pos`: an **Open link**
+/// entry when the click cell is a hyperlink, plus the common pane actions. Each
+/// entry writes its [`WmAction`] into the shared sink (`state.context_menu_action`),
+/// which the event loop drains and dispatches after feeding an event into the
+/// menu. terminal-task-18 (context-menu open surface) / app-task-33.
+fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
+    use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+
+    let sink = state.context_menu_action.clone();
+    let mut menu = ContextMenu::new();
+
+    // Each entry's icon comes from the action registry (one source of action
+    // iconography, shared with the future command palette); the label + shortcut
+    // hint stay menu-local. No quick-pick keycap — the real binding is shown.
+    let entry = |label: &str, icon_action: &str, action: WmAction| -> MenuEntry {
+        let s = sink.clone();
+        let mut e = MenuEntry::new(label, move || {
+            *s.borrow_mut() = Some(action.clone());
+        });
+        if let Some(glyph) = crate::actions::ActionRegistry::icon(icon_action) {
+            e = e.icon(glyph);
+        }
+        e
+    };
+
+    // "Open link" first, only when the click cell carries a hyperlink (OSC 8 or
+    // auto-detected) — same lookup as Cmd+click.
+    if let Some(url) = crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos) {
+        let s = sink.clone();
+        let mut e = MenuEntry::new("Open link", move || {
+            *s.borrow_mut() = Some(WmAction::OpenLink { url: url.clone() });
+        });
+        if let Some(glyph) = crate::actions::ActionRegistry::icon("open_link") {
+            e = e.icon(glyph);
+        }
+        menu = menu.entry(e);
+    }
+
+    // Pane actions target the focused pane (the right-press focuses the clicked one).
+    menu = menu.entry(
+        entry("New column", "split_horizontal", WmAction::SplitHorizontal).shortcut("prefix+Enter"),
+    );
+    menu = menu
+        .entry(entry("Split down", "split_vertical", WmAction::SplitVertical).shortcut("prefix+v"));
+    menu = menu
+        .entry(entry("Zoom / unzoom", "zoom_column", WmAction::ZoomColumn).shortcut("prefix+z"));
+    menu = menu.entry(entry("Float / unfloat", "float", WmAction::Float).shortcut("prefix+f"));
+    menu = menu
+        .entry(entry("Close pane", "close", WmAction::ClosePane).shortcut("prefix+x").danger(true));
+
+    menu = menu
+        .anchor(heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64))
+        .open(true);
+    state.context_menu = Some(menu);
+    state.needs_redraw = true;
+}
+
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
@@ -268,6 +325,18 @@ pub fn on_mouse_input(
         }
         (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
             return None;
+        }
+        // Right-click on a content pane (not on a resize divider) → context menu.
+        // Focus the clicked pane so the menu's pane actions target it, then open
+        // the menu in place. terminal-task-18 (context-menu open surface).
+        (MouseButton::Right, ElementState::Pressed) => {
+            if let Some(pane_id) = hit_test_pane(state, pos) {
+                open_context_menu(state, pane_id, pos);
+                return Some((
+                    WmAction::FocusPane { pane_id },
+                    InteractionSource::MouseContent,
+                ));
+            }
         }
         _ => {}
     }
