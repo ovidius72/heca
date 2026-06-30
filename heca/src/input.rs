@@ -306,6 +306,10 @@ pub enum WmAction {
     PasteClipboard,
     BeginSelection,
     ToggleSelectionEndpoint,
+    /// Selection-mode `O`: open the hyperlink under the selection caret (resolves
+    /// the caret cell → snapshot hyperlink → `OpenLink`). Parameterless, bound in
+    /// the selection-mode keymap.
+    OpenLinkAtCaret,
 
     // ── Hyperlinks (parameterized) ──
     /// Open an OSC 8 link target in the OS default handler. Constructed
@@ -482,6 +486,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "paste_clipboard" => Some(WmAction::PasteClipboard),
         "begin_selection" => Some(WmAction::BeginSelection),
         "toggle_selection_endpoint" => Some(WmAction::ToggleSelectionEndpoint),
+        "open_link_at_caret" => Some(WmAction::OpenLinkAtCaret),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
             if let Some(rest) = name.strip_prefix("focus_workspace_")
@@ -742,6 +747,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::PasteClipboard
         | WmAction::BeginSelection
         | WmAction::ToggleSelectionEndpoint
+        | WmAction::OpenLinkAtCaret
         // Scrollback (same priority as selection — pane-management-class)
         | WmAction::ScrollbackPageUp
         | WmAction::ScrollbackPageDown
@@ -1035,6 +1041,7 @@ mod tests {
                 WmAction::PasteClipboard,
                 WmAction::BeginSelection,
                 WmAction::ToggleSelectionEndpoint,
+                WmAction::OpenLinkAtCaret,
                 // Take (panes + quick-take)
                 WmAction::PaneTake,
                 WmAction::PaneTakeAndFocus,

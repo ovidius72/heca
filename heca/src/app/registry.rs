@@ -577,6 +577,7 @@ pub fn build_registry() -> ActionRegistry {
         &WmAction::ToggleSelectionEndpoint,
         handle_toggle_selection_endpoint,
     );
+    registry.register(&WmAction::OpenLinkAtCaret, handle_open_link_at_caret);
 
     registry
 }

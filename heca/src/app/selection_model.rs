@@ -266,6 +266,31 @@ impl SelectionState {
         }
     }
 
+    /// The current cursor cell — the caret in caret-only state, or the moving
+    /// focus endpoint of an active selection — with its owner, in any active
+    /// state. `None` when inactive or for a backend-native region the host does
+    /// not interpret. Used by follow-link-at-caret (`O` in selection mode).
+    pub fn cursor_cell(&self) -> Option<(SelectionOwner, isize, usize)> {
+        match self {
+            SelectionState::Inactive => None,
+            SelectionState::Caret {
+                owner,
+                stable_row,
+                col,
+            } => Some((*owner, *stable_row, *col)),
+            SelectionState::Selecting(active) | SelectionState::Selected(active) => {
+                match &active.region {
+                    SelectionRegion::HostGrid {
+                        focus_stable_row,
+                        focus_col,
+                        ..
+                    } => Some((active.owner, *focus_stable_row, *focus_col)),
+                    SelectionRegion::BackendNative => None,
+                }
+            }
+        }
+    }
+
     /// Place a caret at the given position (caret-only state, no selection).
     pub fn set_caret(&mut self, owner: SelectionOwner, stable_row: isize, col: usize) {
         *self = SelectionState::Caret { owner, stable_row, col };
@@ -389,6 +414,30 @@ mod tests {
     #[test]
     fn default_matches_new() {
         assert_eq!(SelectionState::default(), SelectionState::new());
+    }
+
+    #[test]
+    fn cursor_cell_reads_caret_and_focus_endpoints() {
+        // Inactive → no cursor.
+        let mut s = SelectionState::new();
+        assert_eq!(s.cursor_cell(), None);
+
+        // Caret-only state → the caret cell.
+        s.set_caret(SelectionOwner::Pane(PaneId(7)), 3, 5);
+        assert_eq!(s.cursor_cell(), Some((SelectionOwner::Pane(PaneId(7)), 3, 5)));
+
+        // Active selection → the moving FOCUS endpoint, not the anchor.
+        s.begin(
+            SelectionOwner::Pane(PaneId(9)),
+            SelectionSource::KeyboardMode,
+            SelectionRegion::HostGrid {
+                anchor_stable_row: 2,
+                anchor_col: 1,
+                focus_stable_row: 8,
+                focus_col: 4,
+            },
+        );
+        assert_eq!(s.cursor_cell(), Some((SelectionOwner::Pane(PaneId(9)), 8, 4)));
     }
 
     #[test]

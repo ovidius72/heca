@@ -800,6 +800,30 @@ pub(crate) fn cell_screen_pos(
     ))
 }
 
+/// Target URI of the hyperlink at a **stable-row** cell in `pane_id`, if any.
+///
+/// Selection state is keyed by stable rows (history-stable), while hyperlink
+/// spans are indexed by visible viewport row; this converts via
+/// `stable - viewport_top_stable_row` and returns `None` when the cell is
+/// scrolled out of the visible range. Used by follow-link-at-caret (`O` in
+/// selection mode). terminal-task-18.
+pub(crate) fn hyperlink_uri_at_stable_cell(
+    state: &AppState,
+    pane_id: PaneId,
+    stable_row: isize,
+    col: usize,
+) -> Option<String> {
+    let snapshot = state
+        .backends
+        .get(pane_id)
+        .and_then(|backend| backend.terminal_snapshot())?;
+    let visible_row = stable_row - snapshot.viewport_top_stable_row;
+    if visible_row < 0 || visible_row >= snapshot.rows as isize {
+        return None;
+    }
+    hyperlink_at_cell(&snapshot.hyperlinks, visible_row as usize, col).map(str::to_owned)
+}
+
 /// Find the hyperlink span covering cell `(row, col)`, if any.
 ///
 /// `start_col` is inclusive, `end_col` exclusive (the capture/renderer

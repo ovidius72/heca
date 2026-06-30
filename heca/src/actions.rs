@@ -767,6 +767,13 @@ impl ActionRegistry {
             category: ActionCategory::Pane,
             default_binding: "o",
         },
+        ActionDescriptor {
+            name: "open_link_at_caret",
+            label: "Open Link at Caret",
+            description: "Open the hyperlink under the selection caret.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+o",
+        },
     ];
 
     /// Look up an action descriptor by its config name.
