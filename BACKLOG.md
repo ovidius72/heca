@@ -675,43 +675,67 @@ Phase 2.5 and 2.6 from `theming-plan.md` are not yet ticked.
 
 - [ ] **theming-task-02** — Verify the light theme (`latte`) renders correctly. Glow is now optional — renderer supports light-theme glow; confirm no visual regressions with `intensity = "off"` and `glow_size = "none"`.
 
-### [ ] Phase: Migrate `heca-config` to `heca-theme` · `theming-02`
+### [x] Phase: Migrate `heca-config` to `heca-theme` · `theming-02`
 Replace duplicate Theme/Color in `heca-config` with re-exports from `heca-theme`.
 Source: `theming-plan.md` Phase 3A
+**DONE in code (verified 2026-06-30 on `feat/theming-03-grid-ui-port` post-rebase).**
+`heca-config/src/color.rs` is `pub use heca_theme::Color;`; `defaults.rs` removed;
+`theme.rs` re-exports `Theme`/`Color`/`GlowLevel`/`Intensity`/`Shadow` from `heca_theme` + thin `load()`;
+`catppuccin_mocha()`/`catppuccin_latte()` convenience constructors removed (commit `6c6b480`);
+`loader.rs` delegates via `theme::load`→`heca_theme::load_theme`; `default_theme() = "grid_tron"`;
+`[settings].theme` wired into `SettingsConfig` + loader. Gate: `cargo check -p heca-config` ✅,
+`cargo test -p heca-config --all-targets` 75/75 ✅, `cargo clippy -p heca-config --all-targets --all-features` ✅.
 
-- [ ] **theming-task-03** — Add `heca-theme` dep to `heca-config/Cargo.toml`.
+- [x] **theming-task-03** — Add `heca-theme` dep to `heca-config/Cargo.toml`.
 
-- [ ] **theming-task-04** — Remove `heca-config/src/color.rs` — re-export `heca_theme::Color` from `heca-config::color`.
+- [x] **theming-task-04** — Remove `heca-config/src/color.rs` — re-export `heca_theme::Color` from `heca-config::color`.
 
-- [ ] **theming-task-05** — Remove `heca-config/src/defaults.rs` — move serde default helpers inline into `theme.rs` or callers.
+- [x] **theming-task-05** — Remove `heca-config/src/defaults.rs` — move serde default helpers inline into `theme.rs` or callers.
 
-- [ ] **theming-task-06** — Update `heca-config/src/theme.rs`:
+- [x] **theming-task-06** — Update `heca-config/src/theme.rs`:
   Remove `Theme` struct — re-export `heca_theme::Theme`.
   Remove `catppuccin_mocha()`/`catppuccin_latte()` constructors — use `heca_theme::load_theme()`.
   Keep `Theme::terminal_cell_size()` (app-specific helper, not in heca-theme).
   Keep `Theme::load(name)` as thin wrapper around `heca_theme::load_theme(name)`.
 
-- [ ] **theming-task-07** — Update `heca-config/src/loader.rs` — delegate `load_theme(name)` to `heca_theme::load_theme(name)`.
+- [x] **theming-task-07** — Update `heca-config/src/loader.rs` — delegate `load_theme(name)` to `heca_theme::load_theme(name)`.
 
-- [ ] **theming-task-08** — Update all other `heca-config` files that import `Color` or `Theme` directly.
+- [x] **theming-task-08** — Update all other `heca-config` files that import `Color` or `Theme` directly.
 
-- [ ] **theming-task-09** — Change `default_theme()` return value from `"mocha"` to `"grid_tron"`.
+- [x] **theming-task-09** — Change `default_theme()` return value from `"mocha"` to `"grid_tron"`.
   This flip is safe only after `theming-task-07` delegates loading to `heca-theme` (which bundles grid_tron).
 
-- [ ] **theming-task-10** — `cargo check -p heca-config` + `cargo test -p heca-config` + clippy clean.
+- [x] **theming-task-10** — `cargo check -p heca-config` + `cargo test -p heca-config` + clippy clean.
 
 ### [ ] Phase: Migrate `heca-grid-ui` to `heca-theme` · `theming-03`
 Replace duplicate Theme/Color/Intensity/GlowLevel in `heca-grid-ui`.
 Source: `theming-plan.md` Phase 3B
 
+> **Re-scope finding (2026-06-30, API audit on `feat/theming-03-grid-ui-port`):**
+> `Color` and `Intensity`/`GlowLevel` ARE safely re-exportable from `heca-theme`
+> (heca_theme::Color is a superset of grid-ui's except `with_alpha_f32` — 1 method,
+> 1 callsite in `dock_frame.rs`; add it to `heca_theme::Color` first).
+> **`Theme` is NOT a drop-in re-export.** `heca_grid_ui::Theme` is a GUI-adapter struct with
+> fields the color theme does not own (and must not regain post-`compositor-04c`):
+> `font_family`, `font_size`, `radius`, `focus_border_width`, `shadow: Color` (vs
+> `heca_theme::Theme.shadow: Shadow` struct, `border_radius` vs `radius`, `pane_padding`,
+> `terminal_*`, drag/drop, float, sidebar fonts, gradient). So task-13 as written ("Remove Theme
+> struct — re-export heca_theme::Theme") would break every widget reading
+> `theme.font_family`/`font_size`/`radius`/`focus_border_width`/`shadow`. **New approach:**
+> grid-ui keeps its own `Theme` struct but **composes** `heca_theme::Theme` (embed it + keep
+> the GUI extras) instead of duplicating the color fields; re-export `Color`/`Intensity`/`GlowLevel`.
+> Needs a `/grill-me` on the adapter-theme shape before coding task-13.
+
 - [ ] **theming-task-11** — Add `heca-theme` dep to `heca-grid-ui/Cargo.toml`.
 
-- [ ] **theming-task-12** — Remove `heca-grid-ui/src/color.rs` — re-export `heca_theme::Color`.
+- [ ] **theming-task-12** — Add `with_alpha_f32` to `heca_theme::Color` (1 method, 1 callsite in `dock_frame.rs`), then make `heca-grid-ui/src/color.rs` a re-export `pub use heca_theme::Color;`. (API audit: heca_theme::Color is otherwise a superset — adds serde, `to_linear_f32x4`, `Display`, `From`/`TryFrom<String>`.)
 
-- [ ] **theming-task-13** — Update `heca-grid-ui/src/theme.rs`:
-  Remove `Theme`, `Intensity`, `GlowLevel` struct definitions.
-  Re-export `heca_theme::Theme`, `heca_theme::Intensity`, `heca_theme::GlowLevel`.
-  Remove `grid_tron()`/`grid_ares()` constructors.
+- [ ] **theming-task-13** — Update `heca-grid-ui/src/theme.rs` (RE-SCOPED, see note above):
+  Re-export `Intensity`/`GlowLevel` from `heca_theme` (verify identical variants+methods first).
+  Keep a grid-ui `Theme` struct but **compose** `heca_theme::Theme` (embed it) + keep GUI extras
+  (`font_family`, `font_size`, `radius`, `focus_border_width`, `shadow: Color`) — do NOT plain-re-export `heca_theme::Theme`.
+  Remove `grid_tron()`/`grid_ares()` constructors (use `heca_theme::load_theme("grid_tron")` at the app adapter boundary).
+  Run `/grill-me` on the adapter-theme field layout before implementing.
 
 - [ ] **theming-task-14** — Update `heca-grid-ui/src/lib.rs` + `prelude` — re-export `Theme`/`Intensity`/`GlowLevel` from `heca-theme` instead of local `theme` module.
 

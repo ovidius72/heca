@@ -21,6 +21,18 @@ The canonical theme loader lives in:
 
 - `heca-theme/src/loader.rs`
 
+> **Note — `heca-grid-ui` is NOT yet migrated (open: `theming-03` in `BACKLOG.md`).**
+> `heca-config` re-exports `Theme`/`Color`/`Intensity`/`GlowLevel`/`Shadow` from `heca-theme`
+> (migration `theming-02` done), but `heca-grid-ui` still defines its **own** `Theme`,
+> `Color`, `Intensity`, `GlowLevel` in `heca-grid-ui/src/{theme,color}.rs` and has **no**
+> `heca-theme` dependency. Its `Theme` is a **GUI-adapter** struct (it adds `font_family`,
+> `font_size`, `radius`, `focus_border_width`, `shadow: Color` — fields the color theme does
+> not own post-`compositor-04c`), so it will not become a plain re-export of `heca_theme::Theme`;
+> the `theming-03` plan is to make it **compose** `heca_theme::Theme` + keep the GUI extras,
+> and re-export `Color`/`Intensity`/`GlowLevel` (after adding `with_alpha_f32` to
+> `heca_theme::Color`). Until then, treat `heca-theme` as canonical for color/palette tokens
+> consumed by `heca-config` + the app, and `heca-grid-ui::Theme` as a separate GUI surface.
+
 ### Resolution order
 
 When a theme is loaded by name, resolution is:
