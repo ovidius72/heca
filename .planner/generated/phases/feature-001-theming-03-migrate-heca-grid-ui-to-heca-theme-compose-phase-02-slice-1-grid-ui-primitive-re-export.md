@@ -2,11 +2,33 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-06-30T16:52:29.394Z
-**Updated:** 2026-06-30T16:54:19.220Z
+**Updated:** 2026-06-30T16:57:36.266Z
 
 Slice 1 — grid-ui primitive re-export: Color/Intensity/GlowLevel from heca-theme
 
 Add heca-theme dep to heca-grid-ui/Cargo.toml. Make heca-grid-ui/src/color.rs a re-export `pub use heca_theme::Color;` (heca_theme::Color is a superset — adds serde, to_linear_f32x4, Display, From/TryFrom<String>; with_alpha_f32 added in Slice 0). Verify Intensity and GlowLevel are identical (variants + methods scanline_opacity/next/radius_scale/strength_scale/parse/label) between grid-ui and heca-theme before re-exporting; if identical, re-export from heca_theme. Update heca-grid-ui/src/lib.rs + prelude to re-export Color/Intensity/GlowLevel from heca-theme. grid-ui::Theme still duplicates the color FIELDS at this stage (compose comes in Slice 2) — only the primitive TYPES are deduped here.
+
+## Goals
+- heca-grid-ui has heca-theme dep
+- grid-ui::Color is re-exported from heca_theme (heca-grid-ui/src/color.rs = pub use heca_theme::Color)
+- Intensity/GlowLevel re-exported from heca_theme (after verifying identical variants+methods)
+- heca-grid-ui/src/lib.rs + prelude re-export Color/Intensity/GlowLevel; Theme stays local
+- grid-ui compiles with the primitive types coming from heca_theme
+
+## Dependencies
+- Slice 0 (needs with_alpha_f32 on heca_theme::Color)
+
+## Risks
+- Intensity/GlowLevel not byte-identical between grid-ui and heca-theme - must reconcile first (port grid-ui-only behavior into heca-theme)
+- a grid-ui::Color method missing on heca_theme::Color besides with_alpha_f32 - block (with_alpha_f32 added in Slice 0 covers the known gap; audit said heca_theme::Color is otherwise a superset)
+
+## Completion Criteria
+- cargo check -p heca-grid-ui green
+- cargo test -p heca-grid-ui --all-targets green
+- cargo clippy -p heca-grid-ui --all-targets --all-features 0 warnings
+- all 30+ widgets compile (Theme still old duplicate struct; only primitive types swapped)
+- Intensity/GlowLevel diff documented (identical) or reconciled
+- rust-skills review done
 
 ## Tasks
 

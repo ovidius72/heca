@@ -53,12 +53,15 @@
 > `paint_link_hints` / `paint_context_menu` / `paint_bell_flash` / `paint_search`); stateful overlays
 > own widget+state on `AppState` with an event-loop routing pass (context menu is the template); new
 > actions follow the "Adding New Actions" checklist; action icons live on `ActionDescriptor.icon`.
+> **Just landed (branch `feat/terminal-images`, not yet merged):** **`terminal-09` general
+> inline-image rendering** — Sixel + iTerm2 `OSC 1337` + Kitty graphics, any tool (not just Yazi),
+> verified live. 3 commits (capture / renderer pipeline / app+damage). See the `terminal-09` phase
+> below; Stage 4 follow-ups are `terminal-task-23..26`.
 > **Candidate next work (pick one; verify first):**
-> - **`terminal-09` images / Yazi preview** (`terminal-task-20/21/22`) — biggest user value; the
->   `GraphicsPlacement` snapshot stub already exists (`terminal-04`). Fixes the Yazi infinite spinner.
 > - **`terminal-07` clipboard `OSC 52`** (`terminal-task-16`) — ⚠️ copy (`copy_selection`) + paste
 >   (`paste_clipboard`) already work; only OSC 52 remains. **Verify before treating 14/15 as TODO.**
 > - **`terminal-04` backend/renderer tests** (`terminal-task-05/06`) — close the test gap.
+> - **`terminal-09` Stage 4** (`terminal-task-23..26`) — per-image damage, animation, config toggle.
 > ⚠️ **Stale-phase check:** `terminal-06` (text selection) appears **already implemented** (selection
 > mode + caret + overlay are live and in daily use) — verify and mark done rather than re-building.
 > `terminal-05` pane-shell-hosting status is also worth re-checking against current `terminal_render.rs`.
@@ -609,17 +612,53 @@ Source: terminal design phase 11 (now tracked in this backlog)
   `heca/src/app/{terminal_host,input,render,registry,interaction}.rs`, `heca/src/chrome/mod.rs`,
   `heca/src/app_state.rs`, `keybindings.default.toml`, `README.md`.
 
-### [ ] Phase: Terminal image protocols (Yazi preview) · `terminal-09`
+### [x] Phase: Terminal image protocols (general inline images) · `terminal-09`
 Source: terminal design phase 12 (now tracked in this backlog)
-Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) must exist first.
+Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 
-- [ ] **terminal-task-20** — Design image/graphics protocol surface: how Kitty graphics protocol + sixel placements map from `wezterm-term` through `TerminalSnapshot` to the renderer.
-  Files: `heca-core/src/backend/terminal/snapshot.rs`, `heca-renderer/src/terminal.rs`
+> **DONE — general inline-image rendering shipped on `feat/terminal-images`.**
+> Scope grew from "Yazi preview" to **any image, any tool**: Sixel, iTerm2
+> `OSC 1337`, and Kitty graphics all funnel through wezterm's per-cell
+> `ImageCell` path, so one protocol-agnostic capture + one renderer blit covers
+> them all. Verified live in the app (`wezterm imgcat` 4-colour PNG rendered in a
+> pane; harness also drove `chafa -f sixel`). Three atomic commits:
+> capture (stage 1) → renderer pipeline (stage 2) → app integration + damage (stage 3).
 
-- [ ] **terminal-task-21** — Implement GPU renderer for image placements: texture upload + blit at correct cell coordinates.
-  Files: `heca-renderer/src/terminal.rs`, new `heca-renderer/src/terminal_graphics.rs`
+- [x] **terminal-task-20** — Capture image/graphics placements from `wezterm-term`
+  through `TerminalSnapshot`. **DONE.** Enabled Kitty graphics in
+  `HecaTerminalConfig`; decode each unique source image to RGBA once (cached by
+  content hash); extended `GraphicsPlacement` (image id / source texcoords /
+  z-index) + added a `TerminalImage` registry; coalesced per-cell slices into one
+  block per `(image, placement, z)`. Also reports real pixel size to wezterm so
+  Sixel attachment doesn't divide by zero and `CSI 14 t`/`16 t` queries (used by
+  image tools to size previews) return non-zero.
+  Files: `heca-core/src/backend/snapshot.rs`, `heca-core/src/backend/terminal/engine.rs`, `heca-core/src/backend/terminal.rs`
 
-- [ ] **terminal-task-22** — Wire Yazi image preview end-to-end. Confirm no infinite spinner.
+- [x] **terminal-task-21** — GPU renderer for image placements. **DONE.** New
+  `heca-renderer/src/image.rs` + `image.wgsl`: textured-quad pipeline
+  (premultiplied alpha, sRGB), per-image GPU texture cache keyed by image id with
+  generation-based eviction, one quad per placement sampling the placement's
+  source texcoords, flushed under-text (z<0) / over-text (z>=0).
+  Files: `heca-renderer/src/image.rs`, `heca-renderer/src/image.wgsl`, `heca-renderer/src/lib.rs`
+
+- [x] **terminal-task-22** — Wire image preview end-to-end. **DONE.** Draw into the
+  terminal scratch around the glyph pass so the retained-layer/copy-band machinery
+  carries images for free; image-aware retained damage (full repaint on placement
+  change / when an image-bearing pane is touched; idle image panes still skip).
+  Confirmed live; the original Yazi infinite-spinner cause (zero pixel-size query
+  response) is addressed by the real `CSI 14/16 t` answer from task-20.
+  Files: `heca/src/app/terminal_render.rs`, `heca/src/app_state.rs`, `heca/src/app/startup.rs`
+
+> **Stage 4 follow-ups (not blocking; new tasks):**
+> - **terminal-task-23** — Per-placement row-range damage instead of full-pane
+>   repaint while an image is on screen (only redraw the image's row span when it
+>   intersects dirty rows). Today any touch of an image-bearing pane forces Full.
+> - **terminal-task-24** — Animated images (`AnimRgba8`, GIF/APNG/WebP): currently
+>   the first frame renders; add frame advance + redraw scheduling.
+> - **terminal-task-25** — Optional `config.toml` toggle `terminal.images`
+>   (default on) to disable inline images.
+> - **terminal-task-26** — Re-verify Yazi specifically with its kitty/sixel
+>   previewer against a real image directory; tune preview sizing if needed.
 
 ### [ ] Phase: Per-pane font zoom · `terminal-10`
 Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no

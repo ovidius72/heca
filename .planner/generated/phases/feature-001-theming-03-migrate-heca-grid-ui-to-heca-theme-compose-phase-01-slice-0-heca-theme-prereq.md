@@ -2,11 +2,28 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-06-30T16:52:23.167Z
-**Updated:** 2026-06-30T16:53:31.682Z
+**Updated:** 2026-06-30T16:57:26.680Z
 
 Slice 0 — heca-theme prereq: Shadow.color: String→Color + Color::with_alpha_f32
 
 Prereq in heca-theme. Change heca_theme::Shadow.color: String → Color (align with all other color fields; serde still round-trips via Color's try_from=String/into=String). Update Shadow::Default color to Color::rgb(0,0,0). Add Color::with_alpha_f32 (grid-ui uses it in dock_frame.rs). Fallout fix in the 2 sites that parse shadow.color as String today: heca/src/chrome/mod.rs shadow_to_gui (drop .parse()) and heca-renderer/examples/showcase.rs heca_theme_to_grid_ui (drop from_str). NOT the full app adapter simplification (that is Slice 3) — only the type-change fallout to keep the build green.
+
+## Goals
+- heca_theme::Shadow.color is Color (not String), aligned with every other color field
+- heca_theme::Color gains with_alpha_f32 (grid-ui uses it in dock_frame.rs)
+- the 2 sites parsing shadow.color as String are simplified to use Color directly (chrome shadow_to_gui, showcase heca_theme_to_grid_ui)
+- workspace builds green after the type change
+
+## Risks
+- Shadow serde round-trip breaks if Color's try_from=String is not engaged for the struct field - verify TOML shadow={color="#000000",...} still loads (Color has #[serde(try_from="String",into="String")])
+- an overlooked consumer of shadow.color as String breaks the build - mitigated by the grep audit (only 2 sites: chrome shadow_to_gui, showcase)
+
+## Completion Criteria
+- cargo test -p heca-theme green
+- cargo clippy -p heca-theme --all-targets --all-features 0 warnings
+- cargo check --workspace green (the 2 fallout-fix sites compile)
+- no test assumed shadow.color was String
+- rust-skills review done
 
 ## Tasks
 

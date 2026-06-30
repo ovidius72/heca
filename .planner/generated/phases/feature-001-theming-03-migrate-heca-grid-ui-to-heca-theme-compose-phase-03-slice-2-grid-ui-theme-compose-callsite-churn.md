@@ -2,11 +2,35 @@
 
 **Status:** 📋 `planned`
 **Created:** 2026-06-30T16:52:37.199Z
-**Updated:** 2026-06-30T16:55:11.578Z
+**Updated:** 2026-06-30T16:57:45.793Z
 
 Slice 2 — grid-ui Theme compose + ~47 callsite churn + modal shadow rework
 
 Refactor heca-grid-ui/src/theme.rs to the locked compose shape: struct Theme { colors: heca_theme::Theme, font_family: String, font_size: f32, focus_border_width: f32 }. Drop the ~16 duplicated color fields + radius (→ colors.border_radius) + shadow: Color (→ colors.shadow token). Drop the local control_radius() + CONTROL_RADIUS_FRAC; reuse heca_theme::Theme::control_radius(). Drop grid_tron()/grid_ares() constructors. Then update the ~47 widget callsites in 21 files: cx.theme().<color-token> → cx.theme().colors.<token>; cx.theme().radius → cx.theme().colors.border_radius; cx.theme().control_radius() → cx.theme().colors.control_radius(); GUI extras (font_size/font_family/focus_border_width) stay top-level. Rework the modal drop-shadow (modal.rs) to the config-driven token: scene::Shadow { color: theme.colors.shadow.color.with_alpha(theme.colors.shadow.alpha), radius: theme.colors.shadow.blur * SHADOW_BLUR_MULT, dx: 0.0, dy: SHADOW_DROP } (replaces the hardcoded SHADOW_BLUR). SHADOW_BLUR_MULT is a per-widget multiplier (design knob); SHADOW_DROP offset stays a widget constant (no config token; follow-up optional shadow.offset token). Atomic by nature: the struct-shape change forces all callsites at once or it won't compile.
+
+## Goals
+- grid-ui::Theme is the compose struct { colors, font_family, font_size, focus_border_width } (16 dup color fields + radius + shadow: Color removed)
+- ~47 widget callsites updated: cx.theme().X -> cx.theme().colors.X; radius -> colors.border_radius; control_radius() -> colors.control_radius()
+- modal drop-shadow reads the config token (color+alpha from colors.shadow, blur = colors.shadow.blur * SHADOW_BLUR_MULT)
+- phase_a.rs test updated to a Theme::from_colors helper
+- grid-ui compiles + tests green
+
+## Dependencies
+- Slice 1 (grid-ui primitive types Color/Intensity/GlowLevel from heca_theme)
+
+## Risks
+- a widget reads a theme field not on heca_theme::Theme (e.g. card_background_alpha) - verify all 47 callsite tokens exist on heca_theme::Theme (audit says they do)
+- SHADOW_BLUR_MULT value choice changes modal visuals - pick ~3.75 to preserve ~30 from default blur 8, document the chosen value
+- atomic slice: the struct-shape change forces all callsites at once or it won't compile - cannot split further
+
+## Completion Criteria
+- cargo check -p heca-grid-ui green (all 30+ widgets compile after compose + churn)
+- cargo test -p heca-grid-ui --all-targets green (phase_a.rs updated to Theme::from_colors helper)
+- cargo clippy -p heca-grid-ui --all-targets --all-features 0 warnings
+- no Theme::grid_tron()/grid_ares() remaining (grep)
+- no cx.theme().radius / cx.theme().shadow (as a field) remaining (grep)
+- no local CONTROL_RADIUS_FRAC / control_radius() in grid-ui
+- rust-skills review done
 
 ## Tasks
 
