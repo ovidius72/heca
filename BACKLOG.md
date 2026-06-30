@@ -734,6 +734,13 @@ Source: `theming-plan.md` Phase 3B
 > extras) instead of duplicating the identical color fields; re-export `Color`/`Intensity`/`GlowLevel`.
 > This **contains/generalizes the wrapper+adapter already landed in `compositor-04c`**
 > (`app_theme_to_gui_theme`/`chrome_gui_theme`) — it does NOT remove that adapter.
+>
+> **Locked design (grill-me 2026-06-30):**
+> - **Compose + explicit `colors` field (NOT `Deref`).** `grid-ui::Theme = { colors: heca_theme::Theme, font_family, font_size, focus_border_width }`. Widgets: `cx.theme().colors.<token>`; GUI extras top-level. ~47 callsites / 21 files churn (insert `.colors`), mechanical, one-time. `Deref` rejected (rust-skills caution + opaque API).
+> - **Q1:** rename `grid-ui::Theme.radius` → `border_radius` (pure rename); drop local `control_radius()`/`CONTROL_RADIUS_FRAC`, reuse `heca_theme`'s.
+> - **Q2:** `shadow` = config-driven token via `colors.shadow` (`heca_theme::Shadow`). Prereq: `heca_theme::Shadow.color: String → Color`. Modal: `color`+`alpha` from token, `blur = theme.colors.shadow.blur * SHADOW_BLUR_MULT` (replaces hardcoded `SHADOW_BLUR`); offset `SHADOW_DROP` stays widget constant (follow-up: add `shadow.offset` token). Removes the `grid-ui::Theme.shadow: Color` field.
+> - **Re-export** `Color`/`Intensity`/`GlowLevel` from `heca-theme` (verify identical; add `with_alpha_f32` to `heca_theme::Color`). Drop `grid_tron()`/`grid_ares()`.
+> - **App adapter (3C.2):** `app_theme_to_gui_theme`/`chrome_gui_theme` STAY, simplify to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` — drop `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same Color type + re-exported enums). Full locked design: `theming-plan.md` 3B header.
 > **`/grill-me` order:** decide field name/type alignment FIRST (rename `radius`→`border_radius`?
 > `shadow: Color` → derive from `Shadow`? keep `focus_border_width` GUI-only?); Deref-vs-delegation
 > for widget access then falls out as a consequence (`Deref<Target=heca_theme::Theme>` only
