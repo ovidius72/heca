@@ -512,23 +512,20 @@ Note: border/radius visual blocker is already FIXED (#121/#122).
 - [ ] **terminal-task-10** — Make the pane shell reflect `idle`/`running`/`error` from `PaneRuntime` (already in chrome store) without coupling to terminal rendering internals.
   Files: `heca/src/chrome/mod.rs`, `heca/src/app/terminal_render.rs`
 
-### [ ] Phase: Text selection · `terminal-06`
+### [x] Phase: Text selection · `terminal-06`
 Shared host selection model — not terminal-only. Keyboard caret, actions, overlays.
-Source: terminal design phase 9 (now tracked in this backlog)
+**DONE** (verified 2026-06-30 — was already implemented; this corrects the stale status).
 
-- [ ] **terminal-task-11** — Define shared selection state in app state, keyed by pane/surface owner.
-  Files: `heca/src/app_state.rs` or new `heca/src/selection.rs`
-
-- [ ] **terminal-task-12** — Add selection actions through `WmAction` + `ActionRegistry` + mode-local keymap.
-  Actions needed: `EnterSelectionMode`, `BeginSelection`, `ClearSelection`, `ToggleSelectionEndpoint`, `CopySelection`, `PasteClipboard`, `SelectionLeft/Right/Up/Down`.
-  Note: several variants already exist in `heca/src/app/interaction.rs` — verify completeness.
-  Mode-local bindings (no prefix required while IN selection mode): `v`/`Space` = begin selection, `o` = flip endpoint, `y` = copy, `Esc` = exit.
-  Follow "Adding New Actions" checklist in `AGENTS.md` (11 steps).
-  Files: `heca/src/input.rs`, `heca/src/app/interaction.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`
-
-- [ ] **terminal-task-13** — Implement host-rendered selection overlay for terminal panes.
-  Mouse entry: `Shift+left-drag` (unmodified drags must still go to TUI mouse mode unaffected).
-  Files: `heca/src/app/terminal_render.rs`, `heca-renderer/src/terminal.rs`
+- [x] **terminal-task-11** — Shared selection state. **DONE**. `SelectionState` (+ `SelectionOwner`,
+  `ActiveSelection`, caret-only/Selecting/Selected) on `AppState.selection`
+  (`heca/src/app/selection_model.rs`).
+- [x] **terminal-task-12** — Selection actions + mode-local keymap. **DONE**. `EnterSelectionMode`,
+  `Selection{Left,Right,Up,Down}`, `BeginSelection`, `ClearSelection`, `ToggleSelectionEndpoint`,
+  `CopySelection`, `PasteClipboard` wired through the registry; selection-mode bindings in
+  `keybindings.default.toml` (`v`/`Space`, `o`, `y`, plus later `Shift+o`, `/`, `n`/`N`).
+- [x] **terminal-task-13** — Host-rendered selection overlay. **DONE**. `selection_overlay_for_pane`
+  (`heca/src/app/terminal_render.rs`); `Shift+left-drag` mouse entry; unmodified drags still reach the
+  TUI.
 
 ### [ ] Phase: Clipboard and paste · `terminal-07`
 System clipboard on top of the shared selection model.
