@@ -770,7 +770,8 @@ bell_audible   = false  # system beep (macOS only for now; no-op elsewhere)
 ```
 
 `bell_attention` only fires while the window is unfocused; the visual and audible
-bells fire on any bell. All default off except `bell_attention`.
+bells fire on any bell. All default off except `bell_attention`. Changes apply
+live with `prefix+Shift+r` (no restart).
 
 ### Pane Info Bar
 
