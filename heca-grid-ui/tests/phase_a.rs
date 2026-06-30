@@ -415,6 +415,42 @@ fn glow_none_suppresses_glow() {
 }
 
 #[test]
+fn glow_strength_scales_with_glow_size() {
+    use heca_grid_ui::GlowLevel;
+    // `glow_size` owns glow STRENGTH (alpha), not just radius: the painted glow's
+    // intensity scales by the level's `strength_scale` (thin 0.5×, medium 1.0×,
+    // large 1.6×) through the single `scaled_glow` chokepoint, so config drives it.
+    let intensity_at = |level: GlowLevel| -> f32 {
+        let mut theme = Theme::grid_tron();
+        theme.glow_size = level;
+        let mut scene = Scene::new();
+        {
+            let mut cx = PaintCx::new(&mut scene, &theme);
+            Surface::new().glow(Color::rgb(64, 224, 255)).paint(&mut cx);
+        }
+        scene
+            .iter()
+            .find_map(|c| match c {
+                DrawCommand::Rect(r) => r.glow.as_ref().map(|g| g.intensity),
+                _ => None,
+            })
+            .expect("glow present")
+    };
+    let medium = intensity_at(GlowLevel::Medium);
+    let thin = intensity_at(GlowLevel::Thin);
+    let large = intensity_at(GlowLevel::Large);
+    assert!(medium > 0.0, "medium glow intensity must be positive");
+    assert!(
+        (thin - medium * 0.5).abs() < 1e-4,
+        "thin should halve glow strength"
+    );
+    assert!(
+        (large - medium * 1.6).abs() < 1e-4,
+        "large should be 1.6x glow strength"
+    );
+}
+
+#[test]
 fn toggle_flip_emits_change_action_with_new_value() {
     use heca_grid_ui::{Action, SignalData};
     use std::cell::RefCell;
