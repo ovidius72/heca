@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 portable-pty = "0.9.0"
 wezterm-term = { git = "https://github.com/wezterm/wezterm", package = "wezterm-term", rev = "891bed31b75f7a71b78e8f42ad07ae89bf99a7de" }
 wezterm-surface = { git = "https://github.com/wezterm/wezterm", package = "wezterm-surface", rev = "891bed31b75f7a71b78e8f42ad07ae89bf99a7de" }

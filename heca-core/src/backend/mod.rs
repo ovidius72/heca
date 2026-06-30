@@ -10,7 +10,7 @@ pub mod terminal;
 pub use fake::FakeBackend;
 pub use snapshot::{
     GraphicsPlacement, HyperlinkSpan, TerminalCursor, TerminalCursorShape, TerminalDamage,
-    TerminalRowRange, TerminalSnapshot,
+    TerminalImage, TerminalRowRange, TerminalSnapshot,
 };
 pub use terminal::{PtyError, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 

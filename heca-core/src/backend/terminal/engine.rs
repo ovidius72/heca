@@ -1,10 +1,13 @@
 use super::super::{
     BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
-    BackendMouseEvent, BackendMouseEventKind, HyperlinkSpan, SearchMatch, TerminalCell,
-    TerminalLine, TerminalPaletteDefaults, TerminalSnapshot, TerminalUnderlineStyle,
+    BackendMouseEvent, BackendMouseEventKind, GraphicsPlacement, HyperlinkSpan, SearchMatch,
+    TerminalCell, TerminalImage, TerminalLine, TerminalPaletteDefaults, TerminalSnapshot,
+    TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use crate::layout::animation::{Animation, AnimationConfig};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::io::{Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -84,6 +87,15 @@ impl TerminalConfiguration for HecaTerminalConfig {
     fn scrollback_size(&self) -> usize {
         self.scrollback_size
     }
+
+    /// Capture Kitty graphics in addition to the Sixel + iTerm2 `OSC 1337`
+    /// protocols wezterm parses by default. All three attach `ImageCell`s to the
+    /// grid, so enabling this widens inline-image support to every common tool
+    /// (`kitten icat`, Yazi's kitty previewer, …) without a protocol-specific
+    /// path. See `terminal-09`.
+    fn enable_kitty_graphics(&self) -> bool {
+        true
+    }
 }
 
 pub(super) struct TerminalEngine {
@@ -124,18 +136,28 @@ pub(super) struct TerminalEngine {
     /// Detect plain-text URLs in the visible grid and emit them as hyperlink
     /// spans (in addition to explicit OSC 8 links). Default `true`.
     link_detection: bool,
+    /// Decoded-image cache keyed by wezterm's source content hash. Each unique
+    /// inline image is decoded to RGBA exactly once and shared (`Arc`) across
+    /// every snapshot that references it; `None` caches a decode failure so a
+    /// broken payload is not retried each frame. `RefCell` because snapshotting
+    /// is `&self`. See `terminal-09`.
+    decoded_images: RefCell<HashMap<[u8; 32], Option<Arc<TerminalImage>>>>,
+    /// Physical cell pixel size `(width, height)` reported to wezterm so it can
+    /// size inline images and answer pixel-size queries. See [`Self::set_cell_px`].
+    cell_px: (f32, f32),
 }
 
 impl TerminalEngine {
     pub(super) fn new(
         cols: usize,
         rows: usize,
+        cell_px: (f32, f32),
         writer: SharedWriter,
         palette_defaults: Option<TerminalPaletteDefaults>,
         scrollback_size: usize,
     ) -> Result<Self, super::PtyError> {
         let mut terminal = Terminal::new(
-            terminal_size(cols, rows),
+            terminal_size(cols, rows, cell_px),
             terminal_config(palette_defaults, scrollback_size),
             "heca",
             env!("CARGO_PKG_VERSION"),
@@ -157,7 +179,24 @@ impl TerminalEngine {
             viewport_anim_config: AnimationConfig::default(),
             viewport_anim_enabled: true,
             link_detection: true,
+            decoded_images: RefCell::new(HashMap::new()),
+            cell_px,
         })
+    }
+
+    /// Update the physical cell pixel size reported to the emulation layer.
+    ///
+    /// wezterm divides the terminal's pixel dimensions by the cell grid to size
+    /// inline images (Sixel/iTerm2/Kitty) and to answer pixel-size queries
+    /// (`CSI 14 t` / `CSI 16 t`) that image tools use to scale previews. A stale
+    /// or zero size leaves images mis-sized (and divides by zero on Sixel), so we
+    /// re-issue the terminal size whenever the renderer's cell metrics change.
+    pub(super) fn set_cell_px(&mut self, cell_px: (f32, f32)) {
+        if self.cell_px == cell_px {
+            return;
+        }
+        self.cell_px = cell_px;
+        self.terminal.resize(terminal_size(self.cols, self.rows, cell_px));
     }
 
     /// Enable or disable plain-text URL auto-detection (linkify).
@@ -172,7 +211,7 @@ impl TerminalEngine {
     pub(super) fn resize(&mut self, cols: usize, rows: usize) {
         self.cols = cols;
         self.rows = rows;
-        self.terminal.resize(terminal_size(cols, rows));
+        self.terminal.resize(terminal_size(cols, rows, self.cell_px));
         // A resize reflows scrollback (visible rows change, history moves), which
         // changes the max valid offset. Re-clamp AFTER the wezterm resize so the
         // boundary reflects the reflowed scrollback, never pointing past the new top.
@@ -469,7 +508,7 @@ impl TerminalEngine {
         let blank_line = TerminalLine {
             cells: vec![blank; cols],
         };
-        let (lines, scrollback_rows, viewport_offset, mut hyperlinks) =
+        let (lines, scrollback_rows, viewport_offset, mut hyperlinks, graphics, images) =
             self.visible_lines(cols, rows, &palette, &blank_line);
 
         // Auto-detect plain-text URLs (echo, logs, …) and add them as link spans
@@ -500,7 +539,8 @@ impl TerminalEngine {
             scrollback_rows,
             viewport_top_stable_row: self.visible_top_stable_row(),
             hyperlinks,
-            graphics: Vec::new(),
+            graphics,
+            images,
         };
         snapshot.debug_assert_valid();
         snapshot
@@ -648,13 +688,21 @@ impl TerminalEngine {
             .collect()
     }
 
+    #[allow(clippy::type_complexity)]
     fn visible_lines(
         &self,
         cols: usize,
         rows: usize,
         palette: &ColorPalette,
         blank_line: &TerminalLine,
-    ) -> (Vec<TerminalLine>, usize, usize, Vec<HyperlinkSpan>) {
+    ) -> (
+        Vec<TerminalLine>,
+        usize,
+        usize,
+        Vec<HyperlinkSpan>,
+        Vec<GraphicsPlacement>,
+        Vec<TerminalImage>,
+    ) {
         let screen = self.terminal.screen();
         let visible_count = rows.min(screen.physical_rows.max(1));
         let total = screen.scrollback_rows();
@@ -670,6 +718,7 @@ impl TerminalEngine {
         let visible_start = visible_end.saturating_sub(visible_count);
         let mut lines = Vec::with_capacity(rows);
         let mut hyperlinks = Vec::new();
+        let mut graphics = GraphicsCollector::default();
 
         for (row, mut line) in screen
             .lines_in_phys_range(visible_start..visible_end)
@@ -678,6 +727,7 @@ impl TerminalEngine {
             .enumerate()
         {
             collect_row_hyperlinks(&line, row, cols, &mut hyperlinks);
+            self.collect_row_graphics(&line, row, cols, &mut graphics);
             lines.push(snapshot_line(&mut line, cols, palette, blank_line));
         }
 
@@ -685,7 +735,66 @@ impl TerminalEngine {
             lines.push(blank_line.clone());
         }
 
-        (lines, total, offset, hyperlinks)
+        let (placements, images) = graphics.finish();
+        (lines, total, offset, hyperlinks, placements, images)
+    }
+
+    /// Collect inline-image placements for one visible row into `out`.
+    ///
+    /// wezterm attaches an [`ImageCell`] to each grid cell an image covers
+    /// (identically for Sixel / iTerm2 / Kitty). We group those per-cell slices
+    /// by `(content hash, placement id, z-index)` into rectangular blocks — see
+    /// [`GraphicsCollector`] — and decode each unique source image once.
+    fn collect_row_graphics(
+        &self,
+        line: &wezterm_term::Line,
+        row: usize,
+        cols: usize,
+        out: &mut GraphicsCollector,
+    ) {
+        for cell in line.visible_cells() {
+            let col = cell.cell_index();
+            if col >= cols {
+                break;
+            }
+            let Some(images) = cell.attrs().images() else {
+                continue;
+            };
+            for image in images {
+                let data = image.image_data();
+                let hash = data.hash();
+                // Decode/register the source image once; skip undecodable ones.
+                let Some(decoded) = self.decode_image(data) else {
+                    continue;
+                };
+                out.add_cell(
+                    hash,
+                    image.placement_id(),
+                    image.z_index(),
+                    row,
+                    col,
+                    texcoord(image.top_left()),
+                    texcoord(image.bottom_right()),
+                    &decoded,
+                );
+            }
+        }
+    }
+
+    /// Decode (or fetch from cache) the RGBA pixels for one source image. Returns
+    /// `None` for an undecodable payload (already-logged, cached so it is not
+    /// retried every frame).
+    fn decode_image(
+        &self,
+        data: &Arc<wezterm_term::image::ImageData>,
+    ) -> Option<Arc<TerminalImage>> {
+        let hash = data.hash();
+        if let Some(cached) = self.decoded_images.borrow().get(&hash) {
+            return cached.clone();
+        }
+        let decoded = decode_terminal_image(hash, &data.data()).map(Arc::new);
+        self.decoded_images.borrow_mut().insert(hash, decoded.clone());
+        decoded
     }
 }
 
@@ -756,6 +865,163 @@ fn collect_row_hyperlinks(
     }
     if let Some(span) = open.take() {
         out.push(span);
+    }
+}
+
+/// Convert a wezterm source texture coordinate to a plain `[x, y]` pair.
+fn texcoord(c: wezterm_surface::TextureCoordinate) -> [f32; 2] {
+    [c.x.into_inner(), c.y.into_inner()]
+}
+
+/// Derive the stable 64-bit image handle the snapshot/renderer use from
+/// wezterm's 32-byte content hash. Truncating to 8 bytes of SHA-256 keeps
+/// collisions astronomically unlikely while giving a cheap cache key.
+fn image_id_from_hash(hash: [u8; 32]) -> u64 {
+    u64::from_le_bytes(hash[..8].try_into().expect("hash is 32 bytes"))
+}
+
+/// Decode one source image to tightly packed RGBA8. `Rgba8` is used as-is;
+/// encoded payloads (iTerm2 `OSC 1337` files, Kitty PNG, …) go through the
+/// `image` crate; animations contribute their first frame (full animation is a
+/// `terminal-09` Stage 4 follow-up). Returns `None` when the payload cannot be
+/// decoded.
+fn decode_terminal_image(
+    hash: [u8; 32],
+    data: &wezterm_term::image::ImageDataType,
+) -> Option<TerminalImage> {
+    use wezterm_term::image::ImageDataType;
+    let (width, height, rgba) = match data {
+        ImageDataType::Rgba8 {
+            data,
+            width,
+            height,
+            ..
+        } => (*width, *height, data.clone()),
+        ImageDataType::AnimRgba8 {
+            width,
+            height,
+            frames,
+            ..
+        } => (*width, *height, frames.first()?.clone()),
+        ImageDataType::EncodedFile(bytes) => decode_encoded_image(bytes)?,
+        ImageDataType::EncodedLease(lease) => {
+            let bytes = lease.get_data().ok()?;
+            decode_encoded_image(&bytes)?
+        }
+    };
+    if width == 0 || height == 0 || rgba.len() != (width as usize) * (height as usize) * 4 {
+        return None;
+    }
+    Some(TerminalImage {
+        id: image_id_from_hash(hash),
+        width,
+        height,
+        rgba: Arc::from(rgba.into_boxed_slice()),
+    })
+}
+
+/// Decode an encoded image blob (PNG/JPEG/GIF/WebP/BMP) to RGBA8 bytes.
+fn decode_encoded_image(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let decoded = image::load_from_memory(bytes)
+        .map_err(|err| eprintln!("terminal inline image: decode failed: {err:#}"))
+        .ok()?
+        .to_rgba8();
+    let (width, height) = decoded.dimensions();
+    Some((width, height, decoded.into_vec()))
+}
+
+/// Accumulates per-cell [`ImageCell`] slices into rectangular placement blocks
+/// while a snapshot is built row by row.
+///
+/// wezterm lays an image across a uniform grid of cells, each carrying the
+/// source texcoord sub-rect for its slice, and clips whole rows/cols when the
+/// image scrolls off-screen. So one block per `(hash, placement id, z-index)`
+/// group, sampling from the first (top-left) cell's `top_left` to the last
+/// (bottom-right) cell's `bottom_right`, reproduces the visible region exactly —
+/// even partially scrolled. Rows arrive top-to-bottom and cells left-to-right,
+/// so the first cell seen for a group is its top-left and the last is its
+/// bottom-right.
+#[derive(Default)]
+struct GraphicsCollector {
+    groups: Vec<GraphicsGroup>,
+    /// Index into `groups` keyed by `(image hash, placement id, z-index)`.
+    index: HashMap<([u8; 32], Option<u32>, i32), usize>,
+    /// Unique decoded images encountered, deduplicated by id.
+    images: HashMap<u64, Arc<TerminalImage>>,
+}
+
+struct GraphicsGroup {
+    image_id: u64,
+    z_index: i32,
+    min_row: usize,
+    min_col: usize,
+    max_row: usize,
+    max_col: usize,
+    src_top_left: [f32; 2],
+    src_bottom_right: [f32; 2],
+}
+
+impl GraphicsCollector {
+    #[allow(clippy::too_many_arguments)]
+    fn add_cell(
+        &mut self,
+        hash: [u8; 32],
+        placement_id: Option<u32>,
+        z_index: i32,
+        row: usize,
+        col: usize,
+        src_top_left: [f32; 2],
+        src_bottom_right: [f32; 2],
+        decoded: &Arc<TerminalImage>,
+    ) {
+        let image_id = decoded.id;
+        self.images.entry(image_id).or_insert_with(|| decoded.clone());
+
+        match self.index.get(&(hash, placement_id, z_index)) {
+            Some(&idx) => {
+                let group = &mut self.groups[idx];
+                group.min_row = group.min_row.min(row);
+                group.min_col = group.min_col.min(col);
+                group.max_row = group.max_row.max(row);
+                group.max_col = group.max_col.max(col);
+                // Cells arrive in row-major order, so the latest is the new
+                // bottom-right corner.
+                group.src_bottom_right = src_bottom_right;
+            }
+            None => {
+                self.index
+                    .insert((hash, placement_id, z_index), self.groups.len());
+                self.groups.push(GraphicsGroup {
+                    image_id,
+                    z_index,
+                    min_row: row,
+                    min_col: col,
+                    max_row: row,
+                    max_col: col,
+                    src_top_left,
+                    src_bottom_right,
+                });
+            }
+        }
+    }
+
+    fn finish(self) -> (Vec<GraphicsPlacement>, Vec<TerminalImage>) {
+        let placements = self
+            .groups
+            .into_iter()
+            .map(|g| GraphicsPlacement {
+                row: g.min_row,
+                col: g.min_col,
+                cols: g.max_col - g.min_col + 1,
+                rows: g.max_row - g.min_row + 1,
+                image_id: g.image_id,
+                src_top_left: g.src_top_left,
+                src_bottom_right: g.src_bottom_right,
+                z_index: g.z_index,
+            })
+            .collect();
+        let images = self.images.into_values().map(|a| (*a).clone()).collect();
+        (placements, images)
     }
 }
 
@@ -1001,13 +1267,20 @@ fn map_mouse_event_kind(kind: BackendMouseEventKind) -> MouseEventKind {
     }
 }
 
-fn terminal_size(cols: usize, rows: usize) -> TerminalSize {
+fn terminal_size(cols: usize, rows: usize, cell_px: (f32, f32)) -> TerminalSize {
+    let cols = cols.max(1);
+    let rows = rows.max(1);
+    // wezterm derives the per-cell pixel size as `pixel_width / cols`, so keep at
+    // least one pixel per cell: a zero would mis-size inline images and divide by
+    // zero on Sixel attachment.
+    let cell_w = cell_px.0.round().max(1.0) as usize;
+    let cell_h = cell_px.1.round().max(1.0) as usize;
     TerminalSize {
-        cols: cols.max(1),
-        rows: rows.max(1),
-        pixel_width: 0,
-        pixel_height: 0,
-        dpi: 0,
+        cols,
+        rows,
+        pixel_width: cols * cell_w,
+        pixel_height: rows * cell_h,
+        dpi: 96,
     }
 }
 
@@ -1134,7 +1407,7 @@ mod tests {
     fn snapshot_preserves_background_colored_blank_cells_after_clear() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
         let mut engine =
-            TerminalEngine::new(6, 2, writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+            TerminalEngine::new(6, 2, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
                 .expect("engine should initialize");
 
         engine.advance_bytes(b"\x1b[48;2;30;30;46m\x1b[2J");
@@ -1158,7 +1431,7 @@ mod tests {
     #[test]
     fn bell_alert_is_captured_once() {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        let mut engine = TerminalEngine::new(80, 24, writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
             .expect("terminal engine should initialize");
 
         engine.advance_bytes(b"\x07");
@@ -1172,6 +1445,7 @@ mod tests {
         let mut engine = TerminalEngine::new(
             80,
             24,
+            (8.0, 16.0),
             writer,
             None,
             crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
@@ -1214,6 +1488,7 @@ mod tests {
         let mut engine = TerminalEngine::new(
             40,
             2,
+            (8.0, 16.0),
             writer,
             None,
             crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
@@ -1237,6 +1512,7 @@ mod tests {
         let mut engine = TerminalEngine::new(
             80,
             4,
+            (8.0, 16.0),
             writer,
             None,
             crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
@@ -1253,7 +1529,97 @@ mod tests {
         assert_eq!(span.row, 0);
         assert_eq!(span.start_col, 0);
         assert_eq!(span.end_col, 4, "the 4 cells of \"link\" form the span");
-        assert!(snapshot.graphics.is_empty(), "graphics stays an empty stub");
+        assert!(
+            snapshot.graphics.is_empty() && snapshot.images.is_empty(),
+            "plain text emits no inline-image placements"
+        );
+    }
+
+    #[test]
+    fn captures_sixel_inline_image_placement() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(
+            20,
+            4,
+            (8.0, 16.0),
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
+
+        // Minimal Sixel: register color 0 = red, then paint a 16px-wide, 6px-tall
+        // band (`!16~` = repeat the all-6-pixels-on column 16 times). Sixel decodes
+        // to RGBA with no base64, so this exercises the full capture path.
+        engine.advance_bytes(b"\x1bPq#0;2;100;0;0#0!16~\x1b\\");
+
+        let snapshot = engine.snapshot((8.0, 16.0));
+        assert_eq!(
+            snapshot.graphics.len(),
+            1,
+            "one inline-image placement captured"
+        );
+        let placement = &snapshot.graphics[0];
+        // 16px / 8px cells = 2 cells wide; 6px / 16px cells = 1 cell tall.
+        assert_eq!(placement.cols, 2, "16px image spans 2 cells of 8px");
+        assert_eq!(placement.rows, 1, "6px image fits in 1 cell of 16px");
+        assert_eq!(placement.row, 0);
+        assert_eq!(placement.col, 0);
+
+        // The placement resolves to a decoded image in the registry.
+        assert_eq!(snapshot.images.len(), 1, "one decoded image registered");
+        let image = &snapshot.images[0];
+        assert_eq!(image.id, placement.image_id, "placement references the image");
+        assert!(image.width >= 16 && image.height >= 6, "decoded at source size");
+        assert_eq!(
+            image.rgba.len(),
+            (image.width as usize) * (image.height as usize) * 4,
+            "RGBA buffer is tightly packed"
+        );
+    }
+
+    #[test]
+    fn decode_terminal_image_handles_rgba_and_rejects_garbage() {
+        use wezterm_term::image::ImageDataType;
+        // A 2x1 opaque-red RGBA image is used as-is.
+        let rgba = vec![255, 0, 0, 255, 255, 0, 0, 255];
+        let data = ImageDataType::new_single_frame(2, 1, rgba.clone());
+        let hash = [7u8; 32];
+        let decoded = decode_terminal_image(hash, &data).expect("rgba decodes");
+        assert_eq!((decoded.width, decoded.height), (2, 1));
+        assert_eq!(&*decoded.rgba, rgba.as_slice());
+        assert_eq!(decoded.id, image_id_from_hash(hash));
+
+        // Undecodable encoded bytes yield None rather than panicking.
+        let junk = ImageDataType::EncodedFile(vec![0xde, 0xad, 0xbe, 0xef]);
+        assert!(decode_terminal_image([1u8; 32], &junk).is_none());
+    }
+
+    #[test]
+    fn graphics_collector_coalesces_block_and_dedups_images() {
+        let image = Arc::new(TerminalImage {
+            id: 42,
+            width: 4,
+            height: 2,
+            rgba: Arc::from(vec![0u8; 4 * 2 * 4].into_boxed_slice()),
+        });
+        let hash = [9u8; 32];
+        let mut collector = GraphicsCollector::default();
+        // A 2x2 cell block, fed in row-major order. Corner texcoords come from the
+        // first (top-left) and last (bottom-right) cells.
+        collector.add_cell(hash, Some(1), 0, 0, 0, [0.0, 0.0], [0.5, 0.5], &image);
+        collector.add_cell(hash, Some(1), 0, 0, 1, [0.5, 0.0], [1.0, 0.5], &image);
+        collector.add_cell(hash, Some(1), 0, 1, 0, [0.0, 0.5], [0.5, 1.0], &image);
+        collector.add_cell(hash, Some(1), 0, 1, 1, [0.5, 0.5], [1.0, 1.0], &image);
+
+        let (placements, images) = collector.finish();
+        assert_eq!(placements.len(), 1, "the 4 cells coalesce into one block");
+        let p = &placements[0];
+        assert_eq!((p.row, p.col, p.cols, p.rows), (0, 0, 2, 2));
+        assert_eq!(p.image_id, 42);
+        assert_eq!(p.src_top_left, [0.0, 0.0], "top-left from the first cell");
+        assert_eq!(p.src_bottom_right, [1.0, 1.0], "bottom-right from the last cell");
+        assert_eq!(images.len(), 1, "the shared image is registered once");
     }
 
     #[test]
@@ -1287,7 +1653,7 @@ mod tests {
     /// Build an engine with enough scrollback to make viewport motion observable.
     fn viewport_engine(cols: usize, rows: usize, scrollback_size: usize) -> TerminalEngine {
         let writer = SharedWriter::new(Box::new(SinkWriter));
-        TerminalEngine::new(cols, rows, writer, None, scrollback_size)
+        TerminalEngine::new(cols, rows, (8.0, 16.0), writer, None, scrollback_size)
             .expect("viewport test engine should initialize")
     }
 

@@ -69,10 +69,13 @@ pub struct HyperlinkSpan {
 
 /// Placement of an inline image/graphic in the terminal grid.
 ///
-/// **Contract stub** for the image-protocol phase (`terminal-09`): it defines
-/// where a graphic sits in the cell grid so the renderer can later blit it. No
-/// capture and no rendering happen yet — `graphics` is always empty for now.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One placement is a single rectangular block of cells covered by one image
+/// (one protocol-level placement). The backend coalesces the per-cell image
+/// attachments wezterm produces (Sixel / iTerm2 `OSC 1337` / Kitty graphics all
+/// funnel through the same per-cell path) into these blocks; the renderer blits
+/// one textured quad per placement, sampling the source sub-rect described by
+/// `src_top_left`/`src_bottom_right`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct GraphicsPlacement {
     /// Top-left cell of the placement (visible-row coordinates).
     pub row: usize,
@@ -80,9 +83,47 @@ pub struct GraphicsPlacement {
     /// Size of the placement in cells.
     pub cols: usize,
     pub rows: usize,
-    /// Opaque, protocol-specific image identifier resolved by the renderer once
-    /// image protocols (Kitty graphics / sixel) are implemented.
+    /// Stable handle derived from the source image content hash. Matches a
+    /// [`TerminalImage::id`] in the snapshot's `images` registry and is the
+    /// renderer's texture-cache key.
     pub image_id: u64,
+    /// Source-image texture coordinates (`0.0..=1.0`, top-left origin) at the
+    /// block's top-left and bottom-right corners. The renderer samples this
+    /// slice so a partially scrolled-off image still shows the correct region
+    /// (wezterm clips whole rows/cols, so corner texcoords describe the visible
+    /// slice exactly).
+    pub src_top_left: [f32; 2],
+    pub src_bottom_right: [f32; 2],
+    /// Stacking order relative to text: `z < 0` draws under the glyphs, `z >= 0`
+    /// over them.
+    pub z_index: i32,
+}
+
+/// Decoded RGBA image referenced by one or more [`GraphicsPlacement`]s.
+///
+/// The backend decodes each unique source image once (keyed by content hash)
+/// and shares the pixel buffer via `Arc`, so cloning a snapshot stays cheap. The
+/// renderer uploads each `id` to a GPU texture once and reuses it across frames.
+#[derive(Clone)]
+pub struct TerminalImage {
+    /// Stable handle derived from the source content hash; matches
+    /// [`GraphicsPlacement::image_id`].
+    pub id: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Tightly packed RGBA8 pixels (`width * height * 4` bytes).
+    pub rgba: std::sync::Arc<[u8]>,
+}
+
+impl std::fmt::Debug for TerminalImage {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_struct("TerminalImage")
+            .field("id", &self.id)
+            .field("width", &self.width)
+            .field("height", &self.height)
+            .field("rgba_len", &self.rgba.len())
+            .finish()
+    }
 }
 
 /// Renderer-agnostic visible terminal state.
@@ -132,8 +173,12 @@ pub struct TerminalSnapshot {
     /// extension point; the renderer ignores it until hyperlink opening lands.
     pub hyperlinks: Vec<HyperlinkSpan>,
     /// Inline image/graphic placements over the visible grid (empty = none).
-    /// Contract stub for `terminal-09`; never populated yet.
+    /// Each entry references a decoded image in `images` by `image_id`.
     pub graphics: Vec<GraphicsPlacement>,
+    /// Decoded images referenced by `graphics`, deduplicated by content hash.
+    /// Empty when the viewport has no inline images. Shares pixel buffers via
+    /// `Arc` so snapshot clones stay cheap.
+    pub images: Vec<TerminalImage>,
 }
 
 impl TerminalSnapshot {

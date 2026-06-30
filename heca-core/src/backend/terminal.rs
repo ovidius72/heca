@@ -270,7 +270,14 @@ impl TerminalBackend {
                 false,
             ),
         };
-        let mut engine = TerminalEngine::new(cols, rows, pty.writer(), palette_defaults, scrollback_size)?;
+        let mut engine = TerminalEngine::new(
+            cols,
+            rows,
+            (cell_w, cell_h),
+            pty.writer(),
+            palette_defaults,
+            scrollback_size,
+        )?;
         engine.set_scroll_animations_enabled(scroll_animations);
 
         // Seed `last_fg_check` one debounce in the past so the very first `update`
@@ -475,6 +482,9 @@ impl PaneBackend for TerminalBackend {
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
         self.cell_w = cell_w;
         self.cell_h = cell_h;
+        // Keep wezterm's reported pixel size in step so inline images stay sized
+        // to the current cell metrics (and Sixel attachment never divides by zero).
+        self.engine.set_cell_px((cell_w, cell_h));
         self.force_full_damage = true;
     }
 
