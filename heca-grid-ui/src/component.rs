@@ -874,9 +874,16 @@ impl<'a> PaintCx<'a> {
     /// it controls only the scanline/CRT overlay — so the two settings no longer
     /// overlap. `GlowLevel::None` drops the glow entirely.
     fn scaled_glow(&self, glow: Option<Glow>) -> Option<Glow> {
-        let size = self.theme.glow_size.radius_scale();
-        glow.filter(|_| size > 0.0).map(|g| Glow {
-            radius: g.radius * size,
+        // `GlowLevel` (theme/config `glow_size`) owns BOTH dimensions of glow:
+        // `radius_scale` (halo size) and `strength_scale` (alpha). Apply both here —
+        // the single chokepoint — so every widget's glow tracks the config uniformly
+        // instead of baking a fixed intensity. `Medium` (default) is 1.0×, so this is
+        // a no-op for the default theme; `none` drops glow entirely.
+        let radius = self.theme.glow_size.radius_scale();
+        let strength = self.theme.glow_size.strength_scale();
+        glow.filter(|_| radius > 0.0).map(|g| Glow {
+            radius: g.radius * radius,
+            intensity: g.intensity * strength,
             ..g
         })
     }
