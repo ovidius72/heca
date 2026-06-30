@@ -645,9 +645,27 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
   terminal scratch around the glyph pass so the retained-layer/copy-band machinery
   carries images for free; image-aware retained damage (full repaint on placement
   change / when an image-bearing pane is touched; idle image panes still skip).
-  Confirmed live; the original Yazi infinite-spinner cause (zero pixel-size query
-  response) is addressed by the real `CSI 14/16 t` answer from task-20.
   Files: `heca/src/app/terminal_render.rs`, `heca/src/app_state.rs`, `heca/src/app/startup.rs`
+
+> **Yazi resolution (verified live) — two extra fixes beyond rendering:**
+> 1. **PTY pixel size (`TIOCSWINSZ`).** The PTY winsize reported `pixel_width/height
+>    = 0`; image tools read `ioctl(TIOCGWINSZ)` to size previews — `kitten icat`
+>    errors outright, Yazi spins. Now we report real pixel dims on the PTY (and the
+>    wezterm model, so `CSI 14/16 t` answers + Sixel cell math agree). Files:
+>    `heca-core/src/backend/terminal/pty.rs`, `terminal.rs`.
+> 2. **Terminal identity (`TERM_PROGRAM=WezTerm`).** Tools pick their image protocol
+>    by sniffing terminal identity. Unidentified, **Yazi falls back to Kitty Unicode
+>    placeholders** (`U=1`) — a mode **no WezTerm release implements either**, so it
+>    renders as boxes. Presenting as WezTerm makes Yazi (and others) use the **iTerm2
+>    `OSC 1337`** protocol heca fully supports — exactly how it works in real WezTerm.
+>    Verified: Yazi previews render, fast, in a release build. File: `pty.rs`.
+> **Known gaps (not blocking):**
+> - `kitten icat` direct transmission still fails: it emits **unpadded base64** and
+>   wezterm-term's decoder requires canonical padding (`osc.rs` `base64_decode`).
+>   Needs a lenient-padding patch (fork / `[patch]`) — low priority.
+> - **Kitty Unicode placeholders** remain unsupported. A future option is to snoop
+>   transmits + decode `U+10EEEE` cells natively — but for the editor use case this
+>   is superseded by the **Neovim GUI** direction (see `neovim-plan.md`).
 
 > **Stage 4 follow-ups (not blocking; new tasks):**
 > - **terminal-task-23** — Per-placement row-range damage instead of full-pane
@@ -657,8 +675,9 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   the first frame renders; add frame advance + redraw scheduling.
 > - **terminal-task-25** — Optional `config.toml` toggle `terminal.images`
 >   (default on) to disable inline images.
-> - **terminal-task-26** — Re-verify Yazi specifically with its kitty/sixel
->   previewer against a real image directory; tune preview sizing if needed.
+> - **terminal-task-26** — Yazi previews now work via the iTerm2 path (see Yazi
+>   resolution above). Optional: crisp retina sizing (report *physical* px =
+>   logical × scale instead of logical) so previews aren't softly upscaled on HiDPI.
 
 ### [ ] Phase: Per-pane font zoom · `terminal-10`
 Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no

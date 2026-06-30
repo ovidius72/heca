@@ -88,15 +88,27 @@ impl PtyHandle {
     pub(super) fn new(
         cols: usize,
         rows: usize,
+        cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         shell_integration: Option<ShellIntegrationAssets>,
     ) -> Result<Self, PtyError> {
-        Self::new_with_shell(cols, rows, wake_on_output, shell_integration, None, false, &[])
+        Self::new_with_shell(
+            cols,
+            rows,
+            cell_px,
+            wake_on_output,
+            shell_integration,
+            None,
+            false,
+            &[],
+        )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new_with_shell(
         cols: usize,
         rows: usize,
+        cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         shell_integration: Option<ShellIntegrationAssets>,
         shell_override: Option<&str>,
@@ -104,7 +116,7 @@ impl PtyHandle {
         env: &[(String, String)],
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
-        let size = pty_size(cols, rows);
+        let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
@@ -117,11 +129,12 @@ impl PtyHandle {
     pub(super) fn new_with_command(
         cols: usize,
         rows: usize,
+        cell_px: (f32, f32),
         wake_on_output: Option<WakeCallback>,
         command: &str,
     ) -> Result<Self, PtyError> {
         let pty_system = native_pty_system();
-        let size = pty_size(cols, rows);
+        let size = pty_size(cols, rows, cell_px);
         let pair = pty_system
             .openpty(size)
             .map_err(|err| PtyError::new(PtyOperation::OpenPty, err))?;
@@ -139,6 +152,16 @@ impl PtyHandle {
     ) -> Result<Self, PtyError> {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        // Advertise WezTerm-compatible image support. heca embeds wezterm-term and
+        // genuinely renders the same inline-image protocols WezTerm does (iTerm2
+        // `OSC 1337` + Sixel), but tools pick their image protocol by sniffing the
+        // terminal identity. Without a recognized identity, image viewers like Yazi
+        // fall back to Kitty Unicode placeholders — a mode no WezTerm release
+        // implements either, which renders as garbage. Presenting as WezTerm makes
+        // them choose the iTerm2 protocol heca supports, exactly as they do in real
+        // WezTerm. See `terminal-09`.
+        cmd.env("TERM_PROGRAM", "WezTerm");
+        cmd.env("TERM_PROGRAM_VERSION", "20240203-110809-5046fc22");
 
         let child = pair
             .slave
@@ -210,9 +233,14 @@ impl PtyHandle {
         self.master.as_raw_fd()
     }
 
-    pub(super) fn resize(&self, cols: usize, rows: usize) -> Result<(), PtyError> {
+    pub(super) fn resize(
+        &self,
+        cols: usize,
+        rows: usize,
+        cell_px: (f32, f32),
+    ) -> Result<(), PtyError> {
         self.master
-            .resize(pty_size(cols, rows))
+            .resize(pty_size(cols, rows, cell_px))
             .map_err(|err| PtyError::new(PtyOperation::Resize, err))
     }
 
@@ -303,12 +331,20 @@ fn shell_kind(shell: &str) -> Option<ShellKind> {
     }
 }
 
-fn pty_size(cols: usize, rows: usize) -> PtySize {
+fn pty_size(cols: usize, rows: usize, cell_px: (f32, f32)) -> PtySize {
+    let cols = cols.max(1);
+    let rows = rows.max(1);
+    // Report pixel dimensions in the PTY winsize (`TIOCSWINSZ`). Programs read
+    // them back via `ioctl(TIOCGWINSZ)` to size inline images — `kitten icat`
+    // errors outright without them, and Yazi's kitty/sixel previewers need them
+    // to render at all. A per-cell size of at least 1px keeps the totals valid.
+    let cell_w = cell_px.0.round().max(1.0) as usize;
+    let cell_h = cell_px.1.round().max(1.0) as usize;
     PtySize {
-        rows: rows.max(1) as u16,
-        cols: cols.max(1) as u16,
-        pixel_width: 0,
-        pixel_height: 0,
+        rows: rows as u16,
+        cols: cols as u16,
+        pixel_width: (cols * cell_w).min(u16::MAX as usize) as u16,
+        pixel_height: (rows * cell_h).min(u16::MAX as usize) as u16,
     }
 }
 

@@ -231,10 +231,10 @@ fn shell_integration_assets() -> Option<ShellIntegrationAssets> {
     static SHELL_ASSETS: OnceLock<Result<ShellIntegrationAssets, String>> = OnceLock::new();
     match SHELL_ASSETS.get_or_init(materialize_shell_integration_assets) {
         Ok(assets) => Some(assets.clone()),
-        Err(err) => {
+        Err(_err) => {
             #[cfg(debug_assertions)]
             eprintln!(
-                "[heca] warning: failed to materialize shell integration assets ({err}); spawning bare shells"
+                "[heca] warning: failed to materialize shell integration assets ({_err}); spawning bare shells"
             );
             None
         }

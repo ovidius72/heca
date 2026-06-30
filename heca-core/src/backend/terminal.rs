@@ -254,6 +254,7 @@ impl TerminalBackend {
                         PtyHandle::new_with_shell(
                             cols,
                             rows,
+                            cell_size,
                             wake_on_output,
                             shell.integration,
                             Some(shell_path),
@@ -261,12 +262,20 @@ impl TerminalBackend {
                             &shell.env,
                         )?
                     }
-                    None => PtyHandle::new(cols, rows, wake_on_output, shell.integration)?,
+                    None => {
+                        PtyHandle::new(cols, rows, cell_size, wake_on_output, shell.integration)?
+                    }
                 };
                 (pty, true)
             }
             LaunchTarget::Command(command) => (
-                PtyHandle::new_with_command(cols, rows, wake_on_output, command.command)?,
+                PtyHandle::new_with_command(
+                    cols,
+                    rows,
+                    cell_size,
+                    wake_on_output,
+                    command.command,
+                )?,
                 false,
             ),
         };
@@ -450,7 +459,7 @@ impl PaneBackend for TerminalBackend {
         self.engine.resize(cols, rows);
         self.force_full_damage = true;
 
-        if self.pty.resize(cols, rows).is_err() {
+        if self.pty.resize(cols, rows, (self.cell_w, self.cell_h)).is_err() {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] warning: failed to resize PTY to {}x{}; terminal model resized anyway",
@@ -482,9 +491,11 @@ impl PaneBackend for TerminalBackend {
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
         self.cell_w = cell_w;
         self.cell_h = cell_h;
-        // Keep wezterm's reported pixel size in step so inline images stay sized
-        // to the current cell metrics (and Sixel attachment never divides by zero).
+        // Keep both pixel-size reporters in step with the current cell metrics:
+        // wezterm's model (inline-image sizing + `CSI 14/16 t` query answers) and
+        // the PTY winsize (`TIOCGWINSZ`, read by image tools like Yazi / kitten).
         self.engine.set_cell_px((cell_w, cell_h));
+        let _ = self.pty.resize(self.cols, self.rows, (cell_w, cell_h));
         self.force_full_damage = true;
     }
 
