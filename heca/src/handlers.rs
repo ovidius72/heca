@@ -2175,6 +2175,23 @@ pub fn handle_open_link(_state: &mut AppState, action: &WmAction) {
     }
 }
 
+/// Selection-mode `O`: open the hyperlink under the selection caret. Resolves the
+/// caret cell (caret-only or the moving focus endpoint of an active selection) →
+/// the owning pane's snapshot hyperlink → the shared open path. Safe no-op when
+/// there is no caret, no owning pane, or no link under it.
+pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
+    let Some((owner, stable_row, col)) = state.selection.cursor_cell() else {
+        return;
+    };
+    let SelectionOwner::Pane(pane_id) = owner;
+    let Some(url) =
+        crate::app::terminal_host::hyperlink_uri_at_stable_cell(state, pane_id, stable_row, col)
+    else {
+        return;
+    };
+    handle_open_link(state, &WmAction::OpenLink { url });
+}
+
 #[cfg(test)]
 mod open_link_tests {
     use super::link_scheme_allowed;

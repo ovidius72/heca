@@ -275,7 +275,8 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::CopySelection
         | WmAction::PasteClipboard
         | WmAction::BeginSelection
-        | WmAction::ToggleSelectionEndpoint => ActionPolicy::FocusedPaneLocal,
+        | WmAction::ToggleSelectionEndpoint
+        | WmAction::OpenLinkAtCaret => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -688,6 +689,7 @@ mod tests {
             WmAction::ClearSelection,
             WmAction::CopySelection,
             WmAction::PasteClipboard,
+            WmAction::OpenLinkAtCaret,
         ];
         for action in &actions {
             let decision = route_interaction_for_session(

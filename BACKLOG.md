@@ -563,8 +563,14 @@ Source: `terminal-implementation.md` Phase 11
   >    by `chrome::paint_link_hints` (cell→screen via new `terminal_host::cell_screen_pos`). Policy
   >    Global. Status shows `FOLLOW`. v1 scope = focused pane only. New unit tests (`candidate_letter`,
   >    `keycap_size`); clippy 0 + all tests green. Full "Adding New Actions" checklist done.
-  > 3. **Selection-mode `O`** — bind `O` in the selection mode keymap → OpenLink for the link under
-  >    the caret (needs the selection caret cell + snapshot hyperlinks). Small.
+  > 3. **Selection-mode `O`** — ✅ **DONE** (branch `feat/terminal-18-selection-open-link`). New
+  >    `WmAction::OpenLinkAtCaret` (`open_link_at_caret`) bound `Shift+o` in the selection-mode keymap
+  >    (`o` stays flip-endpoint). New `SelectionState::cursor_cell()` returns the caret in BOTH
+  >    caret-only and active-selection (moving focus endpoint) states; `terminal_host::
+  >    hyperlink_uri_at_stable_cell` converts stable→visible (`stable - viewport_top_stable_row`,
+  >    `[0,rows)`) and reuses `hyperlink_at_cell`. Handler resolves the URL → shared `handle_open_link`.
+  >    Policy `FocusedPaneLocal` (like the other selection actions). Full "Adding New Actions" checklist;
+  >    new `cursor_cell` test; clippy 0 + all tests green.
   > 4. **Context menu "Open link"** — wire the existing `ContextMenu` to right-click on a terminal
   >    pane: entry "Open link" when the click cell is a link, plus pane actions (split/close/float).
   >    Right-click currently does resize-fallback in `mouse.rs` — handle carefully. (overlaps `app-task-33`).
