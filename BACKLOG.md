@@ -681,9 +681,13 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 > - `kitten icat` direct transmission still fails: it emits **unpadded base64** and
 >   wezterm-term's decoder requires canonical padding (`osc.rs` `base64_decode`).
 >   Needs a lenient-padding patch (fork / `[patch]`) — low priority.
-> - **Kitty Unicode placeholders** remain unsupported. A future option is to snoop
->   transmits + decode `U+10EEEE` cells natively — but for the editor use case this
->   is superseded by the **Neovim GUI** direction (see `neovim-plan.md`).
+> - **Kitty Unicode placeholders** — **DEFERRED to the Neovim GUI** (user decision
+>   2026-07-01). Verified: **no WezTerm release implements `U=1` placeholders**, so
+>   tools that can use another protocol don't need them — Yazi works via iTerm2.
+>   Implementing them in the terminal (snoop transmits → decode `U+10EEEE` cells →
+>   placements) is a sizable feature whose main beneficiary is the editor, which the
+>   **Neovim GUI** (`neovim-plan.md`) handles natively instead. Not planned for the
+>   terminal pane.
 
 > **Stage 4 follow-ups (not blocking; new tasks):**
 > - **terminal-task-23** — Per-placement row-range damage instead of full-pane
