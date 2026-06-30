@@ -25,19 +25,30 @@ The canonical theme loader lives in:
 > `heca-config` re-exports `Theme`/`Color`/`Intensity`/`GlowLevel`/`Shadow` from `heca-theme`
 > (migration `theming-02` done), but `heca-grid-ui` still defines its **own** `Theme`,
 > `Color`, `Intensity`, `GlowLevel` in `heca-grid-ui/src/{theme,color}.rs` and has **no**
-> `heca-theme` dependency. Its `Theme` is a **GUI-adapter** struct, so it will not become a
-> plain re-export of `heca_theme::Theme`. Field differences (precise):
-> - **True GUI-only fields** (not in the color theme, post-`compositor-04c`):
->   `font_family`, `font_size`, `focus_border_width`.
-> - **Name/type mismatches vs `heca_theme::Theme`:** `radius` ↔ `border_radius`;
->   `shadow: Color` ↔ `shadow: Shadow` (struct with color+alpha+blur).
-> - **~16 identical name+type duplicates** are the real dedup targets.
-> The `theming-03` plan is to make `grid-ui::Theme` **compose** `heca_theme::Theme`
-> (embed it + keep the GUI-only extras) — i.e. contain/generalize the wrapper+adapter
-> already landed in `compositor-04c` (`app_theme_to_gui_theme`/`chrome_gui_theme`), not
-> remove it — and re-export `Color`/`Intensity`/`GlowLevel` (after adding `with_alpha_f32`
-> to `heca_theme::Color`). Until then, treat `heca-theme` as canonical for color/palette
-> tokens consumed by `heca-config` + the app, and `heca-grid-ui::Theme` as a separate GUI surface.
+> `heca-theme` dependency. `heca-grid-ui::Theme` is a **GUI-adapter** struct, so it will
+> NOT become a plain re-export of `heca_theme::Theme` (it carries GUI-only fields the color
+> theme does not own post-`compositor-04c`: `font_family`, `font_size`, `focus_border_width`).
+>
+> **Locked `theming-03` design (grill-me 2026-06-30; full spec in `theming-plan.md` 3B):**
+> `grid-ui::Theme` **composes** `heca_theme::Theme` via an explicit `colors` field + keeps the
+> GUI extras top-level:
+> ```rust
+> struct Theme {
+>     colors: heca_theme::Theme,   // color tokens (accent, shadow, border_radius, control_radius(), …)
+>     font_family: String,         // GUI-only (post-compositor-04c)
+>     font_size: f32,              // GUI-only
+>     focus_border_width: f32,     // GUI-only
+> }
+> // widgets: cx.theme().colors.<token>;  cx.theme().font_size / .font_family / .focus_border_width
+> ```
+> `Color`/`Intensity`/`GlowLevel` are re-exported from `heca-theme` (after adding
+> `with_alpha_f32` to `heca_theme::Color`). `radius` → `colors.border_radius` (rename);
+> `shadow` → `colors.shadow` (config-driven `heca_theme::Shadow` token, replacing the
+> hardcoded `SHADOW_BLUR` with `theme.colors.shadow.blur * <widget multiplier>`). The app
+> adapter (`app_theme_to_gui_theme`/`chrome_gui_theme`) STAYS — simplified to embed the
+> loaded theme + fill the GUI extras; it is NOT removed. Until `theming-03` ships, treat
+> `heca-theme` as canonical for color/palette tokens consumed by `heca-config` + the app,
+> and `heca-grid-ui::Theme` as a separate GUI surface.
 
 ### Resolution order
 

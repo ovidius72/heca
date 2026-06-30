@@ -708,60 +708,53 @@ Source: `theming-plan.md` Phase 3A
 - [x] **theming-task-10** — `cargo check -p heca-config` + `cargo test -p heca-config` + clippy clean.
 
 ### [ ] Phase: Migrate `heca-grid-ui` to `heca-theme` · `theming-03`
-Replace duplicate Theme/Color/Intensity/GlowLevel in `heca-grid-ui`.
-Source: `theming-plan.md` Phase 3B
+Dedup the color tokens in `heca-grid-ui` by **composing** `heca-theme` (not re-exporting).
+Source: `theming-plan.md` Phase 3B (locked design there).
 
-> **Re-scope finding (2026-06-30, API audit on `feat/theming-03-grid-ui-port`; refined per review):**
-> `Color` and `Intensity`/`GlowLevel` ARE safely re-exportable from `heca-theme`
-> (heca_theme::Color is a superset of grid-ui's except `with_alpha_f32` — 1 method,
-> 1 callsite in `dock_frame.rs`; add it to `heca_theme::Color` first).
-> **`Theme` is NOT a drop-in re-export.** `heca_grid_ui::Theme` is a GUI-adapter struct.
-> Split the field differences precisely (not all are "missing" — some are name/type
-> mismatches):
-> - **True GUI-only fields** (not in `heca_theme::Theme`, and must not be — post-`compositor-04c`):
->   `font_family`, `font_size`, `focus_border_width`.
-> - **Name/type mismatches** (exist on both sides but differ): `radius` (gui) ↔
->   `border_radius` (theme); `shadow: Color` (gui) ↔ `shadow: Shadow` struct (theme,
->   with color+alpha+blur).
-> - **Identical name+type duplicates** (the real dedup targets, ~16 fields):
->   `accent`, `background`, `surface`, `foreground`, `muted`, `border`, `glow`,
->   `danger`, `success`, `warning`, `border_width`, `glow_size`, `intensity`,
->   `show_focus_border`, `icon_secondary_alpha`, `active_wash_alpha`, + `control_radius()`.
-> So task-13 as written ("Remove Theme struct — re-export heca_theme::Theme") would break
-> every widget reading `theme.font_family`/`font_size`/`focus_border_width` + the 40+ callsites
-> reading `theme.radius`/`theme.shadow` (divergent names/types). **New approach:** grid-ui keeps
-> its own `Theme` struct but **composes** `heca_theme::Theme` (embed it + keep the GUI-only
-> extras) instead of duplicating the identical color fields; re-export `Color`/`Intensity`/`GlowLevel`.
-> This **contains/generalizes the wrapper+adapter already landed in `compositor-04c`**
-> (`app_theme_to_gui_theme`/`chrome_gui_theme`) — it does NOT remove that adapter.
+> **Design (locked, grill-me 2026-06-30): COMPOSE with an explicit `colors` field.**
+> `grid-ui::Theme` is a **GUI-adapter** struct, not a color theme — so it does NOT
+> re-export `heca_theme::Theme` (that would drop `font_family`/`font_size`/`focus_border_width`
+> and clash with `compositor-04c`, which moved fonts out of the color theme into the
+> adapter). It embeds the color theme and keeps only the GUI extras:
 >
-> **Locked design (grill-me 2026-06-30):**
-> - **Compose + explicit `colors` field (NOT `Deref`).** `grid-ui::Theme = { colors: heca_theme::Theme, font_family, font_size, focus_border_width }`. Widgets: `cx.theme().colors.<token>`; GUI extras top-level. ~47 callsites / 21 files churn (insert `.colors`), mechanical, one-time. `Deref` rejected (rust-skills caution + opaque API).
-> - **Q1:** rename `grid-ui::Theme.radius` → `border_radius` (pure rename); drop local `control_radius()`/`CONTROL_RADIUS_FRAC`, reuse `heca_theme`'s.
-> - **Q2:** `shadow` = config-driven token via `colors.shadow` (`heca_theme::Shadow`). Prereq: `heca_theme::Shadow.color: String → Color`. Modal: `color`+`alpha` from token, `blur = theme.colors.shadow.blur * SHADOW_BLUR_MULT` (replaces hardcoded `SHADOW_BLUR`); offset `SHADOW_DROP` stays widget constant (follow-up: add `shadow.offset` token). Removes the `grid-ui::Theme.shadow: Color` field.
-> - **Re-export** `Color`/`Intensity`/`GlowLevel` from `heca-theme` (verify identical; add `with_alpha_f32` to `heca_theme::Color`). Drop `grid_tron()`/`grid_ares()`.
-> - **App adapter (3C.2):** `app_theme_to_gui_theme`/`chrome_gui_theme` STAY, simplify to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` — drop `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same Color type + re-exported enums). Full locked design: `theming-plan.md` 3B header.
-> **`/grill-me` order:** decide field name/type alignment FIRST (rename `radius`→`border_radius`?
-> `shadow: Color` → derive from `Shadow`? keep `focus_border_width` GUI-only?); Deref-vs-delegation
-> for widget access then falls out as a consequence (`Deref<Target=heca_theme::Theme>` only
-> exposes identical name+type fields — it would NOT cover `radius`/`shadow` without reconciliation).
+> ```rust
+> struct Theme {
+>     colors: heca_theme::Theme,   // color tokens (accent, shadow, border_radius, control_radius(), …)
+>     font_family: String,         // GUI-only (post-compositor-04c)
+>     font_size: f32,              // GUI-only
+>     focus_border_width: f32,     // GUI-only
+> }
+> // widgets: cx.theme().colors.<token>;  cx.theme().font_size / .font_family / .focus_border_width
+> ```
+>
+> Decisions:
+> - **Access = explicit `colors` field (NOT `Deref`)** — `rust-skills` cautions Deref-polymorphism; the explicit field keeps the API clear (~47 callsites / 21 files churn, mechanical, one-time).
+> - **`radius` → `colors.border_radius`** (pure rename of `heca_theme::Theme.border_radius`, same f32); drop the local `control_radius()` + `CONTROL_RADIUS_FRAC`, reuse `heca_theme::Theme::control_radius()`.
+> - **`shadow` = config-driven token via `colors.shadow`** (`heca_theme::Shadow`, NOT a `Color` field). Modal drop-shadow reads `color`+`alpha` from the token, `blur = theme.colors.shadow.blur * SHADOW_BLUR_MULT` (replaces the hardcoded `SHADOW_BLUR` constant — no hardcoded values that override config). Offset `SHADOW_DROP` stays a widget constant (no config token exists; follow-up: add `shadow.offset`).
+> - **Re-export `Color`/`Intensity`/`GlowLevel`** from `heca-theme` (verify identical variants+methods first; add `with_alpha_f32` to `heca_theme::Color`). Drop `grid_tron()`/`grid_ares()`.
+> - **App adapter (`theming-04` task-18): `app_theme_to_gui_theme`/`chrome_gui_theme` STAY**, simplified to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` — drops `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same `Color` type + re-exported enums). Contains/generalizes the `compositor-04c` adapter; does NOT remove it.
 
 - [ ] **theming-task-11** — Add `heca-theme` dep to `heca-grid-ui/Cargo.toml`.
 
-- [ ] **theming-task-12** — Add `with_alpha_f32` to `heca_theme::Color` (1 method, 1 callsite in `dock_frame.rs`), then make `heca-grid-ui/src/color.rs` a re-export `pub use heca_theme::Color;`. (API audit: heca_theme::Color is otherwise a superset — adds serde, `to_linear_f32x4`, `Display`, `From`/`TryFrom<String>`.)
+- [ ] **theming-task-12** — Prereq in `heca-theme`: add `with_alpha_f32` to `heca_theme::Color` (grid-ui uses it in `dock_frame.rs`). Then make `heca-grid-ui/src/color.rs` a re-export `pub use heca_theme::Color;` (heca_theme::Color is a superset — adds serde, `to_linear_f32x4`, `Display`, `From`/`TryFrom<String>`).
 
-- [ ] **theming-task-13** — Update `heca-grid-ui/src/theme.rs` (RE-SCOPED, see note above):
-  Re-export `Intensity`/`GlowLevel` from `heca_theme` (verify identical variants+methods first).
-  Keep a grid-ui `Theme` struct but **compose** `heca_theme::Theme` (embed it) + keep GUI extras
-  (`font_family`, `font_size`, `radius`, `focus_border_width`, `shadow: Color`) — do NOT plain-re-export `heca_theme::Theme`.
-  Remove `grid_tron()`/`grid_ares()` constructors (use `heca_theme::load_theme("grid_tron")` at the app adapter boundary).
-  Run `/grill-me` on the adapter-theme field layout before implementing.
+- [ ] **theming-task-13** — Refactor `heca-grid-ui/src/theme.rs` to the locked compose shape:
+  - `struct Theme { colors: heca_theme::Theme, font_family: String, font_size: f32, focus_border_width: f32 }`.
+  - Drop the ~16 duplicated color fields + `radius` (→ `colors.border_radius`) + `shadow: Color` (→ `colors.shadow` token).
+  - Drop the local `control_radius()` + `CONTROL_RADIUS_FRAC`; reuse `heca_theme::Theme::control_radius()`.
+  - Drop `grid_tron()`/`grid_ares()` constructors.
+  - Re-export `Intensity`/`GlowLevel` from `heca_theme` (verify identical first).
+  - Prereq in `heca-theme`: `Shadow.color: String → Color` (align with all other color fields).
 
-- [ ] **theming-task-14** — Update `heca-grid-ui/src/lib.rs` + `prelude` — re-export `Theme`/`Intensity`/`GlowLevel` from `heca-theme` instead of local `theme` module.
+- [ ] **theming-task-13a** — Update widget callsites (~47 in 21 files): `cx.theme().<color-token>` → `cx.theme().colors.<token>`; `cx.theme().radius` → `cx.theme().colors.border_radius`; `cx.theme().control_radius()` → `cx.theme().colors.control_radius()`. GUI extras (`font_size`/`font_family`/`focus_border_width`) stay top-level.
 
-- [ ] **theming-task-15** — Verify all 30+ widgets still compile (they call `cx.theme()` — should work via re-export). Run a `cargo check -p heca-grid-ui`.
+- [ ] **theming-task-13b** — Rework the modal drop-shadow (`heca-grid-ui/src/widgets/modal.rs`) to the config-driven token: `scene::Shadow { color: theme.colors.shadow.color.with_alpha(theme.colors.shadow.alpha), radius: theme.colors.shadow.blur * SHADOW_BLUR_MULT, dx: 0.0, dy: SHADOW_DROP }` (replaces the hardcoded `SHADOW_BLUR`); color+alpha from the token, no separate `shadow: Color` field.
 
-- [ ] **theming-task-16** — Update `heca-grid-ui/tests/phase_a.rs` — replace `Theme::grid_tron()` with `heca_theme::load_theme("grid_tron")`.
+- [ ] **theming-task-14** — Update `heca-grid-ui/src/lib.rs` + `prelude`: re-export `Color`/`Intensity`/`GlowLevel` from `heca-theme`; **keep `Theme` as the local composed struct** (do NOT re-export `heca_theme::Theme`).
+
+- [ ] **theming-task-15** — Verify all 30+ widgets compile after the compose + callsite churn. Run `cargo check -p heca-grid-ui`.
+
+- [ ] **theming-task-16** — Update `heca-grid-ui/tests/phase_a.rs`: replace `Theme::grid_tron()` with a `GuiTheme { colors: heca_theme::load_theme("grid_tron"), font_family: <default>, font_size: <default>, focus_border_width: <default> }` helper (or a grid-ui `Theme::from_colors(heca_theme::Theme)` test helper).
 
 - [ ] **theming-task-17** — `cargo check -p heca-grid-ui` + `cargo test -p heca-grid-ui` + clippy clean.
 
@@ -770,8 +763,8 @@ Remove all hardcoded colors, theme-name branches, and semi-hardcoded alpha magic
 Source: `theming-plan.md` Phase 3C
 Hard requirement: zero literal `Color::new(...)` / `[0.xxx, ...]` / `*_ALPHA` constants in active render/widget paths after this phase.
 
-- [ ] **theming-task-18** — Fix `heca/src/chrome/mod.rs`:
-  Make `chrome_gui_theme()` a direct pass-through of `heca_theme::Theme` (no manual 5-field patching).
+- [ ] **theming-task-18** — Fix `heca/src/chrome/mod.rs` (keep the adapter, don't flatten — per theming-03 compose):
+  Keep `chrome_gui_theme()`/`app_theme_to_gui_theme()` as the GUI-adapter; simplify to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` (no per-field color patching). Drop `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same `Color` type + re-exported enums).
   Replace `chrome_colors()` hardcoded `Color::new(17, 17, 27, 255)` with `theme.background`.
 
 - [ ] **theming-task-19** — Fix `heca/src/app/render.rs`:
