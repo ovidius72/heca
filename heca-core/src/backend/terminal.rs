@@ -99,6 +99,11 @@ pub struct TerminalBackend {
     rows: usize,
     cell_w: f32,
     cell_h: f32,
+    /// Device scale factor (logical→physical). Pixel dimensions reported to the
+    /// emulation model + PTY are `cell × scale` so inline images are generated and
+    /// sized at the real on-screen resolution (crisp on HiDPI). Defaults to 1.0
+    /// until the app pushes the window scale via [`PaneBackend::set_scale_factor`].
+    cell_scale: f32,
     reader_disconnected: bool,
     exited: bool,
     reaped: bool,
@@ -301,6 +306,7 @@ impl TerminalBackend {
             rows,
             cell_w,
             cell_h,
+            cell_scale: 1.0,
             reader_disconnected: false,
             exited: false,
             reaped: false,
@@ -438,6 +444,21 @@ impl TerminalBackend {
             },
         )
     }
+
+    /// Physical cell pixel size `(cell × scale)` reported to the emulation model
+    /// and the PTY, so inline images render at the real on-screen resolution.
+    fn physical_cell_px(&self) -> (f32, f32) {
+        (self.cell_w * self.cell_scale, self.cell_h * self.cell_scale)
+    }
+
+    /// Push the current physical cell pixel size to both reporters: the wezterm
+    /// model (image sizing + `CSI 14/16 t` answers) and the PTY winsize
+    /// (`TIOCGWINSZ`, read by image tools like Yazi / kitten).
+    fn push_pixel_metrics(&mut self) {
+        let px = self.physical_cell_px();
+        self.engine.set_cell_px(px);
+        let _ = self.pty.resize(self.cols, self.rows, px);
+    }
 }
 
 impl PaneBackend for TerminalBackend {
@@ -459,7 +480,7 @@ impl PaneBackend for TerminalBackend {
         self.engine.resize(cols, rows);
         self.force_full_damage = true;
 
-        if self.pty.resize(cols, rows, (self.cell_w, self.cell_h)).is_err() {
+        if self.pty.resize(cols, rows, self.physical_cell_px()).is_err() {
             #[cfg(debug_assertions)]
             eprintln!(
                 "[heca] warning: failed to resize PTY to {}x{}; terminal model resized anyway",
@@ -510,12 +531,21 @@ impl PaneBackend for TerminalBackend {
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
         self.cell_w = cell_w;
         self.cell_h = cell_h;
-        // Keep both pixel-size reporters in step with the current cell metrics:
-        // wezterm's model (inline-image sizing + `CSI 14/16 t` query answers) and
-        // the PTY winsize (`TIOCGWINSZ`, read by image tools like Yazi / kitten).
-        self.engine.set_cell_px((cell_w, cell_h));
-        let _ = self.pty.resize(self.cols, self.rows, (cell_w, cell_h));
+        self.push_pixel_metrics();
         self.force_full_damage = true;
+    }
+
+    fn set_scale_factor(&mut self, scale: f32) {
+        let scale = if scale.is_finite() && scale > 0.0 {
+            scale
+        } else {
+            1.0
+        };
+        if (self.cell_scale - scale).abs() < f32::EPSILON {
+            return;
+        }
+        self.cell_scale = scale;
+        self.push_pixel_metrics();
     }
 
     fn update(&mut self) -> bool {

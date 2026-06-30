@@ -43,9 +43,10 @@ pub(crate) fn prepare_terminal_mount(
     pane_id: PaneId,
     content_rect: Rectangle,
     base_cell_size: (f32, f32),
+    scale: f32,
 ) -> Option<TerminalMount> {
     let backend = backends.get_mut(pane_id)?;
-    sync_terminal_backend_size(backend, content_rect, base_cell_size);
+    sync_terminal_backend_size(backend, content_rect, base_cell_size, scale);
     let snapshot = backend.terminal_snapshot()?;
     let damage = backend.take_terminal_damage();
 
@@ -60,6 +61,7 @@ fn sync_terminal_backend_size(
     backend: &mut dyn PaneBackend,
     content_rect: Rectangle,
     base_cell_size: (f32, f32),
+    scale: f32,
 ) {
     let (approx_cell_w, approx_cell_h) = base_cell_size;
     if approx_cell_w <= 0.0 || approx_cell_h <= 0.0 {
@@ -71,6 +73,9 @@ fn sync_terminal_backend_size(
     let fitted_cell_w = (content_rect.size.w as f32 / cols as f32).max(1.0);
     let fitted_cell_h = (content_rect.size.h as f32 / rows as f32).max(1.0);
 
+    // Keep the device scale current so inline images report physical pixels
+    // (crisp on HiDPI). Cheap: the backend ignores an unchanged scale.
+    backend.set_scale_factor(scale);
     backend.set_cell_size(fitted_cell_w, fitted_cell_h);
     backend.set_size(cols, rows);
 }

@@ -240,6 +240,11 @@ pub trait PaneBackend: Send {
     /// how the backend reports cell geometry to the renderer.
     fn set_cell_size(&mut self, _cell_w: f32, _cell_h: f32) {}
 
+    /// Update the device scale factor (logical→physical). Terminal backends use
+    /// it to report physical pixel dimensions to image tools so previews render
+    /// crisply on HiDPI displays. Default no-op for non-terminal backends.
+    fn set_scale_factor(&mut self, _scale: f32) {}
+
     /// Poll for updates (read PTY output, process events, etc.).
     /// Call this every frame before rendering.
     /// Returns true if new data was received and a redraw is needed.

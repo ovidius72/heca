@@ -684,9 +684,13 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   the first frame renders; add frame advance + redraw scheduling.
 > - **terminal-task-25** — Optional `config.toml` toggle `terminal.images`
 >   (default on) to disable inline images.
-> - **terminal-task-26** — Yazi previews now work via the iTerm2 path (see Yazi
->   resolution above). Optional: crisp retina sizing (report *physical* px =
->   logical × scale instead of logical) so previews aren't softly upscaled on HiDPI.
+> - **terminal-task-26** — Yazi previews work via the iTerm2 path (see Yazi
+>   resolution above). **DONE: crisp retina sizing** — the backend reports
+>   *physical* px (`cell × scale`) to the model + PTY, threaded via
+>   `PaneBackend::set_scale_factor` (pushed each frame in `sync_terminal_backend_size`
+>   + on scale change in `refresh_terminal_cell_size`). Previews now render at the
+>   real on-screen resolution instead of being upscaled. ⚠️ visible appearance
+>   change on HiDPI (crisper + more correctly sized) — verify in-app.
 
 ### [ ] Phase: Per-pane font zoom · `terminal-10`
 Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no
