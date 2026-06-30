@@ -38,11 +38,30 @@
 
 > Source: terminal design, now consolidated into this backlog.
 > Real PTY terminal using `portable-pty` + `wezterm-term` + `cosmic-text` is live. Core (Phases 0–5) is shipped.
-> **Shipped since**: dirty-region rendering, host scrollback, ligature policy, OSC 8 + linkify
-> **hyperlink open** across all surfaces (mouse / keyboard / selection / context menu), and the
-> configurable **bell** (attention / visual / audible).
-> Remaining: backend/renderer tests, pane-shell hosting contract, clipboard (`OSC 52`), scrollback
-> search, terminal images (Yazi), per-pane font zoom.
+> **Shipped**: dirty-region rendering, host scrollback, ligature policy, OSC 8 + linkify **hyperlink
+> open** across all surfaces (mouse / keyboard / selection / context menu), configurable **bell**
+> (attention / visual / audible), and **scrollback search** (`/` in selection mode). Phase
+> `terminal-08` is complete.
+
+> **RESUME HANDOFF (2026-06-30) — read first.**
+> **State is clean & green** on `main`: clippy 0, full suite passing (the real-shell damage tests
+> that flaked under CPU contention are fixed — `TEST_TIMEOUT` is a 30s safety cap, PR #209).
+> **Just shipped (all merged):** hyperlink open #199/#200/#201/#202, centralized action icons +
+> context menu #202, glow strength config-driven #204, follow-link all-panes #205, configurable bell
+> #206, scrollback search #208, flaky-test fix #209.
+> **Architecture you can reuse:** overlays paint into the chrome scene on top (`chrome::paint_*` —
+> `paint_link_hints` / `paint_context_menu` / `paint_bell_flash` / `paint_search`); stateful overlays
+> own widget+state on `AppState` with an event-loop routing pass (context menu is the template); new
+> actions follow the "Adding New Actions" checklist; action icons live on `ActionDescriptor.icon`.
+> **Candidate next work (pick one; verify first):**
+> - **`terminal-09` images / Yazi preview** (`terminal-task-20/21/22`) — biggest user value; the
+>   `GraphicsPlacement` snapshot stub already exists (`terminal-04`). Fixes the Yazi infinite spinner.
+> - **`terminal-07` clipboard `OSC 52`** (`terminal-task-16`) — ⚠️ copy (`copy_selection`) + paste
+>   (`paste_clipboard`) already work; only OSC 52 remains. **Verify before treating 14/15 as TODO.**
+> - **`terminal-04` backend/renderer tests** (`terminal-task-05/06`) — close the test gap.
+> ⚠️ **Stale-phase check:** `terminal-06` (text selection) appears **already implemented** (selection
+> mode + caret + overlay are live and in daily use) — verify and mark done rather than re-building.
+> `terminal-05` pane-shell-hosting status is also worth re-checking against current `terminal_render.rs`.
 
 ### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
@@ -493,23 +512,20 @@ Note: border/radius visual blocker is already FIXED (#121/#122).
 - [ ] **terminal-task-10** — Make the pane shell reflect `idle`/`running`/`error` from `PaneRuntime` (already in chrome store) without coupling to terminal rendering internals.
   Files: `heca/src/chrome/mod.rs`, `heca/src/app/terminal_render.rs`
 
-### [ ] Phase: Text selection · `terminal-06`
+### [x] Phase: Text selection · `terminal-06`
 Shared host selection model — not terminal-only. Keyboard caret, actions, overlays.
-Source: terminal design phase 9 (now tracked in this backlog)
+**DONE** (verified 2026-06-30 — was already implemented; this corrects the stale status).
 
-- [ ] **terminal-task-11** — Define shared selection state in app state, keyed by pane/surface owner.
-  Files: `heca/src/app_state.rs` or new `heca/src/selection.rs`
-
-- [ ] **terminal-task-12** — Add selection actions through `WmAction` + `ActionRegistry` + mode-local keymap.
-  Actions needed: `EnterSelectionMode`, `BeginSelection`, `ClearSelection`, `ToggleSelectionEndpoint`, `CopySelection`, `PasteClipboard`, `SelectionLeft/Right/Up/Down`.
-  Note: several variants already exist in `heca/src/app/interaction.rs` — verify completeness.
-  Mode-local bindings (no prefix required while IN selection mode): `v`/`Space` = begin selection, `o` = flip endpoint, `y` = copy, `Esc` = exit.
-  Follow "Adding New Actions" checklist in `AGENTS.md` (11 steps).
-  Files: `heca/src/input.rs`, `heca/src/app/interaction.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`
-
-- [ ] **terminal-task-13** — Implement host-rendered selection overlay for terminal panes.
-  Mouse entry: `Shift+left-drag` (unmodified drags must still go to TUI mouse mode unaffected).
-  Files: `heca/src/app/terminal_render.rs`, `heca-renderer/src/terminal.rs`
+- [x] **terminal-task-11** — Shared selection state. **DONE**. `SelectionState` (+ `SelectionOwner`,
+  `ActiveSelection`, caret-only/Selecting/Selected) on `AppState.selection`
+  (`heca/src/app/selection_model.rs`).
+- [x] **terminal-task-12** — Selection actions + mode-local keymap. **DONE**. `EnterSelectionMode`,
+  `Selection{Left,Right,Up,Down}`, `BeginSelection`, `ClearSelection`, `ToggleSelectionEndpoint`,
+  `CopySelection`, `PasteClipboard` wired through the registry; selection-mode bindings in
+  `keybindings.default.toml` (`v`/`Space`, `o`, `y`, plus later `Shift+o`, `/`, `n`/`N`).
+- [x] **terminal-task-13** — Host-rendered selection overlay. **DONE**. `selection_overlay_for_pane`
+  (`heca/src/app/terminal_render.rs`); `Shift+left-drag` mouse entry; unmodified drags still reach the
+  TUI.
 
 ### [ ] Phase: Clipboard and paste · `terminal-07`
 System clipboard on top of the shared selection model.
