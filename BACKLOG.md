@@ -36,9 +36,13 @@
 
 ## Terminal
 
-> Source: `terminal-implementation.md`
+> Source: terminal design, now consolidated into this backlog.
 > Real PTY terminal using `portable-pty` + `wezterm-term` + `cosmic-text` is live. Core (Phases 0–5) is shipped.
-> Remaining: advanced fidelity, test coverage, selection/clipboard, pane-shell integration.
+> **Shipped since**: dirty-region rendering, host scrollback, ligature policy, OSC 8 + linkify
+> **hyperlink open** across all surfaces (mouse / keyboard / selection / context menu), and the
+> configurable **bell** (attention / visual / audible).
+> Remaining: backend/renderer tests, pane-shell hosting contract, clipboard (`OSC 52`), scrollback
+> search, terminal images (Yazi), per-pane font zoom.
 
 ### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
@@ -471,7 +475,7 @@ Close the test gap before selection/clipboard adds more moving parts.
 - [ ] **terminal-task-06** — Renderer tests: content-rect clipping, row invalidation logic, color mapping.
   Files: `heca-renderer/src/terminal.rs` (inline test module)
 
-- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results in `terminal-implementation.md` HANDOFF.
+- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results in this backlog (or a dedicated handoff doc).
   Note: verify Yazi image preview (currently shows infinite spinner — see `terminal-task-21`)
 
 ### [ ] Phase: Pane-shell hosting contract · `terminal-05`
@@ -479,7 +483,7 @@ Formally mount the terminal as content inside a `heca-grid-ui` Pane shell.
 The shell owns outer chrome (borders, title, focus ring, content rect, clip). The terminal host owns PTY/snapshot/render/input.
 Note: border/radius visual blocker is already FIXED (#121/#122).
 
-- [ ] **terminal-task-08** — Define the pane-shell hosting contract in `terminal-implementation.md` — what the shell owns vs what the terminal host owns. No code yet.
+- [ ] **terminal-task-08** — Define the pane-shell hosting contract in this backlog (or a dedicated design note) — what the shell owns vs what the terminal host owns. No code yet.
 
 - [ ] **terminal-task-09** — Adapt the terminal host to render inside a `heca-grid-ui` `Pane` widget via an explicit content-slot API.
   Starting point: `heca/src/app/terminal_host.rs` `Rectangle`-based mount step.
@@ -491,7 +495,7 @@ Note: border/radius visual blocker is already FIXED (#121/#122).
 
 ### [ ] Phase: Text selection · `terminal-06`
 Shared host selection model — not terminal-only. Keyboard caret, actions, overlays.
-Source: `terminal-implementation.md` Phase 9
+Source: terminal design phase 9 (now tracked in this backlog)
 
 - [ ] **terminal-task-11** — Define shared selection state in app state, keyed by pane/surface owner.
   Files: `heca/src/app_state.rs` or new `heca/src/selection.rs`
@@ -509,7 +513,7 @@ Source: `terminal-implementation.md` Phase 9
 
 ### [ ] Phase: Clipboard and paste · `terminal-07`
 System clipboard on top of the shared selection model.
-Source: `terminal-implementation.md` Phase 10
+Source: terminal design phase 10 (now tracked in this backlog)
 
 - [ ] **terminal-task-14** — Copy selected text to system clipboard (not terminal-specific — uses the shared selection owner).
   Files: `heca/src/handlers.rs`, add clipboard crate (`arboard` or platform equivalent)
@@ -523,7 +527,7 @@ Source: `terminal-implementation.md` Phase 10
 
 ### [ ] Phase: Terminal UX and attention features · `terminal-08`
 Bell, scrollback search, hyperlinks.
-Source: `terminal-implementation.md` Phase 11
+Source: terminal design phase 11 (now tracked in this backlog)
 
 - [x] **terminal-task-17** — Bell handling. **DONE**. Backend capture (`BellHandler` → `take_alerts`
   → `BackendAlert::Bell`) already existed; added the **configurable policy** under
@@ -580,7 +584,7 @@ Source: `terminal-implementation.md` Phase 11
   Files: `heca/src/input.rs`, `heca-core/src/backend/terminal/engine.rs`, overlay UI via `heca-grid-ui`
 
 ### [ ] Phase: Terminal image protocols (Yazi preview) · `terminal-09`
-Source: `terminal-implementation.md` Phase 12
+Source: terminal design phase 12 (now tracked in this backlog)
 Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) must exist first.
 
 - [ ] **terminal-task-20** — Design image/graphics protocol surface: how Kitty graphics protocol + sixel placements map from `wezterm-term` through `TerminalSnapshot` to the renderer.
