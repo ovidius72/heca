@@ -14,6 +14,7 @@ use heca_renderer::background::BackgroundLayer;
 use heca_renderer::blur::Blur;
 use heca_renderer::composite::Compositor;
 use heca_renderer::grid::GridRenderer;
+use heca_renderer::image::ImageRenderer;
 use heca_renderer::primitive::PrimitiveRenderer;
 use heca_renderer::text::TextRenderer;
 use std::collections::HashMap;
@@ -409,6 +410,11 @@ pub struct RetainedTerminalLayer {
     view: wgpu::TextureView,
     physical_size: (u32, u32),
     pub render_key: u64,
+    /// Signature of the inline-image placements last rendered into this layer.
+    /// When it changes, the layer is fully repainted so images appear, move, and
+    /// clear correctly (the retained per-row optimization can't reason about
+    /// images that span dirty and clean rows). See `terminal-09`.
+    pub graphics_sig: u64,
 }
 
 impl RetainedTerminalLayer {
@@ -432,6 +438,7 @@ impl RetainedTerminalLayer {
             view,
             physical_size: (width.max(1), height.max(1)),
             render_key,
+            graphics_sig: 0,
         }
     }
 
@@ -582,6 +589,8 @@ pub struct AppState {
     pub surface_config: wgpu::SurfaceConfiguration,
     pub primitive_renderer: PrimitiveRenderer,
     pub text_renderer: TextRenderer,
+    /// Inline terminal-image renderer (Sixel / iTerm2 / Kitty graphics).
+    pub image_renderer: ImageRenderer,
     pub grid_renderer: GridRenderer,
     pub compositor: Compositor,
     pub terminal_layers: HashMap<PaneId, RetainedTerminalLayer>,

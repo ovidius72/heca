@@ -1,0 +1,11 @@
+{
+  "updatedAt": "2026-06-30T16:55:03.446Z",
+  "currentPhaseId": "",
+  "inProgressTaskIds": [],
+  "nextSteps": [
+    "Run /planner project discuss to bootstrap discovery"
+  ],
+  "blockers": [],
+  "notes": "Project initialized. Awaiting discovery.",
+  "lastSessionSummary": ""
+}

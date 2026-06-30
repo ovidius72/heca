@@ -1,0 +1,42 @@
+# feature-001-theming-03-migrate-heca-grid-ui-to-heca-theme-compose-phase-01-slice-0-heca-theme-prereq — Slice 0 — heca-theme prereq
+
+**Status:** 📋 `planned`
+**Created:** 2026-06-30T16:52:23.167Z
+**Updated:** 2026-06-30T16:53:31.682Z
+
+Slice 0 — heca-theme prereq: Shadow.color: String→Color + Color::with_alpha_f32
+
+Prereq in heca-theme. Change heca_theme::Shadow.color: String → Color (align with all other color fields; serde still round-trips via Color's try_from=String/into=String). Update Shadow::Default color to Color::rgb(0,0,0). Add Color::with_alpha_f32 (grid-ui uses it in dock_frame.rs). Fallout fix in the 2 sites that parse shadow.color as String today: heca/src/chrome/mod.rs shadow_to_gui (drop .parse()) and heca-renderer/examples/showcase.rs heca_theme_to_grid_ui (drop from_str). NOT the full app adapter simplification (that is Slice 3) — only the type-change fallout to keep the build green.
+
+## Tasks
+
+### 📋 slice-0-heca-theme-prereq-task-001-shadow-color-string-color-defa — Shadow.color: String → Color + Default
+
+Status: 📋 `planned`
+
+In heca-theme/src/theme.rs: change `pub color: String` → `pub color: Color` on the Shadow struct. Update Shadow::Default to `color: Color::rgb(0,0,0)`. Serde still round-trips: Color has #[serde(try_from = "String", into = "String")], so TOML `shadow = { color = "#000000", ... }` deserializes via try_from and serializes back to String. Verify heca-theme tests still pass (no test assumed shadow.color was String).</description>
+<parameter name="shortName">shadow-color-to-color
+
+### 📋 slice-0-heca-theme-prereq-task-002-add-color-with-alpha-f32-in-he — Add Color::with_alpha_f32 in heca-theme
+
+Status: 📋 `planned`
+
+In heca-theme/src/color.rs, add `pub fn with_alpha_f32(self, a: f32) -> Self { Self { a: (a.clamp(0.0, 1.0) * 255.0).round() as u8, ..self } }` right after `with_alpha`. grid-ui uses it in dock_frame.rs:292 (`accent.with_alpha_f32(wash_alpha)`). Add a unit test mirroring grid-ui's (clamp behavior). This makes heca_theme::Color a superset of grid-ui's Color, enabling the re-export in Slice 1.
+
+### 📋 slice-0-heca-theme-prereq-task-003-fix-shadow-to-gui-fallout-drop — Fix shadow_to_gui fallout (drop .parse())
+
+Status: 📋 `planned`
+
+Fix fallout of Shadow.color: String→Color in heca/src/chrome/mod.rs `shadow_to_gui`. Today: `match shadow.color.parse::<heca_config::theme::Color>() { Ok(color) => Color::new(color.r, color.g, color.b, alpha_u8(shadow.alpha)), Err(_) => Color::TRANSPARENT }`. After the type change, `shadow.color` is already `heca_config::theme::Color` (= heca_theme::Color), so drop the parse + Err branch: `Color::new(shadow.color.r, shadow.color.g, shadow.color.b, alpha_u8(shadow.alpha))`. The returned `Color` here is grid-ui::Color (still its own type until Slice 1) — component-copy from the heca_theme::Color fields. Minimal: only the type-change fallout, NOT the full adapter simplification (Slice 3).
+
+### 📋 slice-0-heca-theme-prereq-task-004-fix-showcase-heca-theme-to-gri — Fix showcase heca_theme_to_grid_ui fallout (drop from_str)
+
+Status: 📋 `planned`
+
+Fix fallout of Shadow.color: String→Color in heca-renderer/examples/showcase.rs `heca_theme_to_grid_ui`. Today (line ~150): `let shadow_color = match heca_theme::Color::from_str(&ht.shadow.color) { Ok(c) => Color::new(c.r, c.g, c.b, (ht.shadow.alpha * 255.0).min(255.0) as u8), Err(_) => ... }`. After the type change, `ht.shadow.color` is already `heca_theme::Color`, so drop from_str + the match: `Color::new(ht.shadow.color.r, ht.shadow.color.g, ht.shadow.color.b, (ht.shadow.alpha * 255.0).min(255.0) as u8)`. The outer `Color` is grid-ui::Color (showcase builds a grid-ui::Theme). Minimal fallout fix only.
+
+### 📋 slice-0-heca-theme-prereq-task-005-gate-cargo-test-clippy-heca-th — Gate: cargo test/clippy heca-theme + cargo check workspace + rust-skills review
+
+Status: 📋 `planned`
+
+Gate for Slice 0: `cargo test -p heca-theme` green + `cargo clippy -p heca-theme --all-targets --all-features` 0 warnings + `cargo check --workspace` green (the two fallout-fix sites compile). Then load rust-skills and run a formal review (repo mandate: review against rust-skills rules before marking complete).
