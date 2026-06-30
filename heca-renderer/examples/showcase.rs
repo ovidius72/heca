@@ -9,7 +9,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -147,10 +146,12 @@ const THEME_NAMES: [&str; 3] = ["grid_tron", "mocha", "latte"];
 /// fonts are decoupled from the color theme (see `compositor-04c`).
 fn heca_theme_to_grid_ui(ht: &heca_theme::Theme) -> Theme {
     let font_config = heca_config::font::FontConfig::default();
-    let shadow_color = match heca_theme::Color::from_str(&ht.shadow.color) {
-        Ok(c) => Color::new(c.r, c.g, c.b, (ht.shadow.alpha * 255.0).min(255.0) as u8),
-        Err(_) => Color::TRANSPARENT,
-    };
+    let shadow_color = Color::new(
+        ht.shadow.color.r,
+        ht.shadow.color.g,
+        ht.shadow.color.b,
+        (ht.shadow.alpha * 255.0).min(255.0) as u8,
+    );
     Theme {
         name: ht.name.clone(),
         background: Color::new(

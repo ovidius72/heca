@@ -2148,15 +2148,13 @@ fn alpha_u8(a: f32) -> u8 {
     (a.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// Converts a serialized app shadow token into the grid-ui shadow color.
+/// Converts the app shadow token into the grid-ui shadow color.
 ///
-/// The grid-ui theme stores shadow as a concrete RGBA color, while the app
-/// config/theme model stores the base color string and alpha separately.
+/// `heca_theme::Shadow.color` is already a `Color` (parsed at theme-load time via
+/// serde), so here we just bake the `alpha` fraction into the color's alpha channel
+/// for the grid-ui draw primitive (which takes a single RGBA `Color`).
 fn shadow_to_gui(shadow: &heca_config::theme::Shadow) -> Color {
-    match shadow.color.parse::<heca_config::theme::Color>() {
-        Ok(color) => Color::new(color.r, color.g, color.b, alpha_u8(shadow.alpha)),
-        Err(_) => Color::TRANSPARENT,
-    }
+    Color::new(shadow.color.r, shadow.color.g, shadow.color.b, alpha_u8(shadow.alpha))
 }
 
 fn glow_level_to_gui(level: heca_config::theme::GlowLevel) -> heca_grid_ui::theme::GlowLevel {

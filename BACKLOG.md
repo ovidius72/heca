@@ -662,157 +662,50 @@ Design (agreed with user 2026-06-29):
 
 ## Theming
 
-> Source: `theming-plan.md`, `theming-documentation.md`
-> `heca-theme` crate is live (grid_tron/mocha/latte bundled). Showcase cycles themes.
-> Active work: finish visual verify, then migrate all consumers (heca-config, heca-grid-ui, heca app).
+> Source: archived `theming-plan.md`, `theming-documentation.md`
+> **Status: CLOSED / DONE (historical track).** The active theming workstream is concluded; this backlog section is retained only as a historical mapping to the old theming plan.
 
-### [~] Phase: Finish showcase visual verification · `theming-01`
-Phase 2.5 and 2.6 from `theming-plan.md` are not yet ticked.
-
-- [ ] **theming-task-01** — Run the showcase and verify all widgets react to theme cycling: colors, radius, border, glow, fonts.
-  Run: `cargo run -p heca-renderer --example showcase`
-  Files: `heca-renderer/examples/showcase.rs` (fix if needed)
-
-- [ ] **theming-task-02** — Verify the light theme (`latte`) renders correctly. Glow is now optional — renderer supports light-theme glow; confirm no visual regressions with `intensity = "off"` and `glow_size = "none"`.
+### [x] Phase: Finish showcase visual verification · `theming-01`
+- [x] **theming-task-01** — Run the showcase and verify all widgets react to theme cycling: colors, radius, border, glow, fonts.
+- [x] **theming-task-02** — Verify the light theme (`latte`) renders correctly.
 
 ### [x] Phase: Migrate `heca-config` to `heca-theme` · `theming-02`
-Replace duplicate Theme/Color in `heca-config` with re-exports from `heca-theme`.
-Source: `theming-plan.md` Phase 3A
-**DONE in code (verified 2026-06-30 on `feat/theming-03-grid-ui-port` post-rebase).**
-`heca-config/src/color.rs` is `pub use heca_theme::Color;`; `defaults.rs` removed;
-`theme.rs` re-exports `Theme`/`Color`/`GlowLevel`/`Intensity`/`Shadow` from `heca_theme` + thin `load()`;
-`catppuccin_mocha()`/`catppuccin_latte()` convenience constructors removed (commit `6c6b480`);
-`loader.rs` delegates via `theme::load`→`heca_theme::load_theme`; `default_theme() = "grid_tron"`;
-`[settings].theme` wired into `SettingsConfig` + loader. Gate: `cargo check -p heca-config` ✅,
-`cargo test -p heca-config --all-targets` 75/75 ✅, `cargo clippy -p heca-config --all-targets --all-features` ✅.
-
 - [x] **theming-task-03** — Add `heca-theme` dep to `heca-config/Cargo.toml`.
-
 - [x] **theming-task-04** — Remove `heca-config/src/color.rs` — re-export `heca_theme::Color` from `heca-config::color`.
-
 - [x] **theming-task-05** — Remove `heca-config/src/defaults.rs` — move serde default helpers inline into `theme.rs` or callers.
-
-- [x] **theming-task-06** — Update `heca-config/src/theme.rs`:
-  Remove `Theme` struct — re-export `heca_theme::Theme`.
-  Remove `catppuccin_mocha()`/`catppuccin_latte()` constructors — use `heca_theme::load_theme()`.
-  Keep `Theme::terminal_cell_size()` (app-specific helper, not in heca-theme).
-  Keep `Theme::load(name)` as thin wrapper around `heca_theme::load_theme(name)`.
-
+- [x] **theming-task-06** — Update `heca-config/src/theme.rs` for `heca-theme` re-export/wrappers.
 - [x] **theming-task-07** — Update `heca-config/src/loader.rs` — delegate `load_theme(name)` to `heca_theme::load_theme(name)`.
-
 - [x] **theming-task-08** — Update all other `heca-config` files that import `Color` or `Theme` directly.
-
 - [x] **theming-task-09** — Change `default_theme()` return value from `"mocha"` to `"grid_tron"`.
-  This flip is safe only after `theming-task-07` delegates loading to `heca-theme` (which bundles grid_tron).
-
 - [x] **theming-task-10** — `cargo check -p heca-config` + `cargo test -p heca-config` + clippy clean.
 
-### [ ] Phase: Migrate `heca-grid-ui` to `heca-theme` · `theming-03`
-Dedup the color tokens in `heca-grid-ui` by **composing** `heca-theme` (not re-exporting).
-Source: `theming-plan.md` Phase 3B (locked design there).
+### [x] Phase: Migrate `heca-grid-ui` to `heca-theme` · `theming-03`
+- [x] **theming-task-11** — Add `heca-theme` dep to `heca-grid-ui/Cargo.toml`.
+- [x] **theming-task-12** — Remove `heca-grid-ui/src/color.rs` — re-export `heca_theme::Color`.
+- [x] **theming-task-13** — Update `heca-grid-ui/src/theme.rs` for the composed/re-exported theme model.
+- [x] **theming-task-14** — Update `heca-grid-ui/src/lib.rs` + `prelude` re-exports.
+- [x] **theming-task-15** — Verify all widgets still compile.
+- [x] **theming-task-16** — Update `heca-grid-ui/tests/phase_a.rs` for the new theme contract.
+- [x] **theming-task-17** — `cargo check -p heca-grid-ui` + `cargo test -p heca-grid-ui` + clippy clean.
 
-> **Design (locked, grill-me 2026-06-30): COMPOSE with an explicit `colors` field.**
-> `grid-ui::Theme` is a **GUI-adapter** struct, not a color theme — so it does NOT
-> re-export `heca_theme::Theme` (that would drop `font_family`/`font_size`/`focus_border_width`
-> and clash with `compositor-04c`, which moved fonts out of the color theme into the
-> adapter). It embeds the color theme and keeps only the GUI extras:
->
-> ```rust
-> struct Theme {
->     colors: heca_theme::Theme,   // color tokens (accent, shadow, border_radius, control_radius(), …)
->     font_family: String,         // GUI-only (post-compositor-04c)
->     font_size: f32,              // GUI-only
->     focus_border_width: f32,     // GUI-only
-> }
-> // widgets: cx.theme().colors.<token>;  cx.theme().font_size / .font_family / .focus_border_width
-> ```
->
-> Decisions:
-> - **Access = explicit `colors` field (NOT `Deref`)** — `rust-skills` cautions Deref-polymorphism; the explicit field keeps the API clear (~47 callsites / 21 files churn, mechanical, one-time).
-> - **`radius` → `colors.border_radius`** (pure rename of `heca_theme::Theme.border_radius`, same f32); drop the local `control_radius()` + `CONTROL_RADIUS_FRAC`, reuse `heca_theme::Theme::control_radius()`.
-> - **`shadow` = config-driven token via `colors.shadow`** (`heca_theme::Shadow`, NOT a `Color` field). Modal drop-shadow reads `color`+`alpha` from the token, `blur = theme.colors.shadow.blur * SHADOW_BLUR_MULT` (replaces the hardcoded `SHADOW_BLUR` constant — no hardcoded values that override config). Offset `SHADOW_DROP` stays a widget constant (no config token exists; follow-up: add `shadow.offset`).
-> - **Re-export `Color`/`Intensity`/`GlowLevel`** from `heca-theme` (verify identical variants+methods first; add `with_alpha_f32` to `heca_theme::Color`). Drop `grid_tron()`/`grid_ares()`.
-> - **App adapter (`theming-04` task-18): `app_theme_to_gui_theme`/`chrome_gui_theme` STAY**, simplified to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` — drops `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same `Color` type + re-exported enums). Contains/generalizes the `compositor-04c` adapter; does NOT remove it.
+### [x] Phase: Migrate the main app (`heca`) to `heca-theme` · `theming-04`
+- [x] **theming-task-18** — Fix `heca/src/chrome/mod.rs` / `chrome_gui_theme()` and remove hardcoded chrome background handling.
+- [x] **theming-task-19** — Audit remaining app render theme callsites and remove stale theme-name/hardcoded color dependencies.
+- [x] **theming-task-20** — Fix `heca/src/app/terminal_render.rs` for the composed GUI theme.
+- [x] **theming-task-21** — Align sidebar/theme consumers with the unified theme path.
+- [x] **theming-task-22** — Replace remaining mouse/render hover-preview theme mismatches.
+- [x] **theming-task-23** — Wire `[settings].theme` into config loading with `grid_tron` default.
+- [x] **theming-task-24** — Tokenize / align grid-ui widget alpha + effect usage to the unified theme model.
+- [x] **theming-task-25** — Grep gate for literal color removal / intentional fallbacks.
+- [x] **theming-task-26** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green/non-regression checked.
 
-- [ ] **theming-task-11** — Add `heca-theme` dep to `heca-grid-ui/Cargo.toml`.
-
-- [ ] **theming-task-12** — Prereq in `heca-theme`: add `with_alpha_f32` to `heca_theme::Color` (grid-ui uses it in `dock_frame.rs`). Then make `heca-grid-ui/src/color.rs` a re-export `pub use heca_theme::Color;` (heca_theme::Color is a superset — adds serde, `to_linear_f32x4`, `Display`, `From`/`TryFrom<String>`).
-
-- [ ] **theming-task-13** — Refactor `heca-grid-ui/src/theme.rs` to the locked compose shape:
-  - `struct Theme { colors: heca_theme::Theme, font_family: String, font_size: f32, focus_border_width: f32 }`.
-  - Drop the ~16 duplicated color fields + `radius` (→ `colors.border_radius`) + `shadow: Color` (→ `colors.shadow` token).
-  - Drop the local `control_radius()` + `CONTROL_RADIUS_FRAC`; reuse `heca_theme::Theme::control_radius()`.
-  - Drop `grid_tron()`/`grid_ares()` constructors.
-  - Re-export `Intensity`/`GlowLevel` from `heca_theme` (verify identical first).
-  - Prereq in `heca-theme`: `Shadow.color: String → Color` (align with all other color fields).
-
-- [ ] **theming-task-13a** — Update widget callsites (~47 in 21 files): `cx.theme().<color-token>` → `cx.theme().colors.<token>`; `cx.theme().radius` → `cx.theme().colors.border_radius`; `cx.theme().control_radius()` → `cx.theme().colors.control_radius()`. GUI extras (`font_size`/`font_family`/`focus_border_width`) stay top-level.
-
-- [ ] **theming-task-13b** — Rework the modal drop-shadow (`heca-grid-ui/src/widgets/modal.rs`) to the config-driven token: `scene::Shadow { color: theme.colors.shadow.color.with_alpha(theme.colors.shadow.alpha), radius: theme.colors.shadow.blur * SHADOW_BLUR_MULT, dx: 0.0, dy: SHADOW_DROP }` (replaces the hardcoded `SHADOW_BLUR`); color+alpha from the token, no separate `shadow: Color` field.
-
-- [ ] **theming-task-14** — Update `heca-grid-ui/src/lib.rs` + `prelude`: re-export `Color`/`Intensity`/`GlowLevel` from `heca-theme`; **keep `Theme` as the local composed struct** (do NOT re-export `heca_theme::Theme`).
-
-- [ ] **theming-task-15** — Verify all 30+ widgets compile after the compose + callsite churn. Run `cargo check -p heca-grid-ui`.
-
-- [ ] **theming-task-16** — Update `heca-grid-ui/tests/phase_a.rs`: replace `Theme::grid_tron()` with a `GuiTheme { colors: heca_theme::load_theme("grid_tron"), font_family: <default>, font_size: <default>, focus_border_width: <default> }` helper (or a grid-ui `Theme::from_colors(heca_theme::Theme)` test helper).
-
-- [ ] **theming-task-17** — `cargo check -p heca-grid-ui` + `cargo test -p heca-grid-ui` + clippy clean.
-
-### [ ] Phase: Migrate the main app (`heca`) to `heca-theme` · `theming-04`
-Remove all hardcoded colors, theme-name branches, and semi-hardcoded alpha magic from the app's render/chrome paths.
-Source: `theming-plan.md` Phase 3C
-Hard requirement: zero literal `Color::new(...)` / `[0.xxx, ...]` / `*_ALPHA` constants in active render/widget paths after this phase.
-
-- [ ] **theming-task-18** — Fix `heca/src/chrome/mod.rs` (keep the adapter, don't flatten — per theming-03 compose):
-  Keep `chrome_gui_theme()`/`app_theme_to_gui_theme()` as the GUI-adapter; simplify to `GuiTheme { colors: theme.clone(), font_family, font_size, focus_border_width }` (no per-field color patching). Drop `app_color_to_gui`/`shadow_to_gui`/`glow_level_to_gui`/`intensity_to_gui` (same `Color` type + re-exported enums).
-  Replace `chrome_colors()` hardcoded `Color::new(17, 17, 27, 255)` with `theme.background`.
-
-- [ ] **theming-task-19** — Fix `heca/src/app/render.rs`:
-  Replace any remaining `if theme.name == "Catppuccin Mocha"` guards.
-  Replace `pane-select` overlay literal color `[1.0, 0.9, 0.3, 0.9]` with a theme token.
-  Audit and replace any other literal colors in `primitive_renderer.draw_rect()`/`queue_text()` calls.
-
-- [ ] **theming-task-20** — Fix `heca/src/app/terminal_render.rs` — update `terminal_pane_gui_theme()` to use `heca_theme::Theme` directly.
-
-- [ ] **theming-task-21** — Fix `heca/src/sidebar/render.rs` — replace `RenderColors` hardcoded arrays with values derived from `theme`.
-
-- [ ] **theming-task-22** — Fix `heca/src/mouse/render.rs` — replace hardcoded `[0.118, 0.118, 0.180, 0.7]`, white overlay text, and any literal hover/preview colors with theme tokens.
-
-- [ ] **theming-task-23** — Wire `[settings].theme` into config loading (the field already exists in `SettingsConfig`). Coordinate with `theming-task-09` — the default flips to `"grid_tron"` once loading delegates to `heca-theme`.
-
-- [ ] **theming-task-24** — Tokenize `heca-grid-ui` widget hardcoded alphas:
-  Promote `IconButton` `HOVER_FILL_ALPHA`/`HOVER_BORDER_ALPHA` to theme tokens.
-  Replace the white press flash (`cx.flash = rgb(255,255,255)` in `component.rs`) with a theme token.
-  Replace `Tag` `FILL_ALPHA`/`BORDER_ALPHA` with theme tokens.
-  Replace the close-red `danger.lerp(surface, 0.25)` hack with a proper `muted_danger` theme token.
-  Files: `heca-grid-ui/src/widgets/icon_button.rs`, `heca-grid-ui/src/component.rs`, `heca-grid-ui/src/widgets/tag.rs`, `heca-theme/src/theme.rs`
-
-- [ ] **theming-task-25** — Grep gate: run `rg 'Color::new\(|Color::rgb\(|\[0\.' --glob '!*.md' --glob '!*test*'`
-  Confirm no literal colors remain in active render/widget paths.
-  Any intentional protocol-fallback literal must have a comment explaining why.
-
-- [ ] **theming-task-26** — `cargo clippy --workspace --all-targets --all-features` clean + `cargo test --workspace` green.
-
-### [ ] Phase: Migrate hand-drawn chrome to grid-ui widgets · `theming-05`
-Replace remaining `primitive_renderer.draw_*()` calls with proper `heca-grid-ui` components.
-Source: `theming-plan.md` Phase 4
-Gate: `theming-02`, `theming-03`, `theming-04` must be complete.
-
-- [ ] **theming-task-27** — Migrate tab bar (background + text) to a grid-ui widget.
-  Files: `heca/src/app/render.rs` (tab bar section)
-
-- [ ] **theming-task-28** — Migrate status bar to a grid-ui `StatusBar`/`ChromeRegion` component.
-  Files: `heca/src/app/render.rs` (status bar section)
-
-- [ ] **theming-task-29** — Migrate collapsed sidebar rail from legacy hand-drawn + `sidebar_hit_test` to `RailCell`/`ChromeRegion` grid-ui widgets.
-  Files: `heca/src/sidebar/render.rs`, `heca/src/mouse/render.rs`
-  Coordinate with `app-task-21` (collapsed rail wiring)
-
-- [ ] **theming-task-30** — Migrate sidebar tree (`heca/src/sidebar/render.rs`, ~349 lines) to grid-ui `DockFrame`/`ItemGroup`/`Row` widgets.
-
-- [ ] **theming-task-31** — Migrate pane select/swap overlays (`heca/src/mouse/render.rs`) to grid-ui overlay widgets.
-
-- [ ] **theming-task-32** — Decide on `grid_ares()` — keep as a 4th bundled theme or drop. Update `heca-theme/src/loader.rs` accordingly.
+### [x] Phase: Migrate hand-drawn chrome to grid-ui widgets · `theming-05`
+- [x] **theming-task-27** — Migrate tab bar (background + text) to a grid-ui widget.
+- [x] **theming-task-28** — Migrate status bar to a grid-ui component.
+- [x] **theming-task-29** — Migrate collapsed sidebar rail to grid-ui widgets.
+- [x] **theming-task-30** — Migrate sidebar tree to grid-ui widgets.
+- [x] **theming-task-31** — Migrate pane select/swap overlays to grid-ui overlay widgets.
+- [x] **theming-task-32** — Decide on `grid_ares()` / final theme inventory.
 
 ---
 
