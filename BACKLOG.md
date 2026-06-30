@@ -509,20 +509,26 @@ Close the test gap before selection/clipboard adds more moving parts.
   Needs a manual in-app run (not automatable). Yazi image preview: ✅ now works
   (iTerm2 path — see `terminal-09` Yazi resolution).
 
-### [ ] Phase: Pane-shell hosting contract · `terminal-05`
+### [x] Phase: Pane-shell hosting contract · `terminal-05`
 Formally mount the terminal as content inside a `heca-grid-ui` Pane shell.
 The shell owns outer chrome (borders, title, focus ring, content rect, clip). The terminal host owns PTY/snapshot/render/input.
-Note: border/radius visual blocker is already FIXED (#121/#122).
+**DONE** (verified 2026-07-01 — was already implemented; this corrects the stale status).
 
-- [ ] **terminal-task-08** — Define the pane-shell hosting contract in this backlog (or a dedicated design note) — what the shell owns vs what the terminal host owns. No code yet.
+- [x] **terminal-task-08** — Pane-shell contract. **DONE (embodied in code + this note).**
+  Shell owns chrome (border/title/focus ring/content rect/clip), terminal host owns
+  PTY/snapshot/render/input. Realized by `TerminalPaneShell` +
+  `paint_terminal_pane_shell` (`terminal_render.rs`).
 
-- [ ] **terminal-task-09** — Adapt the terminal host to render inside a `heca-grid-ui` `Pane` widget via an explicit content-slot API.
-  Starting point: `heca/src/app/terminal_host.rs` `Rectangle`-based mount step.
-  Files: `heca/src/app/terminal_host.rs`, `heca/src/app/terminal_render.rs`
-  Gate: the ChromeHost/pane-shell boundary must be defined first (`plugin-task-05`)
+- [x] **terminal-task-09** — Render inside a grid-ui `Pane`. **DONE.**
+  `paint_terminal_pane_shell` mounts the content inside `UiPane::new()` (grid-ui
+  `Pane` widget); the terminal content is blitted into the shell's content rect.
+  Files: `heca/src/app/terminal_render.rs`
 
-- [ ] **terminal-task-10** — Make the pane shell reflect `idle`/`running`/`error` from `PaneRuntime` (already in chrome store) without coupling to terminal rendering internals.
-  Files: `heca/src/chrome/mod.rs`, `heca/src/app/terminal_render.rs`
+- [x] **terminal-task-10** — Reflect `idle`/`running`/`error` from `PaneRuntime`.
+  **DONE.** `heca/src/chrome/mod.rs` maps `ProcessStatus` to distinct `StatusDot`s
+  (Idle→offline, Running/Success→online, Error→error) from the chrome store's
+  `PaneRuntime`, decoupled from terminal rendering internals.
+  Files: `heca/src/chrome/mod.rs`
 
 ### [x] Phase: Text selection · `terminal-06`
 Shared host selection model — not terminal-only. Keyboard caret, actions, overlays.
