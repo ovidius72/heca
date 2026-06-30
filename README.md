@@ -757,6 +757,21 @@ handler (`open` / `xdg-open` / `start`):
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 
+#### Terminal bell
+
+A terminal bell (`\a`) can drive up to three independent cues, configured under
+`[appearance.terminal]`:
+
+```toml
+[appearance.terminal]
+bell_attention = true   # OS attention cue (Dock bounce / taskbar flash) while unfocused
+bell_visual    = false  # brief accent flash over the content area
+bell_audible   = false  # system beep (macOS only for now; no-op elsewhere)
+```
+
+`bell_attention` only fires while the window is unfocused; the visual and audible
+bells fire on any bell. All default off except `bell_attention`.
+
 ### Pane Info Bar
 
 Each pane shows a small **info bar** along its top: configurable **segments** on the

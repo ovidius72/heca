@@ -525,8 +525,14 @@ Source: `terminal-implementation.md` Phase 10
 Bell, scrollback search, hyperlinks.
 Source: `terminal-implementation.md` Phase 11
 
-- [ ] **terminal-task-17** — Bell handling: capture backend alert, window attention signal, audible/visual bell policy via config.
-  Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`, `heca-config`
+- [x] **terminal-task-17** — Bell handling. **DONE**. Backend capture (`BellHandler` → `take_alerts`
+  → `BackendAlert::Bell`) already existed; added the **configurable policy** under
+  `[appearance.terminal]`: `bell_attention` (OS attention cue when unfocused; default on),
+  `bell_visual` (fading accent flash over the content area), `bell_audible` (system beep — macOS
+  `NSBeep`, no-op elsewhere). Wired in `lifecycle.rs` (`apply_bell_policy` + `ring_system_bell`); flash
+  state `AppState.bell_flash_until` + render via `chrome::paint_bell_flash` (shares
+  `BELL_FLASH_DURATION`). Files: `heca-config/src/appearance.rs`, `heca/src/app/{lifecycle,render}.rs`,
+  `heca/src/chrome/mod.rs`, `config.default.toml`, `README.md`. clippy 0 + tests green.
 
 - [x] **terminal-task-18** — `OSC 8` hyperlink **open**. **DONE** (verified live). One
   `WmAction::OpenLink { url }` (handler → OS opener + scheme allowlist, policy `Global`, RPC
@@ -548,13 +554,13 @@ Source: `terminal-implementation.md` Phase 11
     source; `ActionRegistry::icon(name)` reads it; both the context menu and the pane-action bar
     (`pane_action_spec`) resolve icons from it (foundation also serves `app-task-33`).
 
-  **Follow-ups (not blocking):**
-  - Glow **intensity** is still hardcoded per widget (radius scales with config `glow_size`, intensity
-    does not) — promote intensity to a theme/config token across grid-ui widgets. See
-    [[grid-ui-widgets-not-fully-theme-driven]].
-  - Optional: add a `SquareSplitHorizontal` (left/right) glyph to grid-ui so "New column" can show a
-    column-split icon instead of `Plus` (needs the real Phosphor Duotone codepoint + showcase update).
-  - FollowLink overlay is **focused-pane only** (v1) — could widen to all visible panes later.
+  **Follow-ups:**
+  - ✅ **DONE** (#204) — glow **strength** is now config/theme-driven: `scaled_glow` applies
+    `GlowLevel::strength_scale` (not just `radius_scale`), so `[appearance] glow_size` drives both
+    halo size and intensity uniformly across all widgets (`medium` = 1.0×, no default regression).
+  - ✅ **DONE** (#205) — FollowLink overlay now spans **all visible panes** (`LinkHint` carries its
+    own `pane_id`; `collect_link_hints` iterates `pane_outer_frames`).
+  - ~~SquareSplitHorizontal glyph for "New column"~~ — **decided: keep `Plus`** (user preference).
 
 - [x] **terminal-task-26** — **URL auto-detection (linkify)**. **DONE** (#197). OSC 8 only marks links a program
   *explicitly* emits; the common case (`echo "https://google.com"`, log output, …) is **plain text**.

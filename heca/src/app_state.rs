@@ -620,6 +620,10 @@ pub struct AppState {
     pub modifiers: ModifiersState,
     /// Host-owned shared selection state, reusable across pane/backend types.
     pub selection: SelectionState,
+    /// Deadline of an active **visual bell** flash (`None` = not flashing). Set on a
+    /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
+    /// draws a fading content-area overlay until `Instant::now()` reaches it.
+    pub bell_flash_until: Option<std::time::Instant>,
     /// Open right-click context menu (`None` when closed). The app's first
     /// stateful overlay: the host owns the widget so it is laid out/painted each
     /// frame and fed pointer/key events while open. terminal-task-18 / app-task-33.

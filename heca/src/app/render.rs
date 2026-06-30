@@ -1143,6 +1143,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
     // Right-click context menu overlay, on top of everything. terminal-task-18.
     crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
+    // Visual-bell flash over the content area (fades out). terminal-task-17.
+    crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,
