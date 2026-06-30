@@ -757,10 +757,13 @@ mod tests {
     use std::time::{Duration, Instant};
 
     // Generous on purpose: tests spawn real shells/TUIs (bash, nvim) whose
-    // first paint can lag under parallel-test CPU contention. 3s flaked ~1 in 3
-    // full-suite runs; 6s keeps these deterministic without slowing the common
-    // path (they usually finish well under a second).
-    const TEST_TIMEOUT: Duration = Duration::from_secs(6);
+    // first paint can lag under parallel-test CPU contention. This is only a SAFETY
+    // CAP, not a measured wait: `pump_backend_until` returns the instant its
+    // predicate is true (these tests usually finish well under a second), so a
+    // generous cap costs nothing on the happy path and just removes false timeouts
+    // under load. 3s flaked ~1 in 3 runs; 6s still flaked when tests ran alongside
+    // clippy (a real shell starved of CPU echoes after the deadline). 30s is ample.
+    const TEST_TIMEOUT: Duration = Duration::from_secs(30);
     const TEST_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
     #[cfg(not(windows))]
