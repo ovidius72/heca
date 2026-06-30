@@ -47,7 +47,7 @@ impl Component for Card {
         }
         let (radius, bw) = {
             let t = cx.theme();
-            (t.radius, t.border_width)
+            (t.colors.border_radius, t.colors.border_width)
         };
         let s = &self.base.style;
         // Keep the styled border color, but take its width from the theme.

@@ -178,7 +178,7 @@ impl Component for ScrollBar {
             return;
         };
         let active = self.hovered || self.drag_grab.is_some();
-        let accent = cx.theme().accent;
+        let accent = cx.theme().colors.accent;
         let glow = Some(Glow {
             color: accent,
             radius: 10.0,
@@ -196,7 +196,7 @@ impl Component for ScrollBar {
                 THUMB_REST_ALPHA
             }),
             None,
-            cx.theme().control_radius(),
+            cx.theme().colors.control_radius(),
             glow,
         );
     }

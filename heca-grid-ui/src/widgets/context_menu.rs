@@ -321,15 +321,15 @@ impl Component for ContextMenu {
         let (background, surface, accent, glow_c, foreground, muted, danger, ctrl_radius, radius) = {
             let t = cx.theme();
             (
-                t.background,
-                t.surface,
-                t.accent,
-                t.glow,
-                t.foreground,
-                t.muted,
-                t.danger,
-                t.control_radius(),
-                t.radius,
+                t.colors.background,
+                t.colors.surface,
+                t.colors.accent,
+                t.colors.glow,
+                t.colors.foreground,
+                t.colors.muted,
+                t.colors.danger,
+                t.colors.control_radius(),
+                t.colors.border_radius,
             )
         };
         let font = self.base.font;

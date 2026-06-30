@@ -76,7 +76,7 @@ impl Component for ProgressBar {
         }
         let (surface, accent, glow_c, muted, theme_radius) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.radius)
+            (t.colors.surface, t.colors.accent, t.colors.glow, t.colors.muted, t.colors.border_radius)
         };
         let b = self.base.bounds;
         // Follow the theme radius, clamped to the bar's pill max (0 → square).

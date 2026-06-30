@@ -36,6 +36,16 @@ impl Color {
         Self { a, ..self }
     }
 
+    /// Return a copy with the alpha channel set from a `0.0..=1.0` fraction (clamped).
+    /// Convenience for theme alpha tokens that live as `f32` (e.g. `shadow.alpha`,
+    /// `active_wash_alpha`). Used by grid-ui widgets like `DockFrame`.
+    pub fn with_alpha_f32(self, a: f32) -> Self {
+        Self {
+            a: (a.clamp(0.0, 1.0) * 255.0).round() as u8,
+            ..self
+        }
+    }
+
     /// Convert to `[f32; 4]` in `0.0..=1.0` for the GPU boundary.
     pub fn to_f32x4(self) -> [f32; 4] {
         [
@@ -187,5 +197,17 @@ mod tests {
         assert!((f[1] - 64.0 / 255.0).abs() < f32::EPSILON);
         assert!((f[2] - 32.0 / 255.0).abs() < f32::EPSILON);
         assert!((f[3] - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn with_alpha_f32_clamps_and_quantizes() {
+        let c = Color::rgb(10, 20, 30);
+        assert_eq!(c.with_alpha_f32(0.0), Color::new(10, 20, 30, 0));
+        assert_eq!(c.with_alpha_f32(1.0), Color::new(10, 20, 30, 255));
+        // overshoot clamps to the [0,1] range
+        assert_eq!(c.with_alpha_f32(2.0), Color::new(10, 20, 30, 255));
+        assert_eq!(c.with_alpha_f32(-1.0), Color::new(10, 20, 30, 0));
+        // 0.5 -> 128 (rounds .5 away from zero)
+        assert_eq!(c.with_alpha_f32(0.5), Color::new(10, 20, 30, 128));
     }
 }

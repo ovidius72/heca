@@ -222,11 +222,11 @@ impl Component for Tooltip {
         let (surface, accent, glow_c, foreground, ctrl_radius) = {
             let t = cx.theme();
             (
-                t.surface,
-                t.accent,
-                t.glow,
-                t.foreground,
-                t.control_radius(),
+                t.colors.surface,
+                t.colors.accent,
+                t.colors.glow,
+                t.colors.foreground,
+                t.colors.control_radius(),
             )
         };
         let font = self.base.font;

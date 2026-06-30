@@ -232,6 +232,22 @@ impl TerminalEngine {
         }
     }
 
+    /// Reload the terminal emulation config (palette + scrollback size) live.
+    /// Used by `prefix+Shift+r` so theme/config changes apply to existing PTYs.
+    pub(super) fn reload_config(
+        &mut self,
+        palette_defaults: Option<TerminalPaletteDefaults>,
+        scrollback_size: usize,
+    ) {
+        self.terminal
+            .set_config(terminal_config(palette_defaults, scrollback_size));
+        let max_offset = self.max_viewport_offset();
+        if self.viewport_offset > max_offset {
+            self.viewport_offset = max_offset;
+            self.viewport_changed = true;
+        }
+    }
+
     /// Test-only override of the viewport-animation config. Lets animation tests
     /// exercise the real code path deterministically: a 0ms duration completes on
     /// the first `advance_animation()` (done path), a long duration stays ongoing

@@ -50,7 +50,7 @@ pub struct Pane {
     base: Base,
     frame: PaneFrame,
     /// Optional per-widget [`PaneFrame::Bordered`] border width override (logical
-    /// px). `None` → the live `theme.border_width` (the default, so the global
+    /// px). `None` → the live `theme.colors.border_width` (the default, so the global
     /// BORDER control still drives every pane). `Some(w)` lets one pane carry its
     /// own frame width independent of the theme (e.g. a self-themed sidebar shell).
     border_width: Option<f32>,
@@ -102,7 +102,7 @@ impl Pane {
     }
 
     /// Override the [`PaneFrame::Bordered`] border width (logical px), independent
-    /// of the theme. `None` (the default) keeps the live `theme.border_width` so the
+    /// of the theme. `None` (the default) keeps the live `theme.colors.border_width` so the
     /// global BORDER control drives the pane; `Some(w)` pins this pane's frame width
     /// (e.g. a sidebar shell that wants its own thickness). No effect on the
     /// `Bracketed`/`None` frames. The border color still comes from `.border(color, _)`
@@ -132,7 +132,7 @@ impl Component for Pane {
         let radius = if self.base.style.radius > 0.0 {
             self.base.style.radius
         } else {
-            cx.theme().radius
+            cx.theme().colors.border_radius
         };
 
         match self.frame {
@@ -144,7 +144,7 @@ impl Component for Pane {
             }
             PaneFrame::Bordered => {
                 // A clean border whose WIDTH always comes from the live
-                // `theme.border_width` (the global border control) — read at paint
+                // `theme.colors.border_width` (the global border control) — read at paint
                 // time so it tracks the control immediately and is gone at
                 // `border_width == 0`. An explicit `.border(color, _)` only supplies
                 // the COLOR; its width is ignored in favour of the theme (so a
@@ -152,7 +152,7 @@ impl Component for Pane {
                 // No explicit color ⇒ the theme border color.
                 let (tb_color, tb_width) = {
                     let t = cx.theme();
-                    (t.border, t.border_width)
+                    (t.colors.border, t.colors.border_width)
                 };
                 let color = self.base.style.border.map_or(tb_color, |bd| bd.color);
                 // Width: per-widget override (`.border_width(w)`) when set, else the
@@ -179,7 +179,7 @@ impl Component for Pane {
                 if let Some(f) = fill {
                     cx.rect(b, f, None, radius, self.base.style.glow);
                 }
-                let width = self.border_width.unwrap_or(cx.theme().border_width);
+                let width = self.border_width.unwrap_or(cx.theme().colors.border_width);
                 cx.bracket_frame_with(b, width, radius);
             }
         }

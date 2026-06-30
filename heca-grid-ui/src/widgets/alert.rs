@@ -113,15 +113,15 @@ impl Component for Alert {
         }
         let (foreground, muted, radius) = {
             let t = cx.theme();
-            (t.foreground, t.muted, t.control_radius())
+            (t.colors.foreground, t.colors.muted, t.colors.control_radius())
         };
         let title_fs = self.base.font;
         let body_fs = self.base.font * BODY_SCALE;
         let color = match self.variant {
-            AlertVariant::Info => cx.theme().accent,
-            AlertVariant::Success => cx.theme().success,
-            AlertVariant::Warning => cx.theme().warning,
-            AlertVariant::Danger => cx.theme().danger,
+            AlertVariant::Info => cx.theme().colors.accent,
+            AlertVariant::Success => cx.theme().colors.success,
+            AlertVariant::Warning => cx.theme().colors.warning,
+            AlertVariant::Danger => cx.theme().colors.danger,
         };
         let b = self.base.bounds;
 

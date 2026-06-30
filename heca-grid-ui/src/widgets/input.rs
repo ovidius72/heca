@@ -461,12 +461,12 @@ impl Component for Input {
         let (surface, accent, muted, foreground, radius, bw) = {
             let t = cx.theme();
             (
-                t.surface,
-                t.accent,
-                t.muted,
-                t.foreground,
-                t.control_radius(),
-                t.border_width,
+                t.colors.surface,
+                t.colors.accent,
+                t.colors.muted,
+                t.colors.foreground,
+                t.colors.control_radius(),
+                t.colors.border_width,
             )
         };
         let b = self.base.bounds;
@@ -536,7 +536,7 @@ impl Component for Input {
         }
 
         // Focus-visible ring (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(b, accent);
         }
     }

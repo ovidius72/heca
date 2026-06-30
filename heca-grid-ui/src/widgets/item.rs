@@ -236,13 +236,13 @@ impl Component for Item {
         let (accent, glow_c, foreground, muted_c, border_c, ctrl_radius, bw) = {
             let t = cx.theme();
             (
-                t.accent,
-                t.glow,
-                t.foreground,
-                t.muted,
-                t.border,
-                t.control_radius(),
-                t.border_width,
+                t.colors.accent,
+                t.colors.glow,
+                t.colors.foreground,
+                t.colors.muted,
+                t.colors.border,
+                t.colors.control_radius(),
+                t.colors.border_width,
             )
         };
         let b = self.base.bounds;
@@ -376,7 +376,7 @@ impl Component for Item {
         if self.interactive()
             && !disabled
             && self.base.focus_visible.get_untracked()
-            && cx.theme().show_focus_border
+            && cx.theme().colors.show_focus_border
         {
             cx.corner_brackets(b, accent);
         }

@@ -86,7 +86,7 @@ pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, col
     }
     let (accent, glow_c, background, ctrl_radius) = {
         let t = cx.theme();
-        (t.accent, t.glow, t.background, t.control_radius())
+        (t.colors.accent, t.colors.glow, t.colors.background, t.colors.control_radius())
     };
     let keycap_c = color.unwrap_or(accent);
     let keycap_glow = color.unwrap_or(glow_c);
