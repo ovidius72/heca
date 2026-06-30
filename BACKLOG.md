@@ -528,81 +528,35 @@ Source: `terminal-implementation.md` Phase 11
 - [ ] **terminal-task-17** — Bell handling: capture backend alert, window attention signal, audible/visual bell policy via config.
   Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`, `heca-config`
 
-- [ ] **terminal-task-18** — `OSC 8` hyperlink **open** (capture already shipped in `terminal-03`).
+- [x] **terminal-task-18** — `OSC 8` hyperlink **open**. **DONE** (verified live). One
+  `WmAction::OpenLink { url }` (handler → OS opener + scheme allowlist, policy `Global`, RPC
+  `open-link`) behind **all surfaces**, all merged:
+  - **Mouse Cmd+click** (#199) — link-first in `mouse.rs` `on_mouse_input` before interactive-move;
+    `hyperlink_uri_at_position` + pure `hyperlink_at_cell` (start-incl / end-excl) in `terminal_host.rs`.
+    Plus a hover **pointer cursor** when Cmd is held over a link (refreshed on `ModifiersChanged`).
+  - **Keyboard `prefix+Shift+o`** (#200) — `WmAction::FollowLink` + `InputMode::FollowLink`
+    (vimium-style a–z keycaps over visible links of the focused pane). Keycap visual reused from
+    `KeyHint` via extracted `keycap_size`/`paint_keycap`, painted into the chrome scene by
+    `chrome::paint_link_hints` (`terminal_host::cell_screen_pos`).
+  - **Selection-mode `Shift+o`** (#201) — `WmAction::OpenLinkAtCaret`; `SelectionState::cursor_cell()`
+    (caret in caret-only AND active-selection) + `hyperlink_uri_at_stable_cell` (stable→visible).
+  - **Context menu right-click** (#202) — the app's first **stateful overlay**: `AppState.context_menu`
+    + `context_menu_action` sink (closure→`WmAction` bridge); entries Open link / New column / Split
+    down / Zoom / Float / Close. Right-click in the pane body opens it; `fallback_divider` now only
+    resizes within a 24px band of a seam. Painted via `chrome::{layout_context_menu, paint_context_menu}`.
+  - **Centralized action icons** (#202) — new `ActionDescriptor.icon: Option<Glyph>` is the single
+    source; `ActionRegistry::icon(name)` reads it; both the context menu and the pane-action bar
+    (`pane_action_spec`) resolve icons from it (foundation also serves `app-task-33`).
 
-  > **RESUME HANDOFF (2026-06-29) — read first.**
-  > **MERGED already (in `main`):** `terminal-03` (OSC 8 capture + theme/config-driven rendering:
-  > `[appearance.terminal] hyperlink_style` none|color|underline|undercurl default underline,
-  > `hyperlink_color`→accent) · **#196** the OpenLink FOUNDATION · **#197** linkify
-  > (`terminal-task-26`: plain URLs auto-detected, `link_detection` default true).
-  > **So the shared spine EXISTS:** `WmAction::OpenLink { url }` (`heca/src/input.rs`), handler
-  > `handle_open_link` + OS opener + scheme allowlist (`heca/src/handlers.rs`), policy `Global`
-  > (`interaction.rs`), registered (`registry.rs`), RPC `open-link <url>` (`rpc.rs`). The snapshot
-  > already carries `hyperlinks: Vec<HyperlinkSpan>` (OSC 8 + detected) via `backend.terminal_snapshot()`.
-  > **DECISIONS LOCKED:** mouse = **Cmd+click, link-first** (Cmd is the interactive-move modifier
-  > `interactive_move_modifier` default Super, so: if Cmd held AND the click cell is in a link →
-  > OpenLink + consume; else existing interactive-move). Keyboard = **`prefix+Shift+o`** HintKey
-  > overlay. Selection mode = **`O`** (`o` stays flip-endpoint). Context menu widget ALREADY EXISTS
-  > (`heca-grid-ui/src/widgets/context_menu.rs`, full `MenuEntry`/`ContextMenu`).
-  > **NEXT, in order — each its own PR:**
-  > 1. **Mouse Cmd+click** — ✅ **DONE** (branch `feat/terminal-18-mouse-open-link`). Link-first in
-  >    `heca/src/mouse.rs` `on_mouse_input` `(Left, Pressed)` arm, before interactive-move: Cmd held +
-  >    link under cursor → `OpenLink` + consume; else falls through to move/focus. Helper
-  >    `hyperlink_uri_at_position` + pure `hyperlink_at_cell` (start inclusive / end exclusive) in
-  >    `terminal_host.rs` (reuses `cell_coords_at_position`). **Plus hover cursor** (user request): Cmd
-  >    over a link → `CursorIcon::Pointer`, gated on the exact same condition as the click; refreshed
-  >    on `ModifiersChanged` too (`update_cursor` + `link_hover` in `mouse.rs`, call in `events.rs`).
-  >    4 hit-test unit tests; clippy 0 + 274 tests green. Plain click still goes to the TUI.
-  > 2. **HintKey overlay** — ✅ **DONE** (branch `feat/terminal-18-keyboard-open-link`). New enter-mode
-  >    action `WmAction::FollowLink` (`follow_link`, bound `prefix+Shift+o`) + `InputMode::FollowLink
-  >    { pane_id, candidates: Vec<LinkHint> }` (`app_state.rs`) modeled on `PaneSelect`. `LinkHint`
-  >    carries `label`/`row`/`start_col`/`url`. Candidates built by `collect_link_hints` from the
-  >    FOCUSED pane's `snapshot.hyperlinks` (OSC 8 + linkify), a–z A–Z via shared `candidate_letter`
-  >    (52-cap). Key handling `handle_follow_link_mode` → `OpenLink`. Keycap visual REUSED: extracted
-  >    `keycap_size` + `paint_keycap` free fns from `KeyHint` (grid-ui), painted into the chrome scene
-  >    by `chrome::paint_link_hints` (cell→screen via new `terminal_host::cell_screen_pos`). Policy
-  >    Global. Status shows `FOLLOW`. v1 scope = focused pane only. New unit tests (`candidate_letter`,
-  >    `keycap_size`); clippy 0 + all tests green. Full "Adding New Actions" checklist done.
-  > 3. **Selection-mode `O`** — ✅ **DONE** (branch `feat/terminal-18-selection-open-link`). New
-  >    `WmAction::OpenLinkAtCaret` (`open_link_at_caret`) bound `Shift+o` in the selection-mode keymap
-  >    (`o` stays flip-endpoint). New `SelectionState::cursor_cell()` returns the caret in BOTH
-  >    caret-only and active-selection (moving focus endpoint) states; `terminal_host::
-  >    hyperlink_uri_at_stable_cell` converts stable→visible (`stable - viewport_top_stable_row`,
-  >    `[0,rows)`) and reuses `hyperlink_at_cell`. Handler resolves the URL → shared `handle_open_link`.
-  >    Policy `FocusedPaneLocal` (like the other selection actions). Full "Adding New Actions" checklist;
-  >    new `cursor_cell` test; clippy 0 + all tests green.
-  > 4. **Context menu "Open link"** — ✅ **DONE** (branch `feat/terminal-18-context-menu-open-link`).
-  >    Right-click a content pane → the grid-ui `ContextMenu` opens at the cursor: "Open link"
-  >    (conditional on a link cell, same `hyperlink_uri_at_position` lookup) + pane actions Split
-  >    right/down, Float, Close (danger), each with a quick-pick key + shortcut hint. This is the app's
-  >    FIRST stateful overlay (CommandPalette was only a stub): new `AppState.context_menu:
-  >    Option<ContextMenu>` + `context_menu_action` sink (`Rc<RefCell<Option<WmAction>>>`) — entry
-  >    `on_select` closures write the action, the event loop drains + dispatches it. Right-press focuses
-  >    the clicked pane then opens the menu (`mouse.rs`, after the resize-divider guard, so right-drag
-  >    resize still works). Events while open routed to the menu first (`events.rs`: pointer move/press +
-  >    keyboard via `winit_key_to_grid_key`; outside-click/Esc dismiss; stray right-click NOT forwarded
-  >    to the TUI). Rendered on top via `chrome::{layout_context_menu (mutable, pre scene-borrow),
-  >    paint_context_menu}` into the chrome scene. clippy 0 + tests green. (Foundation also serves
-  >    `app-task-33`.) NOTE: overlay is interactive — needs live click-through verification.
+  **Follow-ups (not blocking):**
+  - Glow **intensity** is still hardcoded per widget (radius scales with config `glow_size`, intensity
+    does not) — promote intensity to a theme/config token across grid-ui widgets. See
+    [[grid-ui-widgets-not-fully-theme-driven]].
+  - Optional: add a `SquareSplitHorizontal` (left/right) glyph to grid-ui so "New column" can show a
+    column-split icon instead of `Plus` (needs the real Phosphor Duotone codepoint + showcase update).
+  - FollowLink overlay is **focused-pane only** (v1) — could widen to all visible panes later.
 
-  Design LOCKED with user 2026-06-29 — one `WmAction::OpenLink { url }` behind **five surfaces**:
-  - **`WmAction::OpenLink { url }`** + handler → OS opener (`open` macOS / `xdg-open` Linux /
-    `start` Windows). Full "Adding New Actions" checklist + RPC.
-  - **Keyboard / HintKey**: bind **`prefix+Shift+o`** → a vimium-style "follow link" overlay. Needs
-    a **generic rect-targeted hint overlay** (the current `KeyHint` wraps a *widget*; terminal links
-    are content-grid spans). New `InputMode::FollowLink` modeled on `PaneSelect` (a–z labels over
-    the visible `snapshot.hyperlinks` rects); label press → `OpenLink`.
-  - **Mouse**: `Cmd`/`Ctrl`+click on a link span → hit-test → `OpenLink` (plain click still goes to
-    the TUI).
-  - **Selection mode**: **`O`** opens the link under the caret (`o` stays flip-endpoint).
-    Mnemonic: "O opens links" everywhere (prefix+O global, O in selection).
-  - **Context menu**: "Open link" entry when right-clicking a link (the `ContextMenu` widget already
-    exists in heca-grid-ui — see `app-task-33`).
-  - No hardcoded colors/keys; everything via the registry so all surfaces share one path.
-  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`, `heca/src/mouse/`,
-  `heca/src/rpc.rs`, `keybindings.default.toml`, `heca-grid-ui/src/widgets/` (hint overlay).
-
-- [ ] **terminal-task-26** — **URL auto-detection (linkify)**. OSC 8 only marks links a program
+- [x] **terminal-task-26** — **URL auto-detection (linkify)**. **DONE** (#197). OSC 8 only marks links a program
   *explicitly* emits; the common case (`echo "https://google.com"`, log output, …) is **plain text**.
   Detect URL patterns in the visible terminal text and emit them as `HyperlinkSpan`s — the **same**
   pipeline as OSC 8 (`terminal-03`), so rendering (`terminal-03`) and every open surface
