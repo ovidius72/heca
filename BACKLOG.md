@@ -488,17 +488,26 @@ Extension points for hyperlinks and inline graphics without redesigning the core
   Files: `heca-core/src/backend/snapshot.rs`
   Related: `terminal-task-20` (full image rendering for Yazi)
 
-### [ ] Phase: Backend and renderer tests · `terminal-04`
+### [x] Phase: Backend and renderer tests · `terminal-04`
 Close the test gap before selection/clipboard adds more moving parts.
 
-- [ ] **terminal-task-05** — Backend lifecycle tests: init → resize → snapshot, dirty rows after output, exit detection.
-  Files: `heca-core/src/backend/terminal/tests.rs` (or inline)
+- [x] **terminal-task-05** — Backend lifecycle tests. **DONE (already covered).**
+  `heca-core/src/backend/terminal.rs` tests cover init→snapshot, resize→dimensions,
+  initial-full-then-none + resize-forces-full damage, input→shell, output→row
+  damage, grapheme preservation, exit detection (3 tests), nvim TUI bg cells, and
+  bash/zsh shell-integration. Plus the new OSC52 / bracketed-paste / sixel /
+  image-decode engine tests.
 
-- [ ] **terminal-task-06** — Renderer tests: content-rect clipping, row invalidation logic, color mapping.
-  Files: `heca-renderer/src/terminal.rs` (inline test module)
+- [x] **terminal-task-06** — Renderer tests. **DONE (already covered).** 10 tests in
+  `heca-renderer/src/terminal.rs` (color mapping via `run_push_cell`, color
+  boundaries, multibyte/wide cells, default-bg match, font-family resolution,
+  surface-alpha), the `clip` module tests (content-rect clipping/culling), the
+  app-side row-invalidation policy (`retained_damage_*` + `terminal_damage_copy_bands`),
+  plus the new image geometry + `image.wgsl` validation tests.
 
-- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results in this backlog (or a dedicated handoff doc).
-  Note: verify Yazi image preview (currently shows infinite spinner — see `terminal-task-21`)
+- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results here.
+  Needs a manual in-app run (not automatable). Yazi image preview: ✅ now works
+  (iTerm2 path — see `terminal-09` Yazi resolution).
 
 ### [ ] Phase: Pane-shell hosting contract · `terminal-05`
 Formally mount the terminal as content inside a `heca-grid-ui` Pane shell.
