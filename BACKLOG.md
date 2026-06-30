@@ -530,19 +530,28 @@ Shared host selection model — not terminal-only. Keyboard caret, actions, over
   (`heca/src/app/terminal_render.rs`); `Shift+left-drag` mouse entry; unmodified drags still reach the
   TUI.
 
-### [ ] Phase: Clipboard and paste · `terminal-07`
+### [x] Phase: Clipboard and paste · `terminal-07`
 System clipboard on top of the shared selection model.
 Source: terminal design phase 10 (now tracked in this backlog)
 
-- [ ] **terminal-task-14** — Copy selected text to system clipboard (not terminal-specific — uses the shared selection owner).
-  Files: `heca/src/handlers.rs`, add clipboard crate (`arboard` or platform equivalent)
+- [x] **terminal-task-14** — Copy selected text to system clipboard. **DONE.**
+  `handle_copy_selection` extracts the host-grid selection and writes via `arboard`
+  (`set_system_clipboard`). Reachable from keyboard / mouse / RPC.
+  Files: `heca/src/handlers.rs`
 
-- [ ] **terminal-task-15** — Paste from system clipboard through the focused pane/backend.
-  Terminal paste must respect bracketed-paste mode when active.
-  Files: `heca/src/handlers.rs`, `heca-core/src/backend/terminal/engine.rs`
+- [x] **terminal-task-15** — Paste from system clipboard through the focused pane.
+  **DONE.** `handle_paste_clipboard` reads `arboard` and forwards via the new
+  `PaneBackend::paste`, which **wraps in bracketed-paste markers** (`ESC[200~ …
+  ESC[201~`) when the program enabled DECSET 2004.
+  Files: `heca/src/handlers.rs`, `heca-core/src/backend/terminal.rs`, `engine.rs`
 
-- [ ] **terminal-task-16** — Add `OSC 52` terminal protocol clipboard support.
-  Files: `heca-core/src/backend/terminal/engine.rs`
+- [x] **terminal-task-16** — `OSC 52` clipboard support. **DONE.** Register a wezterm
+  `Clipboard` handler (`OscClipboard`); wezterm parses + base64-decodes the
+  sequence, we capture the text into a queue the app drains
+  (`take_clipboard_writes`) and pushes to the OS clipboard. **Writes only** —
+  `OSC 52` read/query is intentionally unsupported (clipboard-exfiltration risk).
+  Covered by `captures_osc52_clipboard_write_once` + `bracketed_paste_mode_tracks_decset_2004`.
+  Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`
 
 ### [x] Phase: Terminal UX and attention features · `terminal-08`
 Bell, scrollback search, hyperlinks.

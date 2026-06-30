@@ -488,6 +488,25 @@ impl PaneBackend for TerminalBackend {
         self.engine.take_alerts()
     }
 
+    fn take_clipboard_writes(&mut self) -> Vec<String> {
+        self.engine.take_clipboard_writes()
+    }
+
+    fn paste(&mut self, text: &str) {
+        // Wrap in bracketed-paste markers when the program enabled DECSET 2004, so
+        // editors/shells treat the whole blob as literal pasted text (no auto-indent,
+        // no executing newlines). Otherwise forward verbatim.
+        if self.engine.bracketed_paste_enabled() {
+            let mut framed = Vec::with_capacity(text.len() + 12);
+            framed.extend_from_slice(b"\x1b[200~");
+            framed.extend_from_slice(text.as_bytes());
+            framed.extend_from_slice(b"\x1b[201~");
+            self.process_input(&framed);
+        } else {
+            self.process_input(text.as_bytes());
+        }
+    }
+
     fn set_cell_size(&mut self, cell_w: f32, cell_h: f32) {
         self.cell_w = cell_w;
         self.cell_h = cell_h;

@@ -34,6 +34,11 @@ pub(crate) fn poll_backends(state: &mut AppState) -> BackendPollResult {
                 result.bell_any = true;
             }
         }
+        // OSC 52: a program asked to set the system clipboard. wezterm already
+        // base64-decoded it; push the text to the OS clipboard.
+        for text in backend.take_clipboard_writes() {
+            crate::handlers::set_system_clipboard(&text);
+        }
     }
     let closing_panes = state.backends.pane_ids_to_close();
     result.closed_any = !closing_panes.is_empty();

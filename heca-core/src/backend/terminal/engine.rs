@@ -15,7 +15,8 @@ use wezterm_surface::CursorVisibility;
 use wezterm_term::color::{ColorAttribute, ColorPalette};
 use wezterm_term::input::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use wezterm_term::{
-    Alert, AlertHandler, CellAttributes, Intensity, Terminal, TerminalConfiguration, TerminalSize,
+    Alert, AlertHandler, CellAttributes, Clipboard, ClipboardSelection, Intensity, Terminal,
+    TerminalConfiguration, TerminalSize,
 };
 
 /// Small wrapper around a shared PTY writer so `wezterm-term` can encode
@@ -70,6 +71,33 @@ impl AlertHandler for BellHandler {
         if matches!(alert, Alert::Bell) {
             self.pending_bell.store(true, Ordering::SeqCst);
         }
+    }
+}
+
+/// Routes `OSC 52` clipboard writes from the terminal program into a shared
+/// queue the app drains and forwards to the system clipboard.
+///
+/// Only **writes** are honored: a program can set the clipboard, but clipboard
+/// *reads* over `OSC 52` (the `?` query form) are intentionally unsupported —
+/// letting arbitrary terminal output exfiltrate clipboard contents is a known
+/// security risk. wezterm parses and base64-decodes the sequence for us; we just
+/// capture the decoded text.
+struct OscClipboard {
+    pending: Arc<Mutex<Vec<String>>>,
+}
+
+impl Clipboard for OscClipboard {
+    fn set_contents(
+        &self,
+        _selection: ClipboardSelection,
+        data: Option<String>,
+    ) -> anyhow::Result<()> {
+        if let Some(text) = data
+            && !text.is_empty()
+        {
+            self.pending.lock().unwrap().push(text);
+        }
+        Ok(())
     }
 }
 
@@ -145,6 +173,9 @@ pub(super) struct TerminalEngine {
     /// Physical cell pixel size `(width, height)` reported to wezterm so it can
     /// size inline images and answer pixel-size queries. See [`Self::set_cell_px`].
     cell_px: (f32, f32),
+    /// `OSC 52` clipboard-write requests captured from terminal output, drained
+    /// by the app and pushed to the system clipboard. See [`OscClipboard`].
+    clipboard_writes: Arc<Mutex<Vec<String>>>,
 }
 
 impl TerminalEngine {
@@ -167,6 +198,10 @@ impl TerminalEngine {
         terminal.set_notification_handler(Box::new(BellHandler {
             pending_bell: Arc::clone(&pending_bell),
         }));
+        let clipboard_writes = Arc::new(Mutex::new(Vec::new()));
+        terminal.set_clipboard(&(Arc::new(OscClipboard {
+            pending: Arc::clone(&clipboard_writes),
+        }) as Arc<dyn Clipboard>));
 
         Ok(Self {
             terminal,
@@ -181,6 +216,7 @@ impl TerminalEngine {
             link_detection: true,
             decoded_images: RefCell::new(HashMap::new()),
             cell_px,
+            clipboard_writes,
         })
     }
 
@@ -224,6 +260,18 @@ impl TerminalEngine {
 
     pub(super) fn advance_bytes(&mut self, bytes: &[u8]) {
         self.terminal.advance_bytes(bytes);
+    }
+
+    /// Drain `OSC 52` clipboard-write requests captured since the last poll. The
+    /// app forwards them to the system clipboard.
+    pub(super) fn take_clipboard_writes(&self) -> Vec<String> {
+        std::mem::take(&mut self.clipboard_writes.lock().unwrap())
+    }
+
+    /// Whether the program has enabled bracketed paste (DECSET 2004), so pasted
+    /// text must be wrapped in `ESC[200~ … ESC[201~`.
+    pub(super) fn bracketed_paste_enabled(&self) -> bool {
+        self.terminal.bracketed_paste_enabled()
     }
 
     pub(super) fn take_alerts(&self) -> Vec<BackendAlert> {
@@ -1437,6 +1485,32 @@ mod tests {
         engine.advance_bytes(b"\x07");
         assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
         assert!(engine.take_alerts().is_empty());
+    }
+
+    #[test]
+    fn captures_osc52_clipboard_write_once() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+            .expect("terminal engine should initialize");
+
+        // OSC 52: set clipboard `c` to base64("hello"). wezterm decodes it for us.
+        engine.advance_bytes(b"\x1b]52;c;aGVsbG8=\x07");
+        assert_eq!(engine.take_clipboard_writes(), vec!["hello".to_string()]);
+        // Drained on read.
+        assert!(engine.take_clipboard_writes().is_empty());
+    }
+
+    #[test]
+    fn bracketed_paste_mode_tracks_decset_2004() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(80, 24, (8.0, 16.0), writer, None, crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE)
+            .expect("terminal engine should initialize");
+
+        assert!(!engine.bracketed_paste_enabled(), "off by default");
+        engine.advance_bytes(b"\x1b[?2004h");
+        assert!(engine.bracketed_paste_enabled(), "DECSET 2004 enables it");
+        engine.advance_bytes(b"\x1b[?2004l");
+        assert!(!engine.bracketed_paste_enabled(), "DECRST 2004 disables it");
     }
 
     #[test]

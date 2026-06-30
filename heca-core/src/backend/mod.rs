@@ -220,6 +220,20 @@ pub trait PaneBackend: Send {
         Vec::new()
     }
 
+    /// Drain `OSC 52` clipboard-write requests the program emitted since the last
+    /// poll. The app forwards each string to the system clipboard. Non-terminal
+    /// backends have none.
+    fn take_clipboard_writes(&mut self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Paste text into the backend. Terminal backends wrap it in bracketed-paste
+    /// markers when the program requested that mode; the default just forwards the
+    /// bytes verbatim.
+    fn paste(&mut self, text: &str) {
+        self.process_input(text.as_bytes());
+    }
+
     /// Update logical terminal cell metrics used by snapshot rendering.
     ///
     /// This does not necessarily change the PTY grid size by itself; it updates
