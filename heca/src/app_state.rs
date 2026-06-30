@@ -120,6 +120,26 @@ pub enum InputMode {
     FollowLink {
         candidates: Vec<LinkHint>,
     },
+    /// Scrollback-search query entry (entered with `/` in selection mode). Typing
+    /// edits `AppState.search`'s query and re-runs the search live; Enter keeps the
+    /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
+    /// matches live in [`SearchState`], not here.
+    Search,
+}
+
+/// Active scrollback search: the query, its matches across the searched pane's
+/// scrollback, and the currently-focused match. Lives on [`AppState`] so `n`/`N`
+/// navigation works after the query overlay closes back into selection mode.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SearchState {
+    /// Pane whose scrollback is being searched.
+    pub pane_id: PaneId,
+    /// Current query text (edited live in [`InputMode::Search`]).
+    pub query: String,
+    /// All matches, ascending by stable row / column.
+    pub matches: Vec<heca_core::backend::SearchMatch>,
+    /// Index into `matches` of the focused match, if any.
+    pub current: Option<usize>,
 }
 
 /// A single follow-link candidate: the letter to press, the pane it lives in, where
@@ -624,6 +644,9 @@ pub struct AppState {
     /// terminal bell when `[appearance.terminal] bell_visual` is on; the render pass
     /// draws a fading content-area overlay until `Instant::now()` reaches it.
     pub bell_flash_until: Option<std::time::Instant>,
+    /// Active scrollback search (`None` = none). Drives the query overlay, match
+    /// highlights, and `n`/`N` navigation. terminal-task-19.
+    pub search: Option<SearchState>,
     /// Open right-click context menu (`None` when closed). The app's first
     /// stateful overlay: the host owns the widget so it is laid out/painted each
     /// frame and fed pointer/key events while open. terminal-task-18 / app-task-33.

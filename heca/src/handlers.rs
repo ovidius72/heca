@@ -2016,6 +2016,8 @@ pub fn handle_exit_scrollback(state: &mut AppState, _action: &WmAction) {
         backend.scroll_to_bottom();
     }
     state.selection.clear();
+    // Leaving the copy-mode session also ends any scrollback search.
+    state.search = None;
     if matches!(state.input_mode, InputMode::Selection) {
         state.input_mode = InputMode::Normal;
     }
@@ -2173,6 +2175,18 @@ pub fn handle_open_link(_state: &mut AppState, action: &WmAction) {
 /// caret cell (caret-only or the moving focus endpoint of an active selection) →
 /// the owning pane's snapshot hyperlink → the shared open path. Safe no-op when
 /// there is no caret, no owning pane, or no link under it.
+pub fn handle_search_scrollback(state: &mut AppState, _action: &WmAction) {
+    crate::app::terminal_host::enter_scrollback_search(state);
+}
+
+pub fn handle_search_next_match(state: &mut AppState, _action: &WmAction) {
+    crate::app::terminal_host::search_step(state, true);
+}
+
+pub fn handle_search_prev_match(state: &mut AppState, _action: &WmAction) {
+    crate::app::terminal_host::search_step(state, false);
+}
+
 pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
     let Some((owner, stable_row, col)) = state.selection.cursor_cell() else {
         return;

@@ -833,6 +833,113 @@ pub(crate) fn hyperlink_uri_at_stable_cell(
     hyperlink_at_cell(&snapshot.hyperlinks, visible_row as usize, col).map(str::to_owned)
 }
 
+/// Enter scrollback-search query entry for the selection's (or focused) pane.
+/// No-op when there is no terminal-backed pane to search. terminal-task-19.
+pub(crate) fn enter_scrollback_search(state: &mut AppState) {
+    let pane_id = match state.selection.owner() {
+        Some(SelectionOwner::Pane(id)) => id,
+        None => match state.focused_pane {
+            Some(id) => id,
+            None => return,
+        },
+    };
+    if state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+        .is_none()
+    {
+        return;
+    }
+    state.search = Some(crate::app_state::SearchState {
+        pane_id,
+        query: String::new(),
+        matches: Vec::new(),
+        current: None,
+    });
+    state.input_mode = InputMode::Search;
+    state.needs_redraw = true;
+}
+
+/// Re-run the search for the current query, refresh the match list, focus the match
+/// nearest at/above the caret (else the last), and jump to it.
+pub(crate) fn run_scrollback_search(state: &mut AppState) {
+    let Some((pane_id, query)) = state
+        .search
+        .as_ref()
+        .map(|s| (s.pane_id, s.query.clone()))
+    else {
+        return;
+    };
+    let cols = match state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+        Some(snap) => snap.cols,
+        None => return,
+    };
+    let caret_row = state.selection.cursor_cell().map(|(_, row, _)| row);
+    let matches = state
+        .backends
+        .get(pane_id)
+        .map(|b| b.search_scrollback(&query, cols))
+        .unwrap_or_default();
+    let current = if matches.is_empty() {
+        None
+    } else {
+        let caret = caret_row.unwrap_or(isize::MAX);
+        // Nearest match at/above the caret, else fall back to the last match.
+        Some(
+            matches
+                .iter()
+                .rposition(|m| m.stable_row <= caret)
+                .unwrap_or(matches.len() - 1),
+        )
+    };
+    if let Some(search) = state.search.as_mut() {
+        search.matches = matches;
+        search.current = current;
+    }
+    jump_to_current_match(state);
+}
+
+/// Move the focused match by one (wrapping) and jump to it. `forward` = next match.
+pub(crate) fn search_step(state: &mut AppState, forward: bool) {
+    let stepped = state.search.as_mut().and_then(|search| {
+        let n = search.matches.len();
+        if n == 0 {
+            return None;
+        }
+        let cur = search.current.unwrap_or(0);
+        let next = if forward {
+            (cur + 1) % n
+        } else {
+            (cur + n - 1) % n
+        };
+        search.current = Some(next);
+        Some(())
+    });
+    if stepped.is_some() {
+        jump_to_current_match(state);
+    }
+}
+
+/// Place the selection caret on the focused match's first cell and scroll it into
+/// view. No-op when no match is focused.
+fn jump_to_current_match(state: &mut AppState) {
+    let Some((pane_id, m)) = state.search.as_ref().and_then(|s| {
+        s.current
+            .and_then(|i| s.matches.get(i))
+            .map(|m| (s.pane_id, m.clone()))
+    }) else {
+        return;
+    };
+    state
+        .selection
+        .set_caret(SelectionOwner::Pane(pane_id), m.stable_row, m.start_col);
+    if let Some(snapshot) = state.backends.get(pane_id).and_then(|b| b.terminal_snapshot()) {
+        ensure_caret_visible(state, pane_id, m.stable_row, &snapshot);
+    }
+    state.needs_redraw = true;
+}
+
 /// Find the hyperlink span covering cell `(row, col)`, if any.
 ///
 /// `start_col` is inclusive, `end_col` exclusive (the capture/renderer

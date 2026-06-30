@@ -310,6 +310,13 @@ pub enum WmAction {
     /// the caret cell → snapshot hyperlink → `OpenLink`). Parameterless, bound in
     /// the selection-mode keymap.
     OpenLinkAtCaret,
+    /// Selection-mode `/`: enter scrollback-search query entry for the selection's
+    /// pane.
+    SearchScrollback,
+    /// Jump to the next scrollback-search match (selection-mode `n`).
+    SearchNextMatch,
+    /// Jump to the previous scrollback-search match (selection-mode `N`).
+    SearchPrevMatch,
 
     // ── Hyperlinks (parameterized) ──
     /// Open an OSC 8 link target in the OS default handler. Constructed
@@ -487,6 +494,9 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "begin_selection" => Some(WmAction::BeginSelection),
         "toggle_selection_endpoint" => Some(WmAction::ToggleSelectionEndpoint),
         "open_link_at_caret" => Some(WmAction::OpenLinkAtCaret),
+        "search_scrollback" => Some(WmAction::SearchScrollback),
+        "search_next_match" => Some(WmAction::SearchNextMatch),
+        "search_prev_match" => Some(WmAction::SearchPrevMatch),
         _ => {
             // Dynamic: focus_workspace_1 → FocusWorkspace { ws_idx: 0 }
             if let Some(rest) = name.strip_prefix("focus_workspace_")
@@ -748,6 +758,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::BeginSelection
         | WmAction::ToggleSelectionEndpoint
         | WmAction::OpenLinkAtCaret
+        | WmAction::SearchScrollback
+        | WmAction::SearchNextMatch
+        | WmAction::SearchPrevMatch
         // Scrollback (same priority as selection — pane-management-class)
         | WmAction::ScrollbackPageUp
         | WmAction::ScrollbackPageDown
@@ -1042,6 +1055,9 @@ mod tests {
                 WmAction::BeginSelection,
                 WmAction::ToggleSelectionEndpoint,
                 WmAction::OpenLinkAtCaret,
+                WmAction::SearchScrollback,
+                WmAction::SearchNextMatch,
+                WmAction::SearchPrevMatch,
                 // Take (panes + quick-take)
                 WmAction::PaneTake,
                 WmAction::PaneTakeAndFocus,

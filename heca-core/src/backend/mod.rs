@@ -45,6 +45,19 @@ pub enum BackendAlert {
     Bell,
 }
 
+/// A scrollback-search hit: a run of cells matching the query on one stable row.
+/// `start_col` is inclusive, `end_col` exclusive (the cell after the run), matching
+/// the [`HyperlinkSpan`] column contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchMatch {
+    /// Stable (history-anchored) row index of the match.
+    pub stable_row: isize,
+    /// First matching cell column (inclusive).
+    pub start_col: usize,
+    /// One past the last matching cell column (exclusive).
+    pub end_col: usize,
+}
+
 /// Backend-agnostic keyboard modifiers.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BackendModifiers {
@@ -343,6 +356,15 @@ pub trait PaneBackend: Send {
         _end: isize,
         _cols: usize,
     ) -> Vec<TerminalLine> {
+        Vec::new()
+    }
+
+    /// Search the **entire scrollback** (history + visible) for `query`,
+    /// case-insensitively, returning every matching run as a [`SearchMatch`] in
+    /// ascending stable-row / column order. `cols` caps the row width considered.
+    /// Empty `query` → no matches. Only terminal backends with host scrollback
+    /// implement this; others return an empty vec.
+    fn search_scrollback(&self, _query: &str, _cols: usize) -> Vec<SearchMatch> {
         Vec::new()
     }
 

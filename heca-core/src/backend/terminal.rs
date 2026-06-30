@@ -700,6 +700,10 @@ impl PaneBackend for TerminalBackend {
     ) -> Vec<TerminalLine> {
         self.engine.lines_in_stable_range(start, end, cols)
     }
+
+    fn search_scrollback(&self, query: &str, cols: usize) -> Vec<crate::backend::SearchMatch> {
+        self.engine.search_scrollback(query, cols)
+    }
 }
 
 fn reconcile_exit_state(

@@ -877,6 +877,30 @@ impl ActionRegistry {
             default_binding: "Shift+o",
             icon: None,
         },
+        ActionDescriptor {
+            name: "search_scrollback",
+            label: "Search Scrollback",
+            description: "Type to search the scrollback; Enter keeps matches, Esc cancels.",
+            category: ActionCategory::Pane,
+            default_binding: "/",
+            icon: Some(Glyph::Search),
+        },
+        ActionDescriptor {
+            name: "search_next_match",
+            label: "Next Search Match",
+            description: "Jump to the next scrollback-search match.",
+            category: ActionCategory::Pane,
+            default_binding: "n",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "search_prev_match",
+            label: "Previous Search Match",
+            description: "Jump to the previous scrollback-search match.",
+            category: ActionCategory::Pane,
+            default_binding: "Shift+n",
+            icon: None,
+        },
     ];
 
     /// Look up an action descriptor by its config name.

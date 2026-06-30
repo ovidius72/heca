@@ -252,7 +252,10 @@ Inside Selection mode:
 | `Shift+g` | Jump to the live bottom (stay in selection mode) |
 | `v` / `Space` | Begin selection (toggle highlighting) |
 | `o` | Toggle selection endpoint |
+| `Shift+o` | Open the hyperlink under the caret |
 | `y` | Copy selection to clipboard |
+| `/` | Search the scrollback — type the query (matches highlight live, the caret jumps to the nearest); `Enter` keeps the matches, `Esc` cancels |
+| `n` / `Shift+n` | Jump to the next / previous search match (after a `/` search) |
 | `Esc` | Exit selection mode (snap to bottom + clear selection) |
 
 **Wheel:**

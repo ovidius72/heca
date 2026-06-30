@@ -123,6 +123,8 @@ paste_clipboard      = ["Super+v", "Ctrl+Shift+v", "prefix+Shift+p"]
 #   v / Space     begin selection
 #   o             flip selection endpoint
 #   Shift+o       open the link under the caret
+#   /             search the scrollback (type query; Enter keeps, Esc cancels)
+#   n / Shift+n   jump to next / previous search match
 #   Esc           exit
 # (Wheel-up at a non-grabbed prompt also enters Selection mode — Q3.)
 
@@ -330,6 +332,15 @@ keys = "o"
 [[keys.mode.bindings]]
 action = "open_link_at_caret"
 keys = "Shift+o"
+[[keys.mode.bindings]]
+action = "search_scrollback"
+keys = "/"
+[[keys.mode.bindings]]
+action = "search_next_match"
+keys = "n"
+[[keys.mode.bindings]]
+action = "search_prev_match"
+keys = "Shift+n"
 
 # Scrollback bindings within selection mode (copy-mode style):
 # u/d = half-page, Ctrl+u/d = full page, g/G = top/bottom, Esc = exit.

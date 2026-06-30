@@ -2005,6 +2005,124 @@ pub(crate) fn paint_context_menu(
     menu.paint(&mut cx);
 }
 
+/// Peak alpha for a non-current search-match highlight; the current match is bolder.
+const SEARCH_HL_ALPHA: u8 = 64;
+const SEARCH_HL_CURRENT_ALPHA: u8 = 150;
+/// Search bar glyph size (logical px).
+const SEARCH_BAR_FONT: f32 = 13.0;
+
+/// Paint the scrollback-search overlay: a highlight rect over every visible match
+/// (the focused one bolder) plus a `/query` bar anchored to the searched pane's
+/// bottom-right. Drawn into the chrome scene (on top). No-op when no search is
+/// active. terminal-task-19.
+pub(crate) fn paint_search(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(search) = state.search.as_ref() else {
+        return;
+    };
+    let pane_id = search.pane_id;
+    let Some(snapshot) = state
+        .backends
+        .get(pane_id)
+        .and_then(|b| b.terminal_snapshot())
+    else {
+        return;
+    };
+    let (cell_w, cell_h) = state
+        .backends
+        .get(pane_id)
+        .map(|b| b.cell_size())
+        .unwrap_or((8.0, 16.0));
+    let top = snapshot.viewport_top_stable_row;
+    let rows = snapshot.rows as isize;
+
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+
+    // Match highlights over the visible viewport.
+    for (i, m) in search.matches.iter().enumerate() {
+        let visible = m.stable_row - top;
+        if visible < 0 || visible >= rows {
+            continue;
+        }
+        let Some((x, y)) = crate::app::terminal_host::cell_screen_pos(
+            state,
+            pane_id,
+            visible as usize,
+            m.start_col,
+        ) else {
+            continue;
+        };
+        let width = m.end_col.saturating_sub(m.start_col) as f32 * cell_w;
+        let rect = Rectangle::new(
+            Point::new(x as f64, y as f64),
+            Size::new(width as f64, cell_h as f64),
+        );
+        let alpha = if Some(i) == search.current {
+            SEARCH_HL_CURRENT_ALPHA
+        } else {
+            SEARCH_HL_ALPHA
+        };
+        cx.rect(rect, theme.accent.with_alpha(alpha), None, 2.0, None);
+    }
+
+    paint_search_bar(state, &mut cx, search, theme);
+}
+
+/// The `/query  n/total` bar at the searched pane's bottom-right corner.
+fn paint_search_bar(
+    state: &crate::app_state::AppState,
+    cx: &mut PaintCx,
+    search: &crate::app_state::SearchState,
+    theme: &GuiTheme,
+) {
+    let Some((_, px, py, pw, ph)) = crate::app::terminal_host::pane_outer_frames(state)
+        .into_iter()
+        .find(|(id, ..)| *id == search.pane_id)
+    else {
+        return;
+    };
+    let count = if search.query.is_empty() {
+        String::new()
+    } else if search.matches.is_empty() {
+        "  no matches".to_string()
+    } else {
+        let pos = search.current.map(|i| i + 1).unwrap_or(0);
+        format!("  {}/{}", pos, search.matches.len())
+    };
+    let label = format!("/{}{}", search.query, count);
+
+    let font = SEARCH_BAR_FONT;
+    let pad = 8.0_f64;
+    let advance = font as f64 * 0.62;
+    let bar_w = (label.chars().count() as f64 * advance + 2.0 * pad).clamp(120.0, 480.0);
+    let bar_h = font as f64 + 2.0 * pad;
+    // Bottom-right of the pane, inset a little.
+    let inset = 8.0_f64;
+    let x = (px + pw) as f64 - bar_w - inset;
+    let y = (py + ph) as f64 - bar_h - inset;
+    let rect = Rectangle::new(Point::new(x, y), Size::new(bar_w, bar_h));
+
+    let border = cx.border(theme.accent.with_alpha(200));
+    cx.rect(rect, theme.surface, border, theme.control_radius(), None);
+    let text_rect = Rectangle::new(
+        Point::new(x + pad, y),
+        Size::new(bar_w - 2.0 * pad, bar_h),
+    );
+    cx.text(
+        text_rect,
+        &label,
+        theme.foreground,
+        font,
+        heca_grid_ui::scene::TextAlign::Start,
+        false,
+    );
+}
+
 /// Test helper: build + layout + paint in one shot. Runtime uses the retained tree
 /// ([`build_chrome_root`] + [`paint_chrome_root`]) instead.
 #[cfg(test)]

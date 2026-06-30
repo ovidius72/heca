@@ -578,6 +578,9 @@ pub fn build_registry() -> ActionRegistry {
         handle_toggle_selection_endpoint,
     );
     registry.register(&WmAction::OpenLinkAtCaret, handle_open_link_at_caret);
+    registry.register(&WmAction::SearchScrollback, handle_search_scrollback);
+    registry.register(&WmAction::SearchNextMatch, handle_search_next_match);
+    registry.register(&WmAction::SearchPrevMatch, handle_search_prev_match);
 
     registry
 }

@@ -1,7 +1,7 @@
 use super::super::{
     BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
-    BackendMouseEvent, BackendMouseEventKind, HyperlinkSpan, TerminalCell, TerminalLine,
-    TerminalPaletteDefaults, TerminalSnapshot, TerminalUnderlineStyle,
+    BackendMouseEvent, BackendMouseEventKind, HyperlinkSpan, SearchMatch, TerminalCell,
+    TerminalLine, TerminalPaletteDefaults, TerminalSnapshot, TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
 use crate::layout::animation::{Animation, AnimationConfig};
@@ -545,6 +545,73 @@ impl TerminalEngine {
                     }
                 }
                 None => out.push(blank_line.clone()),
+            }
+        }
+        out
+    }
+
+    /// Case-insensitive substring search over the **entire** scrollback (history +
+    /// visible), returning every matching run as a [`SearchMatch`] in ascending
+    /// stable-row / column order. Reads cell text directly (no color resolution),
+    /// fills inter-cell gaps with spaces so internal spaces match and columns stay
+    /// aligned, and reports non-overlapping matches.
+    pub(super) fn search_scrollback(&self, query: &str, cols: usize) -> Vec<SearchMatch> {
+        if query.is_empty() || cols == 0 {
+            return Vec::new();
+        }
+        let needle: Vec<char> = query.to_lowercase().chars().collect();
+        let screen = self.terminal.screen();
+        let rows = screen.physical_rows.max(1);
+        let visible_count = self.rows.min(rows);
+        let max_offset = screen.scrollback_rows().saturating_sub(visible_count);
+        let top_stable = screen.visible_row_to_stable_row(0) - max_offset as isize;
+        let bottom_stable = screen.visible_row_to_stable_row(rows as i64 - 1);
+
+        let mut out = Vec::new();
+        for stable in top_stable..=bottom_stable {
+            let Some(phys) = screen.stable_row_to_phys(stable) else {
+                continue;
+            };
+            let lines = screen.lines_in_phys_range(phys..phys + 1);
+            let Some(line) = lines.into_iter().next() else {
+                continue;
+            };
+            // Lowercased char vector + the column each char sits in.
+            let mut chars: Vec<char> = Vec::new();
+            let mut col_of: Vec<usize> = Vec::new();
+            let mut next_col = 0usize;
+            for cell in line.visible_cells() {
+                let idx = cell.cell_index();
+                if idx >= cols {
+                    break;
+                }
+                // Fill the gap of blank cells before this one with spaces.
+                while next_col < idx {
+                    chars.push(' ');
+                    col_of.push(next_col);
+                    next_col += 1;
+                }
+                for ch in cell.str().chars().flat_map(char::to_lowercase) {
+                    chars.push(ch);
+                    col_of.push(idx);
+                }
+                next_col = idx + cell.width().max(1);
+            }
+            if needle.len() > chars.len() {
+                continue;
+            }
+            let mut i = 0;
+            while i + needle.len() <= chars.len() {
+                if chars[i..i + needle.len()] == needle[..] {
+                    out.push(SearchMatch {
+                        stable_row: stable,
+                        start_col: col_of[i],
+                        end_col: col_of[i + needle.len() - 1] + 1,
+                    });
+                    i += needle.len();
+                } else {
+                    i += 1;
+                }
             }
         }
         out
@@ -1097,6 +1164,34 @@ mod tests {
         engine.advance_bytes(b"\x07");
         assert_eq!(engine.take_alerts(), vec![BackendAlert::Bell]);
         assert!(engine.take_alerts().is_empty());
+    }
+
+    #[test]
+    fn search_scrollback_matches_case_insensitively_with_columns() {
+        let writer = SharedWriter::new(Box::new(SinkWriter));
+        let mut engine = TerminalEngine::new(
+            80,
+            24,
+            writer,
+            None,
+            crate::backend::TerminalBackendOptions::DEFAULT_SCROLLBACK_SIZE,
+        )
+        .expect("terminal engine should initialize");
+        engine.advance_bytes(b"Hello World\r\nfoo BAR baz\r\n");
+
+        // Case-insensitive, with inclusive start / exclusive end columns.
+        let world = engine.search_scrollback("world", 80);
+        assert_eq!(world.len(), 1);
+        assert_eq!((world[0].start_col, world[0].end_col), (6, 11));
+
+        // Lowercase query matches uppercase content.
+        let bar = engine.search_scrollback("bar", 80);
+        assert_eq!(bar.len(), 1);
+        assert_eq!((bar[0].start_col, bar[0].end_col), (4, 7));
+
+        // No match, and an empty query, both yield nothing.
+        assert!(engine.search_scrollback("zzz", 80).is_empty());
+        assert!(engine.search_scrollback("", 80).is_empty());
     }
 
     #[test]

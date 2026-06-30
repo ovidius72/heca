@@ -276,7 +276,10 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::PasteClipboard
         | WmAction::BeginSelection
         | WmAction::ToggleSelectionEndpoint
-        | WmAction::OpenLinkAtCaret => ActionPolicy::FocusedPaneLocal,
+        | WmAction::OpenLinkAtCaret
+        | WmAction::SearchScrollback
+        | WmAction::SearchNextMatch
+        | WmAction::SearchPrevMatch => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
