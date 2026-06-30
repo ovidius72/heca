@@ -749,6 +749,11 @@ handler (`open` / `xdg-open` / `start`):
   focused terminal with a letter; press the letter to open it, or `Esc` to cancel.
 - **Selection mode** — `Shift+o` opens the link under the caret (`o` stays the
   flip-endpoint binding).
+- **Context menu** — right-click a terminal pane for a menu with **Open link**
+  (shown only when the click cell is a link) plus pane actions (split, zoom,
+  float, close), each with its icon and keybinding hint. Click an entry or use the arrow
+  keys + Enter; `Esc` or an outside-click dismisses. (Right-clicking right on a
+  resize seam still starts a right-drag resize.)
 
 When `shell_integration = false`, heca spawns a bare interactive shell and you can source the generated snippets manually from `~/.config/heca/runtime/shell-integration/`.
 

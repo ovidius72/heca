@@ -161,6 +161,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let w = phys_size.width as f32 / scale;
     let h = phys_size.height as f32 / scale;
 
+    // Lay out the right-click context menu now, before the scene-texture borrow, so
+    // its paint pass (below) can take a shared `&AppState`. terminal-task-18.
+    crate::chrome::layout_context_menu(state, w, h);
+
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
     let surface_alpha = state.terminal_surface_opacity();
@@ -1137,6 +1141,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
+    // Right-click context menu overlay, on top of everything. terminal-task-18.
+    crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
     render_chrome(
         &mut state.grid_renderer,
         &mut state.text_renderer,

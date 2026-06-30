@@ -571,9 +571,19 @@ Source: `terminal-implementation.md` Phase 11
   >    `[0,rows)`) and reuses `hyperlink_at_cell`. Handler resolves the URL → shared `handle_open_link`.
   >    Policy `FocusedPaneLocal` (like the other selection actions). Full "Adding New Actions" checklist;
   >    new `cursor_cell` test; clippy 0 + all tests green.
-  > 4. **Context menu "Open link"** — wire the existing `ContextMenu` to right-click on a terminal
-  >    pane: entry "Open link" when the click cell is a link, plus pane actions (split/close/float).
-  >    Right-click currently does resize-fallback in `mouse.rs` — handle carefully. (overlaps `app-task-33`).
+  > 4. **Context menu "Open link"** — ✅ **DONE** (branch `feat/terminal-18-context-menu-open-link`).
+  >    Right-click a content pane → the grid-ui `ContextMenu` opens at the cursor: "Open link"
+  >    (conditional on a link cell, same `hyperlink_uri_at_position` lookup) + pane actions Split
+  >    right/down, Float, Close (danger), each with a quick-pick key + shortcut hint. This is the app's
+  >    FIRST stateful overlay (CommandPalette was only a stub): new `AppState.context_menu:
+  >    Option<ContextMenu>` + `context_menu_action` sink (`Rc<RefCell<Option<WmAction>>>`) — entry
+  >    `on_select` closures write the action, the event loop drains + dispatches it. Right-press focuses
+  >    the clicked pane then opens the menu (`mouse.rs`, after the resize-divider guard, so right-drag
+  >    resize still works). Events while open routed to the menu first (`events.rs`: pointer move/press +
+  >    keyboard via `winit_key_to_grid_key`; outside-click/Esc dismiss; stray right-click NOT forwarded
+  >    to the TUI). Rendered on top via `chrome::{layout_context_menu (mutable, pre scene-borrow),
+  >    paint_context_menu}` into the chrome scene. clippy 0 + tests green. (Foundation also serves
+  >    `app-task-33`.) NOTE: overlay is interactive — needs live click-through verification.
 
   Design LOCKED with user 2026-06-29 — one `WmAction::OpenLink { url }` behind **five surfaces**:
   - **`WmAction::OpenLink { url }`** + handler → OS opener (`open` macOS / `xdg-open` Linux /

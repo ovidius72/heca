@@ -16,6 +16,9 @@ use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
+use heca_core::layout::Point;
+use heca_grid_ui::reactive::SignalGet;
+use heca_grid_ui::{Component, Event, GridKey};
 use std::collections::HashMap;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -95,6 +98,22 @@ pub(crate) fn handle_window_event(
             }
             state.mark_full_redraw();
 
+            // An open context menu captures the keyboard: navigation (↑/↓/Enter/Esc)
+            // and quick-pick letters drive it; any other key is swallowed so it does
+            // not leak to the focused terminal while the menu is up.
+            if context_menu_open(state) {
+                if let Some(grid_key) = winit_key_to_grid_key(&event.logical_key) {
+                    if let Some(menu) = state.context_menu.as_mut() {
+                        let _ = menu.event(&Event::Key {
+                            key: grid_key,
+                            pressed: true,
+                        });
+                    }
+                    settle_context_menu(state, registry, InteractionSource::Keyboard);
+                }
+                return;
+            }
+
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
             let log_key = &event.logical_key;
@@ -138,6 +157,17 @@ pub(crate) fn handle_window_event(
                 position.y as f32 / state.scale_factor as f32,
             );
             state.mouse.pos = pos;
+            // An open context menu owns the pointer: route moves to it (row hover)
+            // and stop here so the move does not also drive focus/drag/terminal.
+            if context_menu_open(state) {
+                if let Some(menu) = state.context_menu.as_mut() {
+                    let _ = menu.event(&Event::PointerMoved {
+                        pos: Point::new(pos.0 as f64, pos.1 as f64),
+                    });
+                }
+                state.mark_full_redraw();
+                return;
+            }
             if let Some(action) = mouse::on_cursor_moved(state, pos) {
                 dispatch_action(state, registry, InteractionSource::MouseContent, &action);
             }
@@ -168,6 +198,22 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
+            // An open context menu swallows all button input: a press selects a row
+            // (or dismisses on an outside-click); the release is consumed. Routed
+            // before any normal mouse handling so clicks land on the menu, not panes.
+            if context_menu_open(state) {
+                if button_state == ElementState::Pressed {
+                    let pos = state.mouse.pos;
+                    if let Some(menu) = state.context_menu.as_mut() {
+                        let _ = menu.event(&Event::PointerPressed {
+                            pos: Point::new(pos.0 as f64, pos.1 as f64),
+                        });
+                    }
+                    settle_context_menu(state, registry, InteractionSource::MouseContent);
+                }
+                state.mark_full_redraw();
+                return;
+            }
             // Pane info-bar action **buttons** intercept a plain left-press so a click
             // hits the button (not the terminal). Only an actual button hit is
             // consumed — a press on the empty header band falls through to the normal
@@ -228,7 +274,10 @@ pub(crate) fn handle_window_event(
             // the right-button fallback press, or a release) must not also reach the
             // terminal — the gesture consumed it.
             let resize_consumed = resize_before || mouse::is_resizing(state);
-            if !started_interactive_move && !resize_consumed {
+            // A right-press that just opened the context menu must not also forward
+            // to the terminal (it would deliver a stray right-click to the TUI).
+            let opened_context_menu = context_menu_open(state);
+            if !started_interactive_move && !resize_consumed && !opened_context_menu {
                 forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
             }
             // Snap the cursor on press/release (drag start → Grabbing, drop → Grab/Default)
@@ -241,5 +290,49 @@ pub(crate) fn handle_window_event(
             state.mark_full_redraw();
         }
         _ => {}
+    }
+}
+
+/// Whether a right-click context menu is currently open.
+fn context_menu_open(state: &AppState) -> bool {
+    state
+        .context_menu
+        .as_ref()
+        .is_some_and(|m| m.open_signal().get_untracked())
+}
+
+/// After feeding an event into the open menu: dispatch whatever action the chosen
+/// entry queued in the sink, then drop the menu if it closed itself (entry run or
+/// outside-click). One settle path shared by the mouse + keyboard routes.
+fn settle_context_menu(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+) {
+    let action = state.context_menu_action.borrow_mut().take();
+    if let Some(action) = action {
+        dispatch_action(state, registry, source, &action);
+    }
+    let closed = state
+        .context_menu
+        .as_ref()
+        .is_none_or(|m| !m.open_signal().get_untracked());
+    if closed {
+        state.context_menu = None;
+    }
+    state.mark_full_redraw();
+}
+
+/// Map a winit key to the grid-ui [`GridKey`] the menu understands. Returns `None`
+/// for keys the menu ignores (still swallowed while it is open).
+fn winit_key_to_grid_key(key: &winit::keyboard::Key) -> Option<GridKey> {
+    use winit::keyboard::{Key, NamedKey};
+    match key {
+        Key::Named(NamedKey::Escape) => Some(GridKey::Escape),
+        Key::Named(NamedKey::Enter) => Some(GridKey::Enter),
+        Key::Named(NamedKey::ArrowUp) => Some(GridKey::ArrowUp),
+        Key::Named(NamedKey::ArrowDown) => Some(GridKey::ArrowDown),
+        Key::Character(s) => s.chars().next().map(GridKey::Char),
+        _ => None,
     }
 }

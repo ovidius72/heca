@@ -620,6 +620,15 @@ pub struct AppState {
     pub modifiers: ModifiersState,
     /// Host-owned shared selection state, reusable across pane/backend types.
     pub selection: SelectionState,
+    /// Open right-click context menu (`None` when closed). The app's first
+    /// stateful overlay: the host owns the widget so it is laid out/painted each
+    /// frame and fed pointer/key events while open. terminal-task-18 / app-task-33.
+    pub context_menu: Option<heca_grid_ui::widgets::ContextMenu>,
+    /// Action chosen from `context_menu`. Each entry's `on_select` writes here;
+    /// the event loop drains and dispatches it through the registry after feeding
+    /// an event into the menu (grid-ui widgets cannot dispatch `WmAction`s
+    /// directly — the closure → action sink bridges that).
+    pub context_menu_action: std::rc::Rc<std::cell::RefCell<Option<WmAction>>>,
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
