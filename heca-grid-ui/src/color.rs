@@ -1,5 +1,6 @@
 //! Design-system color primitive.
 //!
-//! Re-exported from `heca-theme` to ensure consistent color representation
-//! across the config, theme, and UI library.
+//! Re-exports [`Color`] from `heca-theme` to maintain a stable primitive
+//! within the design system while unifying implementation.
+
 pub use heca_theme::Color;

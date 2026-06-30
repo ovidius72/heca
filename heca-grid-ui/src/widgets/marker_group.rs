@@ -49,10 +49,10 @@ const INACTIVE_BAR_ALPHA: u8 = 90;
 /// Bar alpha when **hovered but inactive** — brighter than resting, to read as grabbable.
 const HOVER_BAR_ALPHA: u8 = 170;
 /// Base glow falloff radius (logical px) of the active bar. **Config-driven:**
-/// `cx.rect` scales this by `theme.glow_size` and drops the glow entirely at
+/// `cx.rect` scales this by `theme.colors.glow_size` and drops the glow entirely at
 /// `GlowLevel::None` (see [`PaintCx::rect`](crate::component::PaintCx::rect)).
 const BAR_GLOW_RADIUS: f32 = 8.0;
-/// Base glow strength of the active bar, **scaled at paint by `theme.intensity`**
+/// Base glow strength of the active bar, **scaled at paint by `theme.colors.intensity`**
 /// (`Off` ⇒ no glow). Config-driven, not a fixed look.
 const BAR_GLOW_INTENSITY: f32 = 0.16;
 
@@ -158,7 +158,7 @@ impl Component for MarkerGroup {
         // (it owns scanlines only). Nothing about the *look* is fixed here.
         let (accent, glow_c, glow_strength) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.glow_size.strength_scale())
+            (t.colors.accent, t.colors.glow, t.colors.glow_size.strength_scale())
         };
         let b = self.base.bounds;
         let bar_w = if hovered { BAR_W_HOVER } else { BAR_W };
@@ -182,7 +182,7 @@ impl Component for MarkerGroup {
         // width/2 literal — so `border_radius` in config / `prefix+Shift+r` reflows
         // the bar. The SDF path clamps radius to half the bar width, so default themes
         // still render a pill; a sharp theme (border_radius 0) makes it square.
-        cx.rect(bar, color, None, cx.theme().control_radius(), glow);
+        cx.rect(bar, color, None, cx.theme().colors.control_radius(), glow);
 
         // Children paint on top of (right of) the gutter.
         for child in &self.base.children {

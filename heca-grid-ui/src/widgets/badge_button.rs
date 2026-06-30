@@ -141,36 +141,36 @@ impl Component for BadgeButton {
         }
         let hovered = self.hovered.get_untracked() || self.base.focused.get_untracked();
         let pill = self.base.bounds;
-        let radius = (cx.theme().radius * 2.0).min((pill.size.h / 2.0) as f32);
+        let radius = (cx.theme().colors.border_radius * 2.0).min((pill.size.h / 2.0) as f32);
         let (muted, foreground, danger) = {
             let t = cx.theme();
-            (t.muted, t.foreground, t.danger)
+            (t.colors.muted, t.colors.foreground, t.colors.danger)
         };
         let pulse = self.flash.amount();
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
             let border_c = if hovered {
-                cx.theme().accent.with_alpha(OUTLINE_HOVER_ALPHA)
+                cx.theme().colors.accent.with_alpha(OUTLINE_HOVER_ALPHA)
             } else {
                 muted.with_alpha(OUTLINE_ALPHA)
             };
             let fill = if hovered {
-                cx.theme().accent.with_alpha(FILL_ALPHA / 2)
+                cx.theme().colors.accent.with_alpha(FILL_ALPHA / 2)
             } else {
                 Color::TRANSPARENT
             };
             let glow = hovered.then_some(Glow {
-                color: cx.theme().accent,
+                color: cx.theme().colors.accent,
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
             (fill, border_c, foreground, glow)
         } else {
             let c = match self.variant {
-                BadgeVariant::Accent => cx.theme().accent,
+                BadgeVariant::Accent => cx.theme().colors.accent,
                 BadgeVariant::Neutral => muted,
-                BadgeVariant::Success => cx.theme().success,
-                BadgeVariant::Warning => cx.theme().warning,
+                BadgeVariant::Success => cx.theme().colors.success,
+                BadgeVariant::Warning => cx.theme().colors.warning,
                 BadgeVariant::Danger => danger,
                 BadgeVariant::Outline => unreachable!(),
             };
@@ -209,8 +209,8 @@ impl Component for BadgeButton {
             TextAlign::Center,
             true,
         );
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
-            cx.corner_brackets(pill, cx.theme().accent);
+        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
+            cx.corner_brackets(pill, cx.theme().colors.accent);
         }
     }
 

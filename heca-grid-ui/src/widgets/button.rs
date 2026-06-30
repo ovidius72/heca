@@ -260,16 +260,16 @@ impl Component for Button {
         ) = {
             let t = cx.theme();
             (
-                t.surface,
-                t.accent,
-                t.glow,
-                t.danger,
-                t.background,
-                t.foreground,
-                t.muted,
-                t.border,
-                t.border_width,
-                t.control_radius(),
+                t.colors.surface,
+                t.colors.accent,
+                t.colors.glow,
+                t.colors.danger,
+                t.colors.background,
+                t.colors.foreground,
+                t.colors.muted,
+                t.colors.border,
+                t.colors.border_width,
+                t.colors.control_radius(),
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -373,7 +373,7 @@ impl Component for Button {
         }
 
         // Focus ring — only for keyboard focus (focus-visible) and when enabled.
-        if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(b, accent);
         }
     }

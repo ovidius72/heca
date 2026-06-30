@@ -123,22 +123,22 @@ impl Component for Badge {
         }
         let (muted, foreground) = {
             let t = cx.theme();
-            (t.muted, t.foreground)
+            (t.colors.muted, t.colors.foreground)
         };
         let pill = self.base.bounds;
         // Pill widget: round harder than a box (×2), clamped to the capsule max —
         // radius:0 → square, a moderate radius → full pill.
-        let radius = (cx.theme().radius * 2.0).min((pill.size.h / 2.0) as f32);
+        let radius = (cx.theme().colors.border_radius * 2.0).min((pill.size.h / 2.0) as f32);
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
             (Color::TRANSPARENT, muted, foreground, None)
         } else {
             let c = match self.variant {
-                BadgeVariant::Accent => cx.theme().accent,
+                BadgeVariant::Accent => cx.theme().colors.accent,
                 BadgeVariant::Neutral => muted,
-                BadgeVariant::Success => cx.theme().success,
-                BadgeVariant::Warning => cx.theme().warning,
-                BadgeVariant::Danger => cx.theme().danger,
+                BadgeVariant::Success => cx.theme().colors.success,
+                BadgeVariant::Warning => cx.theme().colors.warning,
+                BadgeVariant::Danger => cx.theme().colors.danger,
                 BadgeVariant::Outline => unreachable!(),
             };
             let glow = Some(Glow {

@@ -561,7 +561,7 @@ impl<'a> PaintCx<'a> {
     /// honor the token (and disappear together at width 0). The single chokepoint
     /// that keeps border width theme-driven across the widget set.
     pub fn border(&self, color: Color) -> Option<Border> {
-        let w = self.theme.border_width;
+        let w = self.theme.colors.border_width;
         (w > 0.0).then_some(Border { color, width: w })
     }
 
@@ -661,7 +661,7 @@ impl<'a> PaintCx<'a> {
             return;
         }
         let a = (amount.clamp(0.0, 1.0) * 255.0).round() as u8;
-        self.rect(rect, self.theme.foreground.with_alpha(a), None, radius, None);
+        self.rect(rect, self.theme.colors.foreground.with_alpha(a), None, radius, None);
     }
 
     /// Draw the **drag ghost** — the small labelled chip that follows the cursor
@@ -673,7 +673,7 @@ impl<'a> PaintCx<'a> {
     /// as [`swap_indicator`](Self::swap_indicator) — so the cursor-following chip tells
     /// the user this drag is an **exchange**, not a move (there is no OS "swap" cursor).
     pub fn drag_ghost(&mut self, rect: Rectangle, text: &str, swap: bool) {
-        let (accent, bg, radius) = (self.theme.accent, self.theme.background, self.theme.radius);
+        let (accent, bg, radius) = (self.theme.colors.accent, self.theme.colors.background, self.theme.colors.border_radius);
         let font = (rect.size.h as f32 * 0.55).clamp(10.0, 15.0);
         self.with_overlay(|cx| {
             cx.rect(rect, accent.with_alpha(217), None, radius, None);
@@ -701,15 +701,15 @@ impl<'a> PaintCx<'a> {
     /// [`DropSide::Onto`]. Theme-driven (derives from `accent`); the app calls this
     /// over the bounds returned by [`resolve_at`](crate::drag::resolve_at).
     pub fn drop_indicator(&mut self, bounds: Rectangle, side: DropSide) {
-        let accent = self.theme.accent;
+        let accent = self.theme.colors.accent;
         match side {
             DropSide::Onto => {
-                self.rect(bounds, accent.with_alpha(45), None, self.theme.radius, None);
+                self.rect(bounds, accent.with_alpha(45), None, self.theme.colors.border_radius, None);
                 self.rect(
                     bounds,
                     Color::TRANSPARENT,
                     Some(Border { color: accent, width: 1.5 }),
-                    self.theme.radius,
+                    self.theme.colors.border_radius,
                     None,
                 );
             }
@@ -738,11 +738,11 @@ impl<'a> PaintCx<'a> {
     /// insertion line or `Onto` wash — a distinct cue that the whole item is the target.
     /// Theme-driven (derives from `accent` / `radius` / `border_width`).
     pub fn swap_indicator(&mut self, bounds: Rectangle) {
-        let accent = self.theme.accent;
-        let radius = self.theme.radius;
+        let accent = self.theme.colors.accent;
+        let radius = self.theme.colors.border_radius;
         // Faint wash + bold outer frame.
         self.rect(bounds, accent.with_alpha(28), None, radius, None);
-        let outer_w = (self.theme.border_width * 2.0).max(2.5);
+        let outer_w = (self.theme.colors.border_width * 2.0).max(2.5);
         self.rect(
             bounds,
             Color::TRANSPARENT,
@@ -777,7 +777,7 @@ impl<'a> PaintCx<'a> {
         let a = (DISABLED_SCRIM * 255.0).round() as u8;
         self.rect(
             rect,
-            self.theme.background.with_alpha(a),
+            self.theme.colors.background.with_alpha(a),
             None,
             radius,
             None,
@@ -791,13 +791,13 @@ impl<'a> PaintCx<'a> {
     /// each edge) layered on top — the Tron reticle. DRY: the frame is defined
     /// once here instead of per-widget.
     ///
-    /// Width/radius come from `theme.border_width`/`theme.radius`: at
+    /// Width/radius come from `theme.colors.border_width`/`theme.colors.border_radius`: at
     /// `border_width == 0` the frame draws **nothing** (no border anywhere),
     /// consistent with every other widget's border gate. For a surface that
     /// carries its own width/radius (e.g. a self-themed sidebar shell), use
     /// [`bracket_frame_with`](Self::bracket_frame_with).
     pub fn bracket_frame(&mut self, rect: Rectangle) {
-        let (radius, border_width) = (self.theme.radius, self.theme.border_width);
+        let (radius, border_width) = (self.theme.colors.border_radius, self.theme.colors.border_width);
         self.bracket_frame_with(rect, border_width, radius);
     }
 
@@ -806,7 +806,7 @@ impl<'a> PaintCx<'a> {
     /// reticle (the per-widget `Pane::border_width`/radius overrides). The accent
     /// color still comes from the theme. `border_width <= 0.0` ⇒ no frame.
     pub fn bracket_frame_with(&mut self, rect: Rectangle, border_width: f32, radius: f32) {
-        let accent = self.theme.accent;
+        let accent = self.theme.colors.accent;
         // Borders off (`border_width == 0`) ⇒ no frame at all, like every other
         // widget. A container that needs definition without a border should carry
         // a fill, not a forced hairline.
@@ -879,8 +879,8 @@ impl<'a> PaintCx<'a> {
         // the single chokepoint — so every widget's glow tracks the config uniformly
         // instead of baking a fixed intensity. `Medium` (default) is 1.0×, so this is
         // a no-op for the default theme; `none` drops glow entirely.
-        let radius = self.theme.glow_size.radius_scale();
-        let strength = self.theme.glow_size.strength_scale();
+        let radius = self.theme.colors.glow_size.radius_scale();
+        let strength = self.theme.colors.glow_size.strength_scale();
         glow.filter(|_| radius > 0.0).map(|g| Glow {
             radius: g.radius * radius,
             intensity: g.intensity * strength,

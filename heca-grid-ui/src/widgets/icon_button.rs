@@ -157,7 +157,7 @@ impl Component for IconButton {
         let disabled = self.base.disabled.get_untracked();
         let (accent, glow_c, ctrl_radius, border_width, focus_border_width) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.control_radius(), t.border_width, t.focus_border_width)
+            (t.colors.accent, t.colors.glow, t.colors.control_radius(), t.colors.border_width, t.focus_border_width)
         };
         let tone = self.tone.unwrap_or(accent);
         let p = self.progress.clamp(0.0, 1.0);
@@ -203,7 +203,7 @@ impl Component for IconButton {
         if disabled {
             cx.dim(b, radius);
         }
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(b, accent);
         }
     }

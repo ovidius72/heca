@@ -170,7 +170,7 @@ impl Component for Row {
         let active = self.active.get_untracked();
         let (accent, glow_c, foreground, ctrl_radius, sel_border_w) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.foreground, t.control_radius(), t.focus_border_width)
+            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width)
         };
         let b = self.base.bounds;
 
@@ -266,7 +266,7 @@ impl Component for Row {
         if self.interactive()
             && !disabled
             && self.base.focus_visible.get_untracked()
-            && cx.theme().show_focus_border
+            && cx.theme().colors.show_focus_border
         {
             cx.corner_brackets(b, accent);
         }
@@ -276,7 +276,7 @@ impl Component for Row {
         // the content/selection.
         let attn = self.attention.amount();
         if attn > 0.0 {
-            let c = self.attention_color.unwrap_or_else(|| cx.theme().warning);
+            let c = self.attention_color.unwrap_or_else(|| cx.theme().colors.warning);
             let radius = ctrl_radius.min((b.size.h / 2.0) as f32);
             cx.rect(
                 b,

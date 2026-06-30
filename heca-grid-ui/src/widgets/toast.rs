@@ -313,13 +313,13 @@ impl Component for Toast {
         }
         let (surface, foreground, muted, radius, card_radius) = {
             let t = cx.theme();
-            (t.surface, t.foreground, t.muted, t.control_radius(), t.radius)
+            (t.colors.surface, t.colors.foreground, t.colors.muted, t.colors.control_radius(), t.colors.border_radius)
         };
         let tone = match self.severity {
-            ToastSeverity::Info => cx.theme().accent,
-            ToastSeverity::Success => cx.theme().success,
-            ToastSeverity::Warning => cx.theme().warning,
-            ToastSeverity::Danger => cx.theme().danger,
+            ToastSeverity::Info => cx.theme().colors.accent,
+            ToastSeverity::Success => cx.theme().colors.success,
+            ToastSeverity::Warning => cx.theme().colors.warning,
+            ToastSeverity::Danger => cx.theme().colors.danger,
         };
         let b = self.base.bounds;
         let r = self.rects();
@@ -377,7 +377,7 @@ impl Component for Toast {
             }
         }
         // Focus ring when clickable + focused.
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(b, tone);
         }
     }

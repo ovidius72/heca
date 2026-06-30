@@ -66,7 +66,7 @@ pub struct DockFrame {
     base: Base,
     expanded: Signal<bool>,
     /// Active (current) state: when `true` the frame paints a faint accent
-    /// **wash** (`theme.active_wash_alpha`) over itself — e.g. the active
+    /// **wash** (`theme.colors.active_wash_alpha`) over itself — e.g. the active
     /// workspace in the sidebar. Signal-backed so a host can flip it in place via
     /// [`active_state`](DockFrame::active_state) without rebuilding the tree.
     active: Signal<bool>,
@@ -184,7 +184,7 @@ impl DockFrame {
     }
 
     /// Mark the frame **active** (the current one). An active frame paints a faint
-    /// accent wash (`theme.active_wash_alpha`) over itself. Defaults to inactive.
+    /// accent wash (`theme.colors.active_wash_alpha`) over itself. Defaults to inactive.
     pub fn active(self, active: bool) -> Self {
         self.active.set(active);
         self
@@ -271,7 +271,7 @@ impl Component for DockFrame {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let radius = cx.theme().radius;
+        let radius = cx.theme().colors.border_radius;
         let b = self.base.bounds;
         let fill = self.base.style.fill;
 
@@ -286,7 +286,7 @@ impl Component for DockFrame {
         if self.active.get_untracked() {
             let (accent, wash_alpha) = {
                 let t = cx.theme();
-                (t.accent, t.active_wash_alpha)
+                (t.colors.accent, t.colors.active_wash_alpha)
             };
             if wash_alpha > 0.0 {
                 cx.rect(b, accent.with_alpha_f32(wash_alpha), None, radius, None);

@@ -313,7 +313,7 @@ pub(crate) fn build_pane_info_bar(
     for (glyph, text) in items {
         // No explicit size → the icon inherits the bar's base font, so glyph and
         // label stay balanced when the bar font changes.
-        let leading = Icon::new(glyph).color(theme.foreground);
+        let leading = Icon::new(glyph).color(theme.colors.foreground);
         tag = Some(match tag.take() {
             None => Tag::new(text).leading(leading),
             Some(existing) => existing.segment_text(text, Some(Box::new(leading))),
@@ -696,9 +696,9 @@ pub(crate) fn build_pane_header(
             // not an alarm (full-intensity danger was too vibrant).
             let is_close = matches!(action, heca_config::appearance::PaneAction::Close);
             let (icon_color, tone) = if is_close {
-                (theme.danger.lerp(theme.surface, 0.25), theme.danger)
+                (theme.colors.danger.lerp(theme.colors.surface, 0.25), theme.colors.danger)
             } else {
-                (theme.foreground, theme.accent)
+                (theme.colors.foreground, theme.colors.accent)
             };
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
@@ -1265,16 +1265,16 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
-    let icon_widget = Icon::new(info.icon).size(14.0).color(theme.foreground);
+    let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
     let icon_signal = icon_widget.glyph_signal();
     let active_title_label = Label::new(info.title.clone())
-        .color(theme.accent)
+        .color(theme.colors.accent)
         .bold(true);
     let active_title_signal = active_title_label.text_signal();
     let active_title = Visibility::new(active_title_label, active);
     let active_title_visible = active_title.visible_signal();
     let inactive_title_label = Label::new(info.title.clone())
-        .color(theme.foreground)
+        .color(theme.colors.foreground)
         .bold(true);
     let inactive_title_signal = inactive_title_label.text_signal();
     let inactive_title = Visibility::new(inactive_title_label, !active);
@@ -1290,45 +1290,45 @@ fn pane_card(
     let branch_label_widget = Label::new(truncate_sidebar_git_branch(
         info.git_branch.as_deref().unwrap_or_default(),
     ))
-    .color(theme.foreground)
+    .color(theme.colors.foreground)
     .font_scale(0.8);
     let branch_display_signal = branch_label_widget.text_signal();
     let branch_signal = signal(info.git_branch.clone().unwrap_or_default());
     let add_label_widget = Label::new(info.git_added.clone().unwrap_or_default())
-        .color(theme.success)
+        .color(theme.colors.success)
         .font_scale(0.8);
     let add_label = add_label_widget.text_signal();
     let add_segment = Visibility::new(
         Flex::row()
             .align(Align::Center)
             .gap(4.0)
-            .child(Icon::new(Glyph::Plus).size(12.0).color(theme.success))
+            .child(Icon::new(Glyph::Plus).size(12.0).color(theme.colors.success))
             .child(add_label_widget),
         info.git_added.is_some(),
     );
     let add_text_visible_signal = add_segment.visible_signal();
     let modified_label_widget = Label::new(info.git_modified.clone().unwrap_or_default())
-        .color(theme.warning)
+        .color(theme.colors.warning)
         .font_scale(0.8);
     let modified_label = modified_label_widget.text_signal();
     let modified_segment = Visibility::new(
         Flex::row()
             .align(Align::Center)
             .gap(4.0)
-            .child(Icon::new(Glyph::Warning).size(12.0).color(theme.warning))
+            .child(Icon::new(Glyph::Warning).size(12.0).color(theme.colors.warning))
             .child(modified_label_widget),
         info.git_modified.is_some(),
     );
     let modified_text_visible_signal = modified_segment.visible_signal();
     let deleted_label_widget = Label::new(info.git_deleted.clone().unwrap_or_default())
-        .color(theme.danger)
+        .color(theme.colors.danger)
         .font_scale(0.8);
     let deleted_label = deleted_label_widget.text_signal();
     let deleted_segment = Visibility::new(
         Flex::row()
             .align(Align::Center)
             .gap(4.0)
-            .child(Icon::new(Glyph::Minus).size(12.0).color(theme.danger))
+            .child(Icon::new(Glyph::Minus).size(12.0).color(theme.colors.danger))
             .child(deleted_label_widget),
         info.git_deleted.is_some(),
     );
@@ -1337,7 +1337,7 @@ fn pane_card(
         Flex::row()
             .align(Align::Center)
             .gap(6.0)
-            .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.warning))
+            .child(Icon::new(Glyph::GitBranch).size(12.0).color(theme.colors.warning))
             .child(
                 Tooltip::new_signal(branch_label_widget, branch_signal)
                     .side(TooltipSide::Bottom)
@@ -1403,11 +1403,12 @@ fn pane_card(
     let card = Row::new()
         .background(
             theme
+                .colors
                 .foreground
-                .with_alpha(alpha_u8(theme.card_background_alpha)),
+                .with_alpha(alpha_u8(theme.colors.card_background_alpha)),
         )
-        .highlight(theme.accent)
-        .radius(theme.control_radius())
+        .highlight(theme.colors.accent)
+        .radius(theme.colors.control_radius())
         .padding(6.0)
         .marker(ActiveMarker::Bar)
         .active(active)
@@ -1516,7 +1517,7 @@ fn column_view(
     signals.col_hint.push((ws_idx, c.col_idx, col_hint));
     let hinted = KeyHint::new(col)
         .hint(col_hint)
-        .color(theme.success)
+        .color(theme.colors.success)
         .placement(HintPlacement::CenterRight);
     let (watch, _repaint) = RepaintWatch::new(hinted);
     watch
@@ -1633,7 +1634,7 @@ fn build_workspaces_container(
         col = col.child(
             KeyHint::new(dock)
                 .hint(ws_hint)
-                .color(theme.warning)
+                .color(theme.colors.warning)
                 // Top-right (like the pane cards' right-aligned keycap), nudged down
                 // onto the workspace title row so it lines up with the name.
                 .placement(HintPlacement::TopRight)
@@ -1676,10 +1677,10 @@ fn build_sidebar_shell(
         .align(Align::Center)
         .gap(6.0)
         .padding_xy(2.0, 2.0)
-        .child(Icon::new(Glyph::Sidebar).size(16.0).color(theme.muted))
+        .child(Icon::new(Glyph::Sidebar).size(16.0).color(theme.colors.muted))
         .child(Flex::row().grow(1.0))
         .child(IconButton::new(
-            Icon::new(Glyph::CaretRight).size(14.0).color(theme.muted),
+            Icon::new(Glyph::CaretRight).size(14.0).color(theme.colors.muted),
         ));
 
     Flex::column()
@@ -1734,10 +1735,10 @@ fn build_right_sidebar_shell(
         .align(Align::Center)
         .gap(6.0)
         .padding_xy(2.0, 2.0)
-        .child(Label::new("Details").color(theme.foreground))
+        .child(Label::new("Details").color(theme.colors.foreground))
         .child(Flex::row().grow(1.0))
         .child(IconButton::new(
-            Icon::new(Glyph::CaretRight).size(14.0).color(theme.muted),
+            Icon::new(Glyph::CaretRight).size(14.0).color(theme.colors.muted),
         ));
 
     Flex::column()
@@ -1939,7 +1940,7 @@ pub(crate) fn paint_bell_flash(
         return;
     }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    cx.rect(content_rect, theme.accent.with_alpha(alpha), None, 0.0, None);
+    cx.rect(content_rect, theme.colors.accent.with_alpha(alpha), None, 0.0, None);
 }
 
 /// Paint follow-link keycaps over the focused terminal's hyperlinks while
@@ -2067,7 +2068,7 @@ pub(crate) fn paint_search(
         } else {
             SEARCH_HL_ALPHA
         };
-        cx.rect(rect, theme.accent.with_alpha(alpha), None, 2.0, None);
+        cx.rect(rect, theme.colors.accent.with_alpha(alpha), None, 2.0, None);
     }
 
     paint_search_bar(state, &mut cx, search, theme);
@@ -2107,8 +2108,8 @@ fn paint_search_bar(
     let y = (py + ph) as f64 - bar_h - inset;
     let rect = Rectangle::new(Point::new(x, y), Size::new(bar_w, bar_h));
 
-    let border = cx.border(theme.accent.with_alpha(200));
-    cx.rect(rect, theme.surface, border, theme.control_radius(), None);
+    let border = cx.border(theme.colors.accent.with_alpha(200));
+    cx.rect(rect, theme.colors.surface, border, theme.colors.control_radius(), None);
     let text_rect = Rectangle::new(
         Point::new(x + pad, y),
         Size::new(bar_w - 2.0 * pad, bar_h),
@@ -2116,7 +2117,7 @@ fn paint_search_bar(
     cx.text(
         text_rect,
         &label,
-        theme.foreground,
+        theme.colors.foreground,
         font,
         heca_grid_ui::scene::TextAlign::Start,
         false,
@@ -2137,88 +2138,40 @@ fn chrome_scene(
     paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
-/// Converts an app theme color token into the grid-ui color type.
-fn app_color_to_gui(color: heca_config::theme::Color) -> Color {
-    Color::new(color.r, color.g, color.b, color.a)
-}
-
 /// Convert a `0.0..=1.0` theme alpha token into an 8-bit channel value for
 /// [`Color::with_alpha`]. Clamped so out-of-range config values can't wrap.
 fn alpha_u8(a: f32) -> u8 {
     (a.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// Converts the app shadow token into the grid-ui shadow color.
-///
-/// `heca_theme::Shadow.color` is already a `Color` (parsed at theme-load time via
-/// serde), so here we just bake the `alpha` fraction into the color's alpha channel
-/// for the grid-ui draw primitive (which takes a single RGBA `Color`).
-fn shadow_to_gui(shadow: &heca_config::theme::Shadow) -> Color {
-    Color::new(shadow.color.r, shadow.color.g, shadow.color.b, alpha_u8(shadow.alpha))
-}
-
-fn glow_level_to_gui(level: heca_config::theme::GlowLevel) -> heca_grid_ui::theme::GlowLevel {
-    match level {
-        heca_config::theme::GlowLevel::None => heca_grid_ui::theme::GlowLevel::None,
-        heca_config::theme::GlowLevel::Thin => heca_grid_ui::theme::GlowLevel::Thin,
-        heca_config::theme::GlowLevel::Medium => heca_grid_ui::theme::GlowLevel::Medium,
-        heca_config::theme::GlowLevel::Large => heca_grid_ui::theme::GlowLevel::Large,
-    }
-}
-
-fn intensity_to_gui(level: heca_config::theme::Intensity) -> heca_grid_ui::theme::Intensity {
-    match level {
-        heca_config::theme::Intensity::Off => heca_grid_ui::theme::Intensity::Off,
-        heca_config::theme::Intensity::Low => heca_grid_ui::theme::Intensity::Low,
-        heca_config::theme::Intensity::Medium => heca_grid_ui::theme::Intensity::Medium,
-        heca_config::theme::Intensity::Heavy => heca_grid_ui::theme::Intensity::Heavy,
-    }
-}
-
 /// Projects the loaded app theme into the grid-ui widget theme contract.
 ///
-/// This keeps chrome widgets visually aligned with the runtime app palette and
-/// effect tokens until the theme model is fully unified across crates. Font
-/// family/size come from `font_config` (decoupled from the color theme).
+/// With the compose model, `heca_grid_ui::Theme` embeds `heca_theme::Theme`
+/// directly (the `colors` field), and `heca_config::theme::Theme` *is*
+/// `heca_theme::Theme` (re-exported), so no field-by-field conversion is
+/// needed — we clone the theme straight into `colors` and layer the
+/// system-local font tokens on top. Font family/size come from `font_config`
+/// (decoupled from the color theme).
 fn app_theme_to_gui_theme(
     theme: &heca_config::theme::Theme,
     font_config: &heca_config::font::FontConfig,
 ) -> GuiTheme {
     GuiTheme {
-        name: theme.name.clone(),
-        background: app_color_to_gui(theme.background),
-        surface: app_color_to_gui(theme.surface),
-        foreground: app_color_to_gui(theme.foreground),
-        muted: app_color_to_gui(theme.muted),
-        border: app_color_to_gui(theme.border),
-        accent: app_color_to_gui(theme.accent),
-        glow: app_color_to_gui(theme.glow),
-        shadow: shadow_to_gui(&theme.shadow),
-        danger: app_color_to_gui(theme.danger),
-        success: app_color_to_gui(theme.success),
-        warning: app_color_to_gui(theme.warning),
+        colors: theme.clone(),
         font_family: font_config.family.ui_normal().to_string(),
         font_size: font_config.size.ui,
-        radius: theme.border_radius,
-        border_width: theme.border_width,
         // TODO: map from config `focus_border_width` once added to heca-theme; for
         // now the affordance outlines (focus ring + selection) keep a visible default.
         focus_border_width: 1.5,
-        glow_size: glow_level_to_gui(theme.glow_size),
-        intensity: intensity_to_gui(theme.intensity),
-        show_focus_border: theme.show_focus_border,
-        icon_secondary_alpha: theme.icon_secondary_alpha,
-        active_wash_alpha: theme.active_wash_alpha,
-        card_background_alpha: theme.card_background_alpha,
     }
 }
 
 fn chrome_surface_color(theme: &heca_config::theme::Theme) -> Color {
-    app_color_to_gui(theme.surface)
+    theme.surface
 }
 
 fn top_bottom_pane_background_color(theme: &heca_config::theme::Theme) -> Color {
-    app_color_to_gui(theme.effective_top_bottom_pane_background())
+    theme.effective_top_bottom_pane_background()
 }
 
 fn chrome_bar_color_for(
@@ -2249,13 +2202,13 @@ fn chrome_bar_color(state: &crate::app_state::AppState) -> Color {
 fn left_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
     let base = state.theme.effective_left_sidebar_background();
     let resolved = state.appearance.effective_sidebar_background_color(base);
-    sidebar_shell_background_color_for(app_color_to_gui(resolved), &state.appearance)
+    sidebar_shell_background_color_for(resolved, &state.appearance)
 }
 
 fn right_sidebar_shell_background_color(state: &crate::app_state::AppState) -> Color {
     let base = state.theme.effective_right_sidebar_background();
     let resolved = state.appearance.effective_sidebar_background_color(base);
-    sidebar_shell_background_color_for(app_color_to_gui(resolved), &state.appearance)
+    sidebar_shell_background_color_for(resolved, &state.appearance)
 }
 
 fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
@@ -2270,7 +2223,7 @@ fn chrome_shell_surface_color(state: &crate::app_state::AppState) -> Color {
 pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color, Color) {
     let bar_bg = chrome_bar_color(state);
     let sidebar_bg = chrome_shell_surface_color(state);
-    let fg = app_color_to_gui(state.theme.foreground);
+    let fg = state.theme.foreground;
     (bar_bg, sidebar_bg, fg)
 }
 
@@ -2278,21 +2231,21 @@ pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     let (_, sidebar_bg, _) = chrome_colors(state);
     let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
-    theme.background = app_color_to_gui(state.theme.background);
-    theme.surface = sidebar_bg;
+    theme.colors.background = state.theme.background;
+    theme.colors.surface = sidebar_bg;
     // `[appearance]` effect-token overrides take precedence over the theme.
     // `glow_size` owns glow (presence + radius + strength); `intensity` owns
     // scanline/CRT overlay opacity only. Unset → the theme value already set
     // above by `app_theme_to_gui_theme` wins.
-    theme.glow_size = glow_level_to_gui(state.appearance.effective_glow_size(&state.theme));
-    theme.intensity = intensity_to_gui(state.appearance.effective_intensity(&state.theme));
+    theme.colors.glow_size = state.appearance.effective_glow_size(&state.theme);
+    theme.colors.intensity = state.appearance.effective_intensity(&state.theme);
     // Global decorative border width (config `border_width`, theme fallback) — the
     // app-wide BORDER control. Read at paint time, so it live-reloads. Drives the
     // chrome + sidebar frame width.
-    theme.border_width = state.appearance.effective_border_width(&state.theme);
+    theme.colors.border_width = state.appearance.effective_border_width(&state.theme);
     // Global decorative border color (config `border_color`, theme fallback) —
     // drives the chrome/sidebar `bordered` frame. Read at paint, so it live-reloads.
-    theme.border = app_color_to_gui(state.appearance.effective_border_color(&state.theme));
+    theme.colors.border = state.appearance.effective_border_color(&state.theme);
     // Affordance outlines (focus ring + selection) get their own configurable
     // width, independent of the decorative border so they stay visible at
     // `border_width = 0`.
@@ -3132,23 +3085,23 @@ mod tests {
         let font_config = heca_config::font::FontConfig::default();
         let gui = app_theme_to_gui_theme(&theme, &font_config);
 
-        assert_eq!(gui.name, theme.name);
-        assert_eq!(gui.background, app_color_to_gui(theme.background));
-        assert_eq!(gui.surface, app_color_to_gui(theme.surface));
-        assert_eq!(gui.muted, app_color_to_gui(theme.muted));
-        assert_eq!(gui.border, app_color_to_gui(theme.border));
-        assert_eq!(gui.accent, app_color_to_gui(theme.accent));
-        assert_eq!(gui.glow, app_color_to_gui(theme.glow));
-        assert_eq!(gui.danger, app_color_to_gui(theme.danger));
-        assert_eq!(gui.success, app_color_to_gui(theme.success));
-        assert_eq!(gui.warning, app_color_to_gui(theme.warning));
+        assert_eq!(gui.colors.name, theme.name);
+        assert_eq!(gui.colors.background, theme.background);
+        assert_eq!(gui.colors.surface, theme.surface);
+        assert_eq!(gui.colors.muted, theme.muted);
+        assert_eq!(gui.colors.border, theme.border);
+        assert_eq!(gui.colors.accent, theme.accent);
+        assert_eq!(gui.colors.glow, theme.glow);
+        assert_eq!(gui.colors.danger, theme.danger);
+        assert_eq!(gui.colors.success, theme.success);
+        assert_eq!(gui.colors.warning, theme.warning);
         assert_eq!(gui.font_family, font_config.family.ui_normal());
         assert_eq!(gui.font_size, font_config.size.ui);
-        assert_eq!(gui.radius, theme.border_radius);
-        assert_eq!(gui.border_width, theme.border_width);
-        assert_eq!(gui.glow_size, heca_grid_ui::theme::GlowLevel::None);
-        assert_eq!(gui.intensity, heca_grid_ui::theme::Intensity::Off);
-        assert!(gui.show_focus_border);
+        assert_eq!(gui.colors.border_radius, theme.border_radius);
+        assert_eq!(gui.colors.border_width, theme.border_width);
+        assert_eq!(gui.colors.glow_size, heca_grid_ui::theme::GlowLevel::None);
+        assert_eq!(gui.colors.intensity, heca_grid_ui::theme::Intensity::Off);
+        assert!(gui.colors.show_focus_border);
     }
 
     #[test]
@@ -3158,15 +3111,15 @@ mod tests {
 
         assert_eq!(
             top_bottom_pane_background_color(&tron),
-            app_color_to_gui(tron.effective_top_bottom_pane_background())
+            tron.effective_top_bottom_pane_background()
         );
-        assert_eq!(chrome_surface_color(&tron), app_color_to_gui(tron.surface));
+        assert_eq!(chrome_surface_color(&tron), tron.surface);
         assert_eq!(
             chrome_surface_color(&latte),
-            app_color_to_gui(latte.surface)
+            latte.surface
         );
         assert_ne!(
-            app_color_to_gui(latte.effective_left_sidebar_background()),
+            latte.effective_left_sidebar_background(),
             chrome_surface_color(&latte)
         );
     }
@@ -3179,7 +3132,7 @@ mod tests {
             ..Default::default()
         };
 
-        let left_bg = app_color_to_gui(theme.effective_left_sidebar_background());
+        let left_bg = theme.effective_left_sidebar_background();
         assert_ne!(
             chrome_bar_color_for(&theme, &appearance),
             sidebar_shell_background_color_for(left_bg, &appearance)
@@ -3193,7 +3146,7 @@ mod tests {
     #[test]
     fn chrome_scene_emits_status_text() {
         use heca_grid_ui::{Color, DrawCommand};
-        let theme = GuiTheme::grid_tron();
+        let theme = GuiTheme::default();
         // No sidebar (collapsed) — just the status bar should produce text.
         let scene = super::chrome_scene(
             &super::ChromeFrame {
@@ -3202,7 +3155,7 @@ mod tests {
                 tab_bar_height: 32.0,
                 status_bar_height: 24.0,
                 status: "2 panes | foo | NORMAL",
-                side_bg: Color::new(17, 17, 27, 255),
+                side_bg: theme.colors.background,
                 fg: Color::new(200, 200, 200, 255),
             },
             &theme,
@@ -3241,7 +3194,7 @@ mod tests {
             floating_panes: Vec::new(),
         });
 
-        let theme = GuiTheme::grid_tron();
+        let theme = GuiTheme::default();
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         chrome
@@ -3254,7 +3207,7 @@ mod tests {
             &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
-            theme.background,
+            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
@@ -3319,8 +3272,8 @@ mod tests {
         });
 
         // A distinct border color so we can prove it reached the painted frame.
-        let mut theme = GuiTheme::grid_tron();
-        theme.border = Color::new(0x40, 0xe0, 0xff, 0xff);
+        let mut theme = GuiTheme::default();
+        theme.colors.border = Color::new(0x40, 0xe0, 0xff, 0xff);
         let border_w = 4.0_f32;
 
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
@@ -3330,7 +3283,7 @@ mod tests {
             &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
-            theme.background,
+            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,
@@ -3346,7 +3299,7 @@ mod tests {
         let found = scene.iter().any(|c| match c {
             DrawCommand::Rect(r) => r
                 .border
-                .is_some_and(|b| b.color == theme.border && (b.width - border_w).abs() < 0.01),
+                .is_some_and(|b| b.color == theme.colors.border && (b.width - border_w).abs() < 0.01),
             _ => false,
         });
         assert!(
@@ -3379,7 +3332,7 @@ mod tests {
             floating_panes: Vec::new(),
         });
 
-        let theme = GuiTheme::grid_tron();
+        let theme = GuiTheme::default();
         let emit_intent: super::ChromeIntentEmitter = Rc::new(|_| {});
         let chrome = SharedChromeState::new(280.0, true, 260.0, false);
         let mut drag = super::DragItemRegistry::default();
@@ -3388,7 +3341,7 @@ mod tests {
             &heca_config::programs::ProgramsConfig::default(),
             280.0,
             600.0,
-            theme.background,
+            theme.colors.background,
             &theme,
             &emit_intent,
             &chrome.workspaces,

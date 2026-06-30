@@ -317,8 +317,8 @@ impl Component for ScrollRegion {
         // Focus ring (keyboard focus only — focus-visible) so the user sees
         // which region receives scroll keys. Mirrors Button/Input's focus
         // affordance; drawn in viewport space (not clipped, not scrolled).
-        if self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
-            cx.corner_brackets(vp, cx.theme().accent);
+        if self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
+            cx.corner_brackets(vp, cx.theme().colors.accent);
         }
 
         // Scrollbar thumb on top, in viewport space (not scrolled with content).
@@ -333,8 +333,8 @@ impl Component for ScrollRegion {
                 THUMB_REST_ALPHA
             };
             let theme = cx.theme();
-            let color = theme.accent.with_alpha(alpha);
-            cx.rect(t, color, None, theme.control_radius(), None);
+            let color = theme.colors.accent.with_alpha(alpha);
+            cx.rect(t, color, None, theme.colors.control_radius(), None);
         }
     }
 
