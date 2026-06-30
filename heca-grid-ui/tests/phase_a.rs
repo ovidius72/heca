@@ -81,7 +81,7 @@ fn paint_emits_background_rect_and_label_text() {
         .background(Color::rgb(10, 10, 10))
         .child(Label::new("HI"));
 
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -104,11 +104,11 @@ fn paint_emits_background_rect_and_label_text() {
 
 #[test]
 fn surface_paints_styled_rect_with_border() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let surface = Surface::new()
         .background(Color::rgb(12, 18, 24))
-        .border(theme.accent, 1.5)
-        .glow(theme.glow);
+        .border(theme.colors.accent, 1.5)
+        .glow(theme.colors.glow);
 
     let mut scene = Scene::new();
     {
@@ -123,7 +123,7 @@ fn surface_paints_styled_rect_with_border() {
 
 #[test]
 fn card_carries_title_label() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let card = Card::new("UPLINK").child(Label::new("ONLINE"));
 
     let mut scene = Scene::new();
@@ -222,7 +222,7 @@ fn button_hover_tracks_pointer() {
 
 #[test]
 fn button_variants_paint_distinct_fills() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let fill_of = |button: Button| {
         let mut scene = Scene::new();
         {
@@ -240,7 +240,7 @@ fn button_variants_paint_distinct_fills() {
     let ghost = fill_of(Button::ghost("X"));
     assert_eq!(
         primary,
-        Some(theme.surface),
+        Some(theme.colors.surface),
         "primary rests on a dark surface"
     );
     assert_eq!(ghost.map(|c| c.a), Some(0), "ghost is invisible at rest");
@@ -387,8 +387,8 @@ fn glow_none_suppresses_glow() {
     use heca_grid_ui::GlowLevel;
     // Glow is owned solely by `glow_size` now (intensity controls only scanlines),
     // so `GlowLevel::None` — not `Intensity::Off` — is what suppresses the glow.
-    let mut theme = Theme::grid_tron();
-    theme.glow_size = GlowLevel::None;
+    let mut theme = Theme::default();
+    theme.colors.glow_size = GlowLevel::None;
 
     let root = Surface::new().glow(Color::rgb(64, 224, 255));
     let mut scene = Scene::new();
@@ -404,7 +404,7 @@ fn glow_none_suppresses_glow() {
     assert!(!glow_present, "glow must be suppressed when glow_size is None");
 
     // And with a glow size set, the glow survives.
-    theme.glow_size = GlowLevel::Medium;
+    theme.colors.glow_size = GlowLevel::Medium;
     let mut scene2 = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene2, &theme);
@@ -421,8 +421,8 @@ fn glow_strength_scales_with_glow_size() {
     // intensity scales by the level's `strength_scale` (thin 0.5×, medium 1.0×,
     // large 1.6×) through the single `scaled_glow` chokepoint, so config drives it.
     let intensity_at = |level: GlowLevel| -> f32 {
-        let mut theme = Theme::grid_tron();
-        theme.glow_size = level;
+        let mut theme = Theme::default();
+        theme.colors.glow_size = level;
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -510,7 +510,7 @@ fn toggle_knob_slides_toward_target_on_tick() {
     LayoutEngine::new().compute(&mut toggle, Size::new(200.0, 80.0));
 
     let knob_x = |t: &Toggle| {
-        let theme = Theme::grid_tron();
+        let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -621,7 +621,7 @@ fn checkbox_label_is_clickable_and_side_positions_the_box() {
     );
 
     // Left label: the label text command sits left of the box.
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut left = Checkbox::new().label("ENABLE").label_side(LabelSide::Left);
     LayoutEngine::new().compute(&mut left, Size::new(400.0, 40.0));
     let mut scene = Scene::new();
@@ -643,7 +643,7 @@ fn checkbox_label_is_clickable_and_side_positions_the_box() {
 
 #[test]
 fn checkbox_paints_indicator_only_when_checked() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let rect_count = |cb: &Checkbox| {
         let mut scene = Scene::new();
         {
@@ -770,7 +770,7 @@ fn input_backspace_and_midword_insert_respect_cursor() {
 
 #[test]
 fn input_placeholder_shows_only_when_empty_and_unfocused() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let texts = |input: &Input| -> Vec<String> {
         let mut scene = Scene::new();
         {
@@ -1144,7 +1144,7 @@ fn disabled_input_ignores_typing() {
 
 #[test]
 fn badge_colored_has_fill_outline_has_none() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let fill_of = |badge: Badge| {
         let mut badge = badge;
         LayoutEngine::new().compute(&mut badge, Size::new(200.0, 80.0));
@@ -1174,7 +1174,7 @@ fn badge_colored_has_fill_outline_has_none() {
 
 #[test]
 fn badge_renders_its_label() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut badge = Badge::new("LIVE");
     LayoutEngine::new().compute(&mut badge, Size::new(200.0, 80.0));
     let mut scene = Scene::new();
@@ -1192,7 +1192,7 @@ fn badge_renders_its_label() {
 
 #[test]
 fn status_dot_color_and_glow_track_status() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let probe = |dot: StatusDot| {
         let mut dot = dot;
         LayoutEngine::new().compute(&mut dot, Size::new(50.0, 50.0));
@@ -1211,15 +1211,15 @@ fn status_dot_color_and_glow_track_status() {
     };
     let (online, online_glow) = probe(StatusDot::online());
     let (offline, offline_glow) = probe(StatusDot::offline());
-    assert_eq!(online, theme.success);
+    assert_eq!(online, theme.colors.success);
     assert!(online_glow, "active dot glows");
-    assert_eq!(offline, theme.muted);
+    assert_eq!(offline, theme.colors.muted);
     assert!(!offline_glow, "offline dot does not glow");
 }
 
 #[test]
 fn select_opens_and_paints_options_in_overlay_layer() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut sel = Select::new(["LOW", "MEDIUM", "HIGH"]);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 200.0));
 
@@ -1292,7 +1292,7 @@ fn select_click_row_commits_and_closes() {
 
 #[test]
 fn select_long_list_caps_visible_rows_and_scrolls() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let opts: Vec<String> = (0..20).map(|n| format!("OPT{n}")).collect();
     let mut sel = Select::new(opts);
     LayoutEngine::new().compute(&mut sel, Size::new(300.0, 400.0));
@@ -1410,7 +1410,7 @@ fn tabs_arrow_keys_and_click_change_selection() {
 
 #[test]
 fn tabs_underline_slides_toward_selection() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let underline_x = |t: &Tabs| {
         let mut scene = Scene::new();
         {
@@ -1458,7 +1458,7 @@ fn horizontal_separator_spans_container_width() {
 
 #[test]
 fn spinner_animates_and_paints_its_ring() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut spinner = Spinner::new();
     LayoutEngine::new().compute(&mut spinner, Size::new(40.0, 40.0));
     assert!(spinner.tick(0.016), "spinner keeps requesting frames");
@@ -1477,7 +1477,7 @@ fn spinner_animates_and_paints_its_ring() {
 
 #[test]
 fn alert_renders_title_body_and_accent_bar() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut alert = Alert::success("DEPLOYED").body("grid online");
     LayoutEngine::new().compute(&mut alert, Size::new(400.0, 100.0));
 
@@ -1505,7 +1505,7 @@ fn alert_renders_title_body_and_accent_bar() {
 
 #[test]
 fn progress_bar_fill_eases_toward_value() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let fill_w = |bar: &ProgressBar| {
         let mut scene = Scene::new();
         {
@@ -1539,7 +1539,7 @@ fn progress_bar_fill_eases_toward_value() {
 
 #[test]
 fn gauge_lights_segments_by_value() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let lit = |g: &Gauge| {
         let mut scene = Scene::new();
         {
@@ -1609,7 +1609,7 @@ fn display_only_item_is_inert_and_unfocusable() {
 
 #[test]
 fn item_label_color_tracks_selected_state() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let label_color = |item: &Item| {
         let mut scene = Scene::new();
         {
@@ -1629,12 +1629,12 @@ fn item_label_color_tracks_selected_state() {
 
     assert_eq!(
         label_color(&plain),
-        Some(theme.foreground),
+        Some(theme.colors.foreground),
         "plain label uses foreground"
     );
     assert_eq!(
         label_color(&sel),
-        Some(theme.accent),
+        Some(theme.colors.accent),
         "active label uses accent"
     );
 }
@@ -1663,7 +1663,7 @@ fn item_slots_lay_out_left_and_right() {
 
 #[test]
 fn item_trailing_border_draws_a_flat_frame_no_glow() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let frames = |item: &Item| -> usize {
         let mut scene = Scene::new();
         {
@@ -1694,10 +1694,10 @@ fn item_trailing_border_draws_a_flat_frame_no_glow() {
 
 #[test]
 fn pane_draws_rounded_accent_border_no_brackets() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut pane = Pane::new()
-        .background(theme.surface)
-        .border(theme.accent, theme.border_width)
+        .background(theme.colors.surface)
+        .border(theme.colors.accent, theme.colors.border_width)
         .child(Label::new("X"));
     LayoutEngine::new().compute(&mut pane, Size::new(200.0, 300.0));
 
@@ -1719,7 +1719,7 @@ fn pane_draws_rounded_accent_border_no_brackets() {
         matches!(
             c,
             DrawCommand::Rect(r)
-                if r.border.is_some() && r.radius == theme.radius && r.glow.is_none()
+                if r.border.is_some() && r.radius == theme.colors.border_radius && r.glow.is_none()
         )
     });
     assert!(rounded_border, "pane draws a rounded accent border at the theme radius");
@@ -1953,7 +1953,7 @@ fn collapsed_dock_body_is_not_painted() {
     // would stamp overlapping text there (the showcase artifact this guards).
     let collect_labels = |dock: &mut DockFrame| -> Vec<String> {
         LayoutEngine::new().compute(dock, Size::new(220.0, 400.0));
-        let theme = Theme::grid_tron();
+        let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2006,7 +2006,7 @@ fn icon_paints_duotone_layers_in_the_icon_font() {
     let mut icon = Icon::new(Glyph::Folder).size(24.0);
     LayoutEngine::new().compute(&mut icon, Size::new(100.0, 100.0));
 
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2136,7 +2136,7 @@ fn dock_frame_rail_paints_icon_not_title() {
 
     let paint = |sidebar: &mut ChromeRegion| -> (Vec<String>, usize) {
         LayoutEngine::new().compute(sidebar, Size::new(400.0, 600.0));
-        let theme = Theme::grid_tron();
+        let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2216,7 +2216,7 @@ fn key_hint_overlays_letter_only_when_set() {
 
     let paint = |w: &mut KeyHint| -> (Vec<String>, usize) {
         LayoutEngine::new().compute(w, Size::new(80.0, 80.0));
-        let theme = Theme::grid_tron();
+        let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2366,7 +2366,7 @@ fn tooltip_reveals_after_a_hover_delay_and_hides_on_leave() {
     // Render + report whether the bubble text was painted.
     let shows_help = |tip: &mut Tooltip| -> bool {
         LayoutEngine::new().compute(tip, Size::new(300.0, 200.0));
-        let theme = Theme::grid_tron();
+        let theme = Theme::default();
         let mut scene = Scene::new();
         {
             let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2435,7 +2435,7 @@ fn tooltip_flips_to_fit_the_viewport() {
     let center = Point::new(b.loc.x + b.size.w / 2.0, b.loc.y + b.size.h / 2.0);
     tip.event(&Event::PointerMoved { pos: center });
 
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
@@ -2507,7 +2507,7 @@ fn modal_scrim_click_dismisses_but_panel_body_does_not() {
     // Paint once so the modal caches the viewport for hit-testing.
     let vp = Size::new(400.0, 300.0);
     LayoutEngine::new().compute(&mut m, vp);
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
@@ -2542,7 +2542,7 @@ fn modal_non_dismissible_forces_a_button_choice() {
 
     let vp = Size::new(400.0, 300.0);
     LayoutEngine::new().compute(&mut m, vp);
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
@@ -2749,10 +2749,10 @@ fn button_derives_border_width_and_radius_from_theme() {
     use heca_grid_ui::{Button, Component};
 
     // A theme with a distinctive radius + border width.
-    let mut theme = Theme::grid_tron();
-    theme.radius = 10.0;
-    theme.border_width = 2.0;
-    let expected_radius = theme.control_radius();
+    let mut theme = Theme::default();
+    theme.colors.border_radius = 10.0;
+    theme.colors.border_width = 2.0;
+    let expected_radius = theme.colors.control_radius();
 
     let mut btn = Button::primary("OK");
     LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
@@ -2766,18 +2766,18 @@ fn button_derives_border_width_and_radius_from_theme() {
     // theme's control radius and stroke at the theme's border width — not the
     // old hardcoded 0.0 / 1.5.
     let bg = scene.iter().find_map(|cmd| match cmd {
-        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
         _ => None,
     }).expect("button paints a surface-filled background box");
-    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.control_radius()");
+    assert_eq!(bg.radius, expected_radius, "button corner radius follows theme.colors.control_radius()");
     assert_eq!(
         bg.border.expect("primary button has a border").width,
-        theme.border_width,
-        "button border width follows theme.border_width",
+        theme.colors.border_width,
+        "button border width follows theme.colors.border_width",
     );
 
     // border_width == 0 → no border drawn (borders off, like every surface).
-    theme.border_width = 0.0;
+    theme.colors.border_width = 0.0;
     let mut btn = Button::primary("OK");
     LayoutEngine::new().base_font(theme.font_size).compute(&mut btn, Size::new(300.0, 80.0));
     let mut scene = Scene::new();
@@ -2786,7 +2786,7 @@ fn button_derives_border_width_and_radius_from_theme() {
         btn.paint(&mut cx);
     }
     let bg = scene.iter().find_map(|cmd| match cmd {
-        DrawCommand::Rect(r) if r.fill == theme.surface => Some(*r),
+        DrawCommand::Rect(r) if r.fill == theme.colors.surface => Some(*r),
         _ => None,
     }).expect("button still paints its background box");
     assert!(bg.border.is_none(), "border_width == 0 means no button border");
@@ -2800,8 +2800,8 @@ fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
     // NOTHING (no hairline). A container that needs definition at 0 carries a fill,
     // not a forced border. This keeps the bracket frame consistent with every other
     // widget's border gate.
-    let mut theme = Theme::grid_tron();
-    theme.border_width = 0.0;
+    let mut theme = Theme::default();
+    theme.colors.border_width = 0.0;
     let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
 
     let mut scene = Scene::new();
@@ -2813,17 +2813,17 @@ fn bracket_frame_zero_border_draws_nothing_nonzero_draws_reticle() {
 
     // With a real border: one dimmed continuous accent line tracing the perimeter,
     // plus four bright accent corners — each redrawn clipped to its corner box.
-    theme.border_width = 2.0;
+    theme.colors.border_width = 2.0;
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
         cx.bracket_frame(rect);
     }
     let bright_corners = scene.iter().filter(|c| matches!(
-        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.colors.accent && b.width > 0.0)
     )).count();
     let dim_line = scene.iter().any(|c| matches!(
-        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.accent.a && b.width > 0.0)
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color.a < theme.colors.accent.a && b.width > 0.0)
     ));
     let clips = scene.iter().filter(|c| matches!(c, DrawCommand::PushClip(_))).count();
     assert_eq!(bright_corners, 4, "border>0 draws four bright accent corner brackets");
@@ -2836,8 +2836,8 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
     // `bracket_frame_with` sizes the reticle from the passed width/radius, not the
     // theme — the seam that lets a bracketed sidebar honor `sidebar_border_width`
     // even when the global/theme border is 0. (Issue 1.)
-    let mut theme = Theme::grid_tron();
-    theme.border_width = 0.0; // global borders OFF
+    let mut theme = Theme::default();
+    theme.colors.border_width = 0.0; // global borders OFF
     let rect = Rectangle::new(Point::new(10.0, 10.0), Size::new(200.0, 120.0));
 
     // Theme says 0, but an explicit width of 3 still draws the reticle.
@@ -2847,12 +2847,12 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
         cx.bracket_frame_with(rect, 3.0, 8.0);
     }
     let bright_corners = scene.iter().filter(|c| matches!(
-        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.accent && b.width > 0.0)
+        c, DrawCommand::Rect(r) if r.border.is_some_and(|b| b.color == theme.colors.accent && b.width > 0.0)
     )).count();
-    assert_eq!(bright_corners, 4, "explicit width draws the reticle even when theme.border_width == 0");
+    assert_eq!(bright_corners, 4, "explicit width draws the reticle even when theme.colors.border_width == 0");
 
     // An explicit width of 0 draws nothing, regardless of the theme.
-    theme.border_width = 5.0;
+    theme.colors.border_width = 5.0;
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
@@ -2864,7 +2864,7 @@ fn bracket_frame_with_honors_explicit_width_independent_of_theme() {
 #[test]
 fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // A default `Bordered` Pane with NO explicit `.border()` derives its border
-    // from `theme.border_width` (the global border control): a theme-colored
+    // from `theme.colors.border_width` (the global border control): a theme-colored
     // border when borders are on, and nothing at `border_width == 0`. This is the
     // consistency contract — the global control governs every container.
     use heca_grid_ui::{Component, Pane};
@@ -2873,7 +2873,7 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
     // survive a global border change (the showcase bug). `None` ⇒ no `.border()`.
     let border_rects = |theme: &Theme, explicit: Option<(heca_grid_ui::Color, f32)>| -> Vec<heca_grid_ui::scene::RectCmd> {
         let mut p = Pane::new()
-            .background(theme.surface)
+            .background(theme.colors.surface)
             .width(Length::Px(120.0))
             .height(Length::Px(80.0));
         if let Some((c, w)) = explicit {
@@ -2891,25 +2891,25 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
         }).collect()
     };
 
-    let mut theme = Theme::grid_tron();
-    theme.border_width = 2.0;
+    let mut theme = Theme::default();
+    theme.colors.border_width = 2.0;
     let on = border_rects(&theme, None);
     assert!(
-        on.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 2.0)),
-        "Bordered pane draws theme.border at theme.border_width without an explicit .border()",
+        on.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.border && b.width == 2.0)),
+        "Bordered pane draws theme.colors.border at theme.colors.border_width without an explicit .border()",
     );
 
     // An explicit `.border(accent, 9.0)` keeps the COLOR but the width follows the
     // theme (2.0), never the 9.0 literal.
-    let explicit = border_rects(&theme, Some((theme.accent, 9.0)));
+    let explicit = border_rects(&theme, Some((theme.colors.accent, 9.0)));
     assert!(
-        explicit.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 2.0)),
-        "explicit .border() supplies color only; width tracks theme.border_width",
+        explicit.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.accent && b.width == 2.0)),
+        "explicit .border() supplies color only; width tracks theme.colors.border_width",
     );
 
-    theme.border_width = 0.0;
+    theme.colors.border_width = 0.0;
     assert!(
-        border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.accent, 9.0))).is_empty(),
+        border_rects(&theme, None).is_empty() && border_rects(&theme, Some((theme.colors.accent, 9.0))).is_empty(),
         "border_width == 0 leaves the Bordered pane with no visible border, even with an explicit .border()",
     );
 }
@@ -2917,13 +2917,13 @@ fn bordered_pane_border_width_follows_theme_and_vanishes_at_zero() {
 #[test]
 fn bordered_pane_border_width_override_is_independent_of_theme() {
     // `.border_width(w)` pins a Bordered pane's frame width regardless of the
-    // global `theme.border_width` — the seam that lets the sidebar shell carry its
+    // global `theme.colors.border_width` — the seam that lets the sidebar shell carry its
     // own thickness (`[appearance] sidebar_border_width`). Color still resolves
-    // from `.border(color, _)` when set, else `theme.border`.
+    // from `.border(color, _)` when set, else `theme.colors.border`.
     use heca_grid_ui::{Color, Component, Pane};
     let border_rects = |theme: &Theme, override_w: Option<f32>, explicit: Option<Color>| -> Vec<heca_grid_ui::scene::RectCmd> {
         let mut p = Pane::new()
-            .background(theme.surface)
+            .background(theme.colors.surface)
             .border_width(override_w)
             .width(Length::Px(120.0))
             .height(Length::Px(80.0));
@@ -2942,25 +2942,25 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
         }).collect()
     };
 
-    let mut theme = Theme::grid_tron();
+    let mut theme = Theme::default();
 
-    // Theme borders OFF, but the override forces a 3px frame in theme.border.
-    theme.border_width = 0.0;
+    // Theme borders OFF, but the override forces a 3px frame in theme.colors.border.
+    theme.colors.border_width = 0.0;
     let forced = border_rects(&theme, Some(3.0), None);
     assert!(
-        forced.iter().any(|r| r.border.is_some_and(|b| b.color == theme.border && b.width == 3.0)),
+        forced.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.border && b.width == 3.0)),
         "override draws its own width even when the global border is off",
     );
 
     // Override width + explicit color: width = override, color = explicit.
-    let colored = border_rects(&theme, Some(3.0), Some(theme.accent));
+    let colored = border_rects(&theme, Some(3.0), Some(theme.colors.accent));
     assert!(
-        colored.iter().any(|r| r.border.is_some_and(|b| b.color == theme.accent && b.width == 3.0)),
+        colored.iter().any(|r| r.border.is_some_and(|b| b.color == theme.colors.accent && b.width == 3.0)),
         "override sets width; explicit .border() sets color",
     );
 
     // override = 0 ⇒ no border, even with the global border ON.
-    theme.border_width = 5.0;
+    theme.colors.border_width = 5.0;
     assert!(
         border_rects(&theme, Some(0.0), None).is_empty(),
         "override of 0 removes the border regardless of the global width",
@@ -2970,8 +2970,8 @@ fn bordered_pane_border_width_override_is_independent_of_theme() {
 /// Paint `w` under `border_width == 0` and return every visible (width>0) Rect
 /// border stroke it emitted.
 fn visible_border_widths_at_zero<C: heca_grid_ui::Component>(mut w: C) -> Vec<f32> {
-    let mut theme = Theme::grid_tron();
-    theme.border_width = 0.0;
+    let mut theme = Theme::default();
+    theme.colors.border_width = 0.0;
     let vp = Size::new(400.0, 200.0);
     LayoutEngine::new().base_font(theme.font_size).compute(&mut w, vp);
     let mut scene = Scene::new();
@@ -3006,13 +3006,13 @@ fn non_container_widgets_drop_their_border_at_zero_border_width() {
 #[test]
 fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
     use heca_grid_ui::scene::Shadow;
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let rect = Rectangle::new(Point::new(50.0, 50.0), Size::new(120.0, 80.0));
 
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow, radius: 24.0, dx: 0.0, dy: 10.0 });
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow_color(), radius: 24.0, dx: 0.0, dy: 10.0 });
     }
     let sh = scene.iter().find_map(|c| match c {
         DrawCommand::Rect(r) => r.shadow,
@@ -3024,7 +3024,7 @@ fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow.with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
+        cx.drop_shadow(rect, 8.0, Shadow { color: theme.shadow_color().with_alpha(0), radius: 24.0, dx: 0.0, dy: 10.0 });
     }
     assert!(scene.is_empty(), "a zero-alpha shadow draws nothing (shadows-off)");
 }
@@ -3032,7 +3032,7 @@ fn drop_shadow_emits_a_shadow_rect_and_respects_zero_alpha() {
 #[test]
 fn open_modal_casts_a_drop_shadow() {
     use heca_grid_ui::{Component, Modal};
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut m = Modal::new("Delete?", "Cannot undo").confirm("OK", || {}).open(true);
     let vp = Size::new(400.0, 300.0);
     LayoutEngine::new().compute(&mut m, vp);
@@ -3048,7 +3048,7 @@ fn open_modal_casts_a_drop_shadow() {
 #[test]
 fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
     use heca_grid_ui::{Component, Toast};
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
 
     // Press the Retry action, then paint: the press flash must cover only the
     // action button, not the whole card (no "whole widget clicked" feedback).
@@ -3063,7 +3063,7 @@ fn toast_action_press_flashes_only_the_action_not_the_whole_card() {
         t.paint(&mut cx);
     }
     // The flash is drawn in the theme's foreground color (see PaintCx::flash).
-    let fg = theme.foreground;
+    let fg = theme.colors.foreground;
     let flash = scene.iter().find_map(|c| match c {
         DrawCommand::Rect(r) if r.fill.r == fg.r && r.fill.g == fg.g && r.fill.b == fg.b && r.fill.a > 0 => Some(*r),
         _ => None,
@@ -3106,7 +3106,7 @@ fn toast_stack_dismiss_reports_the_clicked_id() {
 
     // Settle the slide-in, then paint to cache the viewport + lay the toast out.
     stack.tick(1.0);
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let vp = Size::new(800.0, 600.0);
     let mut scene = Scene::new();
     {
@@ -3127,7 +3127,7 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
     let items = signal(vec![ToastSpec::new(1, "Hi")]);
     let mut stack = ToastStack::new(items).corner(ToastCorner::TopLeft);
     stack.tick(1.0);
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(Size::new(800.0, 600.0));
@@ -3142,7 +3142,7 @@ fn toast_stack_passes_through_clicks_that_miss_every_toast() {
 
 #[test]
 fn paint_cx_culls_offscreen_content_but_not_headless() {
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let vp = Size::new(800.0, 600.0);
     let off = Rectangle::new(Point::new(10.0, 5000.0), Size::new(100.0, 40.0)); // far below
     let on = Rectangle::new(Point::new(10.0, 10.0), Size::new(100.0, 40.0));
@@ -3151,7 +3151,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        cx.rect(on, theme.surface, None, 0.0, None);
+        cx.rect(on, theme.colors.surface, None, 0.0, None);
     }
     assert_eq!(scene.len(), 1, "on-screen rect is painted");
 
@@ -3159,8 +3159,8 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme).with_viewport(vp);
-        cx.rect(off, theme.surface, None, 0.0, None);
-        cx.text(off, "hidden", theme.foreground, 15.0, TextAlign::Start, false);
+        cx.rect(off, theme.colors.surface, None, 0.0, None);
+        cx.text(off, "hidden", theme.colors.foreground, 15.0, TextAlign::Start, false);
     }
     assert!(scene.is_empty(), "content far below the viewport is culled");
 
@@ -3168,7 +3168,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
     let mut scene = Scene::new();
     {
         let mut cx = PaintCx::new(&mut scene, &theme);
-        cx.rect(off, theme.surface, None, 0.0, None);
+        cx.rect(off, theme.colors.surface, None, 0.0, None);
     }
     assert_eq!(scene.len(), 1, "no viewport ⇒ no culling (headless default)");
 }
@@ -3177,7 +3177,7 @@ fn paint_cx_culls_offscreen_content_but_not_headless() {
 fn with_clip_wraps_body_draws_in_push_and_pop_clip() {
     use heca_grid_ui::PaintCx;
 
-    let theme = Theme::grid_tron();
+    let theme = Theme::default();
     let mut scene = Scene::new();
     let clip = Rectangle::new(Point::new(0.0, 0.0), Size::new(50.0, 50.0));
     {
@@ -3185,7 +3185,7 @@ fn with_clip_wraps_body_draws_in_push_and_pop_clip() {
         cx.with_clip(clip, |cx| {
             cx.rect(
                 Rectangle::new(Point::new(5.0, 5.0), Size::new(10.0, 10.0)),
-                theme.surface,
+                theme.colors.surface,
                 None,
                 0.0,
                 None,

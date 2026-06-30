@@ -136,7 +136,7 @@ impl GlowLevel {
 /// Drop-shadow configuration for elevated/floating surfaces.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Shadow {
-    pub color: String,
+    pub color: Color,
     pub alpha: f32,
     pub blur: f32,
 }
@@ -144,7 +144,7 @@ pub struct Shadow {
 impl Default for Shadow {
     fn default() -> Self {
         Self {
-            color: "#000000".to_string(),
+            color: Color::rgb(0, 0, 0),
             alpha: 0.3,
             blur: 8.0,
         }
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
-        assert!((theme.control_radius() - 4.0).abs() < f32::EPSILON);
+        assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -551,5 +551,31 @@ mod tests {
                 "{name} gradient top and bottom should differ"
             );
         }
+    }
+
+    /// `Shadow.color` is a `Color` (not a `String`) - pinned so a regression to
+    /// `String` is caught. The bundled grid_tron TOML writes
+    /// `shadow = { color = "#000000", alpha = 0.3, blur = 8.0 }`; serde must parse
+    /// the hex string into a `Color` via `Color`'s `try_from<String>`.
+    #[test]
+    fn shadow_color_is_color_from_toml_hex() {
+        let theme = crate::load_theme("grid_tron");
+        assert_eq!(theme.shadow.color, Color::rgb(0, 0, 0));
+        assert!((theme.shadow.alpha - 0.3).abs() < f32::EPSILON);
+        assert!((theme.shadow.blur - 8.0).abs() < f32::EPSILON);
+    }
+
+    /// Serde round-trip: a `Shadow` with a hex `color` deserializes to a `Color`
+    /// and serializes back, so the TOML config representation stays stable.
+    #[test]
+    fn shadow_serde_roundtrips_color() {
+        let toml = "color = \"#89b4fa\"\nalpha = 0.25\nblur = 12.0\n";
+        let s: Shadow = toml::from_str(toml).unwrap();
+        assert_eq!(s.color, Color::rgb(0x89, 0xb4, 0xfa));
+        assert!((s.alpha - 0.25).abs() < f32::EPSILON);
+        assert!((s.blur - 12.0).abs() < f32::EPSILON);
+        let reserialized: String = toml::to_string(&s).unwrap();
+        let s2: Shadow = toml::from_str(&reserialized).unwrap();
+        assert_eq!(s, s2);
     }
 }

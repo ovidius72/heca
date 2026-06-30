@@ -361,6 +361,17 @@ pub trait PaneBackend: Send {
     /// Enable or disable plain-text URL auto-detection (linkify) in snapshots.
     fn set_link_detection(&mut self, _enabled: bool) {}
 
+    /// Reload live terminal emulation defaults derived from the theme/config.
+    ///
+    /// Terminal backends use this to apply a new palette (fg/bg/cursor/ANSI) and
+    /// scrollback-size policy on config reload without recreating the PTY.
+    /// Non-terminal/fake backends ignore it.
+    fn reload_terminal_config(
+        &mut self,
+        _palette_defaults: Option<TerminalPaletteDefaults>,
+        _scrollback_size: usize,
+    ) {
+    }
     /// Fetch the inclusive stable-row range `[start, end]` as renderer-ready
     /// terminal lines, each capped to `cols` cells.
     ///

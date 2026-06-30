@@ -1240,6 +1240,7 @@ version = "0.1.0"
 dependencies = [
  "floem_reactive",
  "heca-core",
+ "heca-theme",
  "taffy",
 ]
 

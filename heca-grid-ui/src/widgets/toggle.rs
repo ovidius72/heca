@@ -134,7 +134,7 @@ impl Component for Toggle {
         let disabled = self.base.disabled.get_untracked();
         let (surface, accent, glow_c, muted, foreground, theme_radius) = {
             let t = cx.theme();
-            (t.surface, t.accent, t.glow, t.muted, t.foreground, t.radius)
+            (t.colors.surface, t.colors.accent, t.colors.glow, t.colors.muted, t.colors.foreground, t.colors.border_radius)
         };
         let p = self.progress.clamp(0.0, 1.0);
         let track = self.base.bounds;
@@ -192,7 +192,7 @@ impl Component for Toggle {
         }
 
         // Focus-visible ring (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(track, accent);
         }
     }

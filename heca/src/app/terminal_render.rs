@@ -838,14 +838,14 @@ fn terminal_pane_gui_theme(
     border_radius: f32,
 ) -> GuiTheme {
     let mut theme = crate::chrome::chrome_gui_theme(state);
-    theme.accent = to_gui_color(border_color);
-    theme.border = to_gui_color(border_color);
-    theme.radius = border_radius;
-    theme.border_width = border_width;
+    theme.colors.accent = to_gui_color(border_color);
+    theme.colors.border = to_gui_color(border_color);
+    theme.colors.border_radius = border_radius;
+    theme.colors.border_width = border_width;
     // The title's `Cut` style matches its surroundings against `theme.background`;
     // for a pane that means the real app/window background sitting behind it (the
     // reserved title strip shows the window backdrop, not the chrome grey).
-    theme.background = to_gui_color(state.theme.background.to_f32x4());
+    theme.colors.background = to_gui_color(state.theme.background.to_f32x4());
     theme
 }
 

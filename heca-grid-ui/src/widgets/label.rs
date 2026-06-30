@@ -99,7 +99,7 @@ impl Component for Label {
             return;
         }
         cx.paint_base(&self.base);
-        let color = self.color.unwrap_or_else(|| cx.theme().foreground);
+        let color = self.color.unwrap_or_else(|| cx.theme().colors.foreground);
         cx.text(
             self.base.bounds,
             &self.text.get_untracked(),

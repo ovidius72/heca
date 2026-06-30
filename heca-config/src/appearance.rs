@@ -918,7 +918,7 @@ mod tests {
 
     #[test]
     fn z0_gradient_default_resolves_to_theme_colors() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         let cfg = AppearanceConfig::default();
         // No config override → inherits the theme's explicit TOML gradient
         // colors (mocha ships them).
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn z0_gradient_config_override_wins_over_theme() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         let cfg = AppearanceConfig {
             background_gradient_top: Some(Color::new(1, 2, 3, 255)),
             background_gradient_bottom: Some(Color::new(4, 5, 6, 255)),
@@ -949,7 +949,7 @@ mod tests {
 
     #[test]
     fn z0_gradient_unset_theme_fields_fall_back_to_derived() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         let mut bare = mocha.clone();
         bare.background_gradient_top = None;
         bare.background_gradient_bottom = None;
@@ -974,7 +974,7 @@ mod tests {
 
     #[test]
     fn effect_token_resolvers_inherit_theme_when_unset() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         let cfg = AppearanceConfig::default();
         // mocha ships glow_size = GlowLevel::None (the "no glow" variant),
         // intensity = Intensity::Off. (Not to be confused with cfg.glow_size,
@@ -990,7 +990,7 @@ mod tests {
 
     #[test]
     fn effect_token_config_override_wins_over_theme() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         // mocha defaults: glow_size = None, intensity = Off.
         let cfg = AppearanceConfig {
             glow_size: Some(GlowLevel::Large),
@@ -1135,7 +1135,7 @@ theme = "mocha"
 
     #[test]
     fn floating_border_color_resolves_config_then_float_accent() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
 
         // Default: no config override -> theme.float_accent.
         let cfg = AppearanceConfig::default();
@@ -1177,7 +1177,7 @@ theme = "mocha"
 
     #[test]
     fn sidebar_border_width_resolves_config_then_global_then_theme() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
 
         // Unset → falls back to the global border_width (here the theme value).
         let dflt = AppearanceConfig::default();
@@ -1207,7 +1207,7 @@ theme = "mocha"
 
     #[test]
     fn sidebar_background_and_radius_resolve_config_then_fallback() {
-        let mocha = crate::theme::catppuccin_mocha();
+        let mocha = crate::theme::load("mocha");
         let theme_surface = Color::new(9, 9, 9, 255);
 
         // Unset → the theme-derived surface passed in / the theme radius.

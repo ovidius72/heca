@@ -71,7 +71,7 @@ impl Component for Separator {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let color = cx.theme().border;
+        let color = cx.theme().colors.border;
         cx.rect(self.base.bounds, color, None, 0.0, None);
     }
 }

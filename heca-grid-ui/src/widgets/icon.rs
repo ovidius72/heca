@@ -207,9 +207,9 @@ impl Component for Icon {
             return;
         }
         let size = self.glyph_size();
-        let primary = self.color.unwrap_or_else(|| cx.theme().foreground);
+        let primary = self.color.unwrap_or_else(|| cx.theme().colors.foreground);
         let secondary = self.secondary.unwrap_or_else(|| {
-            let a = (cx.theme().icon_secondary_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let a = (cx.theme().colors.icon_secondary_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
             primary.with_alpha(a)
         });
         let rect = self.base.bounds;

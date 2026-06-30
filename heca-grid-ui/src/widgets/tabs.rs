@@ -191,7 +191,7 @@ impl Component for Tabs {
         let disabled = self.base.disabled.get_untracked();
         let (accent, glow_c, muted, foreground) = {
             let t = cx.theme();
-            (t.accent, t.glow, t.muted, t.foreground)
+            (t.colors.accent, t.colors.glow, t.colors.muted, t.colors.foreground)
         };
         let b = self.base.bounds;
         let fs = self.base.font;
@@ -231,7 +231,7 @@ impl Component for Tabs {
         if disabled {
             cx.dim(b, 0.0);
         }
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(b, accent);
         }
     }

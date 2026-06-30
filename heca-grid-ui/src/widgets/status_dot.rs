@@ -73,10 +73,10 @@ impl Component for StatusDot {
         }
         let t = cx.theme();
         let color = match self.status {
-            DotStatus::Online => t.success,
-            DotStatus::Warning => t.warning,
-            DotStatus::Error => t.danger,
-            DotStatus::Offline => t.muted,
+            DotStatus::Online => t.colors.success,
+            DotStatus::Warning => t.colors.warning,
+            DotStatus::Error => t.colors.danger,
+            DotStatus::Offline => t.colors.muted,
         };
         let glow = (self.status != DotStatus::Offline).then_some(Glow {
             color,

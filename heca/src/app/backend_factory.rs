@@ -119,24 +119,7 @@ pub(crate) fn create_terminal_backend(
     create_terminal_backend_with_options(cols, rows, cell_size, options)
 }
 
-fn terminal_backend_options(
-    theme: &Theme,
-    event_proxy: Option<&EventLoopProxy<AppEvent>>,
-    shell_integration_enabled: bool,
-    scrollback_size: usize,
-    scroll_animations: bool,
-) -> TerminalBackendOptions {
-    let wake_on_output = event_proxy.map(|proxy| {
-        let proxy = proxy.clone();
-        Arc::new(move || {
-            let _ = proxy.send_event(AppEvent::BackendWake);
-        }) as Arc<dyn Fn() + Send + Sync>
-    });
-    let shell_integration = if shell_integration_enabled {
-        shell_integration_assets()
-    } else {
-        None
-    };
+pub(crate) fn terminal_palette_defaults(theme: &Theme) -> Option<TerminalPaletteDefaults> {
     let palette_defaults = TerminalPaletteDefaults {
         foreground: theme
             .terminal_foreground
@@ -166,21 +149,42 @@ fn terminal_backend_options(
             .terminal_brights
             .map(|colors| colors.map(|color| [color.r, color.g, color.b, color.a])),
     };
+    if palette_defaults.foreground.is_some()
+        || palette_defaults.background.is_some()
+        || palette_defaults.cursor_fg.is_some()
+        || palette_defaults.cursor_bg.is_some()
+        || palette_defaults.cursor_border.is_some()
+        || palette_defaults.selection_fg.is_some()
+        || palette_defaults.selection_bg.is_some()
+        || palette_defaults.ansi.is_some()
+        || palette_defaults.brights.is_some()
+    {
+        Some(palette_defaults)
+    } else {
+        None
+    }
+}
+
+fn terminal_backend_options(
+    theme: &Theme,
+    event_proxy: Option<&EventLoopProxy<AppEvent>>,
+    shell_integration_enabled: bool,
+    scrollback_size: usize,
+    scroll_animations: bool,
+) -> TerminalBackendOptions {
+    let wake_on_output = event_proxy.map(|proxy| {
+        let proxy = proxy.clone();
+        Arc::new(move || {
+            let _ = proxy.send_event(AppEvent::BackendWake);
+        }) as Arc<dyn Fn() + Send + Sync>
+    });
+    let shell_integration = if shell_integration_enabled {
+        shell_integration_assets()
+    } else {
+        None
+    };
     TerminalBackendOptions {
-        palette_defaults: if palette_defaults.foreground.is_some()
-            || palette_defaults.background.is_some()
-            || palette_defaults.cursor_fg.is_some()
-            || palette_defaults.cursor_bg.is_some()
-            || palette_defaults.cursor_border.is_some()
-            || palette_defaults.selection_fg.is_some()
-            || palette_defaults.selection_bg.is_some()
-            || palette_defaults.ansi.is_some()
-            || palette_defaults.brights.is_some()
-        {
-            Some(palette_defaults)
-        } else {
-            None
-        },
+        palette_defaults: terminal_palette_defaults(theme),
         wake_on_output,
         shell_integration,
         scrollback_size,

@@ -12,20 +12,6 @@ pub fn load(name: &str) -> Theme {
     heca_theme::load_theme(name)
 }
 
-/// Convenience loader for the bundled Catppuccin Mocha theme.
-///
-/// Equivalent to `load("mocha")`.
-pub fn catppuccin_mocha() -> Theme {
-    load("mocha")
-}
-
-/// Convenience loader for the bundled Catppuccin Latte theme.
-///
-/// Equivalent to `load("latte")`.
-pub fn catppuccin_latte() -> Theme {
-    load("latte")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

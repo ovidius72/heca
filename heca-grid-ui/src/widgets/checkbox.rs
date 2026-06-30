@@ -210,13 +210,13 @@ impl Component for Checkbox {
         let (surface, accent, glow_c, muted, foreground, radius, bw) = {
             let t = cx.theme();
             (
-                t.surface,
-                t.accent,
-                t.glow,
-                t.muted,
-                t.foreground,
-                t.control_radius(),
-                t.border_width,
+                t.colors.surface,
+                t.colors.accent,
+                t.colors.glow,
+                t.colors.muted,
+                t.colors.foreground,
+                t.colors.control_radius(),
+                t.colors.border_width,
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -272,7 +272,7 @@ impl Component for Checkbox {
         }
 
         // Focus-visible ring around the whole control (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().show_focus_border {
+        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
             cx.corner_brackets(self.base.bounds, accent);
         }
     }
