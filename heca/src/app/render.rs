@@ -355,6 +355,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     viewport_widget_panes.extend(floating_panes.iter());
     crate::chrome::sync_pane_viewport_widgets(state, &viewport_widget_panes);
 
+    // Recomputed each frame by the two `sync_retained_terminal_layers` calls
+    // below (tiled + floating), which OR into it. Reset once here first.
+    state.has_animated_images = false;
     sync_retained_terminal_layers(
         state,
         &tiled_panes,

@@ -1,7 +1,8 @@
 use super::super::{
     BackendAlert, BackendKeyCode, BackendKeyEvent, BackendModifiers, BackendMouseButton,
     BackendMouseEvent, BackendMouseEventKind, GraphicsPlacement, HyperlinkSpan, SearchMatch,
-    TerminalCell, TerminalImage, TerminalLine, TerminalPaletteDefaults, TerminalSnapshot,
+    TerminalCell, TerminalImage, TerminalImageFrame, TerminalLine, TerminalPaletteDefaults,
+    TerminalSnapshot,
     TerminalUnderlineStyle,
 };
 use crate::backend::{TerminalCursor, TerminalCursorShape};
@@ -11,6 +12,7 @@ use std::collections::HashMap;
 use std::io::{Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use wezterm_surface::CursorVisibility;
 use wezterm_term::color::{ColorAttribute, ColorPalette};
 use wezterm_term::input::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -955,54 +957,159 @@ fn image_id_from_hash(hash: [u8; 32]) -> u64 {
     u64::from_le_bytes(hash[..8].try_into().expect("hash is 32 bytes"))
 }
 
-/// Decode one source image to tightly packed RGBA8. `Rgba8` is used as-is;
-/// encoded payloads (iTerm2 `OSC 1337` files, Kitty PNG, …) go through the
-/// `image` crate; animations contribute their first frame (full animation is a
-/// `terminal-09` Stage 4 follow-up). Returns `None` when the payload cannot be
-/// decoded.
+/// GIF/APNG frame delays at or below this are treated as "as fast as possible"
+/// and clamped to [`DEFAULT_FRAME_DELAY`], matching how browsers render such GIFs
+/// (a 0ms delay would otherwise spin the animation at the frame rate).
+const MIN_HONORED_FRAME_DELAY: Duration = Duration::from_millis(10);
+const DEFAULT_FRAME_DELAY: Duration = Duration::from_millis(100);
+
+/// Decode one source image to one or more tightly packed RGBA8 frames. `Rgba8`
+/// is a single static frame; `AnimRgba8` and encoded GIF/APNG payloads decode
+/// every frame with its delay (`terminal-task-24`). Returns `None` when the
+/// payload cannot be decoded.
 fn decode_terminal_image(
     hash: [u8; 32],
     data: &wezterm_term::image::ImageDataType,
 ) -> Option<TerminalImage> {
     use wezterm_term::image::ImageDataType;
-    let (width, height, rgba) = match data {
+    let (width, height, frames) = match data {
         ImageDataType::Rgba8 {
             data,
             width,
             height,
             ..
-        } => (*width, *height, data.clone()),
+        } => (*width, *height, vec![(data.clone(), Duration::ZERO)]),
         ImageDataType::AnimRgba8 {
             width,
             height,
             frames,
+            durations,
             ..
-        } => (*width, *height, frames.first()?.clone()),
-        ImageDataType::EncodedFile(bytes) => decode_encoded_image(bytes)?,
+        } => {
+            let collected: Vec<(Vec<u8>, Duration)> = frames
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let delay = durations.get(i).copied().unwrap_or(DEFAULT_FRAME_DELAY);
+                    (f.clone(), clamp_frame_delay(delay))
+                })
+                .collect();
+            (*width, *height, collected)
+        }
+        ImageDataType::EncodedFile(bytes) => decode_encoded_frames(bytes)?,
         ImageDataType::EncodedLease(lease) => {
             let bytes = lease.get_data().ok()?;
-            decode_encoded_image(&bytes)?
+            decode_encoded_frames(&bytes)?
         }
     };
-    if width == 0 || height == 0 || rgba.len() != (width as usize) * (height as usize) * 4 {
+
+    if width == 0 || height == 0 || frames.is_empty() {
         return None;
+    }
+    let stride = (width as usize) * (height as usize) * 4;
+    let frames: Vec<TerminalImageFrame> = frames
+        .into_iter()
+        .filter(|(rgba, _)| rgba.len() == stride)
+        .map(|(rgba, delay)| TerminalImageFrame {
+            rgba: Arc::from(rgba.into_boxed_slice()),
+            delay,
+        })
+        .collect();
+    if frames.is_empty() {
+        return None;
+    }
+    // Optional decode diagnostic (off by default): set `HECA_DEBUG_IMAGES` to log
+    // the source variant and how many frames each inline image decoded to. Handy
+    // for telling apart tools that send a raw animation from ones that pre-flatten
+    // it to a single frame (e.g. some file-manager previews).
+    if std::env::var_os("HECA_DEBUG_IMAGES").is_some() {
+        let variant = match data {
+            ImageDataType::Rgba8 { .. } => "Rgba8",
+            ImageDataType::AnimRgba8 { .. } => "AnimRgba8",
+            ImageDataType::EncodedFile(_) => "EncodedFile",
+            ImageDataType::EncodedLease(_) => "EncodedLease",
+        };
+        eprintln!(
+            "[heca-img] decoded {variant} {width}x{height} -> {} frame(s)",
+            frames.len()
+        );
     }
     Some(TerminalImage {
         id: image_id_from_hash(hash),
         width,
         height,
-        rgba: Arc::from(rgba.into_boxed_slice()),
+        frames: Arc::from(frames.into_boxed_slice()),
     })
 }
 
-/// Decode an encoded image blob (PNG/JPEG/GIF/WebP/BMP) to RGBA8 bytes.
-fn decode_encoded_image(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+/// Clamp near-zero animation frame delays up to a sane default (browser behavior).
+fn clamp_frame_delay(delay: Duration) -> Duration {
+    if delay <= MIN_HONORED_FRAME_DELAY {
+        DEFAULT_FRAME_DELAY
+    } else {
+        delay
+    }
+}
+
+/// Decoded RGBA frames: canvas `(width, height)` and one `(pixels, delay)` per
+/// frame (a single entry for a static image).
+type DecodedFrames = (u32, u32, Vec<(Vec<u8>, Duration)>);
+
+/// Decode an encoded image blob to RGBA8 frames. Animated GIF and APNG decode
+/// every frame (each composited to the full canvas) with its delay; every other
+/// format (JPEG/WebP/BMP/static PNG/GIF) yields a single zero-delay frame.
+fn decode_encoded_frames(bytes: &[u8]) -> Option<DecodedFrames> {
+    use image::AnimationDecoder;
+    use std::io::Cursor;
+
+    let animated: Option<Vec<image::Frame>> = match image::guess_format(bytes).ok()? {
+        image::ImageFormat::Gif => image::codecs::gif::GifDecoder::new(Cursor::new(bytes))
+            .ok()
+            .and_then(|d| d.into_frames().collect_frames().ok()),
+        image::ImageFormat::Png => {
+            let decoder = image::codecs::png::PngDecoder::new(Cursor::new(bytes)).ok()?;
+            if decoder.is_apng().ok()? {
+                decoder
+                    .apng()
+                    .ok()
+                    .and_then(|a| a.into_frames().collect_frames().ok())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    if let Some(frames) = animated.filter(|f| f.len() > 1) {
+        let mut out = Vec::with_capacity(frames.len());
+        let (mut width, mut height) = (0u32, 0u32);
+        for frame in frames {
+            let delay = clamp_frame_delay(duration_from_delay(frame.delay()));
+            let buffer = frame.into_buffer();
+            width = buffer.width();
+            height = buffer.height();
+            out.push((buffer.into_vec(), delay));
+        }
+        return Some((width, height, out));
+    }
+
+    // Static image (or single-frame animation): decode the one frame.
     let decoded = image::load_from_memory(bytes)
         .map_err(|err| eprintln!("terminal inline image: decode failed: {err:#}"))
         .ok()?
         .to_rgba8();
     let (width, height) = decoded.dimensions();
-    Some((width, height, decoded.into_vec()))
+    Some((width, height, vec![(decoded.into_vec(), Duration::ZERO)]))
+}
+
+/// Convert an `image` crate frame delay to a [`Duration`].
+fn duration_from_delay(delay: image::Delay) -> Duration {
+    let (numer, denom) = delay.numer_denom_ms();
+    if denom == 0 {
+        Duration::from_millis(numer as u64)
+    } else {
+        Duration::from_micros((numer as u64 * 1000) / denom as u64)
+    }
 }
 
 /// Accumulates per-cell [`ImageCell`] slices into rectangular placement blocks
@@ -1672,8 +1779,9 @@ mod tests {
         let image = &snapshot.images[0];
         assert_eq!(image.id, placement.image_id, "placement references the image");
         assert!(image.width >= 16 && image.height >= 6, "decoded at source size");
+        assert_eq!(image.frames.len(), 1, "static image has one frame");
         assert_eq!(
-            image.rgba.len(),
+            image.frames[0].rgba.len(),
             (image.width as usize) * (image.height as usize) * 4,
             "RGBA buffer is tightly packed"
         );
@@ -1688,7 +1796,8 @@ mod tests {
         let hash = [7u8; 32];
         let decoded = decode_terminal_image(hash, &data).expect("rgba decodes");
         assert_eq!((decoded.width, decoded.height), (2, 1));
-        assert_eq!(&*decoded.rgba, rgba.as_slice());
+        assert_eq!(decoded.frames.len(), 1);
+        assert_eq!(&*decoded.frames[0].rgba, rgba.as_slice());
         assert_eq!(decoded.id, image_id_from_hash(hash));
 
         // Undecodable encoded bytes yield None rather than panicking.
@@ -1697,12 +1806,51 @@ mod tests {
     }
 
     #[test]
+    fn decode_terminal_image_decodes_animated_gif_frames() {
+        use image::{Delay, Frame, RgbaImage};
+        use wezterm_term::image::ImageDataType;
+
+        // Encode a 2x2, two-frame GIF (red then blue, 120ms each) in memory.
+        let red = RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255]));
+        let blue = RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255]));
+        let mut bytes = Vec::new();
+        {
+            let mut enc = image::codecs::gif::GifEncoder::new(&mut bytes);
+            enc.encode_frame(Frame::from_parts(red, 0, 0, Delay::from_numer_denom_ms(120, 1)))
+                .expect("encode frame 0");
+            enc.encode_frame(Frame::from_parts(blue, 0, 0, Delay::from_numer_denom_ms(120, 1)))
+                .expect("encode frame 1");
+        }
+
+        let decoded = decode_terminal_image([3u8; 32], &ImageDataType::EncodedFile(bytes))
+            .expect("animated gif decodes");
+        assert_eq!(decoded.frames.len(), 2, "two animation frames captured");
+        assert!(decoded.is_animated());
+        assert_eq!(decoded.frames[0].delay, Duration::from_millis(120));
+        assert_eq!(decoded.total_duration(), Duration::from_millis(240));
+        // The two frames must decode to DIFFERENT pixels (red vs blue) — a
+        // regression here would make an animation play but look frozen.
+        assert_ne!(
+            decoded.frames[0].rgba, decoded.frames[1].rgba,
+            "animation frames must differ; frame 0 red, frame 1 blue"
+        );
+        assert_eq!(&decoded.frames[0].rgba[..4], &[255, 0, 0, 255], "frame 0 red");
+        assert_eq!(&decoded.frames[1].rgba[..4], &[0, 0, 255, 255], "frame 1 blue");
+    }
+
+    #[test]
     fn graphics_collector_coalesces_block_and_dedups_images() {
         let image = Arc::new(TerminalImage {
             id: 42,
             width: 4,
             height: 2,
-            rgba: Arc::from(vec![0u8; 4 * 2 * 4].into_boxed_slice()),
+            frames: Arc::from(
+                vec![TerminalImageFrame {
+                    rgba: Arc::from(vec![0u8; 4 * 2 * 4].into_boxed_slice()),
+                    delay: Duration::ZERO,
+                }]
+                .into_boxed_slice(),
+            ),
         });
         let hash = [9u8; 32];
         let mut collector = GraphicsCollector::default();

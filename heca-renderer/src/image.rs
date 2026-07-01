@@ -47,9 +47,24 @@ struct QueuedQuad {
 }
 
 struct CachedImage {
+    /// The GPU texture holding the currently-uploaded frame. Retained so an
+    /// animated image can re-upload the next frame in place (all frames share the
+    /// image's `width`/`height`).
+    texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     /// Generation of the last frame that referenced this image; drives eviction.
     last_used: u64,
+    /// Playback state for an animated image (`None` for a static one).
+    anim: Option<AnimPlayback>,
+}
+
+/// Wall-clock playback state for one animated inline image.
+struct AnimPlayback {
+    /// When the animation was first uploaded; the shown frame derives from
+    /// `now - start` looped over the total duration.
+    start: std::time::Instant,
+    /// Which frame index is currently written into the texture.
+    uploaded_frame: usize,
 }
 
 /// GPU renderer for inline terminal images.
@@ -215,27 +230,52 @@ impl ImageRenderer {
 
     /// Ensure every image in `images` has a GPU texture, uploading new ones, and
     /// mark them all used this generation. Idempotent per id across frames.
+    ///
+    /// For animated images, advances the playback clock: when the frame shown at
+    /// "now" differs from the one in the texture, the new frame is re-uploaded in
+    /// place. Returns `true` when any animated image advanced a frame this call,
+    /// so the caller can damage its rows and keep requesting frames.
     pub fn upload_images(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         images: &[TerminalImage],
-    ) {
+    ) -> bool {
+        let now = std::time::Instant::now();
+        let mut advanced = false;
         for image in images {
             match self.cache.get_mut(&image.id) {
-                Some(cached) => cached.last_used = self.generation,
+                Some(cached) => {
+                    cached.last_used = self.generation;
+                    if let Some(anim) = cached.anim.as_mut() {
+                        let desired = image.frame_index_at(now.saturating_duration_since(anim.start));
+                        if desired != anim.uploaded_frame
+                            && let Some(frame) = image.frames.get(desired)
+                        {
+                            write_image_frame(queue, &cached.texture, image, &frame.rgba);
+                            anim.uploaded_frame = desired;
+                            advanced = true;
+                        }
+                    }
+                }
                 None => {
-                    let bind_group = self.upload_one(device, queue, image);
+                    let (texture, bind_group) = self.upload_one(device, queue, image);
+                    let anim = image
+                        .is_animated()
+                        .then_some(AnimPlayback { start: now, uploaded_frame: 0 });
                     self.cache.insert(
                         image.id,
                         CachedImage {
+                            texture,
                             bind_group,
                             last_used: self.generation,
+                            anim,
                         },
                     );
                 }
             }
         }
+        advanced
     }
 
     fn upload_one(
@@ -243,7 +283,7 @@ impl ImageRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         image: &TerminalImage,
-    ) -> wgpu::BindGroup {
+    ) -> (wgpu::Texture, wgpu::BindGroup) {
         let size = wgpu::Extent3d {
             width: image.width.max(1),
             height: image.height.max(1),
@@ -259,23 +299,12 @@ impl ImageRenderer {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &image.rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(image.width * 4),
-                rows_per_image: Some(image.height),
-            },
-            size,
-        );
+        // The first frame is always present (frames is non-empty by construction).
+        if let Some(frame) = image.frames.first() {
+            write_image_frame(queue, &texture, image, &frame.rgba);
+        }
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terminal_inline_image_bind_group"),
             layout: &self.texture_bind_group_layout,
             entries: &[
@@ -288,7 +317,8 @@ impl ImageRenderer {
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
                 },
             ],
-        })
+        });
+        (texture, bind_group)
     }
 
     /// Drop cached textures not referenced in the last `max_age` generations.
@@ -398,6 +428,35 @@ impl ImageRenderer {
             rpass.draw_indexed(0..indices.len() as u32, 0, 0..1);
         }
     }
+}
+
+/// Write one frame's RGBA pixels into `texture` (all frames share the image's
+/// `width`/`height`, so the texture size never changes across a frame advance).
+fn write_image_frame(
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+    image: &TerminalImage,
+    rgba: &[u8],
+) {
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(image.width * 4),
+            rows_per_image: Some(image.height),
+        },
+        wgpu::Extent3d {
+            width: image.width.max(1),
+            height: image.height.max(1),
+            depth_or_array_layers: 1,
+        },
+    );
 }
 
 /// Map a placement's cell rect to a logical pixel rect `[x, y, w, h]`.

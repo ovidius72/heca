@@ -62,12 +62,13 @@
 > **Method reminder (learned the hard way this session): VERIFY before concluding.** Don't generalize
 > from one file/one tool; run the probe/test/build first. (Cost real time on Yazi + the worktree.)
 > **Remaining terminal work (not blocking):**
-> - **`terminal-10` per-pane font zoom** — per-pane font size + `TerminalStyle.font_size` in the render
->   loop (`terminal_render.rs`) + `PaneFontZoom` action/input. Real coding, not started.
-> - **Image polish**: animated GIF/APNG frames (`terminal-task-24`); per-image row-range damage
->   (`terminal-task-23`, low priority — perf already good).
+> - **`terminal-10` per-pane + whole-app font zoom** — **DONE + merged (PR #213).** See the font-zoom
+>   phase below for the full contract.
+> - **Image polish** — **DONE (branch `feat/terminal-image-polish`):** per-image row-range damage
+>   (`terminal-task-23`) + animated GIF/APNG/`AnimRgba8` (`terminal-task-24`). See the image phase.
 > - **`terminal-task-07`** manual validation matrix — needs a human at the keyboard.
-> **Also pending:** verify retina image sizing in-app (visible HiDPI appearance change).
+> **Also pending (needs a human at the keyboard):** verify retina image sizing + animated-GIF playback
+> in-app.
 
 ### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
@@ -698,12 +699,22 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   **Neovim GUI** (`neovim-plan.md`) handles natively instead. Not planned for the
 >   terminal pane.
 
-> **Stage 4 follow-ups (not blocking; new tasks):**
-> - **terminal-task-23** — Per-placement row-range damage instead of full-pane
->   repaint while an image is on screen (only redraw the image's row span when it
->   intersects dirty rows). Today any touch of an image-bearing pane forces Full.
-> - **terminal-task-24** — Animated images (`AnimRgba8`, GIF/APNG/WebP): currently
->   the first frame renders; add frame advance + redraw scheduling.
+> **Stage 4 follow-ups:**
+> - **terminal-task-23 — DONE (2026-07-01, branch `feat/terminal-image-polish`).** Per-image
+>   row-range damage: `retained_damage_to_apply` now damages the union of text-damage rows and the
+>   image placement rows (new ∪ old) instead of forcing `Full`; a text change that doesn't overlap an
+>   image leaves the image retained. Helpers `image_row_ranges`/`merge_row_ranges`/`ranges_overlap`
+>   + `RetainedTerminalLayer.image_rows`; 14 policy/helper tests.
+> - **terminal-task-24 — DONE (2026-07-01, same branch).** Animated GIF/APNG/`AnimRgba8`.
+>   `TerminalImage` now holds `frames: Arc<[TerminalImageFrame]>` (pixels + per-frame delay);
+>   `decode_encoded_frames` decodes all frames via `image::AnimationDecoder`, near-zero GIF delays
+>   clamp to 100ms. `ImageRenderer` owns a per-image wall-clock, picks the frame for "now",
+>   re-uploads it into the existing texture on change, and returns whether any advanced;
+>   `sync_retained_terminal_layers` advances before the damage decision (→ per-image row damage via
+>   task-23), and `AppState.has_animated_images` keeps the event loop ticking at frame cadence.
+>   Tests: `frame_index_at` loop/clamp + end-to-end animated-GIF decode. heca-core 88, heca-renderer
+>   25, heca 288, clippy clean. **Needs a human at the keyboard:** visual check with a real GIF
+>   (e.g. `yazi` preview or `imgcat animated.gif`).
 > - **terminal-task-25** — **DONE.** `config.toml` toggle
 >   `appearance.terminal.images` (default `true`). When off, the engine skips
 >   inline-image capture entirely (guarded `collect_row_graphics`). Wired via

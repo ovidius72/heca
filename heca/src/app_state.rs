@@ -411,10 +411,14 @@ pub struct RetainedTerminalLayer {
     physical_size: (u32, u32),
     pub render_key: u64,
     /// Signature of the inline-image placements last rendered into this layer.
-    /// When it changes, the layer is fully repainted so images appear, move, and
-    /// clear correctly (the retained per-row optimization can't reason about
-    /// images that span dirty and clean rows). See `terminal-09`.
+    /// When it changes, only the affected image rows (old ∪ new) are repainted —
+    /// images appear, move, clear, and animate without a full-pane repaint. See
+    /// `terminal-09` / `terminal-task-23`.
     pub graphics_sig: u64,
+    /// Visible row ranges the last-rendered inline images covered. Retained so a
+    /// placement change or animation frame advance can damage the *old* rows too
+    /// (otherwise a removed/moved image would leave stale pixels behind).
+    pub image_rows: Vec<heca_core::backend::TerminalRowRange>,
 }
 
 impl RetainedTerminalLayer {
@@ -439,6 +443,7 @@ impl RetainedTerminalLayer {
             physical_size: (width.max(1), height.max(1)),
             render_key,
             graphics_sig: 0,
+            image_rows: Vec::new(),
         }
     }
 
@@ -621,6 +626,10 @@ pub struct AppState {
     /// Refreshed on `prefix+Shift+r` reload.
     pub font_config: FontConfig,
     pub terminal_cell_size: (f32, f32),
+    /// Whether any visible pane is currently showing an animated inline image
+    /// (GIF/APNG). Set each frame by `sync_retained_terminal_layers`; the redraw
+    /// loop keeps requesting frames while true so the animation plays.
+    pub has_animated_images: bool,
     /// App-wide font-zoom **offset in points**, applied on top of BOTH the
     /// configured chrome/UI font (`font_config.size.ui`) and the terminal font
     /// (`font_config.size.terminal`), so the whole app scales together. Driven by

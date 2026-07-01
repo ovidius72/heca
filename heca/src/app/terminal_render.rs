@@ -8,7 +8,7 @@ use crate::app::selection_model::{SelectionOwner, SelectionRegion, SelectionStat
 use crate::app::terminal_host::TerminalMount;
 use crate::app_state::AppState;
 use heca_config::theme::Color;
-use heca_core::backend::{TerminalDamage, TerminalSnapshot};
+use heca_core::backend::{TerminalDamage, TerminalRowRange, TerminalSnapshot};
 use heca_core::layout::{PaneId, Point, Rectangle, Size};
 use heca_grid_ui::builders::{LayoutExt, StyleExt};
 use heca_grid_ui::theme::Theme as GuiTheme;
@@ -55,6 +55,9 @@ pub(crate) fn sync_retained_terminal_layers(
     // One image-cache generation per frame; upload marks images used, then stale
     // textures (scrolled-off / closed panes) are evicted after the pane loop.
     state.image_renderer.begin_frame();
+    // Whether any visible pane shows an animated image, so the redraw loop keeps
+    // ticking frames (`terminal-task-24`).
+    let mut any_animated = false;
 
     for pane in panes {
         let Some(mount) = pane.mount.as_ref() else {
@@ -108,24 +111,36 @@ pub(crate) fn sync_retained_terminal_layers(
 
         let graphics_sig = graphics_signature(&mount.snapshot.graphics);
         let graphics_changed = layer.graphics_sig != graphics_sig;
-        let graphics_present = !mount.snapshot.graphics.is_empty();
+        let image_rows_now = image_row_ranges(&mount.snapshot.graphics, mount.snapshot.rows);
+
+        // Upload new images and advance any animated ones (`terminal-task-24`).
+        // Done before the damage decision so a frame advance — which changes pixels
+        // without changing the placement signature — can damage the image's rows.
+        let anim_advanced =
+            state
+                .image_renderer
+                .upload_images(&state.device, &state.queue, &mount.snapshot.images);
+        any_animated |= mount.snapshot.images.iter().any(|img| img.is_animated());
 
         // The retained layer holds the last frame's content. The decision below
         // is the whole point of the retained-content foundation (`terminal-00b`):
         // when there is nothing to do we skip the update entirely so unchanged
-        // rows stay visible, and only dirty rows are re-rendered otherwise —
-        // except a resize, style change, or inline-image change forces a full
-        // repaint.
+        // rows stay visible; otherwise only the dirty rows — text damage plus the
+        // rows the inline images cover (`terminal-task-23`) — are re-rendered. A
+        // resize or style change still forces a full repaint. An image placement
+        // change or animation frame advance damages the image rows (old ∪ new).
         let Some(damage) = retained_damage_to_apply(
             resized,
             style_changed,
-            graphics_present,
-            graphics_changed,
+            graphics_changed || anim_advanced,
             &mount.damage,
+            &image_rows_now,
+            &layer.image_rows,
         ) else {
             continue;
         };
         layer.graphics_sig = graphics_sig;
+        layer.image_rows = image_rows_now;
 
         render_terminal_layer_update(
             state,
@@ -137,6 +152,11 @@ pub(crate) fn sync_retained_terminal_layers(
             window_physical_size,
         );
     }
+
+    // OR (never assign): this runs once for tiled panes and once for floating
+    // panes per frame, so assigning would let the second call clobber the first.
+    // `render_frame` resets the flag to false before the tiled call each frame.
+    state.has_animated_images |= any_animated;
 
     // Drop image textures not referenced for a while (panes scrolled past the
     // image or closed). Generous grace so re-scrolling to a recent image does not
@@ -161,27 +181,91 @@ const IMAGE_TEXTURE_MAX_AGE_FRAMES: u64 = 600;
 ///
 /// This is the pure policy behind `sync_retained_terminal_layers`; extracting it
 /// keeps the retained-presentation contract unit-testable without a GPU.
+///
+/// `image_rows_now` / `image_rows_prev` are the visible row ranges the pane's
+/// inline images cover this frame and last frame. Per-image damage
+/// (`terminal-task-23`): an image change (appear / move / clear / animation frame
+/// advance) damages only those rows (new ∪ old) instead of the whole pane, and a
+/// text change on a pane holding images only re-blits the image where the changed
+/// text actually overlaps it.
 fn retained_damage_to_apply(
     resized: bool,
     style_changed: bool,
-    graphics_present: bool,
     graphics_changed: bool,
     mount_damage: &TerminalDamage,
+    image_rows_now: &[TerminalRowRange],
+    image_rows_prev: &[TerminalRowRange],
 ) -> Option<TerminalDamage> {
-    // A structural change repaints every row. Inline images force the same: the
-    // per-row optimization can't reason about an image spanning dirty and clean
-    // rows, so any image change — or any frame that touches a pane holding an
-    // image — re-renders the whole layer (and re-blits the images). An idle image
-    // pane (no damage, unchanged placements) still skips, so static images cost
-    // nothing per frame. Per-row image damage is a `terminal-09` Stage 4 follow-up.
-    let touches_pane = !matches!(mount_damage, TerminalDamage::None);
-    if resized || style_changed || graphics_changed || (graphics_present && touches_pane) {
+    // A structural change (resize / style) still repaints every row; the per-row
+    // path can't reason about the whole grid moving or re-shaping.
+    if resized || style_changed {
         return Some(TerminalDamage::Full);
     }
-    match mount_damage {
-        TerminalDamage::None => None,
-        other => Some(other.clone()),
+    // A `Full` text damage subsumes any image rows.
+    if matches!(mount_damage, TerminalDamage::Full) {
+        return Some(TerminalDamage::Full);
     }
+
+    let text_rows: &[TerminalRowRange] = match mount_damage {
+        TerminalDamage::Rows(rows) => rows,
+        _ => &[],
+    };
+
+    let mut damage: Vec<TerminalRowRange> = text_rows.to_vec();
+    if graphics_changed {
+        // Appear / move / clear / frame advance: repaint the union of the old and
+        // new image rows (old so a removed/moved image leaves no stale pixels).
+        damage.extend_from_slice(image_rows_now);
+        damage.extend_from_slice(image_rows_prev);
+    } else if !text_rows.is_empty() && ranges_overlap(text_rows, image_rows_now) {
+        // Text changed under/over an image: re-blit the image on those rows so the
+        // glyph pass doesn't overwrite it (or leave the image's old pixels).
+        damage.extend_from_slice(image_rows_now);
+    }
+
+    let merged = merge_row_ranges(damage);
+    if merged.is_empty() {
+        None
+    } else {
+        Some(TerminalDamage::Rows(merged))
+    }
+}
+
+/// Visible row ranges an image placement list covers, clamped to `[0, rows)`.
+fn image_row_ranges(
+    graphics: &[heca_core::backend::GraphicsPlacement],
+    rows: usize,
+) -> Vec<TerminalRowRange> {
+    let mut ranges: Vec<TerminalRowRange> = graphics
+        .iter()
+        .filter_map(|g| {
+            let start = g.row.min(rows);
+            let end = g.row.saturating_add(g.rows).min(rows);
+            (end > start).then_some(TerminalRowRange::new(start, end))
+        })
+        .collect();
+    ranges = merge_row_ranges(ranges);
+    ranges
+}
+
+/// Whether any range in `a` overlaps any range in `b` (half-open `[start, end)`).
+fn ranges_overlap(a: &[TerminalRowRange], b: &[TerminalRowRange]) -> bool {
+    a.iter()
+        .any(|ra| b.iter().any(|rb| ra.start < rb.end && rb.start < ra.end))
+}
+
+/// Sort and coalesce adjacent/overlapping row ranges into a minimal set.
+fn merge_row_ranges(mut ranges: Vec<TerminalRowRange>) -> Vec<TerminalRowRange> {
+    ranges.retain(|r| r.end > r.start);
+    ranges.sort_by_key(|r| r.start);
+    let mut merged: Vec<TerminalRowRange> = Vec::with_capacity(ranges.len());
+    for r in ranges {
+        match merged.last_mut() {
+            Some(last) if r.start <= last.end => last.end = last.end.max(r.end),
+            _ => merged.push(r),
+        }
+    }
+    merged
 }
 
 /// Stable signature of a pane's inline-image placements, so a layer can detect
@@ -340,16 +424,12 @@ fn render_terminal_layer_update(
     state.text_renderer.set_damage(None);
 
     // Inline images draw in the same logical space as the primitive/text passes.
-    // Upload any new images, then queue one quad per placement to flush into the
-    // scratch around the glyph pass below. (Placements are only present when the
-    // damage policy forced a full repaint, so this stays consistent with the
-    // retained layer.)
+    // Textures were already uploaded/advanced in `sync_retained_terminal_layers`
+    // before the damage decision; here we just queue one quad per placement to
+    // flush into the scratch around the glyph pass below.
     state
         .image_renderer
         .set_screen_size(&state.queue, logical_size.0, logical_size.1);
-    state
-        .image_renderer
-        .upload_images(&state.device, &state.queue, &mount.snapshot.images);
     for placement in &mount.snapshot.graphics {
         state.image_renderer.queue_placement(
             placement,
@@ -997,8 +1077,9 @@ pub(super) fn build_selection_overlay(
 #[cfg(test)]
 mod tests {
     use super::{
-        TerminalCopyBand, build_selection_overlay, graphics_signature, retained_damage_to_apply,
-        retained_terminal_texture_size, terminal_damage_copy_bands, terminal_layer_render_key,
+        TerminalCopyBand, build_selection_overlay, graphics_signature, image_row_ranges,
+        merge_row_ranges, ranges_overlap, retained_damage_to_apply, retained_terminal_texture_size,
+        terminal_damage_copy_bands, terminal_layer_render_key,
     };
     use crate::app::selection_model::{
         SelectionOwner, SelectionRegion, SelectionSource, SelectionState,
@@ -1310,93 +1391,199 @@ mod tests {
         }
     }
 
+    fn rng(start: usize, end: usize) -> TerminalRowRange {
+        TerminalRowRange::new(start, end)
+    }
+
     #[test]
     fn retained_damage_skips_when_backend_reports_none_and_no_structural_change() {
-        // No resize, no style change, backend reports nothing dirty: the retained
-        // layer already holds the previous frame, so the update is skipped entirely
-        // (unchanged rows stay visible — never cleared).
-        assert_eq!(retained_damage_to_apply(false, false, false, false, &TerminalDamage::None), None);
+        // No resize, no style change, backend reports nothing dirty, no images:
+        // the retained layer already holds the previous frame, so it is skipped.
+        assert_eq!(
+            retained_damage_to_apply(false, false, false, &TerminalDamage::None, &[], &[]),
+            None
+        );
     }
 
     #[test]
     fn retained_damage_passes_dirty_rows_through_when_stable() {
-        // Stable layer + backend row damage: only the reported rows are redrawn.
-        let rows = TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]);
+        // Stable layer + backend row damage, no images: only the reported rows.
+        let rows = TerminalDamage::Rows(vec![rng(1, 3)]);
         assert_eq!(
-            retained_damage_to_apply(false, false, false, false, &rows),
-            Some(TerminalDamage::Rows(vec![TerminalRowRange::new(1, 3)]))
+            retained_damage_to_apply(false, false, false, &rows, &[], &[]),
+            Some(TerminalDamage::Rows(vec![rng(1, 3)]))
         );
     }
 
     #[test]
     fn retained_damage_passes_full_through_when_stable() {
         assert_eq!(
-            retained_damage_to_apply(false, false, false, false, &TerminalDamage::Full),
+            retained_damage_to_apply(false, false, false, &TerminalDamage::Full, &[], &[]),
             Some(TerminalDamage::Full)
         );
     }
 
     #[test]
     fn retained_damage_upgrades_to_full_on_resize_even_if_backend_reports_none() {
-        // A resize is structural: even if the backend has no row damage this frame,
-        // every row must be repainted or the resized grid shows stale content.
         assert_eq!(
-            retained_damage_to_apply(true, false, false, false, &TerminalDamage::None),
+            retained_damage_to_apply(true, false, false, &TerminalDamage::None, &[], &[]),
             Some(TerminalDamage::Full)
         );
     }
 
     #[test]
     fn retained_damage_upgrades_to_full_on_style_change() {
-        // A font/alpha/style change repaints the whole layer.
         assert_eq!(
-            retained_damage_to_apply(false, true, false, false, &TerminalDamage::None),
+            retained_damage_to_apply(false, true, false, &TerminalDamage::None, &[], &[]),
             Some(TerminalDamage::Full)
         );
         assert_eq!(
-            retained_damage_to_apply(false, true, false, false, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 2)])),
+            retained_damage_to_apply(
+                false,
+                true,
+                false,
+                &TerminalDamage::Rows(vec![rng(0, 2)]),
+                &[],
+                &[]
+            ),
             Some(TerminalDamage::Full)
         );
     }
 
     #[test]
     fn retained_damage_resize_dominates_style_and_backend_damage() {
-        // Both structural triggers present: still exactly one Full (not Rows).
         assert_eq!(
-            retained_damage_to_apply(true, true, false, false, &TerminalDamage::Rows(vec![TerminalRowRange::new(0, 1)])),
-            Some(TerminalDamage::Full)
-        );
-    }
-
-    #[test]
-    fn retained_damage_forces_full_when_image_present_and_pane_touched() {
-        // An image pane with row damage upgrades to Full so the whole image
-        // (which may span dirty and clean rows) re-renders and re-copies.
-        let rows = TerminalDamage::Rows(vec![TerminalRowRange::new(1, 2)]);
-        assert_eq!(
-            retained_damage_to_apply(false, false, true, false, &rows),
+            retained_damage_to_apply(
+                true,
+                true,
+                false,
+                &TerminalDamage::Rows(vec![rng(0, 1)]),
+                &[],
+                &[]
+            ),
             Some(TerminalDamage::Full)
         );
     }
 
     #[test]
     fn retained_damage_idle_image_pane_still_skips() {
-        // A static image with no damage and unchanged placements costs nothing:
-        // the retained layer already holds it, so the update is skipped.
+        // A static image with no text damage and unchanged placements costs nothing.
         assert_eq!(
-            retained_damage_to_apply(false, false, true, false, &TerminalDamage::None),
+            retained_damage_to_apply(
+                false,
+                false,
+                false,
+                &TerminalDamage::None,
+                &[rng(5, 7)],
+                &[rng(5, 7)]
+            ),
             None
         );
     }
 
     #[test]
-    fn retained_damage_forces_full_when_placements_change_even_without_row_damage() {
-        // Placement set changed (image appeared / moved / cleared): force Full even
-        // if the backend reported no row damage this frame.
+    fn retained_damage_image_change_damages_only_image_rows() {
+        // Image appeared (graphics_changed) with no text damage: repaint just the
+        // image rows (terminal-task-23), not the whole pane.
         assert_eq!(
-            retained_damage_to_apply(false, false, false, true, &TerminalDamage::None),
-            Some(TerminalDamage::Full)
+            retained_damage_to_apply(
+                false,
+                false,
+                true,
+                &TerminalDamage::None,
+                &[rng(3, 5)],
+                &[]
+            ),
+            Some(TerminalDamage::Rows(vec![rng(3, 5)]))
         );
+    }
+
+    #[test]
+    fn retained_damage_image_move_repaints_old_and_new_rows() {
+        // Image moved: union of old and new rows so no stale pixels remain.
+        assert_eq!(
+            retained_damage_to_apply(
+                false,
+                false,
+                true,
+                &TerminalDamage::None,
+                &[rng(6, 8)],
+                &[rng(3, 5)]
+            ),
+            Some(TerminalDamage::Rows(vec![rng(3, 5), rng(6, 8)]))
+        );
+    }
+
+    #[test]
+    fn retained_damage_image_clear_repaints_old_rows() {
+        // Image cleared (now empty, was present): repaint the old rows to erase it.
+        assert_eq!(
+            retained_damage_to_apply(false, false, true, &TerminalDamage::None, &[], &[rng(3, 5)]),
+            Some(TerminalDamage::Rows(vec![rng(3, 5)]))
+        );
+    }
+
+    #[test]
+    fn retained_damage_text_over_image_reblits_image_rows() {
+        // Text changed on rows that overlap an image: re-blit the image there so
+        // the glyph pass doesn't clobber it. Merged into one contiguous range.
+        assert_eq!(
+            retained_damage_to_apply(
+                false,
+                false,
+                false,
+                &TerminalDamage::Rows(vec![rng(4, 6)]),
+                &[rng(5, 8)],
+                &[rng(5, 8)]
+            ),
+            Some(TerminalDamage::Rows(vec![rng(4, 8)]))
+        );
+    }
+
+    #[test]
+    fn retained_damage_text_away_from_image_leaves_image_alone() {
+        // Text changed far from a static image: only the text rows are repainted;
+        // the image stays retained (not re-blitted).
+        assert_eq!(
+            retained_damage_to_apply(
+                false,
+                false,
+                false,
+                &TerminalDamage::Rows(vec![rng(1, 2)]),
+                &[rng(5, 7)],
+                &[rng(5, 7)]
+            ),
+            Some(TerminalDamage::Rows(vec![rng(1, 2)]))
+        );
+    }
+
+    #[test]
+    fn image_row_ranges_clamps_and_merges() {
+        use heca_core::backend::GraphicsPlacement;
+        let placement = |row, rows| GraphicsPlacement {
+            row,
+            col: 0,
+            cols: 2,
+            rows,
+            image_id: 1,
+            src_top_left: [0.0, 0.0],
+            src_bottom_right: [1.0, 1.0],
+            z_index: 0,
+        };
+        // Two placements (rows 1..3 and 2..4) merge to 1..4; a third past the grid
+        // clamps to `rows`.
+        let g = vec![placement(1, 2), placement(2, 2), placement(9, 5)];
+        assert_eq!(image_row_ranges(&g, 10), vec![rng(1, 4), rng(9, 10)]);
+    }
+
+    #[test]
+    fn merge_row_ranges_coalesces_adjacent_and_overlapping() {
+        assert_eq!(
+            merge_row_ranges(vec![rng(3, 5), rng(1, 2), rng(2, 3), rng(5, 6)]),
+            vec![rng(1, 6)]
+        );
+        assert!(ranges_overlap(&[rng(4, 6)], &[rng(5, 8)]));
+        assert!(!ranges_overlap(&[rng(1, 2)], &[rng(5, 8)]));
     }
 
     #[test]

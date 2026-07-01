@@ -99,11 +99,26 @@ pub struct GraphicsPlacement {
     pub z_index: i32,
 }
 
+/// One frame of a decoded terminal image: its pixels plus how long it displays.
+///
+/// A static image is a single frame with a zero delay; an animated GIF / APNG /
+/// `AnimRgba8` sequence has one entry per frame. All frames of an image share the
+/// parent [`TerminalImage`]'s `width`/`height` (the decoders composite each frame
+/// to the full canvas), so the renderer can reuse one same-sized GPU texture.
+#[derive(Clone)]
+pub struct TerminalImageFrame {
+    /// Tightly packed RGBA8 pixels (`width * height * 4` bytes).
+    pub rgba: std::sync::Arc<[u8]>,
+    /// How long this frame is shown before the next one.
+    pub delay: std::time::Duration,
+}
+
 /// Decoded RGBA image referenced by one or more [`GraphicsPlacement`]s.
 ///
 /// The backend decodes each unique source image once (keyed by content hash)
-/// and shares the pixel buffer via `Arc`, so cloning a snapshot stays cheap. The
-/// renderer uploads each `id` to a GPU texture once and reuses it across frames.
+/// and shares the frame buffers via `Arc`, so cloning a snapshot stays cheap. The
+/// renderer uploads each `id` to a GPU texture once and reuses it across frames;
+/// for an animated image it re-uploads the current frame as the clock advances.
 #[derive(Clone)]
 pub struct TerminalImage {
     /// Stable handle derived from the source content hash; matches
@@ -111,8 +126,41 @@ pub struct TerminalImage {
     pub id: u64,
     pub width: u32,
     pub height: u32,
-    /// Tightly packed RGBA8 pixels (`width * height * 4` bytes).
-    pub rgba: std::sync::Arc<[u8]>,
+    /// One or more frames (always non-empty). A single frame = a static image.
+    pub frames: std::sync::Arc<[TerminalImageFrame]>,
+}
+
+impl TerminalImage {
+    /// Whether this image has more than one frame (an animation).
+    pub fn is_animated(&self) -> bool {
+        self.frames.len() > 1
+    }
+
+    /// Total loop duration (sum of every frame's delay).
+    pub fn total_duration(&self) -> std::time::Duration {
+        self.frames.iter().map(|f| f.delay).sum()
+    }
+
+    /// Index of the frame shown at `elapsed` since the animation started, looping.
+    /// Returns `0` for a static image or a zero-duration loop.
+    pub fn frame_index_at(&self, elapsed: std::time::Duration) -> usize {
+        if self.frames.len() <= 1 {
+            return 0;
+        }
+        let total = self.total_duration();
+        if total.is_zero() {
+            return 0;
+        }
+        let t = elapsed.as_nanos() % total.as_nanos();
+        let mut acc: u128 = 0;
+        for (i, frame) in self.frames.iter().enumerate() {
+            acc += frame.delay.as_nanos();
+            if t < acc {
+                return i;
+            }
+        }
+        self.frames.len() - 1
+    }
 }
 
 impl std::fmt::Debug for TerminalImage {
@@ -121,7 +169,7 @@ impl std::fmt::Debug for TerminalImage {
             .field("id", &self.id)
             .field("width", &self.width)
             .field("height", &self.height)
-            .field("rgba_len", &self.rgba.len())
+            .field("frames", &self.frames.len())
             .finish()
     }
 }
@@ -201,5 +249,57 @@ impl TerminalSnapshot {
             self.viewport_offset <= self.scrollback_rows.saturating_sub(self.rows),
             "terminal snapshot `viewport_offset` must stay within `[0, scrollback_rows - rows]`"
         );
+    }
+}
+
+#[cfg(test)]
+mod image_tests {
+    use super::{TerminalImage, TerminalImageFrame};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    fn img(delays_ms: &[u64]) -> TerminalImage {
+        let frames: Vec<TerminalImageFrame> = delays_ms
+            .iter()
+            .map(|&ms| TerminalImageFrame {
+                rgba: Arc::from(vec![0u8; 4].into_boxed_slice()),
+                delay: Duration::from_millis(ms),
+            })
+            .collect();
+        TerminalImage {
+            id: 1,
+            width: 1,
+            height: 1,
+            frames: Arc::from(frames.into_boxed_slice()),
+        }
+    }
+
+    #[test]
+    fn static_image_is_not_animated_and_stays_on_frame_zero() {
+        let image = img(&[0]);
+        assert!(!image.is_animated());
+        assert_eq!(image.frame_index_at(Duration::from_secs(5)), 0);
+    }
+
+    #[test]
+    fn animated_frame_index_advances_and_loops() {
+        // Three frames of 100ms each; total loop = 300ms.
+        let image = img(&[100, 100, 100]);
+        assert!(image.is_animated());
+        assert_eq!(image.total_duration(), Duration::from_millis(300));
+        assert_eq!(image.frame_index_at(Duration::from_millis(0)), 0);
+        assert_eq!(image.frame_index_at(Duration::from_millis(99)), 0);
+        assert_eq!(image.frame_index_at(Duration::from_millis(100)), 1);
+        assert_eq!(image.frame_index_at(Duration::from_millis(250)), 2);
+        // Loops back to frame 0 after the total duration.
+        assert_eq!(image.frame_index_at(Duration::from_millis(300)), 0);
+        assert_eq!(image.frame_index_at(Duration::from_millis(450)), 1);
+    }
+
+    #[test]
+    fn zero_duration_loop_stays_on_frame_zero() {
+        // Degenerate: multiple frames but all zero delay — avoid divide-by-zero.
+        let image = img(&[0, 0]);
+        assert_eq!(image.frame_index_at(Duration::from_millis(10)), 0);
     }
 }
