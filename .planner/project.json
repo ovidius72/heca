@@ -1,0 +1,45 @@
+{
+  "name": "Heca",
+  "goal": "Consolidare Heca come workspace compositor nativo, keyboard-first e pluggable, completando piattaforma terminale, architettura chrome/plugin, libreria grid-ui, integrazione Neovim GUI e rifiniture app/chrome.",
+  "description": "Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.",
+  "webPort": 63011,
+  "scope": [],
+  "outOfScope": [],
+  "decisions": [
+    "Usare il BACKLOG come fonte primaria e più aggiornata dello stato dei lavori.",
+    "Mantenere nel planner anche le feature completate, marcate come done.",
+    "Mantenere Pluggable Chrome come una singola feature con tutte le sue fasi, non spezzata in sotto-feature.",
+    "Separare Grid-UI Widget Library da Pluggable Chrome: workstream distinti.",
+    "Le widget G1–G8 di grid-ui esistono già nel codebase e non vanno ricreate."
+  ],
+  "globalRules": [
+    "Per UI nuove usare widget esistenti di heca-grid-ui o introdurre widget generici theme-driven in heca-grid-ui, non composizioni ad-hoc nell'app.",
+    "Ogni azione utente deve passare per ActionRegistry e KeymapRegistry, con keybinding configurabili.",
+    "Nessun hardcode di colori, keybinding o stile: leggere da Theme/config.",
+    "Ogni capability significativa deve essere raggiungibile da mouse/UI, keyboard/action e RPC quando appropriato."
+  ],
+  "technologies": [
+    "Rust",
+    "wgpu",
+    "cosmic-text",
+    "winit",
+    "portable-pty",
+    "wezterm-term",
+    "tokio",
+    "serde",
+    "TOML"
+  ],
+  "tools": [],
+  "contentLanguage": "Italian",
+  "chatLanguage": "Italian",
+  "plannerAutoEnable": false,
+  "plannerNeverAsk": false,
+  "plannerAutoStartWeb": false,
+  "plannerNeverStartWeb": false,
+  "workflowRules": {
+    "beforePhaseStart": [],
+    "beforeTaskStart": [],
+    "afterPhaseComplete": []
+  },
+  "acceptedDecisions": []
+}
