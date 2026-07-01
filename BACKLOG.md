@@ -712,9 +712,18 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   re-uploads it into the existing texture on change, and returns whether any advanced;
 >   `sync_retained_terminal_layers` advances before the damage decision (→ per-image row damage via
 >   task-23), and `AppState.has_animated_images` keeps the event loop ticking at frame cadence.
->   Tests: `frame_index_at` loop/clamp + end-to-end animated-GIF decode. heca-core 88, heca-renderer
->   25, heca 288, clippy clean. **Needs a human at the keyboard:** visual check with a real GIF
->   (e.g. `yazi` preview or `imgcat animated.gif`).
+>   Tests: `frame_index_at` loop/clamp + end-to-end animated-GIF decode **with distinct frame
+>   pixels**. heca-core 88, heca-renderer 25, heca 288, clippy clean. **VERIFIED LIVE (2026-07-01):**
+>   plays correctly via `ranger` and a raw iTerm2 `OSC 1337` send.
+>   **Bug found + fixed during live verification:** the animation froze on frame 0 because
+>   `has_animated_images` was clobbered — `sync_retained_terminal_layers` runs twice per frame (tiled
+>   + floating) and the second call overwrote the flag to `false`, killing the continuous-redraw
+>   loop. Fix: reset once per frame in `render_frame`, OR into it from both calls. Added an optional
+>   `HECA_DEBUG_IMAGES` env-gated decode diagnostic.
+>   **Not our bug:** `yazi` previews don't animate (it sends a single flattened frame — confirmed on
+>   other terminals too); `ranger` sends the raw GIF and animates. **Still open:** APNG not visually
+>   spot-checked (decode path shared with GIF, so low risk); retina crispness of animations.
+>   Shipped as PR #214 (branch `feat/terminal-image-polish`).
 > - **terminal-task-25** — **DONE.** `config.toml` toggle
 >   `appearance.terminal.images` (default `true`). When off, the engine skips
 >   inline-image capture entirely (guarded `collect_row_graphics`). Wired via
