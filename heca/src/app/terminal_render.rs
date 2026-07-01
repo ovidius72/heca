@@ -55,6 +55,9 @@ pub(crate) fn sync_retained_terminal_layers(
     // One image-cache generation per frame; upload marks images used, then stale
     // textures (scrolled-off / closed panes) are evicted after the pane loop.
     state.image_renderer.begin_frame();
+    // Whether any visible pane shows an animated image, so the redraw loop keeps
+    // ticking frames (`terminal-task-24`).
+    let mut any_animated = false;
 
     for pane in panes {
         let Some(mount) = pane.mount.as_ref() else {
@@ -110,16 +113,26 @@ pub(crate) fn sync_retained_terminal_layers(
         let graphics_changed = layer.graphics_sig != graphics_sig;
         let image_rows_now = image_row_ranges(&mount.snapshot.graphics, mount.snapshot.rows);
 
+        // Upload new images and advance any animated ones (`terminal-task-24`).
+        // Done before the damage decision so a frame advance — which changes pixels
+        // without changing the placement signature — can damage the image's rows.
+        let anim_advanced =
+            state
+                .image_renderer
+                .upload_images(&state.device, &state.queue, &mount.snapshot.images);
+        any_animated |= mount.snapshot.images.iter().any(|img| img.is_animated());
+
         // The retained layer holds the last frame's content. The decision below
         // is the whole point of the retained-content foundation (`terminal-00b`):
         // when there is nothing to do we skip the update entirely so unchanged
         // rows stay visible; otherwise only the dirty rows — text damage plus the
         // rows the inline images cover (`terminal-task-23`) — are re-rendered. A
-        // resize or style change still forces a full repaint.
+        // resize or style change still forces a full repaint. An image placement
+        // change or animation frame advance damages the image rows (old ∪ new).
         let Some(damage) = retained_damage_to_apply(
             resized,
             style_changed,
-            graphics_changed,
+            graphics_changed || anim_advanced,
             &mount.damage,
             &image_rows_now,
             &layer.image_rows,
@@ -139,6 +152,8 @@ pub(crate) fn sync_retained_terminal_layers(
             window_physical_size,
         );
     }
+
+    state.has_animated_images = any_animated;
 
     // Drop image textures not referenced for a while (panes scrolled past the
     // image or closed). Generous grace so re-scrolling to a recent image does not
@@ -406,16 +421,12 @@ fn render_terminal_layer_update(
     state.text_renderer.set_damage(None);
 
     // Inline images draw in the same logical space as the primitive/text passes.
-    // Upload any new images, then queue one quad per placement to flush into the
-    // scratch around the glyph pass below. (Placements are only present when the
-    // damage policy forced a full repaint, so this stays consistent with the
-    // retained layer.)
+    // Textures were already uploaded/advanced in `sync_retained_terminal_layers`
+    // before the damage decision; here we just queue one quad per placement to
+    // flush into the scratch around the glyph pass below.
     state
         .image_renderer
         .set_screen_size(&state.queue, logical_size.0, logical_size.1);
-    state
-        .image_renderer
-        .upload_images(&state.device, &state.queue, &mount.snapshot.images);
     for placement in &mount.snapshot.graphics {
         state.image_renderer.queue_placement(
             placement,

@@ -626,6 +626,10 @@ pub struct AppState {
     /// Refreshed on `prefix+Shift+r` reload.
     pub font_config: FontConfig,
     pub terminal_cell_size: (f32, f32),
+    /// Whether any visible pane is currently showing an animated inline image
+    /// (GIF/APNG). Set each frame by `sync_retained_terminal_layers`; the redraw
+    /// loop keeps requesting frames while true so the animation plays.
+    pub has_animated_images: bool,
     /// App-wide font-zoom **offset in points**, applied on top of BOTH the
     /// configured chrome/UI font (`font_config.size.ui`) and the terminal font
     /// (`font_config.size.terminal`), so the whole app scales together. Driven by

@@ -328,6 +328,7 @@ pub(crate) async fn init_state(
         appearance,
         font_config: app_config.config.font.clone(),
         terminal_cell_size,
+        has_animated_images: false,
         app_font_zoom: 0.0,
         pane_font_zoom: std::collections::HashMap::new(),
         pane_cell_override: std::collections::HashMap::new(),

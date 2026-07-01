@@ -138,6 +138,8 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
     }
 
     let terminal_animating = backend_poll.terminal_animating;
+    // An animated inline image (GIF/APNG) keeps the loop ticking so frames advance.
+    let image_animating = state.has_animated_images;
     let needs_frame = state.needs_redraw
         || backend_poll.has_data
         || backend_poll.closed_any
@@ -145,12 +147,17 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         || bell_flashing
         || state.session.are_animations_ongoing()
         || terminal_animating
+        || image_animating
         || chrome_animating;
     if needs_frame {
         state.window.request_redraw();
     }
 
-    if state.session.are_animations_ongoing() || terminal_animating || chrome_animating {
+    if state.session.are_animations_ongoing()
+        || terminal_animating
+        || image_animating
+        || chrome_animating
+    {
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + crate::chrome::FRAME_INTERVAL,
         ));
