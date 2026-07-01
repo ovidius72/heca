@@ -14,13 +14,14 @@ use crate::app::terminal_host::{
 };
 use crate::app::terminal_metrics::refresh_terminal_cell_size;
 use crate::app_state::AppState;
+use crate::input::{FontZoomStep, WmAction};
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use heca_core::layout::Point;
 use heca_grid_ui::reactive::SignalGet;
 use heca_grid_ui::{Component, Event, GridKey};
 use std::collections::HashMap;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 #[derive(Clone, Debug)]
 pub enum AppEvent {
@@ -286,11 +287,60 @@ pub(crate) fn handle_window_event(
             state.mark_full_redraw();
         }
         WindowEvent::MouseWheel { delta, .. } => {
-            forward_mouse_wheel(state, state.mouse.pos, delta);
+            // Ctrl/Meta+wheel is a font-zoom gesture, resolved by what's under the
+            // pointer. It is intercepted at the WM level BEFORE terminal wheel
+            // forwarding so the modified wheel never reaches the TUI as a scroll.
+            if !handle_wheel_font_zoom(state, registry, state.mouse.pos, delta) {
+                forward_mouse_wheel(state, state.mouse.pos, delta);
+            }
             state.mark_full_redraw();
         }
         _ => {}
     }
+}
+
+/// Handle a `Ctrl`/`Meta`+wheel font-zoom gesture. Returns `true` when the wheel
+/// event was consumed as a zoom (so the caller must NOT forward it to terminal
+/// scroll). Resolution is pointer-based: over a pane → zoom that pane; over
+/// chrome/empty space → app-wide zoom. Scroll up zooms in, down zooms out.
+fn handle_wheel_font_zoom(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    pos: (f32, f32),
+    delta: MouseScrollDelta,
+) -> bool {
+    if !state.mouse_wheel_change_font_size {
+        return false;
+    }
+    let mods = state.modifiers;
+    if !(mods.control_key() || mods.super_key()) {
+        return false;
+    }
+
+    // Consume the gesture regardless of direction so a modified wheel never leaks
+    // to the TUI; only dispatch when there is a usable vertical direction.
+    let vertical = match delta {
+        MouseScrollDelta::LineDelta(_, y) => y,
+        MouseScrollDelta::PixelDelta(p) => p.y as f32,
+    };
+    if vertical == 0.0 {
+        return true;
+    }
+    let step = if vertical > 0.0 {
+        FontZoomStep::In
+    } else {
+        FontZoomStep::Out
+    };
+
+    let action = match mouse::hit_test_pane(state, pos) {
+        Some(pane_id) => WmAction::PaneTerminalFontZoom {
+            pane_id: Some(pane_id),
+            step,
+        },
+        None => WmAction::AppFontZoom { step },
+    };
+    dispatch_action(state, registry, InteractionSource::MouseContent, &action);
+    true
 }
 
 /// Whether a right-click context menu is currently open.

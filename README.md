@@ -178,6 +178,29 @@ heca uses **tmux-style prefix mode**: press `Ctrl+B`, release, then press the ac
 | Pane height increase | `Shift+=` | Grow active pane height |
 | Pane height decrease | `Shift+-` | Shrink active pane height |
 
+### Font zoom
+
+Two explicit scopes (no implicit resolution): **`Ctrl`** = whole app (chrome/UI
+font **and** every terminal pane), **`Ctrl+Shift`** = the focused terminal pane
+only, layered on top of the app-wide size. The same gesture is also on
+**`Ctrl`/`Meta`+mouse-wheel**, resolved by what's under the pointer (over a pane →
+that pane; over chrome/empty → whole app). (`Alt` is avoided: on macOS the Option
+key rewrites the typed character, so `Alt+=` never matches.)
+
+| Command | Default Binding | Description |
+|---------|----------------|-------------|
+| App font bigger (everything) | `Ctrl+=` | Increase chrome/UI + every terminal pane |
+| App font smaller (everything) | `Ctrl+-` | Decrease chrome/UI + every terminal pane |
+| App font reset (everything) | `Ctrl+0` | Reset to the configured sizes |
+| Terminal font bigger (pane) | `Ctrl+Shift+=` | Increase the focused pane's font size |
+| Terminal font smaller (pane) | `Ctrl+Shift+-` | Decrease the focused pane's font size |
+| Terminal font reset (pane) | `Ctrl+Shift+0` | Focused pane follows the app-wide size |
+
+**Sticky font-size modes** (avoid re-pressing the chord): enter once, then tap keys
+repeatedly. `prefix+!` → **app** font mode (whole app), `prefix+@` → **pane** font
+mode (focused pane). Inside either mode: `k`/`↑` bigger, `j`/`↓` smaller, `0` reset,
+`Esc`/`Enter` exit. Like the built-in `resize` mode (`prefix+r`), fully rebindable.
+
 ### Move / Swap (adjacent)
 
 | Command | Default Binding | Description |

@@ -37,6 +37,29 @@ impl std::str::FromStr for ResizeAxis {
     }
 }
 
+/// Direction of a terminal font-zoom step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FontZoomStep {
+    /// Increase the font size by one step.
+    In,
+    /// Decrease the font size by one step.
+    Out,
+    /// Reset to the base size (global → configured size; pane → follow global).
+    Reset,
+}
+
+impl std::str::FromStr for FontZoomStep {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "in" | "increase" | "+" => Ok(FontZoomStep::In),
+            "out" | "decrease" | "-" => Ok(FontZoomStep::Out),
+            "reset" | "0" => Ok(FontZoomStep::Reset),
+            _ => Err(format!("unknown font zoom step: {}", s)),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SpawnKind {
     Terminal,
@@ -177,6 +200,23 @@ pub enum WmAction {
         target: ResizeTarget,
         width: f64,
         height: f64,
+    },
+
+    // ── Font zoom ──
+    /// App-wide font zoom (the `app-03` base). Steps **both** the chrome/UI font
+    /// (sidebar, tabs, status bar) and every terminal pane together, so the whole
+    /// app scales. `Reset` returns to the configured `font.size.*`. No layout
+    /// impact (policy: `Global`).
+    AppFontZoom {
+        step: FontZoomStep,
+    },
+    /// Per-pane terminal font zoom, layered on top of the global size. `pane_id =
+    /// None` targets the focused pane (keyboard); `Some(id)` targets a specific
+    /// pane (`Ctrl`/`Meta`+wheel over a pane, or RPC). `Reset` makes the pane
+    /// follow the global size again.
+    PaneTerminalFontZoom {
+        pane_id: Option<PaneId>,
+        step: FontZoomStep,
     },
 
     // ── Pane (unit) ──
@@ -446,6 +486,29 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         }),
         "pane_height_increase" => Some(WmAction::PaneHeightIncrease),
         "pane_height_decrease" => Some(WmAction::PaneHeightDecrease),
+        // Font zoom — global (app-wide terminal) branch, the `app-03` base.
+        "app_font_increase" => Some(WmAction::AppFontZoom {
+            step: FontZoomStep::In,
+        }),
+        "app_font_decrease" => Some(WmAction::AppFontZoom {
+            step: FontZoomStep::Out,
+        }),
+        "app_font_reset" => Some(WmAction::AppFontZoom {
+            step: FontZoomStep::Reset,
+        }),
+        // Font zoom — focused-pane branch (keyboard resolves `pane_id = None`).
+        "pane_terminal_font_increase" => Some(WmAction::PaneTerminalFontZoom {
+            pane_id: None,
+            step: FontZoomStep::In,
+        }),
+        "pane_terminal_font_decrease" => Some(WmAction::PaneTerminalFontZoom {
+            pane_id: None,
+            step: FontZoomStep::Out,
+        }),
+        "pane_terminal_font_reset" => Some(WmAction::PaneTerminalFontZoom {
+            pane_id: None,
+            step: FontZoomStep::Reset,
+        }),
         "workspace_next" => Some(WmAction::WorkspaceNext),
         "focus_toggle_local" => Some(WmAction::FocusToggleLocal),
         "focus_toggle_global" => Some(WmAction::FocusToggleGlobal),
@@ -642,6 +705,15 @@ pub fn build_action(
         "scroll_to_offset" => Some(WmAction::ScrollToOffset {
             rows: get_usize(args, "rows")?,
         }),
+        // Font zoom (RPC): `step` = in|out|reset; pane variant optionally targets
+        // a specific `pane_id` (omitted → focused pane).
+        "app_font_zoom" => Some(WmAction::AppFontZoom {
+            step: get_enum(args, "step")?,
+        }),
+        "pane_terminal_font_zoom" => Some(WmAction::PaneTerminalFontZoom {
+            pane_id: get_u64(args, "pane_id").map(PaneId),
+            step: get_enum(args, "step")?,
+        }),
 
         "spawn_command" => Some(WmAction::SpawnCommand {
             command: get_string(args, "command")?,
@@ -741,6 +813,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ResizeDecrease
         | WmAction::PaneHeightIncrease
         | WmAction::PaneHeightDecrease => 3,
+        // Font zoom — resolved from keybindings; pane-management class.
+        WmAction::AppFontZoom { .. } | WmAction::PaneTerminalFontZoom { .. } => 1,
         // Sidebars
         WmAction::SidebarLeft | WmAction::SidebarRight => 4,
         // System
@@ -855,6 +929,26 @@ mod tests {
         assert_eq!(
             action_from_name("command_palette"),
             Some(WmAction::CommandPalette)
+        );
+        // Font zoom — six names map to two variants with the right step + None pane.
+        assert_eq!(
+            action_from_name("app_font_increase"),
+            Some(WmAction::AppFontZoom {
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            action_from_name("app_font_reset"),
+            Some(WmAction::AppFontZoom {
+                step: FontZoomStep::Reset
+            })
+        );
+        assert_eq!(
+            action_from_name("pane_terminal_font_decrease"),
+            Some(WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::Out
+            })
         );
         // Selection actions are generic (host capability), not terminal-only.
         assert_eq!(
@@ -1117,6 +1211,13 @@ mod tests {
                     target: ResizeTarget::Column,
                     width: 0.0,
                     height: 0.0,
+                },
+                WmAction::AppFontZoom {
+                    step: FontZoomStep::In,
+                },
+                WmAction::PaneTerminalFontZoom {
+                    pane_id: None,
+                    step: FontZoomStep::In,
                 },
                 WmAction::FloatAt {
                     pane_id: PaneId(0),

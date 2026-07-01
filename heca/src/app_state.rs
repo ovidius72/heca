@@ -621,6 +621,23 @@ pub struct AppState {
     /// Refreshed on `prefix+Shift+r` reload.
     pub font_config: FontConfig,
     pub terminal_cell_size: (f32, f32),
+    /// App-wide font-zoom **offset in points**, applied on top of BOTH the
+    /// configured chrome/UI font (`font_config.size.ui`) and the terminal font
+    /// (`font_config.size.terminal`), so the whole app scales together. Driven by
+    /// the app-wide zoom action (the `app-03` base) and `Ctrl`/`Meta`+wheel over
+    /// chrome. `0.0` = no zoom. Reset returns it to `0.0`; a config reload leaves
+    /// it intact.
+    pub app_font_zoom: f32,
+    /// Per-pane terminal font-zoom **offset in points**, applied on top of the
+    /// global base (`font_config.size.terminal + app_font_zoom`) for
+    /// that pane only. Absent = follows the global size. The effective per-pane
+    /// size is clamped to `[TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX]`.
+    pub pane_font_zoom: HashMap<PaneId, f32>,
+    /// Resolved base cell size for panes with a non-zero `pane_font_zoom` offset,
+    /// recomputed whenever that pane's effective font size changes. Panes absent
+    /// here use the global `terminal_cell_size`. Feeds the base cell that
+    /// `prepare_terminal_mount` fits the PTY grid to.
+    pub pane_cell_override: HashMap<PaneId, (f32, f32)>,
     pub scale_factor: f64,
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
@@ -687,6 +704,14 @@ pub struct AppState {
     pub terminal_mouse_enabled: bool,
     /// Number of scrollback rows per wheel notch.
     pub terminal_wheel_scroll_lines: usize,
+    /// Points added/removed per terminal font-zoom step, from
+    /// `[settings] terminal_font_zoom_step`. Threaded here so the zoom handlers
+    /// don't reach back into config each dispatch.
+    pub terminal_font_zoom_step: f32,
+    /// Whether `Ctrl`/`Meta`+wheel changes the font size, from
+    /// `[settings] mouse_wheel_change_font_size`. When false the wheel gesture is
+    /// skipped and the modified wheel is forwarded normally.
+    pub mouse_wheel_change_font_size: bool,
     /// Whether backend-side discrete terminal viewport animations are enabled.
     pub terminal_scroll_animations_enabled: bool,
     /// Modifier key for interactive pane drag.
@@ -724,6 +749,47 @@ impl AppState {
 }
 
 impl AppState {
+    /// The effective **terminal** global font size: the configured terminal size
+    /// plus the app zoom offset, clamped. This is the base every pane starts from
+    /// before its own per-pane offset is applied.
+    pub fn app_font_size(&self) -> f32 {
+        (self.font_config.size.terminal + self.app_font_zoom).clamp(
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,
+        )
+    }
+
+    /// The effective **chrome/UI** font size: the configured UI size plus the same
+    /// app zoom offset, clamped. Scales the sidebar, tabs, and status bar together
+    /// with the terminals so the app zoom is truly app-wide.
+    pub fn app_ui_font_size(&self) -> f32 {
+        (self.font_config.size.ui + self.app_font_zoom).clamp(
+            crate::app::terminal_metrics::APP_UI_FONT_SIZE_MIN,
+            crate::app::terminal_metrics::APP_UI_FONT_SIZE_MAX,
+        )
+    }
+
+    /// The effective terminal font size for a specific pane: the configured size
+    /// plus the global zoom offset plus that pane's per-pane offset, clamped to the
+    /// supported range. Both the PTY cell fit and the rendered glyph size derive
+    /// from this single value so they never disagree.
+    pub fn effective_terminal_font_size(&self, pane_id: PaneId) -> f32 {
+        let pane_offset = self.pane_font_zoom.get(&pane_id).copied().unwrap_or(0.0);
+        (self.font_config.size.terminal + self.app_font_zoom + pane_offset).clamp(
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MIN,
+            crate::app::terminal_metrics::TERMINAL_FONT_SIZE_MAX,
+        )
+    }
+
+    /// The base cell size a pane's PTY grid is fitted to, honoring per-pane zoom.
+    /// Falls back to the global `terminal_cell_size` for panes with no override.
+    pub fn pane_base_cell_size(&self, pane_id: PaneId) -> (f32, f32) {
+        self.pane_cell_override
+            .get(&pane_id)
+            .copied()
+            .unwrap_or(self.terminal_cell_size)
+    }
+
     /// Terminal pane surface opacity, derived from the shared appearance contract.
     ///
     /// Returns `1.0` (opaque) when `terminal_transparency = 0`, and the

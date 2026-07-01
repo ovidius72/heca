@@ -144,6 +144,10 @@ impl HecaApp {
             state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;
             state.terminal_wheel_scroll_lines =
                 self.app_config.config.settings.terminal_wheel_scroll_lines;
+            state.terminal_font_zoom_step =
+                self.app_config.config.settings.terminal_font_zoom_step;
+            state.mouse_wheel_change_font_size =
+                self.app_config.config.settings.mouse_wheel_change_font_size;
             state.terminal_scroll_animations_enabled =
                 self.app_config.config.settings.terminal_scroll_animations;
             let link_detection = self.app_config.config.appearance.terminal.link_detection;

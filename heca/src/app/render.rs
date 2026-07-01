@@ -263,12 +263,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
         let ph = rect.size.h as f32;
         let content_rect =
             stable_tiled_content_rect(px, py, pw, ph, pane_content_inset, pane_title_top_inset);
+        let base_cell = state.pane_base_cell_size(*pane_id);
         let mount = content_rect.and_then(|content_rect| {
             prepare_terminal_mount(
                 &mut state.backends,
                 *pane_id,
                 content_rect,
-                state.terminal_cell_size,
+                base_cell,
                 state.scale_factor as f32,
             )
         });
@@ -297,6 +298,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let sidebar_bottom = h - chrome.status_bar_height;
     let sidebar_h = sidebar_bottom - sidebar_top;
     let terminal_font_config = state.font_config.clone();
+    // Effective global terminal size (config + global zoom). Per-pane offsets are
+    // applied inside `sync_retained_terminal_layers`; this is the base/fallback.
+    let app_font_size = state.app_font_size();
     let mut floating_panes = Vec::new();
     if let Some(ws) = state.session.active_workspace() {
         for float in &ws.floating_panes {
@@ -312,12 +316,13 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 pane_content_inset,
                 pane_title_top_inset,
             );
+            let base_cell = state.pane_base_cell_size(float.pane.id);
             let mount = content_rect.and_then(|content_rect| {
                 prepare_terminal_mount(
                     &mut state.backends,
                     float.pane.id,
                     content_rect,
-                    state.terminal_cell_size,
+                    base_cell,
                     state.scale_factor as f32,
                 )
             });
@@ -354,7 +359,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         state,
         &tiled_panes,
         TerminalStyle {
-            font_size: terminal_font_config.size.terminal,
+            font_size: app_font_size,
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha,
             ligatures: terminal_ligatures,
@@ -368,7 +373,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         state,
         &floating_panes,
         TerminalStyle {
-            font_size: terminal_font_config.size.terminal,
+            font_size: app_font_size,
             families: terminal_font_families_from(&terminal_font_config.family),
             surface_alpha: floating_surface_alpha,
             ligatures: terminal_ligatures,
@@ -562,6 +567,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
         if pane.content_rect.is_some()
             && let Some(mount) = pane.mount.as_ref()
         {
+            let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
             let selection_overlay =
                 selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
             if blit_retained_terminal_layer(
@@ -599,7 +605,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                         stencil: Some(stencil_view),
                     },
                     TerminalStyle {
-                        font_size: state.font_config.size.terminal,
+                        font_size: pane_font_size,
                         families: terminal_font_families_from(&state.font_config.family),
                         surface_alpha,
                         ligatures: state.appearance.terminal.ligatures,
@@ -785,6 +791,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             }
 
             if let Some(mount) = pane.mount.as_ref() {
+                let pane_font_size = state.effective_terminal_font_size(pane.pane_id);
                 let selection_overlay =
                     selection_overlay_for_pane(state, pane.pane_id, &mount.snapshot);
                 if blit_retained_terminal_layer(
@@ -829,7 +836,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                             stencil: Some(stencil_view),
                         },
                         TerminalStyle {
-                            font_size: state.font_config.size.terminal,
+                            font_size: pane_font_size,
                             families: terminal_font_families_from(&state.font_config.family),
                             surface_alpha: floating_surface_alpha,
                             ligatures: state.appearance.terminal.ligatures,

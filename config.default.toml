@@ -56,6 +56,17 @@ terminal_mouse = true
 # Number of scrollback rows per wheel notch.
 terminal_wheel_scroll_lines = 3
 
+# Points added/removed per font-zoom step. Drives the whole-app zoom
+# (prefix+Ctrl+= / - / 0, scales chrome + terminals) and the per-pane zoom
+# (prefix+Ctrl+Shift+= / - / 0), plus the Ctrl/Meta+wheel gesture. Non-positive
+# values fall back to the default.
+terminal_font_zoom_step = 1.0
+
+# Whether Ctrl/Meta+mouse-wheel changes the font size (app-wide over the chrome,
+# focused pane over a pane). Set false to disable the gesture and keep font zoom
+# keyboard-only; the modified wheel is then forwarded like a normal wheel.
+mouse_wheel_change_font_size = true
+
 # Smooth animation for backend-side discrete terminal viewport jumps.
 # Set false to make animated viewport jumps immediate.
 terminal_scroll_animations = true

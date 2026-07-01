@@ -503,6 +503,21 @@ pub fn build_registry() -> ActionRegistry {
         handle_open_link,
     );
 
+    // ── Font zoom (terminal) ──
+    registry.register(
+        &WmAction::AppFontZoom {
+            step: input::FontZoomStep::In,
+        },
+        handle_app_font_zoom,
+    );
+    registry.register(
+        &WmAction::PaneTerminalFontZoom {
+            pane_id: None,
+            step: input::FontZoomStep::In,
+        },
+        handle_pane_terminal_font_zoom,
+    );
+
     // ── Sidebar-specific (parameterized) ──
     registry.register(
         &WmAction::AddPaneToColumn {
@@ -594,6 +609,69 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn default_font_size_modes_build_with_triggers_and_keys() {
+        use crate::input::FontZoomStep;
+        let config = heca_config::theme::Config::default();
+        let (mode_keymaps, mode_triggers) = build_modes(&config);
+
+        // Both modes exist, are sticky, and are entered by prefix+! / prefix+@.
+        let (app_trigger, app_sticky) = mode_triggers
+            .get("app_font_size")
+            .expect("app_font_size mode trigger");
+        assert!(app_sticky, "app_font_size must be sticky");
+        assert_eq!(*app_trigger, KeyCombo::parse("!"));
+        let (pane_trigger, pane_sticky) = mode_triggers
+            .get("pane_font_size")
+            .expect("pane_font_size mode trigger");
+        assert!(pane_sticky, "pane_font_size must be sticky");
+        assert_eq!(*pane_trigger, KeyCombo::parse("@"));
+
+        // Inner keys resolve to the right actions (k/ArrowUp = bigger, j = smaller,
+        // 0 = reset) — whole-app for app_font_size, focused pane for pane_font_size.
+        let app = mode_keymaps.get("app_font_size").unwrap();
+        assert_eq!(
+            app.resolve("app_font_size", &KeyCombo::parse("k")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            app.resolve("app_font_size", &KeyCombo::parse("ArrowUp")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            app.resolve("app_font_size", &KeyCombo::parse("j")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::Out
+            })
+        );
+        assert_eq!(
+            app.resolve("app_font_size", &KeyCombo::parse("0")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::Reset
+            })
+        );
+
+        let pane = mode_keymaps.get("pane_font_size").unwrap();
+        assert_eq!(
+            pane.resolve("pane_font_size", &KeyCombo::parse("k")),
+            Some(&WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            pane.resolve("pane_font_size", &KeyCombo::parse("0")),
+            Some(&WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::Reset
+            })
+        );
+    }
+
+    #[test]
     fn default_ctrl_k_binding_stays_swap_up() {
         let config = heca_config::theme::Config::default();
         let keymap = build_keymap(&config);
@@ -613,6 +691,78 @@ mod tests {
         assert_eq!(
             keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+j")),
             Some(&WmAction::MoveColumnDown)
+        );
+    }
+
+    #[test]
+    fn default_font_zoom_bindings_resolve_without_collision() {
+        use crate::input::FontZoomStep;
+        let config = heca_config::theme::Config::default();
+        let keymap = build_keymap(&config);
+
+        // Global (app-wide) branch: prefix+Ctrl+= / - / 0.
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+=")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+-")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::Out
+            })
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+0")),
+            Some(&WmAction::AppFontZoom {
+                step: FontZoomStep::Reset
+            })
+        );
+
+        // Focused-pane branch: prefix+Ctrl+Shift+= / - / 0 (pane_id resolved at
+        // dispatch). Ctrl+Shift is used instead of Alt because macOS rewrites the
+        // character under the Option key, so Alt+= would never match.
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+=")),
+            Some(&WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+-")),
+            Some(&WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::Out
+            })
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+0")),
+            Some(&WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::Reset
+            })
+        );
+
+        // No collision: the bare `=`/`-` (resize) and Shift+`=` (pane height) keys
+        // keep their original actions — the Ctrl / Ctrl+Shift variants are distinct.
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("=")),
+            Some(&WmAction::ResizeIncrease)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("-")),
+            Some(&WmAction::ResizeDecrease)
+        );
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Shift+=")),
+            Some(&WmAction::PaneHeightIncrease)
+        );
+        // The other Ctrl+Shift bindings (move column up/down) keep their actions.
+        assert_eq!(
+            keymap.resolve("normal", &KeyCombo::parse("Ctrl+Shift+k")),
+            Some(&WmAction::MoveColumnUp)
         );
     }
 

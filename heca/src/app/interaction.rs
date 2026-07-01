@@ -279,7 +279,10 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::OpenLinkAtCaret
         | WmAction::SearchScrollback
         | WmAction::SearchNextMatch
-        | WmAction::SearchPrevMatch => ActionPolicy::FocusedPaneLocal,
+        | WmAction::SearchPrevMatch
+        // Per-pane font zoom operates on the focused (or specified) pane with no
+        // layout impact — allowed in both tiled and floating domains.
+        | WmAction::PaneTerminalFontZoom { .. } => ActionPolicy::FocusedPaneLocal,
 
         // ── Workspace-level: blocked when Floating ──
         WmAction::WorkspaceNext
@@ -304,6 +307,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // Follow-link overlay targets the focused terminal's links; no layout
         // impact, so it stays reachable from any focus domain (incl. floating).
         WmAction::FollowLink => ActionPolicy::Global,
+        // App-wide terminal font zoom changes only font metrics/PTY reflow — no
+        // tiled/floating layout impact, so it must work in any focus domain.
+        WmAction::AppFontZoom { .. } => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,
@@ -891,6 +897,13 @@ mod tests {
             WmAction::PasteClipboard,
             WmAction::BeginSelection,
             WmAction::ToggleSelectionEndpoint,
+            WmAction::AppFontZoom {
+                step: crate::input::FontZoomStep::In,
+            },
+            WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: crate::input::FontZoomStep::In,
+            },
         ];
         for action in &unit_actions {
             let _policy = action_policy(action);

@@ -51,6 +51,12 @@ impl BackendStore {
         self.map.values_mut()
     }
 
+    /// Iterate over all backends mutably together with their pane IDs, so
+    /// callers can resolve per-pane state (e.g. per-pane font zoom cell sizes).
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (PaneId, &mut Box<dyn PaneBackend>)> {
+        self.map.iter_mut().map(|(id, backend)| (*id, backend))
+    }
+
     /// Collect pane IDs whose backends have exited and should be closed.
     pub fn pane_ids_to_close(&self) -> Vec<PaneId> {
         self.map
