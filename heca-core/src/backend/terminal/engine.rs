@@ -1018,6 +1018,22 @@ fn decode_terminal_image(
     if frames.is_empty() {
         return None;
     }
+    // Optional decode diagnostic (off by default): set `HECA_DEBUG_IMAGES` to log
+    // the source variant and how many frames each inline image decoded to. Handy
+    // for telling apart tools that send a raw animation from ones that pre-flatten
+    // it to a single frame (e.g. some file-manager previews).
+    if std::env::var_os("HECA_DEBUG_IMAGES").is_some() {
+        let variant = match data {
+            ImageDataType::Rgba8 { .. } => "Rgba8",
+            ImageDataType::AnimRgba8 { .. } => "AnimRgba8",
+            ImageDataType::EncodedFile(_) => "EncodedFile",
+            ImageDataType::EncodedLease(_) => "EncodedLease",
+        };
+        eprintln!(
+            "[heca-img] decoded {variant} {width}x{height} -> {} frame(s)",
+            frames.len()
+        );
+    }
     Some(TerminalImage {
         id: image_id_from_hash(hash),
         width,
