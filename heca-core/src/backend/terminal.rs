@@ -762,6 +762,10 @@ impl PaneBackend for TerminalBackend {
         self.engine.set_link_detection(enabled);
     }
 
+    fn set_image_capture(&mut self, enabled: bool) {
+        self.engine.set_image_capture(enabled);
+    }
+
     fn reload_terminal_config(
         &mut self,
         palette_defaults: Option<TerminalPaletteDefaults>,

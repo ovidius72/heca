@@ -701,8 +701,11 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   intersects dirty rows). Today any touch of an image-bearing pane forces Full.
 > - **terminal-task-24** — Animated images (`AnimRgba8`, GIF/APNG/WebP): currently
 >   the first frame renders; add frame advance + redraw scheduling.
-> - **terminal-task-25** — Optional `config.toml` toggle `terminal.images`
->   (default on) to disable inline images.
+> - **terminal-task-25** — **DONE.** `config.toml` toggle
+>   `appearance.terminal.images` (default `true`). When off, the engine skips
+>   inline-image capture entirely (guarded `collect_row_graphics`). Wired via
+>   `PaneBackend::set_image_capture` from `backend_factory`, mirroring
+>   `link_detection`.
 > - **terminal-task-26** — Yazi previews work via the iTerm2 path (see Yazi
 >   resolution above). **DONE: crisp retina sizing** — the backend reports
 >   *physical* px (`cell × scale`) to the model + PTY, threaded via

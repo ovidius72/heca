@@ -164,6 +164,9 @@ pub(super) struct TerminalEngine {
     /// Detect plain-text URLs in the visible grid and emit them as hyperlink
     /// spans (in addition to explicit OSC 8 links). Default `true`.
     link_detection: bool,
+    /// Capture inline-image placements into the snapshot. Default `true`; the app
+    /// turns it off via the `terminal.images` config toggle. See `terminal-09`.
+    image_capture: bool,
     /// Decoded-image cache keyed by wezterm's source content hash. Each unique
     /// inline image is decoded to RGBA exactly once and shared (`Arc`) across
     /// every snapshot that references it; `None` caches a decode failure so a
@@ -214,10 +217,16 @@ impl TerminalEngine {
             viewport_anim_config: AnimationConfig::default(),
             viewport_anim_enabled: true,
             link_detection: true,
+            image_capture: true,
             decoded_images: RefCell::new(HashMap::new()),
             cell_px,
             clipboard_writes,
         })
+    }
+
+    /// Enable or disable inline-image capture (the `terminal.images` config toggle).
+    pub(super) fn set_image_capture(&mut self, enabled: bool) {
+        self.image_capture = enabled;
     }
 
     /// Update the physical cell pixel size reported to the emulation layer.
@@ -791,7 +800,9 @@ impl TerminalEngine {
             .enumerate()
         {
             collect_row_hyperlinks(&line, row, cols, &mut hyperlinks);
-            self.collect_row_graphics(&line, row, cols, &mut graphics);
+            if self.image_capture {
+                self.collect_row_graphics(&line, row, cols, &mut graphics);
+            }
             lines.push(snapshot_line(&mut line, cols, palette, blank_line));
         }
 

@@ -361,6 +361,9 @@ pub trait PaneBackend: Send {
     /// Enable or disable plain-text URL auto-detection (linkify) in snapshots.
     fn set_link_detection(&mut self, _enabled: bool) {}
 
+    /// Enable or disable inline-image capture (`terminal.images` config toggle).
+    fn set_image_capture(&mut self, _enabled: bool) {}
+
     /// Reload live terminal emulation defaults derived from the theme/config.
     ///
     /// Terminal backends use this to apply a new palette (fg/bg/cursor/ANSI) and
