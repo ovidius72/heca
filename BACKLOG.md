@@ -43,28 +43,31 @@
 > (attention / visual / audible), and **scrollback search** (`/` in selection mode). Phase
 > `terminal-08` is complete.
 
-> **RESUME HANDOFF (2026-06-30) — read first.**
-> **State is clean & green** on `main`: clippy 0, full suite passing (the real-shell damage tests
-> that flaked under CPU contention are fixed — `TEST_TIMEOUT` is a 30s safety cap, PR #209).
-> **Just shipped (all merged):** hyperlink open #199/#200/#201/#202, centralized action icons +
-> context menu #202, glow strength config-driven #204, follow-link all-panes #205, configurable bell
-> #206, scrollback search #208, flaky-test fix #209.
-> **Architecture you can reuse:** overlays paint into the chrome scene on top (`chrome::paint_*` —
-> `paint_link_hints` / `paint_context_menu` / `paint_bell_flash` / `paint_search`); stateful overlays
-> own widget+state on `AppState` with an event-loop routing pass (context menu is the template); new
-> actions follow the "Adding New Actions" checklist; action icons live on `ActionDescriptor.icon`.
-> **Just landed (branch `feat/terminal-images`, not yet merged):** **`terminal-09` general
-> inline-image rendering** — Sixel + iTerm2 `OSC 1337` + Kitty graphics, any tool (not just Yazi),
-> verified live. 3 commits (capture / renderer pipeline / app+damage). See the `terminal-09` phase
-> below; Stage 4 follow-ups are `terminal-task-23..26`.
-> **Candidate next work (pick one; verify first):**
-> - **`terminal-07` clipboard `OSC 52`** (`terminal-task-16`) — ⚠️ copy (`copy_selection`) + paste
->   (`paste_clipboard`) already work; only OSC 52 remains. **Verify before treating 14/15 as TODO.**
-> - **`terminal-04` backend/renderer tests** (`terminal-task-05/06`) — close the test gap.
-> - **`terminal-09` Stage 4** (`terminal-task-23..26`) — per-image damage, animation, config toggle.
-> ⚠️ **Stale-phase check:** `terminal-06` (text selection) appears **already implemented** (selection
-> mode + caret + overlay are live and in daily use) — verify and mark done rather than re-building.
-> `terminal-05` pane-shell-hosting status is also worth re-checking against current `terminal_render.rs`.
+> **RESUME HANDOFF (2026-07-01) — read first.**
+> **Branch `feat/terminal-images`** — synced with `origin/main` (theming PR #211 merged in, commit
+> `e3f33cb`); builds, `heca-core` 84/84, clippy 0. A PR to `main` is being opened.
+> **Done this session (committed on the branch):**
+> - **`terminal-09` inline images** — Sixel + iTerm2 `OSC 1337` + Kitty graphics, any tool. Capture
+>   (`heca-core/src/backend/terminal/engine.rs` `collect_row_graphics` + decode cache), renderer
+>   (`heca-renderer/src/image.rs` + `image.wgsl`), app integration + damage (`terminal_render.rs`).
+> - **Yazi fixed** — two non-obvious fixes: PTY pixel size (`TIOCSWINSZ`) in `pty.rs`, and
+>   **`TERM_PROGRAM=WezTerm` identity** in `pty.rs` so Yazi picks the iTerm2 protocol (no WezTerm
+>   release implements Kitty Unicode placeholders — Yazi's fallback — so identity is the real fix).
+> - **Retina-crisp images** — physical px (`cell × scale`) via `PaneBackend::set_scale_factor`.
+> - **`terminal-07`** — OSC 52 clipboard write (`OscClipboard` in engine) + bracketed-paste-aware
+>   `PaneBackend::paste`. Copy/paste already worked.
+> - **`terminal-04`/`05`/`06`** — verified already covered/implemented, marked done.
+> - **`terminal-task-25`** — `appearance.terminal.images` config toggle.
+> - Kitty Unicode placeholders **deferred to the Neovim GUI** (see `neovim-plan.md`).
+> **Method reminder (learned the hard way this session): VERIFY before concluding.** Don't generalize
+> from one file/one tool; run the probe/test/build first. (Cost real time on Yazi + the worktree.)
+> **Remaining terminal work (not blocking):**
+> - **`terminal-10` per-pane font zoom** — per-pane font size + `TerminalStyle.font_size` in the render
+>   loop (`terminal_render.rs`) + `PaneFontZoom` action/input. Real coding, not started.
+> - **Image polish**: animated GIF/APNG frames (`terminal-task-24`); per-image row-range damage
+>   (`terminal-task-23`, low priority — perf already good).
+> - **`terminal-task-07`** manual validation matrix — needs a human at the keyboard.
+> **Also pending:** verify retina image sizing in-app (visible HiDPI appearance change).
 
 ### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
