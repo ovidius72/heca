@@ -1812,6 +1812,14 @@ mod tests {
         assert!(decoded.is_animated());
         assert_eq!(decoded.frames[0].delay, Duration::from_millis(120));
         assert_eq!(decoded.total_duration(), Duration::from_millis(240));
+        // The two frames must decode to DIFFERENT pixels (red vs blue) — a
+        // regression here would make an animation play but look frozen.
+        assert_ne!(
+            decoded.frames[0].rgba, decoded.frames[1].rgba,
+            "animation frames must differ; frame 0 red, frame 1 blue"
+        );
+        assert_eq!(&decoded.frames[0].rgba[..4], &[255, 0, 0, 255], "frame 0 red");
+        assert_eq!(&decoded.frames[1].rgba[..4], &[0, 0, 255, 255], "frame 1 blue");
     }
 
     #[test]
