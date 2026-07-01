@@ -1756,6 +1756,25 @@ pub fn handle_clear_selection(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
+/// Write text to the system clipboard via `arboard`; shared by selection-copy
+/// and the `OSC 52` clipboard-write path. Failures are logged in debug builds.
+pub(crate) fn set_system_clipboard(text: &str) {
+    match arboard::Clipboard::new() {
+        Ok(mut clipboard) => {
+            if let Err(e) = clipboard.set_text(text) {
+                #[cfg(debug_assertions)]
+                eprintln!("[heca] clipboard write failed: {e}");
+                let _ = e; // Suppress unused warning in release.
+            }
+        }
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[heca] clipboard unavailable: {e}");
+            let _ = e;
+        }
+    }
+}
+
 /// Copy the active host-grid selection text to the system clipboard.
 ///
 /// Routes through the action registry so it is reachable from keyboard,
@@ -1824,20 +1843,7 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     }
 
     // Write to system clipboard.
-    match arboard::Clipboard::new() {
-        Ok(mut clipboard) => {
-            if let Err(e) = clipboard.set_text(&text) {
-                #[cfg(debug_assertions)]
-                eprintln!("[heca] clipboard write failed: {e}");
-                let _ = e; // Suppress unused warning in release.
-            }
-        }
-        Err(e) => {
-            #[cfg(debug_assertions)]
-            eprintln!("[heca] clipboard unavailable: {e}");
-            let _ = e;
-        }
-    }
+    set_system_clipboard(&text);
 
     // Clear the active selection but stay in selection mode with the caret
     // at the last focus position. This way the user can immediately navigate
@@ -1855,12 +1861,12 @@ pub fn handle_copy_selection(state: &mut AppState, _action: &WmAction) {
     state.needs_redraw = true;
 }
 
-/// Placeholder for the future paste-clipboard action.
+/// Paste the system clipboard into the focused pane.
 ///
-/// Routes the action today so it is reachable from `config.toml` and RPC
-/// without forcing a fake implementation. The real paste integration
-/// belongs to Phase 10. The handler is intentionally minimal — a real
-/// implementation will need clipboard state and the focused pane's backend.
+/// Reads the OS clipboard via `arboard` and forwards it to the focused backend.
+/// The backend wraps the text in bracketed-paste markers when the program
+/// enabled that mode (see `PaneBackend::paste`), so editors treat it as literal
+/// input.
 pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
     // Read the system clipboard and forward text into the focused pane.
     let text = match arboard::Clipboard::new() {
@@ -1889,9 +1895,9 @@ pub fn handle_paste_clipboard(state: &mut AppState, _action: &WmAction) {
         None => return,
     };
 
-    // Forward the text to the pane's backend.
+    // Forward the text to the pane's backend (bracketed-paste aware).
     if let Some(backend) = state.backends.get_mut(pane_id) {
-        backend.process_input(text.as_bytes());
+        backend.paste(&text);
     }
 
     state.needs_redraw = true;

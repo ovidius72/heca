@@ -269,6 +269,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 *pane_id,
                 content_rect,
                 state.terminal_cell_size,
+                state.scale_factor as f32,
             )
         });
         // Sync viewport state into the chrome store for GUI reactivity.
@@ -317,6 +318,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                     float.pane.id,
                     content_rect,
                     state.terminal_cell_size,
+                    state.scale_factor as f32,
                 )
             });
             // Sync viewport state into the chrome store for GUI reactivity.

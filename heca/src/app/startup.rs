@@ -217,6 +217,7 @@ pub(crate) async fn init_state(
     surface.configure(&device, &config);
 
     let mut primitive_renderer = PrimitiveRenderer::new(&device, surface_format);
+    let image_renderer = heca_renderer::image::ImageRenderer::new(&device, surface_format);
     let mut text_renderer = TextRenderer::new(&device, surface_format);
     text_renderer.set_scale_factor(scale_factor);
     text_renderer.set_target_size(physical.width, physical.height);
@@ -311,6 +312,7 @@ pub(crate) async fn init_state(
         surface_config: config,
         primitive_renderer,
         text_renderer,
+        image_renderer,
         grid_renderer,
         compositor,
         terminal_layers: std::collections::HashMap::new(),

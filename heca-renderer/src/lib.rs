@@ -7,6 +7,7 @@ pub mod composite;
 pub mod font;
 pub mod gradient;
 pub mod grid;
+pub mod image;
 pub mod primitive;
 pub mod scene;
 pub mod terminal;

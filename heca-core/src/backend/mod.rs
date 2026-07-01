@@ -10,7 +10,7 @@ pub mod terminal;
 pub use fake::FakeBackend;
 pub use snapshot::{
     GraphicsPlacement, HyperlinkSpan, TerminalCursor, TerminalCursorShape, TerminalDamage,
-    TerminalRowRange, TerminalSnapshot,
+    TerminalImage, TerminalRowRange, TerminalSnapshot,
 };
 pub use terminal::{PtyError, ShellIntegrationAssets, TerminalBackend, TerminalBackendOptions};
 
@@ -220,11 +220,30 @@ pub trait PaneBackend: Send {
         Vec::new()
     }
 
+    /// Drain `OSC 52` clipboard-write requests the program emitted since the last
+    /// poll. The app forwards each string to the system clipboard. Non-terminal
+    /// backends have none.
+    fn take_clipboard_writes(&mut self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Paste text into the backend. Terminal backends wrap it in bracketed-paste
+    /// markers when the program requested that mode; the default just forwards the
+    /// bytes verbatim.
+    fn paste(&mut self, text: &str) {
+        self.process_input(text.as_bytes());
+    }
+
     /// Update logical terminal cell metrics used by snapshot rendering.
     ///
     /// This does not necessarily change the PTY grid size by itself; it updates
     /// how the backend reports cell geometry to the renderer.
     fn set_cell_size(&mut self, _cell_w: f32, _cell_h: f32) {}
+
+    /// Update the device scale factor (logical→physical). Terminal backends use
+    /// it to report physical pixel dimensions to image tools so previews render
+    /// crisply on HiDPI displays. Default no-op for non-terminal backends.
+    fn set_scale_factor(&mut self, _scale: f32) {}
 
     /// Poll for updates (read PTY output, process events, etc.).
     /// Call this every frame before rendering.
@@ -341,6 +360,9 @@ pub trait PaneBackend: Send {
 
     /// Enable or disable plain-text URL auto-detection (linkify) in snapshots.
     fn set_link_detection(&mut self, _enabled: bool) {}
+
+    /// Enable or disable inline-image capture (`terminal.images` config toggle).
+    fn set_image_capture(&mut self, _enabled: bool) {}
 
     /// Reload live terminal emulation defaults derived from the theme/config.
     ///

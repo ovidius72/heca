@@ -133,6 +133,11 @@ fn default_terminal_link_detection() -> bool {
     true
 }
 
+/// Default inline-image rendering: `true`.
+fn default_terminal_images() -> bool {
+    true
+}
+
 /// Default bell window-attention policy: `true` (request the OS attention cue —
 /// Dock bounce / taskbar flash — on a bell while the window is unfocused).
 fn default_terminal_bell_attention() -> bool {
@@ -279,6 +284,11 @@ pub struct TerminalAppearance {
     /// focus. macOS only for now (`NSBeep`); a no-op elsewhere. Default `false`.
     #[serde(default = "default_terminal_bell_audible")]
     pub bell_audible: bool,
+    /// Render inline images emitted by terminal programs (iTerm2 `OSC 1337`,
+    /// Sixel, Kitty graphics — e.g. Yazi previews). Disable to skip image capture
+    /// and rendering entirely. Default `true`.
+    #[serde(default = "default_terminal_images")]
+    pub images: bool,
 }
 
 impl Default for TerminalAppearance {
@@ -296,6 +306,7 @@ impl Default for TerminalAppearance {
             bell_attention: default_terminal_bell_attention(),
             bell_visual: default_terminal_bell_visual(),
             bell_audible: default_terminal_bell_audible(),
+            images: default_terminal_images(),
         }
     }
 }

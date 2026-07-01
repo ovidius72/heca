@@ -43,25 +43,31 @@
 > (attention / visual / audible), and **scrollback search** (`/` in selection mode). Phase
 > `terminal-08` is complete.
 
-> **RESUME HANDOFF (2026-06-30) — read first.**
-> **State is clean & green** on `main`: clippy 0, full suite passing (the real-shell damage tests
-> that flaked under CPU contention are fixed — `TEST_TIMEOUT` is a 30s safety cap, PR #209).
-> **Just shipped (all merged):** hyperlink open #199/#200/#201/#202, centralized action icons +
-> context menu #202, glow strength config-driven #204, follow-link all-panes #205, configurable bell
-> #206, scrollback search #208, flaky-test fix #209.
-> **Architecture you can reuse:** overlays paint into the chrome scene on top (`chrome::paint_*` —
-> `paint_link_hints` / `paint_context_menu` / `paint_bell_flash` / `paint_search`); stateful overlays
-> own widget+state on `AppState` with an event-loop routing pass (context menu is the template); new
-> actions follow the "Adding New Actions" checklist; action icons live on `ActionDescriptor.icon`.
-> **Candidate next work (pick one; verify first):**
-> - **`terminal-09` images / Yazi preview** (`terminal-task-20/21/22`) — biggest user value; the
->   `GraphicsPlacement` snapshot stub already exists (`terminal-04`). Fixes the Yazi infinite spinner.
-> - **`terminal-07` clipboard `OSC 52`** (`terminal-task-16`) — ⚠️ copy (`copy_selection`) + paste
->   (`paste_clipboard`) already work; only OSC 52 remains. **Verify before treating 14/15 as TODO.**
-> - **`terminal-04` backend/renderer tests** (`terminal-task-05/06`) — close the test gap.
-> ⚠️ **Stale-phase check:** `terminal-06` (text selection) appears **already implemented** (selection
-> mode + caret + overlay are live and in daily use) — verify and mark done rather than re-building.
-> `terminal-05` pane-shell-hosting status is also worth re-checking against current `terminal_render.rs`.
+> **RESUME HANDOFF (2026-07-01) — read first.**
+> **Branch `feat/terminal-images`** — synced with `origin/main` (theming PR #211 merged in, commit
+> `e3f33cb`); builds, `heca-core` 84/84, clippy 0. A PR to `main` is being opened.
+> **Done this session (committed on the branch):**
+> - **`terminal-09` inline images** — Sixel + iTerm2 `OSC 1337` + Kitty graphics, any tool. Capture
+>   (`heca-core/src/backend/terminal/engine.rs` `collect_row_graphics` + decode cache), renderer
+>   (`heca-renderer/src/image.rs` + `image.wgsl`), app integration + damage (`terminal_render.rs`).
+> - **Yazi fixed** — two non-obvious fixes: PTY pixel size (`TIOCSWINSZ`) in `pty.rs`, and
+>   **`TERM_PROGRAM=WezTerm` identity** in `pty.rs` so Yazi picks the iTerm2 protocol (no WezTerm
+>   release implements Kitty Unicode placeholders — Yazi's fallback — so identity is the real fix).
+> - **Retina-crisp images** — physical px (`cell × scale`) via `PaneBackend::set_scale_factor`.
+> - **`terminal-07`** — OSC 52 clipboard write (`OscClipboard` in engine) + bracketed-paste-aware
+>   `PaneBackend::paste`. Copy/paste already worked.
+> - **`terminal-04`/`05`/`06`** — verified already covered/implemented, marked done.
+> - **`terminal-task-25`** — `appearance.terminal.images` config toggle.
+> - Kitty Unicode placeholders **deferred to the Neovim GUI** (see `neovim-plan.md`).
+> **Method reminder (learned the hard way this session): VERIFY before concluding.** Don't generalize
+> from one file/one tool; run the probe/test/build first. (Cost real time on Yazi + the worktree.)
+> **Remaining terminal work (not blocking):**
+> - **`terminal-10` per-pane font zoom** — per-pane font size + `TerminalStyle.font_size` in the render
+>   loop (`terminal_render.rs`) + `PaneFontZoom` action/input. Real coding, not started.
+> - **Image polish**: animated GIF/APNG frames (`terminal-task-24`); per-image row-range damage
+>   (`terminal-task-23`, low priority — perf already good).
+> - **`terminal-task-07`** manual validation matrix — needs a human at the keyboard.
+> **Also pending:** verify retina image sizing in-app (visible HiDPI appearance change).
 
 ### [x] Phase: Terminal damage-preservation foundation · `terminal-00`
 Dirty-row rendering depends on retained terminal content. The app currently clears the frame each redraw and the terminal host currently drains damage before render uses it, so skipping unchanged rows today would erase them instead of optimizing redraw cost.
@@ -485,32 +491,47 @@ Extension points for hyperlinks and inline graphics without redesigning the core
   Files: `heca-core/src/backend/snapshot.rs`
   Related: `terminal-task-20` (full image rendering for Yazi)
 
-### [ ] Phase: Backend and renderer tests · `terminal-04`
+### [x] Phase: Backend and renderer tests · `terminal-04`
 Close the test gap before selection/clipboard adds more moving parts.
 
-- [ ] **terminal-task-05** — Backend lifecycle tests: init → resize → snapshot, dirty rows after output, exit detection.
-  Files: `heca-core/src/backend/terminal/tests.rs` (or inline)
+- [x] **terminal-task-05** — Backend lifecycle tests. **DONE (already covered).**
+  `heca-core/src/backend/terminal.rs` tests cover init→snapshot, resize→dimensions,
+  initial-full-then-none + resize-forces-full damage, input→shell, output→row
+  damage, grapheme preservation, exit detection (3 tests), nvim TUI bg cells, and
+  bash/zsh shell-integration. Plus the new OSC52 / bracketed-paste / sixel /
+  image-decode engine tests.
 
-- [ ] **terminal-task-06** — Renderer tests: content-rect clipping, row invalidation logic, color mapping.
-  Files: `heca-renderer/src/terminal.rs` (inline test module)
+- [x] **terminal-task-06** — Renderer tests. **DONE (already covered).** 10 tests in
+  `heca-renderer/src/terminal.rs` (color mapping via `run_push_cell`, color
+  boundaries, multibyte/wide cells, default-bg match, font-family resolution,
+  surface-alpha), the `clip` module tests (content-rect clipping/culling), the
+  app-side row-invalidation policy (`retained_damage_*` + `terminal_damage_copy_bands`),
+  plus the new image geometry + `image.wgsl` validation tests.
 
-- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results in this backlog (or a dedicated handoff doc).
-  Note: verify Yazi image preview (currently shows infinite spinner — see `terminal-task-21`)
+- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results here.
+  Needs a manual in-app run (not automatable). Yazi image preview: ✅ now works
+  (iTerm2 path — see `terminal-09` Yazi resolution).
 
-### [ ] Phase: Pane-shell hosting contract · `terminal-05`
+### [x] Phase: Pane-shell hosting contract · `terminal-05`
 Formally mount the terminal as content inside a `heca-grid-ui` Pane shell.
 The shell owns outer chrome (borders, title, focus ring, content rect, clip). The terminal host owns PTY/snapshot/render/input.
-Note: border/radius visual blocker is already FIXED (#121/#122).
+**DONE** (verified 2026-07-01 — was already implemented; this corrects the stale status).
 
-- [ ] **terminal-task-08** — Define the pane-shell hosting contract in this backlog (or a dedicated design note) — what the shell owns vs what the terminal host owns. No code yet.
+- [x] **terminal-task-08** — Pane-shell contract. **DONE (embodied in code + this note).**
+  Shell owns chrome (border/title/focus ring/content rect/clip), terminal host owns
+  PTY/snapshot/render/input. Realized by `TerminalPaneShell` +
+  `paint_terminal_pane_shell` (`terminal_render.rs`).
 
-- [ ] **terminal-task-09** — Adapt the terminal host to render inside a `heca-grid-ui` `Pane` widget via an explicit content-slot API.
-  Starting point: `heca/src/app/terminal_host.rs` `Rectangle`-based mount step.
-  Files: `heca/src/app/terminal_host.rs`, `heca/src/app/terminal_render.rs`
-  Gate: the ChromeHost/pane-shell boundary must be defined first (`plugin-task-05`)
+- [x] **terminal-task-09** — Render inside a grid-ui `Pane`. **DONE.**
+  `paint_terminal_pane_shell` mounts the content inside `UiPane::new()` (grid-ui
+  `Pane` widget); the terminal content is blitted into the shell's content rect.
+  Files: `heca/src/app/terminal_render.rs`
 
-- [ ] **terminal-task-10** — Make the pane shell reflect `idle`/`running`/`error` from `PaneRuntime` (already in chrome store) without coupling to terminal rendering internals.
-  Files: `heca/src/chrome/mod.rs`, `heca/src/app/terminal_render.rs`
+- [x] **terminal-task-10** — Reflect `idle`/`running`/`error` from `PaneRuntime`.
+  **DONE.** `heca/src/chrome/mod.rs` maps `ProcessStatus` to distinct `StatusDot`s
+  (Idle→offline, Running/Success→online, Error→error) from the chrome store's
+  `PaneRuntime`, decoupled from terminal rendering internals.
+  Files: `heca/src/chrome/mod.rs`
 
 ### [x] Phase: Text selection · `terminal-06`
 Shared host selection model — not terminal-only. Keyboard caret, actions, overlays.
@@ -527,19 +548,28 @@ Shared host selection model — not terminal-only. Keyboard caret, actions, over
   (`heca/src/app/terminal_render.rs`); `Shift+left-drag` mouse entry; unmodified drags still reach the
   TUI.
 
-### [ ] Phase: Clipboard and paste · `terminal-07`
+### [x] Phase: Clipboard and paste · `terminal-07`
 System clipboard on top of the shared selection model.
 Source: terminal design phase 10 (now tracked in this backlog)
 
-- [ ] **terminal-task-14** — Copy selected text to system clipboard (not terminal-specific — uses the shared selection owner).
-  Files: `heca/src/handlers.rs`, add clipboard crate (`arboard` or platform equivalent)
+- [x] **terminal-task-14** — Copy selected text to system clipboard. **DONE.**
+  `handle_copy_selection` extracts the host-grid selection and writes via `arboard`
+  (`set_system_clipboard`). Reachable from keyboard / mouse / RPC.
+  Files: `heca/src/handlers.rs`
 
-- [ ] **terminal-task-15** — Paste from system clipboard through the focused pane/backend.
-  Terminal paste must respect bracketed-paste mode when active.
-  Files: `heca/src/handlers.rs`, `heca-core/src/backend/terminal/engine.rs`
+- [x] **terminal-task-15** — Paste from system clipboard through the focused pane.
+  **DONE.** `handle_paste_clipboard` reads `arboard` and forwards via the new
+  `PaneBackend::paste`, which **wraps in bracketed-paste markers** (`ESC[200~ …
+  ESC[201~`) when the program enabled DECSET 2004.
+  Files: `heca/src/handlers.rs`, `heca-core/src/backend/terminal.rs`, `engine.rs`
 
-- [ ] **terminal-task-16** — Add `OSC 52` terminal protocol clipboard support.
-  Files: `heca-core/src/backend/terminal/engine.rs`
+- [x] **terminal-task-16** — `OSC 52` clipboard support. **DONE.** Register a wezterm
+  `Clipboard` handler (`OscClipboard`); wezterm parses + base64-decodes the
+  sequence, we capture the text into a queue the app drains
+  (`take_clipboard_writes`) and pushes to the OS clipboard. **Writes only** —
+  `OSC 52` read/query is intentionally unsupported (clipboard-exfiltration risk).
+  Covered by `captures_osc52_clipboard_write_once` + `bracketed_paste_mode_tracks_decset_2004`.
+  Files: `heca-core/src/backend/terminal/engine.rs`, `heca/src/app/lifecycle.rs`
 
 ### [x] Phase: Terminal UX and attention features · `terminal-08`
 Bell, scrollback search, hyperlinks.
@@ -609,17 +639,83 @@ Source: terminal design phase 11 (now tracked in this backlog)
   `heca/src/app/{terminal_host,input,render,registry,interaction}.rs`, `heca/src/chrome/mod.rs`,
   `heca/src/app_state.rs`, `keybindings.default.toml`, `README.md`.
 
-### [ ] Phase: Terminal image protocols (Yazi preview) · `terminal-09`
+### [x] Phase: Terminal image protocols (general inline images) · `terminal-09`
 Source: terminal design phase 12 (now tracked in this backlog)
-Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) must exist first.
+Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 
-- [ ] **terminal-task-20** — Design image/graphics protocol surface: how Kitty graphics protocol + sixel placements map from `wezterm-term` through `TerminalSnapshot` to the renderer.
-  Files: `heca-core/src/backend/terminal/snapshot.rs`, `heca-renderer/src/terminal.rs`
+> **DONE — general inline-image rendering shipped on `feat/terminal-images`.**
+> Scope grew from "Yazi preview" to **any image, any tool**: Sixel, iTerm2
+> `OSC 1337`, and Kitty graphics all funnel through wezterm's per-cell
+> `ImageCell` path, so one protocol-agnostic capture + one renderer blit covers
+> them all. Verified live in the app (`wezterm imgcat` 4-colour PNG rendered in a
+> pane; harness also drove `chafa -f sixel`). Three atomic commits:
+> capture (stage 1) → renderer pipeline (stage 2) → app integration + damage (stage 3).
 
-- [ ] **terminal-task-21** — Implement GPU renderer for image placements: texture upload + blit at correct cell coordinates.
-  Files: `heca-renderer/src/terminal.rs`, new `heca-renderer/src/terminal_graphics.rs`
+- [x] **terminal-task-20** — Capture image/graphics placements from `wezterm-term`
+  through `TerminalSnapshot`. **DONE.** Enabled Kitty graphics in
+  `HecaTerminalConfig`; decode each unique source image to RGBA once (cached by
+  content hash); extended `GraphicsPlacement` (image id / source texcoords /
+  z-index) + added a `TerminalImage` registry; coalesced per-cell slices into one
+  block per `(image, placement, z)`. Also reports real pixel size to wezterm so
+  Sixel attachment doesn't divide by zero and `CSI 14 t`/`16 t` queries (used by
+  image tools to size previews) return non-zero.
+  Files: `heca-core/src/backend/snapshot.rs`, `heca-core/src/backend/terminal/engine.rs`, `heca-core/src/backend/terminal.rs`
 
-- [ ] **terminal-task-22** — Wire Yazi image preview end-to-end. Confirm no infinite spinner.
+- [x] **terminal-task-21** — GPU renderer for image placements. **DONE.** New
+  `heca-renderer/src/image.rs` + `image.wgsl`: textured-quad pipeline
+  (premultiplied alpha, sRGB), per-image GPU texture cache keyed by image id with
+  generation-based eviction, one quad per placement sampling the placement's
+  source texcoords, flushed under-text (z<0) / over-text (z>=0).
+  Files: `heca-renderer/src/image.rs`, `heca-renderer/src/image.wgsl`, `heca-renderer/src/lib.rs`
+
+- [x] **terminal-task-22** — Wire image preview end-to-end. **DONE.** Draw into the
+  terminal scratch around the glyph pass so the retained-layer/copy-band machinery
+  carries images for free; image-aware retained damage (full repaint on placement
+  change / when an image-bearing pane is touched; idle image panes still skip).
+  Files: `heca/src/app/terminal_render.rs`, `heca/src/app_state.rs`, `heca/src/app/startup.rs`
+
+> **Yazi resolution (verified live) — two extra fixes beyond rendering:**
+> 1. **PTY pixel size (`TIOCSWINSZ`).** The PTY winsize reported `pixel_width/height
+>    = 0`; image tools read `ioctl(TIOCGWINSZ)` to size previews — `kitten icat`
+>    errors outright, Yazi spins. Now we report real pixel dims on the PTY (and the
+>    wezterm model, so `CSI 14/16 t` answers + Sixel cell math agree). Files:
+>    `heca-core/src/backend/terminal/pty.rs`, `terminal.rs`.
+> 2. **Terminal identity (`TERM_PROGRAM=WezTerm`).** Tools pick their image protocol
+>    by sniffing terminal identity. Unidentified, **Yazi falls back to Kitty Unicode
+>    placeholders** (`U=1`) — a mode **no WezTerm release implements either**, so it
+>    renders as boxes. Presenting as WezTerm makes Yazi (and others) use the **iTerm2
+>    `OSC 1337`** protocol heca fully supports — exactly how it works in real WezTerm.
+>    Verified: Yazi previews render, fast, in a release build. File: `pty.rs`.
+> **Known gaps (not blocking):**
+> - `kitten icat` direct transmission still fails: it emits **unpadded base64** and
+>   wezterm-term's decoder requires canonical padding (`osc.rs` `base64_decode`).
+>   Needs a lenient-padding patch (fork / `[patch]`) — low priority.
+> - **Kitty Unicode placeholders** — **DEFERRED to the Neovim GUI** (user decision
+>   2026-07-01). Verified: **no WezTerm release implements `U=1` placeholders**, so
+>   tools that can use another protocol don't need them — Yazi works via iTerm2.
+>   Implementing them in the terminal (snoop transmits → decode `U+10EEEE` cells →
+>   placements) is a sizable feature whose main beneficiary is the editor, which the
+>   **Neovim GUI** (`neovim-plan.md`) handles natively instead. Not planned for the
+>   terminal pane.
+
+> **Stage 4 follow-ups (not blocking; new tasks):**
+> - **terminal-task-23** — Per-placement row-range damage instead of full-pane
+>   repaint while an image is on screen (only redraw the image's row span when it
+>   intersects dirty rows). Today any touch of an image-bearing pane forces Full.
+> - **terminal-task-24** — Animated images (`AnimRgba8`, GIF/APNG/WebP): currently
+>   the first frame renders; add frame advance + redraw scheduling.
+> - **terminal-task-25** — **DONE.** `config.toml` toggle
+>   `appearance.terminal.images` (default `true`). When off, the engine skips
+>   inline-image capture entirely (guarded `collect_row_graphics`). Wired via
+>   `PaneBackend::set_image_capture` from `backend_factory`, mirroring
+>   `link_detection`.
+> - **terminal-task-26** — Yazi previews work via the iTerm2 path (see Yazi
+>   resolution above). **DONE: crisp retina sizing** — the backend reports
+>   *physical* px (`cell × scale`) to the model + PTY, threaded via
+>   `PaneBackend::set_scale_factor` (pushed each frame in `sync_terminal_backend_size`
+>   + on scale change in `refresh_terminal_cell_size`). Previews now render at the
+>   real on-screen resolution instead of being upscaled. ⚠️ visible appearance
+>   change on HiDPI (crisper + more correctly sized) — verify in-app.
 
 ### [ ] Phase: Per-pane font zoom · `terminal-10`
 Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no

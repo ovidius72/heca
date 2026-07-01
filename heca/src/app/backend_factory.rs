@@ -55,6 +55,7 @@ pub(crate) fn create_terminal_backend_for_state(
     let mut backend =
         create_terminal_backend_with_options(cols, rows, state.terminal_cell_size, options);
     backend.set_link_detection(state.appearance.terminal.link_detection);
+    backend.set_image_capture(state.appearance.terminal.images);
     backend
 }
 
@@ -77,6 +78,7 @@ pub(crate) fn create_command_backend_for_state(
     let mut backend =
         create_command_backend_with_options(cols, rows, state.terminal_cell_size, command, options);
     backend.set_link_detection(state.appearance.terminal.link_detection);
+    backend.set_image_capture(state.appearance.terminal.images);
     backend
 }
 
@@ -235,10 +237,10 @@ fn shell_integration_assets() -> Option<ShellIntegrationAssets> {
     static SHELL_ASSETS: OnceLock<Result<ShellIntegrationAssets, String>> = OnceLock::new();
     match SHELL_ASSETS.get_or_init(materialize_shell_integration_assets) {
         Ok(assets) => Some(assets.clone()),
-        Err(err) => {
+        Err(_err) => {
             #[cfg(debug_assertions)]
             eprintln!(
-                "[heca] warning: failed to materialize shell integration assets ({err}); spawning bare shells"
+                "[heca] warning: failed to materialize shell integration assets ({_err}); spawning bare shells"
             );
             None
         }

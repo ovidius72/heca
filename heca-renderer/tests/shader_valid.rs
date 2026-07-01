@@ -25,3 +25,8 @@ fn primitive_shader_is_valid() {
 fn text_shader_is_valid() {
     validate("text.wgsl", include_str!("../src/text.wgsl"));
 }
+
+#[test]
+fn image_shader_is_valid() {
+    validate("image.wgsl", include_str!("../src/image.wgsl"));
+}

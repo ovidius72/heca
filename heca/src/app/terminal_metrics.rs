@@ -27,7 +27,9 @@ pub(crate) fn refresh_terminal_cell_size(state: &mut AppState) {
     state.terminal_cell_size =
         resolve_terminal_cell_size(&mut state.text_renderer, &state.font_config);
     let (cell_w, cell_h) = state.terminal_cell_size;
+    let scale = state.scale_factor as f32;
     for backend in state.backends.values_mut() {
+        backend.set_scale_factor(scale);
         backend.set_cell_size(cell_w, cell_h);
     }
 }

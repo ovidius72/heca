@@ -149,6 +149,7 @@ impl PaneBackend for FakeBackend {
             viewport_top_stable_row: 0,
             hyperlinks: Vec::new(),
             graphics: Vec::new(),
+            images: Vec::new(),
         };
         snapshot.debug_assert_valid();
         Some(snapshot)

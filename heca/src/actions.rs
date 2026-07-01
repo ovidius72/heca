@@ -848,7 +848,7 @@ impl ActionRegistry {
         ActionDescriptor {
             name: "paste_clipboard",
             label: "Paste Clipboard",
-            description: "Paste system clipboard content into the focused pane. Placeholder until Phase 10 lands paste integration.",
+            description: "Paste system clipboard content into the focused pane (bracketed-paste aware).",
             category: ActionCategory::Pane,
             default_binding: "unbound",
             icon: None,
