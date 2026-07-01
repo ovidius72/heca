@@ -153,7 +153,10 @@ pub(crate) fn sync_retained_terminal_layers(
         );
     }
 
-    state.has_animated_images = any_animated;
+    // OR (never assign): this runs once for tiled panes and once for floating
+    // panes per frame, so assigning would let the second call clobber the first.
+    // `render_frame` resets the flag to false before the tiled call each frame.
+    state.has_animated_images |= any_animated;
 
     // Drop image textures not referenced for a while (panes scrolled past the
     // image or closed). Generous grace so re-scrolling to a recent image does not
