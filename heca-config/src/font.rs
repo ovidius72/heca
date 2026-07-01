@@ -274,11 +274,18 @@ impl FontConfig {
     /// height ≈ 1.28em — the same ratios the old `Theme::terminal_cell_size`
     /// used, relocated here since font size no longer lives on `Theme`.
     pub fn terminal_cell_size(&self) -> (f32, f32) {
+        self.terminal_cell_size_for(self.size.terminal)
+    }
+
+    /// Same heuristic as [`terminal_cell_size`](Self::terminal_cell_size) but for
+    /// an explicit font size — used by per-pane font zoom, where a pane's size can
+    /// differ from the configured `size.terminal`.
+    pub fn terminal_cell_size_for(&self, size: f32) -> (f32, f32) {
         const TERMINAL_CELL_WIDTH_RATIO: f32 = 0.58;
         const TERMINAL_CELL_HEIGHT_RATIO: f32 = 1.28;
         (
-            self.size.terminal * TERMINAL_CELL_WIDTH_RATIO,
-            self.size.terminal * TERMINAL_CELL_HEIGHT_RATIO,
+            size * TERMINAL_CELL_WIDTH_RATIO,
+            size * TERMINAL_CELL_HEIGHT_RATIO,
         )
     }
 }

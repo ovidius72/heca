@@ -47,6 +47,21 @@ resize_decrease      = "prefix+-"
 pane_height_increase = "prefix+Shift+="
 pane_height_decrease = "prefix+Shift+-"
 
+# ── Font zoom ──
+# Two explicit scopes (no implicit resolution): Ctrl = whole app (chrome/UI font
+# AND every terminal pane), Ctrl+Shift = the focused terminal pane only, layered
+# on top of the app-wide size. =/- zoom in/out; 0 resets. The same gesture is also
+# on Ctrl/Meta+mouse-wheel, resolved by what's under the pointer (pane → pane,
+# chrome → whole app).
+# (Alt is deliberately avoided: on macOS the Option key rewrites the typed
+#  character, so an Alt+= binding would never match.)
+app_font_increase = "prefix+Ctrl+="        # Whole app (chrome + terminals) bigger
+app_font_decrease = "prefix+Ctrl+-"        # Whole app (chrome + terminals) smaller
+app_font_reset    = "prefix+Ctrl+0"        # Whole app back to configured sizes
+pane_terminal_font_increase   = "prefix+Ctrl+Shift+="  # Focused pane font bigger
+pane_terminal_font_decrease   = "prefix+Ctrl+Shift+-"  # Focused pane font smaller
+pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # Focused pane follows app-wide
+
 # ── Pane operations ──
 close = "prefix+x"   # Close active pane
 float = "prefix+f"   # Toggle pane floating
@@ -373,3 +388,49 @@ keys = "End"
 [[keys.mode.bindings]]
 action = "exit_scrollback"
 keys = "Escape"
+
+# ── Font size modes (sticky) ──
+# Enter the mode once, then tap keys repeatedly without re-pressing the chord:
+#   k / ArrowUp = bigger,  j / ArrowDown = smaller,  0 = reset,  Esc/Enter = exit.
+# `app_font_size` scales the WHOLE app (chrome + every terminal); `pane_font_size`
+# scales only the focused terminal pane. The direct chords still work too
+# (prefix+Ctrl+=/-/0 whole app, prefix+Ctrl+Shift+=/-/0 focused pane).
+[[keys.mode]]
+name = "app_font_size"
+trigger = "prefix+!"   # prefix then Shift+1
+sticky = true
+[[keys.mode.bindings]]
+action = "app_font_increase"
+keys = "k"
+[[keys.mode.bindings]]
+action = "app_font_increase"
+keys = "ArrowUp"
+[[keys.mode.bindings]]
+action = "app_font_decrease"
+keys = "j"
+[[keys.mode.bindings]]
+action = "app_font_decrease"
+keys = "ArrowDown"
+[[keys.mode.bindings]]
+action = "app_font_reset"
+keys = "0"
+
+[[keys.mode]]
+name = "pane_font_size"
+trigger = "prefix+@"   # prefix then Shift+2
+sticky = true
+[[keys.mode.bindings]]
+action = "pane_terminal_font_increase"
+keys = "k"
+[[keys.mode.bindings]]
+action = "pane_terminal_font_increase"
+keys = "ArrowUp"
+[[keys.mode.bindings]]
+action = "pane_terminal_font_decrease"
+keys = "j"
+[[keys.mode.bindings]]
+action = "pane_terminal_font_decrease"
+keys = "ArrowDown"
+[[keys.mode.bindings]]
+action = "pane_terminal_font_reset"
+keys = "0"

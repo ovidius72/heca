@@ -21,7 +21,7 @@ use crate::app::terminal_host::{
 };
 use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
 use crate::chrome;
-use crate::input::{SpawnKind, WmAction};
+use crate::input::{FontZoomStep, SpawnKind, WmAction};
 use crate::sidebar;
 use crate::{
     collect_all_pane_candidates, destroy_empty_workspace, find_pane_location, move_pane_to_column,
@@ -2116,6 +2116,46 @@ pub fn handle_scroll_to_offset(state: &mut AppState, action: &WmAction) {
 
 pub fn handle_reload_config(state: &mut AppState, _action: &WmAction) {
     state.pending_reload = true;
+}
+
+/// Resolve a [`FontZoomStep`] into a signed point delta using the configured step
+/// size (`[settings] terminal_font_zoom_step`). `Reset` maps to `0.0`, which both
+/// zoom helpers treat as "clear the offset". A non-positive configured step falls
+/// back to the built-in default so zoom never becomes a no-op.
+fn font_zoom_delta(state: &AppState, step: FontZoomStep) -> f32 {
+    use crate::app::terminal_metrics::TERMINAL_FONT_ZOOM_STEP;
+    let size = if state.terminal_font_zoom_step > 0.0 {
+        state.terminal_font_zoom_step
+    } else {
+        TERMINAL_FONT_ZOOM_STEP
+    };
+    match step {
+        FontZoomStep::In => size,
+        FontZoomStep::Out => -size,
+        FontZoomStep::Reset => 0.0,
+    }
+}
+
+/// App-wide terminal font zoom (the `app-03` base) — steps every pane's size.
+pub fn handle_app_font_zoom(state: &mut AppState, action: &WmAction) {
+    let WmAction::AppFontZoom { step } = action else {
+        return;
+    };
+    let delta = font_zoom_delta(state, *step);
+    crate::app::terminal_metrics::apply_app_font_zoom(state, delta);
+}
+
+/// Per-pane terminal font zoom. `pane_id = None` targets the focused pane
+/// (keyboard); `Some(id)` targets a specific pane (`Ctrl`/`Meta`+wheel / RPC).
+pub fn handle_pane_terminal_font_zoom(state: &mut AppState, action: &WmAction) {
+    let WmAction::PaneTerminalFontZoom { pane_id, step } = action else {
+        return;
+    };
+    let Some(target) = pane_id.or(state.focused_pane) else {
+        return;
+    };
+    let delta = font_zoom_delta(state, *step);
+    crate::app::terminal_metrics::apply_pane_terminal_font_zoom(state, target, delta);
 }
 
 /// Schemes we are willing to hand to the OS opener. OSC 8 links come from

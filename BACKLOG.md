@@ -717,7 +717,50 @@ Gate: `terminal-task-03`/`terminal-task-04` (protocol hook stubs) — satisfied.
 >   real on-screen resolution instead of being upscaled. ⚠️ visible appearance
 >   change on HiDPI (crisper + more correctly sized) — verify in-app.
 
-### [ ] Phase: Per-pane font zoom · `terminal-10`
+### [x] Phase: Per-pane font zoom · `terminal-10`
+> **DONE (2026-07-01) on `feat/terminal-font-zoom`** (branched off `feat/terminal-images`).
+> Two explicit action variants: `GlobalTerminalFontZoom { step }` (app-wide base, policy `Global`)
+> and `PaneTerminalFontZoom { pane_id: Option, step }` (focused/target pane, policy
+> `FocusedPaneLocal`), with `FontZoomStep { In, Out, Reset }`. State: `terminal_font_zoom_global`
+> (points) + `pane_font_zoom: HashMap<PaneId, f32>` (per-pane offset) + `pane_cell_override` cache on
+> `AppState`; effective size = `(config + global + pane).clamp(6.0, 72.0)` via
+> `AppState::effective_terminal_font_size`. Render loop builds `TerminalStyle.font_size` per pane and
+> a per-pane render key in `sync_retained_terminal_layers`; `prepare_terminal_mount` fits each PTY to
+> the pane's base cell. Keyboard: `prefix+Ctrl+=/-/0` (global), `prefix+Alt+=/-/0` (pane). Mouse:
+> `Ctrl`/`Meta`+wheel intercepted in `events.rs` before terminal forwarding, pointer-resolved (pane →
+> pane, chrome → global). RPC: `global-terminal-font <step>`, `pane-terminal-font <step> [pane_id]`.
+> Step size is configurable: `[settings] terminal_font_zoom_step` (default 1.0pt). Maps pruned on
+> pane close. Tests: `default_font_zoom_bindings_resolve_without_collision`, `test_font_zoom_commands`,
+> `action_from_name`. heca 282/282, heca-core 84/84, heca-config 75/75, clippy clean.
+> **Binding fix (2026-07-01 review):** pane branch moved from `Alt` to **`Ctrl+Shift`**
+> (`prefix+Ctrl+Shift+=/-/0`). Root cause: `normalize_key_text` only applies the physical-key
+> remap (`Equal`→`=`, `Digit0`→`0`) when **Ctrl** is held, so on macOS `Alt+=` delivers the
+> Option-rewritten character (`≠`) and never matched — the Alt bindings were dead. Ctrl+Shift routes
+> through the working Ctrl-remap path.
+> **Scope change (2026-07-01, user request "l'app intera"):** the global branch is now a true
+> **whole-app** zoom — it scales the chrome/UI font (sidebar, tabs, status bar) **and** every
+> terminal pane together, not just terminals. Renamed `GlobalTerminalFontZoom`→`AppFontZoom`, config
+> keys `global_terminal_font_*`→`app_font_*`, RPC `global-terminal-font`→`app-font`, state field
+> `terminal_font_zoom_global`→`app_font_zoom`. Chrome side: `AppState::app_ui_font_size()` =
+> `(config.ui + app_font_zoom).clamp(8,48)`, applied in `chrome_gui_theme` (font used both by the
+> per-frame `paint_chrome_root` base font and the retained-tree rebuild); `app_font_zoom` added to
+> `chrome_signature` so a zoom forces a chrome rebuild. Keyboard: `prefix+Ctrl+=/-/0` (whole app),
+> `prefix+Ctrl+Shift+=/-/0` (focused pane). Mouse `Ctrl`/`Meta`+wheel: over pane → pane, over chrome
+> → whole app. heca 282/282, heca-config 75/75, clippy clean.
+> **Sticky font modes (2026-07-01, user request):** two `[[keys.mode]]` blocks (config-only, no new
+> Rust — actions already exist, `build_modes` is generic): `app_font_size` (trigger `prefix+!` =
+> Shift+1) and `pane_font_size` (trigger `prefix+@` = Shift+2), both `sticky=true`. Inside: `k`/`ArrowUp`
+> bigger, `j`/`ArrowDown` smaller, `0` reset, `Esc`/`Enter` exit (auto via `handle_custom_mode`). Avoids
+> re-pressing the chord. Test `default_font_size_modes_build_with_triggers_and_keys`. No collisions
+> (`!`/`@` were free). heca 283/283, clippy clean.
+> **Wheel toggle (2026-07-01, user request):** `[settings] mouse_wheel_change_font_size` (bool,
+> default true) gates the `Ctrl`/`Meta`+wheel zoom in `handle_wheel_font_zoom`; false forwards the
+> modified wheel normally (font zoom stays keyboard-only). Threaded through `AppState`, startup, and
+> reload like `terminal_font_zoom_step`.
+> **Still needs a human at the keyboard:** rebuild + restart, then confirm `Ctrl` scales chrome +
+> all panes, `Ctrl+Shift` scales only the focused pane, and the `prefix+!` / `prefix+@` sticky modes
+> work; retina visual check.
+
 Zoom the terminal font **per pane**, with the same gesture also driving app-wide zoom when no
 pane is targeted. Feasibility confirmed 2026-06-29: the per-pane plumbing mostly exists — cell
 size is already per-backend (`backend.cell_size()`, used for mouse/selection mapping), the grid
@@ -737,14 +780,14 @@ Design (agreed with user 2026-06-29):
   top, so the global binding moves everything and the per-pane binding fine-tunes one pane. The
   global action IS `app-03`'s — design them together.
 
-- [ ] **terminal-task-23** — Per-pane font-size state (default = global config). Store per `pane_id`
+- [x] **terminal-task-23** — Per-pane font-size state (default = global config). Store per `pane_id`
   (AppState map or `PaneRuntime`); resolve cell size from the pane's size and `set_cell_size` per
   backend (re-fits cols/rows → PTY reflow, already handled).
   Files: `heca/src/app/terminal_metrics.rs`, `heca/src/app/terminal_host.rs`, `heca/src/app_state.rs`
-- [ ] **terminal-task-24** — Build `TerminalStyle.font_size` per pane in the render loop (today a
+- [x] **terminal-task-24** — Build `TerminalStyle.font_size` per pane in the render loop (today a
   single global style feeds all panes); retained layer + size-keyed glyph cache already cope.
   Files: `heca/src/app/render.rs`, `heca/src/app/terminal_render.rs`
-- [ ] **terminal-task-25** — Actions + input. A pane `WmAction` (`PaneFontZoom { delta }` + reset)
+- [x] **terminal-task-25** — Actions + input. A pane `WmAction` (`PaneFontZoom { delta }` + reset)
   for the focused pane, and the global zoom action shared with `app-03`. Two keyboard bindings
   (global vs pane) + mouse `Ctrl`/`Meta`+wheel resolved by pointer (over pane → pane action; over
   chrome → global action). Intercept the modified wheel at the WM level **before** terminal wheel

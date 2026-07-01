@@ -69,6 +69,16 @@ fn default_terminal_mouse() -> bool {
 fn default_terminal_wheel_scroll_lines() -> usize {
     3
 }
+/// Default points added/removed per terminal font-zoom step (keyboard notch or
+/// `Ctrl`/`Meta`+wheel notch).
+fn default_terminal_font_zoom_step() -> f32 {
+    1.0
+}
+/// Default for whether `Ctrl`/`Meta`+wheel changes the font size. On by default;
+/// set false to reserve the modified wheel for the terminal/app instead.
+fn default_mouse_wheel_change_font_size() -> bool {
+    true
+}
 fn default_terminal_scroll_animations() -> bool {
     true
 }
@@ -155,6 +165,21 @@ pub struct SettingsConfig {
     #[serde(default = "default_terminal_wheel_scroll_lines", alias = "terminal-wheel-scroll-lines")]
     pub terminal_wheel_scroll_lines: usize,
 
+    /// Points added/removed per terminal font-zoom step (keyboard `prefix+Ctrl/Alt`
+    /// bindings and `Ctrl`/`Meta`+wheel). Applies to both the app-wide and the
+    /// per-pane zoom. Non-positive values fall back to the default step.
+    #[serde(default = "default_terminal_font_zoom_step", alias = "terminal-font-zoom-step")]
+    pub terminal_font_zoom_step: f32,
+
+    /// Whether `Ctrl`/`Meta`+mouse-wheel changes the font size (app-wide over
+    /// chrome, focused pane over a pane). When false the modified wheel is left
+    /// alone (forwarded like a normal wheel), and font zoom stays keyboard-only.
+    #[serde(
+        default = "default_mouse_wheel_change_font_size",
+        alias = "mouse-wheel-change-font-size"
+    )]
+    pub mouse_wheel_change_font_size: bool,
+
     /// Enable smooth animation for backend-side discrete terminal viewport jumps.
     /// When false, animated scroll APIs degrade to immediate scroll.
     #[serde(default = "default_terminal_scroll_animations", alias = "terminal-scroll-animations")]
@@ -184,6 +209,8 @@ impl Default for SettingsConfig {
             terminal_scrollback_lines: default_terminal_scrollback_lines(),
             terminal_mouse: default_terminal_mouse(),
             terminal_wheel_scroll_lines: default_terminal_wheel_scroll_lines(),
+            terminal_font_zoom_step: default_terminal_font_zoom_step(),
+            mouse_wheel_change_font_size: default_mouse_wheel_change_font_size(),
             terminal_scroll_animations: default_terminal_scroll_animations(),
         }
     }

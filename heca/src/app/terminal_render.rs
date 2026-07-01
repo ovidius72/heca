@@ -56,12 +56,18 @@ pub(crate) fn sync_retained_terminal_layers(
     // textures (scrolled-off / closed panes) are evicted after the pane loop.
     state.image_renderer.begin_frame();
 
-    let render_key = terminal_layer_render_key(&terminal_style);
     for pane in panes {
         let Some(mount) = pane.mount.as_ref() else {
             state.terminal_layers.remove(&pane.pane_id);
             continue;
         };
+
+        // Per-pane font zoom: start from the shared style and override the font
+        // size for this pane. The render key already folds in `font_size`, so a
+        // zoom change on one pane repaints only that pane's retained layer.
+        let mut pane_style = terminal_style;
+        pane_style.font_size = state.effective_terminal_font_size(pane.pane_id);
+        let render_key = terminal_layer_render_key(&pane_style);
 
         let physical_size = retained_terminal_texture_size(mount.content_rect, state.scale_factor);
         // The offscreen scratch must match the pane's exact physical size. A
@@ -126,7 +132,7 @@ pub(crate) fn sync_retained_terminal_layers(
             pane.pane_id,
             mount,
             &damage,
-            terminal_style,
+            pane_style,
             window_logical_size,
             window_physical_size,
         );
@@ -273,6 +279,14 @@ fn retain_live_terminal_layers(state: &mut AppState) {
     }
     state
         .terminal_layers
+        .retain(|pane_id, _| live_panes.contains(pane_id));
+    // Per-pane font-zoom state is keyed by pane; drop it for closed panes so the
+    // maps don't leak entries across the app's lifetime.
+    state
+        .pane_font_zoom
+        .retain(|pane_id, _| live_panes.contains(pane_id));
+    state
+        .pane_cell_override
         .retain(|pane_id, _| live_panes.contains(pane_id));
 }
 

@@ -2231,6 +2231,11 @@ pub(crate) fn chrome_colors(state: &crate::app_state::AppState) -> (Color, Color
 pub(crate) fn chrome_gui_theme(state: &crate::app_state::AppState) -> GuiTheme {
     let (_, sidebar_bg, _) = chrome_colors(state);
     let mut theme = app_theme_to_gui_theme(&state.theme, &state.font_config);
+    // App-wide font zoom scales the chrome/UI font alongside the terminals, so the
+    // sidebar/tabs/status bar grow/shrink together with the panes. Read at paint
+    // time so it live-updates; a zoom change also bumps `chrome_signature` to force
+    // a tree rebuild at the new size.
+    theme.font_size = state.app_ui_font_size();
     theme.colors.background = state.theme.background;
     theme.colors.surface = sidebar_bg;
     // `[appearance]` effect-token overrides take precedence over the theme.
@@ -2896,6 +2901,8 @@ pub(crate) fn chrome_signature(state: &crate::app_state::AppState, chrome: Chrom
     phys.width.hash(&mut hsh);
     phys.height.hash(&mut hsh);
     state.scale_factor.to_bits().hash(&mut hsh);
+    // App-wide font zoom scales the chrome font, so a change must rebuild the tree.
+    state.app_font_zoom.to_bits().hash(&mut hsh);
     chrome.left_sidebar_width.to_bits().hash(&mut hsh);
     chrome.right_sidebar_width.to_bits().hash(&mut hsh);
     chrome.sidebar_gap.to_bits().hash(&mut hsh);

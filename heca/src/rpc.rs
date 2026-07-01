@@ -31,7 +31,7 @@
 //!     (selection is a host capability; these commands are reachable from
 //!      RPC, keyboard bindings, and future mouse/UI dispatch)
 
-use crate::input::{ResizeTarget, SpawnKind, WmAction};
+use crate::input::{FontZoomStep, ResizeTarget, SpawnKind, WmAction};
 use heca_core::layout::PaneId;
 use heca_core::runtime::PaneClosePolicy;
 
@@ -447,6 +447,26 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             })?;
             Ok(WmAction::ScrollToOffset { rows })
         }
+        // Font zoom: `<in|out|reset>` step; the pane variant optionally takes a
+        // trailing pane_id (omitted → focused pane).
+        "app-font" => {
+            let step_arg = expect_arg!("step");
+            let step = step_arg
+                .parse::<FontZoomStep>()
+                .map_err(|_| RpcError::UnknownCommand(step_arg.to_string()))?;
+            Ok(WmAction::AppFontZoom { step })
+        }
+        "pane-terminal-font" => {
+            let step_arg = expect_arg!("step");
+            let step = step_arg
+                .parse::<FontZoomStep>()
+                .map_err(|_| RpcError::UnknownCommand(step_arg.to_string()))?;
+            let pane_id = match parts.next() {
+                Some(id) => Some(PaneId(parse_u64!(id, "pane_id"))),
+                None => None,
+            };
+            Ok(WmAction::PaneTerminalFontZoom { pane_id, step })
+        }
         "open-link" => {
             // The URL is the remainder of the line (URLs are normally one token,
             // but join defensively in case of stray spaces).
@@ -468,7 +488,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::{ResizeTarget, WmAction};
+    use crate::input::{FontZoomStep, ResizeTarget, WmAction};
     use heca_core::layout::PaneId;
 
     #[test]
@@ -933,6 +953,42 @@ mod tests {
             parse_rpc_command("direct-scroll-to-offset 42"),
             Ok(WmAction::ScrollToOffset { rows: 42 })
         );
+    }
+
+    #[test]
+    fn test_font_zoom_commands() {
+        assert_eq!(
+            parse_rpc_command("app-font in"),
+            Ok(WmAction::AppFontZoom {
+                step: FontZoomStep::In
+            })
+        );
+        assert_eq!(
+            parse_rpc_command("app-font reset"),
+            Ok(WmAction::AppFontZoom {
+                step: FontZoomStep::Reset
+            })
+        );
+        // Pane variant: optional trailing pane_id (omitted → focused pane).
+        assert_eq!(
+            parse_rpc_command("pane-terminal-font out"),
+            Ok(WmAction::PaneTerminalFontZoom {
+                pane_id: None,
+                step: FontZoomStep::Out
+            })
+        );
+        assert_eq!(
+            parse_rpc_command("pane-terminal-font in 7"),
+            Ok(WmAction::PaneTerminalFontZoom {
+                pane_id: Some(PaneId(7)),
+                step: FontZoomStep::In
+            })
+        );
+        // Unknown step is rejected.
+        assert!(matches!(
+            parse_rpc_command("app-font sideways"),
+            Err(RpcError::UnknownCommand(_))
+        ));
     }
 
     #[test]
