@@ -66,7 +66,7 @@
 >   phase below for the full contract.
 > - **Image polish** — **DONE (branch `feat/terminal-image-polish`):** per-image row-range damage
 >   (`terminal-task-23`) + animated GIF/APNG/`AnimRgba8` (`terminal-task-24`). See the image phase.
-> - **`terminal-task-07`** manual validation matrix — needs a human at the keyboard.
+> - **`terminal-task-07`** manual validation matrix — **DONE (2026-07-02), validated in-app by the user.**
 > **Also pending (needs a human at the keyboard):** verify retina image sizing + animated-GIF playback
 > in-app.
 
@@ -509,9 +509,10 @@ Close the test gap before selection/clipboard adds more moving parts.
   app-side row-invalidation policy (`retained_damage_*` + `terminal_damage_copy_bands`),
   plus the new image geometry + `image.wgsl` validation tests.
 
-- [ ] **terminal-task-07** — Manual validation matrix: shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Document results here.
-  Needs a manual in-app run (not automatable). Yazi image preview: ✅ now works
-  (iTerm2 path — see `terminal-09` Yazi resolution).
+- [x] **terminal-task-07** — Manual validation matrix. **DONE (2026-07-02) — validated in-app by
+  the user:** shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize,
+  mouse-enabled TUI all confirmed working. Yazi image preview works (iTerm2 path — see `terminal-09`
+  Yazi resolution); animated GIF/APNG playback verified via ranger + raw OSC 1337.
 
 ### [x] Phase: Pane-shell hosting contract · `terminal-05`
 Formally mount the terminal as content inside a `heca-grid-ui` Pane shell.
