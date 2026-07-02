@@ -1133,10 +1133,32 @@ Source: `pluggable-chrome-plugin-plan.md` §3.5 (rows 3–10)
 
 - [ ] **plugin-task-15** — Add `app.overlay.open_modal(spec)` + `app.overlay.open_dropdown(spec)` with async result-returning flows.
   Backed by the existing `Modal`/`Select` grid-ui widgets. The host owns the async plumbing.
+  The modal `body` is a `ViewNode` (§2.7.1), so depends on the `plugin-ui` phase.
   Files: `heca/src/host.rs`, `heca/src/chrome/mod.rs`
 
 - [ ] **plugin-task-16** — Add `app.regions.left_sidebar.add_container(contribution)` + analogues for right/top/bottom + `move_container(container_id, target_region)`.
+  The plugin-facing container body is a `ViewNode` tree (`plugin-ui`); built-in Rust providers may still build `Component`s directly.
   Files: `heca/src/host.rs`
+
+### [ ] Phase: Declarative widget-tree UI model (`ViewNode`) · `plugin-ui`
+The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node
+holds a vector of child widgets — plus the host mapper that realizes it into the retained
+`heca-grid-ui` tree. **Gate/consumers:** the rich overlay `body` (`plugin-task-15`),
+config-plugin render (`plugin-task-21`), and the WASM contribution description
+(`plugin-task-26`) all build on this. Do it before the overlay `body` and WASM work.
+Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
+
+- [ ] **plugin-task-ui-1** — Define `ViewNode { kind, props, events, children }`: the closed `WidgetKind` vocabulary (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`; leaves `Label`/`Button`/`Badge`/`Icon`/`Input`/`Toggle`/`StatusDot`/…), `PropMap` (serializable scalars + semantic enums like `Variant`/`WidgetSize`), and `Intent` (action id + args). Must be serializable (WASM-ready). Files: new `heca/src/chrome/view.rs` (or a shared crate for reuse by the WASM SDK).
+
+- [ ] **plugin-task-ui-2** — Typed, SwiftUI-style **builder SDK** that emits `ViewNode` (`Column::new().gap(8).child(...)`). Ergonomic authoring layer over the uniform node; the WASM SDK re-exports it.
+
+- [ ] **plugin-task-ui-3** — Host **mapper** `realize(&ViewNode) -> Box<dyn heca_grid_ui::Component>`: recursive walk — instantiate the grid-ui widget per `kind`, resolve `props` against the `Theme`, wire `events` to intent routing, recurse on `children` via `.child(...)`. Translation only — no new layout/paint. Files: `heca/src/chrome/`.
+
+- [ ] **plugin-task-ui-4** — Extend the shipped `Modal` widget (grid-ui) to host a **`body` child subtree** (today it draws title+message only — "there is no child"), so a modal can contain a realized `ViewNode` (table/form/list). `OverlayHost::open_modal` then takes `body: ViewNode` + `actions`. Update the showcase demo + `docs/widgets.md`.
+
+- [ ] **plugin-task-ui-5** — (on demand) Add a first-class `Table` widget to `heca-grid-ui` (columns/header/row-selection/sort) + showcase + `docs/widgets.md` + a mapper arm. Until a real consumer needs it, a table is composed from `Grid`/`Row`/`Label`.
+
+- [ ] **plugin-task-ui-6** — Author docs: a `docs/plugin-authoring.md` with detailed `ViewNode` examples (panel, complex table, modal with a form) + a short "Plugins (upcoming)" pointer in `README.md`. Must be clearly marked **design / target Phase 9 — not yet available** until the WASM runtime (`plugin-08`) ships.
 
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
@@ -1182,7 +1204,7 @@ Gate: `plugin-02`, `plugin-03`, `plugin-04`, `plugin-05` must all be complete.
 
 - [ ] **plugin-task-25** — Add event bus bridge — marshal typed `ChromeEvent`s across the WASM boundary to plugin handlers.
 
-- [ ] **plugin-task-26** — Add region contribution API — WASM plugin returns a container description; the host mounts it via `ChromeHost`.
+- [ ] **plugin-task-26** — Add region contribution API — the WASM plugin returns a **`ViewNode` tree** (`plugin-ui`) as its container description; the host wraps the plugin in a first-party **`WasmProviderAdapter: Provider`** (the host-adapter pattern, §2.6.1) and mounts it via `ChromeHost`. The adapter marshals `build_contribution`/events/actions across the boundary; everything downstream is identical to a built-in provider.
 
 - [ ] **plugin-task-27** — Add plugin action registration API — WASM plugin registers string action IDs; host dispatches back to the plugin on invocation.
 
