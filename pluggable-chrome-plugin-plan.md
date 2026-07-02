@@ -241,6 +241,79 @@ So plugin model should support things like:
 
 This solves the “how do I know which button was pressed?” problem much better than pure JSON triggers.
 
+### 2.7.1 Formal contract (`plugin-task-03`, proposed 2026-07-02 — pending review)
+
+**Grounding — what already exists.** The grid-ui overlay widgets (`Modal`,
+`Select`, `CommandPalette`, `Tooltip`, `ToastStack`) each report
+`overlay_active()` + `focusable()` while open, draw on the scene's overlay layer
+via `cx.with_overlay(...)`, and the `FocusManager` routes pointer/key events to
+the active overlay first. Open/close is a **host-owned `Signal<bool>`** per
+widget (see `heca-grid-ui/src/widgets/modal.rs`). Dismissal paths are already
+correct: buttons, `Esc` (= cancel), scrim click; `dismissible(false)` forces a
+button decision. **Two gaps** this contract closes:
+
+1. **No central stack.** Each widget owns its own bool signal; nothing arbitrates
+   z-order between several open overlays or owns a single focus trap.
+2. **No result value.** Interaction is callback-only (`Modal::confirm`/`cancel`
+   closures) — a provider cannot `await` "which button was pressed".
+
+**Decision — a host-owned `OverlayHost`.** A new app-side overlay stack
+(`heca/src/chrome/overlay.rs`, built in `plugin-02`/Phase 8) owns an explicit
+z-ordered `Vec` of active overlays. It renders each entry through the *existing*
+grid-ui widget bound to host-owned signals — providers/plugins **never** build
+overlay widgets across the boundary (§2.6); they submit a **spec** and receive a
+**typed result**. Input routes to the top of the stack first (reusing the
+`overlay_active()`/`FocusManager` path). A **modal** entry is focus-trapping +
+scrim + blocks everything below; a **dropdown/popover** entry is light-dismiss
+(click-outside or `Esc` pops it) with no scrim.
+
+**Result-returning API shape.**
+
+```rust
+/// Host-owned overlay stack. Providers/plugins submit a spec and await a typed
+/// result; the host owns z-order, focus trap, Esc, click-outside, positioning.
+pub trait OverlayHost {
+    /// Push a modal; resolves when the user confirms, cancels, or dismisses.
+    fn open_modal(&self, spec: ModalSpec) -> OverlayFuture<ModalResult>;
+    /// Push a dropdown/popover anchored to a rect; resolves on pick or dismiss.
+    fn open_dropdown(&self, spec: DropdownSpec) -> OverlayFuture<DropdownResult>;
+}
+
+pub struct ModalSpec {
+    pub title: String,
+    pub message: String,
+    pub confirm_label: String,
+    pub cancel_label: Option<String>,
+    pub danger: bool,
+    /// `false` = forced decision (Esc/scrim swallowed) — mirrors `Modal::dismissible`.
+    pub dismissible: bool,
+}
+pub enum ModalResult { Confirmed, Cancelled, Dismissed }
+
+pub struct DropdownSpec {
+    pub anchor: heca_core::layout::Rectangle, // viewport-space anchor (§5.7 geometry)
+    pub side: OverlaySide,                     // preferred side; host flips on overflow
+    pub items: Vec<DropdownItem>,
+}
+pub struct DropdownItem { pub id: String, pub label: String, pub enabled: bool }
+pub enum DropdownResult { Picked(String), Dismissed }
+
+pub enum OverlaySide { Above, Below, Start, End }
+```
+
+**`OverlayFuture<T>` — single-threaded reality.** heca's UI is single-threaded
+(`floem_reactive`, `Rc`), so this is **not** a `Send`/`Sync` executor future. It
+is a host one-shot handle whose result is delivered on the UI thread. First-party
+providers may equivalently pass an `FnOnce(T)` completion; both map to the same
+host stack entry. For the WASM bridge (Phase 9) the call marshals as a
+`request-id` + a later `resolve` event carrying the result variant — the same
+event→read boundary as `App::on` / `App::state`.
+
+**Positioning.** Anchors are in viewport space using `heca-core::layout`
+`Rectangle`/`Point`/`Size` (§5.7). The host clamps to the viewport and flips
+`side` on overflow — the same behavior `Modal` (centering) and `Select`
+(anchoring) already implement, now owned once by the host.
+
 ---
 
 ## 2.8 The design is not sidebar-only; it is chrome-wide
@@ -337,6 +410,104 @@ Subregions conceptually:
 - `BottomBarHost`
 
 These may be implementations of one generic region host abstraction.
+
+### 3.1.1 Formal contract (`plugin-task-01`, proposed 2026-07-02 — pending review)
+
+**Decision — canonical region identity: `RegionId`.** Today the only region
+identifier in the app is the **event-payload** enum
+`chrome::events::ChromeRegion { Left, Right }` (used by `RegionModeChanged` /
+`RegionSizeChanged`), and `SharedChromeState` exposes only `left_*` / `right_*`
+region reads/writes. The contract widens this to the four canonical regions:
+
+```rust
+pub enum RegionId { LeftSidebar, RightSidebar, TopBar, BottomBar }
+```
+
+- **In `plugin-02`**, rename the event enum `ChromeRegion` → `RegionId`, add
+  `TopBar`/`BottomBar`, and generalize the `SharedChromeState` region API from
+  `left_*`/`right_*` pairs to a per-`RegionId` map. The two event variants carry
+  `RegionId` unchanged in shape.
+- The **grid-ui `ChromeRegion` widget keeps its name** — it is the *oriented
+  shell*, not a region identity. One widget instance is mounted per `RegionId`:
+  `ChromeRegion::vertical()` for the two sidebars, `ChromeRegion::horizontal()`
+  for the two bars. `RegionId` says *which* region; the widget says *how it
+  renders*.
+
+**Decision — contribution taxonomy + per-region allow-list.** A contribution is
+one of five semantic units (never raw pixels):
+
+```rust
+pub enum Contribution {
+    Container(ContainerContribution),   // mounted, movable domain container
+    ToolbarGroup(ToolbarGroup),         // clustered action buttons
+    StatusSegment(StatusSegment),       // text/badge segment
+    Panel(PanelContribution),           // fixed, non-movable panel
+    OverlayRequest(OverlaySpec),        // ModalSpec | DropdownSpec → OverlayHost (§2.7.1)
+}
+
+/// The two overlay specs from §2.7.1, unified for the `OverlayRequest` variant.
+pub enum OverlaySpec { Modal(ModalSpec), Dropdown(DropdownSpec) }
+```
+
+Allowed per region:
+
+| RegionId                      | Allowed contributions                 |
+| ----------------------------- | ------------------------------------- |
+| `LeftSidebar` / `RightSidebar`| `Container` (primary), `Panel`        |
+| `TopBar` / `BottomBar`        | `StatusSegment`, `ToolbarGroup`       |
+| any                           | `OverlayRequest` (region-agnostic → OverlayHost) |
+
+The **`Container`** carries all host-level placement metadata plus a build hook:
+
+```rust
+pub struct ContainerContribution {
+    pub id: ContainerId,              // stable string id (== provider id)
+    pub title: String,
+    pub supported_regions: RegionSet, // which RegionIds it may live in
+    pub default_region: RegionId,
+    pub default_order: i32,           // stacking order within a region (lower = earlier)
+    pub movable: bool,
+    pub collapsible: bool,
+    /// Builds the container body as a host-understood grid-ui subtree. Called by
+    /// the region host on (re)mount / invalidation. Returns a *model*; the host
+    /// owns render/focus/clip/overlays (§2.6).
+    pub build: Box<dyn Fn(&ChromeCtx) -> Box<dyn heca_grid_ui::Component>>,
+}
+```
+
+**ChromeHost responsibilities** (app-side, `heca/src/chrome/host.rs`, `plugin-02`;
+bridges to the shipped `App` facade in `heca/src/host.rs` for state + events):
+
+- own a registry of mounted contributions **per `RegionId`**, with order + visibility;
+- track container placement (which `RegionId`, which order) and **persist** it;
+- own **host-level** container move/reorder between compatible regions, validated
+  against `supported_regions` — distinct from **container-internal** DnD, which
+  stays inside the mounted container (§2.9);
+- compute host-level drop targets for container DnD;
+- schedule **invalidation** — re-call a provider's `build_contribution` when the
+  events it subscribed to fire (bridged from the `ChromeEvent` bus via `App::on`);
+- bridge event dispatch to providers.
+
+```rust
+pub struct ChromeHost { /* per-RegionId registries, placement map, App bridge */ }
+impl ChromeHost {
+    pub fn register(&mut self, provider: Box<dyn Provider>);
+    pub fn contributions(&self, region: RegionId) -> &[MountedContribution];
+    pub fn move_container(&mut self, id: ContainerId, to: RegionId) -> Result<(), MoveError>;
+    pub fn reorder(&mut self, id: ContainerId, before: Option<ContainerId>);
+    pub fn set_region_visible(&mut self, region: RegionId, visible: bool);
+}
+```
+
+**Geometry rule (§5.7).** Every rect/point/size in ChromeHost / provider /
+overlay APIs uses `heca-core/src/layout/types.rs` `Rectangle` / `Point` / `Size`.
+The legacy `heca_core::types::Rect` must not appear in any chrome-facing API
+(cleanup is `plugin-task-04`).
+
+**Movement-as-action rule (§2.9).** Every host-level placement mutation
+(`move_container`, `reorder`, `set_region_visible`) must also be reachable as a
+named `WmAction` (`plugin-task-08`) so mouse, keyboard, and RPC hit the same
+path. The methods above are the internal API; the actions are the public surface.
 
 ---
 
@@ -455,6 +626,75 @@ The first provider should be:
 - `WorkspacesContainerProvider`
 
 The current sidebar code should be gradually migrated into that shape.
+
+### 3.4.1 Formal contract (`plugin-task-02`, proposed 2026-07-02 — pending review)
+
+**The `Provider` trait.** A provider never mutates app state directly (§2.3): it
+reads through `ChromeCtx` selectors, reacts to events, and dispatches actions.
+
+```rust
+/// A built-in (later WASM-backed) contributor of chrome content.
+pub trait Provider {
+    /// Stable identity — also the `ContainerId` when it contributes a container.
+    fn id(&self) -> &str;
+    /// Regions this provider's contribution may be placed in.
+    fn supported_regions(&self) -> RegionSet;
+    /// Where it mounts by default on first run.
+    fn default_region(&self) -> RegionId;
+    /// Default stacking order within a region (lower = earlier).
+    fn default_order(&self) -> i32 { 0 }
+    /// Human title (rail/tab label, move menu).
+    fn title(&self) -> &str;
+    /// Host-level move/reorder allowed?
+    fn movable(&self) -> bool { true }
+    /// Collapsible within its region shell?
+    fn collapsible(&self) -> bool { true }
+    /// Build the contribution model. Called on mount and on each invalidation.
+    fn build_contribution(&self, ctx: &ChromeCtx) -> Contribution;
+    /// Subscribe to events / register actions on activation. The returned RAII
+    /// handles are held by the host while the provider is mounted, and dropped
+    /// (unsubscribing) on unmount.
+    fn on_activate(&mut self, _ctx: &ChromeCtx) -> ProviderHandles {
+        ProviderHandles::default()
+    }
+}
+```
+
+**`ChromeCtx` — the provider/plugin-facing facade.** It *extends* the shipped
+read/observe `App` (`heca/src/host.rs`, which already gives `on(event)` +
+`state()` selectors) with the write/contribute halves that §3.5 rows 3–10 defer.
+`plugin-01` only names them; they are implemented in later phases.
+
+```rust
+pub struct ChromeCtx {
+    app: App,                 // SHIPPED: on(event) + state() read selectors (§3.5 rows 1–2)
+    // actions: ActionDispatch,   // dispatch/register string actions   (plugin-04/05)
+    // overlay: OverlayHandle,    // open_modal/open_dropdown (§2.7.1)   (plugin-05/Phase 8)
+    // regions: RegionHandle,     // add/move containers                 (plugin-05)
+}
+```
+
+**Lifecycle (state machine).**
+
+1. **register** — `ChromeHost::register(Box<dyn Provider>)` records it and reads
+   its placement metadata (`supported_regions` / `default_region` / `default_order`).
+2. **on_activate** — provider subscribes to events (`ctx.on(...)`) and registers
+   actions; returns `ProviderHandles` the host keeps alive.
+3. **build_contribution** — host calls it, receives a `Contribution` *model*, and
+   mounts the mapped grid-ui subtree into the region shell.
+4. **react** — on a subscribed `ChromeEvent`, the provider marks itself dirty; the
+   host **invalidates** and re-calls `build_contribution`.
+5. **move / reorder** — host updates placement (validated vs `supported_regions`);
+   the contribution is remounted in its new slot.
+6. **unmount** — host drops the provider's `ProviderHandles`, unsubscribing events
+   and unregistering actions.
+
+**Rules.** `build_contribution` returns a *model*, never widget references held
+across rebuilds — the host owns render/focus/clip/overlays (§2.6). The first
+concrete provider is **`WorkspacesContainerProvider`** (`plugin-task-10`),
+migrating `heca/src/sidebar/` into this shape; its container-internal DnD stays
+inside the container (§2.9), and its sidebar-nav selection projects into shared
+chrome state (`plugin-task-10a`).
 
 ---
 
@@ -1194,11 +1434,11 @@ This architecture implies future changes to at least these areas:
 
 ## Architecture
 
-- [ ] Write and ratify the formal chrome host + provider + plugin contracts
-- [ ] Define chrome regions and allowed contribution types — *(partial: `ChromeRegion` widget exists for all 4 oriented regions; the formal contribution-type contract is unwritten)*
+- [x] Write and ratify the formal chrome host + provider + plugin contracts — *`plugin-01`: ChromeHost §3.1.1, Provider §3.4.1, overlay §2.7.1 (2026-07-02)*
+- [x] Define chrome regions and allowed contribution types — *`RegionId` (4 regions) + 5-unit `Contribution` taxonomy + per-region allow-list, §3.1.1*
 - [x] Define shared UI/chrome state model — *design locked (`F4-chrome-state-design.md`); `SharedChromeState` foundation landed (PR #107)*
-- [ ] Define provider lifecycle model
-- [ ] Define overlay ownership and result-returning API shape
+- [x] Define provider lifecycle model — *`Provider` trait + 6-step lifecycle + `ChromeCtx`, §3.4.1*
+- [x] Define overlay ownership and result-returning API shape — *`OverlayHost` + `open_modal`/`open_dropdown` + `OverlayFuture`, §2.7.1*
 
 ## Core runtime
 
