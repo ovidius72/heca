@@ -1061,33 +1061,33 @@ Source: `pluggable-chrome-plugin-plan.md` Phase 1
 
 - [x] **plugin-task-03** — Write the overlay ownership and result-returning API shape: modal/dropdown lifecycle, focus trap, ESC, async result contract. Document in `pluggable-chrome-plugin-plan.md` §2.7/Phase 8. — **DONE 2026-07-02**, §2.7.1: host-owned `OverlayHost` z-stack (closes the "no central stack / no result" gaps in the shipped grid-ui overlay widgets), `open_modal`/`open_dropdown` → typed `OverlayFuture` (single-threaded one-shot; WASM marshals as request-id + resolve event).
 
-- [ ] **plugin-task-04** — Audit and fix geometry types in chrome-facing code.
-  All new chrome/container/overlay contracts must use `heca-core/src/layout/types.rs` `Rectangle`/`Point`/`Size`.
-  Remove remaining legacy `heca_core::types::Rect` from chrome-facing code.
-  Files: `heca/src/chrome/mod.rs`, `heca/src/sidebar/`, grep `heca_core::types::Rect`
+- [x] **plugin-task-04** — Audit and fix geometry types in chrome-facing code. — **DONE (already satisfied) 2026-07-02**: verified there is no legacy `heca_core::types::Rect` — `heca-core` exposes only `backend`/`layout`/`runtime`, no `types` module and no `Rect` geometry type (only `Rectangle` in `layout::types`), and nothing in `heca/src` imports a bare `Rect`. Eliminated in an earlier refactor; §5.7/§7 of the plan were stale. New chrome/container APIs already use `Rectangle`/`Point`/`Size`.
 
-### [ ] Phase: ChromeHost and region hosts · `plugin-02`
+### [x] Phase: ChromeHost and region hosts · `plugin-02` — **DONE 2026-07-02** (runtime core; no render, no app-side provider yet — those are plugin-03)
 The central runtime that mounts/orders/moves containers across all 4 regions.
 Source: `pluggable-chrome-plugin-plan.md` Phase 3
 
-- [ ] **plugin-task-05** — Introduce `ChromeHost` struct in `heca/src/chrome/host.rs`:
-  Owns registries for all 4 regions, tracks container placement and ordering, owns host-level container move/reorder, bridges plugins with the app state and action system.
+> **Scope landed:** pure runtime, no render change. The app still hand-paints its
+> chrome and wires no provider; `ChromeHost` is constructed empty in `AppState`
+> (`app/startup.rs`) and unit-tested. First visible payoff is plugin-03.
+> Also: renamed the `ChromeRegion` event enum → `RegionId {LeftSidebar,RightSidebar,TopBar,BottomBar}`
+> (+ `index()`/`ALL`) and added the `ContainerPlacementChanged` event.
 
-- [ ] **plugin-task-06** — Introduce region hosts (`LeftSidebarHost`, `RightSidebarHost`, `TopBarHost`, `BottomBarHost`) or a single generic `RegionHost<Orientation>`. Each tracks its ordered list of mounted containers and their visibility.
+- [x] **plugin-task-05** — Introduce `ChromeHost` struct in `heca/src/chrome/host.rs`. — **DONE**: 4-region array + `ContainerId→RegionId` placement index + event bus; `register`/`contributions`/`placement`/`move_container`/`reorder`/`set_region_visible` + `MoveError`. Seats containers from `Provider` *metadata* only (never calls the render seam `build_contribution`), so the host is App-free and unit-tested. Bridging to `App`/actions is plugin-03/04.
 
-- [ ] **plugin-task-07** — Implement container registration, ordering, and placement persistence.
+- [x] **plugin-task-06** — Region hosts. — **DONE**: chose the generic `RegionHost` (ordered `Vec<MountedContribution>` + visibility), one per `RegionId`, held in `ChromeHost.regions[4]`. (Not four named structs.)
 
-- [ ] **plugin-task-08** — Implement host-level container move between compatible regions as a named action (not mouse-only).
-  New `WmAction` variants: `MoveContainerToRegion { container_id, region }`, `ReorderContainerBefore { container_id, before_id }`.
-  Must be reachable from keyboard + RPC. Follow "Adding New Actions" checklist in `AGENTS.md`.
-  Files: `heca/src/input.rs`, `heca/src/handlers.rs`, `heca/src/app/registry.rs`
+- [x] **plugin-task-07** — Container registration, ordering, placement. — **DONE**: `register` seats at `default_region`/`default_order` (stable insert); `move_container` validates against `supported_regions`; `reorder` positions before a target. **Placement persistence to disk/config deferred** — in-memory only (one container today, no user-visible effect); `// TODO(plugin-07/config)` seam → plugin-06/07.
+
+- [x] **plugin-task-08** — Host-level container move as a named action. — **DONE**: `WmAction::MoveContainerToRegion`/`ReorderContainerBefore`/`SetRegionVisible` (parameterized, `ActionPolicy::Global`), handlers in `handlers.rs`, registered in `build_registry`, RPC parity (`move-container-to-region`/`reorder-container-before`/`set-region-visible` + `parse_region_id`). Mouse/DnD path is plugin-03; dotted dynamic-action string ids (`chrome.container.move_to_region`) are plugin-04's dynamic registry.
 
 ### [ ] Phase: Built-in provider system and WorkspacesContainer migration · `plugin-03`
 Prove the provider model with the first real built-in provider before loading external plugins.
 Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 
-- [ ] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
+- [~] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
   Files: `heca/src/providers/mod.rs` (new)
+  **Trait + `ChromeCtx` + `ProviderHandles` already landed in plugin-02** (`ChromeHost::register` needed them): `heca/src/providers/mod.rs` + the `Contribution`/`ContainerContribution` model in `heca/src/chrome/contribution.rs`. `ChromeCtx` currently wraps only the read/observe `App` half; its `actions`/`overlay`/`regions` halves are plugin-04/05. Remaining for plugin-03: the first real `impl Provider` (`plugin-task-10`) + calling `build_contribution`/`on_activate` on the render path.
 
 - [ ] **plugin-task-10** — Implement `WorkspacesContainerProvider` as the first built-in provider.
   Migrates the current `heca/src/sidebar/` workspace-tree logic into the provider shape.

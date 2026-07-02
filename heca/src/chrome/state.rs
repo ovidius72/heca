@@ -40,7 +40,7 @@ use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
 use heca_grid_ui::widgets::RegionMode;
 
-use super::{ChromeEvent, ChromeEventBus, ChromeRegion};
+use super::{ChromeEvent, ChromeEventBus, RegionId};
 
 /// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
 ///
@@ -727,7 +727,7 @@ impl SharedChromeState {
         }
         self.left.mode.set(mode);
         self.events.emit(ChromeEvent::RegionModeChanged {
-            region: ChromeRegion::Left,
+            region: RegionId::LeftSidebar,
             mode,
         });
     }
@@ -737,7 +737,7 @@ impl SharedChromeState {
         }
         self.left.size.set(size);
         self.events.emit(ChromeEvent::RegionSizeChanged {
-            region: ChromeRegion::Left,
+            region: RegionId::LeftSidebar,
             size,
         });
     }
@@ -747,7 +747,7 @@ impl SharedChromeState {
         }
         self.right.mode.set(mode);
         self.events.emit(ChromeEvent::RegionModeChanged {
-            region: ChromeRegion::Right,
+            region: RegionId::RightSidebar,
             mode,
         });
     }
@@ -757,7 +757,7 @@ impl SharedChromeState {
         }
         self.right.size.set(size);
         self.events.emit(ChromeEvent::RegionSizeChanged {
-            region: ChromeRegion::Right,
+            region: RegionId::RightSidebar,
             size,
         });
     }

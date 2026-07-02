@@ -303,6 +303,17 @@ pub(crate) async fn init_state(
     let terminal_layer_scratch =
         app_state::RetainedTerminalScratch::new(&device, config.format, 1, 1);
 
+    // Region visibility/width lives in chrome_state (was SidebarState). Build it
+    // first so the ChromeHost can share its event bus. plugin-02: the host is
+    // wired but empty — first-party providers register in plugin-03.
+    let chrome_state = crate::chrome::SharedChromeState::new(
+        app_config.config.appearance.effective_sidebar_width(),
+        true,
+        app_config.config.appearance.effective_sidebar_width(),
+        true,
+    );
+    let chrome_host = crate::chrome::ChromeHost::new(chrome_state.events());
+
     Box::new(AppState {
         window,
         event_proxy,
@@ -345,12 +356,8 @@ pub(crate) async fn init_state(
             &keymap::KeyCombo::parse(&app_config.config.keys.prefix),
         ),
         // Region visibility/width now lives in chrome_state (was SidebarState).
-        chrome_state: crate::chrome::SharedChromeState::new(
-            app_config.config.appearance.effective_sidebar_width(),
-            true,
-            app_config.config.appearance.effective_sidebar_width(),
-            true,
-        ),
+        chrome_state,
+        chrome_host,
         mouse: app_state::MouseState::new(),
         modifiers: winit::keyboard::ModifiersState::default(),
         selection: app_state::SelectionState::new(),

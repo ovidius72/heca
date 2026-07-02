@@ -387,6 +387,24 @@ pub enum WmAction {
         focus_after: bool,
     },
 
+    // ── Chrome container placement (parameterized) — plugin-02, §2.9 ──
+    // Host-level container moves. Parameterized (carry ids/region), so — like the
+    // other parameterized variants — they are constructed programmatically (RPC,
+    // mouse, command palette), not bound directly from a config key. They apply to
+    // `AppState.chrome_host`.
+    MoveContainerToRegion {
+        container_id: String,
+        region: crate::chrome::RegionId,
+    },
+    ReorderContainerBefore {
+        container_id: String,
+        before_id: Option<String>,
+    },
+    SetRegionVisible {
+        region: crate::chrome::RegionId,
+        visible: bool,
+    },
+
     // ── Config ──
     ReloadConfig,
 }
@@ -878,6 +896,9 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::TakePane { .. }
         | WmAction::OpenLink { .. }
         | WmAction::PaneTake
+        | WmAction::MoveContainerToRegion { .. }
+        | WmAction::ReorderContainerBefore { .. }
+        | WmAction::SetRegionVisible { .. }
         | WmAction::PaneTakeAndFocus => 6,
     }
 }

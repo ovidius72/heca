@@ -408,6 +408,28 @@ pub fn build_registry() -> ActionRegistry {
         },
         handle_take_pane,
     );
+    // Chrome container placement (plugin-02, §2.9).
+    registry.register(
+        &WmAction::MoveContainerToRegion {
+            container_id: String::new(),
+            region: crate::chrome::RegionId::LeftSidebar,
+        },
+        handle_move_container_to_region,
+    );
+    registry.register(
+        &WmAction::ReorderContainerBefore {
+            container_id: String::new(),
+            before_id: None,
+        },
+        handle_reorder_container_before,
+    );
+    registry.register(
+        &WmAction::SetRegionVisible {
+            region: crate::chrome::RegionId::LeftSidebar,
+            visible: false,
+        },
+        handle_set_region_visible,
+    );
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::RenameColumn, handle_rename_column);
     registry.register(
@@ -607,6 +629,25 @@ mod tests {
     use crate::keymap::KeyCombo;
     use heca_config::theme::{KeyModeConfig, ModeBindingConfig};
     use std::collections::HashMap;
+
+    #[test]
+    fn chrome_container_placement_actions_have_handlers() {
+        // Every WmAction variant must have a registered handler (execute() panics
+        // in debug otherwise) — assert the plugin-02 container actions are wired.
+        let registry = super::build_registry();
+        assert!(registry.has_handler(&WmAction::MoveContainerToRegion {
+            container_id: String::new(),
+            region: crate::chrome::RegionId::LeftSidebar,
+        }));
+        assert!(registry.has_handler(&WmAction::ReorderContainerBefore {
+            container_id: String::new(),
+            before_id: None,
+        }));
+        assert!(registry.has_handler(&WmAction::SetRegionVisible {
+            region: crate::chrome::RegionId::LeftSidebar,
+            visible: true,
+        }));
+    }
 
     #[test]
     fn default_font_size_modes_build_with_triggers_and_keys() {

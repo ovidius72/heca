@@ -1391,12 +1391,11 @@ This architecture implies future changes to at least these areas:
 - must expand with richer chrome/container/item primitives
 - but should still remain presentation-focused
 
-### 5.7 Geometry unification
+### 5.7 Geometry unification — **DONE (verified 2026-07-02, `plugin-task-04`)**
 
-- chrome-facing geometry should be unified on `heca-core/src/layout/types.rs`
-- migrate remaining legacy `heca_core::types::Rect` usage out of chrome-facing code
-- especially remove/replace the current `Rect` usage in `heca/src/chrome.rs`
-- new ChromeHost / provider / overlay APIs should use `Rectangle` / `Point` / `Size` as the canonical geometry contract
+- chrome-facing geometry is unified on `heca-core/src/layout/types.rs`
+- ~~migrate remaining legacy `heca_core::types::Rect` usage out of chrome-facing code~~ — **already gone**: `heca-core` has no `types` module and no `Rect` geometry type (only `Rectangle` in `layout::types`); nothing in `heca/src` imports a bare `Rect`. `heca/src/chrome.rs` is now the split `heca/src/chrome/`, which uses `Rectangle`/`Point`/`Size`.
+- new ChromeHost / provider / overlay APIs use `Rectangle` / `Point` / `Size` as the canonical geometry contract (§3.1.1)
 
 ---
 
@@ -1443,8 +1442,8 @@ This architecture implies future changes to at least these areas:
 ## Core runtime
 
 - [ ] Introduce shared UI/chrome state layer — *(partial: `SharedChromeState` foundation landed, PR #107; consumer migration is PLAN.md P0, not done)*
-- [ ] Introduce ChromeHost and region hosts — *(partial: `ChromeRegion` widget exists; app-side ChromeHost does not)*
-- [ ] Introduce built-in provider system
+- [x] Introduce ChromeHost and region hosts — *`plugin-02`: `ChromeHost` (4-region array + placement index + moves) + generic `RegionHost` in `heca/src/chrome/host.rs`, wired empty into `AppState`. Runtime only; render is plugin-03.*
+- [~] Introduce built-in provider system — *`Provider` trait + `ChromeCtx` + `Contribution` model landed (`plugin-02`); first real provider + app-side registration are `plugin-03`.*
 - [ ] Migrate current sidebar/workspace logic into `WorkspacesContainerProvider`
 
 ## Actions

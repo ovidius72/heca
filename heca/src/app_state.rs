@@ -671,6 +671,10 @@ pub struct AppState {
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.
     pub chrome_state: crate::chrome::SharedChromeState,
+    /// Host runtime for pluggable chrome regions (contract §3.1.1): owns container
+    /// placement/ordering per region and host-level moves. plugin-02 wires it
+    /// empty; first-party providers register in plugin-03.
+    pub chrome_host: crate::chrome::ChromeHost,
     pub mouse: MouseState,
     pub modifiers: ModifiersState,
     /// Host-owned shared selection state, reusable across pane/backend types.

@@ -3,10 +3,26 @@
 //! UI dimensions, timing defaults, layout proportions, and render parameters
 //! that were previously scattered as magic numbers across the codebase.
 
+mod contribution;
 mod events;
+mod host;
 mod state;
-pub use events::{ChromeEvent, ChromeEventBus, ChromeRegion, ChromeSubscription};
+pub use contribution::{Contribution, RegionSet};
+pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId};
+pub use host::ChromeHost;
 pub use state::{SharedChromeState, WorkspacesContainerState};
+// Contribution/placement API surface for the render + provider phases (plugin-03).
+// These are public seam types not yet consumed by name in-binary — same rationale
+// as the `#![allow(dead_code)]` carried by the modules that define them.
+// `MoveError` is `ChromeHost::move_container`'s error; handlers report it via
+// `Display` today and the mouse/DnD path names it in plugin-03.
+#[allow(unused_imports)]
+pub use contribution::{
+    ContainerContribution, ContainerId, OverlaySpec, PanelContribution, StatusSegment,
+    ToolbarGroup, WidgetModel,
+};
+#[allow(unused_imports)]
+pub use host::{MountedContribution, MoveError, RegionHost};
 
 use heca_core::layout::ColumnWidth;
 use heca_core::layout::types::{Point, Rectangle, Size};

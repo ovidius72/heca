@@ -7,6 +7,7 @@ mod host;
 mod input;
 mod keymap;
 mod mouse;
+mod providers;
 mod rpc;
 mod shortcut;
 mod sidebar;
