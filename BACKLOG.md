@@ -1202,6 +1202,39 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 
 > Source: `grid-ui-chrome-plan.md`, `PLAN.md` grid-ui backlog
 > Core widget vocabulary is largely built. Remaining: scroll primitive, Pane shell header, more widgets, Nerd-Font icons, showcase coverage, bloom effects, crate debt.
+>
+> **PRUNING DECISIONS (2026-07-02) — verified against the code; these govern the tasks below.**
+> The section stalled because it was full of speculative widgets with no consumer, plus items already
+> covered by existing widgets. Verified findings:
+> - **CUT — already built/covered:** scrollbar color token (`gridui-task-30` — `scroll_bar.rs` exists);
+>   Pane header slot + CornerBrackets/Reticle (`gridui-task-02`/`04` — the terminal pane-shell already
+>   draws header + focus-ring bracket; `terminal-05` DONE); HUD Frame (`gridui-task-17` — the bracketed
+>   `Pane` covers it); Accordion (`gridui-task-20` — `DockFrame`/`ItemGroup` already collapse); Search
+>   Input widget (`gridui-task-19` — the base `Input` **and** `CommandPalette`'s filter input already
+>   provide search; sidebar search is just wiring, tied to `plugin-03`); Metric Row (`gridui-task-18` —
+>   REMOVED: the "stat card" look already exists in the showcase via a local `card(label, value)` helper
+>   composing bracketed `Pane` + `Label`; no dedicated widget needed, and no consumer in the app anyway).
+> - **CUT — no consumer:** ScrollRegion horizontal scroll (`gridui-task-29` — the column strip already
+>   scrolls horizontally via `ViewOffset`; ScrollRegion is vertical-list only); `DrawCommand::Custom`
+>   (`gridui-task-14` — not present, YAGNI escape hatch).
+> - **DEFER — until a real consumer:** full-scene bloom (`gridui-task-13`); visual-regression tests
+>   (`gridui-task-12` — heavy infra, low ROI); nested-region wheel hit-testing (`gridui-task-32`).
+> - **KEEP (real):**
+>   - **Status bar REBUILD** (`gridui-task-05`) — NOT "done": today it's text-only; must gain
+>     badges/tags/info + plugin extensions; ties to the Pluggable-Chrome **bottom-bar region**.
+>   - **Tab-bar slot** (`gridui-task-03`) — for **stacked/tabbed pane layout** (niri/i3). `tabs.rs` is
+>     the building block; the stacked layout itself is a SEPARATE heca-core layout feature (see App note).
+>   - **Multi-select `Select`** (`gridui-task-16`) — NOT done (`select.rs` has no multi-selection).
+>   - **Item DnD reorder** (`gridui-task-15`) — SMALL; the DnD framework (`heca-grid-ui/src/drag/`) is ready.
+>   - **Sidebar scroll wiring** (`gridui-task-33`) — real; overlaps `plugin-03`.
+>   - **Pick-a-scrollable-region** (`gridui-task-34`) — SMALL/optional, NOT the big task the prose implies:
+>     `KeyHint` + the six pick `InputMode`s (PaneSelect/Swap/Take, WorkspacePick, ColumnPick, …) already
+>     exist and are reused everywhere; only a `ScrollFocused` action + a scroll mode are new. Do it only
+>     when multiple regions actually compete for `j/k`.
+>   - **NF icons** (`gridui-03`), **showcase audit** (`gridui-task-11`), and all **`gridui-07` crate-debt**.
+> - **Widget cleanup:** `gauge.rs` is reportedly unused — candidate for removal (verify no importers first).
+> - **New feature surfaced:** stacked/tabbed pane layout (niri/i3) — a heca-core LAYOUT feature that would
+>   consume `tabs.rs`; track under App/Chrome, not here.
 
 ### [x] Phase: Scroll / list primitive · `gridui-01`
 An embeddable scroll region for sidebar docks and list views.
@@ -1287,11 +1320,9 @@ Add `NfIcon` for program/language logos (nvim, docker, lazygit, python, rust) th
 - [ ] **gridui-task-17** — `HUD Frame`: a floating HUD-style bordered container for overlays/panels.
   Files: `heca-grid-ui/src/widgets/hud_frame.rs`
 
-- [ ] **gridui-task-18** — `Metric Row`: a compact key/value row for status displays (git stats, process metrics, etc.).
-  Files: `heca-grid-ui/src/widgets/metric_row.rs`
-
-- [ ] **gridui-task-19** — `Search Input`: a search/filter text input with clear button and debounced `on_change` callback.
-  Files: `heca-grid-ui/src/widgets/search_input.rs`
+- [~] **gridui-task-19** — ~~`Search Input` widget~~ **CUT (redundant): the base `Input` + `CommandPalette`'s
+  filter input already provide search.** Remaining real work = wire search into the sidebar (integration,
+  tied to `plugin-03`), not a new widget.
 
 - [ ] **gridui-task-20** — `Accordion`: collapsible section with animated open/close transition.
   Files: `heca-grid-ui/src/widgets/accordion.rs`
@@ -1535,7 +1566,7 @@ terminal-01   (independent)
 terminal-02a → terminal-02        (run-level shaping gates the ligature setting)
 terminal-03 → terminal-09        (protocol hooks gate image rendering)
 terminal-04   (independent, do soon)
-terminal-05   (gate: plugin-02 for the formal pane-shell boundary)
+terminal-05   (DONE 2026-07-01 — no longer gated; pane-shell contract implemented)
 terminal-06 → terminal-07        (selection gates clipboard)
 
 gridui-01     (independent — clip is already done)
