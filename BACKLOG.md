@@ -1055,11 +1055,11 @@ This phase is interactive — cannot be done without the user running the app.
 Write and ratify the formal chrome-host + provider + plugin contracts before any implementation.
 Source: `pluggable-chrome-plugin-plan.md` Phase 1
 
-- [ ] **plugin-task-01** — Write the formal `ChromeHost` contract: what a region is, what it can host, allowed contribution types (container, toolbar group, status segment, panel, overlay request). Document in `pluggable-chrome-plugin-plan.md` §3.1.
+- [x] **plugin-task-01** — Write the formal `ChromeHost` contract: what a region is, what it can host, allowed contribution types (container, toolbar group, status segment, panel, overlay request). Document in `pluggable-chrome-plugin-plan.md` §3.1. — **DONE 2026-07-02**, §3.1.1: `RegionId {LeftSidebar,RightSidebar,TopBar,BottomBar}` (widens the `Left/Right` event enum in `plugin-02`), 5-unit `Contribution` taxonomy + per-region allow-list, `ContainerContribution` metadata, `ChromeHost` responsibilities + skeleton, geometry (§5.7) + movement-as-action (§2.9) rules.
 
-- [ ] **plugin-task-02** — Write the formal provider lifecycle model: `id()`, `supported_regions()`, `default_region()`, `movable`, `collapsible`, `build_contribution(ChromeCtx)`. Document in `pluggable-chrome-plugin-plan.md` §3.4.
+- [x] **plugin-task-02** — Write the formal provider lifecycle model: `id()`, `supported_regions()`, `default_region()`, `movable`, `collapsible`, `build_contribution(ChromeCtx)`. Document in `pluggable-chrome-plugin-plan.md` §3.4. — **DONE 2026-07-02**, §3.4.1: `Provider` trait (adds `default_order`/`title`), 6-step lifecycle state machine, `ChromeCtx` = shipped `App` facade + deferred write/contribute halves.
 
-- [ ] **plugin-task-03** — Write the overlay ownership and result-returning API shape: modal/dropdown lifecycle, focus trap, ESC, async result contract. Document in `pluggable-chrome-plugin-plan.md` §2.7/Phase 8.
+- [x] **plugin-task-03** — Write the overlay ownership and result-returning API shape: modal/dropdown lifecycle, focus trap, ESC, async result contract. Document in `pluggable-chrome-plugin-plan.md` §2.7/Phase 8. — **DONE 2026-07-02**, §2.7.1: host-owned `OverlayHost` z-stack (closes the "no central stack / no result" gaps in the shipped grid-ui overlay widgets), `open_modal`/`open_dropdown` → typed `OverlayFuture` (single-threaded one-shot; WASM marshals as request-id + resolve event).
 
 - [ ] **plugin-task-04** — Audit and fix geometry types in chrome-facing code.
   All new chrome/container/overlay contracts must use `heca-core/src/layout/types.rs` `Rectangle`/`Point`/`Size`.
