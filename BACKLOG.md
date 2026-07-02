@@ -1423,12 +1423,46 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
 
 ### [ ] Phase: Sidebar wiring and collapsed rail · `app-06`
 
+> **SIDEBAR MODE — regressions, root causes & DECISIONS (2026-07-02). Verified against code.**
+> Three regressions found in `InputMode::SidebarNav`. **Fixes are DEFERRED** — they are done when we
+> touch the owning tasks below (mostly inside `plugin-03`, since `plugin-03` migrates the sidebar into a
+> `WorkspacesContainerProvider` and re-touching it now = double rework). Full write-up:
+> `handoff-sidebar-and-plugin.md`.
+>
+> - **#1 — keys "don't work" in sidebar mode.** Most likely the keys FIRE but produce NO visible effect.
+>   Routing is correct: `InputMode::SidebarNav` → `handle_sidebar_nav_mode` (`heca/src/app/input.rs:603`)
+>   resolves via the `"sidebar"` mode keymap (j/k/arrows → `sidebar_up/down`); `handle_sidebar_up/down`
+>   move the cursor. But the expanded sidebar highlights only `active_pane` (`chrome/mod.rs:1260`), NOT
+>   the nav cursor (`sidebar_tree.current_item()`) → nothing changes on screen. **Owner: `plugin-task-10a`**
+>   (already exists). Caveat: confirm at runtime the cursor actually moves (log `sidebar_tree.cursor`); if
+>   it doesn't move, it's a keymap regression instead.
+> - **#2 — collapsed rail: incoherent style, no `KeyHint`, no pane name (even after rename).** Root cause:
+>   the collapsed rail is still LEGACY hand-drawn (`render_sidebar_collapsed` `heca/src/sidebar/render.rs:30`),
+>   labels via `collapsed_pane_label` (`render.rs:353`) showing only the FIRST CHAR of `pane.name`; not
+>   theme-coherent with the expanded side (`DockFrame`/`Card`/`MarkerGroup`). **Owner: `app-task-21`, with
+>   EXTENDED scope (see below).**
+> - **#3 — entering sidebar mode force-expands (should stay collapsed).** Root cause (certain):
+>   `handle_sidebar_focus` (`heca/src/handlers.rs:1309`) does `set_left_mode(Expanded)` +
+>   `set_left_size(DEFAULT_SIDEBAR_WIDTH)` on every entry. **Owner: NEW task `app-task-31` below.**
+> Coupling: fixing #3 (stay collapsed) means the collapsed rail MUST render the nav cursor, or you
+> navigate blind — so #2's scope must include collapsed-cursor rendering (the collapsed analog of `10a`).
+
 - [ ] **app-task-20** — Wire sidebar buttons (`+w` workspace, `+c` column, `+p` pane) — `button_hitboxes` are defined but click handlers are not connected.
   Files: `heca/src/sidebar/hit_test.rs`, `heca/src/mouse/surface_left.rs`
 
-- [ ] **app-task-21** — Migrate the collapsed sidebar rail from legacy hand-drawn + `sidebar_hit_test` to `RailCell`/`ChromeRegion` grid-ui widgets.
-  Files: `heca/src/sidebar/render.rs`, `heca/src/mouse/render.rs`
-  Coordinate with `theming-task-29`.
+- [ ] **app-task-21** — Migrate the collapsed sidebar rail from legacy hand-drawn + `sidebar_hit_test` to `RailCell`/`ChromeRegion` grid-ui widgets. **(EXTENDED SCOPE, 2026-07-02 — regression #2.)** Must also:
+  (a) use `KeyHint` in collapsed mode (consistent with the expanded pick overlays);
+  (b) surface the pane NAME (tooltip/label), updating live on rename — today only the first char shows;
+  (c) render the sidebar-nav CURSOR/selection while in `InputMode::SidebarNav` (collapsed analog of `plugin-task-10a`);
+  (d) be theme-coherent with the expanded side.
+  Files: `heca/src/sidebar/render.rs`, `heca/src/mouse/render.rs`. Coordinate with `theming-task-29`.
+  **Do this INSIDE `plugin-03`** (sidebar → `WorkspacesContainerProvider`) to avoid double rework.
+
+- [ ] **app-task-31** — **(NEW, 2026-07-02 — regression #3.)** Enter `SidebarNav` WITHOUT force-expanding:
+  `handle_sidebar_focus` must NOT call `set_left_mode(Expanded)` / `set_left_size(DEFAULT_SIDEBAR_WIDTH)` —
+  keep the current collapsed/expanded state so sidebar mode works while collapsed.
+  Small + standalone-able, but DEFERRED with the rest (pairs with `app-task-21`'s collapsed-cursor render).
+  Files: `heca/src/handlers.rs` (`handle_sidebar_focus`, ~line 1309).
 
 ### [ ] Phase: Damage-region render optimization · `app-07`
 Let the compositor's preserved scene texture actually preserve things — partial repaints instead of full-frame clears.
