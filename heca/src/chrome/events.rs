@@ -8,10 +8,35 @@ use heca_core::layout::PaneId;
 use heca_core::runtime::ProcessStatus;
 use heca_grid_ui::widgets::RegionMode;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ChromeRegion {
-    Left,
-    Right,
+/// Canonical identity of a pluggable chrome region (contract §3.1.1). The
+/// vertical sidebars and horizontal bars are all addressed by this enum; the
+/// grid-ui `ChromeRegion` *widget* is the oriented shell that renders one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RegionId {
+    LeftSidebar,
+    RightSidebar,
+    TopBar,
+    BottomBar,
+}
+
+impl RegionId {
+    /// All four regions in canonical order.
+    pub const ALL: [RegionId; 4] = [
+        RegionId::LeftSidebar,
+        RegionId::RightSidebar,
+        RegionId::TopBar,
+        RegionId::BottomBar,
+    ];
+
+    /// Dense `0..4` index for array-keyed storage (e.g. `ChromeHost`'s region array).
+    pub fn index(self) -> usize {
+        match self {
+            RegionId::LeftSidebar => 0,
+            RegionId::RightSidebar => 1,
+            RegionId::TopBar => 2,
+            RegionId::BottomBar => 3,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -62,11 +87,11 @@ pub enum ChromeEvent {
         offset: f32,
     },
     RegionModeChanged {
-        region: ChromeRegion,
+        region: RegionId,
         mode: RegionMode,
     },
     RegionSizeChanged {
-        region: ChromeRegion,
+        region: RegionId,
         size: f32,
     },
     /// A pane's terminal viewport state (offset/bottom/scrollback-rows) changed.
@@ -76,6 +101,14 @@ pub enum ChromeEvent {
         viewport_offset: usize,
         at_bottom: bool,
         scrollback_rows: usize,
+    },
+    /// A mounted container's host-level placement changed — it was moved to a
+    /// different region or reordered within its region by `ChromeHost`. Lets
+    /// future chrome consumers re-read placement. `region` is the container's new
+    /// region.
+    ContainerPlacementChanged {
+        container_id: String,
+        region: RegionId,
     },
 }
 
@@ -96,6 +129,7 @@ impl ChromeEvent {
             ChromeEvent::RegionModeChanged { .. } => "chrome.region.mode.changed",
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
+            ChromeEvent::ContainerPlacementChanged { .. } => "chrome.container.placement.changed",
         }
     }
 }

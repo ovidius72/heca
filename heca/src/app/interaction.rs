@@ -310,6 +310,11 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // App-wide terminal font zoom changes only font metrics/PTY reflow — no
         // tiled/floating layout impact, so it must work in any focus domain.
         WmAction::AppFontZoom { .. } => ActionPolicy::Global,
+        // Chrome container placement acts on chrome regions, independent of the
+        // pane tiled/floating domain, so it stays reachable in any focus domain.
+        WmAction::MoveContainerToRegion { .. }
+        | WmAction::ReorderContainerBefore { .. }
+        | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,

@@ -95,6 +95,21 @@ impl std::error::Error for RpcError {}
 /// );
 /// ```
 // Transitional: will be used by the RPC server / socket listener in Phase 5.
+/// Parse an RPC region token (`left-sidebar`/`left`, `right-sidebar`/`right`,
+/// `top-bar`/`top`, `bottom-bar`/`bottom`) into a [`RegionId`](crate::chrome::RegionId).
+fn parse_region_id(cmd: &str, value: &str) -> Result<crate::chrome::RegionId, RpcError> {
+    use crate::chrome::RegionId;
+    match value {
+        "left-sidebar" | "left" => Ok(RegionId::LeftSidebar),
+        "right-sidebar" | "right" => Ok(RegionId::RightSidebar),
+        "top-bar" | "top" => Ok(RegionId::TopBar),
+        "bottom-bar" | "bottom" => Ok(RegionId::BottomBar),
+        _ => Err(RpcError::UnknownCommand(format!(
+            "{cmd}: unknown region '{value}'"
+        ))),
+    }
+}
+
 pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
     let input = input.trim();
     if input.is_empty() {
@@ -345,6 +360,33 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "rename-workspace" => Ok(WmAction::RenameWorkspace),
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
+        // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.
+        "move-container-to-region" => {
+            let container_id = expect_arg!("container_id").to_string();
+            let region = parse_region_id(&cmd, expect_arg!("region"))?;
+            Ok(WmAction::MoveContainerToRegion {
+                container_id,
+                region,
+            })
+        }
+        "reorder-container-before" => {
+            let container_id = expect_arg!("container_id").to_string();
+            // Optional target; omitted → reorder to the end of the region.
+            let before_id = parts.next().map(|s| s.to_string());
+            Ok(WmAction::ReorderContainerBefore {
+                container_id,
+                before_id,
+            })
+        }
+        "set-region-visible" => {
+            let region = parse_region_id(&cmd, expect_arg!("region"))?;
+            let visible = match expect_arg!("visible") {
+                "show" | "true" | "1" => true,
+                "hide" | "false" | "0" => false,
+                other => return Err(RpcError::UnknownCommand(other.to_string())),
+            };
+            Ok(WmAction::SetRegionVisible { region, visible })
+        }
         "collapse-current-workspace" => Ok(WmAction::CollapseCurrentWorkspace),
         "expand-current-workspace" => Ok(WmAction::ExpandCurrentWorkspace),
         "toggle-current-workspace-collapsed" => Ok(WmAction::ToggleCurrentWorkspaceCollapsed),
@@ -1058,5 +1100,49 @@ mod tests {
             ),
             "open-link with no URL is a missing-argument error"
         );
+    }
+
+    #[test]
+    fn test_chrome_container_placement_commands() {
+        use crate::chrome::RegionId;
+        assert_eq!(
+            parse_rpc_command("move-container-to-region workspaces right-sidebar"),
+            Ok(WmAction::MoveContainerToRegion {
+                container_id: "workspaces".to_string(),
+                region: RegionId::RightSidebar,
+            })
+        );
+        // Optional before-id → None (reorder to end).
+        assert_eq!(
+            parse_rpc_command("reorder-container-before workspaces"),
+            Ok(WmAction::ReorderContainerBefore {
+                container_id: "workspaces".to_string(),
+                before_id: None,
+            })
+        );
+        assert_eq!(
+            parse_rpc_command("reorder-container-before workspaces agents"),
+            Ok(WmAction::ReorderContainerBefore {
+                container_id: "workspaces".to_string(),
+                before_id: Some("agents".to_string()),
+            })
+        );
+        assert_eq!(
+            parse_rpc_command("set-region-visible top-bar hide"),
+            Ok(WmAction::SetRegionVisible {
+                region: RegionId::TopBar,
+                visible: false,
+            })
+        );
+        // Unknown region token is rejected.
+        assert!(matches!(
+            parse_rpc_command("move-container-to-region ws nowhere"),
+            Err(RpcError::UnknownCommand(_))
+        ));
+        // Missing required arg.
+        assert!(matches!(
+            parse_rpc_command("move-container-to-region ws"),
+            Err(RpcError::MissingArgument { .. })
+        ));
     }
 }

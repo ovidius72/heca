@@ -2246,6 +2246,52 @@ pub fn handle_open_link_at_caret(state: &mut AppState, _action: &WmAction) {
     handle_open_link(state, &WmAction::OpenLink { url });
 }
 
+// ── Chrome container placement (plugin-02, §2.9) ──────────────────────────────
+// Host-level container moves against `AppState.chrome_host`. plugin-02 has no
+// render path consuming the host yet, so these change placement + emit the
+// `ContainerPlacementChanged` event but produce no visible effect until plugin-03.
+
+/// Move a mounted container to another chrome region (validated against the
+/// container's `supported_regions`).
+pub fn handle_move_container_to_region(state: &mut AppState, action: &WmAction) {
+    let WmAction::MoveContainerToRegion {
+        container_id,
+        region,
+    } = action
+    else {
+        return;
+    };
+    if let Err(e) = state.chrome_host.move_container(container_id, *region) {
+        eprintln!("[heca] move container '{container_id}' failed: {e}");
+    }
+}
+
+/// Reorder a mounted container within its region, before `before_id` (or to the
+/// end when `None`).
+pub fn handle_reorder_container_before(state: &mut AppState, action: &WmAction) {
+    let WmAction::ReorderContainerBefore {
+        container_id,
+        before_id,
+    } = action
+    else {
+        return;
+    };
+    if let Err(e) = state
+        .chrome_host
+        .reorder(container_id, before_id.as_deref())
+    {
+        eprintln!("[heca] reorder container '{container_id}' failed: {e}");
+    }
+}
+
+/// Set a chrome region's host-level visibility.
+pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) {
+    let WmAction::SetRegionVisible { region, visible } = action else {
+        return;
+    };
+    state.chrome_host.set_region_visible(*region, *visible);
+}
+
 #[cfg(test)]
 mod open_link_tests {
     use super::link_scheme_allowed;
