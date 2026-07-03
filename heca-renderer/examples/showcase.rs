@@ -1183,6 +1183,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 |icon: Icon, name: &str, tag: Badge| Item::new(name).leading(icon).trailing(tag);
             let source_control = DockFrame::new("SOURCE CONTROL")
                 .rail(sidebar_mode, Glyph::GitBranch)
+                // `.nav_selected(true)`: the sidebar-nav cursor on a workspace frame —
+                // a hollow accent border, distinct from `.active(true)`'s filled wash
+                // (see EXPLORER above).
+                .nav_selected(true)
                 .header(
                     Flex::row()
                         .align(Align::Center)
@@ -1284,13 +1288,24 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                                 .placement(HintPlacement::CenterRight),
                         )
                         .child(
-                            KeyHint::new(Row::new().padding(6.0).child(Label::new("pane B")))
+                            // `.nav_selected(true)`: the nav cursor on a pane card — a
+                            // hollow outline, distinct from `.active(true)`'s filled pill.
+                            KeyHint::new(
+                                Row::new()
+                                    .padding(6.0)
+                                    .nav_selected(true)
+                                    .child(Label::new("pane B")),
+                            )
                                 .hint(rail_hints[1])
                                 .placement(HintPlacement::CenterRight),
                         ),
                 )
                 .child(
                     MarkerGroup::new()
+                        // `.nav_selected(true)`: the sidebar-nav cursor — a full-opacity
+                        // bar without the active glow, so it reads distinctly from the
+                        // active column's glowing bar.
+                        .nav_selected(true)
                         .gap(4.0)
                         .draggable(DragItemId::new(901))
                         .drop_target(DragItemId::new(901))

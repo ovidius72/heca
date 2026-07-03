@@ -776,9 +776,13 @@ background (a stronger same-hue tint) so a state-tinted row never gets a clashin
 
 - **Construct**: `Row::new()`. Add content with `.child(...)`.
 - **Builders**: `.on_activate(impl Fn())` (also makes it focusable), `.active(bool)`,
+  `.nav_selected(bool)` (a hollow same-hue **outline** for the sidebar-nav cursor — shown
+  distinctly from the filled `active` pill; a row can show one, the other, or both),
   `.marker(ActiveMarker)`, `.highlight(Color)` (override the derived hue),
   `.attention(Signal<bool>)` + `.attention_color(Color)`, plus `StyleExt` for a persistent
   background under the selection overlay.
+- **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
+  cursor) — bind either so the host flips it in place without a rebuild.
 - **Accessors**: `.state() -> Signal<bool>` (active).
 - **Attention**: when the host sets the bound `attention` signal `true`, the row flashes a few
   times (see [`Attention`](#attention)) and consumes the signal. The host plays any **sound** —
@@ -1010,9 +1014,11 @@ seam for a move/swap [`KeyHint`](#keyhint) target / drag handle (wrap the group,
 draggable; the bar stays a pure indicator). All bar styling is read from the `Theme` at paint.
 
 - **Construct**: `MarkerGroup::new()`. Add rows with `.child(...)`.
-- **Builders**: `.active(bool)`.
-- **Accessors**: `.state() -> Signal<bool>` (active) — bind it; the host writes it when the
-  group's selection changes and the bar repaints without a rebuild.
+- **Builders**: `.active(bool)`, `.nav_selected(bool)` (sidebar-nav cursor — a full-opacity
+  bar **without** the active glow, so it reads distinctly from the active column).
+- **Accessors**: `.state() -> Signal<bool>` (active), `.nav_state() -> Signal<bool>` (nav
+  cursor) — bind either; the host writes it when the group's selection changes and the bar
+  repaints without a rebuild.
 
 ```rust
 MarkerGroup::new()
@@ -1033,9 +1039,12 @@ away to a single centered `Icon` while the region is collapsed to a rail.
   `Badge`), `.expanded(bool)`, `.on_toggle(impl Fn(Action))` (`"dock-toggle"`),
   `.rail(Signal<RegionMode>, Glyph)` (fold to an icon in `CollapsedRail`),
   `.active(bool)` (paint a faint accent **wash** over the whole frame — alpha =
-  `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace).
+  `Theme::active_wash_alpha` — to mark it as the current/active dock, e.g. the active workspace),
+  `.nav_selected(bool)` (a hollow accent **border** marking the sidebar-nav cursor on a
+  workspace frame — distinct from the filled active wash).
 - **Accessors**: `.state() -> Signal<bool>` (expanded), `.active_state() -> Signal<bool>` (the
-  wash flag — bind it to flip the active wash in place without rebuilding the tree).
+  wash flag), `.nav_state() -> Signal<bool>` (the nav-cursor outline flag) — bind them to flip
+  the look in place without rebuilding the tree.
 
 ```rust
 let sidebar = ChromeRegion::vertical();

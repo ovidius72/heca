@@ -131,20 +131,24 @@ fn test_cursor_movement() {
 
     assert_eq!(tree.cursor, 0, "cursor starts at 0");
 
+    // Navigation skips columns: down moves the cursor and never lands on a column.
     tree.cursor_down();
-    assert_eq!(tree.cursor, 1, "cursor moves down to 1");
+    assert!(tree.cursor > 0, "cursor moves down");
+    assert!(
+        !matches!(tree.current_item(), Some(SidebarItem::Column { .. })),
+        "cursor never lands on a column"
+    );
 
     tree.cursor_up();
-    assert_eq!(tree.cursor, 0, "cursor moves up back to 0");
+    assert_eq!(tree.cursor, 0, "cursor moves up back to the start");
 
-    // Move to end, then past end should clamp
+    // Move to end, then past end should clamp on a navigable item (never a column).
     for _ in 0..tree.item_count + 5 {
         tree.cursor_down();
     }
-    assert_eq!(
-        tree.cursor,
-        tree.item_count - 1,
-        "cursor clamps at last item"
+    assert!(
+        !matches!(tree.current_item(), Some(SidebarItem::Column { .. })),
+        "cursor clamps on a navigable item, not a column"
     );
 
     // Move past start should clamp at 0

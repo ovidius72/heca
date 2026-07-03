@@ -39,6 +39,19 @@ impl RegionId {
     }
 }
 
+/// A `Copy` projection of the sidebar-nav cursor selection — a mirror of
+/// `sidebar::model::SidebarItem` without the sidebar-model coupling. Carried by
+/// [`ChromeEvent::SidebarSelectionChanged`] and mirrored into the chrome store so
+/// the expanded sidebar can highlight the nav cursor **distinctly** from the real
+/// focused pane (`active_pane`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SidebarSelection {
+    Workspace { ws_idx: usize },
+    Column { ws_idx: usize, col_idx: usize },
+    Pane { pane_id: PaneId },
+    FloatingPane { pane_id: PaneId, ws_idx: usize },
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ChromeEvent {
     PaneActiveChanged {
@@ -110,6 +123,12 @@ pub enum ChromeEvent {
         container_id: String,
         region: RegionId,
     },
+    /// The sidebar-nav cursor selection changed, or was cleared on leaving nav
+    /// mode (`None`). Lets the expanded sidebar highlight the nav cursor distinctly
+    /// from `active_pane` (the real session focus).
+    SidebarSelectionChanged {
+        selection: Option<SidebarSelection>,
+    },
 }
 
 impl ChromeEvent {
@@ -130,6 +149,7 @@ impl ChromeEvent {
             ChromeEvent::RegionSizeChanged { .. } => "chrome.region.size.changed",
             ChromeEvent::TerminalViewportChanged { .. } => "terminal.viewport.changed",
             ChromeEvent::ContainerPlacementChanged { .. } => "chrome.container.placement.changed",
+            ChromeEvent::SidebarSelectionChanged { .. } => "sidebar.selection.changed",
         }
     }
 }

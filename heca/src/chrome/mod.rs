@@ -8,7 +8,7 @@ mod events;
 mod host;
 mod state;
 pub use contribution::{Contribution, RegionSet};
-pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId};
+pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 pub use host::ChromeHost;
 pub use state::{SharedChromeState, WorkspacesContainerState};
 // Contribution/placement API surface for the render + provider phases (plugin-03).
@@ -1428,6 +1428,7 @@ fn pane_card(
         .padding(6.0)
         .marker(ActiveMarker::Bar)
         .active(active)
+        .nav_selected(false)
         .draggable(drag_id)
         .drop_target(drag_id)
         // On click/Enter the card records its pane id in the host sink; the app reads
@@ -1438,6 +1439,7 @@ fn pane_card(
         .child(content);
     // Bind the card's active signal so focus changes update it without a rebuild.
     signals.pane_active.push((pane_id, card.state()));
+    signals.pane_nav.push((pane_id, card.nav_state()));
     // Wrap the card in a universal `KeyHint` so a move/swap/take pick can stamp this
     // pane's letter over it. `KeyHint` is transparent — it hugs the child and routes
     // events/focus/drag straight through — so the card stays a drag source + target
@@ -1599,6 +1601,7 @@ fn build_workspaces_container(
         // `sync_chrome_signals` instead of forcing a tree rebuild; the alpha is the
         // theme's `active_wash_alpha` token, not a baked-in literal.
         dock = dock.active(active_ws);
+        dock = dock.nav_selected(false);
         let ws_pane_ids = ws
             .columns
             .iter()
@@ -1607,6 +1610,7 @@ fn build_workspaces_container(
             .map(|p| p.pane_id)
             .collect::<Vec<_>>();
         signals.ws_active.push((ws_pane_ids, dock.active_state()));
+        signals.ws_nav.push((ws_idx, dock.nav_state()));
         // The whole workspace is a column drop target (F4.5 step 2 scope C): dropping a
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
@@ -2390,6 +2394,12 @@ pub(crate) struct ChromeSignals {
     /// iff it contains the active pane). Drives the active-workspace accent wash in
     /// place, mirroring [`col_active`](ChromeSignals::col_active).
     pub(crate) ws_active: Vec<(Vec<PaneId>, Signal<bool>)>,
+    /// Sidebar-nav cursor signals, mirroring the `*_active` families: each pane
+    /// card's nav-outline signal (by pane id), each column's (by `(ws_idx, col_idx)`),
+    /// each workspace's (by `ws_idx`). Driven from `nav_selection()` — the cursor
+    /// highlight is distinct from `active_pane`.
+    pub(crate) pane_nav: Vec<(PaneId, Signal<bool>)>,
+    pub(crate) ws_nav: Vec<(usize, Signal<bool>)>,
     /// Each pane card's [`KeyHint`] pick-letter signal, keyed by pane id. Driven each
     /// frame from the active [`InputMode`](crate::app_state::InputMode) candidates
     /// (move/swap/take pick): `Some(letter)` while the pane is a candidate, else
@@ -2493,6 +2503,26 @@ fn sync_pane_runtime_state(
     changed
 }
 
+/// Project a borrowed sidebar-tree `SidebarItem` into the `Copy`
+/// [`SidebarSelection`] mirrored in the chrome store (`None` stays `None`).
+fn sidebar_selection_from_item(
+    item: Option<&crate::sidebar::SidebarItem>,
+) -> Option<SidebarSelection> {
+    use crate::sidebar::SidebarItem;
+    item.map(|it| match it {
+        SidebarItem::Workspace { ws_idx } => SidebarSelection::Workspace { ws_idx: *ws_idx },
+        SidebarItem::Column { ws_idx, col_idx } => SidebarSelection::Column {
+            ws_idx: *ws_idx,
+            col_idx: *col_idx,
+        },
+        SidebarItem::Pane { pane_id } => SidebarSelection::Pane { pane_id: *pane_id },
+        SidebarItem::FloatingPane { pane_id, ws_idx } => SidebarSelection::FloatingPane {
+            pane_id: *pane_id,
+            ws_idx: *ws_idx,
+        },
+    })
+}
+
 /// Mirror canonical app/runtime state into the shared chrome store before the
 /// retained tree reads it. `InputMode` remains the source of truth for keyboard
 /// pick flows; the store is the reactive UI mirror.
@@ -2501,6 +2531,23 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
+    // Project the sidebar-nav cursor selection into the store — but only while
+    // actually navigating (`SidebarNav`), so the nav-cursor highlight shows during
+    // navigation and clears on exit. Selection-driven: this does NOT move the real
+    // focus (`active_pane`); the expanded sidebar renders both, distinctly. The
+    // setter is a change-guarded chokepoint, so calling it every frame is cheap.
+    let nav_selection = if matches!(
+        state.input_mode,
+        crate::app_state::InputMode::SidebarNav
+    ) {
+        sidebar_selection_from_item(state.sidebar_tree.current_item())
+    } else {
+        None
+    };
+    state
+        .chrome_state
+        .workspaces
+        .set_nav_selection(nav_selection);
     let next_candidates = state
         .input_mode
         .candidates()
@@ -2579,6 +2626,25 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
     }
     for (pids, sig) in &retained.signals.ws_active {
         let v = active.is_some_and(|a| pids.contains(&a));
+        if sig.get_untracked() != v {
+            sig.set(v);
+            changed = true;
+        }
+    }
+    // Project the sidebar-nav cursor selection onto each row's nav-cursor signal —
+    // distinct from `active` above, so the expanded sidebar shows both the real
+    // focus and the nav cursor while navigating.
+    let nav = state.chrome_state.workspaces.nav_selection();
+    for (pid, sig) in &retained.signals.pane_nav {
+        let v = matches!(nav, Some(SidebarSelection::Pane { pane_id }) if pane_id == *pid)
+            || matches!(nav, Some(SidebarSelection::FloatingPane { pane_id, .. }) if pane_id == *pid);
+        if sig.get_untracked() != v {
+            sig.set(v);
+            changed = true;
+        }
+    }
+    for (ws_idx, sig) in &retained.signals.ws_nav {
+        let v = matches!(nav, Some(SidebarSelection::Workspace { ws_idx: w }) if w == *ws_idx);
         if sig.get_untracked() != v {
             sig.set(v);
             changed = true;

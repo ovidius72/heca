@@ -1085,6 +1085,30 @@ Source: `pluggable-chrome-plugin-plan.md` Phase 3
 Prove the provider model with the first real built-in provider before loading external plugins.
 Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 
+> **`plugin-task-10a` (sidebar-nav highlight) — DONE 2026-07-03** on branch
+> `feat/plugin-03-providers`. Cursor highlight (accent+glow, always-on, distinct from
+> active) projected via `nav_selection` + `SidebarSelectionChanged`; cursor navigates
+> **panes + workspaces only** (skips columns); `handle_sidebar_focus` no longer expands
+> a contracted sidebar. `Row`/`MarkerGroup`/`DockFrame` gained `nav_selected`. 297 tests,
+> clippy clean. Full detail: `handoff-sidebar-nav-task10a.md`.
+
+**Sidebar follow-ups (arising from task-10a live testing — 2026-07-03):**
+- [ ] **sidebar-fu-1** — Collapsed rail: pane initials not updated on rename.
+  `collapsed_pane_label` (`heca/src/sidebar/render.rs`) uses the process name; prefer
+  `custom_name` when set.
+- [ ] **sidebar-fu-2** — KeyHint missing in the collapsed rail (old impl exists); bring
+  the universal `KeyHint` into the hand-drawn rail. Folds into `app-task-21`.
+- [ ] **sidebar-fu-3** — New `[settings]` bools `show_left_sidebar` / `show_right_sidebar`
+  / `show_top_bar` / `show_bottom_bar`; `false` = fully hide that chrome widget. Touches
+  `heca-config` schema + chrome region apply (`RegionMode::Hidden`) + startup/reload.
+- [ ] **sidebar-fu-4** — Restore sidebar **add/remove buttons + context menu** for
+  ws/cols/panes (lost in the grid-ui rebuild). Three surfaces: sidebar **buttons**
+  (addPane→highlighted column, addCol→highlighted workspace, addWs→top), **sidebar-mode
+  actions** on the highlighted item (handlers already exist:
+  `handle_sidebar_create_workspace`/`create_column`/`split_in_column`/`delete_selected`,
+  `handlers.rs:1471/1485/1504/1532` — verify targets), and a **mouse context menu** with
+  the same ops (reuse the right-click overlay pattern in `chrome/mod.rs`).
+
 - [~] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
   Files: `heca/src/providers/mod.rs` (new)
   **Trait + `ChromeCtx` + `ProviderHandles` already landed in plugin-02** (`ChromeHost::register` needed them): `heca/src/providers/mod.rs` + the `Contribution`/`ContainerContribution` model in `heca/src/chrome/contribution.rs`. `ChromeCtx` currently wraps only the read/observe `App` half; its `actions`/`overlay`/`regions` halves are plugin-04/05. Remaining for plugin-03: the first real `impl Provider` (`plugin-task-10`) + calling `build_contribution`/`on_activate` on the render path.

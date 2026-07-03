@@ -38,6 +38,10 @@ const HOVER_TINT_ALPHA: u8 = 40;
 /// Alpha of the crisp same-hue border drawn around the *active* pill — the main
 /// cue that distinguishes a selected row from a merely tinted/hovered one.
 const ACTIVE_BORDER_ALPHA: u8 = 180;
+/// Alpha of the hollow same-hue border marking the sidebar-nav **cursor** — a
+/// border with no fill and no bar, so it reads distinctly from the filled
+/// `active` pill (a row can show one, the other, or — rarely — both coincide).
+const NAV_OUTLINE_ALPHA: u8 = 220;
 /// Number of flashes a `needs attention` pulse plays.
 const ATTENTION_PULSES: u32 = 4;
 /// Peak glow radius (logical px) of the attention pulse border.
@@ -56,6 +60,8 @@ pub struct Row {
     base: Base,
     /// Active (selected/current) state: tinted bg + optional marker.
     active: Signal<bool>,
+    /// Sidebar-nav cursor state: a hollow outline, distinct from `active`.
+    nav: Signal<bool>,
     marker: ActiveMarker,
     hovered: Signal<bool>,
     flash: Flash,
@@ -80,6 +86,7 @@ impl Row {
         Self {
             base,
             active: signal(false),
+            nav: signal(false),
             marker: ActiveMarker::Bar,
             hovered: signal(false),
             flash: Flash::new(),
@@ -136,6 +143,19 @@ impl Row {
     /// The active-state signal — bind UI to it reactively.
     pub fn state(&self) -> Signal<bool> {
         self.active
+    }
+
+    /// Set the sidebar-nav **cursor** state — a hollow outline shown distinctly
+    /// from the filled `active` pill (e.g. the workspaces sidebar highlights the
+    /// nav cursor while the real focused pane keeps its pill).
+    pub fn nav_selected(self, on: bool) -> Self {
+        self.nav.set(on);
+        self
+    }
+
+    /// The nav-cursor signal — bind UI to it reactively.
+    pub fn nav_state(&self) -> Signal<bool> {
+        self.nav
     }
 
     fn interactive(&self) -> bool {
@@ -218,6 +238,24 @@ impl Component for Row {
                     .unwrap_or(foreground.with_alpha(HOVER_FILL_ALPHA))
             };
             cx.rect(sel, c, None, sel_radius, None);
+        }
+
+        // Nav-cursor outline: a **distinct-colored** border (theme foreground, not the
+        // accent the `active` pill uses) marking the sidebar j/k/arrow cursor. Drawn
+        // ALWAYS when nav — even on the active row — so the cursor stays visible when
+        // it coincides with the active pill (a plain accent outline would vanish into
+        // the pill).
+        if self.nav.get_untracked() {
+            cx.rect(
+                sel,
+                accent.with_alpha(0),
+                Some(Border {
+                    color: accent.with_alpha(NAV_OUTLINE_ALPHA),
+                    width: (sel_border_w * 1.5).max(2.0),
+                }),
+                sel_radius,
+                Some(Glow { color: glow_c, radius: 8.0, intensity: 0.28 }),
+            );
         }
 
         // Active indicator.
