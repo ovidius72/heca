@@ -163,6 +163,55 @@ you never block the UI thread and never touch the overlay's rendering.
 
 ---
 
+## Context menus & KeyHint — overlays and hints from a plugin
+
+These are **host-owned capabilities**, not widgets you nest in a `ViewNode`. A plugin
+never draws a context menu nor manages a KeyHint; it **requests** the overlay or
+**declares** an intent, and the host owns z-order, focus, keyboard routing, and dismissal.
+
+**Context menu = a host-owned dropdown anchored at the right-click.** Two equivalent ways:
+
+*Declarative* — attach a context handler in the `ViewNode`:
+
+```rust
+Row::new()
+    .child(Label::new(&container.name))
+    .on_context([ item("restart", "Restart"), item("remove", "Remove") ])
+```
+
+On right-click the host opens the menu, owns z-order / focus / click-outside / Esc, and
+returns the chosen entry to you as an **intent** (`plugin.docker.restart`, …).
+
+*Imperative* — the same, in response to the event:
+
+```rust
+let choice = ctx.overlay.open_dropdown(DropdownSpec {
+    anchor: click_rect,          // a context menu is just a dropdown anchored at the click
+    side: OverlaySide::Below,
+    items: vec![ item("restart", "Restart"), item("remove", "Remove") ],
+}).await;
+if let DropdownResult::Picked(id) = choice { ctx.actions.dispatch(&id, args) }
+```
+
+Items are data (id + label); one item may carry a `ViewNode` if it needs rich content, but
+the *menu itself* stays host-owned.
+
+**KeyHint is different: it's the host's universal leader/vimium overlay, not a widget.**
+You never create a KeyHint. Instead, **any plugin widget that exposes an `on_press` intent
+is automatically "hintable"** — when the user triggers the leader, the host assigns letters
+to *every* clickable target (app + plugin) and, on the keypress, emits the intent:
+
+```rust
+Button::new("Restart").on_press(intent("plugin.docker.restart", { "id": id }))
+// → the host assigns it a leader letter and routes it. No KeyHint code in the plugin.
+```
+
+Opt a widget out with `.hintable(false)`; the default is "has an intent ⇒ is a target". One
+system covers app and plugin widgets alike.
+
+**Rule of thumb:** `ViewNode` = *mounted content*; **overlays** (context menu / dropdown /
+modal) = *requested* from the host; **KeyHint** = *enabled* by exposing an intent.
+
 ## The closed vocabulary (and how to extend it)
 
 Plugins compose from the host's **closed** `WidgetKind` set. You get unlimited
