@@ -31,10 +31,6 @@ impl SidebarItem {
         }
     }
 
-    /// Returns whether this row can be selected/highlighted by the cursor.
-    pub fn is_selectable(&self) -> bool {
-        !matches!(self, SidebarItem::FloatingPane { .. })
-    }
 }
 
 /// A pane entry in the sidebar tree.
@@ -276,9 +272,13 @@ impl SidebarTree {
     }
 
     fn is_navigable(&self, idx: usize) -> bool {
-        self.flat_items
-            .get(idx)
-            .is_some_and(|item| item.is_selectable())
+        // The nav cursor stops only on panes and workspace headers — never on
+        // columns (landing on a column reads as a "jump into nothing") nor floating
+        // panes. Workspace headers stay selectable so a collapsed workspace can be
+        // re-expanded with `l`.
+        self.flat_items.get(idx).is_some_and(|item| {
+            matches!(item, SidebarItem::Pane { .. } | SidebarItem::Workspace { .. })
+        })
     }
 
     /// Move selection up, keeping cursor visible.

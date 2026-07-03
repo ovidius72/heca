@@ -40,7 +40,7 @@ use heca_core::runtime::{ContentKind, GitInfo, PaneRuntime, ProcessStatus};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, SignalWith, signal};
 use heca_grid_ui::widgets::RegionMode;
 
-use super::{ChromeEvent, ChromeEventBus, RegionId};
+use super::{ChromeEvent, ChromeEventBus, RegionId, SidebarSelection};
 
 /// Per-pane reactive mirror of canonical [`PaneRuntime`] fields.
 ///
@@ -166,6 +166,11 @@ pub struct WorkspacesContainerState {
     /// This container's **content** scroll offset (logical px) — scrolls when the
     /// container has too many items. (The shell's dock-list scroll is separate.)
     pub(crate) scroll: Signal<f32>,
+    /// The sidebar-nav cursor selection while in `InputMode::SidebarNav`, projected
+    /// from `AppState.sidebar_tree.current_item()`. `None` = not navigating. Drives
+    /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
+    /// `active_pane` (the real session focus).
+    pub(crate) nav_selection: Signal<Option<SidebarSelection>>,
 }
 
 impl WorkspacesContainerState {
@@ -180,12 +185,17 @@ impl WorkspacesContainerState {
             pending_pick: signal(None),
             panes: signal(HashMap::new()),
             scroll: signal(0.0),
+            nav_selection: signal(None),
         }
     }
 
     // ── Reads ──
     pub fn active_pane(&self) -> Option<PaneId> {
         self.selection.active_pane.get()
+    }
+    /// The current sidebar-nav cursor selection (`None` when not navigating).
+    pub fn nav_selection(&self) -> Option<SidebarSelection> {
+        self.nav_selection.get()
     }
     #[cfg_attr(
         not(test),
@@ -284,6 +294,16 @@ impl WorkspacesContainerState {
         }
         self.selection.active_pane.set(pane);
         self.events.emit(ChromeEvent::PaneActiveChanged { pane });
+    }
+    /// Set (or clear, with `None`) the sidebar-nav cursor selection. Emits
+    /// [`ChromeEvent::SidebarSelectionChanged`]. Cleared on leaving nav mode.
+    pub fn set_nav_selection(&self, selection: Option<SidebarSelection>) {
+        if self.nav_selection.get_untracked() == selection {
+            return;
+        }
+        self.nav_selection.set(selection);
+        self.events
+            .emit(ChromeEvent::SidebarSelectionChanged { selection });
     }
     #[cfg_attr(
         not(test),
@@ -827,6 +847,32 @@ mod tests {
         assert_eq!(s.workspaces.active_pane(), None);
         s.workspaces.set_active_pane(Some(PaneId(7)));
         assert_eq!(s.workspaces.active_pane(), Some(PaneId(7)));
+    }
+
+    #[test]
+    fn nav_selection_round_trips_and_emits_on_change() {
+        let s = state();
+        assert_eq!(s.workspaces.nav_selection(), None);
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        let seen_ev = seen.clone();
+        let _sub = s.events().subscribe("sidebar.selection.changed", move |e| {
+            seen_ev.borrow_mut().push(e.name().to_string());
+        });
+
+        let sel = SidebarSelection::Pane { pane_id: PaneId(4) };
+        s.workspaces.set_nav_selection(Some(sel));
+        assert_eq!(s.workspaces.nav_selection(), Some(sel));
+        // Idempotent: setting the same value again emits nothing.
+        s.workspaces.set_nav_selection(Some(sel));
+        // Clearing on nav exit.
+        s.workspaces.set_nav_selection(None);
+        assert_eq!(s.workspaces.nav_selection(), None);
+
+        assert_eq!(
+            seen.borrow().as_slice(),
+            ["sidebar.selection.changed", "sidebar.selection.changed"],
+            "one event for the set, one for the clear — none for the duplicate"
+        );
     }
 
     #[test]

@@ -1307,12 +1307,11 @@ pub fn handle_sidebar_right(state: &mut AppState, _action: &WmAction) {
 }
 
 pub fn handle_sidebar_focus(state: &mut AppState, _action: &WmAction) {
-    state
-        .chrome_state
-        .set_left_mode(heca_grid_ui::widgets::RegionMode::Expanded);
-    state
-        .chrome_state
-        .set_left_size(crate::chrome::DEFAULT_SIDEBAR_WIDTH);
+    // Enter sidebar-nav WITHOUT changing the sidebar's mode or width at all: a
+    // contracted/collapsed sidebar stays exactly as it is, an expanded one stays
+    // expanded (selection-driven). The look is driven by `left_size` (render.rs
+    // uses width < SIDEBAR_EXPANDED_THRESHOLD for the rail), so touching neither
+    // mode nor size here is what keeps the contracted sidebar contracted.
     state.input_mode = InputMode::SidebarNav;
     update_session_viewport(state);
     after_layout_change(state);

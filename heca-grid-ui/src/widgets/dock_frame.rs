@@ -28,6 +28,7 @@ use crate::builders::{LayoutExt, Parent, StyleExt};
 use crate::component::{Base, Component, Event, Handled, PaintCx, paint_child, route_event};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
 use crate::style::{Align, Direction, Justify};
+use crate::scene::{Border, Glow};
 use crate::widgets::{Flex, Glyph, Icon, Item, Label, RegionMode};
 
 /// Chevron glyphs for expanded / collapsed states.
@@ -60,6 +61,13 @@ const BODY: usize = 1;
 const RAIL: usize = 2;
 /// Index of the controls slot within the header row (after the toggle [`Item`]).
 const CONTROLS: usize = 1;
+/// Alpha of the accent border marking the sidebar-nav **cursor** on a workspace
+/// frame — a thick, glowing border, distinct from the (filled) active wash.
+const NAV_OUTLINE_ALPHA: u8 = 235;
+/// Alpha of the faint accent fill under the nav-cursor border — light enough to
+/// stay clearly weaker than the active wash, but enough to make the narrow
+/// workspace header read as selected.
+const NAV_WASH_ALPHA: u8 = 30;
 
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
@@ -70,6 +78,9 @@ pub struct DockFrame {
     /// workspace in the sidebar. Signal-backed so a host can flip it in place via
     /// [`active_state`](DockFrame::active_state) without rebuilding the tree.
     active: Signal<bool>,
+    /// Sidebar-nav cursor state: paints a hollow accent border, distinct from the
+    /// active wash. Signal-backed so the host flips it in place.
+    nav: Signal<bool>,
     /// Text signal of the header's chevron glyph (flipped on toggle).
     chevron: Signal<String>,
     on_toggle: Option<Box<dyn Fn(Action)>>,
@@ -132,6 +143,7 @@ impl DockFrame {
             base,
             expanded,
             active: signal(false),
+            nav: signal(false),
             chevron,
             on_toggle: None,
             rail_mode: None,
@@ -194,6 +206,18 @@ impl DockFrame {
     /// (via the chrome's per-frame signal sync) without rebuilding the tree.
     pub fn active_state(&self) -> Signal<bool> {
         self.active
+    }
+
+    /// Mark the frame as the sidebar-nav **cursor** — a hollow accent border,
+    /// shown distinctly from the active wash. Defaults to off.
+    pub fn nav_selected(self, on: bool) -> Self {
+        self.nav.set(on);
+        self
+    }
+
+    /// The nav-cursor signal — bind it so the host can flip the outline in place.
+    pub fn nav_state(&self) -> Signal<bool> {
+        self.nav
     }
 
     /// Make the frame **rail-aware**: it observes the hosting region's
@@ -291,6 +315,30 @@ impl Component for DockFrame {
             if wash_alpha > 0.0 {
                 cx.rect(b, accent.with_alpha_f32(wash_alpha), None, radius, None);
             }
+        }
+
+        // Nav-cursor outline — a hollow accent border marking the sidebar-nav
+        // cursor on this workspace frame, distinct from the filled active wash.
+        // Shown only when this isn't already the active frame.
+        if self.nav.get_untracked() {
+            let (cursor_c, glow, border_w) = {
+                let t = cx.theme();
+                (t.colors.accent, t.colors.glow, t.focus_border_width)
+            };
+            // A **distinct-colored** thick border + faint fill (theme foreground, not
+            // the accent the active wash uses) marking the sidebar cursor on a
+            // workspace header. Drawn ALWAYS when nav — even on the active workspace —
+            // so the cursor stays visible when it coincides with the active wash.
+            cx.rect(
+                b,
+                cursor_c.with_alpha(NAV_WASH_ALPHA),
+                Some(Border {
+                    color: cursor_c.with_alpha(NAV_OUTLINE_ALPHA),
+                    width: (border_w * 2.0).max(2.5),
+                }),
+                radius,
+                Some(Glow { color: glow, radius: 8.0, intensity: 0.25 }),
+            );
         }
 
         // Prominent flat corner-bracket frame (shared with Pane) — unless frameless

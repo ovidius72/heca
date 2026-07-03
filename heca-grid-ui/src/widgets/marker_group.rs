@@ -64,6 +64,9 @@ pub struct MarkerGroup {
     /// Active state: brightens the bar to the accent (+ glow). Bind reactively
     /// via [`state`](MarkerGroup::state).
     active: Signal<bool>,
+    /// Sidebar-nav cursor state: a full-opacity bar **without** the active glow,
+    /// so the cursor reads distinctly from the active column.
+    nav: Signal<bool>,
     /// Pointer is over the left grip gutter (drives the hover affordance).
     hovered: Signal<bool>,
 }
@@ -76,6 +79,7 @@ impl MarkerGroup {
         Self {
             base,
             active: signal(false),
+            nav: signal(false),
             hovered: signal(false),
         }
     }
@@ -90,6 +94,17 @@ impl MarkerGroup {
     /// the group's selection changes; the bar repaints from it).
     pub fn state(&self) -> Signal<bool> {
         self.active
+    }
+
+    /// Set the sidebar-nav **cursor** state (full-opacity bar, no active glow).
+    pub fn nav_selected(self, on: bool) -> Self {
+        self.nav.set(on);
+        self
+    }
+
+    /// The nav-cursor signal — bind UI to it reactively.
+    pub fn nav_state(&self) -> Signal<bool> {
+        self.nav
     }
 
     /// `true` while the pointer is over the left grip gutter. The host reads this
@@ -151,6 +166,7 @@ impl Component for MarkerGroup {
         // Theme-driven: accent + glow when active; brighter + thicker when the
         // grip is hovered; a dimmed accent at rest.
         let active = self.active.get_untracked();
+        let nav = self.nav.get_untracked();
         let hovered = self.hovered.get_untracked();
         // All effect parameters come from the theme (→ config.toml): glow color,
         // plus its strength via `glow_size` — `GlowLevel` is the sole owner of
@@ -173,6 +189,10 @@ impl Component for MarkerGroup {
                 intensity: BAR_GLOW_INTENSITY * glow_strength,
             };
             (accent, Some(g))
+        } else if nav {
+            // Nav cursor: full-opacity accent, but no glow — a "lit but flat" bar,
+            // clearly the cursor yet distinct from the active column's glowing bar.
+            (accent, None)
         } else if hovered {
             (accent.with_alpha(HOVER_BAR_ALPHA), None)
         } else {
