@@ -1306,8 +1306,12 @@ Panel::new().title("Hello")
 ```
 
 Complex widgets (tables, forms) and rich **modals** (a modal `body` is itself a
-`ViewNode`) are built the same way. See the full guide for panel / table / modal-with-form
-examples: **[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
+`ViewNode`) are built the same way. **Context menus and KeyHints come from the host, not
+from nested widgets**: a context menu is a host-owned dropdown the plugin *requests* (or
+declares with `.on_context`), and any plugin widget with an `on_press` intent is
+automatically leader-**hintable**. See the full guide for panel / table / modal-with-form
+examples and the "Context menus & KeyHint" section:
+**[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
 
 ## Roadmap
 
