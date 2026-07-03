@@ -27,6 +27,7 @@ Think tmux meets NIRI meets Neovide — all panes render in a single GPU-acceler
 - [Modes](#modes)
 - [Spawning Applications](#spawning-applications)
 - [Architecture](#architecture)
+- [Plugins (Planned)](#plugins-planned)
 - [Roadmap](#roadmap)
 - [License](#license)
 
@@ -1281,6 +1282,36 @@ The agreed behavior for float toggling is:
 - **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
 
 ---
+
+## Plugins (Planned)
+
+> **Not yet available.** This describes the *planned* plugin model (target Phase 9)
+> so early adopters can see where it's going. The SDK below does not exist yet.
+> Full guide with detailed examples: **[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
+
+heca will be extensible via **WASM plugins**. A plugin observes app state, dispatches
+**intents** (never mutating state directly), and contributes UI as a declarative
+**`ViewNode`** tree — a recursive widget tree like Flutter's `Widget` or SwiftUI's
+`View`, where a container node holds a vector of child widgets. The host maps that
+tree to real `heca-grid-ui` widgets, themes them, and owns focus/clipping/overlays.
+
+```rust
+// A container is just a ViewNode with children — compose arbitrarily:
+Panel::new().title("Hello")
+    .child(Column::new().gap(6).padding(10)
+        .child(Label::new(format!("Active pane: {name}")))
+        .child(Button::new("Refresh")
+            .variant(Variant::Accent)                 // semantic, themed by the host
+            .on_press(intent("example.hello.refresh", {}))))  // intent, not a callback
+```
+
+Complex widgets (tables, forms) and rich **modals** (a modal `body` is itself a
+`ViewNode`) are built the same way. **Context menus and KeyHints come from the host, not
+from nested widgets**: a context menu is a host-owned dropdown the plugin *requests* (or
+declares with `.on_context`), and any plugin widget with an `on_press` intent is
+automatically leader-**hintable**. See the full guide for panel / table / modal-with-form
+examples and the "Context menus & KeyHint" section:
+**[docs/plugin-authoring.md](docs/plugin-authoring.md)**.
 
 ## Roadmap
 

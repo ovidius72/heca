@@ -217,6 +217,140 @@ So plugin authors get a code-first API, while the host still controls:
 - region constraints
 - widget validation
 
+### 2.6.1 How a plugin renders our widgets — host-adapter + declarative ViewModel (design; Phase 9)
+
+This is the *design* for the plugin authoring path; it is **not built yet**. The
+built-in Rust path (plugin-03) builds real widgets directly; the pieces below are
+the WASM plugin path (Phase 9) and are recorded so the seam we ship now stays
+compatible with them.
+
+**A) Host-adapter pattern — how a plugin becomes a `Provider`.** A WASM plugin
+does **not** cross the boundary as a Rust `Box<dyn Provider>` (unstable ABI,
+safety). Instead the host wraps each plugin in a first-party **adapter** —
+`WasmProviderAdapter: Provider` — that marshals `build_contribution`, events
+(`app.on`), and action dispatch to/from the WASM module. So the `Provider` trait
+is the **single seam**: built-ins implement it directly; plugins are reached
+through a host-owned adapter that speaks the same trait. Everything downstream
+(`ChromeHost`, regions, contributions) is identical for both.
+
+**B) Authoring UI: code → builder SDK → declarative ViewModel → host maps to
+`heca-grid-ui`.** The plugin never instantiates our widget structs across the
+boundary and never hand-writes JSON as its primary experience. It calls a
+**builder SDK** that produces a **serializable ViewModel** — a tree of *typed
+nodes with props* drawn from the host's **closed widget vocabulary**. The host
+receives that tree, maps each node to the real `heca-grid-ui` widget, applies
+props, mounts the subtree into the region, and owns render/focus/clip. Sketch of
+a plugin building a panel with a button:
+
+```
+// plugin code (compiles to WASM), using the host SDK builder:
+Panel::new("docker.containers")
+    .title("Containers")
+    .child(Row::new()
+        .child(Label::new(state.name))
+        .child(Button::new("Restart")
+            .variant(Variant::Danger)          // semantic variant, not a raw color
+            .size(WidgetSize::Small)
+            .on_press(intent("plugin.docker.restart", { "id": state.id }))))
+// → serializes to a ViewModel: { kind:"Panel", props:{title}, children:[ { kind:"Row", … } ] }
+// → host maps each node to the grid-ui widget, themes it, mounts it.
+```
+
+**C) Props vs styling.** Props are **serializable data** — strings, numbers,
+bools, and *semantic enums* the host knows (`WidgetSize::Small`,
+`Variant::Danger|Accent`, `TooltipSide`, …). **Styling is not a free prop:**
+colors/fonts/alphas come from the `Theme`/config, never from raw values passed by
+the plugin. The plugin picks *intent* (danger/accent/size); the host resolves the
+actual pixels from the theme. This keeps every plugin visually consistent and
+theme-driven.
+
+**D) Interaction is intent-based, not callbacks across the boundary.** A
+`Button::on_press` does not run plugin code during paint. It carries an **intent**
+= a string action id + serializable args. The host routes it: either dispatch a
+registered action, or deliver it to the plugin as an event (`app.on`). This keeps
+input routing, ordering, and re-entrancy on the host side.
+
+**E) Overlays are requested, not mounted.** A **modal/dropdown/popover is NOT a
+region contribution** the plugin mounts — it is host-owned (§2.7.1). The plugin
+**requests** it and awaits a typed result:
+
+```
+// Simple case via the message convenience; body could instead be a full tree (§2.6.2/§2.7.1).
+let result = ctx.overlay.open_modal(
+    ModalSpec::message("Restart nginx?", "The container will stop briefly.")
+        .danger(true)
+        .actions([ModalAction::danger("restart", "Restart"), ModalAction::new("cancel", "Cancel")]),
+).await;                                // WASM: marshals as request-id + a resolve event
+match result {
+    ModalResult::Action { id, .. } if id == "restart" => ctx.actions.dispatch("plugin.docker.restart", args),
+    _ => {}
+}
+```
+
+The host owns z-order, focus trap, ESC, click-outside, positioning, and returns
+the typed `ModalResult`/`DropdownResult`. So: **panels/toolbars/status segments →
+mounted into a region as a `Contribution`; modals/dropdowns → requested from the
+`OverlayHost`.**
+
+**Why this shape:** no Rust object and no GPU/focus/overlay control crosses the
+boundary — only serializable data + string ids; the host stays the single owner
+of rendering, theming, input routing, and overlay z-order (§2.6/§2.7 guardrails).
+Shipped today: the `heca-grid-ui` widgets themselves + the read/observe `App`
+facade. Planned: the builder SDK + ViewModel + WASM bridge (Phase 9) and the
+`OverlayHost` async API (Phase 8).
+
+### 2.6.2 The declarative widget tree (`ViewNode`) — a SwiftUI/Flutter-style model
+
+The "ViewModel" above is concretely a **recursive widget tree**: a *container*
+node holds a **vector of child widgets**, each of which may itself be a container.
+This is the same shape as Flutter's `Widget` tree or SwiftUI's `View` tree.
+
+**Half of it already exists.** `heca-grid-ui` is already a retained, recursive
+tree: every widget has `Base.children: Vec<Box<dyn Component>>`, the `Parent`
+trait exposes `.child(...)`, and `Flex`/`Row`/`Card`/… hold arbitrary nestable
+children. That is our *RenderObject/Element* layer. What the plugin path adds is
+the **declarative layer on top** — a serializable `ViewNode` (Flutter's `Widget` /
+SwiftUI's `View`) that the host **realizes** into that existing retained tree.
+
+**The declarative node** (design; Phase 9):
+
+```
+struct ViewNode {
+    kind:     WidgetKind,               // closed enum of host-known widgets:
+                                        //   containers: Column|Row|Grid|Card|Scroll|Panel
+                                        //   leaves:     Label|Button|Badge|Icon|Input|Toggle|StatusDot|…
+    props:    PropMap,                  // serializable scalars + semantic enums (variant, size, align…)
+    events:   Map<EventName, Intent>,   // on_press / on_change → intent(action_id, args)
+    children: Vec<ViewNode>,            // recursive; empty for leaves
+}
+```
+
+Containers (`Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`, and the modal `body` in
+§2.7.1) carry `children`; leaves don't. A typed, SwiftUI-like **builder SDK** sits
+on top for ergonomics and emits this uniform node (just as Flutter's typed
+`Widget` classes lower to `Element`/`RenderObject`):
+
+```
+Column::new().gap(8).padding(12)
+    .child(Label::new(title).variant(Variant::Heading))
+    .child(Row::new()
+        .child(Badge::new(status).variant(Variant::Accent))
+        .child(Button::new("Restart").variant(Variant::Danger)
+            .on_press(intent("plugin.docker.restart", { "id": id }))))
+```
+
+**The host mapper** — `realize(&ViewNode) -> Box<dyn Component>` — is a recursive
+walk: create the `heca-grid-ui` widget for `kind`, resolve `props` against the
+`Theme`, wire `events` to intent routing, then recurse on `children` and attach
+each via `.child(...)`. Because the retained tree already exists, the mapper only
+**translates**; it never reimplements layout, paint, focus, or clipping.
+
+**Vocabulary is closed to plugins, extensible by the host.** Adding a new
+`WidgetKind` (e.g. `Table`) is host-side work — the widget in `heca-grid-ui`, its
+showcase demo + `docs/widgets.md`, and a mapper arm — **never** something a plugin
+invents. Until a first-class `Table` exists, a table is *composed* from the
+existing building blocks (`Grid`/`Flex` + `Row` + `Label`/`Badge` + `Scroll`).
+
 ---
 
 ## 2.7 Overlays must be host-owned
@@ -281,14 +415,20 @@ pub trait OverlayHost {
 
 pub struct ModalSpec {
     pub title: String,
-    pub message: String,
-    pub confirm_label: String,
-    pub cancel_label: Option<String>,
+    /// The dialog body — a full declarative widget tree (§2.6.2), so a modal can
+    /// hold a table/form/list, not just text. `ModalSpec::message(&str)` is a
+    /// convenience that wraps a single `Label` in a `body`.
+    pub body: ViewNode,
+    /// Bottom action buttons. Their id comes back in `ModalResult::Action`.
+    pub actions: Vec<ModalAction>,
     pub danger: bool,
     /// `false` = forced decision (Esc/scrim swallowed) — mirrors `Modal::dismissible`.
     pub dismissible: bool,
 }
-pub enum ModalResult { Confirmed, Cancelled, Dismissed }
+pub struct ModalAction { pub id: String, pub label: String, pub danger: bool }
+/// The chosen action id, plus any data the body collected (e.g. a selected row,
+/// form field values) marshalled back from the realized widget tree.
+pub enum ModalResult { Action { id: String, data: PropMap }, Dismissed }
 
 pub struct DropdownSpec {
     pub anchor: heca_core::layout::Rectangle, // viewport-space anchor (§5.7 geometry)
@@ -385,6 +525,76 @@ This rule aligns with the broader heca principle that app capabilities should no
 ---
 
 ## 3. Target Architecture
+
+## 3.0 Runtime architecture map (⚠️ KEEP THIS CURRENT)
+
+> **This map is a living document.** Every phase that adds, moves, or renames a
+> runtime subsystem **must** update this tree in the same change, and flip its
+> `SHIPPED` / `PLANNED(phase)` marker. A stale map is worse than no map — if you
+> touch the ownership graph and don't update this, the change is incomplete.
+> Verified against code 2026-07-02 (post plugin-02).
+
+Legend: `[✓]` shipped · `[~]` partially shipped · `[ ]` planned (owning phase noted).
+
+```
+HecaApp                                   # winit runtime — the outer shell
+├── registry: ActionRegistry          [✓] # NOT inside AppState: stateless rules,
+├── keymap: KeymapRegistry             [✓] #   handlers run it on `state`
+│   └── mode_keymaps / mode_triggers   [✓]
+├── app_config, event_proxy            [✓]
+└── state: Box<AppState>               [✓] # THE canonical app state
+     │
+     ├── ── Axis 1: canonical layout/session (the source of truth) ──
+     ├── session: Session              [✓] # workspaces → columns → panes
+     │    ├── workspaces: Vec<Workspace>    #   position = index (ordinal, not px)
+     │    ├── active_workspace_idx          #   which workspace is visible/focused
+     │    └── Workspace{ scrolling(columns), floating_panes, focus_domain }
+     │         └── Column{ panes, active_pane_idx, width, … }
+     │              └── Pane{ id, title, custom_name, runtime, … }
+     ├── sidebar_tree: SidebarTree     [✓] # nav model (a projection of session)
+     ├── focused_pane: Option<PaneId>  [✓] # cache of the resolved focused pane
+     ├── input_mode: InputMode         [✓]
+     │
+     ├── ── Axis 2: chrome (the pluggable surround that views/drives Axis 1) ──
+     ├── chrome_state: SharedChromeState[✓] # signal-backed DERIVED mirror:
+     │    │                                 #   active_pane, per-ws collapse, pick,
+     │    │                                 #   scroll, PaneRuntime (proc/status/cwd/git)
+     │    └── events: ChromeEventBus    [✓] # string-named events + "*" catch-all
+     ├── chrome_host: ChromeHost        [~] # SHIPPED runtime (plugin-02), still EMPTY
+     │    └── regions: [RegionHost; 4]  [~] #   one generic RegionHost per RegionId
+     │         │                            #   (LeftSidebar/RightSidebar/TopBar/BottomBar)
+     │         └── MountedContribution  [ ] #   mounted providers — plugin-03
+     │              └── (built via Provider::build_contribution → grid-ui subtree)
+     └── renderers / backends / theme   [✓]
+
+App facade (app.on / app.state)         [✓] # built FROM chrome_state (AppState::host());
+                                            #   the read/observe half of the plugin API
+
+Providers (mounted into chrome_host.regions):
+  WorkspacesContainerProvider           [ ] # plugin-03 — first built-in; projects `session`
+  Agents / Docker / Git / Notes …       [ ] # later built-ins, then WASM plugins
+
+Planned subsystems (not yet in the tree):
+  ActionRegistry (dynamic, string-id)   [ ] # plugin-04 (Phase 6) — beside the enum registry
+  OverlayHost (modal/dropdown + async)  [ ] # Phase 8 (§2.7.1)
+  WASM plugin runtime + host SDK        [ ] # Phase 9
+  AgentDriverRegistry (per-pane agents) [ ] # agent-integration plan (parked)
+  Container placement persistence        [ ] # plugin-07 (in-memory today)
+```
+
+**Two orthogonal axes — the load-bearing idea.** *Axis 1* (`session`) owns the
+canonical layout: which workspaces/columns/panes exist, their ordinal position,
+what's visible (`active_workspace_idx`), and focus (hierarchical:
+`active_workspace_idx` → `workspace.focus_domain` → `column.active_pane_idx`,
+cached in `focused_pane`). It is mutated **only** through actions
+(`WmAction → ActionRegistry.execute → handler`). *Axis 2* (chrome:
+`chrome_state` + `chrome_host` + event bus) is a **derived mirror + pluggable
+surround** that *reads/observes* Axis 1 and *dispatches actions* to change it —
+it never owns layout truth. A pane therefore has two faces: its layout position
+lives in `session`; its runtime (process/status/cwd/git) is mirrored into
+`chrome_state` (`PaneRuntime`) and emitted on the bus so chrome/plugins react
+without touching the session. The `WorkspacesContainer` is one Axis-2 *projection*
+of Axis 1 — **the sidebar is a shell that hosts it, not the workspace tree itself.**
 
 ## 3.1 ChromeHost
 
@@ -1460,6 +1670,10 @@ This architecture implies future changes to at least these areas:
 - [x] Add richer sidebar item/group widgets as needed — *`Item`, `ItemGroup`, `MarkerGroup`, `RailCell`, `Row`, `KeyHint`*
 - [x] Add or generalize region/top/bottom/right-side widgets — *`ChromeRegion` (one oriented shell for all 4 regions)*
 - [ ] Add list/scroll primitives if needed — *G7: unblocked (renderer clip landed), not yet built*
+- [ ] Declarative `ViewNode` widget-tree model + typed builder SDK (§2.6.2) — *`plugin-ui`*
+- [ ] Host mapper `realize(ViewNode) -> Box<dyn Component>` (recursive, theme-resolved) — *`plugin-ui`*
+- [ ] Extend `Modal` to host a `body` child subtree (rich modal content) — *`plugin-ui` / Overlays*
+- [ ] `Table` widget (on demand) + showcase/docs — *`plugin-ui`*
 
 ## Compositing effects
 
@@ -1474,6 +1688,7 @@ This architecture implies future changes to at least these areas:
 - [x] Add host-owned modal API — *`Modal` widget (host-routed input, overlay layer)*
 - [x] Add host-owned dropdown/popover API — *`Select` (overlay-layer dropdown); `Tooltip`, `CommandPalette`, `ToastStack` also host-owned*
 - [ ] Support async result-returning overlay flows
+- [ ] Overlay `body` accepts a `ViewNode` tree (rich modals: table/form/list) — *`plugin-ui` (§2.7.1)*
 
 ## Plugins
 
@@ -1481,7 +1696,9 @@ This architecture implies future changes to at least these areas:
 - [ ] Add plugin discovery/loading lifecycle
 - [ ] Add event bus bridge to plugins
 - [ ] Add region contribution API for plugins
+- [ ] Host-adapter `WasmProviderAdapter: Provider` bridging WASM plugins (§2.6.1)
 - [ ] Add plugin action registration API
+- [ ] Author `docs/plugin-authoring.md` (ViewNode examples) + README pointer — *mark "upcoming" until `plugin-08`*
 
 ## Validation
 
