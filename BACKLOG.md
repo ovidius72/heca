@@ -1108,6 +1108,15 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   `handle_sidebar_create_workspace`/`create_column`/`split_in_column`/`delete_selected`,
   `handlers.rs:1471/1485/1504/1532` — verify targets), and a **mouse context menu** with
   the same ops (reuse the right-click overlay pattern in `chrome/mod.rs`).
+- [ ] **plugin-doc-1** — Document **context menu + KeyHint from a plugin** (agreed
+  model, 2026-07-03): overlays (context menu = a host-owned dropdown anchored at the
+  right-click; declared via `.on_context(items)` or `ctx.overlay.open_dropdown(...)`)
+  and **KeyHint = "intent ⇒ hintable"** (any plugin widget with an `on_press` intent is
+  auto-assigned a leader letter by the host; no plugin-side KeyHint). Canonical place:
+  a new section in `docs/plugin-authoring.md`; add a cross-ref note in `docs/widgets.md`
+  (`ContextMenu`/`KeyHint` sections) + the README **Plugins** section. NB: authoring.md
+  + README Plugins live on branch `docs/plugin-architecture` (not yet merged) — do it
+  there, coordinated.
 
 - [~] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
   Files: `heca/src/providers/mod.rs` (new)

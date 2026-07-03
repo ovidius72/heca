@@ -1094,6 +1094,12 @@ RailCell::new(Icon::new(Glyph::Terminal).color(theme.success).size(22.0))
 
 ### KeyHint
 
+> **From a plugin:** the leader/pick overlay is **host-owned and universal** — a plugin
+> never creates a `KeyHint`; any plugin widget that exposes an `on_press` intent is
+> auto-hintable ("intent ⇒ hintable"). Likewise a **context menu** is a host-owned
+> dropdown the plugin *requests* (or declares via `.on_context`), not a nested widget.
+> See **[plugin-authoring.md](plugin-authoring.md)** → "Context menus & KeyHint".
+
 A **generic** transparent wrapper that overlays a glowing accent **keycap letter** on any
 actionable child while a host-owned `Signal<Option<String>>` is `Some` — the keyboard pick /
 jump prefix (move/swap/select, command palettes, content panes). It is transparent to focus and
