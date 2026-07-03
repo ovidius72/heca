@@ -28,14 +28,14 @@
       "id": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
       "name": "🖥️ Terminal Platform Completion",
       "description": "Completamento della piattaforma terminale: damage preservation, dirty-region rendering, viewport scrollback host-managed, policy ligature, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane font zoom.",
-      "status": "in-progress",
+      "status": "done",
       "discussedAt": "",
       "contextReady": false,
       "contextReadyReason": "",
       "startDate": "",
       "endDate": "",
-      "workDone": "La maggior parte della piattaforma terminale è completata: foundation, dirty-region rendering, scrollback host-managed, ligature, hook protocolli, selection, clipboard/paste, UX e image protocols.",
-      "workRemaining": "Restano pochi elementi: task manuali di validazione, follow-up sugli image protocols e soprattutto terminal-10 (per-pane font zoom), attualmente lavorato su un altro branch.",
+      "workDone": "Piattaforma terminale completata: damage preservation, dirty-region rendering, scrollback host-managed, ligature policy, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane/whole-app font zoom. Il backlog su origin/main chiude anche la validazione manuale runtime (`terminal-task-07`) il 2026-07-02.",
+      "workRemaining": "Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.",
       "acceptedDecisions": [],
       "phaseIds": [
         "7120375b-cc0c-49e4-8b62-54cb6a35eadc",
@@ -53,7 +53,7 @@
       ],
       "dependsOn": [],
       "createdAt": "2026-07-01T18:08:37.398Z",
-      "updatedAt": "2026-07-01T19:58:10.784796Z"
+      "updatedAt": "2026-07-02T07:47:19.999Z"
     },
     {
       "id": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",

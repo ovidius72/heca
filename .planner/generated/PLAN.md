@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-01T20:33:21.995Z
+**Last updated:** 2026-07-03T09:58:41.469Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -56,11 +56,11 @@ Status: ✅ `done`
 - ✅ **3fdd622b-1757-40f6-8af0-1767760fa792** theming-04: Migrate main app (heca) to heca-theme (3/3 tasks)
 - ✅ **457bdae8-efba-4665-a795-25120ea154bd** theming-03: Migrate heca-grid-ui to heca-theme (2/2 tasks)
 
-### 🚧 be986d1d-cc2c-4acc-b703-4b1788a4ff86 — 🖥️ Terminal Platform Completion
+### ✅ be986d1d-cc2c-4acc-b703-4b1788a4ff86 — 🖥️ Terminal Platform Completion
 
 Completamento della piattaforma terminale: damage preservation, dirty-region rendering, viewport scrollback host-managed, policy ligature, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane font zoom.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
 **Phases:**
 - ✅ **24b9d664-80d0-48c8-ab5d-46d7daa177a8** terminal-08: Terminal UX and attention features (4/4 tasks)
@@ -71,14 +71,14 @@ Status: 🚧 `in-progress`
 - ✅ **7b69ffc4-bc98-47dd-95ab-1c45eb9b5074** terminal-05: Pane-shell hosting contract (1/1 tasks)
 - ✅ **903725c6-bb78-44a1-a25a-a720cdde68ff** terminal-01: Dirty-region terminal rendering (1/1 tasks)
 - ✅ **a3be94c5-7427-499f-82d6-4d91bd4c61dc** terminal-06: Text selection (2/2 tasks)
-- 🚧 **acb2c4bf-e7bf-4aa1-b41b-d908a35801e3** terminal-04: Backend and renderer tests (2/3 tasks)
+- ✅ **acb2c4bf-e7bf-4aa1-b41b-d908a35801e3** terminal-04: Backend and renderer tests (3/3 tasks)
 - ✅ **b23c166e-142d-41c8-80b0-edad5e83d405** terminal-03: Richer terminal protocol hooks (2/2 tasks)
 - ✅ **c9038ab9-dcbc-4ec4-99fc-ecd161fc7eb3** terminal-09: Image protocols (9/9 tasks)
 - ✅ **e9b3402f-fb1f-45b7-ab95-c939736a3dab** terminal-10: Per-pane font zoom (3/3 tasks)
 
-**Work done:** La maggior parte della piattaforma terminale è completata: foundation, dirty-region rendering, scrollback host-managed, ligature, hook protocolli, selection, clipboard/paste, UX e image protocols.
+**Work done:** Piattaforma terminale completata: damage preservation, dirty-region rendering, scrollback host-managed, ligature policy, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane/whole-app font zoom. Il backlog su origin/main chiude anche la validazione manuale runtime (`terminal-task-07`) il 2026-07-02.
 
-**Work remaining:** Restano pochi elementi: task manuali di validazione, follow-up sugli image protocols e soprattutto terminal-10 (per-pane font zoom), attualmente lavorato su un altro branch.
+**Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
 ### 📋 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — 🧩 Pluggable Chrome Architecture
 
@@ -112,15 +112,15 @@ Status: 📋 `planned`
 - 📋 **ef538743-f412-443d-811b-9e02b66106c1** gridui-01: Scroll/list primitive (1/7 tasks)
 - 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** gridui-07: Crate-review debt (0/8 tasks)
 
-### ❓ b5d04826-7fd8-4094-ace5-96dc93b825a0 — 🌫️ Compositor Frost
+### ⏸️ b5d04826-7fd8-4094-ace5-96dc93b825a0 — 🌫️ Compositor Frost
 
 Lavoro sulla pipeline z=0 per fondo frosted/blurred: gradient background, cached blur, integrazione pipeline, tuning visivo e ship review finale. La pipeline base è merged, restano tuning e review finale.
 
-Status: ❓ `deferred`
+Status: ⏸️ `deferred`
 
 **Phases:**
-- ❓ **1af771d1-e22b-43ce-94d3-b9f228e926db** compositor-06: Ship review finale (0/1 tasks)
-- ❓ **2e48e3d1-0cff-4ead-863f-c36ff1077178** compositor-05: Visual tuning (0/4 tasks)
+- ⏸️ **1af771d1-e22b-43ce-94d3-b9f228e926db** compositor-06: Ship review finale (0/1 tasks)
+- ❌ **2e48e3d1-0cff-4ead-863f-c36ff1077178** compositor-05: Visual tuning (0/4 tasks)
 - ✅ **743fd127-624a-44e4-83e8-370a53cc1beb** compositor-01-to-04c: z=0 pipeline (merged) (5/5 tasks)
 
 **Work remaining:** La pipeline base è merged. Il tentativo di visual tuning (compositor-05) è stato rifiutato; la review finale/compositor-06 è differita e non è lavoro attivo in questo momento.
@@ -158,14 +158,14 @@ Status: 📋 `planned`
 - 📋 **aa6c3a49-f3a4-4330-876d-4156745e1ade** nvim-05: Image layer (0/3 tasks)
 - 📋 **dcf766af-eb11-4a78-9dd3-1e1e15663c33** nvim-04: Input routing (0/3 tasks)
 
-### ❓ eef184fb-863e-476f-8839-0dff37443acf — 🤖 AI Agent Integration
+### ⏸️ eef184fb-863e-476f-8839-0dff37443acf — 🤖 AI Agent Integration
 
 Integrazione agenti AI: `AgentDriver` trait e registry, built-in drivers (Claude/Codex/pi), status agent nei pane e suoni di transizione. Feature parcheggiata e dipendente dalle fasi iniziali di Pluggable Chrome.
 
-Status: ❓ `deferred`
+Status: ⏸️ `deferred`
 
 **Phases:**
-- ❓ **f5251ab1-db02-4c74-a1f3-97380b5909f5** agents-01: Agent status tracking and sounds (0/4 tasks)
+- ⏸️ **f5251ab1-db02-4c74-a1f3-97380b5909f5** agents-01: Agent status tracking and sounds (0/4 tasks)
 
 **Work remaining:** Feature pianificata ma differita: l’implementazione dipende dal completamento delle fondamenta di Pluggable Chrome, in particolare plugin-01 → plugin-05.
 
@@ -233,11 +233,11 @@ Status: 📋 `planned`
 
 **Tasks:** 0/4
 
-### ❓ 1af771d1-e22b-43ce-94d3-b9f228e926db — compositor-06: Ship review finale
+### ⏸️ 1af771d1-e22b-43ce-94d3-b9f228e926db — compositor-06: Ship review finale
 
 Review finale differita: quality gates e sign-off finale restano fuori dal lavoro attivo attuale.
 
-Status: ❓ `deferred`
+Status: ⏸️ `deferred`
 
 **Tasks:** 0/1
 
@@ -257,11 +257,11 @@ Status: ✅ `done`
 
 **Tasks:** 4/4
 
-### ❓ 2e48e3d1-0cff-4ead-863f-c36ff1077178 — compositor-05: Visual tuning
+### ❌ 2e48e3d1-0cff-4ead-863f-c36ff1077178 — compositor-05: Visual tuning
 
 Tentativo di tuning visivo blur/transparency/background esplicitamente non approvato; lasciato come storico ma rifiutato nella forma attuale.
 
-Status: ❓ `rejected`
+Status: ❌ `rejected`
 
 **Tasks:** 0/4
 
@@ -489,13 +489,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/3
 
-### 🚧 acb2c4bf-e7bf-4aa1-b41b-d908a35801e3 — terminal-04: Backend and renderer tests
+### ✅ acb2c4bf-e7bf-4aa1-b41b-d908a35801e3 — terminal-04: Backend and renderer tests
 
 Test per lifecycle backend PTY e renderer terminale.
 
-Status: 🚧 `in-progress`
+Status: ✅ `done`
 
-**Tasks:** 2/3
+**Tasks:** 3/3
 
 ### ✅ b23c166e-142d-41c8-80b0-edad5e83d405 — terminal-03: Richer terminal protocol hooks
 
@@ -569,11 +569,11 @@ Status: 📋 `planned`
 
 **Tasks:** 1/7
 
-### ❓ f5251ab1-db02-4c74-a1f3-97380b5909f5 — agents-01: Agent status tracking and sounds
+### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — agents-01: Agent status tracking and sounds
 
 Feature differita: dipende dalle fondamenta di Pluggable Chrome (plugin-01 → plugin-05) prima di poter iniziare l’implementazione.
 
-Status: ❓ `deferred`
+Status: ⏸️ `deferred`
 
 **Tasks:** 0/4
 

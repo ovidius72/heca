@@ -4,7 +4,7 @@
   "number": 1,
   "slug": "terminal-04-backend-and-renderer-tests",
   "title": "terminal-04: Backend and renderer tests",
-  "status": "in-progress",
+  "status": "done",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -49,18 +49,18 @@
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
       "shortName": "manual-validation-matrix",
       "title": "Manual validation matrix",
-      "status": "in-progress",
+      "status": "done",
       "description": "Matrice di validazione manuale del comportamento terminale a runtime.",
-      "notes": "",
+      "notes": "Allineato al BACKLOG di origin/main: DONE (2026-07-02), validato in-app dall'utente. Verificati shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Yazi image preview OK (path iTerm2); animated GIF/APNG verificati in-app.",
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
       "startedAt": "2026-07-01T20:25:48.949Z",
-      "completedAt": "",
+      "completedAt": "2026-07-02T07:46:51.035Z",
       "createdAt": "2026-07-01T18:11:32.026Z",
-      "updatedAt": "2026-07-01T20:25:48.949Z"
+      "updatedAt": "2026-07-02T07:46:51.035Z"
     },
     {
       "id": "c59f097a-ee19-4c87-bb04-9faa3d853c10",
@@ -82,5 +82,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:07.246Z",
-  "updatedAt": "2026-07-01T20:25:48.949Z"
+  "updatedAt": "2026-07-02T07:46:51.035Z"
 }

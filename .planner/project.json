@@ -34,7 +34,7 @@
   "chatLanguage": "Italian",
   "plannerAutoEnable": false,
   "plannerNeverAsk": false,
-  "plannerAutoStartWeb": false,
+  "plannerAutoStartWeb": true,
   "plannerNeverStartWeb": false,
   "workflowRules": {
     "beforePhaseStart": [],
