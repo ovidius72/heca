@@ -1,7 +1,7 @@
 {
   "id": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 1,
+  "number": 4,
   "slug": "app-07-damage-region-render-optimization",
   "title": "app-07: Damage-region render optimization",
   "status": "planned",
@@ -31,6 +31,7 @@
     {
       "id": "93b4880a-4007-442f-9071-1fdf789aaabf",
       "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 1,
       "shortName": "scissor-damage-union",
       "title": "Scissor union damage rect rendering",
       "status": "planned",
@@ -49,6 +50,7 @@
     {
       "id": "bf8c3c21-d2b1-4b76-a8eb-ac84e9553470",
       "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 2,
       "shortName": "damage-gate-renderer",
       "title": "Damage gate via GridRenderer set_damage",
       "status": "planned",
@@ -67,6 +69,7 @@
     {
       "id": "9de9b934-dcec-4aa2-b52a-e3e8b114159c",
       "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 3,
       "shortName": "verify-damage-rendering",
       "title": "Verify rendering with damage optimization",
       "status": "planned",
@@ -85,6 +88,7 @@
     {
       "id": "73442037-1a7c-42d9-959f-eaa8dc4b3769",
       "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 4,
       "shortName": "stop-perframe-clear",
       "title": "Stop unconditional per-frame clear",
       "status": "planned",
@@ -103,6 +107,7 @@
     {
       "id": "0c4afd42-0366-4270-8d91-015cdee2fefb",
       "phaseId": "9e5ec754-ebf3-47f9-9850-378dd75b8e1c",
+      "number": 5,
       "shortName": "pane-damage-render",
       "title": "Pane rendering from damage signals",
       "status": "planned",

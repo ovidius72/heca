@@ -1,7 +1,7 @@
 {
   "id": "a6831878-0168-4261-935e-818cc9b9a909",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 1,
+  "number": 9,
   "slug": "app-03-app-wide-zoom-and-font-size-controls",
   "title": "app-03: App-wide zoom and font-size controls",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "2c58342a-be3a-4591-befb-e7a947803bcc",
       "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
+      "number": 1,
       "shortName": "app-wide-zoom-action",
       "title": "App-wide zoom WmAction",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "262d15e2-e380-49bd-b207-26635e823dc7",
       "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
+      "number": 2,
       "shortName": "ui-font-size-actions",
       "title": "UI font size increase and decrease",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "92548b51-e669-4f8f-84dd-c96c8becfbfa",
       "phaseId": "a6831878-0168-4261-935e-818cc9b9a909",
+      "number": 3,
       "shortName": "terminal-font-actions",
       "title": "Terminal font size increase and decrease",
       "status": "planned",

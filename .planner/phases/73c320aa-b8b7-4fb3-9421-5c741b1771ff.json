@@ -1,10 +1,10 @@
 {
   "id": "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 1,
+  "number": 4,
   "slug": "plugin-03-built-in-provider-workspacescontainer-migration",
   "title": "plugin-03: Built-in provider + WorkspacesContainer migration",
-  "status": "planned",
+  "status": "in-progress",
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
@@ -29,9 +29,10 @@
     {
       "id": "c992d27c-dfe3-4fef-a7af-58cc4f026db0",
       "phaseId": "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+      "number": 1,
       "shortName": "workspaces-provider",
       "title": "Implement WorkspacesContainerProvider",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Migrare il workspace tree nel provider built-in.",
       "notes": "",
       "decisions": [],
@@ -39,17 +40,18 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
+      "startedAt": "2026-07-03T11:12:24.356Z",
       "completedAt": "",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-03T11:12:24.356Z"
     },
     {
       "id": "49c6b033-35a3-41c3-b3dd-6a78ca9d93cc",
       "phaseId": "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+      "number": 2,
       "shortName": "define-provider-trait",
       "title": "Define Provider trait",
-      "status": "planned",
+      "status": "done",
       "description": "Trait comune per provider built-in e futuri provider pluggable.",
       "notes": "",
       "decisions": [],
@@ -57,14 +59,15 @@
       "checklist": [],
       "subtasks": [],
       "dependsOn": [],
-      "startedAt": "",
-      "completedAt": "",
+      "startedAt": "2026-07-03T11:11:14.598Z",
+      "completedAt": "2026-07-03T11:12:24.355Z",
       "createdAt": "2026-07-01T18:12:25.304Z",
-      "updatedAt": "2026-07-01T18:12:25.304Z"
+      "updatedAt": "2026-07-03T11:12:24.355Z"
     },
     {
       "id": "eb07808e-de6c-4a4e-be17-967c2b90b7d5",
       "phaseId": "73c320aa-b8b7-4fb3-9421-5c741b1771ff",
+      "number": 3,
       "shortName": "sidebar-selection-bridge",
       "title": "Bridge sidebar-nav selection into shared state",
       "status": "planned",
@@ -82,5 +85,5 @@
     }
   ],
   "createdAt": "2026-07-01T18:09:59.861Z",
-  "updatedAt": "2026-07-01T18:12:25.304Z"
+  "updatedAt": "2026-07-03T11:12:24.356Z"
 }

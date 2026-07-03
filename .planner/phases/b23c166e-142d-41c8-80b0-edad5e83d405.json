@@ -1,7 +1,7 @@
 {
   "id": "b23c166e-142d-41c8-80b0-edad5e83d405",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 1,
+  "number": 9,
   "slug": "terminal-03-richer-terminal-protocol-hooks",
   "title": "terminal-03: Richer terminal protocol hooks",
   "status": "done",
@@ -28,6 +28,7 @@
     {
       "id": "78ba0852-dad9-4df3-b7b9-18494fcb1df3",
       "phaseId": "b23c166e-142d-41c8-80b0-edad5e83d405",
+      "number": 1,
       "shortName": "osc8-hyperlink-hook",
       "title": "Add OSC 8 hyperlink extension point",
       "status": "done",
@@ -46,6 +47,7 @@
     {
       "id": "7f3a2ef9-51e3-49fe-8208-83bfc9e947d6",
       "phaseId": "b23c166e-142d-41c8-80b0-edad5e83d405",
+      "number": 2,
       "shortName": "graphics-placement-stub",
       "title": "Add graphics placement stub",
       "status": "done",

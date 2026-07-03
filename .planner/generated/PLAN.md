@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-03T09:58:41.469Z
+**Last updated:** 2026-07-03T15:56:33.221Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -80,20 +80,20 @@ Status: ✅ `done`
 
 **Work remaining:** Nessun lavoro terminale aperto nel backlog principale. Restano al più verifiche osservative/non bloccanti già annotate nel backlog, ma il track è considerato completato.
 
-### 📋 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — 🧩 Pluggable Chrome Architecture
+### 🚧 ebb9ceb0-ea12-4374-af6e-12aa4256bcc3 — 🧩 Pluggable Chrome Architecture
 
 Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
 **Phases:**
 - 📋 **099e2eb5-30be-4f3c-ab57-a4f111cdc44c** plugin-06: Placeholder token system (0/3 tasks)
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** plugin-08: WASM plugin runtime (0/5 tasks)
-- 📋 **73c320aa-b8b7-4fb3-9421-5c741b1771ff** plugin-03: Built-in provider + WorkspacesContainer migration (0/3 tasks)
+- 🚧 **73c320aa-b8b7-4fb3-9421-5c741b1771ff** plugin-03: Built-in provider + WorkspacesContainer migration (1/3 tasks)
 - 📋 **74abdac5-8a35-4e5f-a82f-3abb9bb0b738** plugin-05: Host API actions/overlay/region (0/3 tasks)
-- 📋 **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** plugin-02: ChromeHost and region hosts (0/4 tasks)
+- ✅ **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** plugin-02: ChromeHost and region hosts (4/4 tasks)
 - 📋 **88b87a32-ff00-4044-9a32-c575e3ed5401** plugin-04: Dynamic action registry (0/3 tasks)
-- 📋 **9ec31d60-7dfa-4dcc-9797-b265a4d30562** plugin-01: Formal architecture contracts (0/4 tasks)
+- ✅ **9ec31d60-7dfa-4dcc-9797-b265a4d30562** plugin-01: Formal architecture contracts (4/4 tasks)
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** plugin-09: Multi-region proof + config integration (0/3 tasks)
 
@@ -112,14 +112,14 @@ Status: 📋 `planned`
 - 📋 **ef538743-f412-443d-811b-9e02b66106c1** gridui-01: Scroll/list primitive (1/7 tasks)
 - 📋 **f9a8c93b-6938-4644-88e4-f1d2d2f59d6d** gridui-07: Crate-review debt (0/8 tasks)
 
-### ⏸️ b5d04826-7fd8-4094-ace5-96dc93b825a0 — 🌫️ Compositor Frost
+### 📋 b5d04826-7fd8-4094-ace5-96dc93b825a0 — 🌫️ Compositor Frost
 
 Lavoro sulla pipeline z=0 per fondo frosted/blurred: gradient background, cached blur, integrazione pipeline, tuning visivo e ship review finale. La pipeline base è merged, restano tuning e review finale.
 
-Status: ⏸️ `deferred`
+Status: 📋 `planned`
 
 **Phases:**
-- ⏸️ **1af771d1-e22b-43ce-94d3-b9f228e926db** compositor-06: Ship review finale (0/1 tasks)
+- ✅ **1af771d1-e22b-43ce-94d3-b9f228e926db** compositor-06: Ship review finale (1/1 tasks)
 - ❌ **2e48e3d1-0cff-4ead-863f-c36ff1077178** compositor-05: Visual tuning (0/4 tasks)
 - ✅ **743fd127-624a-44e4-83e8-370a53cc1beb** compositor-01-to-04c: z=0 pipeline (merged) (5/5 tasks)
 
@@ -136,7 +136,7 @@ Status: 📋 `planned`
 - ✅ **3bdc254b-4b5c-4f74-a783-8de4ae1628fa** app-12: Keyboard move-to-target picks + rename override + plugin-observable state (3/3 tasks)
 - 📋 **50c22c08-b639-4a1a-a3cb-2a9f7084c0f9** app-05: Workspace drag-to-reorder (0/4 tasks)
 - 📋 **5cab2dbb-ce1b-4a33-b6bc-ede8437fca09** app-11: Right-click context menu (0/3 tasks)
-- 📋 **621e6f47-a0e2-4d0d-9012-e6feadb70097** app-06: Sidebar wiring + collapsed rail (0/2 tasks)
+- 📋 **621e6f47-a0e2-4d0d-9012-e6feadb70097** app-06: Sidebar wiring + collapsed rail (0/3 tasks)
 - 📋 **884c75d3-e99a-4537-b09c-aa9efab3270c** app-08: Fix NSWindow vibrancy warning (0/1 tasks)
 - 📋 **9e5ec754-ebf3-47f9-9850-378dd75b8e1c** app-07: Damage-region render optimization (0/5 tasks)
 - 📋 **a6831878-0168-4261-935e-818cc9b9a909** app-03: App-wide zoom and font-size controls (0/3 tasks)
@@ -233,13 +233,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/4
 
-### ⏸️ 1af771d1-e22b-43ce-94d3-b9f228e926db — compositor-06: Ship review finale
+### ✅ 1af771d1-e22b-43ce-94d3-b9f228e926db — compositor-06: Ship review finale
 
 Review finale differita: quality gates e sign-off finale restano fuori dal lavoro attivo attuale.
 
-Status: ⏸️ `deferred`
+Status: ✅ `done`
 
-**Tasks:** 0/1
+**Tasks:** 1/1
 
 ### ✅ 21cc78bb-e0d6-4b57-a20c-a18cb98cd215 — theming-05: Migrate hand-drawn chrome to grid-ui widgets
 
@@ -359,7 +359,7 @@ Collegare i bottoni della sidebar e migrare il collapsed rail a grid-ui.
 
 Status: 📋 `planned`
 
-**Tasks:** 0/2
+**Tasks:** 0/3
 
 ### ✅ 7120375b-cc0c-49e4-8b62-54cb6a35eadc — terminal-01a-h: Host terminal scrollback viewport
 
@@ -369,13 +369,13 @@ Status: ✅ `done`
 
 **Tasks:** 4/4
 
-### 📋 73c320aa-b8b7-4fb3-9421-5c741b1771ff — plugin-03: Built-in provider + WorkspacesContainer migration
+### 🚧 73c320aa-b8b7-4fb3-9421-5c741b1771ff — plugin-03: Built-in provider + WorkspacesContainer migration
 
 Provider trait e migrazione del workspace tree in WorkspacesContainerProvider.
 
-Status: 📋 `planned`
+Status: 🚧 `in-progress`
 
-**Tasks:** 0/3
+**Tasks:** 1/3
 
 ### ✅ 743fd127-624a-44e4-83e8-370a53cc1beb — compositor-01-to-04c: z=0 pipeline (merged)
 
@@ -393,13 +393,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/3
 
-### 📋 7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c — plugin-02: ChromeHost and region hosts
+### ✅ 7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c — plugin-02: ChromeHost and region hosts
 
 Introduzione di ChromeHost e region host per left/right/top/bottom con ordering e persistence.
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
-**Tasks:** 0/4
+**Tasks:** 4/4
 
 ### ✅ 7b69ffc4-bc98-47dd-95ab-1c45eb9b5074 — terminal-05: Pane-shell hosting contract
 
@@ -457,13 +457,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/5
 
-### 📋 9ec31d60-7dfa-4dcc-9797-b265a4d30562 — plugin-01: Formal architecture contracts
+### ✅ 9ec31d60-7dfa-4dcc-9797-b265a4d30562 — plugin-01: Formal architecture contracts
 
 Contratti formali per ChromeHost, provider lifecycle, overlay ownership e audit geometry types.
 
-Status: 📋 `planned`
+Status: ✅ `done`
 
-**Tasks:** 0/4
+**Tasks:** 4/4
 
 ### ✅ a3be94c5-7427-499f-82d6-4d91bd4c61dc — terminal-06: Text selection
 

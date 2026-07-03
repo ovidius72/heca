@@ -1,7 +1,7 @@
 {
   "id": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 1,
+  "number": 6,
   "slug": "gridui-07-crate-review-debt",
   "title": "gridui-07: Crate-review debt",
   "status": "planned",
@@ -34,6 +34,7 @@
     {
       "id": "dcdd3d61-3f20-49d7-a02d-b60edea5caa2",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 1,
       "shortName": "eliminate-hot-allocs",
       "title": "Eliminate hot-path allocations",
       "status": "planned",
@@ -52,6 +53,7 @@
     {
       "id": "8f27d989-8448-4556-9e3e-a652155dea31",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 2,
       "shortName": "nonexhaustive-enums",
       "title": "Add non_exhaustive to public enums",
       "status": "planned",
@@ -70,6 +72,7 @@
     {
       "id": "ff38079b-e9d7-4ed1-a6fc-1cb05cbaddaa",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 3,
       "shortName": "workspace-lints-cargo",
       "title": "Workspace lints in Cargo.toml",
       "status": "planned",
@@ -88,6 +91,7 @@
     {
       "id": "48def7e3-3c88-4aea-a459-5cfc9d4fc422",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 4,
       "shortName": "increase-widget-tests",
       "title": "Increase widget test coverage",
       "status": "planned",
@@ -106,6 +110,7 @@
     {
       "id": "5c2c4288-1f53-42f3-9440-2427038494f9",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 5,
       "shortName": "extract-animation-helpers",
       "title": "Extract shared animation helpers",
       "status": "planned",
@@ -124,6 +129,7 @@
     {
       "id": "37651e5d-a62e-4dbe-8f32-7cb8e1e1ffd7",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 6,
       "shortName": "replace-allow-expect",
       "title": "Replace allow with expect",
       "status": "planned",
@@ -142,6 +148,7 @@
     {
       "id": "ef50268d-2dcf-412b-904f-e995c6d314dc",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 7,
       "shortName": "add-missing-docs",
       "title": "Add missing docs to lib.rs",
       "status": "planned",
@@ -160,6 +167,7 @@
     {
       "id": "cc10bb1a-e295-467f-8017-8261065bb21b",
       "phaseId": "f9a8c93b-6938-4644-88e4-f1d2d2f59d6d",
+      "number": 8,
       "shortName": "fix-badge-unreachable",
       "title": "Fix badge.rs unreachable in reachable",
       "status": "planned",

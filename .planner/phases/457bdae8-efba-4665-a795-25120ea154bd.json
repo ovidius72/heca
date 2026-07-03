@@ -1,7 +1,7 @@
 {
   "id": "457bdae8-efba-4665-a795-25120ea154bd",
   "featureId": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
-  "number": 1,
+  "number": 3,
   "slug": "theming-03-migrate-heca-grid-ui-to-heca-theme",
   "title": "theming-03: Migrate heca-grid-ui to heca-theme",
   "status": "done",
@@ -28,6 +28,7 @@
     {
       "id": "1165d4c4-cd7a-4ca4-bce0-390422592af0",
       "phaseId": "457bdae8-efba-4665-a795-25120ea154bd",
+      "number": 1,
       "shortName": "compose-theme-colors",
       "title": "Compose Theme via colors field of heca-theme",
       "status": "done",
@@ -46,6 +47,7 @@
     {
       "id": "917e5b54-2ab1-46d2-a382-9513fbafb738",
       "phaseId": "457bdae8-efba-4665-a795-25120ea154bd",
+      "number": 2,
       "shortName": "update-gridui-callsites",
       "title": "Update grid-ui callsites to use theme colors",
       "status": "done",

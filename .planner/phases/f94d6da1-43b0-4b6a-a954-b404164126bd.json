@@ -1,7 +1,7 @@
 {
   "id": "f94d6da1-43b0-4b6a-a954-b404164126bd",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 1,
+  "number": 7,
   "slug": "plugin-09-multi-region-proof-config-integration",
   "title": "plugin-09: Multi-region proof + config integration",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "cfb1414b-472b-49db-bbf9-2f385651bc80",
       "phaseId": "f94d6da1-43b0-4b6a-a954-b404164126bd",
+      "number": 1,
       "shortName": "second-provider-git",
       "title": "Second built-in provider (git status)",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "6b4a27dd-41f4-4bcd-b0a5-d80048235b52",
       "phaseId": "f94d6da1-43b0-4b6a-a954-b404164126bd",
+      "number": 2,
       "shortName": "plugin-actions-rpc",
       "title": "Plugin actions in keybindings and RPC",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "a89ee7d9-196c-4dc0-9b78-eb44f87686bf",
       "phaseId": "f94d6da1-43b0-4b6a-a954-b404164126bd",
+      "number": 3,
       "shortName": "action-discovery-ux",
       "title": "Action discovery UX",
       "status": "planned",

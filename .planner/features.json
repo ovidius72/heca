@@ -2,6 +2,7 @@
   "features": [
     {
       "id": "8df6dded-5cfb-42a1-8da1-724f3d36b2b4",
+      "number": 1,
       "name": "🎨 Theme System",
       "description": "Migrazione completa a `heca-theme`: crate standalone, temi bundled (`grid_tron`, `mocha`, `latte`), migrazione di `heca-config`, `heca-grid-ui` e app principale, rimozione dei colori hardcoded e migrazione del chrome hand-drawn verso widget grid-ui. Completata.",
       "status": "done",
@@ -26,6 +27,7 @@
     },
     {
       "id": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
+      "number": 2,
       "name": "🖥️ Terminal Platform Completion",
       "description": "Completamento della piattaforma terminale: damage preservation, dirty-region rendering, viewport scrollback host-managed, policy ligature, hook protocolli terminali, test backend/renderer, pane-shell hosting contract, text selection, clipboard/paste/OSC 52, UX terminale, image protocols e per-pane font zoom.",
       "status": "done",
@@ -57,9 +59,10 @@
     },
     {
       "id": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
+      "number": 3,
       "name": "🧩 Pluggable Chrome Architecture",
       "description": "Architettura chrome pluggable: `ChromeHost` con regioni left/right/top/bottom, provider built-in, migrazione workspace tree in `WorkspacesContainerProvider`, dynamic action registry, host API per actions/overlay/regions, placeholder token system, plugin semplici da config e runtime WASM.",
-      "status": "planned",
+      "status": "in-progress",
       "discussedAt": "",
       "contextReady": false,
       "contextReadyReason": "",
@@ -85,6 +88,7 @@
     },
     {
       "id": "cd083ad1-8310-4368-981b-d14c73c20d96",
+      "number": 4,
       "name": "📐 Grid-UI Widget Library",
       "description": "Espansione della libreria UI GPU-free e signal-driven: scroll/list primitive, pane shell header/tabs, icon widget Nerd Font, showcase coverage con visual regression, bloom/custom draw effects, widget aggiuntivi e cleanup del crate.",
       "status": "planned",
@@ -111,9 +115,10 @@
     },
     {
       "id": "b5d04826-7fd8-4094-ace5-96dc93b825a0",
+      "number": 5,
       "name": "🌫️ Compositor Frost",
       "description": "Lavoro sulla pipeline z=0 per fondo frosted/blurred: gradient background, cached blur, integrazione pipeline, tuning visivo e ship review finale. La pipeline base è merged, restano tuning e review finale.",
-      "status": "deferred",
+      "status": "planned",
       "discussedAt": "",
       "contextReady": false,
       "contextReadyReason": "",
@@ -133,6 +138,7 @@
     },
     {
       "id": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
+      "number": 6,
       "name": "🛠️ App / Chrome Features",
       "description": "Feature applicative e di chrome: audit di parità con Niri, split di `render.rs`, zoom/font-size controls, pane numbering, workspace drag-to-reorder, sidebar wiring + collapsed rail, damage-region optimization, fix vibrancy warning macOS, leftovers sidebar/chrome e context menu.",
       "status": "planned",
@@ -163,6 +169,7 @@
     },
     {
       "id": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
+      "number": 7,
       "name": "🖋️ Neovim GUI Pane",
       "description": "Integrazione Neovim GUI come pane: `nvim --embed`, msgpack-RPC, render singola grid, multi-istanza, `ext_multigrid`, input routing, image layer dedicato e markdown layer. Feature ancora in fase di idea/progettazione.",
       "status": "planned",
@@ -188,6 +195,7 @@
     },
     {
       "id": "eef184fb-863e-476f-8839-0dff37443acf",
+      "number": 8,
       "name": "🤖 AI Agent Integration",
       "description": "Integrazione agenti AI: `AgentDriver` trait e registry, built-in drivers (Claude/Codex/pi), status agent nei pane e suoni di transizione. Feature parcheggiata e dipendente dalle fasi iniziali di Pluggable Chrome.",
       "status": "deferred",

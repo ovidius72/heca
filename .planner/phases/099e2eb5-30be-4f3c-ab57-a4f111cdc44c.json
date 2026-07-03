@@ -1,7 +1,7 @@
 {
   "id": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 1,
+  "number": 2,
   "slug": "plugin-06-placeholder-token-system",
   "title": "plugin-06: Placeholder token system",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "12766991-ce77-4b08-9153-51549aa98e92",
       "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
+      "number": 1,
       "shortName": "token-syntax-registry",
       "title": "Define token syntax and registry",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "deece3a4-e107-44fe-8e6d-f087ccb5daf5",
       "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
+      "number": 2,
       "shortName": "token-pane-infobar",
       "title": "Wire token resolution into pane info bar",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "db20fa00-a387-4ef1-b035-53c50913d9a1",
       "phaseId": "099e2eb5-30be-4f3c-ab57-a4f111cdc44c",
+      "number": 3,
       "shortName": "token-config-paths",
       "title": "Wire token resolution into config paths",
       "status": "planned",

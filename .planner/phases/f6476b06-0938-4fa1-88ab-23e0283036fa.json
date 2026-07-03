@@ -32,6 +32,7 @@
     {
       "id": "15525f19-726d-4ba2-ad4f-7bb125b64413",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 1,
       "shortName": "extract-terminal-pass",
       "title": "Extract terminal render pass",
       "status": "planned",
@@ -50,6 +51,7 @@
     {
       "id": "c54916bc-ddf7-4ddb-b15d-d1589cae5589",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 2,
       "shortName": "extract-pane-passes",
       "title": "Extract tiled and floating pane passes",
       "status": "planned",
@@ -68,6 +70,7 @@
     {
       "id": "9ff8e0e6-fae5-41ec-96b3-323cf1d5a8e6",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 3,
       "shortName": "extract-selection-pass",
       "title": "Extract selection overlay pass",
       "status": "planned",
@@ -86,6 +89,7 @@
     {
       "id": "569af514-8c13-44de-b449-787824284152",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 4,
       "shortName": "extract-chrome-overlays",
       "title": "Extract chrome flush and overlays",
       "status": "planned",
@@ -104,6 +108,7 @@
     {
       "id": "8d46033c-ad73-4c92-a469-530fc60103f6",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 5,
       "shortName": "render-frame-orchestrator",
       "title": "Keep render/mod.rs as frame orchestrator",
       "status": "planned",
@@ -122,6 +127,7 @@
     {
       "id": "dab566c5-3abf-4067-bba2-a81b992f9228",
       "phaseId": "f6476b06-0938-4fa1-88ab-23e0283036fa",
+      "number": 6,
       "shortName": "extract-geometry",
       "title": "Extract geometry helpers",
       "status": "planned",

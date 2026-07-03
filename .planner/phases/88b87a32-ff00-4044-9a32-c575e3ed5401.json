@@ -1,7 +1,7 @@
 {
   "id": "88b87a32-ff00-4044-9a32-c575e3ed5401",
   "featureId": "ebb9ceb0-ea12-4374-af6e-12aa4256bcc3",
-  "number": 1,
+  "number": 3,
   "slug": "plugin-04-dynamic-action-registry",
   "title": "plugin-04: Dynamic action registry",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "7e59ba55-0cda-4ebd-a431-5075edbfb52b",
       "phaseId": "88b87a32-ff00-4044-9a32-c575e3ed5401",
+      "number": 1,
       "shortName": "chrome-placement-string",
       "title": "Chrome placement actions as string IDs",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "531289a4-c4d9-46af-95a1-e091fcf04f37",
       "phaseId": "88b87a32-ff00-4044-9a32-c575e3ed5401",
+      "number": 2,
       "shortName": "keybindings-string-ids",
       "title": "Config keybindings target string IDs",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "cd9db84b-fed5-4076-893d-083a5a8eb8ae",
       "phaseId": "88b87a32-ff00-4044-9a32-c575e3ed5401",
+      "number": 3,
       "shortName": "dynamic-action-registry",
       "title": "Evolve ActionRegistry for dynamic registration",
       "status": "planned",

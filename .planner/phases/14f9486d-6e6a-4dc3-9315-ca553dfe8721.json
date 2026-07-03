@@ -30,6 +30,7 @@
     {
       "id": "ab6687d7-f0cf-478d-a834-26bf8ceb48e0",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
+      "number": 1,
       "shortName": "ext-multigrid",
       "title": "Per-window grids from ext_multigrid",
       "status": "planned",
@@ -48,6 +49,7 @@
     {
       "id": "248035a0-dd96-4494-b788-0713f09c8ea9",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
+      "number": 2,
       "shortName": "win-viewport-tracking",
       "title": "win_viewport scroll tracking",
       "status": "planned",
@@ -66,6 +68,7 @@
     {
       "id": "625ef496-a969-4d6e-bb48-22299c1b9670",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
+      "number": 3,
       "shortName": "win-pos-geometry",
       "title": "win_pos and win_float_pos geometry",
       "status": "planned",
@@ -84,6 +87,7 @@
     {
       "id": "94e81f8d-9e0a-4090-9d43-65a9372a016a",
       "phaseId": "14f9486d-6e6a-4dc3-9315-ca553dfe8721",
+      "number": 4,
       "shortName": "float-z-ordering",
       "title": "Float window z-ordering",
       "status": "planned",

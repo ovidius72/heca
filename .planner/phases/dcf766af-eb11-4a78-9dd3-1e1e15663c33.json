@@ -1,7 +1,7 @@
 {
   "id": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
   "featureId": "0c704076-6072-4c57-8ee1-9fc11f6eaa3a",
-  "number": 1,
+  "number": 2,
   "slug": "nvim-04-input-routing",
   "title": "nvim-04: Input routing",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "7eb642e7-0b6b-4133-a55c-dae05d198c77",
       "phaseId": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
+      "number": 1,
       "shortName": "prefix-nvim-coexist",
       "title": "Prefix binding coexistence with nvim",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "124c0831-b7ee-4185-94b9-7e2c588fbce9",
       "phaseId": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
+      "number": 2,
       "shortName": "mouse-forward-nvim",
       "title": "Mouse forwarding to nvim",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "78f61bb7-7c00-4d41-942a-237a3a3c68ad",
       "phaseId": "dcf766af-eb11-4a78-9dd3-1e1e15663c33",
+      "number": 3,
       "shortName": "full-key-encoding",
       "title": "Full key encoding to nvim_input",
       "status": "planned",

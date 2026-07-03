@@ -1,7 +1,7 @@
 {
   "id": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 1,
+  "number": 5,
   "slug": "app-10-sidebar-chrome-leftovers",
   "title": "app-10: Sidebar/chrome leftovers",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "5503d97c-da4a-4569-bcec-898bf81fb651",
       "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 1,
       "shortName": "column-pick-keycaps",
       "title": "Column-level pick keycaps",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "2732d77c-f84e-4faa-a521-1e3a63ccdfc9",
       "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 2,
       "shortName": "drop-onto-workspace",
       "title": "Drop onto workspace for pane drags",
       "status": "done",
@@ -65,6 +67,7 @@
     {
       "id": "865e1d62-8cef-40e8-bd4e-dc0c0723f993",
       "phaseId": "c192c5ca-f6ac-493a-bd8d-d95117c430aa",
+      "number": 3,
       "shortName": "f44-widget-leftovers",
       "title": "F4.4 widget migration leftovers",
       "status": "done",

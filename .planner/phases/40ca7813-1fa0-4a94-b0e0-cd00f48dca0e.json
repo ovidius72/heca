@@ -1,7 +1,7 @@
 {
   "id": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 1,
+  "number": 3,
   "slug": "terminal-02-ligature-policy",
   "title": "terminal-02: Ligature policy",
   "status": "done",
@@ -28,6 +28,7 @@
     {
       "id": "2ab183ea-eece-4b0c-b9ec-aa66d3810029",
       "phaseId": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
+      "number": 1,
       "shortName": "upgrade-shaping-ligatures",
       "title": "Upgrade shaping stack for ligatures",
       "status": "done",
@@ -46,6 +47,7 @@
     {
       "id": "e5fd97ad-d080-4503-8b00-0328ee80ec8c",
       "phaseId": "40ca7813-1fa0-4a94-b0e0-cd00f48dca0e",
+      "number": 2,
       "shortName": "terminal-ligatures-toggle",
       "title": "Add configurable terminal_ligatures toggle",
       "status": "done",

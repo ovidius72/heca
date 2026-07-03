@@ -36,6 +36,7 @@
     {
       "id": "e276308e-38f6-45be-a3fb-e8c4bec9a6c9",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
+      "number": 1,
       "shortName": "agentdriver-registry",
       "title": "AgentDriver trait and registry",
       "status": "deferred",
@@ -60,6 +61,7 @@
     {
       "id": "b19c371b-1c53-46bd-8cbf-8d9dfd5703d6",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
+      "number": 2,
       "shortName": "agent-status-display",
       "title": "Agent status display in pane chrome",
       "status": "deferred",
@@ -84,6 +86,7 @@
     {
       "id": "4a0de2bf-bfe9-4a1a-82eb-2b427555ec13",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
+      "number": 3,
       "shortName": "builtin-agent-drivers",
       "title": "Built-in agent drivers",
       "status": "deferred",
@@ -108,6 +111,7 @@
     {
       "id": "a52865e6-5a18-4c67-8634-2e3127307000",
       "phaseId": "f5251ab1-db02-4c74-a1f3-97380b5909f5",
+      "number": 4,
       "shortName": "agent-transition-sounds",
       "title": "Transition sounds via rodio",
       "status": "deferred",

@@ -1,32 +1,32 @@
 # Handoff
 
-Created at: 2026-07-02T08:06:11.120Z
-Updated at: 2026-07-03T09:41:20.578Z
+Created at: 2026-07-03T15:56:33.220Z
+Updated at: 2026-07-03T15:56:33.220Z
 Reason: session shutdown (quit)
 
 ## Progress snapshot
-- Features: 2/8 done, 0 active
-- Phases: 19/54 done, 0 active/discovery
-- Tasks: 61/182 done, 0 active
+- Features: 2/8 done, 1 active
+- Phases: 22/54 done, 1 active/discovery
+- Tasks: 71/183 done, 1 active
 
 ## Current focus
-- Feature: `be986d1d-cc2c-4acc-b703-4b1788a4ff86` — 🖥️ Terminal Platform Completion (done)
-- Phase: `acb2c4bf-e7bf-4aa1-b41b-d908a35801e3` — terminal-04: Backend and renderer tests (done)
-- Task: `21e56e42-006f-4fe8-919b-838163ea8dff` — Manual validation matrix (done)
+- Feature: `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture (in-progress)
+- Phase: `73c320aa-b8b7-4fb3-9421-5c741b1771ff` — plugin-03: Built-in provider + WorkspacesContainer migration (in-progress)
+- Task: `c992d27c-dfe3-4fef-a7af-58cc4f026db0` — Implement WorkspacesContainerProvider (in-progress)
 
 ## What was being done
-Allineato al BACKLOG di origin/main: DONE (2026-07-02), validato in-app dall'utente. Verificati shell prompt, long output scroll, nvim, truecolor, Unicode fallback, pane resize, mouse-enabled TUI. Yazi image preview OK (path iTerm2); animated GIF/APNG verificati in-app.
+No additional execution notes were captured.
 
 ## How to resume
-1. Open task 21e56e42-006f-4fe8-919b-838163ea8dff (Manual validation matrix).
+1. Open task c992d27c-dfe3-4fef-a7af-58cc4f026db0 (Implement WorkspacesContainerProvider).
 2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.
-3. Before implementation work, run planner-task-start 21e56e42-006f-4fe8-919b-838163ea8dff (or call task_start).
-4. Continue with the next activity: Start task 21e56e42-006f-4fe8-919b-838163ea8dff — Manual validation matrix with planner-task-start (or task_start) before doing implementation work.
+3. Confirm whether the current task is already in-progress before doing implementation work.
+4. Continue with the next activity: Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
 
 ## Files to inspect first
 - .planner/project.json
 - .planner/features.json
-- .planner/phases/acb2c4bf-e7bf-4aa1-b41b-d908a35801e3.json
+- .planner/phases/73c320aa-b8b7-4fb3-9421-5c741b1771ff.json
 - .planner/resume.json
 - .planner/HANDOFF.md
 - .planner/generated/PLAN.md
@@ -35,13 +35,12 @@ Allineato al BACKLOG di origin/main: DONE (2026-07-02), validato in-app dall'ute
 - None recorded
 
 ## Next steps
-- Start task 21e56e42-006f-4fe8-919b-838163ea8dff — Manual validation matrix with planner-task-start (or task_start) before doing implementation work.
-- Then continue work in phase acb2c4bf-e7bf-4aa1-b41b-d908a35801e3.
+- Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
 
 ## Recent activity
 - Latest feature update: 🖥️ Terminal Platform Completion (done) at 2026-07-02T07:47:19.999Z
-- Latest phase update: terminal-04: Backend and renderer tests (done) at 2026-07-02T07:46:51.035Z
-- Latest task update: Manual validation matrix (done) at 2026-07-02T07:46:51.035Z
+- Latest phase update: plugin-03: Built-in provider + WorkspacesContainer migration (in-progress) at 2026-07-03T11:12:24.356Z
+- Latest task update: Implement WorkspacesContainerProvider (in-progress) at 2026-07-03T11:12:24.356Z
 
 ## Reminder
 - When work is fully resumed and this handoff is no longer needed, delete `.planner/HANDOFF.md`.

@@ -1,7 +1,7 @@
 {
   "id": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
   "featureId": "cd083ad1-8310-4368-981b-d14c73c20d96",
-  "number": 1,
+  "number": 2,
   "slug": "gridui-05-bloom-and-custom-draw-effects",
   "title": "gridui-05: Bloom and custom draw effects",
   "status": "planned",
@@ -28,6 +28,7 @@
     {
       "id": "d6d3ce85-9553-429c-8322-1ec4ca726178",
       "phaseId": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
+      "number": 1,
       "shortName": "offscreen-bloom",
       "title": "Implement offscreen bloom pipeline",
       "status": "planned",
@@ -46,6 +47,7 @@
     {
       "id": "d2abc295-6706-471d-b113-83e240c85675",
       "phaseId": "cb8f1203-9ae5-431d-8e7d-07dad2804396",
+      "number": 2,
       "shortName": "custom-drawcommand",
       "title": "DrawCommand Custom escape hatch",
       "status": "planned",

@@ -30,6 +30,7 @@
     {
       "id": "70bd1c49-970d-4923-8b24-0abe18c4d3a0",
       "phaseId": "7120375b-cc0c-49e4-8b62-54cb6a35eadc",
+      "number": 1,
       "shortName": "host-viewport-state",
       "title": "Add host-managed terminal viewport state",
       "status": "done",
@@ -48,6 +49,7 @@
     {
       "id": "d6d65d38-c8e6-4df0-b7b5-2e808ece5328",
       "phaseId": "7120375b-cc0c-49e4-8b62-54cb6a35eadc",
+      "number": 2,
       "shortName": "route-wheel-scrollback",
       "title": "Route wheel and selection-mode movement through host scrollback",
       "status": "done",
@@ -66,6 +68,7 @@
     {
       "id": "1e593300-623e-4d78-8a89-6938100382a6",
       "phaseId": "7120375b-cc0c-49e4-8b62-54cb6a35eadc",
+      "number": 3,
       "shortName": "mirror-viewport-chrome",
       "title": "Mirror terminal viewport state into chrome store",
       "status": "done",
@@ -84,6 +87,7 @@
     {
       "id": "b491e93d-5472-4f5c-92f2-ddd948fba6cd",
       "phaseId": "7120375b-cc0c-49e4-8b62-54cb6a35eadc",
+      "number": 4,
       "shortName": "scrollback-chrome-widgets",
       "title": "Add scrollback chrome widgets and animation",
       "status": "done",

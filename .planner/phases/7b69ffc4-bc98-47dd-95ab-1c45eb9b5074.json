@@ -1,7 +1,7 @@
 {
   "id": "7b69ffc4-bc98-47dd-95ab-1c45eb9b5074",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 1,
+  "number": 5,
   "slug": "terminal-05-pane-shell-hosting-contract",
   "title": "terminal-05: Pane-shell hosting contract",
   "status": "done",
@@ -27,6 +27,7 @@
     {
       "id": "3d20f9cc-da40-4585-b9cd-c731934fef29",
       "phaseId": "7b69ffc4-bc98-47dd-95ab-1c45eb9b5074",
+      "number": 1,
       "shortName": "mount-terminal-pane-shell",
       "title": "Mount terminal inside grid-ui Pane shell",
       "status": "done",

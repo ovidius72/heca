@@ -1,7 +1,7 @@
 {
   "id": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
   "featureId": "be986d1d-cc2c-4acc-b703-4b1788a4ff86",
-  "number": 1,
+  "number": 7,
   "slug": "terminal-04-backend-and-renderer-tests",
   "title": "terminal-04: Backend and renderer tests",
   "status": "done",
@@ -29,6 +29,7 @@
     {
       "id": "3dcec4d9-f035-46e3-b80a-8e7fcd7dfdfd",
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
+      "number": 1,
       "shortName": "backend-lifecycle-tests",
       "title": "Backend lifecycle tests",
       "status": "done",
@@ -47,6 +48,7 @@
     {
       "id": "21e56e42-006f-4fe8-919b-838163ea8dff",
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
+      "number": 2,
       "shortName": "manual-validation-matrix",
       "title": "Manual validation matrix",
       "status": "done",
@@ -65,6 +67,7 @@
     {
       "id": "c59f097a-ee19-4c87-bb04-9faa3d853c10",
       "phaseId": "acb2c4bf-e7bf-4aa1-b41b-d908a35801e3",
+      "number": 3,
       "shortName": "terminal-renderer-tests",
       "title": "Renderer tests",
       "status": "done",

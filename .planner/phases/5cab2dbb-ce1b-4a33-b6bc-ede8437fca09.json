@@ -1,7 +1,7 @@
 {
   "id": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
   "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
-  "number": 1,
+  "number": 6,
   "slug": "app-11-right-click-context-menu",
   "title": "app-11: Right-click context menu",
   "status": "planned",
@@ -29,6 +29,7 @@
     {
       "id": "967a121b-9003-4abe-bc42-294f25b6fb90",
       "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 1,
       "shortName": "build-contextmenu",
       "title": "Build ContextMenu grid-ui widget",
       "status": "planned",
@@ -47,6 +48,7 @@
     {
       "id": "c511a0ad-6883-4b81-a160-c1e6c97516ed",
       "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 2,
       "shortName": "sidebar-contextmenu",
       "title": "Sidebar right-click context menu",
       "status": "planned",
@@ -65,6 +67,7 @@
     {
       "id": "479bf80c-6b3d-4e28-8df1-19f509eb3569",
       "phaseId": "5cab2dbb-ce1b-4a33-b6bc-ede8437fca09",
+      "number": 3,
       "shortName": "terminal-contextmenu",
       "title": "Terminal pane right-click context menu",
       "status": "planned",
