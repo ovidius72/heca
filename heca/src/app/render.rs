@@ -11,7 +11,7 @@ use crate::app::terminal_render::{
     stable_tiled_content_rect, sync_retained_terminal_layers,
 };
 use crate::app_state::{AppState, InputMode};
-use crate::chrome::{ChromeConfig, DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
+use crate::chrome::ChromeConfig;
 use crate::{mouse, sidebar};
 use heca_grid_ui::Component;
 use heca_grid_ui::drag::DragSurfaceId;
@@ -68,6 +68,9 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::FollowLink { .. } => {
             ("FOLLOW", " — press a letter to open the link".to_string())
         }
+        InputMode::HintPick { .. } => {
+            ("HINT", " — press a letter to activate a target".to_string())
+        }
         InputMode::Search => (
             "SEARCH",
             " — type to search, Enter to keep, Esc to cancel".to_string(),
@@ -80,7 +83,9 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::Rename { buffer, .. } => ("RENAME", format!(": {}_", buffer)),
         InputMode::Chord { sequence } => ("CHORD", format!(" w→{}", sequence.join("→"))),
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
-        InputMode::ConfirmDelete { message, .. } => ("CONFIRM", format!(" {} ", message)),
+        // The confirm now lives entirely in the Modal dialog; the status bar only
+        // shows the mode word, no duplicated prompt.
+        InputMode::ConfirmDelete { .. } => ("CONFIRM", String::new()),
         InputMode::PaneTake { focus_after, .. } => {
             (if *focus_after { "TAKE+" } else { "TAKE" }, pick_suffix())
         }
@@ -168,6 +173,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Lay out the right-click context menu now, before the scene-texture borrow, so
     // its paint pass (below) can take a shared `&AppState`. terminal-task-18.
     crate::chrome::layout_context_menu(state, w, h);
+    crate::chrome::layout_confirm_dialog(state, w, h);
 
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
@@ -186,18 +192,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
         .to_f32x4();
 
     let chrome = ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: if state.chrome_state.left_visible() {
-            state.chrome_state.left_size()
-        } else {
-            40.0
-        },
-        right_sidebar_width: if state.chrome_state.right_visible() {
-            state.chrome_state.right_size()
-        } else {
-            40.0
-        },
+        tab_bar_height: state.tab_bar_height(),
+        status_bar_height: state.status_bar_height(),
+        left_sidebar_width: state.left_sidebar_width(),
+        right_sidebar_width: state.right_sidebar_width(),
         sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     };
     let pane_area = chrome.content_rect(w, h);
@@ -900,7 +898,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // (`build_chrome_scene`). Only the COLLAPSED icon rail is still hand-drawn
     // here; when expanded we skip the hand-drawn bg/divider/content entirely so it
     // doesn't paint over the grid sidebar.
-    if chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+    if chrome.left_sidebar_width > 0.0
+        && chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
+    {
         let sidebar_gap = chrome.sidebar_gap.max(0.0);
         let rail_x = sidebar_gap.min(chrome.left_sidebar_width * 0.5);
         let rail_y = sidebar_top + sidebar_gap;
@@ -976,7 +976,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Legacy hand-drawn ghost — only for the COLLAPSED rail. When the sidebar is
     // expanded the grid-ui chrome shell is painted on top (covering this), so the
     // ghost is drawn into the chrome scene instead via `paint_drag_overlay` below.
-    if chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
+    if chrome.left_sidebar_width > 0.0
+        && chrome.left_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
         && let Some(label) = state
             .mouse
             .drag_ctx
@@ -1012,7 +1013,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
         );
     }
 
-    if chrome.right_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD {
+    if chrome.right_sidebar_width > 0.0
+        && chrome.right_sidebar_width < crate::chrome::SIDEBAR_EXPANDED_THRESHOLD
+    {
         let sidebar_gap = chrome.sidebar_gap.max(0.0);
         let rail_w = (chrome.right_sidebar_width - sidebar_gap * 2.0).max(0.0);
         let rail_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
@@ -1118,12 +1121,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items) = crate::chrome::build_chrome_root(state, chrome);
+        let (root, signals, drag_items, hint_targets) =
+            crate::chrome::build_chrome_root(state, chrome);
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
+            hint_targets,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
@@ -1157,8 +1162,10 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Follow-link keycaps (prefix+Shift+o) over the focused terminal's hyperlinks,
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
+    crate::chrome::paint_hint_targets(state, &mut chrome_scene, w, h, &chrome_theme);
     // Right-click context menu overlay, on top of everything. terminal-task-18.
     crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
+    crate::chrome::paint_confirm_dialog(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
@@ -1195,18 +1202,10 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
     let win_w = phys.width as f32 / state.scale_factor as f32;
     let win_h = phys.height as f32 / state.scale_factor as f32;
     let chrome = ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: if state.chrome_state.left_visible() {
-            state.chrome_state.left_size()
-        } else {
-            40.0
-        },
-        right_sidebar_width: if state.chrome_state.right_visible() {
-            state.chrome_state.right_size()
-        } else {
-            40.0
-        },
+        tab_bar_height: state.tab_bar_height(),
+        status_bar_height: state.status_bar_height(),
+        left_sidebar_width: state.left_sidebar_width(),
+        right_sidebar_width: state.right_sidebar_width(),
         sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     };
     let pane_area = chrome.content_rect(win_w, win_h);
@@ -1248,7 +1247,8 @@ mod tests {
                 action: Box::new(WmAction::ClosePane),
                 resume_sidebar: false,
             }),
-            ("CONFIRM", " Delete pane? ".to_string())
+            ("CONFIRM", String::new()),
+            "the prompt lives in the Modal now — the status bar shows only the mode word"
         );
     }
 }

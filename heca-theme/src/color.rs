@@ -86,6 +86,13 @@ impl Color {
             mix(self.a, other.a),
         )
     }
+
+    /// WCAG relative luminance (`0.0` darkest – `1.0` lightest), from linearized sRGB.
+    /// Used to choose a readable foreground over an arbitrary fill.
+    pub fn luminance(self) -> f32 {
+        let [r, g, b, _] = self.to_linear_f32x4();
+        0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
 }
 
 impl FromStr for Color {

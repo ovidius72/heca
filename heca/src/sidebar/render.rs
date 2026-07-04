@@ -358,7 +358,12 @@ fn collapsed_pane_label(
 ) -> String {
     candidate_char(pane.pane_id, candidates, focused_pane)
         .map(|ch| ch.to_string())
-        .unwrap_or_else(|| pane.name.chars().next().unwrap_or(fallback).to_string())
+        .unwrap_or_else(|| {
+            // Prefer the user-set custom name (rename) over the process-derived
+            // title, mirroring the expanded side's display-name resolution.
+            let display = pane.custom_name.as_deref().unwrap_or(&pane.name);
+            display.chars().next().unwrap_or(fallback).to_string()
+        })
 }
 
 fn item_state_color(
@@ -371,5 +376,47 @@ fn item_state_color(
         SidebarItemState::Active => accent,
         SidebarItemState::Visited => visited_color,
         SidebarItemState::None => foreground,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(name: &str, custom: Option<&str>) -> SidebarPaneEntry {
+        SidebarPaneEntry {
+            pane_id: PaneId(1),
+            name: name.to_string(),
+            custom_name: custom.map(|s| s.to_string()),
+            state: SidebarItemState::None,
+        }
+    }
+
+    #[test]
+    fn collapsed_label_prefers_custom_name() {
+        // No candidate char (leader/pick inactive) -> fall back to the initial.
+        let pane = entry("zsh", Some("Server"));
+        assert_eq!(collapsed_pane_label(&pane, None, None, '?'), "S");
+    }
+
+    #[test]
+    fn collapsed_label_uses_process_name_when_no_custom() {
+        let pane = entry("zsh", None);
+        assert_eq!(collapsed_pane_label(&pane, None, None, '?'), "z");
+    }
+
+    #[test]
+    fn collapsed_label_falls_back_when_names_empty() {
+        let pane = entry("", None);
+        assert_eq!(collapsed_pane_label(&pane, None, None, '~'), "~");
+    }
+
+    #[test]
+    fn collapsed_label_candidate_wins_over_names() {
+        // While the pick/leader overlay is active the candidate char takes
+        // precedence over both custom and process names.
+        let pane = entry("zsh", Some("Server"));
+        let cands = [('a', PaneId(1))];
+        assert_eq!(collapsed_pane_label(&pane, Some(&cands), None, '?'), "a");
     }
 }

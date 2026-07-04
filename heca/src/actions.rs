@@ -618,6 +618,104 @@ impl ActionRegistry {
             default_binding: "Tab",
             icon: None,
         },
+        // Chrome region show/hide mounted-gate (sidebar-fu-6). Unbound by default
+        // (listed in the `UNBOUND` test allowlist); the user binds them in config.
+        ActionDescriptor {
+            name: "show_left_sidebar",
+            label: "Show Left Sidebar",
+            description: "Mount (show) the left sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "hide_left_sidebar",
+            label: "Hide Left Sidebar",
+            description: "Unmount (hide) the left sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "toggle_left_sidebar",
+            label: "Toggle Left Sidebar (show/hide)",
+            description: "Mount or unmount the left sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "show_right_sidebar",
+            label: "Show Right Sidebar",
+            description: "Mount (show) the right sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "hide_right_sidebar",
+            label: "Hide Right Sidebar",
+            description: "Unmount (hide) the right sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "toggle_right_sidebar",
+            label: "Toggle Right Sidebar (show/hide)",
+            description: "Mount or unmount the right sidebar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "show_top_bar",
+            label: "Show Top Bar",
+            description: "Mount (show) the top bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "hide_top_bar",
+            label: "Hide Top Bar",
+            description: "Unmount (hide) the top bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "toggle_top_bar",
+            label: "Toggle Top Bar (show/hide)",
+            description: "Mount or unmount the top bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "show_bottom_bar",
+            label: "Show Bottom Bar",
+            description: "Mount (show) the bottom bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "hide_bottom_bar",
+            label: "Hide Bottom Bar",
+            description: "Unmount (hide) the bottom bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
+        ActionDescriptor {
+            name: "toggle_bottom_bar",
+            label: "Toggle Bottom Bar (show/hide)",
+            description: "Mount or unmount the bottom bar region.",
+            category: ActionCategory::Chrome,
+            default_binding: "",
+            icon: None,
+        },
         ActionDescriptor {
             name: "sidebar_create_workspace",
             label: "Sidebar Create Workspace",
@@ -1062,7 +1160,23 @@ mod tests {
     fn test_descriptors_are_populated() {
         // Actions invoked only programmatically / by mouse / by context menu have no
         // global keybinding, so their `default_binding` is intentionally empty.
-        const UNBOUND: &[&str] = &["open_link"];
+        const UNBOUND: &[&str] = &[
+            "open_link",
+            // Chrome region show/hide (sidebar-fu-6): intentionally unbound — the
+            // user binds the wanted ones in config.
+            "show_left_sidebar",
+            "hide_left_sidebar",
+            "toggle_left_sidebar",
+            "show_right_sidebar",
+            "hide_right_sidebar",
+            "toggle_right_sidebar",
+            "show_top_bar",
+            "hide_top_bar",
+            "toggle_top_bar",
+            "show_bottom_bar",
+            "hide_bottom_bar",
+            "toggle_bottom_bar",
+        ];
         for desc in ActionRegistry::ALL {
             assert!(!desc.name.is_empty(), "name must not be empty");
             assert!(!desc.label.is_empty(), "label must not be empty");

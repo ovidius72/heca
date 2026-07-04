@@ -42,10 +42,6 @@ pub(crate) fn handle_keyboard_input(
         return;
     }
 
-    if handle_confirm_delete_input(registry, state, ctx) {
-        return;
-    }
-
     let input_mode = state.input_mode.clone();
     match input_mode {
         InputMode::Normal => {
@@ -108,6 +104,9 @@ pub(crate) fn handle_keyboard_input(
         }
         InputMode::FollowLink { candidates } => {
             handle_follow_link_mode(registry, state, &candidates, ctx);
+        }
+        InputMode::HintPick { candidates } => {
+            handle_hint_pick_mode(registry, state, &candidates, ctx);
         }
         InputMode::Search => {
             handle_search_mode(state, ctx);
@@ -228,39 +227,6 @@ fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
         buffer.push_str(ctx.key_text);
     }
 
-    state.needs_redraw = true;
-    true
-}
-
-fn handle_confirm_delete_input(
-    registry: &ActionRegistry,
-    state: &mut AppState,
-    ctx: KeyInputContext<'_>,
-) -> bool {
-    let (action, resume_sidebar) = match &state.input_mode {
-        InputMode::ConfirmDelete {
-            action,
-            resume_sidebar,
-            ..
-        } => (action.as_ref().clone(), *resume_sidebar),
-        _ => return false,
-    };
-
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_y = ctx.key_text == "y" || ctx.key_text == "Y";
-    let is_n = ctx.key_text == "n" || ctx.key_text == "N";
-    let resume_mode = if resume_sidebar {
-        InputMode::SidebarNav
-    } else {
-        InputMode::Normal
-    };
-
-    if is_escape || is_n {
-        state.input_mode = resume_mode;
-    } else if is_y {
-        state.input_mode = resume_mode;
-        dispatch_action(state, registry, InteractionSource::Keyboard, &action);
-    }
     state.needs_redraw = true;
     true
 }
@@ -442,6 +408,40 @@ fn handle_follow_link_mode(
                 url: hint.url.clone(),
             },
         );
+    }
+    state.needs_redraw = true;
+}
+
+/// Universal hint picker (`InputMode::HintPick`): a matching letter fires that
+/// target's intent (resolved from the retained tree's hint-target registry and routed
+/// through the interaction policy layer, exactly like a mouse click); any other key /
+/// Esc just exits. Mirrors [`handle_follow_link_mode`].
+fn handle_hint_pick_mode(
+    registry: &ActionRegistry,
+    state: &mut AppState,
+    candidates: &[(char, heca_grid_ui::HintTargetId)],
+    ctx: KeyInputContext<'_>,
+) {
+    let candidates = candidates.to_vec();
+    state.input_mode = InputMode::Normal;
+    let typed = typed_candidate_char(ctx.key_text, ctx.physical_key);
+    if let Some(ch) = typed
+        && let Some((_, id)) = candidates.iter().find(|(c, _)| *c == ch)
+    {
+        // Resolve the picked target's intent from the retained tree, then dispatch it
+        // (owned clone drops the tree borrow before the mutable dispatch call).
+        let intent = state
+            .chrome_tree
+            .as_ref()
+            .and_then(|t| t.hint_targets.get(*id).cloned());
+        if let Some(intent) = intent {
+            crate::app::interaction::dispatch_intent(
+                state,
+                registry,
+                InteractionSource::Keyboard,
+                intent,
+            );
+        }
     }
     state.needs_redraw = true;
 }

@@ -8,7 +8,7 @@ use crate::app::backend_factory::{
     create_command_backend_for_state, create_terminal_backend_for_state,
     terminal_grid_for_workspace,
 };
-use crate::app::focus::{focus_pane_by_id, sync_focus};
+use crate::app::focus::focus_pane_by_id;
 use crate::app::interaction::{focused_pane_id, pane_is_floating};
 use crate::app::mutations::{after_focus_change, after_layout_change, after_metadata_change};
 use crate::app::pane_ops::{
@@ -691,64 +691,10 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = focused_pane_id(state) else {
         return;
     };
-    let is_floating = pane_is_floating(&state.session, pane_id);
-
-    if is_floating {
-        close_floating_pane(state, pane_id);
-    } else {
-        close_tiled_pane(state);
-    }
-    close_workspace_if_empty(state);
-    after_layout_change(state);
-}
-
-/// Remove a floating pane by ID, switch domain to Tiled if no floats remain,
-/// and focus the last visited tiled pane.
-fn close_floating_pane(state: &mut AppState, pane_id: PaneId) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        if let Some(float_idx) = ws.floating_panes.iter().position(|f| f.pane.id == pane_id) {
-            let removed = ws.floating_panes.remove(float_idx);
-            state.backends.remove_for_pane(removed.pane.id);
-        } else {
-            // pane_is_floating returned true but the pane was not found in
-            // floating_panes — this indicates a state inconsistency.
-            #[cfg(debug_assertions)]
-            eprintln!(
-                "[heca] warning: pane {} reported as floating but not found in floating_panes",
-                pane_id
-            );
-        }
-        // Only switch back to tiled domain if no floating panes remain.
-        if ws.floating_panes.is_empty() {
-            ws.deactivate_floating_panes();
-            ws.focus_domain = FocusDomain::Tiled;
-        }
-    }
-    // Focus the last visited pane in the tiled area.
-    let last_tiled = state
-        .last_visited_pane_per_ws
-        .get(state.session.active_workspace_idx)
-        .copied()
-        .flatten();
-    if let Some(target_id) = last_tiled {
-        focus_pane_by_id(state, target_id);
-    } else {
-        // No last-visited pane recorded; sync focus from session state.
-        sync_focus(state);
-    }
-}
-
-/// Remove the active pane from the active column in the scrolling layout.
-fn close_tiled_pane(state: &mut AppState) {
-    if let Some(ws) = state.session.active_workspace_mut() {
-        let col_idx = ws.scrolling.active_column_idx;
-        if let Some(col) = ws.scrolling.active_column() {
-            let pane_idx = col.active_pane_idx;
-            if let Some(removed) = ws.scrolling.remove_pane(col_idx, pane_idx) {
-                state.backends.remove_for_pane(removed.id);
-            }
-        }
-    }
+    // Centralized: confirm (per `[settings] confirm_close_pane`) or close now. The raw
+    // close is `ClosePaneById` (handles tiled + floating + empty-workspace cleanup), so
+    // both the direct and the dialog-confirmed paths run identical close logic.
+    request_destructive(state, WmAction::ClosePaneById { pane_id }, false);
 }
 
 /// Destroy the active workspace if it's empty and other workspaces exist.
@@ -788,6 +734,28 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
     let candidates = crate::app::terminal_host::collect_link_hints(state);
     if !candidates.is_empty() {
         state.input_mode = InputMode::FollowLink { candidates };
+        state.needs_redraw = true;
+    }
+}
+
+/// Enter the universal hint picker (`prefix+/`): assign a letter to every actionable
+/// chrome target in the retained tree (document order) and show a keycap over each;
+/// the next keypress fires that target's intent. No-ops if there are no targets or no
+/// chrome tree yet.
+pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
+    let Some(tree) = state.chrome_tree.as_ref() else {
+        return;
+    };
+    let candidates: Vec<(char, heca_grid_ui::HintTargetId)> =
+        heca_grid_ui::collect_hint_targets(&tree.root)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, (id, _bounds))| {
+                crate::app::selection::candidate_letter(i).map(|ch| (ch, id))
+            })
+            .collect();
+    if !candidates.is_empty() {
+        state.input_mode = InputMode::HintPick { candidates };
         state.needs_redraw = true;
     }
 }
@@ -1023,6 +991,24 @@ pub fn handle_add_pane_to_column(state: &mut AppState, action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Add a new column to a specific workspace (sidebar right-click context menu).
+/// Switches to the target workspace if needed, then creates a new column via a
+/// horizontal split. Explicit target, so unlike `sidebar_create_column` it does not
+/// depend on the sidebar-nav mode or cursor.
+pub fn handle_add_column_to_workspace(state: &mut AppState, action: &WmAction) {
+    let WmAction::AddColumnToWorkspace { ws_idx } = action else {
+        return;
+    };
+    let target_ws = *ws_idx;
+    if target_ws >= state.session.workspaces.len() {
+        return;
+    }
+    if state.session.active_workspace_idx != target_ws {
+        crate::switch_workspace_tracked(state, target_ws);
+    }
+    handle_split_horizontal(state, &WmAction::SplitHorizontal);
+}
+
 /// Delete a column and all its panes (destructive).
 pub fn handle_delete_column(state: &mut AppState, action: &WmAction) {
     let WmAction::DeleteColumn { ws_idx, col_idx } = action else {
@@ -1059,7 +1045,9 @@ pub fn handle_delete_workspace(state: &mut AppState, action: &WmAction) {
         return;
     };
     let target_ws = *ws_idx;
-    if target_ws >= state.session.workspaces.len() || state.session.workspaces.len() <= 1 {
+    // Deleting the last workspace is allowed (leaves the session empty; recoverable via
+    // create-workspace) — only bail on an out-of-range index.
+    if target_ws >= state.session.workspaces.len() {
         return;
     }
 
@@ -1526,18 +1514,192 @@ pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAct
     }
 }
 
+/// Raise the delete confirmation: set [`InputMode::ConfirmDelete`] (keyboard
+/// y/Enter/n/Esc) AND a clickable [`Modal`](heca_grid_ui::widgets::Modal) overlay
+/// (OK/Cancel). Both resolve through [`resolve_confirm_delete`]. `message` is the
+/// prompt (a trailing " (y/n)" is stripped for the dialog title); `action` runs on
+/// confirm; `resume_sidebar` picks the mode to return to.
+pub(crate) fn begin_confirm_delete(
+    state: &mut AppState,
+    message: String,
+    action: WmAction,
+    resume_sidebar: bool,
+) {
+    use heca_grid_ui::widgets::{Modal, ModalButton};
+    // Reuse the same click-sink pattern as the context menu: the buttons write a
+    // bool result the event loop drains, then resolves the pending ConfirmDelete.
+    let result = state.confirm_dialog_result.clone();
+    result.borrow_mut().take();
+    let confirm_sink = result.clone();
+    let cancel_sink = result;
+    let title = message
+        .trim_end()
+        .trim_end_matches("(y/n)")
+        .trim_end()
+        .trim_end_matches('?')
+        .to_string()
+        + "?";
+    // Data-driven buttons in [Cancel (n)] [Delete (y)] order. Cancel takes initial
+    // focus (safe default) and Esc / scrim activate it; the per-button `shortcut`
+    // drives the `(n)` / `(y)` labels the host fires on that keypress. Keyboard focus
+    // + activation are host-driven in `events.rs`; the pointer path shares these sinks.
+    state.confirm_dialog = Some(
+        Modal::new(title, "This action cannot be undone.")
+            .button(
+                ModalButton::new("Cancel", move || {
+                    *cancel_sink.borrow_mut() = Some(false);
+                })
+                .shortcut('n')
+                .cancel(),
+            )
+            .button(
+                ModalButton::new("Delete", move || {
+                    *confirm_sink.borrow_mut() = Some(true);
+                })
+                .shortcut('y')
+                .danger(true),
+            )
+            .open(true),
+    );
+    state.input_mode = InputMode::ConfirmDelete {
+        message,
+        action: Box::new(action),
+        resume_sidebar,
+    };
+    state.needs_redraw = true;
+}
+
+/// Resolve a pending [`InputMode::ConfirmDelete`] from either input path (keyboard or
+/// the [`Modal`](heca_grid_ui::widgets::Modal) buttons): dispatch the action when
+/// `confirmed`, restore the resume mode, and close the dialog overlay. No-op when no
+/// confirm is pending.
+pub(crate) fn resolve_confirm_delete(
+    state: &mut AppState,
+    registry: &crate::actions::ActionRegistry,
+    confirmed: bool,
+) {
+    let (action, resume_sidebar) = match &state.input_mode {
+        InputMode::ConfirmDelete {
+            action,
+            resume_sidebar,
+            ..
+        } => (action.as_ref().clone(), *resume_sidebar),
+        _ => {
+            state.confirm_dialog = None;
+            return;
+        }
+    };
+    state.confirm_dialog = None;
+    state.confirm_dialog_result.borrow_mut().take();
+    state.input_mode = if resume_sidebar {
+        InputMode::SidebarNav
+    } else {
+        InputMode::Normal
+    };
+    if confirmed {
+        crate::app::interaction::dispatch_action(
+            state,
+            registry,
+            crate::app::interaction::InteractionSource::Keyboard,
+            &action,
+        );
+    }
+    state.needs_redraw = true;
+}
+
+/// Human label for a workspace index (its name, or "ws N").
+fn ws_label(state: &AppState, ws_idx: usize) -> String {
+    state
+        .session
+        .workspaces
+        .get(ws_idx)
+        .and_then(|ws| ws.name.clone())
+        .unwrap_or_else(|| format!("ws {}", ws_idx + 1))
+}
+
+/// The confirm-prompt question for a raw destructive action.
+fn destructive_message(state: &AppState, action: &WmAction) -> String {
+    match action {
+        WmAction::ClosePaneById { pane_id } => {
+            let label = state
+                .session
+                .workspaces
+                .iter()
+                .find_map(|ws| ws.find_pane(*pane_id))
+                .map(|p| p.title.clone())
+                .unwrap_or_else(|| format!("pane {}", pane_id));
+            format!("Close {}?", label)
+        }
+        WmAction::DeleteColumn { ws_idx, col_idx } => {
+            format!("Delete column {} from {}?", col_idx + 1, ws_label(state, *ws_idx))
+        }
+        WmAction::DeleteWorkspace { ws_idx } => format!("Delete {}?", ws_label(state, *ws_idx)),
+        _ => "Confirm?".to_string(),
+    }
+}
+
+/// Run a raw destructive action immediately (no confirm) by calling its handler
+/// directly — the no-dialog branch of [`request_destructive`].
+fn run_destructive_now(state: &mut AppState, action: &WmAction) {
+    match action {
+        WmAction::ClosePaneById { .. } => handle_close_pane_by_id(state, action),
+        WmAction::DeleteColumn { .. } => handle_delete_column(state, action),
+        WmAction::DeleteWorkspace { .. } => handle_delete_workspace(state, action),
+        _ => {}
+    }
+}
+
+/// The single chokepoint for destructive actions (close pane / delete column /
+/// delete workspace): per the matching `[settings] confirm_*` toggle, either raise
+/// the confirm [`Modal`](heca_grid_ui::widgets::Modal) (`begin_confirm_delete`) or run
+/// the raw action immediately. Used from keyboard, sidebar, and the context menus so
+/// the confirm behaviour is identical everywhere. `raw_action` must be a raw variant
+/// (`ClosePaneById`/`DeleteColumn`/`DeleteWorkspace`); the dialog dispatches it back
+/// through the registry on confirm, so the raw handlers never re-enter this gate.
+pub(crate) fn request_destructive(
+    state: &mut AppState,
+    raw_action: WmAction,
+    resume_sidebar: bool,
+) {
+    let confirm = match &raw_action {
+        WmAction::ClosePaneById { .. } => state.confirm_close_pane,
+        WmAction::DeleteColumn { .. } => state.confirm_delete_column,
+        WmAction::DeleteWorkspace { .. } => state.confirm_delete_workspace,
+        _ => false,
+    };
+    if confirm {
+        let message = destructive_message(state, &raw_action);
+        begin_confirm_delete(state, message, raw_action, resume_sidebar);
+    } else {
+        run_destructive_now(state, &raw_action);
+    }
+}
+
 pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) {
     if !matches!(state.input_mode, InputMode::SidebarNav) {
         return;
     }
-    if let Some((message, action)) = sidebar_delete_prompt(state) {
-        state.input_mode = InputMode::ConfirmDelete {
-            message,
-            action: Box::new(action),
-            resume_sidebar: true,
-        };
-        state.needs_redraw = true;
+    if let Some((_, action)) = sidebar_delete_prompt(state) {
+        request_destructive(state, action, true);
     }
+}
+
+/// Delete the "current" column (and all its panes). The nav cursor never lands on a
+/// column (`is_navigable` stops on panes + workspaces), so `sidebar_delete_selected`
+/// can't reach one; this resolves the target column from the sidebar selection in
+/// sidebar-nav mode, or from the focused pane in normal mode, and routes through the
+/// same y/n confirm prompt.
+pub fn handle_delete_current_column(state: &mut AppState, _action: &WmAction) {
+    let in_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
+    let target = if in_sidebar {
+        sidebar_selected_column_target(state)
+    } else {
+        current_tiled_column_target(state)
+    };
+    let Some((ws_idx, col_idx)) = target else {
+        return;
+    };
+    request_destructive(state, WmAction::DeleteColumn { ws_idx, col_idx }, in_sidebar);
 }
 
 /// Apply a workspace collapse change: write the canonical `chrome_state.collapsed_ws`,
@@ -2289,6 +2451,68 @@ pub fn handle_set_region_visible(state: &mut AppState, action: &WmAction) {
         return;
     };
     state.chrome_host.set_region_visible(*region, *visible);
+}
+
+/// Show / hide / toggle a chrome **shell** region via the mounted-gate
+/// (`AppState.show_*` bools — fully unmount → zero width/height). This is the
+/// runtime side of `[settings] show_*` (sidebar-fu-6), a DISTINCT axis from the
+/// `RegionMode` expand/rail toggles. All 12 `Show*`/`Hide*`/`Toggle*` unit actions
+/// route here. On an actual change it reflows the session viewport + forces a full
+/// chrome rebuild, exactly like the config-reload path (`main.rs`).
+pub fn handle_set_chrome_region_shown(state: &mut AppState, action: &WmAction) {
+    #[derive(Clone, Copy)]
+    enum Region {
+        Left,
+        Right,
+        Top,
+        Bottom,
+    }
+    #[derive(Clone, Copy)]
+    enum Mode {
+        Show,
+        Hide,
+        Toggle,
+    }
+    let (region, mode) = match action {
+        WmAction::ShowLeftSidebar => (Region::Left, Mode::Show),
+        WmAction::HideLeftSidebar => (Region::Left, Mode::Hide),
+        WmAction::ToggleLeftSidebar => (Region::Left, Mode::Toggle),
+        WmAction::ShowRightSidebar => (Region::Right, Mode::Show),
+        WmAction::HideRightSidebar => (Region::Right, Mode::Hide),
+        WmAction::ToggleRightSidebar => (Region::Right, Mode::Toggle),
+        WmAction::ShowTopBar => (Region::Top, Mode::Show),
+        WmAction::HideTopBar => (Region::Top, Mode::Hide),
+        WmAction::ToggleTopBar => (Region::Top, Mode::Toggle),
+        WmAction::ShowBottomBar => (Region::Bottom, Mode::Show),
+        WmAction::HideBottomBar => (Region::Bottom, Mode::Hide),
+        WmAction::ToggleBottomBar => (Region::Bottom, Mode::Toggle),
+        _ => return,
+    };
+    let cur = match region {
+        Region::Left => state.show_left_sidebar,
+        Region::Right => state.show_right_sidebar,
+        Region::Top => state.show_top_bar,
+        Region::Bottom => state.show_bottom_bar,
+    };
+    let new_val = match mode {
+        Mode::Show => true,
+        Mode::Hide => false,
+        Mode::Toggle => !cur,
+    };
+    if new_val == cur {
+        return;
+    }
+    match region {
+        Region::Left => state.show_left_sidebar = new_val,
+        Region::Right => state.show_right_sidebar = new_val,
+        Region::Top => state.show_top_bar = new_val,
+        Region::Bottom => state.show_bottom_bar = new_val,
+    }
+    // Geometry changed → recompute the real viewport + force a full chrome rebuild
+    // (mirrors the reload path in `main.rs`).
+    crate::app::render::update_session_viewport(state);
+    state.chrome_tree = None;
+    state.needs_redraw = true;
 }
 
 #[cfg(test)]

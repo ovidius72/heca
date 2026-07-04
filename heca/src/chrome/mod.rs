@@ -119,10 +119,10 @@ use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree};
 use heca_config::programs::{ProgramIcon, ProgramsConfig};
 use heca_core::layout::PaneId;
 use heca_core::runtime::{PaneRuntime, ProcessStatus};
-use heca_grid_ui::builders::{DragExt, LayoutExt, Parent, StyleExt};
+use heca_grid_ui::builders::{DragExt, HintExt, LayoutExt, Parent, StyleExt};
 use heca_grid_ui::drag::{DragItemId, DragPhase, DragSurfaceId};
 use heca_grid_ui::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use heca_grid_ui::style::{Align, Justify, Length};
+use heca_grid_ui::style::{Align, Justify, Length, Spacing, WidgetSize};
 use heca_grid_ui::theme::Theme as GuiTheme;
 use heca_grid_ui::widgets::{
     ActiveMarker, Badge, BadgeButton, DockFrame, Flex, Glyph, HintPlacement, Icon, IconButton,
@@ -1263,6 +1263,7 @@ fn pane_card(
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> RepaintWatch {
     let active = active_pane == Some(pane.pane_id);
     let pane_id = pane.pane_id;
@@ -1281,6 +1282,8 @@ fn pane_card(
     // is assigned by the registry (which records that it's this pane) so the kind
     // round-trips through `drag::source_at`/`resolve_at` without trusting raw ids.
     let drag_id = drag.register(ChromeDragItem::Pane(pane_id));
+    // Hint target: the universal picker (`prefix+/`) focuses this pane by its letter.
+    let hint_id = hints.register(crate::app::interaction::InteractionIntent::FocusPane { pane_id });
     let icon_widget = Icon::new(info.icon).size(14.0).color(theme.colors.foreground);
     let icon_signal = icon_widget.glyph_signal();
     let active_title_label = Label::new(info.title.clone())
@@ -1431,6 +1434,7 @@ fn pane_card(
         .nav_selected(false)
         .draggable(drag_id)
         .drop_target(drag_id)
+        .hint_target(hint_id)
         // On click/Enter the card records its pane id in the host sink; the app reads
         // it after dispatch and focuses that pane (read-via-signal / write-via-action).
         .on_activate(move || {
@@ -1499,6 +1503,7 @@ fn column_view(
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> RepaintWatch {
     let active = c.panes.iter().any(|p| active_pane == Some(p.pane_id));
     // The MarkerGroup is a column drag source + drop target (F4.5 step 2). Its grip
@@ -1523,6 +1528,7 @@ fn column_view(
             ws_state,
             signals,
             drag,
+            hints,
         ));
     }
     // Bind the column bar's active signal (lit iff it holds the active pane).
@@ -1546,6 +1552,10 @@ fn column_view(
 /// [`DockFrame`] (header count [`Badge`] = total panes); its columns are compact
 /// [`column_view`]s (left marker bar + pane cards, no "Col N" header rows — those ate
 /// the sidebar for no user value). Pure projection of the [`SidebarTree`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "workspace-container projection threads host/runtime context + the drag and hint registries explicitly; phase-local before a larger ChromeCx refactor"
+)]
 fn build_workspaces_container(
     tree: &SidebarTree,
     programs: &ProgramsConfig,
@@ -1554,6 +1564,7 @@ fn build_workspaces_container(
     ws_state: &WorkspacesContainerState,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> Flex {
     // Selection is sourced from the container's shared state (the Phase-2 boundary),
     // not from `Session`/`SidebarItemState`. A workspace is "active" iff it hosts the
@@ -1615,6 +1626,11 @@ fn build_workspaces_container(
         // column anywhere on it that isn't a deeper column/pane target moves the column
         // into this workspace. Innermost-first hit-testing lets columns/panes override.
         dock = dock.drop_target(drag.register(ChromeDragItem::Workspace { ws: ws_idx }));
+        // Hint target: the universal picker (`prefix+/`) can focus this workspace by
+        // its letter. The keycap is stamped over the dock's bounds by `paint_hint_targets`.
+        dock = dock.hint_target(hints.register(
+            crate::app::interaction::InteractionIntent::FocusWorkspace { ws_idx },
+        ));
         // Columns stacked with a clear gap between them (the gap + bar mark each
         // column); panes inside a column are tight. Floating panes have no column.
         let mut cols = Flex::column().gap(8.0);
@@ -1629,6 +1645,7 @@ fn build_workspaces_container(
                 ws_state,
                 signals,
                 drag,
+                hints,
             ));
         }
         for float in &ws.floating_panes {
@@ -1641,6 +1658,7 @@ fn build_workspaces_container(
                 ws_state,
                 signals,
                 drag,
+                hints,
             ));
         }
         dock = dock.child(cols);
@@ -1688,21 +1706,12 @@ fn build_sidebar_shell(
     border_radius: f32,
     signals: &mut ChromeSignals,
     drag: &mut DragItemRegistry,
+    hints: &mut HintTargetRegistry,
 ) -> Flex {
     let inner_w = (left_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-    // Header: a sidebar glyph + a collapse toggle pushed to the right. The toggle is
-    // inert until interaction is wired (it becomes an action against shared state).
-    let header = Flex::row()
-        .align(Align::Center)
-        .gap(6.0)
-        .padding_xy(2.0, 2.0)
-        .child(Icon::new(Glyph::Sidebar).size(16.0).color(theme.colors.muted))
-        .child(Flex::row().grow(1.0))
-        .child(IconButton::new(
-            Icon::new(Glyph::CaretRight).size(14.0).color(theme.colors.muted),
-        ));
-
+    // The collapse toggle now lives in the always-visible top bar (sidebar-fu-14), so
+    // the sidebar has no header row — the workspaces container fills the shell.
     Flex::column()
         .width(Length::Px(left_w))
         .height(Length::Px(sidebar_h))
@@ -1721,7 +1730,6 @@ fn build_sidebar_shell(
                         .padding(10.0)
                         .gap(8.0)
                         .background(shell_bg)
-                        .child(header)
                         .child(build_workspaces_container(
                             tree,
                             programs,
@@ -1730,20 +1738,16 @@ fn build_sidebar_shell(
                             ws_state,
                             signals,
                             drag,
+                            hints,
                         )),
                 ),
         )
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "chrome shell assembly still threads retained-tree state explicitly during the Phase 0 migration"
-)]
 fn build_right_sidebar_shell(
     right_w: f32,
     sidebar_h: f32,
     shell_bg: Color,
-    theme: &GuiTheme,
     sidebar_gap: f32,
     border_style: heca_config::appearance::BorderStyle,
     border_width: f32,
@@ -1751,16 +1755,8 @@ fn build_right_sidebar_shell(
 ) -> Flex {
     let inner_w = (right_w - sidebar_gap * 2.0).max(0.0);
     let inner_h = (sidebar_h - sidebar_gap * 2.0).max(0.0);
-    let header = Flex::row()
-        .align(Align::Center)
-        .gap(6.0)
-        .padding_xy(2.0, 2.0)
-        .child(Label::new("Details").color(theme.colors.foreground))
-        .child(Flex::row().grow(1.0))
-        .child(IconButton::new(
-            Icon::new(Glyph::CaretRight).size(14.0).color(theme.colors.muted),
-        ));
-
+    // The collapse toggle now lives in the top bar (sidebar-fu-14); the right sidebar is
+    // an empty placeholder shell until it gains real content.
     Flex::column()
         .width(Length::Px(right_w))
         .height(Length::Px(sidebar_h))
@@ -1778,8 +1774,7 @@ fn build_right_sidebar_shell(
                         .height(Length::Px(inner_h))
                         .padding(10.0)
                         .gap(8.0)
-                        .background(shell_bg)
-                        .child(header),
+                        .background(shell_bg),
                 ),
         )
 }
@@ -1798,14 +1793,37 @@ struct ChromeFrame<'a> {
     fg: Color,
 }
 
-/// Assemble the chrome root widget tree (no layout/paint): a transparent tab band,
-/// a middle row hosting the (optional) full-height sidebar shell + a transparent
-/// content spacer, and the opaque status bar at the bottom. Returns the concrete
-/// [`Flex`] so it can be **retained** across frames (see [`RetainedChrome`]).
+/// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
+/// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region).
+/// Lives in the always-visible top bar so it works in both expanded and collapsed
+/// states, replacing the in-sidebar-header toggle.
+fn sidebar_toggle_button(
+    glyph: Glyph,
+    action: crate::input::WmAction,
+    emit: ChromeIntentEmitter,
+    color: Color,
+) -> IconButton {
+    // Just pick the size variant — the widget derives icon px + padding from the
+    // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
+    // `IconButton` scales its padding). No caller-side size math.
+    IconButton::new(Icon::new(glyph).color(color))
+        .size(WidgetSize::Small)
+        .on_click(move || {
+            emit(crate::app::interaction::InteractionIntent::ActivateAction(action.clone()));
+        })
+}
+
+/// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
+/// (carrying the left/right sidebar collapse toggles at its outer corners), a middle
+/// row hosting the (optional) full-height sidebar shell + a transparent content spacer,
+/// and the opaque status bar at the bottom. Returns the concrete [`Flex`] so it can be
+/// **retained** across frames (see [`RetainedChrome`]).
 fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
+    left_toggle: Option<IconButton>,
+    right_toggle: Option<IconButton>,
     signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame {
@@ -1818,11 +1836,6 @@ fn chrome_root(
         fg,
     } = *frame;
     let middle_h = (h - tab_bar_height - status_bar_height).max(0.0);
-    // The status label's text is bound so mode/focus changes update it in place.
-    let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
-    let status_signal = status_label.text_signal();
-    let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
-    signals.status = Some(status_signal);
 
     // Middle row: the full-height sidebar shell (when expanded) + a transparent
     // spacer over the content area (panes are drawn by the hand-drawn path under
@@ -1838,17 +1851,40 @@ fn chrome_root(
         middle = middle.child(shell);
     }
 
-    Flex::column()
-        .width(Length::Px(w))
-        .height(Length::Px(h))
-        // Transparent tab band — the hand-drawn tab bar paints underneath.
-        .child(
-            Flex::row()
-                .width(Length::Px(w))
-                .height(Length::Px(tab_bar_height)),
-        )
-        .child(middle)
-        .child(
+    let mut root = Flex::column().width(Length::Px(w)).height(Length::Px(h));
+    // Transparent tab band — the hand-drawn tab bar paints underneath. Omitted
+    // entirely when the top bar is hidden (`show_top_bar = false`).
+    if tab_bar_height > 0.0 {
+        // Left toggle at the far-left corner, right toggle at the far-right, spacer
+        // between (over the hand-drawn tab bar). sidebar-fu-14.
+        // Edge inset from a theme spacing token (resolved from the font at layout — no
+        // hand-computed px). Vertical breathing room comes from centering a `Small` toggle.
+        let mut band = Flex::row()
+            .width(Length::Px(w))
+            .height(Length::Px(tab_bar_height))
+            .align(Align::Center)
+            .pad_x(Spacing::Sm);
+        if let Some(t) = left_toggle {
+            band = band.child(t);
+        }
+        band = band.child(Flex::row().grow(1.0));
+        if let Some(t) = right_toggle {
+            band = band.child(t);
+        }
+        root = root.child(band);
+    }
+    root = root.child(middle);
+    // Status (bottom) bar. Built only when shown — a zero-height `Surface` would
+    // still paint its overflowing `Label`, so when `show_bottom_bar = false` we drop
+    // the whole bar (and leave `signals.status` unset, which the per-frame updater
+    // already treats as "nothing to update").
+    if status_bar_height > 0.0 {
+        // The status label's text is bound so mode/focus changes update it in place.
+        let status_label = Label::new(status).font_size(CHROME_TEXT_SIZE).color(fg);
+        let status_signal = status_label.text_signal();
+        let (status_watch, _status_repaint) = RepaintWatch::new(status_label);
+        signals.status = Some(status_signal);
+        root = root.child(
             Surface::row()
                 .width(Length::Px(w))
                 .height(Length::Px(status_bar_height))
@@ -1857,7 +1893,9 @@ fn chrome_root(
                 .align(Align::Center)
                 .padding_xy(8.0, 0.0)
                 .child(status_watch),
-        )
+        );
+    }
+    root
 }
 
 /// Layout + paint a (retained) chrome root tree into a [`Scene`] at the window size.
@@ -1932,6 +1970,14 @@ pub(crate) fn paint_drag_overlay(
 /// legibly over a single terminal cell.
 const LINK_HINT_FONT: f32 = 13.0;
 
+/// Vertical band (from a hint target's top edge) the keycap is centered within. A
+/// tall target (a workspace dock spanning its panes) gets its keycap centered on the
+/// header row rather than floating in the middle; a short target (a pane card) gets it
+/// centered on its single row. Roughly one sidebar row tall.
+const HINT_BAND_H: f64 = 40.0;
+/// Small inset from a hint target's left edge so the keycap sits just inside it.
+const HINT_INSET_X: f64 = 2.0;
+
 /// Peak alpha of the visual-bell flash overlay (faded out over the flash window).
 const BELL_FLASH_MAX_ALPHA: u8 = 56;
 
@@ -1996,6 +2042,46 @@ pub(crate) fn paint_link_hints(
     }
 }
 
+/// Paint the universal hint-picker overlay (`prefix+/`): a glowing keycap over every
+/// actionable chrome target, driven by `InputMode::HintPick`. Target bounds are
+/// re-collected from the retained tree each frame and matched to the mode's candidates
+/// by opaque id, so the keycaps track layout. Mirrors [`paint_link_hints`]. No-op when
+/// the picker isn't active.
+pub(crate) fn paint_hint_targets(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let crate::app_state::InputMode::HintPick { candidates } = &state.input_mode else {
+        return;
+    };
+    let Some(tree) = state.chrome_tree.as_ref() else {
+        return;
+    };
+    let bounds_by_id: std::collections::HashMap<heca_grid_ui::HintTargetId, Rectangle> =
+        heca_grid_ui::collect_hint_targets(&tree.root)
+            .into_iter()
+            .collect();
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+    for (label, id) in candidates {
+        let Some(bounds) = bounds_by_id.get(id) else {
+            continue;
+        };
+        let text = label.to_string();
+        let size = heca_grid_ui::keycap_size(LINK_HINT_FONT, &text);
+        // Center the keycap vertically within the top band of the target (so a tall
+        // workspace dock keeps its letter on the header row, not mid-panes), inset a
+        // touch from the left edge.
+        let band = bounds.size.h.min(HINT_BAND_H);
+        let x = bounds.loc.x + HINT_INSET_X;
+        let y = bounds.loc.y + (band - size.h) / 2.0;
+        let cap = Rectangle::new(Point::new(x, y), size);
+        heca_grid_ui::paint_keycap(&mut cx, cap, &text, LINK_HINT_FONT, None);
+    }
+}
+
 /// Lay out the open right-click context menu (sets the widget's resolved font, used
 /// by its panel sizing). Mutable pass, run **before** the scene-texture borrow so
 /// [`paint_context_menu`] can take a shared `&AppState`. No-op when none is open.
@@ -2024,6 +2110,35 @@ pub(crate) fn paint_context_menu(
     };
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
     menu.paint(&mut cx);
+}
+
+/// Lay out the open confirm dialog (sets its resolved font). Mutable pass, run before
+/// the scene-texture borrow so [`paint_confirm_dialog`] can take a shared `&AppState`.
+/// No-op when none is open. Mirrors [`layout_context_menu`].
+pub(crate) fn layout_confirm_dialog(state: &mut crate::app_state::AppState, w: f32, h: f32) {
+    let font = chrome_gui_theme(state).font_size;
+    if let Some(dialog) = state.confirm_dialog.as_mut() {
+        LayoutEngine::new()
+            .base_font(font)
+            .compute(dialog, Size::new(w as f64, h as f64));
+    }
+}
+
+/// Paint the open confirm dialog (scrim + centered panel + OK/Cancel) into the chrome
+/// scene, on top of everything. Run [`layout_confirm_dialog`] first. No-op when none is
+/// open. Mirrors [`paint_context_menu`].
+pub(crate) fn paint_confirm_dialog(
+    state: &crate::app_state::AppState,
+    scene: &mut Scene,
+    w: f32,
+    h: f32,
+    theme: &GuiTheme,
+) {
+    let Some(dialog) = state.confirm_dialog.as_ref() else {
+        return;
+    };
+    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
+    dialog.paint(&mut cx);
 }
 
 /// Peak alpha for a non-current search-match highlight; the current match is bolder.
@@ -2154,7 +2269,7 @@ fn chrome_scene(
     right_sidebar: Option<Flex>,
 ) -> Scene {
     let mut signals = ChromeSignals::default();
-    let mut root = chrome_root(frame, left_sidebar, right_sidebar, &mut signals);
+    let mut root = chrome_root(frame, left_sidebar, right_sidebar, None, None, &mut signals);
     paint_chrome_root(&mut root, frame.w, frame.h, theme)
 }
 
@@ -2334,6 +2449,10 @@ pub(crate) struct RetainedChrome {
     /// is* (pane / column / workspace). Populated during [`build_chrome_root`] and
     /// queried by [`sidebar_drag_source`]/[`sidebar_drop_target`].
     pub(crate) drag_items: DragItemRegistry,
+    /// Maps each hint target's opaque [`HintTargetId`](heca_grid_ui::HintTargetId) to
+    /// the intent the universal picker fires. Populated during [`build_chrome_root`]
+    /// and queried by the `HintPick` enter/activate path.
+    pub(crate) hint_targets: HintTargetRegistry,
 }
 
 /// What a sidebar [`DragItemId`] refers to. The drag framework is domain-neutral
@@ -2375,6 +2494,36 @@ impl DragItemRegistry {
     #[cfg(test)]
     pub(crate) fn items(&self) -> &[ChromeDragItem] {
         &self.items
+    }
+}
+
+/// Build-time registry mapping each hint target's opaque [`HintTargetId`] (id = push
+/// index) to the [`InteractionIntent`](crate::app::interaction::InteractionIntent) the
+/// host fires when its picker letter is chosen. Lives on [`RetainedChrome`]; rebuilt
+/// with the tree. Parallel to [`DragItemRegistry`] — the grid-ui hint framework is
+/// domain-neutral (ids are opaque), and this app-side map gives them meaning.
+#[derive(Default, Clone)]
+pub(crate) struct HintTargetRegistry {
+    intents: Vec<crate::app::interaction::InteractionIntent>,
+}
+
+impl HintTargetRegistry {
+    /// Register an actionable target's intent and return its freshly-assigned id.
+    fn register(
+        &mut self,
+        intent: crate::app::interaction::InteractionIntent,
+    ) -> heca_grid_ui::HintTargetId {
+        let id = heca_grid_ui::HintTargetId::new(self.intents.len());
+        self.intents.push(intent);
+        id
+    }
+
+    /// The intent for `id` (`None` if not from this build).
+    pub(crate) fn get(
+        &self,
+        id: heca_grid_ui::HintTargetId,
+    ) -> Option<&crate::app::interaction::InteractionIntent> {
+        self.intents.get(id.raw())
     }
 }
 
@@ -2792,7 +2941,7 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
 pub(crate) fn build_chrome_root(
     state: &crate::app_state::AppState,
     chrome: ChromeConfig,
-) -> (Flex, ChromeSignals, DragItemRegistry) {
+) -> (Flex, ChromeSignals, DragItemRegistry, HintTargetRegistry) {
     let phys = state.window.inner_size();
     let scale = state.scale_factor as f32;
     let w = phys.width as f32 / scale;
@@ -2802,6 +2951,7 @@ pub(crate) fn build_chrome_root(
     let status = chrome_status(state);
     let mut signals = ChromeSignals::default();
     let mut drag_items = DragItemRegistry::default();
+    let mut hint_targets = HintTargetRegistry::default();
     let event_proxy = state.event_proxy.clone();
     let emit_intent: ChromeIntentEmitter = Rc::new(move |intent| {
         let _ = event_proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
@@ -2812,7 +2962,7 @@ pub(crate) fn build_chrome_root(
 
     let left_w = chrome.left_sidebar_width;
     let left_sidebar = if left_w >= SIDEBAR_EXPANDED_THRESHOLD {
-        let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
+        let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
         Some(build_sidebar_shell(
             &state.sidebar_tree,
             &state.programs,
@@ -2828,18 +2978,18 @@ pub(crate) fn build_chrome_root(
             state.appearance.effective_sidebar_border_radius(&state.theme),
             &mut signals,
             &mut drag_items,
+            &mut hint_targets,
         ))
     } else {
         None
     };
     let right_w = chrome.right_sidebar_width;
     let right_sidebar = if right_w >= SIDEBAR_EXPANDED_THRESHOLD {
-        let sidebar_h = (h - DEFAULT_TAB_BAR_HEIGHT - DEFAULT_STATUS_BAR_HEIGHT).max(0.0);
+        let sidebar_h = (h - chrome.tab_bar_height - chrome.status_bar_height).max(0.0);
         Some(build_right_sidebar_shell(
             right_w,
             sidebar_h,
             right_sidebar_shell_background_color(state),
-            &theme,
             state.appearance.effective_sidebar_gap(&state.theme),
             state.appearance.effective_sidebar_border_style(),
             state.appearance.effective_sidebar_border_width(&state.theme),
@@ -2849,21 +2999,54 @@ pub(crate) fn build_chrome_root(
         None
     };
 
+    // Top-bar collapse toggles (sidebar-fu-14): shown for each mounted sidebar so the
+    // expand/collapse control is always visible (works in both expanded + collapsed).
+    // The arrow flips with the state: expanded → point at the edge (collapse); collapsed
+    // → point away from the edge (expand).
+    let left_toggle = state.show_left_sidebar.then(|| {
+        let glyph = if state.chrome_state.left_visible() {
+            Glyph::ArrowLineLeft
+        } else {
+            Glyph::ArrowLineRight
+        };
+        sidebar_toggle_button(
+            glyph,
+            crate::input::WmAction::SidebarLeft,
+            emit_intent.clone(),
+            theme.colors.muted,
+        )
+    });
+    let right_toggle = state.show_right_sidebar.then(|| {
+        let glyph = if state.chrome_state.right_visible() {
+            Glyph::ArrowLineRight
+        } else {
+            Glyph::ArrowLineLeft
+        };
+        sidebar_toggle_button(
+            glyph,
+            crate::input::WmAction::SidebarRight,
+            emit_intent.clone(),
+            theme.colors.muted,
+        )
+    });
+
     let root = chrome_root(
         &ChromeFrame {
             w,
             h,
-            tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-            status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
+            tab_bar_height: chrome.tab_bar_height,
+            status_bar_height: chrome.status_bar_height,
             status: &status,
             side_bg,
             fg,
         },
         left_sidebar,
         right_sidebar,
+        left_toggle,
+        right_toggle,
         &mut signals,
     );
-    (root, signals, drag_items)
+    (root, signals, drag_items, hint_targets)
 }
 
 /// Feed a pointer-press into the retained chrome tree so widget callbacks can route
@@ -2902,6 +3085,26 @@ pub(crate) fn sidebar_drag_source(
     let tree = state.chrome_tree.as_ref()?;
     let id = heca_grid_ui::drag::source_at(&tree.root, Point::new(pos.0 as f64, pos.1 as f64))?;
     tree.drag_items.get(id).cloned()
+}
+
+/// The deepest sidebar item (pane → column → workspace) under `pos`, regardless of
+/// drag semantics — used to anchor the right-click context menu on whatever the
+/// cursor is over. Unlike [`sidebar_drag_source`] this accepts every registered
+/// item (workspaces are drop-only, so they never appear as a drag source but must
+/// still be right-clickable). Resolves against the **expanded** grid sidebar's
+/// retained tree; the hand-drawn collapsed rail is not covered (it moves onto grid
+/// widgets in the collapsed-rail migration, `app-task-21`).
+pub(crate) fn sidebar_item_at(
+    state: &crate::app_state::AppState,
+    pos: (f32, f32),
+) -> Option<ChromeDragItem> {
+    let tree = state.chrome_tree.as_ref()?;
+    let hit = heca_grid_ui::drag::resolve_at_filtered(
+        &tree.root,
+        Point::new(pos.0 as f64, pos.1 as f64),
+        &|_| true,
+    )?;
+    tree.drag_items.get(hit.id).cloned()
 }
 
 /// The kind of thing being dragged — passed **explicitly** by the caller so drop
@@ -3259,7 +3462,7 @@ mod tests {
     }
 
     #[test]
-    fn sidebar_shell_hosts_header_and_container() {
+    fn sidebar_shell_hosts_container() {
         use crate::app_state::SidebarItemState;
         use crate::sidebar::{SidebarColEntry, SidebarPaneEntry, SidebarTree, SidebarWsEntry};
         use heca_grid_ui::Component;
@@ -3289,8 +3492,9 @@ mod tests {
         chrome
             .workspaces
             .set_active_pane(Some(heca_core::layout::PaneId(1)));
-        // The shell wraps a bracketed Pane that holds [header, WorkspacesContainer];
-        // the container hosts a dock per workspace (so the tree's text is visible).
+        // The shell wraps a bracketed Pane that holds just the WorkspacesContainer (the
+        // collapse toggle moved to the top bar, sidebar-fu-14); the container hosts a
+        // dock per workspace (so the tree's text is visible).
         let shell = super::build_sidebar_shell(
             &tree,
             &heca_config::programs::ProgramsConfig::default(),
@@ -3306,6 +3510,7 @@ mod tests {
             12.0,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
         );
         assert_eq!(
             shell.base().children.len(),
@@ -3321,10 +3526,11 @@ mod tests {
         let pane = &surface.base().children[0];
         assert_eq!(
             pane.base().children.len(),
-            2,
-            "the shell Pane holds [header, WorkspacesContainer body]",
+            1,
+            "the shell Pane holds just the WorkspacesContainer body (the collapse toggle \
+             moved to the top bar, sidebar-fu-14)",
         );
-        let container = &pane.base().children[1];
+        let container = &pane.base().children[0];
         assert!(
             !container.base().children.is_empty(),
             "WorkspacesContainer must host a dock per workspace",
@@ -3382,6 +3588,7 @@ mod tests {
             12.0,
             &mut super::ChromeSignals::default(),
             &mut super::DragItemRegistry::default(),
+            &mut super::HintTargetRegistry::default(),
         );
 
         let scene = super::paint_chrome_root(&mut shell, 280.0, 600.0, &theme);
@@ -3440,6 +3647,7 @@ mod tests {
             12.0,
             &mut super::ChromeSignals::default(),
             &mut drag,
+            &mut super::HintTargetRegistry::default(),
         );
 
         let items = drag.items();

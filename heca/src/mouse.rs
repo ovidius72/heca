@@ -18,10 +18,7 @@ mod target;
 use crate::app::interaction::InteractionSource;
 use crate::app::terminal_host::should_intercept_selection_gesture;
 use crate::app_state::{AppDragPayload, AppState, InteractiveMovePhase};
-use crate::chrome::{
-    ChromeConfig, DEFAULT_COLLAPSED_SIDEBAR_WIDTH, DEFAULT_STATUS_BAR_HEIGHT,
-    DEFAULT_TAB_BAR_HEIGHT,
-};
+use crate::chrome::ChromeConfig;
 use crate::input::WmAction;
 use heca_core::layout::PaneId;
 use heca_grid_ui::drag::{DEFAULT_DRAG_THRESHOLD_SQ, DragItemId, DragPhase, DragSurfaceId};
@@ -144,6 +141,101 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
     state.needs_redraw = true;
 }
 
+/// Open the right-click context menu for a sidebar `item` (pane / column /
+/// workspace) at `pos`: textual **add / remove** entries acting on that explicit
+/// target. Each entry writes its [`WmAction`] into the shared sink
+/// (`state.context_menu_action`), drained + dispatched by the event loop — the same
+/// path as the content-pane menu. Delete entries dispatch directly (styled
+/// `danger`), matching the content menu's "Close pane" convention. Resolves against
+/// the expanded grid sidebar only (see [`crate::chrome::sidebar_item_at`]).
+fn open_sidebar_context_menu(
+    state: &mut AppState,
+    item: crate::chrome::ChromeDragItem,
+    pos: (f32, f32),
+) {
+    use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+
+    let sink = state.context_menu_action.clone();
+    let entry = |label: &str, icon_action: &str, action: WmAction| -> MenuEntry {
+        let s = sink.clone();
+        let mut e = MenuEntry::new(label, move || {
+            *s.borrow_mut() = Some(action.clone());
+        });
+        if let Some(glyph) = crate::actions::ActionRegistry::icon(icon_action) {
+            e = e.icon(glyph);
+        }
+        e
+    };
+
+    let mut menu = ContextMenu::new();
+    match item {
+        crate::chrome::ChromeDragItem::Pane(pane_id) => {
+            if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id) {
+                menu = menu.entry(entry(
+                    "New pane",
+                    "split_vertical",
+                    WmAction::AddPaneToColumn { ws_idx, col_idx },
+                ));
+            }
+            menu = menu.entry(
+                entry("Delete pane", "close", WmAction::ClosePaneById { pane_id }).danger(true),
+            );
+        }
+        crate::chrome::ChromeDragItem::Column { ws, col } => {
+            menu = menu.entry(entry(
+                "New pane",
+                "split_vertical",
+                WmAction::AddPaneToColumn {
+                    ws_idx: ws,
+                    col_idx: col,
+                },
+            ));
+            menu = menu.entry(entry(
+                "New column",
+                "split_horizontal",
+                WmAction::AddColumnToWorkspace { ws_idx: ws },
+            ));
+            menu = menu.entry(
+                entry(
+                    "Delete column",
+                    "close",
+                    WmAction::DeleteColumn {
+                        ws_idx: ws,
+                        col_idx: col,
+                    },
+                )
+                .danger(true),
+            );
+        }
+        crate::chrome::ChromeDragItem::Workspace { ws } => {
+            menu = menu.entry(entry(
+                "New column",
+                "split_horizontal",
+                WmAction::AddColumnToWorkspace { ws_idx: ws },
+            ));
+            menu = menu.entry(entry(
+                "New workspace",
+                "create_workspace",
+                WmAction::CreateWorkspace,
+            ));
+            menu = menu.entry(
+                entry(
+                    "Delete workspace",
+                    "close",
+                    WmAction::DeleteWorkspace { ws_idx: ws },
+                )
+                .danger(true),
+            );
+        }
+    }
+
+    menu = menu
+        .anchor(heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64))
+        .open(true);
+    state.context_menu = Some(menu);
+    state.needs_redraw = true;
+}
+
 /// Sync the current drag mode with modifier state changes.
 ///
 /// This keeps move/swap behavior live while the user presses or releases Shift.
@@ -195,6 +287,23 @@ pub fn on_mouse_input(
             // When a floating pane is modal, block all sidebar interaction.
             // No clicks, no drags, no mode changes.
             if crate::app::interaction::is_floating_domain(&state.session) {
+                return None;
+            }
+
+            // Right sidebar chrome click (e.g. the collapse toggle). The right sidebar
+            // has no drag surface yet (app-task-21); dispatch the press into the retained
+            // chrome tree so its widget callbacks (the caret's `on_click`) fire, then
+            // consume it so it doesn't leak to the content behind.
+            if point_in_right_sidebar(state, pos) {
+                crate::chrome::chrome_dispatch_press(state, pos);
+                return None;
+            }
+
+            // Top bar chrome click (the sidebar collapse toggles, sidebar-fu-14). Same
+            // as the right sidebar: dispatch into the retained chrome tree and consume.
+            // (No tab-click feature today, so swallowing an empty-band click is harmless.)
+            if point_in_top_bar(state, pos) {
+                crate::chrome::chrome_dispatch_press(state, pos);
                 return None;
             }
 
@@ -324,6 +433,17 @@ pub fn on_mouse_input(
             return None;
         }
         (MouseButton::Right, ElementState::Released) if resize::on_release(state) => {
+            return None;
+        }
+        // Right-click on a sidebar item (pane / column / workspace) → its add/remove
+        // context menu, anchored on the clicked item. Checked before the content
+        // path since the sidebar sits outside the pane area anyway.
+        (MouseButton::Right, ElementState::Pressed)
+            if crate::chrome::sidebar_item_at(state, pos).is_some() =>
+        {
+            if let Some(item) = crate::chrome::sidebar_item_at(state, pos) {
+                open_sidebar_context_menu(state, item, pos);
+            }
             return None;
         }
         // Right-click on a content pane (not on a resize divider) → context menu.
@@ -463,20 +583,43 @@ fn content_area_origin(state: &AppState) -> (f32, f32) {
     (r.loc.x as f32, r.loc.y as f32)
 }
 
+/// Whether `pos` (logical window coords) is over the **right sidebar** region — the
+/// far-right band `[win_w - right_w, win_w]` between the top and bottom bars. The right
+/// sidebar has no drag surface yet (app-task-21); the press handler uses this to route
+/// its clicks straight into the retained chrome tree so its widgets (the collapse
+/// toggle) receive them. `false` when the right sidebar is hidden / zero-width.
+fn point_in_right_sidebar(state: &AppState, pos: (f32, f32)) -> bool {
+    let chrome = chrome_config(state);
+    let right_w = chrome.right_sidebar_width;
+    if right_w <= 0.0 {
+        return false;
+    }
+    let (win_w, win_h) = window_logical_size(state);
+    let x_start = (win_w - right_w).max(0.0);
+    let top = chrome.tab_bar_height;
+    let bottom = (win_h - chrome.status_bar_height).max(top);
+    pos.0 >= x_start && pos.0 <= win_w && pos.1 >= top && pos.1 <= bottom
+}
+
+/// Whether `pos` is over the **top bar** band `[0, tab_bar_height]`. The top bar hosts
+/// the sidebar collapse toggles (sidebar-fu-14) as chrome-tree widgets; the press
+/// handler routes its clicks into the tree so those toggles receive them. `false` when
+/// the top bar is hidden.
+fn point_in_top_bar(state: &AppState, pos: (f32, f32)) -> bool {
+    let chrome = chrome_config(state);
+    if chrome.tab_bar_height <= 0.0 {
+        return false;
+    }
+    let (win_w, _win_h) = window_logical_size(state);
+    pos.0 >= 0.0 && pos.0 <= win_w && pos.1 >= 0.0 && pos.1 <= chrome.tab_bar_height
+}
+
 fn chrome_config(state: &AppState) -> ChromeConfig {
     ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: if state.chrome_state.left_visible() {
-            state.chrome_state.left_size()
-        } else {
-            DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-        },
-        right_sidebar_width: if state.chrome_state.right_visible() {
-            state.chrome_state.right_size()
-        } else {
-            DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-        },
+        tab_bar_height: state.tab_bar_height(),
+        status_bar_height: state.status_bar_height(),
+        left_sidebar_width: state.left_sidebar_width(),
+        right_sidebar_width: state.right_sidebar_width(),
         sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     }
 }

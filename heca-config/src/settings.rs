@@ -83,6 +83,20 @@ fn default_terminal_scroll_animations() -> bool {
     true
 }
 
+/// Chrome regions are shown by default; a `show_*` toggle set to `false` fully
+/// hides that region (the sidebar collapses to `RegionMode::Hidden`; the tab /
+/// status bar collapses to zero height and the pane area reclaims the space).
+fn default_show_chrome_region() -> bool {
+    true
+}
+
+/// Destructive actions (close pane / delete column / delete workspace) ask for
+/// confirmation by default; a `confirm_*` toggle set to `false` performs the action
+/// immediately without the dialog.
+fn default_confirm_destructive() -> bool {
+    true
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -184,6 +198,34 @@ pub struct SettingsConfig {
     /// When false, animated scroll APIs degrade to immediate scroll.
     #[serde(default = "default_terminal_scroll_animations", alias = "terminal-scroll-animations")]
     pub terminal_scroll_animations: bool,
+
+    /// Show the left sidebar region on startup. `false` starts it hidden
+    /// (`RegionMode::Hidden`); the runtime toggle can still reveal it.
+    #[serde(default = "default_show_chrome_region", alias = "show-left-sidebar")]
+    pub show_left_sidebar: bool,
+    /// Show the right sidebar region on startup. `false` starts it hidden.
+    #[serde(default = "default_show_chrome_region", alias = "show-right-sidebar")]
+    pub show_right_sidebar: bool,
+    /// Show the top bar (tab bar). `false` fully hides it (zero height) and the
+    /// pane area reclaims the space.
+    #[serde(default = "default_show_chrome_region", alias = "show-top-bar")]
+    pub show_top_bar: bool,
+    /// Show the bottom bar (status bar). `false` fully hides it (zero height).
+    #[serde(default = "default_show_chrome_region", alias = "show-bottom-bar")]
+    pub show_bottom_bar: bool,
+
+    /// Ask for confirmation (a dialog) before closing a pane. `false` closes
+    /// immediately.
+    #[serde(default = "default_confirm_destructive", alias = "confirm-close-pane")]
+    pub confirm_close_pane: bool,
+    /// Ask for confirmation before deleting a column (and its panes). `false`
+    /// deletes immediately.
+    #[serde(default = "default_confirm_destructive", alias = "confirm-delete-column")]
+    pub confirm_delete_column: bool,
+    /// Ask for confirmation before deleting a workspace (and its contents). `false`
+    /// deletes immediately.
+    #[serde(default = "default_confirm_destructive", alias = "confirm-delete-workspace")]
+    pub confirm_delete_workspace: bool,
 }
 
 impl Default for SettingsConfig {
@@ -212,6 +254,13 @@ impl Default for SettingsConfig {
             terminal_font_zoom_step: default_terminal_font_zoom_step(),
             mouse_wheel_change_font_size: default_mouse_wheel_change_font_size(),
             terminal_scroll_animations: default_terminal_scroll_animations(),
+            show_left_sidebar: default_show_chrome_region(),
+            show_right_sidebar: default_show_chrome_region(),
+            show_top_bar: default_show_chrome_region(),
+            show_bottom_bar: default_show_chrome_region(),
+            confirm_close_pane: default_confirm_destructive(),
+            confirm_delete_column: default_confirm_destructive(),
+            confirm_delete_workspace: default_confirm_destructive(),
         }
     }
 }
@@ -244,6 +293,49 @@ mod tests {
         assert!(s.terminal_mouse);
         assert_eq!(s.terminal_wheel_scroll_lines, 3);
         assert!(s.terminal_scroll_animations);
+        // Chrome regions are all shown by default.
+        assert!(s.show_left_sidebar);
+        assert!(s.show_right_sidebar);
+        assert!(s.show_top_bar);
+        assert!(s.show_bottom_bar);
+        // Destructive actions confirm by default.
+        assert!(s.confirm_close_pane);
+        assert!(s.confirm_delete_column);
+        assert!(s.confirm_delete_workspace);
+    }
+
+    #[test]
+    fn test_confirm_destructive_toggles_parse() {
+        let s: SettingsConfig = toml::from_str(
+            "confirm_close_pane = false\n\
+             confirm_delete_column = false\n\
+             confirm_delete_workspace = false\n",
+        )
+        .expect("confirm toggles should parse");
+        assert!(!s.confirm_close_pane);
+        assert!(!s.confirm_delete_column);
+        assert!(!s.confirm_delete_workspace);
+    }
+
+    #[test]
+    fn test_show_chrome_region_toggles_parse() {
+        let s: SettingsConfig = toml::from_str(
+            "show_left_sidebar = false\n\
+             show_right_sidebar = false\n\
+             show_top_bar = false\n\
+             show_bottom_bar = false\n",
+        )
+        .expect("chrome region toggles should parse");
+        assert!(!s.show_left_sidebar);
+        assert!(!s.show_right_sidebar);
+        assert!(!s.show_top_bar);
+        assert!(!s.show_bottom_bar);
+
+        // Kebab-case aliases parse too.
+        let k: SettingsConfig =
+            toml::from_str("show-top-bar = false\n").expect("kebab alias should parse");
+        assert!(!k.show_top_bar);
+        assert!(k.show_bottom_bar);
     }
 
     #[test]

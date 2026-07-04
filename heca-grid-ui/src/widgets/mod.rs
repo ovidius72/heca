@@ -67,7 +67,7 @@ pub use item_group::ItemGroup;
 pub use key_hint::{HintPlacement, KeyHint, keycap_size, paint_keycap};
 pub use label::Label;
 pub use marker_group::MarkerGroup;
-pub use modal::Modal;
+pub use modal::{Modal, ModalButton};
 pub use pane::{Pane, PaneFrame};
 pub use progress::ProgressBar;
 pub use rail_cell::RailCell;

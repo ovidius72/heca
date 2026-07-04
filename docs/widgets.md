@@ -1150,29 +1150,42 @@ Tooltip::new(
 
 A centered **confirm / alert dialog** over a dimming scrim. Like `Select`, it captures input
 while open — it reports `overlay_active` + is `focusable` only while open, so the host routes
-pointer/keys to it first; its content (title, message, one or two buttons) is **drawn + hit-tested
-manually** on the overlay layer (no child subtree to relocate). Open/close is a host-owned
-`Signal<bool>` (mouse/keyboard/RPC all drive it). Dismissal: the buttons, **Esc** (= cancel), or a
-**scrim** click (= cancel) — each fires its callback and closes.
+pointer/keys to it first; its content (title, message, and a row of **N action buttons**) is
+**drawn + hit-tested manually** on the overlay layer (no child subtree to relocate). Open/close is
+a host-owned `Signal<bool>` (mouse/keyboard/RPC all drive it). Dismissal: a button, **Esc**
+(= cancel), or a **scrim** click (= cancel) — each fires its callback and closes.
+
+**Buttons are data-driven `ModalButton`s.** One button is **focused** (an accent focus ring);
+the host moves focus and activates it (`focus_next` / `focus_prev` / `activate_focused`), each
+button may carry a **letter shortcut** shown as `Label (x)` and fired by `activate_shortcut(c)`,
+and `request_cancel()` activates the cancel button (or closes if dismissible). Initial focus is
+the cancel button (safe default for a destructive dialog).
 
 - **Construct**: `Modal::new(title, message)`.
-- **Builders**: `.confirm(label, impl Fn())` (default `OK`), `.cancel(label, impl Fn())`
-  (optional; Esc/scrim also cancel), `.danger(bool)` (danger-tinted confirm),
-  `.dismissible(bool)` (default `true`; `false` = **forced-decision** — Esc/scrim are swallowed,
-  only the buttons close it), `.open(bool)`.
+- **Buttons**: `.button(ModalButton)` (general, N buttons). A `ModalButton::new(label, impl Fn())`
+  takes `.shortcut(char)` (the `(x)` label + host-fired key), `.danger(bool)` (destructive tint),
+  and `.cancel()` (Esc / scrim activate it; takes initial focus).
+- **Convenience builders**: `.confirm(label, impl Fn())` (primary button), `.cancel(label, impl Fn())`,
+  `.danger(bool)` (tints the primary), `.dismissible(bool)` (default `true`; `false` =
+  **forced-decision** — Esc/scrim are swallowed, only the buttons close it), `.open(bool)`.
+- **Host-driven keyboard** (the host supplies modifier awareness the widget lacks):
+  `focus_next()` / `focus_prev()`, `activate_focused()`, `activate_shortcut(char) -> bool`,
+  `request_cancel()`.
 - **Accessor**: `.open_signal() -> Signal<bool>` — bind a trigger to it to show the dialog.
 
 ```rust
 let modal = Modal::new("Delete pane?", "This action cannot be undone.")
-    .confirm("Delete", || wm.delete_focused())
-    .cancel("Cancel", || {})
-    .danger(true);
+    .button(ModalButton::new("Cancel", || {}).shortcut('n').cancel())
+    .button(ModalButton::new("Delete", || wm.delete_focused()).shortcut('y').danger(true));
 let open = modal.open_signal();
 // … Button::destructive("DELETE").on_click(move || open.set(true)); add `modal` to the tree
 ```
 
 > Host wiring: while `focus.overlay_active(root)`, route pointer **and keys** to the overlay
-> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog.
+> (`focus.deliver_to_overlay(root, &ev)`) so Esc/Enter reach the dialog. `Modal::event` already
+> maps Tab / ←→ / Enter / Space / Char / Esc; a host with modifier state can additionally call
+> `focus_prev()` for **Shift+Tab** and `focus_next/prev()` for **Ctrl+l / Ctrl+h** (as `heca` does
+> in `events.rs`).
 
 ### CommandPalette
 

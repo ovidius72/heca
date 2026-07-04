@@ -90,13 +90,9 @@ pub(crate) enum InteractionIntent {
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
     FocusPane { pane_id: PaneId },
-    /// Focus a specific workspace (from sidebar click).
+    /// Focus a specific workspace (from a sidebar click or the hint picker).
     ///
     /// Dispatched to `WmAction::FocusWorkspace` in `dispatch_action`.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "constructed from mouse/sidebar in future wiring pass")
-    )]
     FocusWorkspace { ws_idx: usize },
     /// Enter sidebar navigation mode (from keyboard shortcut or click).
     ///
@@ -205,7 +201,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn
         | WmAction::DeleteColumn { .. }
+        | WmAction::DeleteCurrentColumn
         | WmAction::AddPaneToColumn { .. }
+        | WmAction::AddColumnToWorkspace { .. }
         // Sidebar actions: blocked when Floating
         | WmAction::SidebarLeft
         | WmAction::SidebarRight
@@ -307,6 +305,9 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         // Follow-link overlay targets the focused terminal's links; no layout
         // impact, so it stays reachable from any focus domain (incl. floating).
         WmAction::FollowLink => ActionPolicy::Global,
+        // Entering the universal hint picker is a harmless overlay; the chosen
+        // target's intent is separately policy-checked when it dispatches.
+        WmAction::HintPick => ActionPolicy::Global,
         // App-wide terminal font zoom changes only font metrics/PTY reflow — no
         // tiled/floating layout impact, so it must work in any focus domain.
         WmAction::AppFontZoom { .. } => ActionPolicy::Global,
@@ -315,6 +316,20 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
+        // Chrome shell region show/hide (sidebar-fu-6): acts on chrome geometry,
+        // independent of the pane tiled/floating domain — reachable from any focus.
+        WmAction::ShowLeftSidebar
+        | WmAction::HideLeftSidebar
+        | WmAction::ToggleLeftSidebar
+        | WmAction::ShowRightSidebar
+        | WmAction::HideRightSidebar
+        | WmAction::ToggleRightSidebar
+        | WmAction::ShowTopBar
+        | WmAction::HideTopBar
+        | WmAction::ToggleTopBar
+        | WmAction::ShowBottomBar
+        | WmAction::HideBottomBar
+        | WmAction::ToggleBottomBar => ActionPolicy::Global,
 
         // ── Source-dependent: may be allowed from some sources ──
         WmAction::FocusPane { .. } => ActionPolicy::SourceDependent,

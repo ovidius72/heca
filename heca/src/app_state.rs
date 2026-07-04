@@ -126,6 +126,14 @@ pub enum InputMode {
     /// matches (so `n`/`N` navigate in selection mode), Esc cancels. The query +
     /// matches live in [`SearchState`], not here.
     Search,
+    /// Universal leader/vimium **hint picker** (entered with `prefix+/`): every
+    /// actionable chrome target gets a letter (a keycap stamped over its bounds);
+    /// the next keypress fires that target's intent. Each candidate carries the
+    /// opaque [`HintTargetId`](heca_grid_ui::HintTargetId) the host maps back to an
+    /// intent via the retained tree's hint-target registry. Any other key / Esc exits.
+    HintPick {
+        candidates: Vec<(char, heca_grid_ui::HintTargetId)>,
+    },
 }
 
 /// Active scrollback search: the query, its matches across the searched pane's
@@ -695,6 +703,16 @@ pub struct AppState {
     /// an event into the menu (grid-ui widgets cannot dispatch `WmAction`s
     /// directly — the closure → action sink bridges that).
     pub context_menu_action: std::rc::Rc<std::cell::RefCell<Option<WmAction>>>,
+    /// The confirm dialog shown while [`InputMode::ConfirmDelete`] is active — a
+    /// host-owned [`Modal`](heca_grid_ui::widgets::Modal) overlay (scrim + OK/Cancel),
+    /// laid out/painted each frame and fed pointer events so a destructive action can
+    /// be confirmed by click as well as by keyboard (y/Enter/n/Esc). `None` when no
+    /// confirm is pending.
+    pub confirm_dialog: Option<heca_grid_ui::widgets::Modal>,
+    /// The dialog's click result: its Confirm button writes `Some(true)`, Cancel /
+    /// scrim / Esc write `Some(false)`. Drained by the event loop, which then resolves
+    /// the pending `ConfirmDelete` (dispatch-or-cancel) exactly like the keyboard path.
+    pub confirm_dialog_result: std::rc::Rc<std::cell::RefCell<Option<bool>>>,
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
@@ -727,6 +745,28 @@ pub struct AppState {
     pub mouse_wheel_change_font_size: bool,
     /// Whether backend-side discrete terminal viewport animations are enabled.
     pub terminal_scroll_animations_enabled: bool,
+    /// Mount the left sidebar region at all, from `[settings] show_left_sidebar`.
+    /// When false the region is fully hidden (zero width) regardless of the
+    /// runtime expand/rail mode — a hard config gate, distinct from the runtime
+    /// `prefix`-toggle. See [`AppState::left_sidebar_width`].
+    pub show_left_sidebar: bool,
+    /// Mount the right sidebar region at all, from `[settings] show_right_sidebar`.
+    /// See [`AppState::right_sidebar_width`].
+    pub show_right_sidebar: bool,
+    /// Show the top bar (tab bar) from `[settings] show_top_bar`. When false the
+    /// tab bar collapses to zero height (see [`AppState::tab_bar_height`]).
+    pub show_top_bar: bool,
+    /// Show the bottom bar (status bar) from `[settings] show_bottom_bar`. When
+    /// false the status bar collapses to zero height (see
+    /// [`AppState::status_bar_height`]).
+    pub show_bottom_bar: bool,
+    /// Confirm before closing a pane (`[settings] confirm_close_pane`). Read by the
+    /// centralized `request_destructive` chokepoint.
+    pub confirm_close_pane: bool,
+    /// Confirm before deleting a column (`[settings] confirm_delete_column`).
+    pub confirm_delete_column: bool,
+    /// Confirm before deleting a workspace (`[settings] confirm_delete_workspace`).
+    pub confirm_delete_workspace: bool,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).
@@ -747,6 +787,52 @@ pub struct AppState {
 impl AppState {
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
+    }
+
+    /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
+    /// hidden via `[settings] show_top_bar`. Chrome layout/hit-testing read this
+    /// so a hidden bar reclaims its space everywhere consistently.
+    pub fn tab_bar_height(&self) -> f32 {
+        if self.show_top_bar {
+            crate::chrome::DEFAULT_TAB_BAR_HEIGHT
+        } else {
+            0.0
+        }
+    }
+
+    /// Effective status-bar (bottom bar) height: the default when shown, `0.0`
+    /// when hidden via `[settings] show_bottom_bar`.
+    pub fn status_bar_height(&self) -> f32 {
+        if self.show_bottom_bar {
+            crate::chrome::DEFAULT_STATUS_BAR_HEIGHT
+        } else {
+            0.0
+        }
+    }
+
+    /// Effective left-sidebar width for layout/hit-testing. `0.0` when the region
+    /// is unmounted via `[settings] show_left_sidebar`; otherwise the expanded
+    /// width, or the collapsed-rail width when the runtime mode is not expanded.
+    pub fn left_sidebar_width(&self) -> f32 {
+        if !self.show_left_sidebar {
+            0.0
+        } else if self.chrome_state.left_visible() {
+            self.chrome_state.left_size()
+        } else {
+            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
+        }
+    }
+
+    /// Effective right-sidebar width for layout/hit-testing. `0.0` when the region
+    /// is unmounted via `[settings] show_right_sidebar`.
+    pub fn right_sidebar_width(&self) -> f32 {
+        if !self.show_right_sidebar {
+            0.0
+        } else if self.chrome_state.right_visible() {
+            self.chrome_state.right_size()
+        } else {
+            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
+        }
     }
 
     /// A first-party [`host`](crate::host) API handle (`app.on` / `app.state`) over

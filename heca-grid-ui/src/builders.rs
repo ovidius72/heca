@@ -91,6 +91,24 @@ pub trait LayoutExt: Component + Sized {
         s.padding_y = Some(y);
         self
     }
+    /// Inner padding (both axes) from a theme [`Spacing`](crate::style::Spacing) token —
+    /// resolved to px from the font at layout. Prefer this over hand-computed px.
+    fn pad_all(mut self, s: crate::style::Spacing) -> Self {
+        let st = &mut self.base_mut().style;
+        st.pad_spacing_x = Some(s);
+        st.pad_spacing_y = Some(s);
+        self
+    }
+    /// Horizontal (left+right) padding from a theme [`Spacing`](crate::style::Spacing) token.
+    fn pad_x(mut self, s: crate::style::Spacing) -> Self {
+        self.base_mut().style.pad_spacing_x = Some(s);
+        self
+    }
+    /// Vertical (top+bottom) padding from a theme [`Spacing`](crate::style::Spacing) token.
+    fn pad_y(mut self, s: crate::style::Spacing) -> Self {
+        self.base_mut().style.pad_spacing_y = Some(s);
+        self
+    }
     /// Width along the main/cross axis.
     fn width(mut self, w: Length) -> Self {
         self.base_mut().style.width = w;
@@ -189,6 +207,22 @@ pub trait DragExt: Component + Sized {
 
 /// Every component gets the drag/drop builders for free.
 impl<T: Component + Sized> DragExt for T {}
+
+/// Opt a widget into the universal leader/vimium **hint picker**: it gets assigned
+/// a letter and, on the keypress, the host fires the intent it mapped `id` to.
+///
+/// Domain-neutral like [`DragExt`]: the id is opaque and the app owns the id→intent
+/// map. Enumerated by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
+pub trait HintExt: Component + Sized {
+    /// Make this widget a **hint target** carrying opaque `id`.
+    fn hint_target(mut self, id: crate::hint::HintTargetId) -> Self {
+        self.base_mut().hint_target = Some(id);
+        self
+    }
+}
+
+/// Every component gets the hint builder for free.
+impl<T: Component + Sized> HintExt for T {}
 
 /// Components that contain children.
 pub trait Parent: Component + Sized {
