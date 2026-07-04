@@ -385,6 +385,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::ClosePane, handle_close_pane);
     registry.register(&WmAction::PaneSelect, handle_pane_select);
     registry.register(&WmAction::FollowLink, handle_follow_link);
+    registry.register(&WmAction::HintPick, handle_hint_pick);
     registry.register(&WmAction::SwapPane, handle_swap_pane);
     registry.register(&WmAction::SwapAndFocusPane, handle_swap_and_focus_pane);
     registry.register(
@@ -430,6 +431,23 @@ pub fn build_registry() -> ActionRegistry {
         },
         handle_set_region_visible,
     );
+    // Chrome region show/hide mounted-gate (sidebar-fu-6) — 12 unit actions, one handler.
+    for action in [
+        &WmAction::ShowLeftSidebar,
+        &WmAction::HideLeftSidebar,
+        &WmAction::ToggleLeftSidebar,
+        &WmAction::ShowRightSidebar,
+        &WmAction::HideRightSidebar,
+        &WmAction::ToggleRightSidebar,
+        &WmAction::ShowTopBar,
+        &WmAction::HideTopBar,
+        &WmAction::ToggleTopBar,
+        &WmAction::ShowBottomBar,
+        &WmAction::HideBottomBar,
+        &WmAction::ToggleBottomBar,
+    ] {
+        registry.register(action, handle_set_chrome_region_shown);
+    }
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::RenameColumn, handle_rename_column);
     registry.register(
@@ -548,6 +566,10 @@ pub fn build_registry() -> ActionRegistry {
         },
         handle_add_pane_to_column,
     );
+    registry.register(
+        &WmAction::AddColumnToWorkspace { ws_idx: 0 },
+        handle_add_column_to_workspace,
+    );
 
     // ── Destructive ──
     registry.register(
@@ -560,6 +582,10 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(
         &WmAction::DeleteWorkspace { ws_idx: 0 },
         handle_delete_workspace,
+    );
+    registry.register(
+        &WmAction::DeleteCurrentColumn,
+        handle_delete_current_column,
     );
 
     // ── Take ──

@@ -70,6 +70,17 @@ impl LayoutEngine {
             }
         };
         c.base_mut().font = resolved;
+        // Resolve theme spacing tokens (font-relative) into concrete padding px, so a
+        // container takes its padding from the theme instead of a hand-computed value.
+        {
+            let s = &mut c.base_mut().style;
+            if let Some(sp) = s.pad_spacing_x {
+                s.padding_x = Some(resolved * sp.scale());
+            }
+            if let Some(sp) = s.pad_spacing_y {
+                s.padding_y = Some(resolved * sp.scale());
+            }
+        }
         c.remeasure();
         let style = c.taffy_style();
         let child_count = c.base().children.len();

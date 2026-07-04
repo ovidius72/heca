@@ -70,34 +70,9 @@ pub(crate) fn click_action(state: &mut AppState, pos: (f32, f32)) -> Option<WmAc
                 WmAction::DeleteWorkspace { .. } | WmAction::DeleteColumn { .. }
             );
             if is_delete {
-                let message = match &button {
-                    WmAction::DeleteWorkspace { ws_idx } => {
-                        let ws_label = if let Some(ws) = state.session.workspaces.get(*ws_idx)
-                            && let Some(ref name) = ws.name
-                        {
-                            name.clone()
-                        } else {
-                            format!("workspace {}", ws_idx + 1)
-                        };
-                        format!("Delete {}? (y/n)", ws_label)
-                    }
-                    WmAction::DeleteColumn { ws_idx, col_idx } => {
-                        let ws_label = if let Some(ws) = state.session.workspaces.get(*ws_idx)
-                            && let Some(ref name) = ws.name
-                        {
-                            name.clone()
-                        } else {
-                            format!("ws {}", ws_idx + 1)
-                        };
-                        format!("Delete column {} from {}? (y/n)", col_idx + 1, ws_label)
-                    }
-                    _ => unreachable!("DeleteWorkspace/DeleteColumn guaranteed by is_delete check"),
-                };
-                state.input_mode = crate::app_state::InputMode::ConfirmDelete {
-                    message,
-                    action: Box::new(button),
-                    resume_sidebar: true,
-                };
+                // Centralized: confirm (per config) or delete now, message generated
+                // by the chokepoint.
+                crate::handlers::request_destructive(state, button, true);
                 return None;
             }
 

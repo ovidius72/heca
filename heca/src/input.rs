@@ -222,10 +222,19 @@ pub enum WmAction {
     // ── Pane (unit) ──
     Float,
     ClosePane,
+    /// Delete the "current" column (and all its panes): the focused pane's column
+    /// in normal mode, or the sidebar selection's column in sidebar-nav mode (the
+    /// nav cursor never lands on a column, so `delete_selected` can't reach one).
+    /// Resolves its target at dispatch and routes through the y/n confirm prompt.
+    DeleteCurrentColumn,
     PaneSelect,
     /// Enter follow-link mode: assign a letter to each visible terminal hyperlink
     /// in the focused pane; the next letter opens that link (via `OpenLink`).
     FollowLink,
+    /// Enter the universal hint picker: assign a letter to every actionable chrome
+    /// target and fire the chosen target's intent on the next keypress
+    /// (`InputMode::HintPick`). Entered with `prefix+/`.
+    HintPick,
     SwapPane,
     SwapAndFocusPane,
     /// Enter the "move active column → workspace" letter pick (shows `KeyHint`s over
@@ -371,6 +380,12 @@ pub enum WmAction {
         ws_idx: usize,
         col_idx: usize,
     },
+    /// Add a new column to a specific workspace. Constructed programmatically (the
+    /// sidebar right-click context menu) with an explicit target, so it does not
+    /// depend on the sidebar-nav cursor or a key binding.
+    AddColumnToWorkspace {
+        ws_idx: usize,
+    },
 
     // ── Destructive (parameterized) ──
     DeleteColumn {
@@ -405,6 +420,24 @@ pub enum WmAction {
         visible: bool,
     },
 
+    // ── Chrome region show/hide (sidebar-fu-6) ──
+    // Runtime, bindable toggles for the **mounted-gate** (`AppState.show_*` bools —
+    // fully unmount → zero width/height), a DISTINCT axis from the `RegionMode`
+    // expand/rail toggles (`SidebarLeft`/`SidebarRight`). Unit variants so they are
+    // config-bindable; unbound by default. All route to `handle_set_chrome_region_shown`.
+    ShowLeftSidebar,
+    HideLeftSidebar,
+    ToggleLeftSidebar,
+    ShowRightSidebar,
+    HideRightSidebar,
+    ToggleRightSidebar,
+    ShowTopBar,
+    HideTopBar,
+    ToggleTopBar,
+    ShowBottomBar,
+    HideBottomBar,
+    ToggleBottomBar,
+
     // ── Config ──
     ReloadConfig,
 }
@@ -435,6 +468,8 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "scroll_view_right" => Some(WmAction::ScrollViewRight),
         "float" => Some(WmAction::Float),
         "close" => Some(WmAction::ClosePane),
+        "delete_current_column" => Some(WmAction::DeleteCurrentColumn),
+        "hint_pick" => Some(WmAction::HintPick),
         "resize_increase" => Some(WmAction::ResizeIncrease),
         "resize_decrease" => Some(WmAction::ResizeDecrease),
         "sidebar_left" => Some(WmAction::SidebarLeft),
@@ -450,6 +485,19 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "sidebar_split_in_column" => Some(WmAction::SidebarSplitInColumn),
         "sidebar_zoom_selected_column" => Some(WmAction::SidebarZoomSelectedColumn),
         "sidebar_delete_selected" => Some(WmAction::SidebarDeleteSelected),
+        // Chrome region show/hide (sidebar-fu-6) — mounted-gate, unbound by default.
+        "show_left_sidebar" => Some(WmAction::ShowLeftSidebar),
+        "hide_left_sidebar" => Some(WmAction::HideLeftSidebar),
+        "toggle_left_sidebar" => Some(WmAction::ToggleLeftSidebar),
+        "show_right_sidebar" => Some(WmAction::ShowRightSidebar),
+        "hide_right_sidebar" => Some(WmAction::HideRightSidebar),
+        "toggle_right_sidebar" => Some(WmAction::ToggleRightSidebar),
+        "show_top_bar" => Some(WmAction::ShowTopBar),
+        "hide_top_bar" => Some(WmAction::HideTopBar),
+        "toggle_top_bar" => Some(WmAction::ToggleTopBar),
+        "show_bottom_bar" => Some(WmAction::ShowBottomBar),
+        "hide_bottom_bar" => Some(WmAction::HideBottomBar),
+        "toggle_bottom_bar" => Some(WmAction::ToggleBottomBar),
         "collapse_current_workspace" => Some(WmAction::CollapseCurrentWorkspace),
         "expand_current_workspace" => Some(WmAction::ExpandCurrentWorkspace),
         "toggle_current_workspace_collapsed" => Some(WmAction::ToggleCurrentWorkspaceCollapsed),
@@ -802,8 +850,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ScrollViewRight
         | WmAction::Float
         | WmAction::ClosePane
+        | WmAction::DeleteCurrentColumn
         | WmAction::PaneSelect
         | WmAction::FollowLink
+        | WmAction::HintPick
         | WmAction::SwapPane
         | WmAction::SwapAndFocusPane
         | WmAction::MoveColumnToWorkspacePick
@@ -891,6 +941,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
         | WmAction::AddPaneToColumn { .. }
+        | WmAction::AddColumnToWorkspace { .. }
         | WmAction::DeleteColumn { .. }
         | WmAction::DeleteWorkspace { .. }
         | WmAction::TakePane { .. }
@@ -899,6 +950,18 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::SetRegionVisible { .. }
+        | WmAction::ShowLeftSidebar
+        | WmAction::HideLeftSidebar
+        | WmAction::ToggleLeftSidebar
+        | WmAction::ShowRightSidebar
+        | WmAction::HideRightSidebar
+        | WmAction::ToggleRightSidebar
+        | WmAction::ShowTopBar
+        | WmAction::HideTopBar
+        | WmAction::ToggleTopBar
+        | WmAction::ShowBottomBar
+        | WmAction::HideBottomBar
+        | WmAction::ToggleBottomBar
         | WmAction::PaneTakeAndFocus => 6,
     }
 }
@@ -1402,6 +1465,27 @@ mod tests {
             action_from_name("scrollback_line_down"),
             Some(WmAction::ScrollbackLineDown { amount: 1 })
         );
+    }
+
+    #[test]
+    fn test_chrome_region_show_hide_action_names() {
+        // sidebar-fu-6: the 12 mounted-gate actions resolve from config names.
+        for (name, expected) in [
+            ("show_left_sidebar", WmAction::ShowLeftSidebar),
+            ("hide_left_sidebar", WmAction::HideLeftSidebar),
+            ("toggle_left_sidebar", WmAction::ToggleLeftSidebar),
+            ("show_right_sidebar", WmAction::ShowRightSidebar),
+            ("hide_right_sidebar", WmAction::HideRightSidebar),
+            ("toggle_right_sidebar", WmAction::ToggleRightSidebar),
+            ("show_top_bar", WmAction::ShowTopBar),
+            ("hide_top_bar", WmAction::HideTopBar),
+            ("toggle_top_bar", WmAction::ToggleTopBar),
+            ("show_bottom_bar", WmAction::ShowBottomBar),
+            ("hide_bottom_bar", WmAction::HideBottomBar),
+            ("toggle_bottom_bar", WmAction::ToggleBottomBar),
+        ] {
+            assert_eq!(action_from_name(name), Some(expected), "name: {name}");
+        }
     }
 
     #[test]

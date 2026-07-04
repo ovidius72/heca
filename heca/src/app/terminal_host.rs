@@ -1174,18 +1174,10 @@ fn pane_content_inset(state: &AppState) -> f32 {
 
 fn chrome_config(state: &AppState) -> crate::chrome::ChromeConfig {
     crate::chrome::ChromeConfig {
-        tab_bar_height: crate::chrome::DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: crate::chrome::DEFAULT_STATUS_BAR_HEIGHT,
-        left_sidebar_width: if state.chrome_state.left_visible() {
-            state.chrome_state.left_size()
-        } else {
-            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-        },
-        right_sidebar_width: if state.chrome_state.right_visible() {
-            state.chrome_state.right_size()
-        } else {
-            crate::chrome::DEFAULT_COLLAPSED_SIDEBAR_WIDTH
-        },
+        tab_bar_height: state.tab_bar_height(),
+        status_bar_height: state.status_bar_height(),
+        left_sidebar_width: state.left_sidebar_width(),
+        right_sidebar_width: state.right_sidebar_width(),
         sidebar_gap: state.appearance.effective_sidebar_gap(&state.theme),
     }
 }

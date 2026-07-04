@@ -64,11 +64,13 @@ pane_terminal_font_reset      = "prefix+Ctrl+Shift+0"  # Focused pane follows ap
 
 # ── Pane operations ──
 close = "prefix+x"   # Close active pane
+delete_current_column = "prefix+Shift+x"  # Delete the focused pane's whole column
 float = "prefix+f"   # Toggle pane floating
 
 # ── Quick select / swap ──
 pane_select         = "prefix+q"        # Letters on panes, pick to focus
 follow_link         = "prefix+Shift+o"  # Letters on terminal links, pick to open
+hint_pick           = "prefix+/"        # Letters on all actionable chrome targets, pick to activate
 swap_pane           = "prefix+Shift+m"  # Letters, swap panes (stay here)
 swap_and_focus_pane = "prefix+m"        # Letters, swap panes (follow)
 
@@ -91,6 +93,18 @@ sidebar_expand_toggle = "prefix+Tab"  # Expand/collapse selected sidebar node
 # Sidebar-tree UI collapse state (works even when the sidebar is hidden):
 toggle_current_workspace_collapsed = "prefix+<"
 toggle_current_column_collapsed    = "prefix+("
+
+# ── Chrome region show/hide (mounted-gate, sidebar-fu-6) ──
+# A DISTINCT axis from `sidebar_left`/`sidebar_right` above (which expand/collapse to
+# the rail): these fully MOUNT/UNMOUNT a region (zero width/height), the runtime twin
+# of `[settings] show_left_sidebar/…`. Unbound by default — uncomment to bind. Each
+# region has a show / hide / toggle action:
+#   show_left_sidebar    hide_left_sidebar    toggle_left_sidebar
+#   show_right_sidebar   hide_right_sidebar   toggle_right_sidebar
+#   show_top_bar         hide_top_bar         toggle_top_bar
+#   show_bottom_bar      hide_bottom_bar      toggle_bottom_bar
+# Example:
+# toggle_bottom_bar = "prefix+Ctrl+b"
 
 # ── Workspace navigation ──
 workspace_prev = ["prefix+u", "prefix+Ctrl+p"]
@@ -287,6 +301,12 @@ keys = "z"
 [[keys.mode.bindings]]
 action = "sidebar_delete_selected"
 keys = "d"
+[[keys.mode.bindings]]
+# Delete the selected item's whole column (the cursor never lands on a column
+# itself, so `d` above can only reach a pane/workspace). Shift+d, kept distinct
+# from `d` — a bare "D" folds to "d" in the keymap, so the Shift+ prefix is required.
+action = "delete_current_column"
+keys = "Shift+d"
 [[keys.mode.bindings]]
 action = "sidebar_expand_toggle"
 keys = "Tab"

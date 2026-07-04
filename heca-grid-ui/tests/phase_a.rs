@@ -2466,7 +2466,7 @@ fn modal_captures_input_only_while_open() {
 }
 
 #[test]
-fn modal_enter_confirms_escape_cancels_then_closes() {
+fn modal_enter_activates_focused_escape_cancels() {
     use heca_grid_ui::{Component, Modal};
     use std::cell::Cell;
     use std::rc::Rc;
@@ -2479,16 +2479,44 @@ fn modal_enter_confirms_escape_cancels_then_closes() {
         .cancel("Cancel", move || c2.set(c2.get() + 1))
         .open(true);
 
-    // Enter = confirm → fires + closes.
+    // Initial focus is the Cancel button (safe default) → Enter activates it.
     m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
-    assert_eq!(confirms.get(), 1, "Enter confirms");
+    assert_eq!(cancels.get(), 1, "Enter on the default-focused Cancel cancels");
+    assert_eq!(confirms.get(), 0);
+    assert!(!m.overlay_active(), "closed after cancel");
+
+    // Reopen; move focus to the primary (Delete) → Enter now confirms.
+    m.open_signal().set(true);
+    m.focus_prev(); // Cancel → Delete
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
+    assert_eq!(confirms.get(), 1, "Enter on the focused Delete confirms");
     assert!(!m.overlay_active(), "closed after confirm");
 
-    // Reopen; Esc = cancel → fires + closes.
+    // Reopen; Esc = cancel regardless of focus.
     m.open_signal().set(true);
     m.event(&Event::Key { key: heca_grid_ui::GridKey::Escape, pressed: true });
-    assert_eq!(cancels.get(), 1, "Escape cancels");
+    assert_eq!(cancels.get(), 2, "Escape cancels");
     assert!(!m.overlay_active(), "closed after cancel");
+}
+
+#[test]
+fn modal_letter_shortcut_activates_its_button() {
+    use heca_grid_ui::widgets::ModalButton;
+    use heca_grid_ui::{Component, Modal};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let done = Rc::new(Cell::new(0u32));
+    let d = done.clone();
+    let mut m = Modal::new("Confirm?", "body")
+        .button(ModalButton::new("Cancel", || {}).shortcut('n').cancel())
+        .button(ModalButton::new("Done", move || d.set(d.get() + 1)).shortcut('y'))
+        .open(true);
+
+    // Pressing the letter fires that button (case-insensitive), regardless of focus.
+    m.event(&Event::Key { key: heca_grid_ui::GridKey::Char('Y'), pressed: true });
+    assert_eq!(done.get(), 1, "shortcut y activates Done");
+    assert!(!m.overlay_active(), "closed after shortcut");
 }
 
 #[test]
@@ -2554,9 +2582,10 @@ fn modal_non_dismissible_forces_a_button_choice() {
     m.event(&Event::PointerPressed { pos: Point::new(3.0, 3.0) });
     assert!(m.overlay_active(), "non-dismissible dialog ignores Esc + scrim");
 
-    // Only a button closes it (Enter = confirm).
+    // Only a button closes it. Focus the primary (Apply) and press Enter.
+    m.focus_prev(); // Cancel → Apply
     m.event(&Event::Key { key: heca_grid_ui::GridKey::Enter, pressed: true });
-    assert_eq!(confirms.get(), 1, "a button still works");
+    assert_eq!(confirms.get(), 1, "a focused button still works");
     assert!(!m.overlay_active(), "closed once a button is chosen");
 }
 

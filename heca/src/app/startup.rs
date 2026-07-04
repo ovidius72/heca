@@ -248,8 +248,16 @@ pub(crate) async fn init_state(
     let background = BackgroundLayer::new(&device, surface_format, physical.width, physical.height);
 
     let chrome = ChromeConfig {
-        tab_bar_height: DEFAULT_TAB_BAR_HEIGHT,
-        status_bar_height: DEFAULT_STATUS_BAR_HEIGHT,
+        tab_bar_height: if app_config.config.settings.show_top_bar {
+            DEFAULT_TAB_BAR_HEIGHT
+        } else {
+            0.0
+        },
+        status_bar_height: if app_config.config.settings.show_bottom_bar {
+            DEFAULT_STATUS_BAR_HEIGHT
+        } else {
+            0.0
+        },
         left_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         right_sidebar_width: crate::chrome::DEFAULT_SIDEBAR_WIDTH,
         sidebar_gap: app_config
@@ -306,6 +314,10 @@ pub(crate) async fn init_state(
     // Region visibility/width lives in chrome_state (was SidebarState). Build it
     // first so the ChromeHost can share its event bus. plugin-02: the host is
     // wired but empty — first-party providers register in plugin-03.
+    // Region *mode* (Expanded/Hidden→rail) is the runtime expand/collapse state.
+    // Config's `show_*_sidebar` is a separate hard "mounted" gate applied at render
+    // time (`AppState::{left,right}_sidebar_width`), so the runtime rail toggle stays
+    // independent of whether the region is configured on at all.
     let chrome_state = crate::chrome::SharedChromeState::new(
         app_config.config.appearance.effective_sidebar_width(),
         true,
@@ -365,6 +377,8 @@ pub(crate) async fn init_state(
         search: None,
         context_menu: None,
         context_menu_action: std::rc::Rc::new(std::cell::RefCell::new(None)),
+        confirm_dialog: None,
+        confirm_dialog_result: std::rc::Rc::new(std::cell::RefCell::new(None)),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],
@@ -377,6 +391,13 @@ pub(crate) async fn init_state(
         terminal_font_zoom_step: app_config.config.settings.terminal_font_zoom_step,
         mouse_wheel_change_font_size: app_config.config.settings.mouse_wheel_change_font_size,
         terminal_scroll_animations_enabled: app_config.config.settings.terminal_scroll_animations,
+        show_left_sidebar: app_config.config.settings.show_left_sidebar,
+        show_right_sidebar: app_config.config.settings.show_right_sidebar,
+        show_top_bar: app_config.config.settings.show_top_bar,
+        show_bottom_bar: app_config.config.settings.show_bottom_bar,
+        confirm_close_pane: app_config.config.settings.confirm_close_pane,
+        confirm_delete_column: app_config.config.settings.confirm_delete_column,
+        confirm_delete_workspace: app_config.config.settings.confirm_delete_workspace,
         interactive_move_modifier: app_config.config.settings.interactive_move_modifier,
         prefix_entered_at: None,
         prefix_combo: keymap::KeyCombo::parse(&app_config.config.keys.prefix),

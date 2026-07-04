@@ -80,6 +80,31 @@ impl WidgetSize {
     }
 }
 
+/// A theme-derived **spacing** token for container padding. Resolved to px from the
+/// inherited font at layout time (so it scales with the theme / font zoom) — callers
+/// pick a token instead of hand-computing px. Used via `LayoutExt::pad`/`pad_x`/`pad_y`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Spacing {
+    None,
+    Xs,
+    Sm,
+    Md,
+    Lg,
+}
+
+impl Spacing {
+    /// Multiplier applied to the inherited font size to get the padding in px.
+    pub fn scale(self) -> f32 {
+        match self {
+            Spacing::None => 0.0,
+            Spacing::Xs => 0.25,
+            Spacing::Sm => 0.5,
+            Spacing::Md => 0.85,
+            Spacing::Lg => 1.25,
+        }
+    }
+}
+
 /// A size along one axis.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Length {
@@ -198,6 +223,11 @@ pub struct Style {
     pub padding_x: Option<f32>,
     /// Vertical (top+bottom) padding override; `None` ⇒ use [`padding`](Self::padding).
     pub padding_y: Option<f32>,
+    /// Horizontal padding as a theme [`Spacing`] token — resolved to px from the font at
+    /// layout (sets `padding_x`). `None` ⇒ use the px padding fields.
+    pub pad_spacing_x: Option<Spacing>,
+    /// Vertical padding as a theme [`Spacing`] token — resolved to px from the font at layout.
+    pub pad_spacing_y: Option<Spacing>,
     pub width: Length,
     pub height: Length,
     pub flex_grow: f32,
@@ -241,6 +271,8 @@ impl Default for Style {
             padding: 0.0,
             padding_x: None,
             padding_y: None,
+            pad_spacing_x: None,
+            pad_spacing_y: None,
             width: Length::Auto,
             height: Length::Auto,
             flex_grow: 0.0,

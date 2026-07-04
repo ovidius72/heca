@@ -387,6 +387,32 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             };
             Ok(WmAction::SetRegionVisible { region, visible })
         }
+        // Chrome shell region show/hide mounted-gate (sidebar-fu-6): region ∈
+        // left|right|top|bottom, mode ∈ show|hide|toggle → the matching unit action.
+        "set-chrome-region-shown" => {
+            let region = expect_arg!("region");
+            let mode = expect_arg!("mode");
+            let action = match (region, mode) {
+                ("left", "show") => WmAction::ShowLeftSidebar,
+                ("left", "hide") => WmAction::HideLeftSidebar,
+                ("left", "toggle") => WmAction::ToggleLeftSidebar,
+                ("right", "show") => WmAction::ShowRightSidebar,
+                ("right", "hide") => WmAction::HideRightSidebar,
+                ("right", "toggle") => WmAction::ToggleRightSidebar,
+                ("top", "show") => WmAction::ShowTopBar,
+                ("top", "hide") => WmAction::HideTopBar,
+                ("top", "toggle") => WmAction::ToggleTopBar,
+                ("bottom", "show") => WmAction::ShowBottomBar,
+                ("bottom", "hide") => WmAction::HideBottomBar,
+                ("bottom", "toggle") => WmAction::ToggleBottomBar,
+                (other_region, other_mode) => {
+                    return Err(RpcError::UnknownCommand(format!(
+                        "set-chrome-region-shown region={other_region} mode={other_mode}"
+                    )));
+                }
+            };
+            Ok(action)
+        }
         "collapse-current-workspace" => Ok(WmAction::CollapseCurrentWorkspace),
         "expand-current-workspace" => Ok(WmAction::ExpandCurrentWorkspace),
         "toggle-current-workspace-collapsed" => Ok(WmAction::ToggleCurrentWorkspaceCollapsed),

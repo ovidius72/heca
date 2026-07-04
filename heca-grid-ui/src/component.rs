@@ -123,6 +123,12 @@ pub struct Base {
     /// [`DragExt::drop_target`](crate::builders::DragExt::drop_target); resolved
     /// generically by [`drag::resolve_at`](crate::drag::resolve_at).
     pub drop_target: Option<DragItemId>,
+    /// If set, this widget is a **hint target**: the universal leader/vimium
+    /// picker assigns it a letter and, on the keypress, the host fires the intent
+    /// it mapped this opaque id to. Universal opt-in via
+    /// [`HintExt::hint_target`](crate::builders::HintExt::hint_target); enumerated
+    /// generically by [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
+    pub hint_target: Option<crate::hint::HintTargetId>,
     /// Resolved font size in logical px, written by the layout pass: the widget's
     /// own `style.font_size` if it set one (> 0), otherwise the theme's base font.
     /// Widgets read **this** for text + size, so a global font flows in for free.
@@ -149,6 +155,7 @@ impl Base {
             children: Vec::new(),
             drag_source: None,
             drop_target: None,
+            hint_target: None,
             font: 15.0,
             needs_paint: Cell::new(true),
         }
@@ -381,6 +388,13 @@ pub trait Component {
     /// [`drag::resolve_at`](crate::drag::resolve_at).
     fn as_drop_target(&self) -> Option<DragItemId> {
         self.base().drop_target
+    }
+
+    /// The opaque hint-target id if this widget is a leader/vimium pick target (see
+    /// [`Base::hint_target`]). Default reads the base. Walked by
+    /// [`hint::collect_hint_targets`](crate::hint::collect_hint_targets).
+    fn as_hint_target(&self) -> Option<crate::hint::HintTargetId> {
+        self.base().hint_target
     }
 }
 

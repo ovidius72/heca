@@ -473,6 +473,14 @@ The real target is a:
 
 with region-specific contribution APIs.
 
+**Every region is a container over an ordered `Vec` of items, not a fixed hand-built
+layout.** The left sidebar, right sidebar, top bar, and bottom bar each hold an
+ordered list of contributions (buttons / segments / containers) that first-party code
+*and plugins* append to and reorder (via `app.regions.<region>.add_container(...)` —
+`plugin-task-16`). So any region restyle (`sidebar-fu-9` bottom bar, `sidebar-fu-15`
+top bar, the sidebars) must be **built as a vector-of-items container from the start**,
+so a plugin adding a button is just a push into that region's list — never a rewrite.
+
 Examples:
 
 - left sidebar may host WorkspacesContainer

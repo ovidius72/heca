@@ -22,6 +22,21 @@ These are made over and over. **Violating either = redo.**
   **NEVER** ad-hoc inline `Flex`/`Surface` with hardcoded sizes/colors in the app. Domain-neutral
   (never name a widget for workspace/column/pane). Full rule: **§ "Creating new widgets"** below.
 
+#### FUNDAMENTAL — the styling/layout contract (violating any of these = redo)
+- **Don't invent widgets.** Use the library widgets. Never hand-roll UI in the app.
+- **Only library-provided values.** No hardcoded size/padding/alpha/color/spacing **anywhere** —
+  every value comes from the `Theme` or a widget **variant**. Magic numbers are a bug.
+- **The caller only picks a semantic variant; the widget owns its styling.** e.g.
+  `IconButton::new(icon).size(WidgetSize::Small)` — the widget derives icon px, padding, cell from
+  the theme font internally. Widgets **must expose methods/properties for their variants**.
+- **No calculations on size / layout / position / style — not in call sites, not in `paint`.**
+  The **parent (`Flex`) handles positioning/layout**; the **widget handles its own styling**. No
+  `header_icon_size(font)` / `padding_xy(font*0.5, …)` math at call sites or in rendering.
+- **The library is fixed ONLY on a proposal the maintainer reviews and accepts.** If a widget/theme
+  lacks a variant, token, or method you need, do **NOT** hand-calculate a workaround and do **NOT**
+  change `heca-grid-ui` unilaterally — **propose** the addition (what + why), get the OK, then
+  implement. Track pending gaps in the plan (e.g. BACKLOG `gridui-styling-foundation`).
+
 ### 2. Behavior/keys → register through the registries. NEVER hardcode.
 - **Every action goes through `ActionRegistry`** (`heca/src/actions.rs`): `registry.register(...)` +
   `registry.execute(...)`. **Registry bypasses are bugs.** No direct state mutation from input code.

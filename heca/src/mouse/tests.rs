@@ -1,4 +1,5 @@
 use super::*;
+use crate::chrome::{DEFAULT_STATUS_BAR_HEIGHT, DEFAULT_TAB_BAR_HEIGHT};
 use heca_core::layout::types::{LayoutOptions, Point, Rectangle, Size};
 use heca_core::layout::workspace::Workspace;
 use heca_core::layout::{Column, ColumnId, ColumnWidth, Pane, PaneId};

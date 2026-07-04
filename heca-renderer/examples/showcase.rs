@@ -757,12 +757,23 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         )
         // Modal: a centered confirm dialog over a scrim. The destructive button
         // opens it; Esc / scrim / the dialog buttons close it (keys route to the
-        // overlay while open). The Modal renders nothing until opened.
+        // overlay while open). N data-driven `ModalButton`s each carry a letter
+        // shortcut shown as `Label (x)`: Tab / ←→ move the focus ring, Enter/Space
+        // activate the focused one, and the letter fires it directly. Cancel takes
+        // initial focus (safe default for a destructive dialog). Renders nothing
+        // until opened.
         .child({
             let modal = Modal::new("Delete pane?", "This action cannot be undone.")
-                .confirm("Delete", || println!("[showcase] pane deleted"))
-                .cancel("Cancel", || println!("[showcase] cancelled"))
-                .danger(true)
+                .button(
+                    ModalButton::new("Cancel", || println!("[showcase] cancelled"))
+                        .shortcut('n')
+                        .cancel(),
+                )
+                .button(
+                    ModalButton::new("Delete", || println!("[showcase] pane deleted"))
+                        .shortcut('y')
+                        .danger(true),
+                )
                 // Destructive → force an explicit choice: Esc / scrim won't dismiss.
                 .dismissible(false);
             let open = modal.open_signal();

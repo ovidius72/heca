@@ -1093,21 +1093,296 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
 > clippy clean. Full detail: `handoff-sidebar-nav-task10a.md`.
 
 **Sidebar follow-ups (arising from task-10a live testing — 2026-07-03):**
-- [ ] **sidebar-fu-1** — Collapsed rail: pane initials not updated on rename.
-  `collapsed_pane_label` (`heca/src/sidebar/render.rs`) uses the process name; prefer
-  `custom_name` when set.
-- [ ] **sidebar-fu-2** — KeyHint missing in the collapsed rail (old impl exists); bring
-  the universal `KeyHint` into the hand-drawn rail. Folds into `app-task-21`.
-- [ ] **sidebar-fu-3** — New `[settings]` bools `show_left_sidebar` / `show_right_sidebar`
-  / `show_top_bar` / `show_bottom_bar`; `false` = fully hide that chrome widget. Touches
-  `heca-config` schema + chrome region apply (`RegionMode::Hidden`) + startup/reload.
-- [ ] **sidebar-fu-4** — Restore sidebar **add/remove buttons + context menu** for
-  ws/cols/panes (lost in the grid-ui rebuild). Three surfaces: sidebar **buttons**
-  (addPane→highlighted column, addCol→highlighted workspace, addWs→top), **sidebar-mode
-  actions** on the highlighted item (handlers already exist:
-  `handle_sidebar_create_workspace`/`create_column`/`split_in_column`/`delete_selected`,
-  `handlers.rs:1471/1485/1504/1532` — verify targets), and a **mouse context menu** with
-  the same ops (reuse the right-click overlay pattern in `chrome/mod.rs`).
+- [x] **sidebar-fu-1** — DONE (branch `feat/sidebar-followups`). Collapsed rail initial now
+  prefers the user-set `custom_name` over the process name, mirroring the expanded side.
+  `collapsed_pane_label` (`heca/src/sidebar/render.rs`) + 4 unit tests.
+- [ ] **sidebar-fu-2** — KeyHint missing in the collapsed rail; bring the universal
+  `KeyHint` into the rail. **Deferred to `app-task-21`** — the hand-drawn rail
+  (`PrimitiveRenderer`) has no rounded-corner or glow primitive, so a faithful keycap
+  needs the collapsed-rail → grid-ui `RailCell` migration. Do it there (RailCell already
+  exists and its docs say to wrap it in `KeyHint`).
+- [x] **sidebar-fu-3** — DONE (branch `feat/sidebar-followups`). New `[settings]` bools
+  `show_left_sidebar` / `show_right_sidebar` / `show_top_bar` / `show_bottom_bar` (default
+  `true`); `false` = fully hide that region (zero width/height, space reclaimed). NOTE: in
+  this app `RegionMode::Hidden` currently renders a 40px rail (the runtime expand/collapse
+  quirk), so the config toggle is a separate hard "mounted" gate on `AppState`
+  (`show_*` + `left_sidebar_width()`/`right_sidebar_width()`/`tab_bar_height()`/
+  `status_bar_height()`), independent of the runtime rail toggle. Wired into render +
+  hit-test + chrome-scene + reload. Config parse tests added.
+- [~] **sidebar-fu-4** — Restore sidebar add/remove. **Actions surface was already done**
+  (`sidebar_create_workspace`/`create_column`/`split_in_column`/`delete_selected` +
+  default keys w/c/v/d in sidebar-nav mode). **Mouse right-click context menu DONE**
+  (branch `feat/sidebar-followups`): right-click a ws/col/pane in the **expanded** sidebar
+  → textual add/remove menu (`open_sidebar_context_menu` in `mouse.rs`, resolved via
+  `chrome::sidebar_item_at`). New action `AddColumnToWorkspace { ws_idx }` +
+  `handle_add_column_to_workspace`; reuses `AddPaneToColumn` / `CreateWorkspace` /
+  `DeleteColumn` / `DeleteWorkspace` / `ClosePaneById`. Delete entries dispatch directly
+  (danger-styled), matching the content menu's "Close pane" convention.
+  Per user decision (2026-07-03): **no inline "+" buttons** — mouse users get the context
+  menu only. REMAINING follow-ups: (a) the **collapsed rail** context menu (hand-drawn;
+  arrives with `app-task-21`), (b) optional y/n confirm for the menu's destructive entries
+  (currently direct, like the content menu).
+- [x] **sidebar-fu-5 — delete-column keyboard shortcut** (branch `feat/sidebar-followups`).
+  There was no keyboard way to delete a column: the sidebar nav cursor skips columns
+  (`is_navigable` = panes + workspaces only), so `d`/`sidebar_delete_selected` can't reach
+  one, and normal mode had only `close` (pane). Added `WmAction::DeleteCurrentColumn` +
+  `handle_delete_current_column` — a **no-arg resolver** (a keybinding can't carry a
+  ws/col target) that picks the focused pane's column in normal mode or the sidebar
+  selection's column in sidebar mode, then routes to the existing `DeleteColumn` via the
+  y/n confirm prompt. Default keys: **`Shift+d`** in sidebar mode, **`prefix+Shift+x`** in
+  normal mode (bare `D`/`X` fold to `d`/`x` in the keymap, so `Shift+` is required to stay
+  distinct). The mouse context menu keeps using `DeleteColumn{ws,col}` directly (target is
+  known from the click) — the new action is only for the keyboard path.
+- [x] **Bug fix — hidden bottom/top bar leftover text** (part of `sidebar-fu-3`). A
+  zero-height status `Surface` still painted its overflowing `Label` ("N panes | branch |
+  MODE") when `show_bottom_bar = false`. `chrome_root` now omits the status bar (and the
+  tab band) entirely when its height is 0, leaving `signals.status` unset (the per-frame
+  updater already treats `None` as "nothing to update").
+
+**NEXT — chrome region controls + confirm dialog + bottom-bar restyle (requested 2026-07-03, NOT started):**
+
+- [x] **sidebar-fu-6 — DONE (branch `feat/sidebar-followups`): show/hide/toggle actions +
+  keybindings for each chrome region.** 12 config-bindable **unit** actions —
+  `show_`/`hide_`/`toggle_` × `left_sidebar`/`right_sidebar`/`top_bar`/`bottom_bar` — all route to
+  `handlers::handle_set_chrome_region_shown`, which flips the `AppState.show_*` **mounted-gate**
+  bool (fully unmount → zero width/height) and reflows like the reload path
+  (`update_session_viewport` + `chrome_tree = None` + `needs_redraw`). Wired end-to-end:
+  `WmAction` unit variants + `action_from_name` + priority match (`input.rs`), 12 `register()`
+  → the one handler (`registry.rs`), `ActionPolicy::Global` (`interaction.rs`), one parameterized
+  RPC command `set-chrome-region-shown region=… mode=…` (`rpc.rs`), 12 `ActionDescriptor`s +
+  the `UNBOUND` test allowlist (`actions.rs`), documented (commented) in `keybindings.default.toml`.
+  heca 302 tests + clippy clean.
+  - **DECISIONS (resolved 2026-07-03):** (1) **Keep both axes** — `sidebar_left`/`sidebar_right`
+    (`prefix+b`/`prefix+.`) stay the `RegionMode` expand↔rail toggle; these 12 are the separate
+    mounted on/off gate. Unifying would kill the rail-collapse. (2) **Unbound by default** — the
+    user binds the wanted ones (prefix key space is scarce; a full unmount is infrequent). Example
+    in `keybindings.default.toml`. (3) Chose 12 unit variants over one parameterized action because
+    the codebase reserves parameterized `WmAction`s for RPC/mouse (not config-bindable) — bindable
+    = unit variants.
+  - **GUI check owed** (can't automate keys here): bind e.g. `toggle_bottom_bar`, press it →
+    bottom bar mounts/unmounts; repeat per region.
+
+- [x] **sidebar-fu-7 — DONE (branch `feat/sidebar-followups`) — confirm delete is now a
+  Modal dialog.** A host-owned `Modal` overlay (`state.confirm_dialog` + a bool click-sink
+  `confirm_dialog_result`, mirroring `context_menu`) shows the question + `Delete`/`Cancel`,
+  raised alongside `InputMode::ConfirmDelete` by the shared helper
+  `handlers::begin_confirm_delete(...)` (replaces the 3 inline sites: sidebar delete,
+  delete-current-column, sidebar mouse-button delete). Both input paths resolve through
+  `handlers::resolve_confirm_delete(state, registry, confirmed)`: **keyboard** y/**Enter**
+  = confirm, n/**Esc** = cancel (`handle_confirm_delete_input`); **mouse** — pointer routed
+  to the Modal in `events.rs` (moves + presses swallowed while open, so clicks don't leak to
+  panes), OK/Cancel/scrim write the sink → resolve. Painted via `paint_confirm_dialog` /
+  `layout_confirm_dialog`. `danger(true)` styling. clippy clean, 301 tests. GUI check pending
+  (delete a pane/column → dialog, click or key). NOTE: the bottom-bar "CONFIRM <msg>" status
+  label is kept as a harmless secondary echo (the Modal is now primary).
+
+- [x] **sidebar-fu-8 — DONE + extended: centralized, config-gated destructive confirm
+  (not sidebar-only).** New `[settings]` bools **`confirm_close_pane` /
+  `confirm_delete_column` / `confirm_delete_workspace`** (default `true`), on `AppState` +
+  startup + reload. Single chokepoint **`handlers::request_destructive(raw_action,
+  resume)`** generates the prompt + reads the matching toggle → either raises the confirm
+  `Modal` (`begin_confirm_delete`) or runs the raw handler now (`run_destructive_now`); no
+  loop (the dialog dispatches the raw variant back via the registry). Wired at EVERY entry:
+  **`prefix+x` + content-menu "Close pane"** (`handle_close_pane` → `ClosePaneById{focused}`;
+  removed dead `close_tiled_pane`/`close_floating_pane`, close now via `handle_close_pane_by_id`
+  + `after_layout_change` refocus), sidebar delete / delete-current-column / sidebar
+  mouse-button delete, and the **sidebar context-menu deletes** (intercepted at the
+  `settle_context_menu` drain). So pane close now confirms per config, everywhere. clippy
+  clean, 301 heca + 77 config tests.
+
+- [ ] **sidebar-fu-13 — dialog rework: keyboard-driven + per-button shortcuts + KeyHint**
+  (bullet 2 of the 2026-07-03 confirm-dialog polish; the confirm `Modal` currently
+  hand-paints its 2 buttons). Requires upgrading `Modal` to host **real button widgets**
+  (the `fu-11`/`plugin-task-ui-4` rich-body work) so buttons can: have **initial focus**
+  (on **Cancel**, agreed), **Tab/Shift+Tab + ←/→ + Ctrl+h/l** focus traversal (Enter/Space
+  activate), show **data-driven shortcut labels** e.g. `[Cancel (n)] [Done (y)]` (a general
+  per-button `shortcut: Option<char>` mechanism — NOT hardcoded y/n), and be **`hint_target`s**
+  so the global picker (`prefix+/`) lights them — which also means `handle_hint_pick` /
+  `paint_hint_targets` / `collect_hint_targets` must additionally walk the **open dialog's
+  tree** (today they only walk the chrome tree). Sequence agreed: this comes AFTER the
+  centralization (fu-8, done).
+  - **Stage 1 DONE (grid-ui `Modal` rework, branch `feat/sidebar-followups`):** `Modal` now
+    holds `buttons: Vec<ModalButton>` (label + optional `shortcut(char)` + `danger` + `cancel`
+    role) with a focused index. Public host-driven methods `focus_next`/`focus_prev`/
+    `activate_focused`/`activate_shortcut(c)`/`request_cancel`. Initial focus = the cancel
+    button; widget `event()` handles Enter/Space=activate-focused, ←/→ & Tab=move, Esc=cancel,
+    Char=shortcut, pointer=click/scrim. Paint: N buttons right-aligned, focus ring (accent
+    border+glow) on the focused one, labels show `(x)`. `.confirm/.cancel/.danger/.open/
+    .dismissible` kept as convenience (app + showcase still build unchanged). `ModalButton`
+    exported. grid-ui 52+127+1 tests green (2 old tests updated to focus-driven semantics +
+    a shortcut test added); heca builds.
+  - **Stage 2 DONE (host wiring, branch `feat/sidebar-followups`):** `events.rs` routes the
+    dialog keyboard into the open `Modal` — Tab/Shift+Tab + ←/→ + **Ctrl+h/l** (modifiers from
+    the host) → `focus_prev/next`; Enter/Space → `activate_focused`; Esc → `request_cancel`; a
+    bare letter → `activate_shortcut` (y/n); then drains `confirm_dialog_result` through
+    `resolve_confirm_delete` (same path as the pointer). `handle_confirm_delete_input` retired
+    (the `Modal` owns the keyboard now). `begin_confirm_delete` rebuilt via `.button()` as
+    **`[Cancel (n)] [Delete (y)]`** (Cancel focused, `danger` on Delete). Widget-change rule
+    done: `ModalButton` exported at crate + prelude level, showcase demo switched to the new
+    API, `docs/widgets.md` Modal section rewritten. heca 301 + grid-ui 52+127+1 tests green,
+    clippy clean.
+  - **Stage 3 (KeyHint over the dialog) — DEFERRED (2026-07-03).** As specced it collides with
+    Stage 2's "modal owns the keyboard": (a) `prefix+/` can't reach the picker — the
+    `confirm_dialog.is_some()` block in `events.rs` swallows every key before the prefix state
+    machine runs, so supporting it means teaching that block to cooperate with the prefix chord;
+    (b) render order — `paint_hint_targets` runs BEFORE `paint_confirm_dialog` (`render.rs:1165`
+    vs `1168`), so keycaps would paint *under* the dialog; (c) the pending action lives in
+    `InputMode::ConfirmDelete { action }` and a hint-pick mode would overwrite/lose it. Deferred
+    because the dialog is already fully keyboard-operable (y/n + Tab/←→ + Enter/Esc) — a picker
+    over 2 buttons adds little. **REVISIT WHEN `fu-11` LANDS** (rich `Modal` `body: ViewNode` +
+    a vector of arbitrary widgets, `plugin-task-ui-4`): once a modal hosts N arbitrary widgets,
+    hinting them becomes worthwhile and the (a)/(b)/(c) surgery is justified — do Stage 3 THEN,
+    against the `ViewNode` body, not against the 2-button dialog.
+
+- [ ] **sidebar-fu-9 — restyle the bottom (status) bar: badges + tabs + agreed style.**
+  The status bar is already a grid-ui component (`theming-task-28` done); rebuild its
+  content with `Badge`/`Tag` segments + a tab strip and a proper visual design. **Style TBD
+  — to agree before building.** Ties to the Pluggable-Chrome **bottom-bar region** rebuild
+  note (badges/tags/info + plugin extensions) and `plugin-task-28` (git-status provider in
+  the bottom bar).
+  - **BUILD IT AS A VECTOR-OF-ITEMS CONTAINER:** not a fixed layout — a container over an ordered
+    `Vec` of segments/buttons that plugins can append to / reorder, per the chrome-region principle
+    (`pluggable-chrome-plugin-plan.md` §2.8 chrome-wide + §3.2 region contributions + `plugin-task-16`).
+
+- [x] **sidebar-fu-14 — DONE (branch `feat/sidebar-followups`): sidebar collapse toggles moved to
+  the top bar.** The `ArrowLineLeft`/`ArrowLineRight` toggles now live at the top bar's left/right
+  corners (`sidebar_toggle_button` built in `build_chrome_root`, placed by `chrome_root`'s tab
+  band), each `→ ActivateAction(SidebarLeft`/`SidebarRight)`. Shown only for a mounted region
+  (`show_left/right_sidebar`). **Both sidebar-header rows were removed entirely** — the left shell
+  is now just the `WorkspacesContainer`, the right shell an empty placeholder (its `emit_intent` +
+  `theme` params dropped). Top-bar clicks route into the chrome tree via `mouse::point_in_top_bar`
+  (mirrors `point_in_right_sidebar`). **Because the top bar is always visible, the toggle now works
+  in BOTH expanded and collapsed states** — solves the "collapsed rail has no button" gap without
+  the `app-task-21` migration. heca 302 tests + clippy clean.
+  - Polish (2026-07-03): the band got a little padding (`padding_xy(6,4)`) so the toggles don't hug
+    the edges, and the arrow glyph now **flips with state** — `left_visible()`/`right_visible()`
+    choose `ArrowLineLeft`↔`ArrowLineRight` (expanded → collapse arrow; collapsed → expand arrow).
+  - GUI check owed: the two arrows sit in the top bar corners; each collapses/expands its sidebar
+    in both states. Watch for overlap with hand-drawn workspace tabs at the left edge (refine if needed).
+
+- [ ] **sidebar-fu-15 — top bar: proper structured style (LATER — style to AGREE first).**
+  Today the top bar is an empty transparent band (the hand-drawn tab bar paints underneath) with
+  the fu-14 collapse toggles overlaid at the corners (no manual padding — the edge-inset waits on
+  the theme spacing token, see `gridui-styling-foundation`). Rebuild it as a real
+  grid-ui **container (`Flex`) with three sub-containers: `LEFT | MIDDLE | RIGHT`**, each hosting
+  **dynamic (state-driven) icons/widgets**:
+  - LEFT = the left-sidebar collapse toggle + future left-aligned chrome;
+  - MIDDLE = the workspace tabs (migrate the hand-drawn tab bar to grid-ui — see `gridui-task-03`);
+  - RIGHT = the right-sidebar collapse toggle + future right-aligned chrome/status.
+  "Dynamic icons" = reflect state (the collapse toggle already flips its arrow per fu-14). Ties to
+  the Pluggable-Chrome **top-bar region**. Design/style **TBD — agree before building**.
+  - **VECTOR-OF-ITEMS, PLUGIN-EXTENSIBLE:** each of the three sub-containers holds an ordered `Vec`
+    of items that plugins can append to / reorder — same chrome-region principle as fu-9
+    (`pluggable-chrome-plugin-plan.md` §2.8 + §3.2 + `plugin-task-16`), NOT a hardcoded set of buttons.
+
+- [ ] **gridui-styling-foundation — widgets + containers must be fully theme-driven so callers
+  (and plugins) NEVER hand-calc size/padding/alpha.** Surfaced 2026-07-04 doing fu-14/fu-15 (user:
+  *"una libreria UI deve fornire le proprietà per un design consistente senza dover ogni volta fare
+  calcoli su spazi, padding, font"*). Three concrete library gaps, do as a **dedicated grid-ui
+  branch** (design tokens first, then migrate; update showcase + `docs/widgets.md`):
+  1. **Interaction-alpha theme tokens.** Every widget bakes its own hover/border/active alphas
+     (`IconButton` `HOVER_FILL_ALPHA`/`ACTIVE_*`, `Button` per-variant, `Modal` `26/180/200/235`,
+     `Tag`, `RailCell`…). Add theme tokens (e.g. `hover_fill_alpha`, `border_rest/hover_alpha`,
+     `active_fill_alpha`, `disabled_alpha`) + migrate all widgets. (Memory:
+     `grid-ui-widgets-not-fully-theme-driven`.)
+  2. **`WidgetSize` must cover the chrome/header size.** Variants scale the font 0.8/0.9/1.0 (all
+     ≤ font), but chrome header buttons want `header_icon_size = (font*1.25).max(15)` (bigger than
+     body font) — so the pane-header buttons hand-calc px + `.cell(...)` instead of
+     `.size(WidgetSize)`. Add a bigger variant / map variants to absolute control sizes, then
+     MIGRATE the legacy callers (pane-header action buttons `chrome/mod.rs:721`; any other
+     `header_icon_size`/`header_button_cell` user) to `.size(WidgetSize)`.
+  3. **Theme spacing tokens + container padding from the theme — DONE (2026-07-04).** Added
+     `Spacing` (None/Xs/Sm/Md/Lg, font-relative `scale()`) in `style.rs` + `Style.pad_spacing_x/y`,
+     resolved to px at layout (`layout.rs`, after `base.font`), + `LayoutExt::pad_all`/`pad_x`/`pad_y`
+     builders (`pad` collides with `Input::pad`, hence `pad_all`). Top-bar band now uses
+     `.pad_x(Spacing::Sm)` — no hand-computed px. Remaining chrome `.padding(10.0)` callers can migrate
+     incrementally. heca 302 + grid-ui 52+127 green.
+  - **DONE (2026-07-04) — readable text on tonal fills.** `Color::luminance()` + `heca_theme::Theme::on(fill)`
+     (picks background/foreground by luminance contrast) → wired into `Modal` + `Button` (Primary/Destructive)
+     so the **danger (red) button label is now light/legible**, accent stays dark. Theme-driven, no hardcoded.
+  Still open in this task: (1) interaction-alpha tokens, (2) `WidgetSize` header-size coverage + migrate
+  pane-header buttons off `header_icon_size`/`.cell`. See memory
+  `think-widget-design-before-writing-not-after-correction`.
+
+- [x] **sidebar-fu-10 — DONE (branch `feat/sidebar-followups`): sidebar header collapse toggle
+  (interim; final both-states version → `app-task-21`).** After GUI feedback (2026-07-03):
+  - Both headers (`build_sidebar_shell` + `build_right_sidebar_shell`, `chrome/mod.rs`) **slimmed**
+    — removed the tall decorative `Glyph::Sidebar` icon (left) and the dead `"Details"` label
+    (right) to reclaim vertical space. The toggle is an `ArrowLineLeft`/`ArrowLineRight`
+    `IconButton` that `.on_click` emits `ActivateAction(SidebarLeft`/`SidebarRight)` → toggles the
+    region `RegionMode` (same model as `prefix+b`/`prefix+.`; coherent with fu-6).
+  - **Right-click bug FIXED:** the right header button did nothing because the right sidebar had
+    **no mouse routing** (`mouse/surface_left.rs` is `LeftSidebar`-only; presses only dispatched to
+    the chrome tree for the left bounds). Added `mouse::point_in_right_sidebar` + a press hook in
+    `on_mouse_input` that routes right-sidebar clicks through `chrome_dispatch_press`, so right
+    chrome widgets now receive clicks. heca 302 tests + clippy clean.
+  - **SUPERSEDED by `sidebar-fu-14` (2026-07-03):** the in-sidebar-header toggle was moved to the
+    top bar and both header rows were removed entirely, so the toggle is now always visible (both
+    states) — this closed the "visible only when expanded" gap without the rail migration. fu-10's
+    lasting contribution is the **right-sidebar click routing fix** (`point_in_right_sidebar`).
+
+- [ ] **sidebar-fu-11 — rich `Modal` (`body: ViewNode`) → app-side consumer of the
+  registered `plugin-ui` work.** CORRECTION (2026-07-03, after syncing `origin/main`): this
+  is **already registered** — my earlier "no existing task" note was from a stale branch. The
+  rich-body overlay is the planned **`plugin-task-ui-4`** ("Overlay `body` accepts a `ViewNode`
+  tree — rich modals: table/form/list", `pluggable-chrome-plugin-plan.md §2.7.1`, plan line
+  ~1691), on top of the `ViewNode` model + host mapper `realize(&ViewNode) -> Box<dyn
+  Component>` (§2.6.2, `plugin-ui`). Today `Modal` (`heca-grid-ui/src/widgets/modal.rs`) is
+  fixed (title + message + ≤2 buttons, *"no child subtree to relocate"*, `docs/widgets.md`).
+  ACTION: don't create a parallel task — fold this into `plugin-ui`/`plugin-task-ui-4`; the
+  app-side rich confirm dialog is just a consumer. `sidebar-fu-7` ships on the 2-button
+  `Modal` first; N-button / rich-body dialogs wait for `plugin-task-ui-4`.
+  **REVIVES `sidebar-fu-13` Stage 3 (KeyHint over the dialog, deferred 2026-07-03):** once the
+  `Modal` hosts a `ViewNode` body + a vector of arbitrary widgets, hinting them is worthwhile —
+  so this task must ALSO do the deferred Stage 3 surgery (let the prefix chord through the modal
+  keyboard block; paint dialog keycaps after `paint_confirm_dialog`, not before; preserve the
+  `InputMode::ConfirmDelete` payload across the pick). See the fu-13 Stage 3 note for the three
+  blockers.
+
+- [ ] **sidebar-fu-12 — global KeyHint picker = implement the documented "intent ⇒ hintable"
+  host capability, app-side first.** This is **not** a new invention: it's the model already
+  documented on main (`docs/plugin-authoring.md`, "KeyHint is the host's universal
+  leader/vimium overlay… any widget that exposes an `on_press` intent is automatically hintable;
+  the leader assigns letters to every clickable target (app + plugin) and emits the intent on
+  keypress; opt out with `.hintable(false)`. One system covers app and plugin alike"). Status
+  there: **planned**. Build the host side now for the **app** chrome (plugin targets join for
+  free later). Leader **`prefix+/`** (confirmed). Reuse the existing precedents: `FollowLink`
+  (enumerate targets → stamp keycaps via `paint_keycap`/`paint_link_hints` → keypress emits) +
+  the `drag_items` registry pattern (a parallel **hint-target registry** populated in
+  `build_chrome_root`, id → bounds + `InteractionIntent`). New `InputMode::HintPick`, a
+  `hint_pick` action bound to `prefix+/`, letter assignment, an overlay paint pass, and
+  keypress→dispatch. Coordinate with `plugin-ui` so the app registry and the plugin
+  `on_press`-intent model are one system.
+  - **PROGRESS (2026-07-03, branch `feat/sidebar-followups`) — Slice 1 DONE (grid-ui
+    primitive):** opaque `HintTargetId` + `Base.hint_target` + `Component::as_hint_target()`
+    + `HintExt::hint_target(id)` builder + `hint::collect_hint_targets(root) ->
+    Vec<(HintTargetId, Rectangle)>` tree walk (skips hidden), exported in lib + prelude. 4
+    unit tests, grid-ui suite green, heca still builds. Mirrors the drag opaque-id pattern.
+  - **Slice 2 DONE (host wiring, 2026-07-03):** `HintTargetRegistry` (id →
+    `InteractionIntent`) on `RetainedChrome`, built + threaded through `build_chrome_root`
+    → `build_sidebar_shell` → `build_workspaces_container` → `column_view` → `pane_card`.
+    Tagged targets: **sidebar pane cards → `FocusPane`**, **workspace docks → `FocusWorkspace`**
+    (removed the now-live `dead_code` expect on `InteractionIntent::FocusWorkspace`).
+    `InputMode::HintPick { candidates: Vec<(char, HintTargetId)> }` + `WmAction::HintPick`
+    (name `hint_pick`, `Global` policy, priority arm) + `handle_hint_pick` (enter: collect →
+    `candidate_letter` labels) + `handle_hint_pick_mode` (letter → registry intent →
+    `dispatch_intent`, same policy path as a click; any other key/Esc exits) + dispatch match
+    arm + render pass `paint_hint_targets` (re-collect each frame, match by id, `paint_keycap`)
+    + status label "HINT". Leader **`prefix+/`**. clippy clean, 301 heca + 179 grid-ui tests.
+  - **REMAINING polish:** (a) **GUI verification pending** (press `prefix+/` → keycaps on
+    panes+workspaces → letter focuses); (b) collapsed rail not covered (hand-drawn; arrives
+    with `app-task-21`); (c) more target kinds as they gain intents (columns, sidebar header
+    toggle fu-10, bottom-bar tabs fu-9, modal buttons fu-11); (d) keycap placement refinement
+    for large targets (ws dock keycap sits at its top-left); (e) short `docs/widgets.md` note
+    on the `HintExt`/`collect_hint_targets` primitive (mirrors the `DragExt` system).
+
+- [x] **plugin-doc-1 — DONE** (landed on `origin/main` via PR #222, now synced in). The
+  context-menu + KeyHint plugin model is documented in `docs/plugin-authoring.md` (+ README
+  Plugins section + `pluggable-chrome-plugin-plan.md`): overlays (context menu = host-owned
+  dropdown; `.on_context(items)` / `ctx.overlay.open_dropdown(...)`) and **KeyHint = "intent ⇒
+  hintable"** (any widget with an `on_press` intent is auto-assigned a leader letter by the
+  host; no plugin-side KeyHint). Follow-up still open: add the cross-ref note in
+  `docs/widgets.md` (`ContextMenu`/`KeyHint` sections) pointing at `plugin-authoring.md`.
 
 - [~] **plugin-task-09** — Define the `Provider` trait: `id()`, `supported_regions()`, `default_region()`, `movable: bool`, `collapsible: bool`, `build_contribution(ChromeCtx) -> ContainerContribution`.
   Files: `heca/src/providers/mod.rs` (new)
@@ -1118,7 +1393,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   The sidebar shell (already a `ChromeRegion` widget) hosts it; the provider owns tree semantics, search, DnD, row actions.
   Files: `heca/src/providers/workspaces.rs` (new), `heca/src/sidebar/` (reshape as the provider's impl)
 
-- [ ] **plugin-task-10a** — Bridge sidebar-nav selection into shared chrome/workspaces state.
+- [x] **plugin-task-10a** — **DONE 2026-07-03** (via `origin/main`; full note at the top of this `plugin-03` phase + `handoff-sidebar-nav-task10a.md`). Verified in-tree: `nav_selected` on `Row`/`MarkerGroup`/`DockFrame` + `SidebarSelectionChanged`/`nav_selection` in `heca/src/chrome/`. Original spec (now shipped) below. Bridge sidebar-nav selection into shared chrome/workspaces state.
   Today the expanded sidebar highlights only `active_pane`, while sidebar navigation mutates
   `AppState.sidebar_tree.cursor/current_item()`; result: `prefix+e` → `j/k` moves the nav model
   internally but **nothing visibly changes** in the expanded sidebar. Add a shared
@@ -1285,7 +1560,7 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 10–11
 ### [x] Phase: Scroll / list primitive · `gridui-01`
 An embeddable scroll region for sidebar docks and list views.
 Note: renderer `PushClip`/`PopClip` is ALREADY implemented in `heca-renderer/src/scene.rs` — this gate is closed.
-**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (PR #177). Reuses the whole-page scroll pattern (shift subtree bounds + clip) inside a widget: bakes `-scroll_offset` into the children's bounds so paint, hit-testing, and DnD all see the visual position (bounds === drawn), and clips to the viewport via `PushClip`. A new post-order `Component::on_layout` hook (layout engine) resets the baked offset on a fresh layout so the shift never compounds — this is what lets an embeddable scroll viewport reuse the page-scroll mechanism without owning the layout/scroll cycle. v1 is vertical-only, multi-child column: wheel (~10% of viewport/notch, viewport-proportional so a small sidebar doesn't overshoot) + draggable thumb (theme-accent grip that brightens on hover/drag, wider 16px grab lane, thumb radius from the `Theme::control_radius()` token), offset exposed as `Signal<f32>`; `Event::Scroll` has no position so the region hover-gates the wheel (tracks hover via `PointerMoved`) so an inline region doesn't swallow every wheel event in the tree. **Focus-gated keyboard scroll** (focusable; `Event::Key` goes to the focused component only, so the gate is just `focused`): `ArrowUp`/`ArrowDown` + `j`/`k` (with/without `Ctrl`) step, `Home`/`End` jump to top/bottom, with a focus ring; a focused child (e.g. `Input`) keeps its keys. **Scroll-into-view API** for keyboard cursor following: `ensure_visible(visual_rect)` (minimal scroll, recovers natural position internally via the baked shift so the host never tracks the offset) + `scroll_to_child(index)` convenience — the widget-side prep for mounting the sidebar tree and having `SidebarNav` keep the cursor on screen. Showcase demo + full `docs/widgets.md` reference added. Same radius-token fix applied to `MarkerGroup`'s marker bar (`control_radius()` instead of hardcoded `bar_w/2`). Grid-ui 47 tests pass, clippy 0. (An earlier draft used a renderer `Translate` primitive; pivoted to bounds-shift per review — no second scroll mechanism, DnD works while scrolled.) **Follow-ups are tracked as open tasks below** (`gridui-task-29`…`gridui-task-34`): horizontal scroll, a dedicated scrollbar color token, PageUp/PageDown keys, nested-region hit-testing, the sidebar scroll wiring, and the pick-a-scrollable-region mode — so the deferral is tracked, not buried in prose.
+**Status (2026-06-22):** ✅ DONE — on `feature/gridui-01-scroll-region` (PR #177). Reuses the whole-page scroll pattern (shift subtree bounds + clip) inside a widget: bakes `-scroll_offset` into the children's bounds so paint, hit-testing, and DnD all see the visual position (bounds === drawn), and clips to the viewport via `PushClip`. A new post-order `Component::on_layout` hook (layout engine) resets the baked offset on a fresh layout so the shift never compounds — this is what lets an embeddable scroll viewport reuse the page-scroll mechanism without owning the layout/scroll cycle. v1 is vertical-only, multi-child column: wheel (~10% of viewport/notch, viewport-proportional so a small sidebar doesn't overshoot) + draggable thumb (theme-accent grip that brightens on hover/drag, wider 16px grab lane, thumb radius from the `Theme::control_radius()` token), offset exposed as `Signal<f32>`; `Event::Scroll` has no position so the region hover-gates the wheel (tracks hover via `PointerMoved`) so an inline region doesn't swallow every wheel event in the tree. **Focus-gated keyboard scroll** (focusable; `Event::Key` goes to the focused component only, so the gate is just `focused`): `ArrowUp`/`ArrowDown` + `j`/`k` (with/without `Ctrl`) step, `Home`/`End` jump to top/bottom, with a focus ring; a focused child (e.g. `Input`) keeps its keys. **Scroll-into-view API** for keyboard cursor following: `ensure_visible(visual_rect)` (minimal scroll, recovers natural position internally via the baked shift so the host never tracks the offset) + `scroll_to_child(index)` convenience — the widget-side prep for mounting the sidebar tree and having `SidebarNav` keep the cursor on screen. Showcase demo + full `docs/widgets.md` reference added. Same radius-token fix applied to `MarkerGroup`'s marker bar (`control_radius()` instead of hardcoded `bar_w/2`). Grid-ui 47 tests pass, clippy 0. (An earlier draft used a renderer `Translate` primitive; pivoted to bounds-shift per review — no second scroll mechanism, DnD works while scrolled.) **Follow-ups are tracked as open tasks below** (`gridui-task-29`…`gridui-task-34`): horizontal scroll, a dedicated scrollbar color token, PageUp/PageDown keys, nested-region hit-testing, the sidebar scroll wiring, and the pick-a-scrollable-region mode — so the deferral is tracked, not buried in prose. **Disposition (2026-07-03): the phase `[x]` = the core `ScrollRegion` widget (`gridui-task-01`, PR #177) shipped — NOT the follow-ups. Live follow-ups = only `gridui-task-33` (sidebar scroll wiring, overlaps `plugin-03`) + `gridui-task-34` (pick-a-region, small); `29`/`30` CUT, `31`/`32` DEFERred (markers applied to each task below).**
 
 - [x] **gridui-task-01** — Build `ScrollRegion` widget in `heca-grid-ui/src/widgets/scroll_region.rs`.
   Uses `PushClip`/`PopClip` for content clipping + bounds-shift (the page-scroll pattern) for the offset.
@@ -1296,25 +1571,22 @@ Note: renderer `PushClip`/`PopClip` is ALREADY implemented in `heca-renderer/src
 
 **Follow-ups (carved out of v1 — tracked, not deferred-to-prose):**
 
-- [ ] **gridui-task-29** — `ScrollRegion`: add **horizontal scroll** (axis-aware offset + thumb; reuse the bounds-shift mechanism). The widget is vertical-only today. Files: `heca-grid-ui/src/widgets/scroll_region.rs`.
-- [ ] **gridui-task-30** — `ScrollRegion`: add a **dedicated scrollbar color token** to `Theme` (config-overridable, `heca-theme/src/themes/*.toml` + `heca-config/src/settings.rs` `[appearance]` override + `heca-grid-ui/src/theme.rs`); the thumb currently reuses `theme.accent`. Alphas stay widget-internal (consistent with `MarkerGroup`).
-- [ ] **gridui-task-31** — `ScrollRegion`: add **PageUp/PageDown** keys (page = one viewport). Blocked on `GridKey` having no page keys — add `PageUp`/`PageDown` to the `GridKey` enum (`heca-grid-ui/src/component.rs`) + the host key mapping (`heca-renderer/examples/showcase.rs` and the app's input path), then handle them in `ScrollRegion::event`.
-- [ ] **gridui-task-32** — `ScrollRegion`: **nested-region wheel hit-testing**. Today the wheel is hover-gated for a single inline region; with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree. Files: `heca-grid-ui/src/widgets/scroll_region.rs` + host wiring.
-- [ ] **gridui-task-33** — **Sidebar scroll wiring** (integration, separate phase): mount the sidebar workspace tree inside a `ScrollRegion`; the `SidebarNav` cursor handler (`j`/`k`, selection-driven) calls `ScrollRegion::ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving the cursor to keep it on screen. Selection stays container-owned via `Item::marker`/`state`. The widget API (`ensure_visible`/`scroll_to_child`) is already in place from `gridui-01`. Files: `heca/src/sidebar/*`, `heca/src/chrome/*`.
-- [ ] **gridui-task-34** — **Pick-a-scrollable-region mode** (app-level, larger): `prefix+<key>` → a `KeyHint` overlay enumerating every scrollable region → pick one → enter a sticky scroll/nav mode bound to it (`j`/`k`/arrows/PgUp/PgDn/Home/End → `WmAction::ScrollFocused`). Needs the full "Adding New Actions" checklist: `WmAction::EnterScrollSelect` + `WmAction::ScrollFocused`, `InputMode::ScrollSelect` + `InputMode::Scroll`, action-registry registration, default binding + descriptor, RPC, `action_policy()` classification, `default-keybindings.toml`/`README.md`. Only needed once multiple scrollable regions compete for `j`/`k`. Run `/grill-me` first (key choice, sticky vs one-shot, pick→focus vs pick→mode). Files: `heca/src/input.rs`, `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app_state.rs`.
+- [~] **gridui-task-29** — ~~`ScrollRegion` horizontal scroll~~ **CUT (2026-07-02): no consumer — the column strip already scrolls horizontally via `ViewOffset`; `ScrollRegion` is vertical-list only. Revive only if a real horizontal-scrolling list appears.** Files: `heca-grid-ui/src/widgets/scroll_region.rs`.
+- [~] **gridui-task-30** — ~~dedicated scrollbar color token~~ **CUT (2026-07-02): already covered — `scroll_bar.rs` exists; the thumb reuses `theme.accent` (alphas widget-internal, consistent with `MarkerGroup`), no dedicated `Theme` token needed.**
+- [ ] **gridui-task-31** — **DEFER (2026-07-03): no consumer yet — do it when a scroll region needs paging.** `ScrollRegion` **PageUp/PageDown** keys (page = one viewport). Blocked on `GridKey` having no page keys — add `PageUp`/`PageDown` to the `GridKey` enum (`heca-grid-ui/src/component.rs`) + the host key mapping (`heca-renderer/examples/showcase.rs` and the app's input path), then handle them in `ScrollRegion::event`.
+- [ ] **gridui-task-32** — **DEFER (2026-07-02): until a real consumer.** `ScrollRegion` **nested-region wheel hit-testing**. Today the wheel is hover-gated for a single inline region; with multiple nested scroll regions the host must find the innermost scrollable under the cursor and route the wheel to it. Likely a host-side helper walking the tree. Files: `heca-grid-ui/src/widgets/scroll_region.rs` + host wiring.
+- [ ] **gridui-task-33** — **KEEP (real; overlaps `plugin-03`).** **Sidebar scroll wiring** (integration, separate phase): mount the sidebar workspace tree inside a `ScrollRegion`; the `SidebarNav` cursor handler (`j`/`k`, selection-driven) calls `ScrollRegion::ensure_visible(selected_row.bounds)` (or `scroll_to_child`) after moving the cursor to keep it on screen. Selection stays container-owned via `Item::marker`/`state`. The widget API (`ensure_visible`/`scroll_to_child`) is already in place from `gridui-01`. Files: `heca/src/sidebar/*`, `heca/src/chrome/*`.
+- [ ] **gridui-task-34** — **KEEP (small/optional).** **Pick-a-scrollable-region mode** (app-level, larger): `prefix+<key>` → a `KeyHint` overlay enumerating every scrollable region → pick one → enter a sticky scroll/nav mode bound to it (`j`/`k`/arrows/PgUp/PgDn/Home/End → `WmAction::ScrollFocused`). Needs the full "Adding New Actions" checklist: `WmAction::EnterScrollSelect` + `WmAction::ScrollFocused`, `InputMode::ScrollSelect` + `InputMode::Scroll`, action-registry registration, default binding + descriptor, RPC, `action_policy()` classification, `default-keybindings.toml`/`README.md`. Only needed once multiple scrollable regions compete for `j`/`k`. Run `/grill-me` first (key choice, sticky vs one-shot, pick→focus vs pick→mode). Files: `heca/src/input.rs`, `heca/src/actions.rs`, `heca/src/app/registry.rs`, `heca/src/handlers.rs`, `heca/src/app_state.rs`.
 
 ### [ ] Phase: Pane shell widget — header and tabs · `gridui-02`
 The `Pane` widget is today a bracket container without a header. Add HUD header, tab bar, and expose the inner content rect properly.
 
-- [ ] **gridui-task-02** — Add optional header slot to `Pane` — a title/status bar area above the content rect. Header can contain: title `Label`, `StatusDot`, `IconButton` actions.
-  Files: `heca-grid-ui/src/widgets/pane.rs`
+- [~] **gridui-task-02** — ~~optional `Pane` header slot~~ **CUT (2026-07-02): the terminal pane-shell already draws a header (pane-info bar); `terminal-05` DONE. No `Pane`-widget header slot needed.**
 
 - [ ] **gridui-task-03** — Add optional tab bar slot to `Pane` — for multi-document pane types.
   Files: `heca-grid-ui/src/widgets/pane.rs`
 
-- [ ] **gridui-task-04** — Build `CornerBrackets`/`Reticle` component for the focused-pane indicator.
-  Files: `heca-grid-ui/src/widgets/corner_brackets.rs`
-  Update `docs/widgets.md` + showcase.
+- [~] **gridui-task-04** — ~~`CornerBrackets`/`Reticle` focused-pane indicator~~ **CUT (2026-07-02): the bracketed `Pane` already draws the focus-ring reticle; no separate component needed.**
 
 - [ ] **gridui-task-05** — Build `StatusBar` component (bottom chrome band: mode label, git info, notifications).
   Files: `heca-grid-ui/src/widgets/status_bar.rs`
@@ -1352,8 +1624,7 @@ Add `NfIcon` for program/language logos (nvim, docker, lazygit, python, rust) th
 - [ ] **gridui-task-13** — Implement offscreen bloom pipeline in `heca-renderer`: bright-pass filter → Gaussian blur → additive composite over the scene.
   Files: `heca-renderer/src/bloom.rs` (new), `heca-renderer/src/lib.rs`
 
-- [ ] **gridui-task-14** — Add `DrawCommand::Custom(Box<dyn CustomDraw>)` escape hatch for one-off GPU effects that don't fit the standard scene model.
-  Files: `heca-grid-ui/src/scene.rs`
+- [~] **gridui-task-14** — ~~`DrawCommand::Custom` escape hatch~~ **CUT (2026-07-02): no consumer — YAGNI escape hatch, not present. Add only if a real one-off GPU effect needs it.**
 
 ### [ ] Phase: Additional widgets · `gridui-06`
 
@@ -1363,15 +1634,13 @@ Add `NfIcon` for program/language logos (nvim, docker, lazygit, python, rust) th
 - [ ] **gridui-task-16** — Multi-select `Select`: extend the `Select` widget to allow multiple simultaneous selections; expose a `Vec<usize>` value signal.
   Files: `heca-grid-ui/src/widgets/select.rs`
 
-- [ ] **gridui-task-17** — `HUD Frame`: a floating HUD-style bordered container for overlays/panels.
-  Files: `heca-grid-ui/src/widgets/hud_frame.rs`
+- [~] **gridui-task-17** — ~~`HUD Frame` container~~ **CUT (2026-07-02): the bracketed `Pane` already covers the floating HUD-bordered container look.**
 
 - [~] **gridui-task-19** — ~~`Search Input` widget~~ **CUT (redundant): the base `Input` + `CommandPalette`'s
   filter input already provide search.** Remaining real work = wire search into the sidebar (integration,
   tied to `plugin-03`), not a new widget.
 
-- [ ] **gridui-task-20** — `Accordion`: collapsible section with animated open/close transition.
-  Files: `heca-grid-ui/src/widgets/accordion.rs`
+- [~] **gridui-task-20** — ~~`Accordion` collapsible section~~ **CUT (2026-07-02): `DockFrame`/`ItemGroup` already collapse/expand; no separate widget needed.**
 
 ### [ ] Phase: Grid-UI crate-review debt · `gridui-07`
 Fix all known code-quality issues from the two Rust crate reviews.
@@ -1503,6 +1772,20 @@ Complete sidebar DnD — workspaces can be dragged to reorder. Panes and columns
   (d) be theme-coherent with the expanded side.
   Files: `heca/src/sidebar/render.rs`, `heca/src/mouse/render.rs`. Coordinate with `theming-task-29`.
   **Do this INSIDE `plugin-03`** (sidebar → `WorkspacesContainerProvider`) to avoid double rework.
+  - **HEADER/TOGGLE — DONE via `sidebar-fu-10` + `sidebar-fu-14` (2026-07-03):** the collapse
+    toggle now lives in the **top bar** (always visible in both states, mirrored left/right), and
+    the tall sidebar headers + dead icon/label were removed. So this task **no longer owns the
+    collapse toggle** — it only covers the rail's cells/cursor/KeyHint/pane-name/theming (a-d above).
+  - **RIGHT-SIDEBAR MOUSE SURFACE (bug found 2026-07-03):** the right header toggle wired in
+    fu-10 has **no effect** because there is **no right-sidebar mouse surface at all** —
+    `heca/src/mouse/surface_left.rs` is `DragSurfaceId::LeftSidebar` only, and its press handler
+    dispatches into the chrome tree only for the **left** bounds (`sidebar_bounds` = left;
+    `chrome_dispatch_press` gated on `left_visible()` at ~L92). The right sidebar is a decorative
+    placeholder with zero click routing. Fix: add a right-chrome press dispatch (mirror the left)
+    so right-sidebar chrome widgets are clickable; also route **collapsed** clicks through
+    `chrome_dispatch_press` (not the legacy `sidebar_hit_test`) once the rail is grid-ui.
+  - **Supersedes the fu-10 interim wiring:** fu-10 left the left toggle working only when expanded
+    and the right toggle non-functional; this task delivers the real both-states, both-sides version.
 
 - [ ] **app-task-31** — **(NEW, 2026-07-02 — regression #3.)** Enter `SidebarNav` WITHOUT force-expanding:
   `handle_sidebar_focus` must NOT call `set_left_mode(Expanded)` / `set_left_size(DEFAULT_SIDEBAR_WIDTH)` —

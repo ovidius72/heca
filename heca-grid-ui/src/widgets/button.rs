@@ -251,12 +251,13 @@ impl Component for Button {
             accent,
             glow_c,
             danger,
-            background,
             foreground,
             muted,
             border_c,
             border_width,
             radius,
+            on_accent,
+            on_danger,
         ) = {
             let t = cx.theme();
             (
@@ -264,12 +265,13 @@ impl Component for Button {
                 t.colors.accent,
                 t.colors.glow,
                 t.colors.danger,
-                t.colors.background,
                 t.colors.foreground,
                 t.colors.muted,
                 t.colors.border,
                 t.colors.border_width,
                 t.colors.control_radius(),
+                t.colors.on(t.colors.accent),
+                t.colors.on(t.colors.danger),
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -287,7 +289,7 @@ impl Component for Button {
                 if p > 0.0 {
                     self.paint_rising_fill(cx, accent, glow_c, p, radius);
                 }
-                self.paint_label(cx, accent.lerp(background, p));
+                self.paint_label(cx, accent.lerp(on_accent, p));
             }
             ButtonVariant::Destructive => {
                 cx.rect(
@@ -305,7 +307,7 @@ impl Component for Button {
                     });
                     cx.rect(b, danger.with_alpha(alpha(p)), None, radius, g);
                 }
-                self.paint_label(cx, danger.lerp(background, p));
+                self.paint_label(cx, danger.lerp(on_danger, p));
             }
             ButtonVariant::Secondary => {
                 // Border becomes more vivid on hover (brighter + solid).

@@ -402,6 +402,19 @@ impl Theme {
             .unwrap_or_else(|| self.derived_darker_background(TOP_BOTTOM_PANE_BG_DARKEN_FACTOR))
     }
 
+    /// A readable text/glyph color to place **on** a tonal fill (`accent`, `danger`,
+    /// `success`, …): whichever of the theme's `background` / `foreground` contrasts
+    /// more with the fill's luminance. Theme-driven (no hardcoded light/dark) — so a
+    /// dark label lands on a bright accent and a light label on a saturated danger.
+    pub fn on(&self, fill: Color) -> Color {
+        let l = fill.luminance();
+        if (l - self.background.luminance()).abs() >= (l - self.foreground.luminance()).abs() {
+            self.background
+        } else {
+            self.foreground
+        }
+    }
+
     /// Effective z=0 gradient *top* color: the theme field when set, else
     /// [`Theme::background`] (an unset gradient is a flat bg-color fill — still a
     /// valid frost source once blurred). The app's `[appearance]`

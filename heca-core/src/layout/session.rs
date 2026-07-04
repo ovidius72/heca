@@ -102,16 +102,23 @@ impl Session {
     }
 
     /// Remove a workspace by index. Returns true if removed.
+    /// Remove the workspace at `idx`. Returns `false` only for an out-of-range index.
+    /// Removing the **last** workspace is allowed and leaves the session empty —
+    /// `active_workspace()` then returns `None` until a new workspace is created
+    /// (e.g. via `add_workspace`); the app renders blank and stays recoverable.
     pub fn remove_workspace(&mut self, idx: usize) -> bool {
-        if idx >= self.workspaces.len() || self.workspaces.len() <= 1 {
+        if idx >= self.workspaces.len() {
             return false;
         }
         self.workspaces.remove(idx);
-        if self.active_workspace_idx > idx {
+        if self.workspaces.is_empty() {
+            // Session emptied — keep the index in a benign state (`get` → `None`).
+            self.active_workspace_idx = 0;
+        } else if self.active_workspace_idx > idx {
             // The active workspace was after the removed one; shift down.
             self.active_workspace_idx -= 1;
         } else if self.active_workspace_idx >= self.workspaces.len() {
-            // The removed workspace was the last one; clamp.
+            // The removed workspace was the last one; clamp to the new last.
             self.active_workspace_idx = self.workspaces.len() - 1;
         }
         true
@@ -398,10 +405,14 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_workspace_cannot_remove_last() {
+    fn test_remove_workspace_can_remove_last_leaving_empty() {
+        // Removing the sole workspace is now allowed; the session is left empty and
+        // `active_workspace()` returns `None` (no underflow on the index clamp).
         let mut session = make_session_with_workspaces(1);
-        assert!(!session.remove_workspace(0));
-        assert_eq!(session.workspaces.len(), 1);
+        assert!(session.remove_workspace(0));
+        assert_eq!(session.workspaces.len(), 0);
+        assert_eq!(session.active_workspace_idx, 0);
+        assert!(session.active_workspace().is_none());
     }
 
     #[test]
