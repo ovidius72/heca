@@ -31,10 +31,6 @@ const FONT_SIZE: f32 = 15.0;
 const ACTIVE_BAR_W: f64 = 3.0;
 /// Active left bar height as a fraction of the row (centered, not full height).
 const ACTIVE_BAR_FRAC: f64 = 0.65;
-/// Active-row fill alpha.
-const ACTIVE_FILL_ALPHA: u8 = 30;
-/// Hover-row fill alpha.
-const HOVER_FILL_ALPHA: u8 = 16;
 /// Padding the optional slot border adds around the slot content.
 const SLOT_BORDER_PAD_X: f64 = 7.0;
 const SLOT_BORDER_PAD_Y: f64 = 4.0;
@@ -262,7 +258,7 @@ impl Component for Item {
         if active {
             cx.rect(
                 sel,
-                accent.with_alpha(ACTIVE_FILL_ALPHA),
+                accent.with_alpha(cx.theme().colors.interaction.row_active_fill),
                 None,
                 sel_radius,
                 None,
@@ -270,7 +266,7 @@ impl Component for Item {
         } else if self.hovered.get_untracked() {
             cx.rect(
                 sel,
-                foreground.with_alpha(HOVER_FILL_ALPHA),
+                foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill),
                 None,
                 sel_radius,
                 None,

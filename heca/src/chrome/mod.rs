@@ -347,30 +347,6 @@ const HEADER_MARGIN: f32 = 6.0;
 /// as one control group.
 const HEADER_BUTTON_GAP: f32 = 1.0;
 
-/// Glyph size of a header action button at the bar `font` — a touch larger than the
-/// body font so the icons are clearly legible/clickable.
-fn header_icon_size(font: f32) -> f32 {
-    (font * 1.25).max(15.0)
-}
-
-/// Square cell size of a header action button — the icon plus snug padding (keeps
-/// the inter-button spacing small while the buttons stay comfortably tappable).
-fn header_button_cell(font: f32) -> f32 {
-    header_icon_size(font) + 6.0
-}
-
-/// Total width the action-button cluster occupies (0 when there are no actions).
-pub(crate) fn header_buttons_width(
-    actions: &[heca_config::appearance::PaneAction],
-    font: f32,
-) -> f32 {
-    if actions.is_empty() {
-        return 0.0;
-    }
-    let n = actions.len() as f32;
-    n * header_button_cell(font) + (n - 1.0).max(0.0) * HEADER_BUTTON_GAP
-}
-
 /// Per-pane context the header buttons need to build their (parameterized) actions
 /// and emit them through the app event loop.
 pub(crate) struct PaneHeaderCtx {
@@ -400,110 +376,70 @@ pub(crate) struct RetainedPaneViewportWidgets {
     pub(crate) badge: BadgeButton,
 }
 
-/// Tooltip keybind hints for the pane-action buttons, formatted from the user's
-/// config (so they track rebinds) with the leader shown as the symbolized prefix
-/// combo. Empty string ⇒ unbound (tooltip then shows the label only). Built at
-/// config load/reload (`PaneActionHints::from_keys`), stored on `AppState`.
+/// Resolved display shortcuts for **every bound action**, keyed by config name
+/// (`"close"`, `"sidebar_left"`, …). Built once at config load/reload from the
+/// default+user keybindings and stored on `AppState`; any button looks its own
+/// shortcut up by the name of the action it triggers, so the choice is never
+/// hand-made by a caller or plugin. The leader renders through the central
+/// [`PREFIX_SYMBOL`](crate::shortcut) seam, uniform across the app.
 #[derive(Clone, Default, PartialEq)]
-pub(crate) struct PaneActionHints {
-    pub(crate) split: String,
-    pub(crate) move_left: String,
-    pub(crate) move_right: String,
-    pub(crate) close: String,
-    pub(crate) zoom: String,
-    pub(crate) float: String,
-}
+pub(crate) struct ActionShortcuts(std::collections::HashMap<String, String>);
 
-impl PaneActionHints {
-    /// Resolve each button's display keybind from the config bindings.
-    pub(crate) fn from_keys(
-        keys: &heca_config::keys::KeysConfig,
-        prefix: &crate::keymap::KeyCombo,
-    ) -> Self {
-        let hint = |action: &str| {
-            keys.bindings
-                .get(action)
-                .and_then(|b| b.keys().first().copied())
-                .map(|s| format_binding(s, prefix))
-                .unwrap_or_default()
-        };
-        Self {
-            split: hint("split_vertical"),
-            move_left: hint("move_pane_left"),
-            move_right: hint("move_pane_right"),
-            close: hint("close"),
-            zoom: hint("zoom_column"),
-            float: hint("float"),
-        }
-    }
-
-    fn for_action(&self, action: heca_config::appearance::PaneAction) -> &str {
-        use heca_config::appearance::PaneAction;
-        match action {
-            PaneAction::Split => &self.split,
-            PaneAction::MoveLeft => &self.move_left,
-            PaneAction::MoveRight => &self.move_right,
-            PaneAction::Close => &self.close,
-            PaneAction::Zoom => &self.zoom,
-            PaneAction::Float => &self.float,
-        }
-    }
-}
-
-/// macOS-style symbols for a [`KeyCombo`] (the prefix): `⌃⌥⇧⌘` + the key.
-fn symbolize_combo(c: &crate::keymap::KeyCombo) -> String {
-    let mut s = String::new();
-    if c.ctrl {
-        s.push('⌃');
-    }
-    if c.alt {
-        s.push('⌥');
-    }
-    if c.shift {
-        s.push('⇧');
-    }
-    if c.super_ {
-        s.push('⌘');
-    }
-    s.push_str(&symbolize_key(&c.key));
-    s
-}
-
-/// A single key token, prettified (named keys → glyphs; letters upper-cased).
-fn symbolize_key(k: &str) -> String {
-    match k.to_ascii_lowercase().as_str() {
-        "enter" | "return" => "↩".into(),
-        "space" => "␣".into(),
-        "arrowleft" | "left" => "←".into(),
-        "arrowright" | "right" => "→".into(),
-        "arrowup" | "up" => "↑".into(),
-        "arrowdown" | "down" => "↓".into(),
-        "escape" | "esc" => "⎋".into(),
-        "tab" => "⇥".into(),
-        _ if k.chars().count() == 1 => k.to_uppercase(),
-        _ => k.to_string(),
-    }
-}
-
-/// Format a config binding string (`"prefix+v"`, `"Alt+Enter"`) for a tooltip: the
-/// leading `prefix` token becomes the symbolized prefix combo, modifiers become
-/// symbols. Empty input ⇒ empty output.
-fn format_binding(s: &str, prefix: &crate::keymap::KeyCombo) -> String {
-    let mut out = String::new();
-    for tok in s.split('+').map(str::trim).filter(|t| !t.is_empty()) {
-        match tok.to_ascii_lowercase().as_str() {
-            "prefix" => {
-                out.push_str(&symbolize_combo(prefix));
-                out.push(' ');
+impl ActionShortcuts {
+    /// Resolve a display shortcut for every action that has a binding (user
+    /// override or bundled default), mirroring `build_keymap`'s merge.
+    pub(crate) fn from_config(config: &heca_config::theme::Config) -> Self {
+        let defaults = heca_config::keys::KeysConfig::default();
+        let mut map = std::collections::HashMap::new();
+        for name in defaults.bindings.keys().chain(config.keys.bindings.keys()) {
+            if map.contains_key(name) {
+                continue;
             }
-            "ctrl" | "control" => out.push('⌃'),
-            "shift" => out.push('⇧'),
-            "alt" | "option" => out.push('⌥'),
-            "super" | "cmd" | "command" | "meta" => out.push('⌘'),
-            _ => out.push_str(&symbolize_key(tok)),
+            if let Some(s) =
+                crate::shortcut::shortcut_for_action(name, &config.keys.bindings, &defaults.bindings)
+            {
+                map.insert(name.clone(), s);
+            }
         }
+        Self(map)
     }
-    out.trim().to_string()
+
+    /// The display shortcut for `action_name`, or `None` when unbound.
+    pub(crate) fn get(&self, action_name: &str) -> Option<&str> {
+        self.0.get(action_name).map(String::as_str)
+    }
+}
+
+/// The config action name a [`PaneAction`] button triggers — the canonical
+/// identity used to resolve its shortcut (the emitted `WmAction` may be a
+/// button-only variant like `ClosePaneById`, so the name is the stable key).
+pub(crate) fn pane_action_name(action: heca_config::appearance::PaneAction) -> &'static str {
+    use heca_config::appearance::PaneAction;
+    match action {
+        PaneAction::Split => "split_vertical",
+        PaneAction::MoveLeft => "move_pane_left",
+        PaneAction::MoveRight => "move_pane_right",
+        PaneAction::Close => "close",
+        PaneAction::Zoom => "zoom_column",
+        PaneAction::Float => "float",
+    }
+}
+
+/// Wrap a clickable `child` in a tooltip = `label` + the action's current shortcut,
+/// resolved centrally from `shortcuts` by `action_name`. The one place any button's
+/// tooltip is composed: callers name the action, never the shortcut, so a rebind
+/// updates every tip and no surface can drift on the leader symbol or format.
+fn action_tooltip(
+    child: impl Component + 'static,
+    action_name: &str,
+    label: &str,
+    shortcuts: &ActionShortcuts,
+) -> Tooltip {
+    let tip = match shortcuts.get(action_name) {
+        Some(sc) if !sc.is_empty() => format!("{label}  {sc}"),
+        _ => label.to_string(),
+    };
+    Tooltip::new(child, tip).side(TooltipSide::Bottom)
 }
 
 /// Map a configured [`PaneAction`] to its `(icon, WM action, label, needs_focus)`.
@@ -582,7 +518,7 @@ pub(crate) struct PaneHeaderContent<'a> {
     /// non-floating buttons (split/zoom/move) are hidden (per the action policy).
     pub(crate) floating: bool,
     /// Tooltip keybind hints (tracked in the key so a config reload rebuilds tips).
-    pub(crate) hints: &'a PaneActionHints,
+    pub(crate) shortcuts: &'a ActionShortcuts,
 }
 
 /// Whether a pane-action button stays visible when its pane is **floating**, driven
@@ -615,7 +551,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
     let hints: Vec<&str> = content
         .actions
         .iter()
-        .map(|&a| content.hints.for_action(a))
+        .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or(""))
         .collect();
     format!(
         "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
@@ -659,31 +595,12 @@ pub(crate) fn build_pane_header(
         .copied()
         .filter(|&a| !content.floating || pane_action_visible_when_floating(a))
         .collect();
-    let buttons_w = header_buttons_width(&visible_actions, font);
-    // The bar yields width to the button cluster first.
-    let bar_max = (avail_w
-        - buttons_w
-        - if buttons_w > 0.0 {
-            HEADER_BUTTON_GAP
-        } else {
-            0.0
-        })
-    .max(0.0);
-    let bar = build_pane_info_bar(
-        content.programs,
-        content.fallback_name,
-        content.custom_name,
-        content.runtime,
-        content.segments,
-        theme,
-        bar_max,
-        font,
-    );
-
-    let buttons = if visible_actions.is_empty() {
+    // Build the action-button cluster first: each button self-sizes from its
+    // `WidgetSize::Header` variant (emphasized glyph + snug cluster padding), so its
+    // width is owned by the widget, not hand-computed here.
+    let mut buttons = if visible_actions.is_empty() {
         None
     } else {
-        let cell = header_button_cell(font);
         let mut row = Flex::row().align(Align::Center).gap(HEADER_BUTTON_GAP);
         for &action in &visible_actions {
             let (glyph, wm_action, label, needs_focus) =
@@ -699,13 +616,6 @@ pub(crate) fn build_pane_header(
             // one, and a `FocusPane` from MouseContent is blocked in the floating domain
             // (logs a spurious "blocked intent"). Unfloat/close act on it directly.
             let needs_focus = needs_focus && !content.floating;
-            // Tooltip = label + the user's configured keybind (prefix symbolized).
-            let key = content.hints.for_action(action);
-            let tip = if key.is_empty() {
-                label.to_string()
-            } else {
-                format!("{label}  {key}")
-            };
             // Close is destructive → its glyph + hover/press use the theme danger
             // hue; the rest use the foreground glyph with an accent hover. The danger
             // glyph is softened toward the header surface so the red reads as a cue,
@@ -718,34 +628,59 @@ pub(crate) fn build_pane_header(
             };
             let proxy = ctx.event_proxy.clone();
             let pane_id = ctx.pane_id;
-            let button = IconButton::new(
-                Icon::new(glyph)
-                    .color(icon_color)
-                    .size(header_icon_size(font)),
-            )
-            .cell(cell)
-            .tone(tone)
-            .active(is_active)
-            .on_click(move || {
-                use crate::app::interaction::{InteractionIntent, InteractionSource};
-                // Active-targeted actions (zoom/float) act on the focused pane, so
-                // focus this pane first — the events are queued and processed in
-                // order on the UI thread, so the action lands on this pane.
-                if needs_focus {
+            let button = IconButton::new(Icon::new(glyph).color(icon_color))
+                .size(WidgetSize::Header)
+                .tone(tone)
+                .active(is_active)
+                .on_click(move || {
+                    use crate::app::interaction::{InteractionIntent, InteractionSource};
+                    // Active-targeted actions (zoom/float) act on the focused pane, so
+                    // focus this pane first — the events are queued and processed in
+                    // order on the UI thread, so the action lands on this pane.
+                    if needs_focus {
+                        let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
+                            source: InteractionSource::MouseContent,
+                            intent: InteractionIntent::FocusPane { pane_id },
+                        });
+                    }
                     let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
                         source: InteractionSource::MouseContent,
-                        intent: InteractionIntent::FocusPane { pane_id },
+                        intent: InteractionIntent::ActivateAction(wm_action.clone()),
                     });
-                }
-                let _ = proxy.send_event(crate::app::events::AppEvent::ChromeIntent {
-                    source: InteractionSource::MouseContent,
-                    intent: InteractionIntent::ActivateAction(wm_action.clone()),
                 });
-            });
-            row = row.child(Tooltip::new(button, tip).side(TooltipSide::Bottom));
+            // Tooltip = label + the action's current keybind(s), resolved centrally
+            // by name (never hand-picked here); the leader renders via PREFIX_SYMBOL.
+            row = row.child(action_tooltip(button, pane_action_name(action), label, content.shortcuts));
         }
         Some(row)
     };
+
+    // Measure the cluster's natural width by laying it out on its own — the widget
+    // reports its size, we don't compute it. (The outer tree is re-laid-out every
+    // frame in `sync_pane_headers`; this pass only feeds the bar's truncation budget.)
+    let buttons_w = if let Some(row) = buttons.as_mut() {
+        LayoutEngine::new()
+            .base_font(font)
+            .compute(row, Size::new(avail_w as f64, avail_w as f64));
+        row.base().bounds.size.w as f32
+    } else {
+        0.0
+    };
+    // The bar yields width to the button cluster first.
+    let bar_max = (avail_w
+        - buttons_w
+        - if buttons_w > 0.0 { HEADER_BUTTON_GAP } else { 0.0 })
+    .max(0.0);
+    let bar = build_pane_info_bar(
+        content.programs,
+        content.fallback_name,
+        content.custom_name,
+        content.runtime,
+        content.segments,
+        theme,
+        bar_max,
+        font,
+    );
 
     let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
     let root = match (bar, buttons) {
@@ -1006,7 +941,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             col_idx: input.col_idx,
             zoomed: input.zoomed,
             floating: input.floating,
-            hints: &state.pane_action_hints,
+            shortcuts: &state.action_shortcuts,
         };
         let key = pane_header_key(&content, font, input.avail_w);
         let needs_build = state
@@ -1794,23 +1729,35 @@ struct ChromeFrame<'a> {
 }
 
 /// A sidebar collapse toggle for the **top bar** (sidebar-fu-14): a small arrow
-/// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region).
-/// Lives in the always-visible top bar so it works in both expanded and collapsed
-/// states, replacing the in-sidebar-header toggle.
+/// `IconButton` that emits `ActivateAction(action)` (expand↔rail for its region),
+/// wrapped in a tooltip carrying its keybind (resolved centrally by `action_name`
+/// — like every other chrome button). Lives in the always-visible top bar so it
+/// works in both expanded and collapsed states.
 fn sidebar_toggle_button(
     glyph: Glyph,
     action: crate::input::WmAction,
+    action_name: &str,
+    shortcuts: &ActionShortcuts,
+    hints: &mut HintTargetRegistry,
     emit: ChromeIntentEmitter,
     color: Color,
-) -> IconButton {
+) -> Tooltip {
+    use crate::app::interaction::InteractionIntent;
+    // Label from the action descriptor (registry-owned), never re-spelled here.
+    let label = crate::actions::ActionRegistry::label(action_name).unwrap_or(action_name);
+    // A hint target firing the *same* intent as a click, so `prefix+/` can pick this
+    // button by letter — every action button is both clickable and hintable.
+    let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
     // Just pick the size variant — the widget derives icon px + padding from the
     // theme font internally (`Icon` with no explicit px uses the variant-scaled font,
     // `IconButton` scales its padding). No caller-side size math.
-    IconButton::new(Icon::new(glyph).color(color))
+    let button = IconButton::new(Icon::new(glyph).color(color))
         .size(WidgetSize::Small)
+        .hint_target(hint_id)
         .on_click(move || {
-            emit(crate::app::interaction::InteractionIntent::ActivateAction(action.clone()));
-        })
+            emit(InteractionIntent::ActivateAction(action.clone()));
+        });
+    action_tooltip(button, action_name, label, shortcuts)
 }
 
 /// Assemble the chrome root widget tree (no layout/paint): a transparent tab band
@@ -1822,8 +1769,8 @@ fn chrome_root(
     frame: &ChromeFrame,
     left_sidebar: Option<Flex>,
     right_sidebar: Option<Flex>,
-    left_toggle: Option<IconButton>,
-    right_toggle: Option<IconButton>,
+    left_toggle: Option<Tooltip>,
+    right_toggle: Option<Tooltip>,
     signals: &mut ChromeSignals,
 ) -> Flex {
     let ChromeFrame {
@@ -3012,6 +2959,9 @@ pub(crate) fn build_chrome_root(
         sidebar_toggle_button(
             glyph,
             crate::input::WmAction::SidebarLeft,
+            "sidebar_left",
+            &state.action_shortcuts,
+            &mut hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
         )
@@ -3025,6 +2975,9 @@ pub(crate) fn build_chrome_root(
         sidebar_toggle_button(
             glyph,
             crate::input::WmAction::SidebarRight,
+            "sidebar_right",
+            &state.action_shortcuts,
+            &mut hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
         )
@@ -3834,19 +3787,6 @@ mod tests {
     }
 
     #[test]
-    fn header_buttons_width_scales_with_action_count() {
-        use heca_config::appearance::PaneAction;
-        assert_eq!(super::header_buttons_width(&[], 15.0), 0.0);
-        let one = super::header_buttons_width(&[PaneAction::Close], 15.0);
-        let three = super::header_buttons_width(
-            &[PaneAction::Split, PaneAction::MoveLeft, PaneAction::Close],
-            15.0,
-        );
-        assert!(one > 0.0);
-        assert!(three > one, "more buttons ⇒ wider cluster");
-    }
-
-    #[test]
     fn pane_action_spec_maps_kinds_to_actions() {
         use crate::input::WmAction;
         use heca_config::appearance::PaneAction;
@@ -3913,13 +3853,13 @@ mod tests {
             }),
             ..PaneRuntime::default()
         };
-        let hints = PaneActionHints::default();
+        let hints = ActionShortcuts::default();
         fn content<'a>(
             programs: &'a ProgramsConfig,
             segments: &'a [heca_config::appearance::PaneSegment],
             actions: &'a [heca_config::appearance::PaneAction],
             rt: &'a PaneRuntime,
-            hints: &'a PaneActionHints,
+            hints: &'a ActionShortcuts,
             col_idx: usize,
         ) -> PaneHeaderContent<'a> {
             PaneHeaderContent {
@@ -3933,7 +3873,7 @@ mod tests {
                 col_idx,
                 zoomed: false,
                 floating: false,
-                hints,
+                shortcuts: hints,
             }
         }
         let base = pane_header_key(
@@ -3992,15 +3932,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn format_binding_symbolizes_prefix_and_modifiers() {
-        let prefix = crate::keymap::KeyCombo::parse("Ctrl+b");
-        // The `prefix` token becomes the symbolized prefix combo; the key upper-cases.
-        assert_eq!(super::format_binding("prefix+v", &prefix), "⌃B V");
-        assert_eq!(super::format_binding("prefix+x", &prefix), "⌃B X");
-        // Modifiers within a chord symbolize; named keys map to glyphs.
-        assert_eq!(super::format_binding("Alt+Enter", &prefix), "⌥↩");
-        assert_eq!(super::format_binding("prefix+Shift+g", &prefix), "⌃B ⇧G");
-        assert_eq!(super::format_binding("", &prefix), "");
-    }
 }

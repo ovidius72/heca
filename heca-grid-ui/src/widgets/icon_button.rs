@@ -22,14 +22,6 @@ use crate::widgets::Icon;
 const DEFAULT_PAD: f32 = 8.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
-/// Peak alpha of the hover fill (tone-tinted) and border.
-const HOVER_FILL_ALPHA: f32 = 28.0;
-const HOVER_BORDER_ALPHA: f32 = 190.0;
-/// Held-on ("active"/toggled) fill + border alpha — a persistent tone wash with a
-/// firm border, mirroring the [`Toggle`](super::Toggle) on-state. Stronger than the
-/// hover fill so an engaged button reads as a *status*, not a transient hover.
-const ACTIVE_FILL_ALPHA: f32 = 64.0;
-const ACTIVE_BORDER_ALPHA: f32 = 215.0;
 /// Hover glow spread + peak intensity (scaled by the theme `glow_size` + hover).
 const GLOW_RADIUS: f32 = 10.0;
 const GLOW_INTENSITY: f32 = 0.18;
@@ -155,9 +147,9 @@ impl Component for IconButton {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (accent, glow_c, ctrl_radius, border_width, focus_border_width) = {
+        let (accent, glow_c, ctrl_radius, border_width, focus_border_width, ia) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.control_radius(), t.colors.border_width, t.focus_border_width)
+            (t.colors.accent, t.colors.glow, t.colors.control_radius(), t.colors.border_width, t.focus_border_width, t.colors.interaction)
         };
         let tone = self.tone.unwrap_or(accent);
         let p = self.progress.clamp(0.0, 1.0);
@@ -168,12 +160,12 @@ impl Component for IconButton {
         // hover frame fading in by `p`, whichever is stronger. Hover layers on top of
         // active so an engaged button still brightens under the cursor.
         let (active_fill, active_border) = if self.active {
-            (ACTIVE_FILL_ALPHA, ACTIVE_BORDER_ALPHA)
+            (ia.control_active_fill as f32, ia.control_active_border as f32)
         } else {
             (0.0, 0.0)
         };
-        let fill_a = (HOVER_FILL_ALPHA * p).max(active_fill);
-        let border_a = (HOVER_BORDER_ALPHA * p).max(active_border);
+        let fill_a = (ia.control_hover_fill as f32 * p).max(active_fill);
+        let border_a = (ia.control_hover_border as f32 * p).max(active_border);
         if fill_a > 0.0 || border_a > 0.0 {
             // Glow holds steady while active, otherwise tracks the hover amount.
             let glow_amt = if self.active { 1.0 } else { p };

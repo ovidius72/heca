@@ -100,8 +100,13 @@ const INTENSITY_OPTS: [Intensity; 4] = [
     Intensity::Heavy,
 ];
 
-/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
-const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
+/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`, `HEADER`).
+const SIZE_OPTS: [WidgetSize; 4] = [
+    WidgetSize::Normal,
+    WidgetSize::Small,
+    WidgetSize::Large,
+    WidgetSize::Header,
+];
 
 /// UI zoom as a **continuous** level in `[ZOOM_MIN, ZOOM_MAX]` (the 0–5 dial). The
 /// factor is geometric — `ZOOM_RATIO^(level - ZOOM_DEFAULT)` — so level 2 == `1.0×`
@@ -605,7 +610,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Label::new("SIZE").color(theme.colors.muted).font_scale(0.85))
                 .child(
-                    Select::new(["NORMAL", "SMALL", "LARGE"])
+                    Select::new(["NORMAL", "SMALL", "LARGE", "HEADER"])
                         .selected(size_idx)
                         .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
@@ -744,6 +749,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     .active(true)
                     .on_click(|| println!("[showcase] unzoom")),
                     "Zoom (active)",
+                ))
+                // `WidgetSize::Header`: the emphasized variant for pane/info-bar action
+                // buttons — the glyph out-sizes the body text and the button self-sizes
+                // from the variant (no explicit icon px), so the whole cluster scales
+                // with the bar font. This is exactly what the in-pane header buttons use.
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Plus).color(theme.colors.foreground))
+                        .size(WidgetSize::Header)
+                        .on_click(|| println!("[showcase] header add")),
+                    "Header size",
                 ))
                 .child(
                     Tooltip::new(

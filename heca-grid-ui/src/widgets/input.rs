@@ -26,14 +26,10 @@ const DEFAULT_WIDTH: f32 = 240.0;
 const PAD: f64 = 10.0;
 /// Caret width (logical px).
 const CARET_W: f64 = 1.5;
-/// Border alpha at rest; firms to solid accent on focus.
-const REST_BORDER_ALPHA: f32 = 150.0;
 /// Caret blink period (seconds): visible for the first half, hidden the second.
 const BLINK_PERIOD: f32 = 1.0;
 /// Max gap (seconds) between clicks counted as part of one multi-click cycle.
 const MULTI_CLICK: f32 = 0.4;
-/// Selection highlight alpha.
-const SELECTION_ALPHA: u8 = 70;
 
 /// A single-line text input. Emits `input-change` with the full new text on each
 /// edit.
@@ -458,7 +454,7 @@ impl Component for Input {
         }
         let disabled = self.base.disabled.get_untracked();
         let focused = self.base.focused.get_untracked();
-        let (surface, accent, muted, foreground, radius, bw) = {
+        let (surface, accent, muted, foreground, radius, bw, ia) = {
             let t = cx.theme();
             (
                 t.colors.surface,
@@ -467,6 +463,7 @@ impl Component for Input {
                 t.colors.foreground,
                 t.colors.control_radius(),
                 t.colors.border_width,
+                t.colors.interaction,
             )
         };
         let b = self.base.bounds;
@@ -475,7 +472,8 @@ impl Component for Input {
         // Field: dark fill; border firms muted → accent on focus. Radius + border
         // width come from the theme so global settings scale this proportionally.
         let p = if focused { 1.0 } else { 0.0 };
-        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let rest_border = ia.control_rest_border as f32;
+        let border_a = rest_border + (255.0 - rest_border) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
@@ -502,7 +500,7 @@ impl Component for Input {
                 ),
                 Size::new((sel_e - sel_s) as f64 * advance, ch),
             );
-            cx.rect(sel, accent.with_alpha(SELECTION_ALPHA), None, 1.0, None);
+            cx.rect(sel, accent.with_alpha(ia.selection), None, 1.0, None);
         }
 
         let s = self.text.get_untracked();

@@ -243,6 +243,27 @@ Result: changing `theme.font_size` (and re-running layout) reflows the entire tr
 no tree rebuild, no per-widget `.font_size(...)` calls. Set `.font_scale(x)` for semantic
 hierarchy, or `.font_size(x)` to pin a specific size.
 
+### Size variants
+
+`WidgetSize` is the **discrete size step** a control picks with `LayoutExt::size` — it scales
+the inherited font **and** the widget's intrinsic padding / fixed dimensions together, so the
+whole affordance grows or shrinks as one. The caller picks a *variant*, never pixels; the
+widget owns the resulting geometry.
+
+| Variant | `font_scale` | `pad_scale` | Use |
+|---------|-------------|------------|-----|
+| `Small` | `0.8` | `0.5` | Compact controls (sidebar, dense toolbars). |
+| `Normal` *(default)* | `0.9` | `0.9` | The compact baseline for most controls. |
+| `Large` | `1.0` | `1.0` | Roomy controls at the full base font — the historical un-sized look. |
+| `Header` | `1.25` | `0.4` | Emphasized header / info-bar action buttons: glyph out-sizes the body text while a snug padding keeps the button cluster tight. |
+
+`font_scale` multiplies the inherited base font (applied centrally in layout); `pad_scale`
+multiplies the widget's intrinsic padding in its `remeasure`. `Header`'s padding is
+deliberately *below* `Small` so an emphasized icon stays large without turning the cluster
+into a row of chunky boxes — this is what the in-pane header action buttons use. Set it per
+widget with `.size(WidgetSize::Header)`; **never** hand-compute the icon/cell size in the
+caller.
+
 ### `Theme`, `GlowLevel` & `Intensity`
 
 Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
@@ -612,11 +633,18 @@ Button::destructive("DEREZ")
 The icon-only cousin of `Button` — a compact, clickable icon affordance for toolbars/headers.
 Ghost at rest (just the icon); an animated tone-tinted hover frame (+ optional glow) fades in,
 with a press flash and keyboard focus ring. Hugs its icon + padding by default; pin a square
-with `.size(px)`. Focusable once `.on_click(...)` is set.
+with `.cell(px)`. Focusable once `.on_click(...)` is set.
 
 - **Construct**: `IconButton::new(Icon)`.
-- **Builders**: `.size(px)` (pin a square), `.tone(Color)` (hover/press hue, default accent),
+- **Builders**: `.cell(px)` (pin a square), `.size(WidgetSize)` (size variant — see
+  [Size variants](#size-variants); `Header` is the emphasized one for info-bar / pane-header
+  buttons), `.tone(Color)` (hover/press hue, default accent),
   `.glow(bool)`, `.active(bool)`, `.on_click(impl Fn() + 'static)`.
+- **Header buttons**: for an emphasized icon in a pane/info-bar header, use
+  `IconButton::new(Icon::new(g).color(c)).size(WidgetSize::Header)` — **no** explicit icon px
+  and **no** `.cell(...)`. The button self-sizes from the variant (glyph `1.25×` the bar font
+  + a snug cluster padding) so the whole cluster scales with the bar font. Never hand-compute
+  the icon/cell size in the caller.
 - **`.active(true)`**: held-on (toggled) status — a persistent tone-tinted fill + firm border
   (the held version of the hover frame, matching the `Toggle` on-state), so the button reads as
   an active *status* not a passive icon. Hover/press still layer on top. Used by the in-pane
@@ -1145,6 +1173,41 @@ Tooltip::new(
     "Close",
 ).side(TooltipSide::Bottom);
 ```
+
+> The raw `Tooltip::new(button, "Close")` above hardcodes the text. **In the heca app,
+> do not do this for an action button** — see the next section: the tip (and its
+> keybinding) is derived from the action, centrally.
+
+### Action buttons — tooltip + KeyHint from the action (heca app pattern)
+
+Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefix+/`
+**KeyHint** from that action, automatically — the caller names the action, never a
+shortcut string, the leader symbol, or a hand-built tip. This keeps every button
+uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
+**`Tooltip`**, and **`hint_target`** ([`KeyHint`](#keyhint) framework); the resolution
+seam is app-side.
+
+```rust
+// heca/src/chrome/mod.rs — one call composes label + the live keybind(s):
+let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
+let button = IconButton::new(icon)
+    .hint_target(hint_id)                       // prefix+/ can pick it (same intent as click)
+    .on_click(move || emit(InteractionIntent::ActivateAction(action.clone())));
+row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
+//                               ▲ action config name  ▲ label
+```
+
+- **Tooltip text is resolved by action name.** `ActionShortcuts` (on `AppState`, rebuilt
+  at config load/reload) maps each action's config name → its display shortcut via
+  `shortcut::shortcut_for_action`, which reads the **user's real binding when they've
+  rebound it** (defaults only as fallback), supports **multiple** bindings (joined
+  ` / `), and renders the leader through the `PREFIX_SYMBOL` constant — never a literal
+  `λ`, never `⌃⌥⇧⌘`. So a rebind in `config.toml` updates the tip with no code change.
+- **The name is the canonical key**, because the emitted `WmAction` may be a button-only
+  variant that isn't itself bound (`ClosePaneById`, `AddPaneToColumn`).
+- **KeyHint** = register the click's intent in the `HintTargetRegistry` and `.hint_target`
+  it. Full app-side rules (incl. the current pane-header-tree gap) are in
+  **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
 ### Modal
 

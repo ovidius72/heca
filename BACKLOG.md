@@ -1280,17 +1280,22 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   *"una libreria UI deve fornire le proprietà per un design consistente senza dover ogni volta fare
   calcoli su spazi, padding, font"*). Three concrete library gaps, do as a **dedicated grid-ui
   branch** (design tokens first, then migrate; update showcase + `docs/widgets.md`):
-  1. **Interaction-alpha theme tokens.** Every widget bakes its own hover/border/active alphas
-     (`IconButton` `HOVER_FILL_ALPHA`/`ACTIVE_*`, `Button` per-variant, `Modal` `26/180/200/235`,
-     `Tag`, `RailCell`…). Add theme tokens (e.g. `hover_fill_alpha`, `border_rest/hover_alpha`,
-     `active_fill_alpha`, `disabled_alpha`) + migrate all widgets. (Memory:
-     `grid-ui-widgets-not-fully-theme-driven`.)
-  2. **`WidgetSize` must cover the chrome/header size.** Variants scale the font 0.8/0.9/1.0 (all
-     ≤ font), but chrome header buttons want `header_icon_size = (font*1.25).max(15)` (bigger than
-     body font) — so the pane-header buttons hand-calc px + `.cell(...)` instead of
-     `.size(WidgetSize)`. Add a bigger variant / map variants to absolute control sizes, then
-     MIGRATE the legacy callers (pane-header action buttons `chrome/mod.rs:721`; any other
-     `header_icon_size`/`header_button_cell` user) to `.size(WidgetSize)`.
+  1. **Interaction-alpha theme tokens — DONE (2026-07-06, branch `feat/gridui-styling-foundation`).**
+     Added `Theme.colors.interaction: InteractionAlphas` (`heca-theme/src/theme.rs`, `#[serde(default)]`
+     so presets inherit it) — ~32 `u8` tokens grouped controls/rows/nav/tonal/text/overlays/scrollbar.
+     Migrated ~24 widgets off their const alphas to `cx.theme().colors.interaction.*` (IconButton,
+     Button, Modal, Tag, RailCell, Toggle, Checkbox, Select, Input, ContextMenu, CommandPalette,
+     KeyHint, Tooltip, …). Exact duplicates unified; near-identical values harmonized per family.
+     (Memory: `grid-ui-widgets-not-fully-theme-driven`.)
+  2. **`WidgetSize` must cover the chrome/header size — DONE (2026-07-06).** Added
+     `WidgetSize::Header` (`font_scale 1.25`, `pad_scale 0.4` — emphasized glyph, snug cluster
+     padding) in `heca-grid-ui/src/style.rs`. Migrated the pane-header action buttons
+     (`build_pane_header`, `chrome/mod.rs`) off the hand-calc `header_icon_size`/`header_button_cell`/
+     `.cell(...)` (all three helpers **deleted**) to `IconButton::new(Icon…).size(WidgetSize::Header)`
+     — no explicit icon px, self-sizing squares. The bar's truncation budget now comes from a
+     measure pass on the button cluster (`LayoutEngine…compute`) instead of the deleted width helper.
+     Showcase (SIZE select + toolbar demo) + `docs/widgets.md` (new "Size variants" table +
+     IconButton `Header` note) updated. heca 300 + grid-ui 52+127 + theme 24 green, clippy clean.
   3. **Theme spacing tokens + container padding from the theme — DONE (2026-07-04).** Added
      `Spacing` (None/Xs/Sm/Md/Lg, font-relative `scale()`) in `style.rs` + `Style.pad_spacing_x/y`,
      resolved to px at layout (`layout.rs`, after `base.font`), + `LayoutExt::pad_all`/`pad_x`/`pad_y`
@@ -1300,9 +1305,31 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   - **DONE (2026-07-04) — readable text on tonal fills.** `Color::luminance()` + `heca_theme::Theme::on(fill)`
      (picks background/foreground by luminance contrast) → wired into `Modal` + `Button` (Primary/Destructive)
      so the **danger (red) button label is now light/legible**, accent stays dark. Theme-driven, no hardcoded.
-  Still open in this task: (1) interaction-alpha tokens, (2) `WidgetSize` header-size coverage + migrate
-  pane-header buttons off `header_icon_size`/`.cell`. See memory
+  Sub-items (1) interaction-alpha tokens and (2) `WidgetSize` header-size coverage + pane-header
+  migration are **both DONE (2026-07-06)**; sub-item (3) theme spacing tokens was done 2026-07-04.
+  The three core library gaps of this task are now closed. See memory
   `think-widget-design-before-writing-not-after-correction`.
+
+  **Follow-ups arising (2026-07-06):**
+  - [x] **Centralized button tooltips from the action registry — DONE (2026-07-06).** Every chrome
+    button now reads its shortcut(s) from the keybinding registry by the **action it emits** (never
+    hardcoded, never caller-picked). `shortcut.rs::shortcut_for_action` prefers the user's binding
+    over defaults, shows **all** bindings joined by `/`, and formats the leader with the
+    `PREFIX_SYMBOL` (λ) constant — omitting it when the binding has no `prefix+`. `chrome::ActionShortcuts`
+    (built once via `from_config`) + `action_tooltip(...)` compose the tooltip; `pane_action_name()`
+    bridges emitted→bound action names. The sidebar expand/collapse toggles now carry tooltips too.
+    Documented in `AGENTS.md` (Pane Info Bar → "Chrome buttons → action, tooltip, KeyHint") and
+    `docs/widgets.md` ("Action buttons — tooltip + KeyHint from the action").
+  - [ ] **KeyHint on ALL actions (FUTURE) — pane-header buttons are not hint-collected.** State
+    verified 2026-07-06: `collect_hint_targets`/`paint_hint_targets` (`chrome/mod.rs:1997`) walk
+    **only** `state.chrome_tree.root`. The pane-header action buttons live in **separate per-pane
+    retained trees** (`state.pane_headers`, built by `build_pane_header`/`sync_pane_headers`) that
+    are never walked, and they do **not** call `.hint_target(...)`. So today: sidebar toggles + dock
+    cells ARE hintable (chrome tree); pane-header split/move/close/zoom/float are NOT. To close it:
+    register a `HintTargetId` (`ActivateAction` intent) on each pane-header button AND extend the
+    `HintPick` collect/paint pass to additionally walk every `state.pane_headers` tree (offset by the
+    pane origin), mirroring how `sidebar-fu-13` Stage 3 wanted the open-dialog tree walked. Kin to
+    `sidebar-fu-12` (global intent⇒hintable picker).
 
 - [x] **sidebar-fu-10 — DONE (branch `feat/sidebar-followups`): sidebar header collapse toggle
   (interim; final both-states version → `app-task-21`).** After GUI feedback (2026-07-03):

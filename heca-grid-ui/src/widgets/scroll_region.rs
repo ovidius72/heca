@@ -51,11 +51,6 @@ const SCROLLBAR_PAD: f64 = 2.0;
 const THUMB_HIT_W: f64 = 16.0;
 /// Minimum thumb height so a very long list still has a grabbable thumb.
 const MIN_THUMB: f64 = 24.0;
-/// Thumb alpha at rest — dim accent (reads as "there's more content").
-const THUMB_REST_ALPHA: u8 = 90;
-/// Thumb alpha when hovered or dragged — brightened to read as grabbable, the
-/// same affordance as [`MarkerGroup`](crate::widgets::MarkerGroup)'s grip bar.
-const THUMB_HOVER_ALPHA: u8 = 200;
 /// Wheel step as a fraction of the viewport height per "line" of delta. The
 /// winit wheel delta is already in lines, so one notch (delta ≈ 1) scrolls ~10%
 /// of the viewport — gentle in a small sidebar, scales up for a tall one. (The
@@ -328,9 +323,9 @@ impl Component for ScrollRegion {
         // color both come from the theme (no hardcoded radius/Color).
         if let Some(t) = self.thumb_rect() {
             let alpha = if self.thumb_grab.is_some() || self.thumb_hovered {
-                THUMB_HOVER_ALPHA
+                cx.theme().colors.interaction.thumb_hover
             } else {
-                THUMB_REST_ALPHA
+                cx.theme().colors.interaction.thumb_rest
             };
             let theme = cx.theme();
             let color = theme.colors.accent.with_alpha(alpha);

@@ -54,9 +54,6 @@ const TOP_INSET: f64 = 2.0;
 const RIGHT_INSET: f64 = 6.0;
 /// Per-glyph advance estimate (fraction of font) for sizing the keycap to its text.
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
-/// Keycap fill alpha — slightly translucent so it reads as an overlay, not a
-/// solid bright block over the target.
-const KEYCAP_ALPHA: u8 = 200;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
 const KEYCAP_GLOW: f32 = 0.45;
 
@@ -95,7 +92,7 @@ pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, col
     // contrast on dark.
     cx.rect(
         cap,
-        keycap_c.with_alpha(KEYCAP_ALPHA),
+        keycap_c.with_alpha(cx.theme().colors.interaction.keycap),
         None,
         radius,
         Some(Glow {

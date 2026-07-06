@@ -25,23 +25,6 @@ use heca_core::layout::{Point, Rectangle, Size};
 /// Inset of the active/hover selection pill from the row edges, so its rounded
 /// corners never contend with a rounded container's corners.
 const SEL_INSET: f64 = 3.0;
-/// Active-row fill alpha when the highlight is the **theme accent** (no row
-/// background to tint).
-const ACTIVE_FILL_ALPHA: u8 = 30;
-/// Hover-row fill alpha when the highlight is the theme foreground.
-const HOVER_FILL_ALPHA: u8 = 16;
-/// Active fill alpha when tinting the row's **own background** color — higher, so
-/// the same-hue highlight reads as a lighter/stronger version of the background.
-const ACTIVE_TINT_ALPHA: u8 = 90;
-/// Hover fill alpha when tinting the row's own background color.
-const HOVER_TINT_ALPHA: u8 = 40;
-/// Alpha of the crisp same-hue border drawn around the *active* pill — the main
-/// cue that distinguishes a selected row from a merely tinted/hovered one.
-const ACTIVE_BORDER_ALPHA: u8 = 180;
-/// Alpha of the hollow same-hue border marking the sidebar-nav **cursor** — a
-/// border with no fill and no bar, so it reads distinctly from the filled
-/// `active` pill (a row can show one, the other, or — rarely — both coincide).
-const NAV_OUTLINE_ALPHA: u8 = 220;
 /// Number of flashes a `needs attention` pulse plays.
 const ATTENTION_PULSES: u32 = 4;
 /// Peak glow radius (logical px) of the attention pulse border.
@@ -188,9 +171,9 @@ impl Component for Row {
         }
         let disabled = self.base.disabled.get_untracked();
         let active = self.active.get_untracked();
-        let (accent, glow_c, foreground, ctrl_radius, sel_border_w) = {
+        let (accent, glow_c, foreground, ctrl_radius, sel_border_w, ia) = {
             let t = cx.theme();
-            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width)
+            (t.colors.accent, t.colors.glow, t.colors.foreground, t.colors.control_radius(), t.focus_border_width, t.colors.interaction)
         };
         let b = self.base.bounds;
 
@@ -213,15 +196,15 @@ impl Component for Row {
         let highlight_base = self.highlight.or(self.base.style.fill);
         if active {
             let fill = if let Some(highlight) = self.highlight {
-                highlight.with_alpha(ACTIVE_FILL_ALPHA)
+                highlight.with_alpha(ia.row_active_fill)
             } else {
                 highlight_base
-                    .map(|h| h.with_alpha(ACTIVE_TINT_ALPHA))
-                    .unwrap_or(accent.with_alpha(ACTIVE_FILL_ALPHA))
+                    .map(|h| h.with_alpha(ia.row_active_tint))
+                    .unwrap_or(accent.with_alpha(ia.row_active_fill))
             };
             // A crisp same-hue border is the clearest "selected" cue — a tinted
             // fill alone is hard to tell apart from the row's background.
-            let edge = highlight_base.unwrap_or(accent).with_alpha(ACTIVE_BORDER_ALPHA);
+            let edge = highlight_base.unwrap_or(accent).with_alpha(ia.row_active_border);
             cx.rect(
                 sel,
                 fill,
@@ -231,11 +214,11 @@ impl Component for Row {
             );
         } else if self.hovered.get_untracked() {
             let c = if let Some(highlight) = self.highlight {
-                highlight.with_alpha(HOVER_FILL_ALPHA)
+                highlight.with_alpha(ia.row_hover_fill)
             } else {
                 highlight_base
-                    .map(|h| h.with_alpha(HOVER_TINT_ALPHA))
-                    .unwrap_or(foreground.with_alpha(HOVER_FILL_ALPHA))
+                    .map(|h| h.with_alpha(ia.row_hover_tint))
+                    .unwrap_or(foreground.with_alpha(ia.row_hover_fill))
             };
             cx.rect(sel, c, None, sel_radius, None);
         }
@@ -250,7 +233,7 @@ impl Component for Row {
                 sel,
                 accent.with_alpha(0),
                 Some(Border {
-                    color: accent.with_alpha(NAV_OUTLINE_ALPHA),
+                    color: accent.with_alpha(ia.nav_outline),
                     width: (sel_border_w * 1.5).max(2.0),
                 }),
                 sel_radius,

@@ -29,8 +29,6 @@ use crate::scene::{Border, Glow, Shadow, TextAlign};
 use std::cell::Cell;
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Scrim (backdrop) alpha over the rest of the UI.
-const SCRIM_ALPHA: u8 = 150;
 /// Panel inner padding.
 const PAD: f64 = 18.0;
 /// Gap between title, message, and the action row.
@@ -359,7 +357,7 @@ impl Component for Modal {
             } else {
                 r.panel
             };
-            cx.rect(scrim, background.with_alpha(SCRIM_ALPHA), None, 0.0, None);
+            cx.rect(scrim, background.with_alpha(cx.theme().colors.interaction.scrim), None, 0.0, None);
 
             // Lift the dialog off the scrim with a soft drop shadow (drawn behind
             // the panel). Independent of the glow/border tokens, so the modal stays

@@ -407,14 +407,58 @@ Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "
 **To add a new action kind:**
 1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
 2. Map it in `pane_action_spec()` (`heca/src/chrome/mod.rs`) → `(Glyph icon,
-   WmAction, label)`. Reuse an **existing** `WmAction` (e.g. `Float` → `WmAction::Float`,
-   `zoom` → `WmAction::ZoomColumn`); do not invent a parallel code path. Tooltips
-   pick up the real keybinding automatically via `PaneActionHints`/`format_binding`
-   — no new keymap entry needed if the action already has a binding.
+   WmAction, label, needs_focus)`, and give it a config **name** in
+   `pane_action_name()` (same file). Reuse an **existing** `WmAction` (e.g. `Float`
+   → `WmAction::Float`, `zoom` → `WmAction::ZoomColumn`); do not invent a parallel
+   code path. The tooltip (and its keybind) is then automatic — see **§ Chrome
+   buttons** below. No new keymap entry needed if the action already has a binding.
 3. Per the action checklist, the action must already be reachable from keyboard +
    RPC; the button just adds the mouse/UI path.
 4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),
    `README.md` (supported-actions table), and `config.default.toml`.
+
+### Chrome buttons → action, tooltip, KeyHint (centralized — do NOT hand-roll)
+
+Every clickable chrome button is tied to the **`WmAction` it triggers**, and both
+its tooltip and its `prefix+/` hint are derived **from that action** — a caller (or
+plugin) never picks a shortcut string, hardcodes the leader symbol, or hand-builds a
+tip. This is the one pattern; follow it for any new button.
+
+**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/mod.rs`):
+```rust
+row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
+```
+- `action_name` is the action's **config name** (`"close"`, `"sidebar_left"`, …) — the
+  canonical identity. The emitted `WmAction` may be a button-only variant
+  (`ClosePaneById`, `AddPaneToColumn`) that isn't itself bound, so the *name* is the key.
+- `ActionShortcuts` (on `AppState`, built at load **and** reload from
+  `ActionShortcuts::from_config`) resolves the shortcut once per config via
+  `shortcut::shortcut_for_action(name, user, defaults)`. That reads the **user's real
+  binding when overridden** (falling back to the bundled default only when the user
+  hasn't rebound it), supports **multiple** bindings (joined ` / `), and renders the
+  leader through `shortcut::PREFIX_SYMBOL` (`λ`) — **never** a literal symbol, never
+  the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
+- Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
+
+**2. KeyHint (vimium-style `prefix+/` pick)** — register the **same intent** the click
+sends and attach it to the widget so the picker can target it by letter:
+```rust
+let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
+let button = IconButton::new(icon).hint_target(hint_id).on_click(move || {
+    emit(InteractionIntent::ActivateAction(action.clone()));
+});
+```
+`hints` is the `&mut HintTargetRegistry` threaded through `build_chrome_root`; the
+grid-ui `hint_target`/`collect_hint_targets`/`paint_hint_targets` framework stamps the
+keycap and the host fires the stored intent on pick. See `sidebar_toggle_button` for a
+complete example (tooltip + hint together).
+
+> **Current gap (tracked):** pane-header action buttons are retained in **separate
+> per-pane trees** (`state.pane_headers`), which `collect_hint_targets(&tree.root)`
+> (the chrome tree) does not walk. So they have tooltips but are **not yet** hintable.
+> Making every pane-header action a hint target needs the per-pane header trees wired
+> into hint collection + `paint_hint_targets` (pane-space bounds) + the pick lookup.
+> Do that as its own change; don't fake it per-button.
 
 ### Planned parameterized binding contract
 

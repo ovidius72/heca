@@ -17,8 +17,6 @@ const PAD_H: f32 = 9.0;
 const PAD_V: f32 = 4.0;
 /// Badge font multiplier — small chip text relative to the base font (≈11px @15).
 const BADGE_FONT_SCALE: f32 = 0.73;
-/// Translucent fill alpha for colored variants.
-const FILL_ALPHA: u8 = 38;
 /// Glow spread radius (px).
 const GLOW_RADIUS: f32 = 10.0;
 /// Glow intensity.
@@ -146,7 +144,7 @@ impl Component for Badge {
                 radius: GLOW_RADIUS,
                 intensity: GLOW_INTENSITY,
             });
-            (c.with_alpha(FILL_ALPHA), c, c.lerp(foreground, 0.25), glow)
+            (c.with_alpha(cx.theme().colors.interaction.badge_fill), c, c.lerp(foreground, 0.25), glow)
         };
 
         let border = cx.border(border_c);

@@ -1063,6 +1063,13 @@ impl ActionRegistry {
         Self::find(name).and_then(|d| d.icon)
     }
 
+    /// The human-readable label for an action, by config name — read from the
+    /// action's [`ActionDescriptor::label`]. The registry-level source of button
+    /// labels, so a caller names the action rather than re-spelling the label.
+    pub fn label(name: &str) -> Option<&'static str> {
+        Self::find(name).map(|d| d.label)
+    }
+
     /// Return all actions in a given category.
     pub fn by_category(
         category: ActionCategory,

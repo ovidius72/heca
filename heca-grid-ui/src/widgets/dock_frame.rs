@@ -61,14 +61,6 @@ const BODY: usize = 1;
 const RAIL: usize = 2;
 /// Index of the controls slot within the header row (after the toggle [`Item`]).
 const CONTROLS: usize = 1;
-/// Alpha of the accent border marking the sidebar-nav **cursor** on a workspace
-/// frame — a thick, glowing border, distinct from the (filled) active wash.
-const NAV_OUTLINE_ALPHA: u8 = 235;
-/// Alpha of the faint accent fill under the nav-cursor border — light enough to
-/// stay clearly weaker than the active wash, but enough to make the narrow
-/// workspace header read as selected.
-const NAV_WASH_ALPHA: u8 = 30;
-
 /// A titled, collapsible, bracket-framed container for a Dock.
 pub struct DockFrame {
     base: Base,
@@ -321,9 +313,9 @@ impl Component for DockFrame {
         // cursor on this workspace frame, distinct from the filled active wash.
         // Shown only when this isn't already the active frame.
         if self.nav.get_untracked() {
-            let (cursor_c, glow, border_w) = {
+            let (cursor_c, glow, border_w, nav_wash, nav_outline) = {
                 let t = cx.theme();
-                (t.colors.accent, t.colors.glow, t.focus_border_width)
+                (t.colors.accent, t.colors.glow, t.focus_border_width, t.colors.interaction.nav_wash, t.colors.interaction.nav_outline)
             };
             // A **distinct-colored** thick border + faint fill (theme foreground, not
             // the accent the active wash uses) marking the sidebar cursor on a
@@ -331,9 +323,9 @@ impl Component for DockFrame {
             // so the cursor stays visible when it coincides with the active wash.
             cx.rect(
                 b,
-                cursor_c.with_alpha(NAV_WASH_ALPHA),
+                cursor_c.with_alpha(nav_wash),
                 Some(Border {
-                    color: cursor_c.with_alpha(NAV_OUTLINE_ALPHA),
+                    color: cursor_c.with_alpha(nav_outline),
                     width: (border_w * 2.0).max(2.5),
                 }),
                 radius,

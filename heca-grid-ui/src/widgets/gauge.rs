@@ -18,8 +18,6 @@ const HEIGHT: f32 = 18.0;
 const SEGMENTS: usize = 12;
 /// Gap between segments (logical px).
 const SEG_GAP: f64 = 3.0;
-/// Unlit segment alpha.
-const UNLIT_ALPHA: u8 = 40;
 
 /// A segmented energy meter.
 pub struct Gauge {
@@ -98,7 +96,7 @@ impl Component for Gauge {
                 });
                 cx.rect(rect, color, None, 1.0, glow);
             } else {
-                cx.rect(rect, muted.with_alpha(UNLIT_ALPHA), None, 1.0, None);
+                cx.rect(rect, muted.with_alpha(cx.theme().colors.interaction.unlit), None, 1.0, None);
             }
         }
     }

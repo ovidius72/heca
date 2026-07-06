@@ -44,10 +44,6 @@ const BAR_W_HOVER: f64 = 5.0;
 /// Vertical inset of the bar from the group's top/bottom (logical px), so the
 /// rounded bar caps don't touch the edges.
 const BAR_INSET: f64 = 2.0;
-/// Bar alpha when the group is **inactive** (the active bar is full-opacity).
-const INACTIVE_BAR_ALPHA: u8 = 90;
-/// Bar alpha when **hovered but inactive** — brighter than resting, to read as grabbable.
-const HOVER_BAR_ALPHA: u8 = 170;
 /// Base glow falloff radius (logical px) of the active bar. **Config-driven:**
 /// `cx.rect` scales this by `theme.colors.glow_size` and drops the glow entirely at
 /// `GlowLevel::None` (see [`PaintCx::rect`](crate::component::PaintCx::rect)).
@@ -194,9 +190,9 @@ impl Component for MarkerGroup {
             // clearly the cursor yet distinct from the active column's glowing bar.
             (accent, None)
         } else if hovered {
-            (accent.with_alpha(HOVER_BAR_ALPHA), None)
+            (accent.with_alpha(cx.theme().colors.interaction.thumb_hover), None)
         } else {
-            (accent.with_alpha(INACTIVE_BAR_ALPHA), None)
+            (accent.with_alpha(cx.theme().colors.interaction.thumb_rest), None)
         };
         // Radius from the theme token (small-control radius) — not a hardcoded
         // width/2 literal — so `border_radius` in config / `prefix+Shift+r` reflows

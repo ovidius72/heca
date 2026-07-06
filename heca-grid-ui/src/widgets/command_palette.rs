@@ -374,8 +374,8 @@ impl Component for CommandPalette {
             } else {
                 panel
             };
-            cx.rect(scrim, background.with_alpha(140), None, 0.0, None);
-            let panel_border = cx.border(accent.with_alpha(200));
+            cx.rect(scrim, background.with_alpha(cx.theme().colors.interaction.scrim), None, 0.0, None);
+            let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
             cx.rect(
                 panel,
                 surface,
@@ -421,8 +421,8 @@ impl Component for CommandPalette {
                 let row = self.row_rect(panel, list_top, row_h, vi);
                 let is_sel = ri == self.selected;
                 if is_sel {
-                    let row_border = cx.border(accent.with_alpha(150));
-                    cx.rect(row, accent.with_alpha(30), row_border, ctrl_radius, None);
+                    let row_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
+                    cx.rect(row, accent.with_alpha(cx.theme().colors.interaction.panel_row_fill), row_border, ctrl_radius, None);
                     // Left accent bar.
                     cx.rect(
                         Rectangle::new(

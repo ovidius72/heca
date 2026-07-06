@@ -672,9 +672,11 @@ pub struct AppState {
     /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
     /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
     pub pane_viewport_widgets: HashMap<PaneId, crate::chrome::RetainedPaneViewportWidgets>,
-    /// Tooltip keybind hints for the pane-action buttons, resolved from config at
-    /// load/reload (so the tooltips show the user's real, rebindable keys).
-    pub pane_action_hints: crate::chrome::PaneActionHints,
+    /// Display shortcuts for every bound action, keyed by config name, resolved from
+    /// config at load/reload (so tooltips/hints show the user's real, rebindable
+    /// keys — never the defaults when overridden). Any chrome button looks its own
+    /// shortcut up by the action it triggers; see [`crate::chrome::ActionShortcuts`].
+    pub action_shortcuts: crate::chrome::ActionShortcuts,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

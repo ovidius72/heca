@@ -20,8 +20,6 @@ const BODY_SCALE: f32 = 0.9;
 const GAP: f64 = 6.0;
 /// Default alert width.
 const DEFAULT_WIDTH: f32 = 360.0;
-/// Translucent fill alpha for the variant tint.
-const FILL_ALPHA: u8 = 22;
 
 /// Visual variant of an [`Alert`], mapped to theme tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -111,9 +109,9 @@ impl Component for Alert {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (foreground, muted, radius) = {
+        let (foreground, muted, radius, tag_fill) = {
             let t = cx.theme();
-            (t.colors.foreground, t.colors.muted, t.colors.control_radius())
+            (t.colors.foreground, t.colors.muted, t.colors.control_radius(), t.colors.interaction.tag_fill)
         };
         let title_fs = self.base.font;
         let body_fs = self.base.font * BODY_SCALE;
@@ -128,7 +126,7 @@ impl Component for Alert {
         // Surface: dark fill tinted by the variant, bordered (theme-width; gone
         // when borders are off).
         let border = cx.border(color);
-        cx.rect(b, color.with_alpha(FILL_ALPHA), border, radius, None);
+        cx.rect(b, color.with_alpha(tag_fill), border, radius, None);
         // Colored left accent bar.
         cx.rect(
             Rectangle::new(b.loc, Size::new(BAR_W, b.size.h)),

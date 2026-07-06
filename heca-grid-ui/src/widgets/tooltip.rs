@@ -236,7 +236,7 @@ impl Component for Tooltip {
 
         // Drawn on the overlay layer so it sits above later siblings.
         cx.with_overlay(|cx| {
-            let border = cx.border(accent.with_alpha(180));
+            let border = cx.border(accent.with_alpha(cx.theme().colors.interaction.tooltip_border));
             cx.rect(
                 rect,
                 surface,
