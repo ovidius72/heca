@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -1251,6 +1251,47 @@ let open = modal.open_signal();
 > maps Tab / ←→ / Enter / Space / Char / Esc; a host with modifier state can additionally call
 > `focus_prev()` for **Shift+Tab** and `focus_next/prev()` for **Ctrl+l / Ctrl+h** (as `heca` does
 > in `events.rs`).
+
+### Dialog
+
+A centered overlay **panel that holds real child components** — the container counterpart to
+[`Modal`](#modal). Where `Modal` draws its title/message/buttons **manually** (no child subtree,
+so its buttons can't be hint targets or focus-traversed as components), `Dialog` lays out a
+padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and each
+action is a real [`Button`](#button). Because the buttons are real children, they get the
+universal hint picker (`prefix+/`), standard focus traversal, and pointer routing **for free** —
+this is what makes an overlay's buttons hintable.
+
+Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
+routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree —
+Tab / ← / → move focus among the buttons, **Enter/Space** activate the focused one (firing its
+`on_click`), and **Esc** or a **scrim** click set a **dismiss-requested** flag. Unlike `Modal`,
+`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal is
+surfaced via `take_dismiss_requested()` for the host to resolve (e.g. dispatch `CloseOverlay`).
+
+Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
++ `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
+
+- **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
+  (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
+- **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — Esc/scrim
+  swallowed without dismissing), `.open(bool)` (focuses the first focusable — order `[Cancel, …]`
+  for a safe default).
+- **Accessors**: `.open_signal() -> Signal<bool>`; `.take_dismiss_requested() -> bool` (drain the
+  Esc/scrim flag after routing input).
+
+```rust
+let dialog = Dialog::new("Delete pane?")
+    .body(Label::new("This action cannot be undone."))
+    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(close)))
+    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit)))
+    .open(true);
+```
+
+> Host wiring mirrors `Modal`: while `focus.overlay_active(root)`, route pointer **and** keys to
+> the overlay; `Dialog::event` maps Tab / ←→ / Enter / Space / Esc and swallows the rest. After
+> routing, poll `take_dismiss_requested()` and resolve the overlay. In `heca` the buttons emit
+> overlay-control intents (`SubmitOverlay` / `CloseOverlay`) via the chrome emitter.
 
 ### CommandPalette
 

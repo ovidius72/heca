@@ -62,7 +62,7 @@ pub use style::{Align, Direction, GridCell, Justify, Length, Spacing, Style, Tra
 pub use theme::{GlowLevel, Intensity, Theme};
 pub use widgets::{
     container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
-    ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, DockFrame, DotStatus, Flex, Gauge, Glyph,
+    ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, Dialog, DockFrame, DotStatus, Flex, Gauge, Glyph,
     Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
     LabelSide, MarkerGroup, Modal, ModalButton, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
     StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility, keycap_size, paint_keycap,
@@ -83,7 +83,7 @@ pub mod prelude {
     pub use crate::theme::{GlowLevel, Intensity, Theme};
     pub use crate::widgets::{
         container, ActiveMarker, Alert, AlertVariant, Badge, BadgeButton, BadgeVariant, Button,
-        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, ContextMenu, DockFrame, DotStatus, Flex, Gauge,
+        ButtonVariant, Card, Checkbox, ChromeRegion, Command, CommandPalette, Container, ContextMenu, Dialog, DockFrame, DotStatus, Flex, Gauge,
         Glyph, Grid, HintPlacement, Icon, IconButton, Input, Item, ItemGroup, KeyHint, Label,
         LabelSide, MarkerGroup, MenuEntry, Modal, ModalButton, Orientation, Pane, PaneFrame, ProgressBar, RailCell, RegionMode, Row, ScrollBar, ScrollRegion, Select, Separator, Spinner,
         StatusDot, Surface, Tabs, Tag, Toast, ToastCorner, ToastSeverity, ToastSpec, ToastStack, Toggle, Tooltip, TooltipSide, Visibility,

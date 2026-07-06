@@ -798,6 +798,37 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .child(Button::destructive("DELETE PANE…").on_click(move || open.set(true)))
                 .child(modal)
         })
+        // Dialog: the container counterpart to Modal — a centered panel over a scrim
+        // that holds REAL child components (the body + real action `Button`s), so its
+        // buttons are hint targets + focus-traversed as components (unlike Modal, which
+        // draws its buttons manually). Tab / ←→ move focus, Enter/Space activate. Here
+        // the buttons close it via the open signal; Esc / scrim set a dismiss-requested
+        // flag the host resolves (`take_dismiss_requested`) — in `heca` that becomes a
+        // `CloseOverlay` action. Renders nothing until opened.
+        .child({
+            let dialog = Dialog::new("Delete pane?");
+            let open = dialog.open_signal();
+            let (cancel_open, delete_open) = (open, open);
+            let dialog = dialog
+                .body(Label::new("This action cannot be undone."))
+                .action(
+                    Button::secondary("Cancel").on_click(move || {
+                        println!("[showcase] dialog cancelled");
+                        cancel_open.set(false);
+                    }),
+                )
+                .action(
+                    Button::destructive("Delete").on_click(move || {
+                        println!("[showcase] dialog: pane deleted");
+                        delete_open.set(false);
+                    }),
+                );
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(Button::destructive("DELETE PANE (DIALOG)…").on_click(move || open.set(true)))
+                .child(dialog)
+        })
         // Pane frame variants: three Panes side-by-side showing None, Bordered,
         // and Bracketed modes. Each has a background + border so the decoration
         // is visible. Click and keyboard interactivity via the `.on_activate`
