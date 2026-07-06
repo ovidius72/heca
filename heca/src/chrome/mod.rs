@@ -7,6 +7,7 @@ mod contribution;
 mod events;
 mod host;
 mod layers;
+mod realize;
 mod state;
 mod view;
 // Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
@@ -18,6 +19,10 @@ pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegist
 pub(crate) use view::{
     Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
 };
+// Host mapper (plugin-task-ui-3): `ViewNode` → retained grid-ui `Component`. Consumed by the
+// OverlayHost/Modal body (ui-4) and plugin panels — not yet referenced in-binary.
+#[allow(unused_imports)]
+pub(crate) use realize::realize;
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 pub use host::ChromeHost;
