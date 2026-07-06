@@ -1233,6 +1233,18 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     a vector of arbitrary widgets, `plugin-task-ui-4`): once a modal hosts N arbitrary widgets,
     hinting them becomes worthwhile and the (a)/(b)/(c) surgery is justified — do Stage 3 THEN,
     against the `ViewNode` body, not against the 2-button dialog.
+    - **UPDATE 2026-07-06 — approach superseded by the surface compositor.** The old plan
+      "make `paint_hint_targets`/`collect_hint_targets` additionally walk the open dialog tree"
+      is **no longer how this is done**. With the surface compositor (`docs/surface-compositor.md`),
+      an open overlay is a **modal layer** in `active_hint_targets` — it already suppresses the
+      chrome/pane hints and (b) render-order concern is moot. The remaining work is: migrate the
+      confirm dialog to an `OverlayHost::open_modal` with a **realized `ViewNode` body + real
+      button components carrying `.hint_target(...)`** (the `Modal` widget draws its buttons
+      manually today, so there is nothing to hint). Blocker (a) becomes "let `prefix+/` through
+      while a modal layer is active"; (c) is handled by the overlay's own state, not `InputMode`.
+      The `ViewNode` model now **exists** (`plugin-task-ui-1` DONE). So Stage 3 = the plugin-ui
+      confirm-dialog-as-layer work (see the `plugin-ui execution` entry + `§2.7.2`), not the old
+      tree-walk hack.
 
 - [ ] **sidebar-fu-9 — restyle the bottom (status) bar: badges + tabs + agreed style.**
   The status bar is already a grid-ui component (`theming-task-28` done); rebuild its
@@ -1370,6 +1382,9 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   ACTION: don't create a parallel task — fold this into `plugin-ui`/`plugin-task-ui-4`; the
   app-side rich confirm dialog is just a consumer. `sidebar-fu-7` ships on the 2-button
   `Modal` first; N-button / rich-body dialogs wait for `plugin-task-ui-4`.
+  **UPDATE 2026-07-06:** the `ViewNode` model now **exists** (`plugin-task-ui-1` DONE,
+  `heca/src/chrome/view.rs`); remaining deps are `realize` (`plugin-task-ui-3`) + Modal `body`
+  (`plugin-task-ui-4`) + `OverlayHost::open_modal` — all now designed in `§2.7.2`.
   **REVIVES `sidebar-fu-13` Stage 3 (KeyHint over the dialog, deferred 2026-07-03):** once the
   `Modal` hosts a `ViewNode` body + a vector of arbitrary widgets, hinting them is worthwhile —
   so this task must ALSO do the deferred Stage 3 surgery (let the prefix chord through the modal
@@ -1485,7 +1500,10 @@ config-plugin render (`plugin-task-21`), and the WASM contribution description
 (`plugin-task-26`) all build on this. Do it before the overlay `body` and WASM work.
 Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
 
-- [x] **plugin-task-ui-1 — DONE (2026-07-06, `heca/src/chrome/view.rs`).** `ViewNode { kind, props, events, children }` + `PropValue` (scalars + semantic enums `ViewSize`/`ViewVariant`, colors/glyphs as names) + `Intent(action id + args)`, all serde-serializable (JSON round-trip test = WASM-ready). **Scope widened per the user (2026-07-06): the model is app-wide and `WidgetKind` covers the WHOLE grid-ui vocabulary** (containers + `ItemGroup`/`DockFrame`/`MarkerGroup`/`Tabs` + all leaves incl. `IconButton`/`Tag`/`Select`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`), not the original 13-widget subset. **Behaviour is Intent-only** (no closures) so it stays serializable for native AND plugin/WASM; a native escape is deferred until a widget proves inexpressible. This is the first task of executing plugin-ui as the conformant path for the confirm-dialog-as-layer / KeyHint-on-modal work (surface-compositor step 2/A). 3 tests green.
+- [x] **plugin-task-ui-1 — DONE (2026-07-06, `heca/src/chrome/view.rs`).** `ViewNode { kind, props, events, children }` (events `press`/`change`, aligned to plan §2.6.2) + `PropValue` (scalars + semantic enums `ViewSize`/`ViewVariant`/`ViewAlign`, colors/glyphs as names) + `Intent(action id + args)`, all serde-serializable (JSON round-trip test = WASM-ready). **Scope widened per the user (2026-07-06): the model is app-wide and `WidgetKind` covers the WHOLE grid-ui vocabulary** (containers + `ItemGroup`/`DockFrame`/`MarkerGroup`/`Tabs` + all leaves incl. `IconButton`/`Tag`/`Select`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`), not the original 13-widget subset. **Behaviour is Intent-only** (no closures) so it stays serializable for native AND plugin/WASM; a native escape is deferred until a widget proves inexpressible. This is the first task of executing plugin-ui as the conformant path for the confirm-dialog-as-layer / KeyHint-on-modal work (surface-compositor step 2/A). 3 tests green.
+
+- [x] **Surface compositor + `LayerRegistry` (step 1) — DONE (2026-07-06).** New `docs/surface-compositor.md` = the layered-surface architecture that decides KeyHint visibility (one rule: active-context + geometric occlusion, **no hardcoded z**). `active_hint_targets` (`chrome/mod.rs`) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. `LayerRegistry` (`chrome/layers.rs`) holds dynamically-added layers (band/kind/modal). Committed: `3809b3c` (compositor) + `14ac690` (registry + ViewNode). Referenced from AGENTS.md + README.md.
+- [ ] **plugin-ui execution — intent/dispatch/overlay design DECIDED (2026-07-06, `pluggable-chrome-plugin-plan.md` §2.7.2).** Everything is an action; `view::Intent{action,args}` = universal currency (click/KeyHint/**RPC**/plugin); carrier `InteractionIntent::View`; one `dispatch_view_intent`; overlay control = actions carrying `overlay: OverlayId` (=`LayerId`) injected by `OverlayHost`; `OverlayHost` built on `LayerRegistry`. **NEXT to implement (resume point):** (1) `InteractionIntent::View` + router/dispatch arm + `dispatch_view_intent` (`interaction.rs`); (2) `realize(&ViewNode, emit, hints) -> Box<dyn Component>` (`plugin-task-ui-3`, new `chrome/realize.rs`, core kinds Column/Row/Label/Button, auto `hint_target` + `on_click→emit(View)`; **verify first** whether `Box<dyn Component>` is `Component` for `.child(box)` at `builders.rs:230`); then `SubmitOverlay`/`CloseOverlay` + `OverlayHost::open_modal` slice → migrate confirm dialog (closes KeyHint-on-modal, `sidebar-fu-13` Stage 3).
 
 - [ ] **plugin-task-ui-2** — Typed, SwiftUI-style **builder SDK** that emits `ViewNode` (`Column::new().gap(8).child(...)`). Ergonomic authoring layer over the uniform node; the WASM SDK re-exports it.
 

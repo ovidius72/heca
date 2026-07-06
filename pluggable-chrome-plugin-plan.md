@@ -462,6 +462,37 @@ event→read boundary as `App::on` / `App::state`.
 `side` on overflow — the same behavior `Modal` (centering) and `Select`
 (anchoring) already implement, now owned once by the host.
 
+### 2.7.2 Intent / dispatch / overlay-control — decided 2026-07-06
+
+Ratified while building the surface compositor + `ViewNode`; drives `realize`
+(plugin-task-ui-3) and `OverlayHost`. **Everything is an action; there is one dispatch.**
+
+- **`view::Intent { action, args }` is the universal invocation currency** — used identically
+  by click, the KeyHint picker (`prefix+/`), **RPC**, and plugins. A `ViewNode` node carries
+  it via `events` (`on_press`/`on_change`); it holds no closures, so it stays serializable.
+- **Convergence carrier:** `InteractionIntent::View(view::Intent)`. `realize` wires each
+  actionable node to BOTH `on_click → emit(View(vi))` and a KeyHint target
+  `hints.register(View(vi))`, so click + picker fire the same thing; RPC feeds the same
+  `dispatch_view_intent` directly. `realize` stays context-agnostic.
+- **One dispatch point** `dispatch_view_intent(state, registry, vi)`: resolve `vi.action` to a
+  built-in `WmAction` (`action_from_name` + args) or a plugin action, execute via
+  `ActionRegistry`. No parallel dispatch path.
+- **Overlay control is actions too**, carrying the overlay **id** so any surface can target a
+  specific overlay: `WmAction::SubmitOverlay { overlay: OverlayId, action: String }`,
+  `WmAction::CloseOverlay { overlay: OverlayId }` (`OverlayId` = the layer's `LayerId`). The
+  **`OverlayHost` owns the id** and injects it into each action button when it builds them
+  from `ModalSpec.actions` (the author only supplies `ModalAction{id,label,danger}`). The
+  `SubmitOverlay` handler resolves that overlay's `OverlayFuture<ModalResult>` (collecting the
+  realized body's data into `ModalResult::Action{id,data}`) and pops it.
+- **How RPC closes/confirms a modal:** it received the `OverlayId` from `open_modal`, so it
+  dispatches `submit_overlay{ overlay: <id>, action }` / `close_overlay{ overlay }` — the same
+  action a button press or KeyHint pick fires. Modals are RPC-driven identically to the UI
+  (action reachability), targeting a specific overlay by id (not "the top").
+
+So `OverlayHost` is the overlay-level API built **on** the `LayerRegistry` (see §2.7.1 note +
+`docs/surface-compositor.md` §9): `open_modal` realizes the `ViewNode` body + injected action
+buttons and pushes a `Modal`-band layer; its buttons dispatch overlay-control actions.
+
 ---
 
 ## 2.8 The design is not sidebar-only; it is chrome-wide
@@ -1686,8 +1717,8 @@ This architecture implies future changes to at least these areas:
 - [x] Add richer sidebar item/group widgets as needed — *`Item`, `ItemGroup`, `MarkerGroup`, `RailCell`, `Row`, `KeyHint`*
 - [x] Add or generalize region/top/bottom/right-side widgets — *`ChromeRegion` (one oriented shell for all 4 regions)*
 - [ ] Add list/scroll primitives if needed — *G7: unblocked (renderer clip landed), not yet built*
-- [ ] Declarative `ViewNode` widget-tree model + typed builder SDK (§2.6.2) — *`plugin-ui`*
-- [ ] Host mapper `realize(ViewNode) -> Box<dyn Component>` (recursive, theme-resolved) — *`plugin-ui`*
+- [x] Declarative `ViewNode` widget-tree model (§2.6.2) — **DONE 2026-07-06**, `heca/src/chrome/view.rs` (`plugin-task-ui-1`). Serializable `{kind, props, events, children}`, events `press`/`change`, `PropValue` (scalars + `ViewSize`/`ViewVariant`/`ViewAlign` + color/glyph names), `Intent(action+args)`; **scope widened per user**: `WidgetKind` covers the WHOLE grid-ui vocabulary and the model is **app-wide**; behaviour is **Intent-only** (serializable for native + WASM). JSON round-trip test. *Typed builder SDK (`plugin-task-ui-2`) still open.*
+- [ ] Host mapper `realize(ViewNode) -> Box<dyn Component>` (recursive, theme-resolved) — *`plugin-ui`* (**design decided 2026-07-06, see §2.7.1 note; next to implement**)
 - [ ] Extend `Modal` to host a `body` child subtree (rich modal content) — *`plugin-ui` / Overlays*
 - [ ] `Table` widget (on demand) + showcase/docs — *`plugin-ui`*
 
