@@ -1280,6 +1280,7 @@ The agreed behavior for float toggling is:
 - **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
 - **Sidebar shell vs container**: the long-term design separates the sidebar shell from the mounted content container. The current workspace tree should evolve into a built-in `WorkspacesContainer`, not remain the definition of the sidebar itself.
 - **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
+- **Surface compositor (layering)**: on-screen surfaces (background, panes, sidebar, floating panes, overlays/modals, future exposé) form a **tree** whose position defines z-order — no hardcoded levels. One uniform rule (context activation + geometric occlusion) decides what is interactive, starting with the universal KeyHint picker (`prefix+/`). See [`docs/surface-compositor.md`](docs/surface-compositor.md) — the contract for adding any new layer, surface, overlay, or button.
 
 ---
 

@@ -1205,9 +1205,11 @@ row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
   `λ`, never `⌃⌥⇧⌘`. So a rebind in `config.toml` updates the tip with no code change.
 - **The name is the canonical key**, because the emitted `WmAction` may be a button-only
   variant that isn't itself bound (`ClosePaneById`, `AddPaneToColumn`).
-- **KeyHint** = register the click's intent in the `HintTargetRegistry` and `.hint_target`
-  it. Full app-side rules (incl. the current pane-header-tree gap) are in
-  **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
+- **KeyHint** = register the click's intent in the **shared** `HintTargetRegistry` (on
+  `AppState`, a monotonic id allocator spanning the chrome tree **and** every per-pane
+  header tree) and `.hint_target` it. Active-targeted buttons (zoom/float) register a
+  `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
+  Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
 
 ### Modal
 

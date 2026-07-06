@@ -668,6 +668,12 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
+    /// Shared allocator + map for the universal KeyHint picker (`prefix+/`), spanning
+    /// EVERY retained tree that carries hint targets — the chrome tree and each pane's
+    /// header tree — which rebuild on independent cadences. Ids are monotonic (never
+    /// reused), so targets from different trees never collide; each tree removes its id
+    /// range on rebuild/prune. See [`crate::chrome::HintTargetRegistry`].
+    pub hint_targets: crate::chrome::HintTargetRegistry,
     /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
     /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
     /// painted read-only in `terminal_render`, dispatched pointer events in `events`.

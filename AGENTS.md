@@ -12,6 +12,7 @@ These are made over and over. **Violating either = redo.**
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
+  - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
@@ -424,6 +425,13 @@ its tooltip and its `prefix+/` hint are derived **from that action** — a calle
 plugin) never picks a shortcut string, hardcodes the leader symbol, or hand-builds a
 tip. This is the one pattern; follow it for any new button.
 
+> **Which hints are actually shown** is decided by the layered **surface compositor**, not
+> per-feature: a button inherits its layer from the surface it lives in, and one uniform
+> rule (context activation + geometric occlusion, no hardcoded z) picks the visible set.
+> **Read [`docs/surface-compositor.md`](docs/surface-compositor.md) before adding any new
+> layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
+> visibility filter — model the surface instead.
+
 **1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/mod.rs`):
 ```rust
 row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
@@ -448,17 +456,29 @@ let button = IconButton::new(icon).hint_target(hint_id).on_click(move || {
     emit(InteractionIntent::ActivateAction(action.clone()));
 });
 ```
-`hints` is the `&mut HintTargetRegistry` threaded through `build_chrome_root`; the
-grid-ui `hint_target`/`collect_hint_targets`/`paint_hint_targets` framework stamps the
-keycap and the host fires the stored intent on pick. See `sidebar_toggle_button` for a
-complete example (tooltip + hint together).
+`hints` is a `&mut HintTargetRegistry` — the **shared** allocator that lives on
+`AppState` and spans **every** retained tree that carries hint targets. It is threaded
+through `build_chrome_root` **and** `build_pane_header`. Ids are **monotonic** (never
+reused), so targets from trees that rebuild on different cadences (the chrome tree vs.
+each per-pane header tree) never collide; each tree records the contiguous id **range**
+it registered and calls `hint_targets.remove_range(range)` when it is rebuilt or pruned
+(see `render.rs` for the chrome tree, `sync_pane_headers` for the headers). The pick
+path (`handle_hint_pick` + `paint_hint_targets`) walks the chrome tree **and** all
+`state.pane_headers` trees; resolution reads the one shared map. See
+`sidebar_toggle_button` for a complete example (tooltip + hint together).
 
-> **Current gap (tracked):** pane-header action buttons are retained in **separate
-> per-pane trees** (`state.pane_headers`), which `collect_hint_targets(&tree.root)`
-> (the chrome tree) does not walk. So they have tooltips but are **not yet** hintable.
-> Making every pane-header action a hint target needs the per-pane header trees wired
-> into hint collection + `paint_hint_targets` (pane-space bounds) + the pick lookup.
-> Do that as its own change; don't fake it per-button.
+- **Active-targeted buttons must focus first.** A pane button whose action acts on the
+  *focused* pane (zoom/float — no pane id in the `WmAction`) registers
+  `InteractionIntent::FocusPaneThenAction { pane_id, action }`, which `dispatch_intent`
+  expands into a `FocusPane` then the action — mirroring what the click does across two
+  events. Pane-parameterized actions (close/move/split carry the pane) just use
+  `ActivateAction`.
+- **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
+  come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
+  `[pane] title_actions` today; the documented **plugin seam** appends there later). The
+  build loop only reads the descriptor fields (glyph / action name / `WmAction` / focus),
+  so config-added, config-hidden, and future plugin-added buttons are tooltip'd + hinted
+  automatically. Do **not** re-introduce a per-action `match` in the render loop.
 
 ### Planned parameterized binding contract
 

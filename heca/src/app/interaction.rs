@@ -86,6 +86,16 @@ pub(crate) enum InteractionSource {
 pub(crate) enum InteractionIntent {
     /// A keyboard shortcut resolved to a WM action.
     ActivateAction(WmAction),
+    /// Focus a specific pane, then run an action on it — the single-intent form of
+    /// what an **active-targeted** pane button does on click (focus first so the
+    /// action lands on the clicked pane, not whatever was active). Used by the pane
+    /// header's KeyHint targets for `zoom`/`float`, whose `WmAction` acts on the
+    /// focused pane and carries no pane id of its own. `dispatch_intent` expands it
+    /// into a `FocusPane` then the action, each policy-routed on its own.
+    FocusPaneThenAction {
+        pane_id: PaneId,
+        action: Box<WmAction>,
+    },
     /// Focus a specific pane (from sidebar click, content click, or RPC).
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
@@ -388,6 +398,12 @@ pub(crate) fn route_interaction_for_session(
 ) -> RouteDecision {
     match &intent {
         InteractionIntent::ActivateAction(action) => route_action(session, source, action),
+        // Defensive: `dispatch_intent` expands this into FocusPane + the action before
+        // routing, so the router should not normally see it. If it does, route by the
+        // inner action's policy (the focus half is always benign).
+        InteractionIntent::FocusPaneThenAction { action, .. } => {
+            route_action(session, source, action)
+        }
         InteractionIntent::FocusPane { .. } => {
             // FocusPane from mouse content/sidebar: blocked when floating.
             // Only the active floating pane can receive focus in floating domain.
@@ -607,11 +623,29 @@ pub(crate) fn dispatch_intent(
     source: InteractionSource,
     intent: InteractionIntent,
 ) {
+    // Composite: focus the pane, then run the action — each half policy-routed on its
+    // own (mirrors what an active-targeted pane button does across two events on click).
+    if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
+        dispatch_intent(state, registry, source, InteractionIntent::FocusPane { pane_id });
+        dispatch_intent(
+            state,
+            registry,
+            source,
+            InteractionIntent::ActivateAction(*action),
+        );
+        return;
+    }
     let decision = route_interaction(state, source, intent);
 
     match decision {
         RouteDecision::Allow(InteractionIntent::ActivateAction(act)) => {
             registry.execute(&act, state);
+        }
+        // Expanded to FocusPane + the action above (before routing), so this is
+        // unreachable in practice; handle it defensively as focus-then-act.
+        RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
+            registry.execute(&WmAction::FocusPane { pane_id }, state);
+            registry.execute(&action, state);
         }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             registry.execute(&WmAction::FocusPane { pane_id }, state);

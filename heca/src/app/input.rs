@@ -428,12 +428,10 @@ fn handle_hint_pick_mode(
     if let Some(ch) = typed
         && let Some((_, id)) = candidates.iter().find(|(c, _)| *c == ch)
     {
-        // Resolve the picked target's intent from the retained tree, then dispatch it
-        // (owned clone drops the tree borrow before the mutable dispatch call).
-        let intent = state
-            .chrome_tree
-            .as_ref()
-            .and_then(|t| t.hint_targets.get(*id).cloned());
+        // Resolve the picked target's intent from the shared registry (spans the chrome
+        // + pane-header trees), then dispatch it (owned clone drops the borrow before the
+        // mutable dispatch call).
+        let intent = state.hint_targets.get(*id).cloned();
         if let Some(intent) = intent {
             crate::app::interaction::dispatch_intent(
                 state,

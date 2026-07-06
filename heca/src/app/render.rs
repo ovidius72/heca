@@ -1121,14 +1121,25 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items, hint_targets) =
-            crate::chrome::build_chrome_root(state, chrome);
+        // Drop the previous chrome tree's hint ids, then register the new tree's targets
+        // into the shared allocator (spans the chrome + pane-header trees), recording the
+        // contiguous id range this tree used so it can be removed on the next rebuild.
+        if let Some(old) = state.chrome_tree.as_ref() {
+            let old_range = old.hint_range.clone();
+            state.hint_targets.remove_range(old_range);
+        }
+        let mut hint_targets = std::mem::take(&mut state.hint_targets);
+        let start = hint_targets.checkpoint();
+        let (root, signals, drag_items) =
+            crate::chrome::build_chrome_root(state, chrome, &mut hint_targets);
+        let hint_range = start..hint_targets.checkpoint();
+        state.hint_targets = hint_targets;
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
-            hint_targets,
+            hint_range,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so

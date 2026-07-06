@@ -1320,16 +1320,27 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     bridges emitted→bound action names. The sidebar expand/collapse toggles now carry tooltips too.
     Documented in `AGENTS.md` (Pane Info Bar → "Chrome buttons → action, tooltip, KeyHint") and
     `docs/widgets.md` ("Action buttons — tooltip + KeyHint from the action").
-  - [ ] **KeyHint on ALL actions (FUTURE) — pane-header buttons are not hint-collected.** State
-    verified 2026-07-06: `collect_hint_targets`/`paint_hint_targets` (`chrome/mod.rs:1997`) walk
-    **only** `state.chrome_tree.root`. The pane-header action buttons live in **separate per-pane
-    retained trees** (`state.pane_headers`, built by `build_pane_header`/`sync_pane_headers`) that
-    are never walked, and they do **not** call `.hint_target(...)`. So today: sidebar toggles + dock
-    cells ARE hintable (chrome tree); pane-header split/move/close/zoom/float are NOT. To close it:
-    register a `HintTargetId` (`ActivateAction` intent) on each pane-header button AND extend the
-    `HintPick` collect/paint pass to additionally walk every `state.pane_headers` tree (offset by the
-    pane origin), mirroring how `sidebar-fu-13` Stage 3 wanted the open-dialog tree walked. Kin to
-    `sidebar-fu-12` (global intent⇒hintable picker).
+  - [x] **KeyHint on pane-header buttons — DONE (2026-07-06). Shared hint allocator across
+    trees.** Was: `collect_hint_targets`/`paint_hint_targets` walked **only** the chrome tree, and
+    the pane-header buttons (separate per-pane trees `state.pane_headers`) were not hintable.
+    Closed by making `HintTargetRegistry` a **shared monotonic allocator + map on `AppState`**
+    (`state.hint_targets`): ids are globally unique (never reused), so the chrome tree and each
+    header tree — which rebuild on independent cadences — can register into one map without
+    collision; each tree records its contiguous id **range** and `remove_range`s it on
+    rebuild/prune (`render.rs` for chrome, `sync_pane_headers` for headers). `build_chrome_root`
+    and `build_pane_header` both take `&mut HintTargetRegistry`; `handle_hint_pick` +
+    `paint_hint_targets` now walk the chrome tree AND every `state.pane_headers` tree; the pick
+    lookup reads the shared map. Active-targeted buttons (zoom/float) register the new reusable
+    `InteractionIntent::FocusPaneThenAction { pane_id, action }` (dispatch_intent expands it to
+    focus-then-act) so the hint focuses the pane first, exactly like the click. Buttons are built
+    from a **dynamic descriptor vector** `pane_header_buttons() -> Vec<PaneHeaderButton>` (config
+    today, documented **plugin seam** to append later) — the render loop reads only descriptor
+    fields, so config-added/hidden and future plugin buttons are hinted automatically, nothing
+    hardcoded. Docs: AGENTS.md + `docs/widgets.md`. heca 300 green, workspace clippy clean.
+  - [ ] **Global KeyHint picker follow-ups (still open).** The pane-header trees are now walked,
+    but the broader `sidebar-fu-12` (documented "intent ⇒ hintable" picker over *arbitrary* plugin
+    widgets) and `sidebar-fu-13` Stage 3 (KeyHint over an open dialog's widget tree) remain — both
+    can now reuse the shared-allocator + multi-tree-walk machinery this task introduced.
 
 - [x] **sidebar-fu-10 — DONE (branch `feat/sidebar-followups`): sidebar header collapse toggle
   (interim; final both-states version → `app-task-21`).** After GUI feedback (2026-07-03):

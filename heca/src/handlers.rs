@@ -743,17 +743,14 @@ pub fn handle_follow_link(state: &mut AppState, _action: &WmAction) {
 /// the next keypress fires that target's intent. No-ops if there are no targets or no
 /// chrome tree yet.
 pub fn handle_hint_pick(state: &mut AppState, _action: &WmAction) {
-    let Some(tree) = state.chrome_tree.as_ref() else {
-        return;
-    };
-    let candidates: Vec<(char, heca_grid_ui::HintTargetId)> =
-        heca_grid_ui::collect_hint_targets(&tree.root)
-            .into_iter()
-            .enumerate()
-            .filter_map(|(i, (id, _bounds))| {
-                crate::app::selection::candidate_letter(i).map(|ch| (ch, id))
-            })
-            .collect();
+    // Which targets are reachable is decided by the layered surface compositor — one rule
+    // (active context + geometric occlusion, no hardcoded z) over the whole surface stack.
+    // See `chrome::active_hint_targets` and `docs/surface-compositor.md`.
+    let candidates: Vec<(char, heca_grid_ui::HintTargetId)> = crate::chrome::active_hint_targets(state)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, (id, _))| crate::app::selection::candidate_letter(i).map(|ch| (ch, id)))
+        .collect();
     if !candidates.is_empty() {
         state.input_mode = InputMode::HintPick { candidates };
         state.needs_redraw = true;
