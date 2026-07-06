@@ -363,6 +363,7 @@ pub(crate) async fn init_state(
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
         hint_targets: crate::chrome::HintTargetRegistry::default(),
+        layers: crate::chrome::LayerRegistry::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
         action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
         // Region visibility/width now lives in chrome_state (was SidebarState).

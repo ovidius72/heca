@@ -6,7 +6,18 @@
 mod contribution;
 mod events;
 mod host;
+mod layers;
 mod state;
+mod view;
+// Registry API surface consumed by the next migration steps (ShowLayer/HideLayer, the
+// confirm dialog as a layer, plugins) — some names not yet referenced in-binary.
+#[allow(unused_imports)]
+pub(crate) use layers::{DynamicLayer, LayerBand, LayerId, LayerKind, LayerRegistry};
+// Declarative UI model (plugin-task-ui-1); consumed by `realize` (ui-3) + Modal body (ui-4).
+#[allow(unused_imports)]
+pub(crate) use view::{
+    Intent, PropMap, PropValue, ViewAlign, ViewNode, ViewSize, ViewVariant, WidgetKind,
+};
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 pub use host::ChromeHost;
@@ -2105,6 +2116,7 @@ pub(crate) fn paint_link_hints(
 /// the opaque region(s) it paints over lower layers (from real layout — never hardcoded),
 /// and whether it is `modal` (a blocking context that suppresses everything beneath it).
 struct HintLayer {
+    band: LayerBand,
     targets: Vec<(heca_grid_ui::HintTargetId, Rectangle)>,
     occluders: Vec<Rectangle>,
     modal: bool,
@@ -2178,6 +2190,7 @@ pub(crate) fn active_hint_targets(
     //    `.hint_target(...)` they become hintable with no new plumbing.
     if let Some(dialog) = state.confirm_dialog.as_ref() {
         layers.push(HintLayer {
+            band: LayerBand::Modal,
             targets: heca_grid_ui::collect_hint_targets(dialog),
             occluders: Vec::new(),
             modal: true,
@@ -2185,6 +2198,7 @@ pub(crate) fn active_hint_targets(
     }
     if let Some(menu) = state.context_menu.as_ref() {
         layers.push(HintLayer {
+            band: LayerBand::Modal,
             targets: heca_grid_ui::collect_hint_targets(menu),
             occluders: Vec::new(),
             modal: true,
@@ -2198,6 +2212,7 @@ pub(crate) fn active_hint_targets(
         let (cl, ct) = (content.loc.x, content.loc.y);
         let (cr, cb) = (content.loc.x + content.size.w, content.loc.y + content.size.h);
         layers.push(HintLayer {
+            band: LayerBand::Overlay,
             targets: heca_grid_ui::collect_hint_targets(&tree.root),
             occluders: vec![
                 Rectangle::new(Point::new(0.0, 0.0), Size::new(vw, ct)), // top bar
@@ -2221,6 +2236,7 @@ pub(crate) fn active_hint_targets(
             continue;
         };
         layers.push(HintLayer {
+            band: LayerBand::Content,
             targets: heca_grid_ui::collect_hint_targets(&header.root),
             occluders: vec![Rectangle::new(
                 Point::new(x as f64, y as f64),
@@ -2229,6 +2245,23 @@ pub(crate) fn active_hint_targets(
             modal: false,
         });
     }
+
+    // 4. Dynamically registered layers (on-demand exposé, plugin panel). They join the
+    //    same stack by their band; their targets + occluder come from their laid-out tree.
+    for layer in state.layers.visible_front_to_back() {
+        let bounds = layer.root.base().bounds;
+        layers.push(HintLayer {
+            band: layer.band,
+            targets: heca_grid_ui::collect_hint_targets(layer.root.as_ref()),
+            occluders: vec![bounds],
+            modal: layer.modal,
+        });
+    }
+
+    // Order the whole stack front → back by band (Modal in front … Background at the back),
+    // stable so within-band order — built-ins before dynamics, and the draw order among
+    // panes (zoomed/float on top) — is preserved.
+    layers.sort_by_key(|l| std::cmp::Reverse(l.band.rank()));
 
     resolve_hint_layers(&layers, viewport)
 }

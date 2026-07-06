@@ -674,6 +674,11 @@ pub struct AppState {
     /// reused), so targets from different trees never collide; each tree removes its id
     /// range on rebuild/prune. See [`crate::chrome::HintTargetRegistry`].
     pub hint_targets: crate::chrome::HintTargetRegistry,
+    /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
+    /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
+    /// trees; this holds runtime-added layers that join the same surface stack. See
+    /// [`crate::chrome::LayerRegistry`] and `docs/surface-compositor.md` §9.
+    pub layers: crate::chrome::LayerRegistry,
     /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
     /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
     /// painted read-only in `terminal_render`, dispatched pointer events in `events`.

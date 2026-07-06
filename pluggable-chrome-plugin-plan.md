@@ -401,6 +401,14 @@ overlay widgets across the boundary (§2.6); they submit a **spec** and receive 
 scrim + blocks everything below; a **dropdown/popover** entry is light-dismiss
 (click-outside or `Esc` pops it) with no scrim.
 
+> **Built on the surface compositor (`docs/surface-compositor.md`).** `OverlayHost` is **not**
+> a separate stack: it is the overlay-level API on top of the app's `LayerStack`/
+> `LayerRegistry` (the single layering mechanism that owns band z-order, occlusion, hint
+> visibility, and later paint + input). `open_modal` `realize`s the `ViewNode` body + actions
+> into a native tree, **pushes it as a `Modal`-band layer**, and resolves `ModalResult` when a
+> button's intent fires. So the overlay z-order/focus-trap here and the compositor's layering
+> are the same stack, described from the overlay API's angle.
+
 **Result-returning API shape.**
 
 ```rust

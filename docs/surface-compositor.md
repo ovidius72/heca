@@ -366,3 +366,27 @@ and hintable for free** — the plugin never touches that machinery.
 2. Convert the confirm dialog to a layer with **hintable buttons** → overlay-KeyHint gap fixed.
 3. Add `WmAction::ShowLayer` + on-demand layers → first native exposé.
 4. Add the `ViewNode` content path → **plugins add layers**.
+
+### Relationship to `OverlayHost` (`pluggable-chrome-plugin-plan.md` §2.6 / §2.7.1)
+
+The plugin plan already ratifies two contracts this section must **build on, not duplicate**:
+
+- **`ViewNode`** (§2.6.2) — the serializable declarative widget tree. Implemented in
+  `heca/src/chrome/view.rs` (plugin-task-ui-1). It is the `LayerContent::View(...)` above and
+  the body of a modal. `realize(&ViewNode) -> Box<dyn Component>` (plugin-task-ui-3) turns it
+  into a retained tree; **actionable nodes (an `on_press` intent) get a KeyHint target for
+  free**, which is exactly how an overlay's buttons become hintable.
+- **`OverlayHost`** (§2.7.1) — the host-owned overlay API: `open_modal(ModalSpec { title,
+  body: ViewNode, actions, … }) -> OverlayFuture<ModalResult>` (and `open_dropdown`).
+
+These are **two levels of one stack**, not two stacks:
+
+- the **`LayerStack`/`LayerRegistry`** here is the low-level layering mechanism (push/pop a
+  layer; band z-order; occlusion; hint visibility; later paint + input routing);
+- **`OverlayHost` is built on it**: `open_modal` `realize`s the `ViewNode` body + action
+  buttons into a native tree, **pushes it as a `Modal`-band overlay layer**, and resolves the
+  returned `ModalResult` when a button's intent fires. Its overlays *are* layers here.
+
+So step 2 (the confirm dialog) is done the conformant way: as an `OverlayHost::open_modal`
+(a `ViewNode` body + actions) rather than a bespoke modal — closing the overlay-KeyHint gap
+and standing up the first slice of `OverlayHost` on the `LayerRegistry`.
