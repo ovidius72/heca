@@ -693,6 +693,29 @@ terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host view
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
 ```
 
+### Confirmation prompts
+
+Destructive actions can pop a **confirm dialog** before running. This is declared
+**per action** and configured in the generic `[confirm]` table, keyed by action
+name — `true` prompts (Cancel / \<action\>), `false` runs immediately:
+
+```toml
+[confirm]
+close = true            # confirm before closing a pane
+delete_column = true    # confirm before deleting a column (and its panes)
+delete_workspace = true # confirm before deleting a workspace (and its contents)
+```
+
+The guard lives on the **action**, so *every* surface that triggers it — a
+keybinding, the pane-header close button, a right-click menu, or RPC — confirms
+identically. Any action (including a plugin's) is configurable by name here; an
+action not listed uses its own declared default. Changes apply on
+`prefix+Shift+r`.
+
+> Replaces the old `[settings] confirm_close_pane` / `confirm_delete_column` /
+> `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
+> `close` / `delete_column` / `delete_workspace`.
+
 ### Fonts
 
 Fonts are **system-local, not theme-portable** — a color theme that shipped a
