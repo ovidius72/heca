@@ -1265,9 +1265,9 @@ this is what makes an overlay's buttons hintable.
 Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
 routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree —
 Tab / ← / → move focus among the buttons, **Enter/Space** activate the focused one (firing its
-`on_click`), and **Esc** or a **scrim** click set a **dismiss-requested** flag. Unlike `Modal`,
-`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal is
-surfaced via `take_dismiss_requested()` for the host to resolve (e.g. dispatch `CloseOverlay`).
+`on_click`), and **Esc** or a **scrim** click fire the `on_dismiss` callback. Unlike `Modal`,
+`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal is a
+callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
 
 Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
 + `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
@@ -1275,23 +1275,25 @@ Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with 
 - **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
 - **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — Esc/scrim
-  swallowed without dismissing), `.open(bool)` (focuses the first focusable — order `[Cancel, …]`
-  for a safe default).
-- **Accessors**: `.open_signal() -> Signal<bool>`; `.take_dismiss_requested() -> bool` (drain the
-  Esc/scrim flag after routing input).
+  swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on Esc/scrim), `.open(bool)`
+  (focuses the first focusable — order `[Cancel, …]` for a safe default), plus `.body_boxed(Box<dyn Component>)`
+  for a body from a mapper (e.g. `realize`).
+- **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust
 let dialog = Dialog::new("Delete pane?")
     .body(Label::new("This action cannot be undone."))
-    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(close)))
-    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit)))
+    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(submit_cancel)))
+    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit_delete)))
+    .on_dismiss(move || emit(close))
     .open(true);
 ```
 
 > Host wiring mirrors `Modal`: while `focus.overlay_active(root)`, route pointer **and** keys to
-> the overlay; `Dialog::event` maps Tab / ←→ / Enter / Space / Esc and swallows the rest. After
-> routing, poll `take_dismiss_requested()` and resolve the overlay. In `heca` the buttons emit
-> overlay-control intents (`SubmitOverlay` / `CloseOverlay`) via the chrome emitter.
+> the overlay; `Dialog::event` maps Tab / ←→ / Enter / Space / Esc and swallows the rest.
+> Dismissal + activation both flow out as callbacks — in `heca` the buttons emit `SubmitOverlay`
+> and `on_dismiss` emits `CloseOverlay` (both via the chrome emitter), so one intent path resolves
+> the overlay for click, KeyHint pick, and RPC alike.
 
 ### CommandPalette
 

@@ -13,9 +13,9 @@
 //! open, so the host routes input here first. Keyboard is handled by an embedded
 //! [`FocusManager`](crate::focus::FocusManager) over the panel subtree: Tab / ← / →  move
 //! focus among the buttons, Enter / Space activate the focused one (firing its `on_click`),
-//! and Esc or a scrim click request **dismissal** — surfaced via
-//! [`take_dismiss_requested`](Dialog::take_dismiss_requested) so the host resolves it
-//! (there are no result closures baked in; a button's own `on_click` carries the action).
+//! and Esc or a scrim click fire the [`on_dismiss`](Dialog::on_dismiss) callback (there are no
+//! result closures baked in; a button's own `on_click` carries the action, and dismissal is a
+//! callback the host points at its own overlay-close path).
 //!
 //! Centering is real layout: the root fills the viewport (`Pct(1.0)` × `Pct(1.0)`) with
 //! `Justify::Center` + `Align::Center`, so the single panel child is centered by taffy and
@@ -57,9 +57,9 @@ pub struct Dialog {
     /// Keyboard focus across the panel's focusable descendants (the action buttons, plus any
     /// focusables inside a rich `body`).
     focus: FocusManager,
-    /// Set when Esc or a scrim click requested dismissal; drained by the host via
-    /// [`take_dismiss_requested`](Dialog::take_dismiss_requested).
-    dismiss_requested: Cell<bool>,
+    /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
+    /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
+    on_dismiss: Option<Box<dyn Fn()>>,
     /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
     has_actions: bool,
     /// Last-seen viewport, cached during paint for the scrim rect.
@@ -90,7 +90,7 @@ impl Dialog {
             open: signal(false),
             dismissible: true,
             focus: FocusManager::new(),
-            dismiss_requested: Cell::new(false),
+            on_dismiss: None,
             has_actions: false,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
         }
@@ -100,6 +100,14 @@ impl Dialog {
     /// inserted between the title and the action row. Call before [`action`](Dialog::action).
     pub fn body(mut self, body: impl Component + 'static) -> Self {
         self.panel_mut().children.push(Box::new(body));
+        self
+    }
+
+    /// Like [`body`](Dialog::body) but takes an already-boxed component — for a body produced
+    /// by a mapper that returns `Box<dyn Component>` (e.g. `heca`'s `realize(ViewNode)`), which
+    /// can't be passed to `body` because `Box<dyn Component>` is not itself `Component`.
+    pub fn body_boxed(mut self, body: Box<dyn Component>) -> Self {
+        self.panel_mut().children.push(body);
         self
     }
 
@@ -129,6 +137,13 @@ impl Dialog {
         self
     }
 
+    /// Set the callback fired when Esc or a scrim click requests dismissal (respecting
+    /// [`dismissible`](Dialog::dismissible)). The host wires this to its overlay-close path.
+    pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_dismiss = Some(Box::new(f));
+        self
+    }
+
     /// Set the initial open state (focusing the first focusable — the safe default when the
     /// caller orders `[Cancel, …, Confirm]`).
     pub fn open(mut self, open: bool) -> Self {
@@ -145,10 +160,11 @@ impl Dialog {
         self.open
     }
 
-    /// Take (and clear) the "dismiss requested" flag set by Esc / a scrim click. The host
-    /// polls this after routing input and resolves the overlay (e.g. `CloseOverlay`).
-    pub fn take_dismiss_requested(&self) -> bool {
-        self.dismiss_requested.replace(false)
+    /// Fire the dismiss callback if one is set (Esc / scrim, respecting `dismissible`).
+    fn request_dismiss(&self) {
+        if let Some(f) = &self.on_dismiss {
+            f();
+        }
     }
 
     fn is_open(&self) -> bool {
@@ -251,7 +267,7 @@ impl Component for Dialog {
                     self.focus.dispatch(panel, ev);
                 } else if self.dismissible {
                     // Scrim click = dismiss request (host resolves it).
-                    self.dismiss_requested.set(true);
+                    self.request_dismiss();
                 }
                 // Always swallow while open (modal).
                 Handled::Yes
@@ -263,7 +279,7 @@ impl Component for Dialog {
             }
             Event::Key { key: GridKey::Escape, pressed: true } => {
                 if self.dismissible {
-                    self.dismiss_requested.set(true);
+                    self.request_dismiss();
                 }
                 Handled::Yes
             }
@@ -295,6 +311,7 @@ impl LayoutExt for Dialog {}
 mod tests {
     use super::*;
     use crate::widgets::{Button, Label};
+    use std::rc::Rc;
 
     fn open_dialog() -> Dialog {
         Dialog::new("Delete pane?")
@@ -302,6 +319,14 @@ mod tests {
             .action(Button::new("Cancel"))
             .action(Button::new("Delete"))
             .open(true)
+    }
+
+    /// An open dialog wired with a dismiss flag, for the Esc / scrim tests.
+    fn open_dialog_with_flag() -> (Dialog, Rc<Cell<bool>>) {
+        let flag = Rc::new(Cell::new(false));
+        let f = flag.clone();
+        let d = open_dialog().on_dismiss(move || f.set(true));
+        (d, flag)
     }
 
     #[test]
@@ -330,24 +355,25 @@ mod tests {
     }
 
     #[test]
-    fn escape_requests_dismiss_when_dismissible() {
-        let mut d = open_dialog();
+    fn escape_fires_dismiss_when_dismissible() {
+        let (mut d, flag) = open_dialog_with_flag();
         assert_eq!(
             d.event(&Event::Key { key: GridKey::Escape, pressed: true }),
             Handled::Yes,
         );
-        assert!(d.take_dismiss_requested(), "Esc set the dismiss flag");
-        assert!(!d.take_dismiss_requested(), "flag cleared after taking");
+        assert!(flag.get(), "Esc fired the dismiss callback");
     }
 
     #[test]
     fn escape_is_swallowed_but_no_dismiss_when_forced() {
-        let mut d = open_dialog().dismissible(false);
+        let flag = Rc::new(Cell::new(false));
+        let f = flag.clone();
+        let mut d = open_dialog().dismissible(false).on_dismiss(move || f.set(true));
         assert_eq!(
             d.event(&Event::Key { key: GridKey::Escape, pressed: true }),
             Handled::Yes,
             "still swallowed (modal)",
         );
-        assert!(!d.take_dismiss_requested(), "forced dialog does not dismiss on Esc");
+        assert!(!flag.get(), "forced dialog does not dismiss on Esc");
     }
 }
