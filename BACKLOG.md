@@ -1551,12 +1551,21 @@ decisions + phases: **`action-interaction-plan.md`** (design locked with the use
   `PaneHeaderContent.catalog`, alongside the existing `shortcuts`). `by_category`/`count`/`category`/
   `default_binding` kept (command-palette/RPC introspection). No behavior change; heca 311 tests green,
   clippy clean. Next: task-B (`ConfirmSpec` + generic gate).
-- [ ] **action-task-B — `ConfirmSpec` + generic gate.** Add `ConfirmSpec`/`ResponseButton`/`Outcome`/
-  `ButtonRole`; attach specs to `close`/`delete_column`/`delete_workspace`; generalize the gate to
-  `maybe_confirm` (reads the spec + `[confirm]` config); `ConfirmSpec→ModalSpec` conversion;
-  `run_outcome` (`Proceed`=`registry.execute`, `Cancel`, `Dispatch`, `Callback`). Remove the hardcoded
-  gate + fold `request_destructive`/`run_destructive_now`/`begin_confirm_delete`. Migrate
-  `[settings] confirm_*` → `[confirm]` + `config.default.toml`. Tests + docs.
+- [~] **action-task-B — `ConfirmSpec` + generic gate. Mechanism DONE (2026-07-08); config-table B2 open.**
+  Added `ConfirmSpec`/`ResponseButton`/`Outcome`/`ButtonRole`/`ConfirmCallback` (`heca/src/actions.rs`,
+  pure data + the native `Callback` documented meticulously per decision 1). The 3 destructive actions
+  are declared specs (`ActionCatalog.confirm`, `confirm_spec(name)`). The central gate
+  `maybe_confirm_destructive` now **reads the catalog spec** (resolves `ClosePane`→`ClosePaneById`,
+  looks up the spec, checks enablement) and raises `open_confirm`, which converts `ConfirmSpec→ModalSpec`
+  and runs the chosen button's `Outcome` via `run_outcome` (`Proceed`=`registry.execute` [gate-bypass,
+  no loop], `Cancel`, `Dispatch`=`dispatch_action`, `Callback`=native closure). Removed
+  `begin_confirm_delete`; `request_destructive` + `run_destructive_now` reimplemented on the spec path;
+  `destructive_message`→`confirm_title` (dynamic title stays code, target-specific). heca 313 tests
+  (2 new: builtin specs + outcome composition), clippy clean. **Behavior preserved** (same forced
+  `[Cancel] [Delete]` modal) — worth an in-app re-check (right-click delete + header close).
+  **B2 (remaining):** migrate `[settings] confirm_*` → a generic `[confirm].<action>` config table
+  (decision 3) + `config.default.toml`; today `confirm_enabled()` still reads the three
+  `state.confirm_*` flags and falls back to the spec's `default_enabled` for unknown names.
 - [ ] **action-task-C — Plugin/dev API + docs.** `register(ActionSpec)` for native (with `Callback`);
   the plugin/WASM declarative path + host adapter (declarative outcomes only); RPC introspection of
   action metadata; **meticulous `Callback` docs** (native-only, opaque across WASM/RPC). Update

@@ -1513,55 +1513,99 @@ pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAct
     }
 }
 
-/// Raise the delete confirmation as a host-owned overlay modal (`chrome::overlay`): a
-/// [`Dialog`](heca_grid_ui::Dialog) layer with `[Cancel (n)] [Delete (y)]` real buttons (so
-/// they're hint targets + focus-traversable — `sidebar-fu-13` Stage 3). `message` is the
-/// prompt (a trailing " (y/n)" / "?" is stripped for the title); `action` runs on confirm;
-/// `resume_sidebar` picks the mode to return to. The buttons emit `SubmitOverlay` and Esc /
-/// scrim emit `CloseOverlay`; the completion below dispatches `action` on confirm and restores
-/// the input mode either way. `InputMode::ConfirmDelete` is set purely as a status-bar marker
-/// (the modal layer owns input while up).
-pub(crate) fn begin_confirm_delete(
+/// Raise a declarative [`ConfirmSpec`](crate::actions::ConfirmSpec) as a host-owned overlay modal
+/// (`chrome::overlay`): a [`Dialog`](heca_grid_ui::Dialog) layer whose real buttons (hint targets +
+/// focus-traversable) come from the spec's [`ResponseButton`](crate::actions::ResponseButton)s. The
+/// **title** is computed dynamically from the concrete `resolved` target ([`confirm_title`]); the
+/// body / buttons / dismissibility come from the spec. On resolve, [`run_outcome`] runs the chosen
+/// button's [`Outcome`](crate::actions::Outcome). `resume_sidebar` picks the mode to return to;
+/// `InputMode::ConfirmDelete` is set purely as a status-bar marker (the modal layer owns input).
+fn open_confirm(
     state: &mut AppState,
-    message: String,
-    action: WmAction,
+    spec: crate::actions::ConfirmSpec,
+    resolved: WmAction,
     resume_sidebar: bool,
 ) {
-    let title = message
-        .trim_end()
-        .trim_end_matches("(y/n)")
-        .trim_end()
-        .trim_end_matches('?')
-        .to_string()
-        + "?";
-    // [Cancel] [Delete]: Cancel is first, so it takes initial focus (safe default) and Enter
-    // activates it; the danger tint marks Delete. Dismissible — Esc / scrim = cancel. The Dialog
-    // owns Tab/Shift+Tab/arrows/Ctrl+h-l/Enter/Space; the buttons get tooltips + KeyHint from the
-    // centralized path — the caller only declares the buttons.
-    let spec = crate::chrome::ModalSpec::message(title, "This action cannot be undone.")
-        .action(crate::chrome::ModalAction::new("cancel", "Cancel"))
-        .action(crate::chrome::ModalAction::new("confirm", "Delete").danger(true))
-        .danger(true)
-        // Destructive → forced decision: an outside/scrim click or Esc is swallowed; the user
-        // must choose Cancel or Delete.
-        .dismissible(false);
-    crate::chrome::open_modal(state, spec, move |state, _registry, result| {
+    use crate::actions::ButtonRole;
+    let title = confirm_title(state, &resolved);
+    let danger_panel = spec.buttons.iter().any(|b| b.role == ButtonRole::Danger);
+    let mut modal = crate::chrome::ModalSpec::message(title, spec.message.clone())
+        .dismissible(spec.dismissible)
+        .danger(danger_panel);
+    for b in &spec.buttons {
+        modal = modal.action(
+            crate::chrome::ModalAction::new(b.id.clone(), b.label.clone())
+                .danger(b.role == ButtonRole::Danger),
+        );
+    }
+    let buttons = spec.buttons;
+    crate::chrome::open_modal(state, modal, move |state, registry, result| {
         state.input_mode = if resume_sidebar {
             InputMode::SidebarNav
         } else {
             InputMode::Normal
         };
-        // Only the "confirm" action runs the destructive command; cancel / dismiss just
-        // restore the mode. Run the raw action **directly** (not via `dispatch_action`) so it
-        // does NOT re-enter the central destructive gate that raised this dialog (no loop) —
-        // `action` is always a raw variant (`ClosePaneById`/`DeleteColumn`/`DeleteWorkspace`).
-        if matches!(&result, crate::chrome::ModalResult::Action { id, .. } if id == "confirm") {
-            run_destructive_now(state, &action);
-        }
+        run_outcome(state, registry, &buttons, &resolved, &result);
         state.needs_redraw = true;
     });
     state.input_mode = InputMode::ConfirmDelete;
     state.needs_redraw = true;
+}
+
+/// Run the [`Outcome`](crate::actions::Outcome) of the response button the user chose — or, on Esc /
+/// scrim dismiss, the `Cancel`-role button's outcome. `Proceed` runs the original `resolved` action
+/// via `registry.execute`, which bypasses the dispatch gate that raised the prompt, so there is no
+/// loop. `Dispatch` re-dispatches (policy-routed normally); `Callback` runs the native closure.
+fn run_outcome(
+    state: &mut AppState,
+    registry: &crate::actions::ActionRegistry,
+    buttons: &[crate::actions::ResponseButton],
+    resolved: &WmAction,
+    result: &crate::chrome::ModalResult,
+) {
+    use crate::actions::{ButtonRole, Outcome};
+    let outcome = match result {
+        crate::chrome::ModalResult::Action { id, .. } => {
+            buttons.iter().find(|b| &b.id == id).map(|b| &b.outcome)
+        }
+        crate::chrome::ModalResult::Dismissed => buttons
+            .iter()
+            .find(|b| b.role == ButtonRole::Cancel)
+            .map(|b| &b.outcome),
+    };
+    match outcome {
+        Some(Outcome::Proceed) => registry.execute(resolved, state),
+        Some(Outcome::Dispatch(action)) => crate::app::interaction::dispatch_action(
+            state,
+            registry,
+            crate::app::interaction::InteractionSource::Keyboard,
+            action,
+        ),
+        Some(Outcome::Callback(cb)) => cb(state, registry),
+        Some(Outcome::Cancel) | None => {}
+    }
+}
+
+/// Whether the confirm prompt for `config_name` is enabled. Phase B reads the existing
+/// `[settings] confirm_*` flags for the three built-ins; unknown names (plugin actions, the future
+/// generic `[confirm]` table — Phase B2) fall back to the spec's `default_enabled`.
+fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -> bool {
+    match config_name {
+        "close" => state.confirm_close_pane,
+        "delete_column" => state.confirm_delete_column,
+        "delete_workspace" => state.confirm_delete_workspace,
+        _ => default_enabled,
+    }
+}
+
+/// The confirm config name for a raw destructive action (`None` if it isn't confirmable).
+fn confirm_config_name(action: &WmAction) -> Option<&'static str> {
+    match action {
+        WmAction::ClosePaneById { .. } => Some("close"),
+        WmAction::DeleteColumn { .. } => Some("delete_column"),
+        WmAction::DeleteWorkspace { .. } => Some("delete_workspace"),
+        _ => None,
+    }
 }
 
 /// Human label for a workspace index (its name, or "ws N").
@@ -1574,8 +1618,9 @@ fn ws_label(state: &AppState, ws_idx: usize) -> String {
         .unwrap_or_else(|| format!("ws {}", ws_idx + 1))
 }
 
-/// The confirm-prompt question for a raw destructive action.
-fn destructive_message(state: &AppState, action: &WmAction) -> String {
+/// The dynamic confirm-prompt **title** for a raw destructive action (target-specific — the pane /
+/// column / workspace name — so it can't live in the static [`ConfirmSpec`]).
+fn confirm_title(state: &AppState, action: &WmAction) -> String {
     match action {
         WmAction::ClosePaneById { pane_id } => {
             let label = state
@@ -1606,59 +1651,60 @@ fn run_destructive_now(state: &mut AppState, action: &WmAction) {
     }
 }
 
-/// The single chokepoint for destructive actions (close pane / delete column /
-/// delete workspace): per the matching `[settings] confirm_*` toggle, either raise
-/// the confirm [`Modal`](heca_grid_ui::widgets::Modal) (`begin_confirm_delete`) or run
-/// the raw action immediately. Used from keyboard, sidebar, and the context menus so
-/// the confirm behaviour is identical everywhere. `raw_action` must be a raw variant
-/// (`ClosePaneById`/`DeleteColumn`/`DeleteWorkspace`); the dialog dispatches it back
-/// through the registry on confirm, so the raw handlers never re-enter this gate.
+/// The confirm-or-run chokepoint for a **raw** destructive action, used by the sidebar / keyboard
+/// resolvers that compute a target then need the same confirm behaviour. Looks up the action's
+/// [`ConfirmSpec`](crate::actions::ConfirmSpec): if the prompt is enabled, [`open_confirm`] raises
+/// it; otherwise the raw action runs now ([`run_destructive_now`]). The central dispatch gate
+/// ([`maybe_confirm_destructive`]) shares this same spec-driven path for directly-dispatched actions.
 pub(crate) fn request_destructive(
     state: &mut AppState,
     raw_action: WmAction,
     resume_sidebar: bool,
 ) {
-    let confirm = match &raw_action {
-        WmAction::ClosePaneById { .. } => state.confirm_close_pane,
-        WmAction::DeleteColumn { .. } => state.confirm_delete_column,
-        WmAction::DeleteWorkspace { .. } => state.confirm_delete_workspace,
-        _ => false,
-    };
-    if confirm {
-        let message = destructive_message(state, &raw_action);
-        begin_confirm_delete(state, message, raw_action, resume_sidebar);
-    } else {
-        run_destructive_now(state, &raw_action);
+    let spec = confirm_config_name(&raw_action)
+        .and_then(|name| state.action_catalog.confirm_spec(name).cloned());
+    match spec {
+        Some(spec) if confirm_enabled(state, &spec.config_name, spec.default_enabled) => {
+            open_confirm(state, spec, raw_action, resume_sidebar)
+        }
+        _ => run_destructive_now(state, &raw_action),
     }
 }
 
-/// The **central destructive-action gate**, called once at the dispatch chokepoint
+/// The **central action-confirmation gate**, called once at the dispatch chokepoint
 /// ([`dispatch_intent`](crate::app::interaction::dispatch_intent)) before any action executes.
 ///
-/// If `action` is a destructive command (close pane / delete column / delete workspace) it is
-/// routed through the confirm chokepoint [`request_destructive`] (per the matching
-/// `[settings] confirm_*` toggle) and this returns `true` — meaning **handled**, the caller must
-/// NOT run the action normally. For every other action it returns `false` (run it as usual).
+/// Looks the dispatched `action` up in the runtime [`ConfirmSpec`](crate::actions::ConfirmSpec)
+/// catalog. If it needs a prompt (and the prompt is enabled), it raises the declarative confirm
+/// overlay and returns `true` — meaning **handled**, the caller must NOT run the action. For every
+/// other action (or when the prompt is disabled) it returns `false` (run it as usual).
 ///
 /// This is why the guard lives on the **action**, not the call site: every surface that dispatches
-/// a destructive action — keyboard, the pane-header close button, a context menu / dropdown, RPC —
-/// funnels through the one dispatch chokepoint and gets identical confirm behaviour for free. The
-/// confirm dialog runs the raw action directly ([`run_destructive_now`]), so it never re-enters
-/// this gate (no loop). `ClosePane` (focused) is normalized to the raw `ClosePaneById`.
+/// an action — keyboard, the pane-header close button, a context menu / dropdown, RPC — funnels
+/// through this one dispatch chokepoint and gets identical confirm behaviour for free. The
+/// confirm's `Proceed` runs the raw action via `registry.execute`, which bypasses this gate (no
+/// loop). `ClosePane` (focused) is resolved to the concrete `ClosePaneById` pinned at prompt time.
 pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction) -> bool {
-    // Return to sidebar-nav after a deletion started there; otherwise Normal.
-    let resume_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
-    let raw = match action {
+    // Resolve the dispatched action to its confirm config name + the concrete action to run on
+    // `Proceed` (`ClosePane` → the focused pane's `ClosePaneById`, pinned now).
+    let (name, resolved) = match action {
         WmAction::ClosePane => match focused_pane_id(state) {
-            Some(pane_id) => WmAction::ClosePaneById { pane_id },
-            None => return true, // nothing focused → nothing to close, but still "handled"
+            Some(pane_id) => ("close", WmAction::ClosePaneById { pane_id }),
+            None => return false, // nothing focused → let the normal path no-op
         },
-        WmAction::ClosePaneById { .. }
-        | WmAction::DeleteColumn { .. }
-        | WmAction::DeleteWorkspace { .. } => action.clone(),
+        WmAction::ClosePaneById { .. } => ("close", action.clone()),
+        WmAction::DeleteColumn { .. } => ("delete_column", action.clone()),
+        WmAction::DeleteWorkspace { .. } => ("delete_workspace", action.clone()),
         _ => return false,
     };
-    request_destructive(state, raw, resume_sidebar);
+    let Some(spec) = state.action_catalog.confirm_spec(name).cloned() else {
+        return false;
+    };
+    if !confirm_enabled(state, &spec.config_name, spec.default_enabled) {
+        return false; // disabled → let dispatch run the action raw via its handler
+    }
+    let resume_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
+    open_confirm(state, spec, resolved, resume_sidebar);
     true
 }
 
