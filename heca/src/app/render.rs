@@ -52,12 +52,15 @@ fn hyperlink_decor_from(style: heca_config::appearance::HyperlinkStyle) -> Hyper
 }
 
 /// Human-readable status mode label and suffix for the status bar.
-pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
+pub(crate) fn status_mode_parts(
+    input_mode: &InputMode,
+    catalog: &crate::actions::ActionCatalog,
+) -> (&'static str, String) {
     // For pick modes the prompt suffix is sourced from the action's `ActionDescriptor`
-    // (via `pending_pick`) so the text lives in one place — the action registry.
+    // (via `pending_pick`) so the text lives in one place — the action catalog.
     let pick_suffix = || {
         input_mode
-            .pending_pick()
+            .pending_pick(catalog)
             .map(|p| format!(" — {}", p.prompt))
             .unwrap_or_default()
     };
@@ -1282,24 +1285,32 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::status_mode_parts;
+    use crate::actions::ActionCatalog;
     use crate::app_state::{InputMode, RenameTarget};
     use heca_core::layout::PaneId;
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {
+        let catalog = ActionCatalog::with_builtins();
         assert_eq!(
-            status_mode_parts(&InputMode::Rename {
-                target: RenameTarget::Pane(PaneId(7)),
-                buffer: "term".to_string(),
-            }),
+            status_mode_parts(
+                &InputMode::Rename {
+                    target: RenameTarget::Pane(PaneId(7)),
+                    buffer: "term".to_string(),
+                },
+                &catalog
+            ),
             ("RENAME", ": term_".to_string())
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::PaneTake {
-                candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
-                focus_after: true,
-            }),
+            status_mode_parts(
+                &InputMode::PaneTake {
+                    candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
+                    focus_after: true,
+                },
+                &catalog
+            ),
             (
                 "TAKE+",
                 " — Select a pane to pull into the active column, then focus it.".to_string()
@@ -1307,7 +1318,7 @@ mod tests {
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::ConfirmDelete),
+            status_mode_parts(&InputMode::ConfirmDelete, &catalog),
             ("CONFIRM", String::new()),
             "the prompt lives in the Modal now — the status bar shows only the mode word"
         );

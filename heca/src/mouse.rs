@@ -98,12 +98,16 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
     // Each entry's icon comes from the action registry (one source of action
     // iconography, shared with the future command palette); the label + shortcut
     // hint stay menu-local. No quick-pick keycap — the real binding is shown.
-    let entry = |label: &str, icon_action: &str, action: WmAction| -> MenuEntry {
+    let entry = |catalog: &crate::actions::ActionCatalog,
+                 label: &str,
+                 icon_action: &str,
+                 action: WmAction|
+     -> MenuEntry {
         let s = sink.clone();
         let mut e = MenuEntry::new(label, move || {
             *s.borrow_mut() = Some(action.clone());
         });
-        if let Some(glyph) = crate::actions::ActionRegistry::icon(icon_action) {
+        if let Some(glyph) = catalog.icon(icon_action) {
             e = e.icon(glyph);
         }
         e
@@ -116,7 +120,7 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
         let mut e = MenuEntry::new("Open link", move || {
             *s.borrow_mut() = Some(WmAction::OpenLink { url: url.clone() });
         });
-        if let Some(glyph) = crate::actions::ActionRegistry::icon("open_link") {
+        if let Some(glyph) = state.action_catalog.icon("open_link") {
             e = e.icon(glyph);
         }
         menu = menu.entry(e);
@@ -124,15 +128,15 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
 
     // Pane actions target the focused pane (the right-press focuses the clicked one).
     menu = menu.entry(
-        entry("New column", "split_horizontal", WmAction::SplitHorizontal).shortcut("prefix+Enter"),
+        entry(&state.action_catalog, "New column", "split_horizontal", WmAction::SplitHorizontal).shortcut("prefix+Enter"),
     );
     menu = menu
-        .entry(entry("Split down", "split_vertical", WmAction::SplitVertical).shortcut("prefix+v"));
+        .entry(entry(&state.action_catalog, "Split down", "split_vertical", WmAction::SplitVertical).shortcut("prefix+v"));
     menu = menu
-        .entry(entry("Zoom / unzoom", "zoom_column", WmAction::ZoomColumn).shortcut("prefix+z"));
-    menu = menu.entry(entry("Float / unfloat", "float", WmAction::Float).shortcut("prefix+f"));
+        .entry(entry(&state.action_catalog, "Zoom / unzoom", "zoom_column", WmAction::ZoomColumn).shortcut("prefix+z"));
+    menu = menu.entry(entry(&state.action_catalog, "Float / unfloat", "float", WmAction::Float).shortcut("prefix+f"));
     menu = menu
-        .entry(entry("Close pane", "close", WmAction::ClosePane).shortcut("prefix+x").danger(true));
+        .entry(entry(&state.action_catalog, "Close pane", "close", WmAction::ClosePane).shortcut("prefix+x").danger(true));
 
     menu = menu
         .anchor(heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64))
@@ -156,12 +160,16 @@ fn open_sidebar_context_menu(
     use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
 
     let sink = state.context_menu_action.clone();
-    let entry = |label: &str, icon_action: &str, action: WmAction| -> MenuEntry {
+    let entry = |catalog: &crate::actions::ActionCatalog,
+                 label: &str,
+                 icon_action: &str,
+                 action: WmAction|
+     -> MenuEntry {
         let s = sink.clone();
         let mut e = MenuEntry::new(label, move || {
             *s.borrow_mut() = Some(action.clone());
         });
-        if let Some(glyph) = crate::actions::ActionRegistry::icon(icon_action) {
+        if let Some(glyph) = catalog.icon(icon_action) {
             e = e.icon(glyph);
         }
         e
@@ -171,18 +179,18 @@ fn open_sidebar_context_menu(
     match item {
         crate::chrome::ChromeDragItem::Pane(pane_id) => {
             if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id) {
-                menu = menu.entry(entry(
+                menu = menu.entry(entry(&state.action_catalog,
                     "New pane",
                     "split_vertical",
                     WmAction::AddPaneToColumn { ws_idx, col_idx },
                 ));
             }
             menu = menu.entry(
-                entry("Delete pane", "close", WmAction::ClosePaneById { pane_id }).danger(true),
+                entry(&state.action_catalog, "Delete pane", "close", WmAction::ClosePaneById { pane_id }).danger(true),
             );
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
-            menu = menu.entry(entry(
+            menu = menu.entry(entry(&state.action_catalog,
                 "New pane",
                 "split_vertical",
                 WmAction::AddPaneToColumn {
@@ -190,13 +198,13 @@ fn open_sidebar_context_menu(
                     col_idx: col,
                 },
             ));
-            menu = menu.entry(entry(
+            menu = menu.entry(entry(&state.action_catalog,
                 "New column",
                 "split_horizontal",
                 WmAction::AddColumnToWorkspace { ws_idx: ws },
             ));
             menu = menu.entry(
-                entry(
+                entry(&state.action_catalog,
                     "Delete column",
                     "close",
                     WmAction::DeleteColumn {
@@ -208,18 +216,18 @@ fn open_sidebar_context_menu(
             );
         }
         crate::chrome::ChromeDragItem::Workspace { ws } => {
-            menu = menu.entry(entry(
+            menu = menu.entry(entry(&state.action_catalog,
                 "New column",
                 "split_horizontal",
                 WmAction::AddColumnToWorkspace { ws_idx: ws },
             ));
-            menu = menu.entry(entry(
+            menu = menu.entry(entry(&state.action_catalog,
                 "New workspace",
                 "create_workspace",
                 WmAction::CreateWorkspace,
             ));
             menu = menu.entry(
-                entry(
+                entry(&state.action_catalog,
                     "Delete workspace",
                     "close",
                     WmAction::DeleteWorkspace { ws_idx: ws },

@@ -1541,10 +1541,16 @@ decisions + phases: **`action-interaction-plan.md`** (design locked with the use
 > `ModalSpec`). Prerequisite already landed: the central destructive gate (`maybe_confirm_destructive`
 > in `interaction.rs`/`handlers.rs`) — this phase generalizes it from 4 hardcoded variants to data.
 
-- [ ] **action-task-A — Runtime registry foundation.** Convert `ActionRegistry` (`heca/src/actions.rs`)
-  to hold `ActionEntry` (metadata + dispatch) at runtime; move built-in descriptors out of
-  `const ALL` into `register_builtins()`; keep `icon/label/find/by_category/count` working; choose the
-  crate for the shared `ActionMeta`/`ConfirmSpec` types. No behavior change; registry-parity tests.
+- [x] **action-task-A — Runtime registry foundation. DONE (2026-07-07).** Added
+  `ActionCatalog` (`heca/src/actions.rs`) — a runtime metadata store seeded from the built-in
+  `ActionRegistry::ALL` descriptors (`&'static` for now; owned plugin entries land in task-C) — on
+  `AppState.action_catalog`. Migrated every metadata lookup off the `ActionRegistry::{find,icon,label}`
+  **statics** (removed) to the catalog: `mouse.rs` context-menu builders (`entry` takes `&ActionCatalog`),
+  `InputMode::pending_pick(&catalog)` + `render::status_mode_parts(_, &catalog)`, and the two stateless
+  chrome helpers `pane_action_spec`/`sidebar_toggle_button` (threaded `&ActionCatalog` via
+  `PaneHeaderContent.catalog`, alongside the existing `shortcuts`). `by_category`/`count`/`category`/
+  `default_binding` kept (command-palette/RPC introspection). No behavior change; heca 311 tests green,
+  clippy clean. Next: task-B (`ConfirmSpec` + generic gate).
 - [ ] **action-task-B — `ConfirmSpec` + generic gate.** Add `ConfirmSpec`/`ResponseButton`/`Outcome`/
   `ButtonRole`; attach specs to `close`/`delete_column`/`delete_workspace`; generalize the gate to
   `maybe_confirm` (reads the spec + `[confirm]` config); `ConfirmSpec→ModalSpec` conversion;

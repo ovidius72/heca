@@ -58,13 +58,10 @@ impl ActionCategory {
     }
 }
 
-/// Static descriptor for a window-manager action.
+/// Static descriptor for a window-manager action. The built-in set lives in
+/// [`ActionRegistry::ALL`]; [`ActionCatalog`] loads them into the runtime, plugin-extensible
+/// metadata surface every UI reads from.
 #[derive(Debug, Clone, Copy)]
-// Preserved for the command palette and RPC introspection (not yet implemented).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "descriptor fields are preserved for command-palette and RPC metadata")
-)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
@@ -75,6 +72,8 @@ pub struct ActionDescriptor {
     /// Category for grouping.
     pub category: ActionCategory,
     /// Default keybinding string (e.g. "h,ArrowLeft").
+    // Preserved for the command palette + RPC introspection (read in tests only for now).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub default_binding: &'static str,
     /// Centralized action icon. The single source of an action's [`Glyph`] —
     /// every surface that renders this action (pane-action bar, context menu,
@@ -143,14 +142,12 @@ impl ActionRegistry {
     }
 }
 
-// ── Static metadata catalog for command palette and RPC introspection ──
-// Not yet consumed by runtime UI; preserved for planned features.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "metadata catalog is preserved for planned command-palette and RPC introspection")
-)]
+// ── Built-in action metadata seed ──
+// The compile-time catalog of built-in actions. `ActionCatalog::with_builtins()` loads this into
+// the runtime, plugin-extensible catalog owned by `AppState`; every UI surface resolves metadata
+// through that catalog, not this const directly.
 impl ActionRegistry {
-    /// All registered actions in a stable order.
+    /// The built-in action descriptors, in a stable order. Seed for [`ActionCatalog`].
     pub const ALL: &[ActionDescriptor] = &[
         // ── Navigation ──
         ActionDescriptor {
@@ -1050,36 +1047,72 @@ impl ActionRegistry {
         },
     ];
 
+}
+
+/// Runtime catalog of action metadata, owned by [`AppState`](crate::app_state::AppState).
+///
+/// Seeded from the built-in [`ActionRegistry::ALL`] descriptors at startup and (plugin action API)
+/// extended by plugins. The single runtime home every UI surface resolves action metadata through —
+/// replacing the old `ActionRegistry::find/icon/label/...` statics, so the set of actions (and their
+/// icons/labels/confirmation) is a runtime, extensible surface rather than a compile-time constant.
+///
+/// Phase A holds built-ins as `&'static ActionDescriptor` (zero-copy). Owned plugin entries (with
+/// `String` metadata) arrive with the plugin action API.
+pub struct ActionCatalog {
+    by_name: HashMap<&'static str, &'static ActionDescriptor>,
+    order: Vec<&'static ActionDescriptor>,
+}
+
+impl ActionCatalog {
+    /// Build the catalog seeded from the built-in [`ActionRegistry::ALL`] descriptors.
+    pub fn with_builtins() -> Self {
+        let order: Vec<&'static ActionDescriptor> = ActionRegistry::ALL.iter().collect();
+        let by_name = order.iter().map(|d| (d.name, *d)).collect();
+        Self { by_name, order }
+    }
+
     /// Look up an action descriptor by its config name.
-    pub fn find(name: &str) -> Option<&'static ActionDescriptor> {
-        Self::ALL.iter().find(|d| d.name == name)
+    pub fn find(&self, name: &str) -> Option<&'static ActionDescriptor> {
+        self.by_name.get(name).copied()
     }
 
-    /// The icon [`Glyph`] for an action, by config name — read straight from the
-    /// action's [`ActionDescriptor::icon`]. The single registry-level source of
-    /// action iconography: every surface (pane-action bar, context menu, command
-    /// palette) resolves icons through here, so none invents its own.
-    pub fn icon(name: &str) -> Option<Glyph> {
-        Self::find(name).and_then(|d| d.icon)
+    /// The icon [`Glyph`] for an action, by config name — the single source of action iconography
+    /// (pane-action bar, context menu, command palette all resolve through here).
+    pub fn icon(&self, name: &str) -> Option<Glyph> {
+        self.find(name).and_then(|d| d.icon)
     }
 
-    /// The human-readable label for an action, by config name — read from the
-    /// action's [`ActionDescriptor::label`]. The registry-level source of button
-    /// labels, so a caller names the action rather than re-spelling the label.
-    pub fn label(name: &str) -> Option<&'static str> {
-        Self::find(name).map(|d| d.label)
+    /// The human-readable label for an action, by config name — so a caller names the action
+    /// rather than re-spelling the label.
+    pub fn label(&self, name: &str) -> Option<&'static str> {
+        self.find(name).map(|d| d.label)
     }
 
-    /// Return all actions in a given category.
+    /// All actions in a given category, in stable order.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+    )]
     pub fn by_category(
+        &self,
         category: ActionCategory,
-    ) -> impl Iterator<Item = &'static ActionDescriptor> {
-        Self::ALL.iter().filter(move |d| d.category == category)
+    ) -> impl Iterator<Item = &'static ActionDescriptor> + '_ {
+        self.order.iter().copied().filter(move |d| d.category == category)
     }
 
-    /// Total number of registered actions.
-    pub fn count() -> usize {
-        Self::ALL.len()
+    /// Total number of catalogued actions.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+    )]
+    pub fn count(&self) -> usize {
+        self.order.len()
+    }
+}
+
+impl Default for ActionCatalog {
+    fn default() -> Self {
+        Self::with_builtins()
     }
 }
 
@@ -1101,12 +1134,16 @@ mod tests {
 
     #[test]
     fn test_registry_has_actions() {
-        assert!(ActionRegistry::count() > 0, "registry should not be empty");
+        assert!(
+            ActionCatalog::with_builtins().count() > 0,
+            "catalog should not be empty"
+        );
     }
 
     #[test]
     fn test_find_known_action() {
-        let desc = ActionRegistry::find("focus_left");
+        let catalog = ActionCatalog::with_builtins();
+        let desc = catalog.find("focus_left");
         assert!(desc.is_some(), "should find focus_left");
         let desc = desc.unwrap();
         assert_eq!(desc.label, "Focus Column Left");
@@ -1115,11 +1152,12 @@ mod tests {
 
     #[test]
     fn test_find_unknown_action() {
-        assert!(ActionRegistry::find("nonexistent").is_none());
+        assert!(ActionCatalog::with_builtins().find("nonexistent").is_none());
     }
 
     #[test]
     fn test_selection_action_descriptors_exist() {
+        let catalog = ActionCatalog::with_builtins();
         for name in [
             "enter_selection_mode",
             "selection_left",
@@ -1130,7 +1168,7 @@ mod tests {
             "copy_selection",
             "paste_clipboard",
         ] {
-            let desc = ActionRegistry::find(name);
+            let desc = catalog.find(name);
             assert!(desc.is_some(), "missing descriptor for {name}");
             let desc = desc.unwrap();
             assert!(
@@ -1147,10 +1185,11 @@ mod tests {
 
     #[test]
     fn test_by_category() {
-        let nav_count = ActionRegistry::by_category(ActionCategory::Navigation).count();
+        let catalog = ActionCatalog::with_builtins();
+        let nav_count = catalog.by_category(ActionCategory::Navigation).count();
         assert!(nav_count > 0, "should have navigation actions");
 
-        let sys_count = ActionRegistry::by_category(ActionCategory::System).count();
+        let sys_count = catalog.by_category(ActionCategory::System).count();
         assert!(sys_count > 0, "should have system actions");
     }
 
@@ -1207,7 +1246,9 @@ mod tests {
 
     #[test]
     fn test_session_category_exists() {
-        let count = ActionRegistry::by_category(ActionCategory::Session).count();
+        let count = ActionCatalog::with_builtins()
+            .by_category(ActionCategory::Session)
+            .count();
         assert_eq!(
             count, 0,
             "no actions in Session category yet, but variant is reserved"

@@ -202,9 +202,9 @@ impl InputMode {
     /// a structured description of the pending action. Mirrored into the reactive chrome
     /// store (and emitted as `PendingPickChanged`) so any component or plugin can react
     /// to it (e.g. render its own prompt overlay). `None` when no pick is active.
-    pub fn pending_pick(&self) -> Option<PendingPick> {
+    pub fn pending_pick(&self, catalog: &crate::actions::ActionCatalog) -> Option<PendingPick> {
         // Map the active pick mode to its enter-mode action; the human prompt + label
-        // come from that action's `ActionDescriptor` (the registry is the single source
+        // come from that action's `ActionDescriptor` (the catalog is the single source
         // of truth for action text — no duplicated strings here).
         let (kind, action_name) = match self {
             InputMode::PaneSelect { .. } => (PickKind::SelectPane, "pane_select"),
@@ -236,7 +236,7 @@ impl InputMode {
             }
             _ => return None,
         };
-        let desc = crate::actions::ActionRegistry::find(action_name)?;
+        let desc = catalog.find(action_name)?;
         Some(PendingPick {
             kind,
             action_name,
@@ -691,6 +691,11 @@ pub struct AppState {
     /// keys — never the defaults when overridden). Any chrome button looks its own
     /// shortcut up by the action it triggers; see [`crate::chrome::ActionShortcuts`].
     pub action_shortcuts: crate::chrome::ActionShortcuts,
+    /// Runtime catalog of action metadata (labels/icons/…; later confirmation specs), seeded from
+    /// the built-in descriptors and — with the plugin action API — extended by plugins. The single
+    /// runtime home every UI surface resolves action metadata through (see
+    /// [`crate::actions::ActionCatalog`]).
+    pub action_catalog: crate::actions::ActionCatalog,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

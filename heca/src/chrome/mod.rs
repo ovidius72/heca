@@ -479,6 +479,7 @@ fn action_tooltip(
 /// action lands on the clicked pane, not whatever happened to be active. The other
 /// buttons carry the pane/column in the action itself, so they don't steal focus.
 fn pane_action_spec(
+    catalog: &crate::actions::ActionCatalog,
     action: heca_config::appearance::PaneAction,
     pane_id: PaneId,
     ws_idx: usize,
@@ -486,9 +487,9 @@ fn pane_action_spec(
 ) -> (Glyph, crate::input::WmAction, &'static str, bool) {
     use crate::input::WmAction;
     use heca_config::appearance::PaneAction;
-    // Icons come from the action registry (the single source); the literal is a
+    // Icons come from the action catalog (the single source); the literal is a
     // defensive fallback only, so the bar and the context menu can never drift.
-    let icon = |name: &str, fallback: Glyph| crate::actions::ActionRegistry::icon(name).unwrap_or(fallback);
+    let icon = |name: &str, fallback: Glyph| catalog.icon(name).unwrap_or(fallback);
     match action {
         PaneAction::Split => (
             icon("split_vertical", Glyph::SquareSplitVertical),
@@ -549,14 +550,20 @@ pub(crate) struct PaneHeaderContent<'a> {
     pub(crate) floating: bool,
     /// Tooltip keybind hints (tracked in the key so a config reload rebuilds tips).
     pub(crate) shortcuts: &'a ActionShortcuts,
+    /// Runtime action-metadata catalog — the single source of each button's icon (and, later,
+    /// plugin-contributed action metadata). Threaded alongside `shortcuts`.
+    pub(crate) catalog: &'a crate::actions::ActionCatalog,
 }
 
 /// Whether a pane-action button stays visible when its pane is **floating**, driven
 /// by the shared [`action_policy`](crate::app::interaction) classification (split /
 /// zoom / move are tiled-only ⇒ hidden; float / close are focused-pane-local ⇒ kept).
-fn pane_action_visible_when_floating(action: heca_config::appearance::PaneAction) -> bool {
-    // Policy ignores the concrete ids, so dummy ids are fine here.
-    let (_, wm, _, _) = pane_action_spec(action, PaneId(0), 0, 0);
+fn pane_action_visible_when_floating(
+    catalog: &crate::actions::ActionCatalog,
+    action: heca_config::appearance::PaneAction,
+) -> bool {
+    // Policy ignores the concrete ids (and the icon), so dummy ids are fine here.
+    let (_, wm, _, _) = pane_action_spec(catalog, action, PaneId(0), 0, 0);
     crate::app::interaction::action_allowed_when_floating(&wm)
 }
 
@@ -596,10 +603,10 @@ fn pane_header_buttons(content: &PaneHeaderContent, ctx: &PaneHeaderCtx) -> Vec<
         .actions
         .iter()
         .copied()
-        .filter(|&a| !content.floating || pane_action_visible_when_floating(a))
+        .filter(|&a| !content.floating || pane_action_visible_when_floating(content.catalog, a))
         .map(|action| {
             let (glyph, wm_action, label, needs_focus) =
-                pane_action_spec(action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
+                pane_action_spec(content.catalog, action, ctx.pane_id, ctx.ws_idx, ctx.col_idx);
             let is_active = match action {
                 PaneAction::Zoom => content.zoomed,
                 PaneAction::Float => content.floating,
@@ -1049,6 +1056,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             zoomed: input.zoomed,
             floating: input.floating,
             shortcuts: &state.action_shortcuts,
+            catalog: &state.action_catalog,
         };
         let key = pane_header_key(&content, font, input.avail_w);
         let needs_build = state
@@ -1857,18 +1865,20 @@ struct ChromeFrame<'a> {
 /// wrapped in a tooltip carrying its keybind (resolved centrally by `action_name`
 /// — like every other chrome button). Lives in the always-visible top bar so it
 /// works in both expanded and collapsed states.
+#[allow(clippy::too_many_arguments)]
 fn sidebar_toggle_button(
     glyph: Glyph,
     action: crate::input::WmAction,
     action_name: &str,
     shortcuts: &ActionShortcuts,
+    catalog: &crate::actions::ActionCatalog,
     hints: &mut HintTargetRegistry,
     emit: ChromeIntentEmitter,
     color: Color,
 ) -> Tooltip {
     use crate::app::interaction::InteractionIntent;
-    // Label from the action descriptor (registry-owned), never re-spelled here.
-    let label = crate::actions::ActionRegistry::label(action_name).unwrap_or(action_name);
+    // Label from the action descriptor (catalog-owned), never re-spelled here.
+    let label = catalog.label(action_name).unwrap_or(action_name);
     // A hint target firing the *same* intent as a click, so `prefix+/` can pick this
     // button by letter — every action button is both clickable and hintable.
     let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
@@ -2699,7 +2709,8 @@ fn chrome_status(state: &crate::app_state::AppState) -> String {
         .and_then(|ws| ws.active_pane())
         .map(|p| p.custom_name.as_deref().unwrap_or(p.title.as_str()))
         .unwrap_or("—");
-    let (mode_str, rename_hint) = crate::app::render::status_mode_parts(&state.input_mode);
+    let (mode_str, rename_hint) =
+        crate::app::render::status_mode_parts(&state.input_mode, &state.action_catalog);
     format!(
         "{} panes | {} | {}{}",
         pane_count, focus_title, mode_str, rename_hint
@@ -3038,10 +3049,8 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
     }
     // Mirror the in-progress pick (its kind + prompt) into the store so components and
     // plugins can react to the pending action (e.g. a custom prompt overlay).
-    state
-        .chrome_state
-        .workspaces
-        .set_pending_pick(state.input_mode.pending_pick());
+    let pending_pick = state.input_mode.pending_pick(&state.action_catalog);
+    state.chrome_state.workspaces.set_pending_pick(pending_pick);
     // Phase 2: bridge backend-detected runtime → canonical `Pane.runtime` + emit
     // `pane.exited{code}` BEFORE mirroring `Pane.runtime` into the store.
     crate::app::process_monitor::sync_pane_runtime_from_backends(state);
@@ -3314,6 +3323,7 @@ pub(crate) fn build_chrome_root(
             crate::input::WmAction::SidebarLeft,
             "sidebar_left",
             &state.action_shortcuts,
+            &state.action_catalog,
             hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
@@ -3330,6 +3340,7 @@ pub(crate) fn build_chrome_root(
             crate::input::WmAction::SidebarRight,
             "sidebar_right",
             &state.action_shortcuts,
+            &state.action_catalog,
             hint_targets,
             emit_intent.clone(),
             theme.colors.muted,
@@ -4144,14 +4155,15 @@ mod tests {
         use crate::input::WmAction;
         use heca_config::appearance::PaneAction;
         let pid = PaneId(7);
+        let catalog = crate::actions::ActionCatalog::with_builtins();
 
         // Pane-parameterized actions carry the pane/column and don't need focus.
-        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Close, pid, 2, 3);
+        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
         assert_eq!(g, Glyph::XSquare);
         assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
         assert!(!focus);
 
-        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Split, pid, 2, 3);
+        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
         assert_eq!(g, Glyph::SquareSplitVertical);
         assert_eq!(
             a,
@@ -4163,12 +4175,12 @@ mod tests {
         assert!(!focus);
 
         // Active-targeted actions use the requested icons + need focus-first.
-        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Zoom, pid, 0, 0);
+        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Zoom, pid, 0, 0);
         assert_eq!(g, Glyph::FrameCorners);
         assert_eq!(a, WmAction::ZoomColumn);
         assert!(focus);
 
-        let (g, a, _, focus) = super::pane_action_spec(PaneAction::Float, pid, 0, 0);
+        let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Float, pid, 0, 0);
         assert_eq!(g, Glyph::Cards);
         assert_eq!(a, WmAction::Float);
         assert!(focus);
@@ -4177,18 +4189,15 @@ mod tests {
     #[test]
     fn floating_pane_keeps_only_float_and_close() {
         use heca_config::appearance::PaneAction;
+        let catalog = crate::actions::ActionCatalog::with_builtins();
         // Driven by the action policy: float/close are focused-pane-local (kept),
         // split/zoom/move are tiled-only (hidden when floating).
-        assert!(super::pane_action_visible_when_floating(PaneAction::Float));
-        assert!(super::pane_action_visible_when_floating(PaneAction::Close));
-        assert!(!super::pane_action_visible_when_floating(PaneAction::Split));
-        assert!(!super::pane_action_visible_when_floating(PaneAction::Zoom));
-        assert!(!super::pane_action_visible_when_floating(
-            PaneAction::MoveLeft
-        ));
-        assert!(!super::pane_action_visible_when_floating(
-            PaneAction::MoveRight
-        ));
+        assert!(super::pane_action_visible_when_floating(&catalog, PaneAction::Float));
+        assert!(super::pane_action_visible_when_floating(&catalog, PaneAction::Close));
+        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::Split));
+        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::Zoom));
+        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::MoveLeft));
+        assert!(!super::pane_action_visible_when_floating(&catalog, PaneAction::MoveRight));
     }
 
     #[test]
@@ -4207,12 +4216,15 @@ mod tests {
             ..PaneRuntime::default()
         };
         let hints = ActionShortcuts::default();
+        let catalog = crate::actions::ActionCatalog::with_builtins();
+        #[allow(clippy::too_many_arguments)]
         fn content<'a>(
             programs: &'a ProgramsConfig,
             segments: &'a [heca_config::appearance::PaneSegment],
             actions: &'a [heca_config::appearance::PaneAction],
             rt: &'a PaneRuntime,
             hints: &'a ActionShortcuts,
+            catalog: &'a crate::actions::ActionCatalog,
             col_idx: usize,
         ) -> PaneHeaderContent<'a> {
             PaneHeaderContent {
@@ -4227,10 +4239,11 @@ mod tests {
                 zoomed: false,
                 floating: false,
                 shortcuts: hints,
+                catalog,
             }
         }
         let base = pane_header_key(
-            &content(&programs, &segments, &actions, &runtime, &hints, 0),
+            &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
             15.0,
             300.0,
         );
@@ -4238,7 +4251,7 @@ mod tests {
         assert_eq!(
             base,
             pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 300.0
             )
@@ -4247,7 +4260,7 @@ mod tests {
         assert_ne!(
             base,
             pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, 1),
+                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 1),
                 15.0,
                 300.0
             )
@@ -4261,7 +4274,7 @@ mod tests {
         assert_ne!(
             base,
             pane_header_key(
-                &content(&programs, &segments, &actions, &other, &hints, 0),
+                &content(&programs, &segments, &actions, &other, &hints, &catalog, 0),
                 15.0,
                 300.0
             )
@@ -4270,7 +4283,7 @@ mod tests {
         assert_ne!(
             base,
             pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 120.0
             )
@@ -4278,7 +4291,7 @@ mod tests {
         assert_eq!(
             base,
             pane_header_key(
-                &content(&programs, &segments, &actions, &runtime, &hints, 0),
+                &content(&programs, &segments, &actions, &runtime, &hints, &catalog, 0),
                 15.0,
                 295.0
             )

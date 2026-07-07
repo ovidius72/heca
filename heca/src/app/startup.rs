@@ -367,6 +367,7 @@ pub(crate) async fn init_state(
         overlays: crate::chrome::OverlayHost::default(),
         pane_viewport_widgets: std::collections::HashMap::new(),
         action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
+        action_catalog: crate::actions::ActionCatalog::with_builtins(),
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state,
         chrome_host,
