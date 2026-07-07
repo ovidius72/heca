@@ -420,6 +420,23 @@ pub enum WmAction {
         visible: bool,
     },
 
+    // ── Overlay control (parameterized) — plugin-ui, §2.7.2 ──
+    // "Everything is an action": an overlay (modal/dropdown) is confirmed or dismissed by
+    // dispatching an action carrying the overlay's id. The `OverlayHost` injects the id into
+    // each action button it builds, and RPC passes the id it got from `open_modal`. Handled
+    // in `dispatch_intent` (which has the `ActionRegistry` the resolution needs to run the
+    // overlay's completion) — NOT via a registered `ActionHandler`, like `FocusPaneThenAction`.
+    /// Confirm overlay `overlay` with action id `action` (a button id or a plugin action id),
+    /// resolving its result to `ModalResult::Action { id: action }` and popping it.
+    SubmitOverlay {
+        overlay: crate::chrome::OverlayId,
+        action: String,
+    },
+    /// Dismiss overlay `overlay`, resolving its result to `ModalResult::Dismissed` and popping it.
+    CloseOverlay {
+        overlay: crate::chrome::OverlayId,
+    },
+
     // ── Chrome region show/hide (sidebar-fu-6) ──
     // Runtime, bindable toggles for the **mounted-gate** (`AppState.show_*` bools —
     // fully unmount → zero width/height), a DISTINCT axis from the `RegionMode`
@@ -962,7 +979,10 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::ShowBottomBar
         | WmAction::HideBottomBar
         | WmAction::ToggleBottomBar
-        | WmAction::PaneTakeAndFocus => 6,
+        | WmAction::PaneTakeAndFocus
+        // Overlay control: parameterized, never keybound (dispatched by overlay buttons/RPC).
+        | WmAction::SubmitOverlay { .. }
+        | WmAction::CloseOverlay { .. } => 6,
     }
 }
 

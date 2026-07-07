@@ -1511,24 +1511,20 @@ pub fn handle_sidebar_zoom_selected_column(state: &mut AppState, _action: &WmAct
     }
 }
 
-/// Raise the delete confirmation: set [`InputMode::ConfirmDelete`] (keyboard
-/// y/Enter/n/Esc) AND a clickable [`Modal`](heca_grid_ui::widgets::Modal) overlay
-/// (OK/Cancel). Both resolve through [`resolve_confirm_delete`]. `message` is the
-/// prompt (a trailing " (y/n)" is stripped for the dialog title); `action` runs on
-/// confirm; `resume_sidebar` picks the mode to return to.
+/// Raise the delete confirmation as a host-owned overlay modal (`chrome::overlay`): a
+/// [`Dialog`](heca_grid_ui::Dialog) layer with `[Cancel (n)] [Delete (y)]` real buttons (so
+/// they're hint targets + focus-traversable — `sidebar-fu-13` Stage 3). `message` is the
+/// prompt (a trailing " (y/n)" / "?" is stripped for the title); `action` runs on confirm;
+/// `resume_sidebar` picks the mode to return to. The buttons emit `SubmitOverlay` and Esc /
+/// scrim emit `CloseOverlay`; the completion below dispatches `action` on confirm and restores
+/// the input mode either way. `InputMode::ConfirmDelete` is set purely as a status-bar marker
+/// (the modal layer owns input while up).
 pub(crate) fn begin_confirm_delete(
     state: &mut AppState,
     message: String,
     action: WmAction,
     resume_sidebar: bool,
 ) {
-    use heca_grid_ui::widgets::{Modal, ModalButton};
-    // Reuse the same click-sink pattern as the context menu: the buttons write a
-    // bool result the event loop drains, then resolves the pending ConfirmDelete.
-    let result = state.confirm_dialog_result.clone();
-    result.borrow_mut().take();
-    let confirm_sink = result.clone();
-    let cancel_sink = result;
     let title = message
         .trim_end()
         .trim_end_matches("(y/n)")
@@ -1536,71 +1532,35 @@ pub(crate) fn begin_confirm_delete(
         .trim_end_matches('?')
         .to_string()
         + "?";
-    // Data-driven buttons in [Cancel (n)] [Delete (y)] order. Cancel takes initial
-    // focus (safe default) and Esc / scrim activate it; the per-button `shortcut`
-    // drives the `(n)` / `(y)` labels the host fires on that keypress. Keyboard focus
-    // + activation are host-driven in `events.rs`; the pointer path shares these sinks.
-    state.confirm_dialog = Some(
-        Modal::new(title, "This action cannot be undone.")
-            .button(
-                ModalButton::new("Cancel", move || {
-                    *cancel_sink.borrow_mut() = Some(false);
-                })
-                .shortcut('n')
-                .cancel(),
-            )
-            .button(
-                ModalButton::new("Delete", move || {
-                    *confirm_sink.borrow_mut() = Some(true);
-                })
-                .shortcut('y')
-                .danger(true),
-            )
-            .open(true),
-    );
-    state.input_mode = InputMode::ConfirmDelete {
-        message,
-        action: Box::new(action),
-        resume_sidebar,
-    };
-    state.needs_redraw = true;
-}
-
-/// Resolve a pending [`InputMode::ConfirmDelete`] from either input path (keyboard or
-/// the [`Modal`](heca_grid_ui::widgets::Modal) buttons): dispatch the action when
-/// `confirmed`, restore the resume mode, and close the dialog overlay. No-op when no
-/// confirm is pending.
-pub(crate) fn resolve_confirm_delete(
-    state: &mut AppState,
-    registry: &crate::actions::ActionRegistry,
-    confirmed: bool,
-) {
-    let (action, resume_sidebar) = match &state.input_mode {
-        InputMode::ConfirmDelete {
-            action,
-            resume_sidebar,
-            ..
-        } => (action.as_ref().clone(), *resume_sidebar),
-        _ => {
-            state.confirm_dialog = None;
-            return;
+    // [Cancel (n)] [Delete (y)]: Cancel is first, so it takes initial focus (safe default) and
+    // Enter activates it; the danger tint marks Delete. Dismissible — Esc / scrim = cancel.
+    let spec = crate::chrome::ModalSpec::message(title, "This action cannot be undone.")
+        .action(crate::chrome::ModalAction::new("cancel", "Cancel").shortcut('n'))
+        .action(
+            crate::chrome::ModalAction::new("confirm", "Delete")
+                .danger(true)
+                .shortcut('y'),
+        )
+        .danger(true);
+    crate::chrome::open_modal(state, spec, move |state, registry, result| {
+        state.input_mode = if resume_sidebar {
+            InputMode::SidebarNav
+        } else {
+            InputMode::Normal
+        };
+        // Only the "confirm" action runs the destructive command; cancel / dismiss just
+        // restore the mode.
+        if matches!(&result, crate::chrome::ModalResult::Action { id, .. } if id == "confirm") {
+            crate::app::interaction::dispatch_action(
+                state,
+                registry,
+                crate::app::interaction::InteractionSource::Keyboard,
+                &action,
+            );
         }
-    };
-    state.confirm_dialog = None;
-    state.confirm_dialog_result.borrow_mut().take();
-    state.input_mode = if resume_sidebar {
-        InputMode::SidebarNav
-    } else {
-        InputMode::Normal
-    };
-    if confirmed {
-        crate::app::interaction::dispatch_action(
-            state,
-            registry,
-            crate::app::interaction::InteractionSource::Keyboard,
-            &action,
-        );
-    }
+        state.needs_redraw = true;
+    });
+    state.input_mode = InputMode::ConfirmDelete;
     state.needs_redraw = true;
 }
 

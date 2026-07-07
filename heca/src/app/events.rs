@@ -115,44 +115,29 @@ pub(crate) fn handle_window_event(
                 return;
             }
 
-            // The confirm dialog owns the keyboard while open: drive the Modal's
-            // focus/activation directly — the host has the winit modifier state the
-            // widget can't see (Shift+Tab, Ctrl+h/l). A button callback writes a bool
-            // into `confirm_dialog_result`; we drain it through the same resolver as the
-            // pointer path. Replaces the old `InputMode::ConfirmDelete` key handler.
-            if state.confirm_dialog.is_some() {
-                use winit::keyboard::{Key, NamedKey};
-                let is_ctrl = state.modifiers.control_key();
-                let is_shift = state.modifiers.shift_key();
-                if let Some(dialog) = state.confirm_dialog.as_mut() {
-                    match &event.logical_key {
-                        Key::Named(NamedKey::Tab) if is_shift => dialog.focus_prev(),
-                        Key::Named(NamedKey::Tab) => dialog.focus_next(),
-                        Key::Named(NamedKey::ArrowRight) => dialog.focus_next(),
-                        Key::Named(NamedKey::ArrowLeft) => dialog.focus_prev(),
-                        Key::Named(NamedKey::Enter | NamedKey::Space) => dialog.activate_focused(),
-                        Key::Named(NamedKey::Escape) => dialog.request_cancel(),
-                        Key::Character(s) => match s.as_str() {
-                            // Vim-style focus motion (Ctrl+h/l); a bare letter fires a
-                            // button shortcut (e.g. y / n).
-                            "h" if is_ctrl => dialog.focus_prev(),
-                            "l" if is_ctrl => dialog.focus_next(),
-                            _ if !is_ctrl => {
-                                if let Some(c) = s.chars().next() {
-                                    dialog.activate_shortcut(c);
-                                }
-                            }
-                            _ => {}
-                        },
-                        _ => {}
+            // A visible modal **layer** (overlay dialog) owns the keyboard: a letter shortcut
+            // fires its action via `SubmitOverlay`; every other key is forwarded to the dialog
+            // root (Tab / ←→ / Enter / Space / Esc — the `Dialog` self-handles them + fires its
+            // `on_dismiss`). Any key is swallowed so nothing leaks to the pane behind the scrim.
+            if let Some(overlay) = crate::chrome::top_modal(state) {
+                if let Some(grid_key) = winit_key_to_grid_key(&event.logical_key) {
+                    if let GridKey::Char(c) = grid_key
+                        && let Some(action) = crate::chrome::shortcut_action(state, overlay, c)
+                    {
+                        dispatch_action(
+                            state,
+                            registry,
+                            InteractionSource::Keyboard,
+                            &WmAction::SubmitOverlay { overlay, action },
+                        );
+                        state.mark_full_redraw();
+                        return;
+                    }
+                    if let Some(root) = state.layers.top_modal_root_mut() {
+                        let _ = root.event(&Event::Key { key: grid_key, pressed: true });
                     }
                 }
-                // A button callback may have written a bool result; resolve it (same
-                // drain as the pointer path).
-                let result = state.confirm_dialog_result.borrow_mut().take();
-                if let Some(confirmed) = result {
-                    crate::handlers::resolve_confirm_delete(state, registry, confirmed);
-                }
+                state.mark_full_redraw();
                 return;
             }
 
@@ -210,10 +195,10 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // The confirm dialog owns the pointer while open (hover on OK/Cancel).
-            if state.confirm_dialog.is_some() {
-                if let Some(dialog) = state.confirm_dialog.as_mut() {
-                    let _ = dialog.event(&Event::PointerMoved {
+            // A visible modal layer owns the pointer while open (hover on its buttons).
+            if crate::chrome::top_modal(state).is_some() {
+                if let Some(root) = state.layers.top_modal_root_mut() {
+                    let _ = root.event(&Event::PointerMoved {
                         pos: Point::new(pos.0 as f64, pos.1 as f64),
                     });
                 }
@@ -266,21 +251,16 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // The confirm dialog swallows all button input while open: a press on OK /
-            // Cancel (or the scrim) resolves it; anything else is consumed so clicks
-            // don't leak to panes behind the dialog.
-            if state.confirm_dialog.is_some() {
+            // A visible modal layer swallows all button input: a press on a button (its
+            // `on_click` emits `SubmitOverlay`) or the scrim (`Dialog::on_dismiss` emits
+            // `CloseOverlay`) resolves it; anything else is consumed so clicks don't leak.
+            if crate::chrome::top_modal(state).is_some() {
                 if button_state == ElementState::Pressed {
                     let pos = state.mouse.pos;
-                    if let Some(dialog) = state.confirm_dialog.as_mut() {
-                        let _ = dialog.event(&Event::PointerPressed {
+                    if let Some(root) = state.layers.top_modal_root_mut() {
+                        let _ = root.event(&Event::PointerPressed {
                             pos: Point::new(pos.0 as f64, pos.1 as f64),
                         });
-                    }
-                    // The Modal's OK/Cancel callbacks wrote a bool result; resolve it.
-                    let result = state.confirm_dialog_result.borrow_mut().take();
-                    if let Some(confirmed) = result {
-                        crate::handlers::resolve_confirm_delete(state, registry, confirmed);
                     }
                 }
                 state.mark_full_redraw();

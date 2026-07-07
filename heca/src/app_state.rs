@@ -85,15 +85,12 @@ pub enum InputMode {
     /// clears the selection and returns to `Normal`; Enter confirms the
     /// selection and returns to `Normal`. Other keys are ignored.
     Selection,
-    /// Confirmation prompt for destructive operations.
-    /// `y` executes the stored action, `n` or `Esc` cancels.
-    /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
-    /// instead of `Normal` after confirm/cancel.
-    ConfirmDelete {
-        message: String,
-        action: Box<WmAction>,
-        resume_sidebar: bool,
-    },
+    /// Status-bar marker while a destructive-confirm modal is up. The prompt itself is a
+    /// host-owned overlay [`Dialog`](heca_grid_ui::Dialog) layer (see
+    /// [`handlers::begin_confirm_delete`](crate::handlers::begin_confirm_delete)) which owns
+    /// input and carries the action/resume in its completion — this variant just drives the
+    /// "CONFIRM" status word.
+    ConfirmDelete,
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.
     PaneTake {
@@ -679,6 +676,12 @@ pub struct AppState {
     /// trees; this holds runtime-added layers that join the same surface stack. See
     /// [`crate::chrome::LayerRegistry`] and `docs/surface-compositor.md` §9.
     pub layers: crate::chrome::LayerRegistry,
+    /// Host-owned overlay stack: pending modal completions + action metadata keyed by
+    /// [`OverlayId`](crate::chrome::OverlayId). The overlays' *visual* trees live in
+    /// [`layers`](AppState::layers) (Modal band); this holds only the result callbacks the
+    /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::overlay`
+    /// and `pluggable-chrome-plugin-plan.md` §2.7.1/§2.7.2.
+    pub overlays: crate::chrome::OverlayHost,
     /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
     /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
     /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
@@ -716,16 +719,8 @@ pub struct AppState {
     /// an event into the menu (grid-ui widgets cannot dispatch `WmAction`s
     /// directly — the closure → action sink bridges that).
     pub context_menu_action: std::rc::Rc<std::cell::RefCell<Option<WmAction>>>,
-    /// The confirm dialog shown while [`InputMode::ConfirmDelete`] is active — a
-    /// host-owned [`Modal`](heca_grid_ui::widgets::Modal) overlay (scrim + OK/Cancel),
-    /// laid out/painted each frame and fed pointer events so a destructive action can
-    /// be confirmed by click as well as by keyboard (y/Enter/n/Esc). `None` when no
-    /// confirm is pending.
-    pub confirm_dialog: Option<heca_grid_ui::widgets::Modal>,
-    /// The dialog's click result: its Confirm button writes `Some(true)`, Cancel /
-    /// scrim / Esc write `Some(false)`. Drained by the event loop, which then resolves
-    /// the pending `ConfirmDelete` (dispatch-or-cancel) exactly like the keyboard path.
-    pub confirm_dialog_result: std::rc::Rc<std::cell::RefCell<Option<bool>>>,
+    // (The destructive-confirm prompt is now a host-owned overlay [`Dialog`] layer in
+    // `chrome::overlay` — see `handlers::begin_confirm_delete` — not a bespoke field here.)
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).

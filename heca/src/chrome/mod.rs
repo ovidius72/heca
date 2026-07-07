@@ -7,6 +7,7 @@ mod contribution;
 mod events;
 mod host;
 mod layers;
+mod overlay;
 mod realize;
 mod state;
 mod view;
@@ -23,6 +24,14 @@ pub(crate) use view::{
 // OverlayHost/Modal body (ui-4) and plugin panels — not yet referenced in-binary.
 #[allow(unused_imports)]
 pub(crate) use realize::realize;
+// Host-owned overlay stack (plugin-task-ui-4, §2.7.1/§2.7.2), built on `LayerRegistry`.
+// `OverlayId` is pub (carried by `WmAction`); the rest is crate-internal.
+pub use overlay::OverlayId;
+#[allow(unused_imports)]
+pub(crate) use overlay::{
+    open_modal, resolve as resolve_overlay, shortcut_action, top_modal, ModalAction, ModalResult,
+    ModalSpec, OverlayHost,
+};
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
 pub use host::ChromeHost;
@@ -2189,18 +2198,9 @@ pub(crate) fn active_hint_targets(
 
     let mut layers: Vec<HintLayer> = Vec::new();
 
-    // 1. Overlays (front, modal): a confirm dialog / context menu captures the picker —
-    //    only its own buttons are eligible, everything beneath is suppressed. Their
-    //    targets are collected like any tree, so once an overlay's buttons opt in via
-    //    `.hint_target(...)` they become hintable with no new plumbing.
-    if let Some(dialog) = state.confirm_dialog.as_ref() {
-        layers.push(HintLayer {
-            band: LayerBand::Modal,
-            targets: heca_grid_ui::collect_hint_targets(dialog),
-            occluders: Vec::new(),
-            modal: true,
-        });
-    }
+    // 1. Overlays (front, modal): the context menu captures the picker — only its own
+    //    buttons are eligible, everything beneath is suppressed. (The destructive-confirm
+    //    dialog is now a dynamically-registered Modal-band layer, collected in step 4.)
     if let Some(menu) = state.context_menu.as_ref() {
         layers.push(HintLayer {
             band: LayerBand::Modal,
@@ -2299,11 +2299,14 @@ pub(crate) fn paint_hint_targets(
     for header in state.pane_headers.values() {
         bounds_by_id.extend(heca_grid_ui::collect_hint_targets(&header.root));
     }
-    if let Some(dialog) = state.confirm_dialog.as_ref() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(dialog));
-    }
     if let Some(menu) = state.context_menu.as_ref() {
         bounds_by_id.extend(heca_grid_ui::collect_hint_targets(menu));
+    }
+    // Dynamically-registered layers (overlay dialogs incl. the confirm prompt, plugin panels):
+    // collect their targets
+    // too, so an overlay's buttons show keycaps like any other surface.
+    for layer in state.layers.visible_front_to_back() {
+        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(layer.root.as_ref()));
     }
     if bounds_by_id.is_empty() {
         return;
@@ -2374,33 +2377,40 @@ pub(crate) fn paint_context_menu(
     menu.paint(&mut cx);
 }
 
-/// Lay out the open confirm dialog (sets its resolved font). Mutable pass, run before
-/// the scene-texture borrow so [`paint_confirm_dialog`] can take a shared `&AppState`.
-/// No-op when none is open. Mirrors [`layout_context_menu`].
-pub(crate) fn layout_confirm_dialog(state: &mut crate::app_state::AppState, w: f32, h: f32) {
+/// Lay out every visible dynamically-registered layer (an overlay dialog, a plugin panel)
+/// at full viewport size. Mutable pass, run before the scene-texture borrow so
+/// [`paint_layers`] can take a shared `&AppState`. Each layer's root is a self-centering /
+/// self-positioning tree (e.g. a [`Dialog`](heca_grid_ui::Dialog) fills the viewport and
+/// centers its panel). No-op when the registry is empty. This is the generic replacement for
+/// the per-overlay `layout_*` passes (`docs/surface-compositor.md` §9).
+pub(crate) fn layout_layers(state: &mut crate::app_state::AppState, w: f32, h: f32) {
     let font = chrome_gui_theme(state).font_size;
-    if let Some(dialog) = state.confirm_dialog.as_mut() {
+    for root in state.layers.visible_roots_mut() {
         LayoutEngine::new()
             .base_font(font)
-            .compute(dialog, Size::new(w as f64, h as f64));
+            .compute(root.as_mut(), Size::new(w as f64, h as f64));
     }
 }
 
-/// Paint the open confirm dialog (scrim + centered panel + OK/Cancel) into the chrome
-/// scene, on top of everything. Run [`layout_confirm_dialog`] first. No-op when none is
-/// open. Mirrors [`paint_context_menu`].
-pub(crate) fn paint_confirm_dialog(
+/// Paint every visible dynamically-registered layer, **back → front** by band (so a Modal
+/// paints over an Overlay paints over Content), on top of the chrome scene. Each layer's root
+/// paints itself (overlay widgets draw their own scrim on `cx.with_overlay`). Run
+/// [`layout_layers`] first. Generic replacement for the per-overlay `paint_*` passes.
+pub(crate) fn paint_layers(
     state: &crate::app_state::AppState,
     scene: &mut Scene,
     w: f32,
     h: f32,
     theme: &GuiTheme,
 ) {
-    let Some(dialog) = state.confirm_dialog.as_ref() else {
+    let layers = state.layers.visible_back_to_front();
+    if layers.is_empty() {
         return;
-    };
+    }
     let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    dialog.paint(&mut cx);
+    for layer in layers {
+        layer.root.paint(&mut cx);
+    }
 }
 
 /// Peak alpha for a non-current search-match highlight; the current match is bolder.

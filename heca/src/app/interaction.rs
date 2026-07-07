@@ -333,6 +333,10 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
+        // Overlay control (§2.7.2): classified Global for match completeness, but never
+        // actually consulted — `dispatch_intent` intercepts these before routing (they carry
+        // an overlay id and resolve the `OverlayHost`, not a focus-domain-sensitive action).
+        WmAction::SubmitOverlay { .. } | WmAction::CloseOverlay { .. } => ActionPolicy::Global,
         // Chrome shell region show/hide (sidebar-fu-6): acts on chrome geometry,
         // independent of the pane tiled/floating domain — reachable from any focus.
         WmAction::ShowLeftSidebar
@@ -634,6 +638,31 @@ pub(crate) fn dispatch_intent(
     source: InteractionSource,
     intent: InteractionIntent,
 ) {
+    // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
+    // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
+    // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
+    // routing, like the `FocusPaneThenAction` composite below. Always allowed (overlay control
+    // has no focus-domain policy; the follow-up action it dispatches is routed on its own).
+    if let InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action }) = &intent
+    {
+        let (overlay, action) = (*overlay, action.clone());
+        crate::chrome::resolve_overlay(
+            state,
+            registry,
+            overlay,
+            crate::chrome::ModalResult::Action {
+                id: action,
+                data: Default::default(),
+            },
+        );
+        return;
+    }
+    if let InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay }) = &intent {
+        let overlay = *overlay;
+        crate::chrome::resolve_overlay(state, registry, overlay, crate::chrome::ModalResult::Dismissed);
+        return;
+    }
+
     // Composite: focus the pane, then run the action — each half policy-routed on its
     // own (mirrors what an active-targeted pane button does across two events on click).
     if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {

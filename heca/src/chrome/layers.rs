@@ -113,6 +113,36 @@ impl LayerRegistry {
         id
     }
 
+    /// Reserve the next id **without** adding a layer, for the case where the layer's own
+    /// content must reference its id *before* the tree exists — e.g. an overlay whose action
+    /// buttons carry `SubmitOverlay { overlay: <this id> }`. Pair with [`insert`](Self::insert).
+    pub(crate) fn reserve_id(&mut self) -> LayerId {
+        let id = LayerId(self.next);
+        self.next += 1;
+        id
+    }
+
+    /// Add a layer under an id previously handed out by [`reserve_id`](Self::reserve_id).
+    /// `Persistent` layers are visible immediately; `OnDemand` layers start visible here
+    /// too (an overlay is shown the moment it's inserted), unlike [`add`](Self::add).
+    pub(crate) fn insert(
+        &mut self,
+        id: LayerId,
+        band: LayerBand,
+        kind: LayerKind,
+        modal: bool,
+        root: Box<dyn Component>,
+    ) {
+        self.layers.push(DynamicLayer {
+            id,
+            band,
+            kind,
+            modal,
+            visible: true,
+            root,
+        });
+    }
+
     /// Remove a layer entirely.
     pub(crate) fn remove(&mut self, id: LayerId) {
         self.layers.retain(|l| l.id != id);
@@ -139,6 +169,42 @@ impl LayerRegistry {
         // Stable sort by band rank DESC (front first) — keeps insertion order within a band.
         out.sort_by_key(|l| std::cmp::Reverse(l.band.rank()));
         out
+    }
+
+    /// The currently-visible layers in **back → front** paint order (Background first, Modal
+    /// last on top). Consumed by `paint_layers`.
+    pub(crate) fn visible_back_to_front(&self) -> Vec<&DynamicLayer> {
+        let mut out = self.visible_front_to_back();
+        out.reverse();
+        out
+    }
+
+    /// Mutable roots of the visible layers (order-independent) — for the per-frame layout pass.
+    pub(crate) fn visible_roots_mut(&mut self) -> impl Iterator<Item = &mut Box<dyn Component>> {
+        self.layers
+            .iter_mut()
+            .filter(|l| l.visible)
+            .map(|l| &mut l.root)
+    }
+
+    /// The id of the front-most visible **modal** layer (the one that captures input), if any.
+    /// Front-most = most-recently inserted (a later modal opens on top of an earlier one).
+    pub(crate) fn top_modal_id(&self) -> Option<LayerId> {
+        self.layers
+            .iter()
+            .rev()
+            .find(|l| l.visible && l.modal)
+            .map(|l| l.id)
+    }
+
+    /// The root of the front-most visible modal layer, mutably — the input target while a modal
+    /// is up. Pairs with [`top_modal_id`](Self::top_modal_id).
+    pub(crate) fn top_modal_root_mut(&mut self) -> Option<&mut (dyn Component + 'static)> {
+        self.layers
+            .iter_mut()
+            .rev()
+            .find(|l| l.visible && l.modal)
+            .map(|l| l.root.as_mut())
     }
 }
 

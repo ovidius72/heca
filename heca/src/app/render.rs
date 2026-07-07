@@ -85,7 +85,7 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
         // The confirm now lives entirely in the Modal dialog; the status bar only
         // shows the mode word, no duplicated prompt.
-        InputMode::ConfirmDelete { .. } => ("CONFIRM", String::new()),
+        InputMode::ConfirmDelete => ("CONFIRM", String::new()),
         InputMode::PaneTake { focus_after, .. } => {
             (if *focus_after { "TAKE+" } else { "TAKE" }, pick_suffix())
         }
@@ -173,7 +173,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Lay out the right-click context menu now, before the scene-texture borrow, so
     // its paint pass (below) can take a shared `&AppState`. terminal-task-18.
     crate::chrome::layout_context_menu(state, w, h);
-    crate::chrome::layout_confirm_dialog(state, w, h);
+    // Generic dynamic-layer layout (overlay dialogs incl. the destructive-confirm prompt,
+    // plugin panels).
+    crate::chrome::layout_layers(state, w, h);
 
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
@@ -1176,7 +1178,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     crate::chrome::paint_hint_targets(state, &mut chrome_scene, w, h, &chrome_theme);
     // Right-click context menu overlay, on top of everything. terminal-task-18.
     crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
-    crate::chrome::paint_confirm_dialog(state, &mut chrome_scene, w, h, &chrome_theme);
+    // Generic dynamic-layer paint (overlay dialogs incl. the confirm prompt, plugin panels),
+    // back→front by band.
+    crate::chrome::paint_layers(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
@@ -1253,11 +1257,7 @@ mod tests {
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::ConfirmDelete {
-                message: "Delete pane?".to_string(),
-                action: Box::new(WmAction::ClosePane),
-                resume_sidebar: false,
-            }),
+            status_mode_parts(&InputMode::ConfirmDelete),
             ("CONFIRM", String::new()),
             "the prompt lives in the Modal now — the status bar shows only the mode word"
         );
