@@ -164,6 +164,15 @@ impl FocusManager {
         handled
     }
 
+    /// Focus the first focusable **without** showing the focus ring (focus-visible = false).
+    /// For programmatic initial focus — e.g. a modal's safe-default button — so Enter/activation
+    /// works immediately but the ring appears only once the user navigates by keyboard
+    /// ([`advance`](Self::advance) shows it). Mirrors the web's focus-visible behaviour.
+    pub fn focus_first_quiet(&mut self, root: &mut dyn Component) {
+        let target = Self::tab_order(root).first().copied();
+        self.apply(root, target, false);
+    }
+
     /// Clear focus (e.g. on Escape).
     pub fn clear(&mut self, root: &mut dyn Component) {
         self.apply(root, None, false);

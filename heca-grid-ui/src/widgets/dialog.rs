@@ -154,8 +154,10 @@ impl Dialog {
     pub fn open(mut self, open: bool) -> Self {
         self.open.set(open);
         if open {
+            // Focus the safe-default (first) button so Enter works — but WITHOUT the ring; it
+            // appears only once the user navigates by keyboard (focus-visible).
             let panel = self.base.children[0].as_mut();
-            self.focus.advance(panel, true);
+            self.focus.focus_first_quiet(panel);
         }
         self
     }
@@ -187,9 +189,12 @@ impl Dialog {
         self.focus.deliver_key(panel, GridKey::Enter);
     }
 
-    /// Fire the dismiss callback (Esc / scrim), respecting [`dismissible`](Dialog::dismissible).
-    fn request_dismiss(&self) {
-        if self.dismissible && let Some(f) = &self.on_dismiss {
+    /// Fire the dismiss callback. **Esc** always calls this (a universal modal cancel); the
+    /// **scrim / outside-click** path gates it on [`dismissible`](Dialog::dismissible) — so a
+    /// forced-choice dialog (`dismissible(false)`) still lets Esc cancel but ignores stray
+    /// outside clicks.
+    fn fire_dismiss(&self) {
+        if let Some(f) = &self.on_dismiss {
             f();
         }
     }
@@ -292,9 +297,9 @@ impl Component for Dialog {
                     // carries the overlay-control action).
                     let panel = self.base.children[0].as_mut();
                     self.focus.dispatch(panel, ev);
-                } else {
-                    // Scrim click = dismiss request (no-op if non-dismissible; host resolves it).
-                    self.request_dismiss();
+                } else if self.dismissible {
+                    // Scrim / outside click dismisses only when dismissible.
+                    self.fire_dismiss();
                 }
                 // Always swallow while open (modal).
                 Handled::Yes
@@ -311,7 +316,8 @@ impl Component for Dialog {
                 Handled::No
             }
             Event::Key { key: GridKey::Escape, pressed: true } => {
-                self.request_dismiss();
+                // Esc is a universal modal cancel — always dismisses (even when not dismissible).
+                self.fire_dismiss();
                 Handled::Yes
             }
             Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
@@ -411,15 +417,21 @@ mod tests {
     }
 
     #[test]
-    fn escape_is_swallowed_but_no_dismiss_when_forced() {
+    fn escape_dismisses_even_when_forced_but_scrim_does_not() {
+        // Esc is a universal modal cancel: it fires `on_dismiss` even on a `dismissible(false)`
+        // (forced-choice) dialog. Only the scrim / outside-click is gated by `dismissible`.
         let flag = Rc::new(Cell::new(false));
         let f = flag.clone();
         let mut d = open_dialog().dismissible(false).on_dismiss(move || f.set(true));
         assert_eq!(
             d.event(&Event::Key { key: GridKey::Escape, pressed: true }),
             Handled::Yes,
-            "still swallowed (modal)",
         );
-        assert!(!flag.get(), "forced dialog does not dismiss on Esc");
+        assert!(flag.get(), "Esc cancels even a forced dialog");
+
+        // A scrim click (press outside the panel) on a forced dialog must NOT dismiss.
+        flag.set(false);
+        let _ = d.event(&Event::PointerPressed { pos: Point::new(-100.0, -100.0) });
+        assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
     }
 }

@@ -605,15 +605,18 @@ impl<'a> PaintCx<'a> {
 
     /// Queue L-shaped corner brackets framing `rect` (a Tron reticle).
     pub fn corner_brackets(&mut self, rect: Rectangle, color: Color) {
+        // A restrained focus reticle: short corner arms + a subtle halo. The glow is kept
+        // low so it reads as a focus cue, not an alarm, and still tracks the `glow_size`
+        // setting via `scaled_glow` (drops to nothing when glow is `none`).
         let glow = self.scaled_glow(Some(Glow {
             color,
-            radius: 6.0,
-            intensity: 1.0,
+            radius: 3.0,
+            intensity: 0.3,
         }));
         self.scene.push(DrawCommand::Brackets(BracketCmd {
             rect,
             color,
-            len: 12.0,
+            len: 7.0,
             // Affordance outline width (focus ring) — its own theme token, so it
             // stays visible even when decorative borders are off (`border_width == 0`).
             thickness: self.theme.focus_border_width,

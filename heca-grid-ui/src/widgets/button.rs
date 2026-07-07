@@ -374,9 +374,15 @@ impl Component for Button {
             cx.dim(b, radius);
         }
 
-        // Focus ring — only for keyboard focus (focus-visible) and when enabled.
+        // Focus ring — only for keyboard focus (focus-visible) and when enabled. It follows the
+        // button's own tone (a destructive button rings in `danger`, not `accent`) so the focus
+        // cue matches the widget's border colour instead of clashing with it.
         if self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+            let ring = match self.variant {
+                ButtonVariant::Destructive => danger,
+                _ => accent,
+            };
+            cx.corner_brackets(b, ring);
         }
     }
 
