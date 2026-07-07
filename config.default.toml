@@ -84,6 +84,20 @@ terminal_scroll_animations = true
 # Bright ANSI 8..15:
 # terminal_brights = ["#444","#ff6b78","#7dffc0","#ffd27a","#7fe9ff","#cdb0ff","#9ff","#ffffff"]
 
+# Confirm destructive actions with a modal dialog before running them. `true`
+# (default) pops a Cancel / Delete confirm; `false` performs the action
+# immediately with no prompt. One toggle per scope.
+confirm_close_pane = true       # closing a pane
+confirm_delete_column = true    # deleting a column (and its panes)
+confirm_delete_workspace = true # deleting a workspace (and its contents)
+
+# Show each chrome region on startup. `false` starts it fully hidden (zero
+# size); the runtime toggles (prefix bindings) can still reveal it.
+show_left_sidebar = true
+show_right_sidebar = true
+show_top_bar = true    # the tab bar
+show_bottom_bar = true # the status bar
+
 # ─────────────────────────────────────────────────────────────────────────────
 [font]
 # ─────────────────────────────────────────────────────────────────────────────

@@ -44,6 +44,15 @@ These are made over and over. **Violating either = redo.**
 - **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
   `config.toml`** — never hardcode a key→behavior mapping in handlers. heca is tmux-like: bindings
   go through the prefix (see § Keybinding Style).
+- **EVERY setting → `config.default.toml`, EVERY keybound action → `keybindings.default.toml`.**
+  These embedded files are the **single source of truth** for defaults. Adding a `SettingsConfig`
+  field (`heca-config/src/settings.rs`) or a bound `WmAction` but **not** writing it into the
+  matching default file is a **bug** — the default then lives only in code (`#[serde(default=…)]`),
+  invisible and undiscoverable to the user. Whenever you add/rename a setting, add it (with a
+  comment) under the right `[section]` in `config.default.toml`; whenever you add a keybound action,
+  add its default in `keybindings.default.toml`. Parameterized, non-config-bindable actions (e.g.
+  `SubmitOverlay`) are the only exception to the keybinding file. When in doubt, **audit** that every
+  `SettingsConfig` field appears in `config.default.toml` and every default binding is present.
 - Adding an action? Follow the **"Adding New Actions" checklist** (§ below) end to end — `WmAction`
   variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor.
 - Rule: a capability must be reachable from **mouse + keybinding/action + RPC**, never one surface only.
