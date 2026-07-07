@@ -1283,7 +1283,6 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 mod tests {
     use super::status_mode_parts;
     use crate::app_state::{InputMode, RenameTarget};
-    use crate::input::WmAction;
     use heca_core::layout::PaneId;
 
     #[test]

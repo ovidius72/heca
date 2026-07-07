@@ -9,7 +9,7 @@
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
+use crate::scene::{Border, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -579,65 +579,24 @@ impl<'a> PaintCx<'a> {
         (w > 0.0).then_some(Border { color, width: w })
     }
 
-    /// Queue **flat** L-shaped corner brackets framing `rect` — prominent angles
-    /// with no glow (for container/pane chrome, vs the glowing focus ring).
-    pub fn corner_brackets_plain(&mut self, rect: Rectangle, color: Color) {
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
-            color,
-            len: 16.0,
-            thickness: 1.5,
-            glow: None,
-        }));
-    }
-
-    /// Flat corner brackets with a custom arm length. Use `len = radius` so the
-    /// bracket arms end exactly where a rounded border's arc begins.
-    pub fn corner_brackets_len(&mut self, rect: Rectangle, color: Color, len: f32) {
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
-            color,
-            len,
-            thickness: 1.5,
-            glow: None,
-        }));
-    }
-
-    /// Queue L-shaped corner brackets framing `rect` (a Tron reticle) — the corner-bracket
-    /// focus/selection cue used across the widget set. The glow is kept low so it reads as a
-    /// focus cue, not an alarm, and tracks the `glow_size` setting via `scaled_glow` (dropping
-    /// to nothing when glow is `none`).
-    pub fn corner_brackets(&mut self, rect: Rectangle, color: Color) {
-        let glow = self.scaled_glow(Some(Glow {
-            color,
-            radius: 3.0,
-            intensity: 0.3,
-        }));
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
-            color,
-            len: 7.0,
-            // Affordance outline width (focus ring) — its own theme token, so it
-            // stays visible even when decorative borders are off (`border_width == 0`).
-            thickness: self.theme.focus_border_width,
-            glow,
-        }));
-    }
-
     /// Queue the **thin-outline focus indicator**: an accent-toned outline drawn *just outside*
     /// `rect` (a CSS-style `outline` with an offset gap), with a restrained halo. An alternative to
     /// the corner-bracket reticle ([`corner_brackets`](Self::corner_brackets)).
     ///
-    /// Because it sits **outside** the widget box rather than on its edge, it is visible whether or
-    /// not the widget draws its own border — borderless variants (e.g. Ghost/Link buttons) get the
-    /// same clear ring — and it never merges into the widget's own border. It is purely drawn (it
-    /// does not affect layout), so it can overlap neighbouring padding like a real focus outline.
+    /// This is **the** keyboard focus indicator for the whole widget set (Button, IconButton,
+    /// Toggle, Checkbox, Input, Select, Tabs, Item, Row, RailCell, Toast, BadgeButton, ScrollRegion,
+    /// …). Because it sits **outside** the widget box rather than on its edge, it is visible whether
+    /// or not the widget draws its own border — borderless variants (e.g. Ghost/Link buttons) get
+    /// the same clear ring — and it never merges into the widget's own border. It is purely drawn
+    /// (it does not affect layout), so it can overlap neighbouring padding like a real focus outline.
     /// `radius` is the widget's own corner radius; the outline widens it by the offset to stay
     /// concentric. Width uses the [`focus_border_width`](crate::theme::Theme::focus_border_width)
     /// token (its own width, so it stays visible even when decorative borders are off), and the halo
     /// is scaled by `glow_size` inside [`rect`](Self::rect) — dropping to nothing when glow is
-    /// `none`. The glow is kept low so it reads as a focus cue, not an alarm. Currently used by
-    /// [`Button`](crate::widgets::Button); a candidate to become the shared focus cue library-wide.
+    /// `none`. The glow is kept low so it reads as a focus cue, not an alarm. Pair with the theme's
+    /// [`effective_focus_ring`](crate::theme::Theme::effective_focus_ring) /
+    /// [`focus_ring_tone`](crate::theme::Theme::focus_ring_tone) for the color. (The decorative
+    /// corner-bracket reticle is a different primitive — [`bracket_frame`](Self::bracket_frame).)
     pub fn focus_ring(&mut self, rect: Rectangle, color: Color, radius: f32) {
         // Offset gap (logical px) between the widget edge and the outline — like CSS `outline-offset`.
         const OFFSET: f32 = 2.0;

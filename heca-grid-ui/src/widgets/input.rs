@@ -533,9 +533,10 @@ impl Component for Input {
             cx.dim(b, radius);
         }
 
-        // Focus-visible ring (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+        // Focus ring — shown whenever focused (theme-aware color, outside the box).
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(b, ring, radius);
         }
     }
 

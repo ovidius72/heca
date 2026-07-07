@@ -309,11 +309,13 @@ impl Component for ScrollRegion {
                 paint_child(child.as_ref(), cx);
             }
         });
-        // Focus ring (keyboard focus only — focus-visible) so the user sees
-        // which region receives scroll keys. Mirrors Button/Input's focus
-        // affordance; drawn in viewport space (not clipped, not scrolled).
-        if self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(vp, cx.theme().colors.accent);
+        // Focus ring — shown whenever this region is focused, so the user sees which region
+        // receives scroll keys. Mirrors Button/Input's focus affordance; drawn in viewport
+        // space (not clipped, not scrolled).
+        if self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            let r = cx.theme().colors.control_radius();
+            cx.focus_ring(vp, ring, r);
         }
 
         // Scrollbar thumb on top, in viewport space (not scrolled with content).

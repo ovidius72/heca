@@ -374,9 +374,10 @@ impl Component for Toast {
                 cx.flash(fr, self.flash.amount() * 0.4, frad);
             }
         }
-        // Focus ring when clickable + focused.
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, tone);
+        // Focus ring when clickable + focused (theme-aware shift of the toast tone).
+        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.focus_ring_tone(tone);
+            cx.focus_ring(b, ring, card_radius);
         }
     }
 

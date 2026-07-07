@@ -203,8 +203,9 @@ impl Component for BadgeButton {
             TextAlign::Center,
             true,
         );
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(pill, cx.theme().colors.accent);
+        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(pill, ring, radius);
         }
     }
 

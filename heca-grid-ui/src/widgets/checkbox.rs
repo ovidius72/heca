@@ -271,9 +271,10 @@ impl Component for Checkbox {
             cx.dim(self.base.bounds, 0.0);
         }
 
-        // Focus-visible ring around the whole control (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(self.base.bounds, accent);
+        // Focus ring around the whole control — shown whenever focused (theme-aware color).
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(self.base.bounds, ring, radius);
         }
     }
 

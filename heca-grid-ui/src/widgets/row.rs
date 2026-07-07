@@ -286,10 +286,11 @@ impl Component for Row {
         }
         if self.interactive()
             && !disabled
-            && self.base.focus_visible.get_untracked()
+            && self.base.focused.get_untracked()
             && cx.theme().colors.show_focus_border
         {
-            cx.corner_brackets(b, accent);
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(b, ring, ctrl_radius);
         }
 
         // "Needs attention" pulse — a glowing colored border over the row,

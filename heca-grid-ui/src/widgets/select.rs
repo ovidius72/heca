@@ -355,8 +355,9 @@ impl Component for Select {
         if disabled {
             cx.dim(b, radius);
         }
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(b, ring, radius);
         }
 
         // Open option list — painted in the overlay layer (on top of everything).

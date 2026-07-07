@@ -188,9 +188,10 @@ impl Component for Toggle {
             cx.dim(track, radius);
         }
 
-        // Focus-visible ring (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(track, accent);
+        // Focus ring — shown whenever focused (theme-aware color, outside the track).
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(track, ring, radius);
         }
     }
 

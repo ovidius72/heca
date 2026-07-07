@@ -586,10 +586,10 @@ impl Theme {
     }
 
     /// The keyboard **focus-outline color** for the default (accent) tone — what
-    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html) draws on a focused Button and
-    /// (in future) every focusable widget. Returns the theme's `focus_ring` token when set, else
-    /// the accent shifted toward `foreground` (see [`focus_ring_tone`](Self::focus_ring_tone)) so
-    /// the ring reads distinct from an accent border on both dark and light themes.
+    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html) draws on every focused widget.
+    /// Returns the theme's `focus_ring` token when set, else the accent shifted toward `foreground`
+    /// (see [`focus_ring_tone`](Self::focus_ring_tone)) so the ring reads distinct from an accent
+    /// border on both dark and light themes.
     pub fn effective_focus_ring(&self) -> Color {
         self.focus_ring.unwrap_or_else(|| self.focus_ring_tone(self.accent))
     }
