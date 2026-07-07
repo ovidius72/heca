@@ -1532,16 +1532,17 @@ pub(crate) fn begin_confirm_delete(
         .trim_end_matches('?')
         .to_string()
         + "?";
-    // [Cancel (n)] [Delete (y)]: Cancel is first, so it takes initial focus (safe default) and
-    // Enter activates it; the danger tint marks Delete. Dismissible — Esc / scrim = cancel.
+    // [Cancel] [Delete]: Cancel is first, so it takes initial focus (safe default) and Enter
+    // activates it; the danger tint marks Delete. Dismissible — Esc / scrim = cancel. The Dialog
+    // owns Tab/Shift+Tab/arrows/Ctrl+h-l/Enter/Space; the buttons get tooltips + KeyHint from the
+    // centralized path — the caller only declares the buttons.
     let spec = crate::chrome::ModalSpec::message(title, "This action cannot be undone.")
-        .action(crate::chrome::ModalAction::new("cancel", "Cancel").shortcut('n'))
-        .action(
-            crate::chrome::ModalAction::new("confirm", "Delete")
-                .danger(true)
-                .shortcut('y'),
-        )
-        .danger(true);
+        .action(crate::chrome::ModalAction::new("cancel", "Cancel"))
+        .action(crate::chrome::ModalAction::new("confirm", "Delete").danger(true))
+        .danger(true)
+        // Destructive → forced decision: an outside/scrim click or Esc is swallowed; the user
+        // must choose Cancel or Delete.
+        .dismissible(false);
     crate::chrome::open_modal(state, spec, move |state, registry, result| {
         state.input_mode = if resume_sidebar {
             InputMode::SidebarNav

@@ -113,6 +113,10 @@ struct ChromePassOpts {
     glow_alpha_scale: f32,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "GPU flush pass threads renderers + queue + view + encoder + scene + overlay sink explicitly"
+)]
 fn render_chrome(
     grid: &mut GridRenderer,
     text: &mut TextRenderer,
@@ -121,6 +125,12 @@ fn render_chrome(
     opts: ChromePassOpts,
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
+    // Overlay content (a button's hover Tooltip, a popover) is NOT flushed with this surface —
+    // it is collected here and flushed once, above every surface, by `render_overlay_band` at
+    // the end of the frame. This makes overlays a real **top band** (the surface-compositor
+    // paint-z-order model, docs/surface-compositor.md), so e.g. a pane-header tooltip is no
+    // longer occluded by a neighbouring pane or the sidebar that flush after it.
+    overlay_sink: &mut Vec<heca_grid_ui::Scene>,
 ) {
     // NOTE: `begin_frame()` is called once at the top of `render_frame`, not here.
     // Calling it per `render_chrome` reset the persistent vertex-buffer write
@@ -146,8 +156,30 @@ fn render_chrome(
     heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer(), opts.glow_alpha_scale);
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);
-    for overlay in scene.overlay_segments() {
-        heca_renderer::scene::enqueue_scene(grid, text, &overlay, opts.glow_alpha_scale);
+    // Defer overlay segments to the frame-final top band (see the param doc + `render_overlay_band`).
+    overlay_sink.extend(scene.overlay_segments());
+}
+
+/// Flush the collected overlay segments from every surface, in accumulation order (panes →
+/// floats → chrome, so higher surfaces' overlays sit on top), **above all surface bases**.
+/// This is the overlay **top band** of the surface compositor's paint z-order: a tooltip /
+/// popover always paints over every pane, float, and the chrome/sidebars, never occluded by a
+/// surface that flushed after its own. Full repaint (no damage/clip); the segments already
+/// carry their own geometry.
+fn render_overlay_band(
+    grid: &mut GridRenderer,
+    text: &mut TextRenderer,
+    queue: &wgpu::Queue,
+    view: &wgpu::TextureView,
+    encoder: &mut wgpu::CommandEncoder,
+    overlays: &[heca_grid_ui::Scene],
+    glow_alpha_scale: f32,
+) {
+    grid.set_damage(None);
+    grid.set_clip(None);
+    text.set_damage(None);
+    for seg in overlays {
+        heca_renderer::scene::enqueue_scene(grid, text, seg, glow_alpha_scale);
         grid.render(queue, view, encoder);
         text.render(queue, view, encoder, None);
     }
@@ -629,6 +661,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
         Some(stencil_view),
     );
 
+    // Overlay content (hover tooltips, popovers) from every surface — panes, floats, chrome —
+    // is collected here and flushed once at the very end, above all bases (the surface-compositor
+    // top band). Declared before the first surface flush; consumed after the last.
+    let mut overlay_sink: Vec<heca_grid_ui::Scene> = Vec::new();
+
     // ── Pass 3: Pane chrome overlay (on top of terminal content) ──
     //
     // The terminal content is a rectangular raster path; drawing the shell after
@@ -679,6 +716,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             },
             scene_view,
             &mut encoder,
+            &mut overlay_sink,
         );
     }
 
@@ -887,6 +925,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 },
                 scene_view,
                 &mut encoder,
+                &mut overlay_sink,
             );
         }
     }
@@ -1204,6 +1243,18 @@ pub(crate) fn render_frame(state: &mut AppState) {
         },
         scene_view,
         &mut encoder,
+        &mut overlay_sink,
+    );
+
+    // Top band: every surface's overlay content (tooltips, popovers), above all bases.
+    render_overlay_band(
+        &mut state.grid_renderer,
+        &mut state.text_renderer,
+        &state.queue,
+        scene_view,
+        &mut encoder,
+        &overlay_sink,
+        glow_alpha_scale,
     );
 
     state.compositor.blit(&view, &mut encoder);

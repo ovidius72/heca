@@ -29,8 +29,8 @@ pub(crate) use realize::realize;
 pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
-    open_modal, resolve as resolve_overlay, shortcut_action, top_modal, ModalAction, ModalResult,
-    ModalSpec, OverlayHost,
+    open_modal, resolve as resolve_overlay, top_modal, ModalAction, ModalResult, ModalSpec,
+    OverlayHost,
 };
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};

@@ -115,32 +115,6 @@ pub(crate) fn handle_window_event(
                 return;
             }
 
-            // A visible modal **layer** (overlay dialog) owns the keyboard: a letter shortcut
-            // fires its action via `SubmitOverlay`; every other key is forwarded to the dialog
-            // root (Tab / ←→ / Enter / Space / Esc — the `Dialog` self-handles them + fires its
-            // `on_dismiss`). Any key is swallowed so nothing leaks to the pane behind the scrim.
-            if let Some(overlay) = crate::chrome::top_modal(state) {
-                if let Some(grid_key) = winit_key_to_grid_key(&event.logical_key) {
-                    if let GridKey::Char(c) = grid_key
-                        && let Some(action) = crate::chrome::shortcut_action(state, overlay, c)
-                    {
-                        dispatch_action(
-                            state,
-                            registry,
-                            InteractionSource::Keyboard,
-                            &WmAction::SubmitOverlay { overlay, action },
-                        );
-                        state.mark_full_redraw();
-                        return;
-                    }
-                    if let Some(root) = state.layers.top_modal_root_mut() {
-                        let _ = root.event(&Event::Key { key: grid_key, pressed: true });
-                    }
-                }
-                state.mark_full_redraw();
-                return;
-            }
-
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
             let log_key = &event.logical_key;
@@ -152,6 +126,28 @@ pub(crate) fn handle_window_event(
                 state.modifiers,
             );
             let is_prefix = is_prefix_match(&event_combo, &state.prefix_combo, log_key, &key_text);
+
+            // A visible modal **layer** (overlay dialog) owns the keyboard — EXCEPT the universal
+            // hint picker, which must still reach the modal's buttons (they're collected as hint
+            // targets by the layer system). So the prefix trigger and any in-flight prefix /
+            // hint-pick sequence fall through to the keymap machinery below; every other key is
+            // just forwarded to the modal's root, which self-handles focus/activation/dismiss
+            // (a `Dialog` tracks its own modifier state from the broadcast `ModifiersChanged`).
+            let picker_seq = is_prefix
+                || matches!(
+                    state.input_mode,
+                    crate::app_state::InputMode::Prefix
+                        | crate::app_state::InputMode::HintPick { .. }
+                );
+            if !picker_seq && crate::chrome::top_modal(state).is_some() {
+                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
+                    && let Some(root) = state.layers.top_modal_root_mut()
+                {
+                    let _ = root.event(&Event::Key { key: gk, pressed: true });
+                }
+                state.mark_full_redraw();
+                return;
+            }
 
             handle_keyboard_input(
                 registry,
@@ -173,6 +169,14 @@ pub(crate) fn handle_window_event(
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
             mouse::on_modifiers_changed(state);
+            // Broadcast to an open modal overlay so a self-contained widget (a `Dialog`) can do
+            // Shift+Tab / Ctrl+h-l itself — its `Event::Key` carries no modifiers.
+            if crate::chrome::top_modal(state).is_some() {
+                let mods = grid_modifiers(state.modifiers);
+                if let Some(root) = state.layers.top_modal_root_mut() {
+                    let _ = root.event(&Event::ModifiersChanged(mods));
+                }
+            }
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
             // toggles the pointer cue even without pointer movement.
             mouse::update_cursor(state, state.mouse.pos);
@@ -436,16 +440,38 @@ fn settle_context_menu(
     state.mark_full_redraw();
 }
 
-/// Map a winit key to the grid-ui [`GridKey`] the menu understands. Returns `None`
-/// for keys the menu ignores (still swallowed while it is open).
+/// Map a winit key to the grid-ui [`GridKey`] an overlay widget understands (context menu,
+/// modal `Dialog`, …). Returns `None` for keys with no grid equivalent (still swallowed while
+/// the overlay is open). The overlay widget self-handles them (focus/activation/dismiss);
+/// modifiers reach it via the broadcast `Event::ModifiersChanged`.
 fn winit_key_to_grid_key(key: &winit::keyboard::Key) -> Option<GridKey> {
     use winit::keyboard::{Key, NamedKey};
     match key {
         Key::Named(NamedKey::Escape) => Some(GridKey::Escape),
         Key::Named(NamedKey::Enter) => Some(GridKey::Enter),
+        Key::Named(NamedKey::Space) => Some(GridKey::Space),
+        Key::Named(NamedKey::Tab) => Some(GridKey::Tab),
+        Key::Named(NamedKey::Backspace) => Some(GridKey::Backspace),
+        Key::Named(NamedKey::Delete) => Some(GridKey::Delete),
         Key::Named(NamedKey::ArrowUp) => Some(GridKey::ArrowUp),
         Key::Named(NamedKey::ArrowDown) => Some(GridKey::ArrowDown),
+        Key::Named(NamedKey::ArrowLeft) => Some(GridKey::ArrowLeft),
+        Key::Named(NamedKey::ArrowRight) => Some(GridKey::ArrowRight),
+        Key::Named(NamedKey::Home) => Some(GridKey::Home),
+        Key::Named(NamedKey::End) => Some(GridKey::End),
         Key::Character(s) => s.chars().next().map(GridKey::Char),
         _ => None,
+    }
+}
+
+/// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state
+/// — broadcast to an open overlay so a self-contained widget (e.g. a modal `Dialog`) can do
+/// Shift+Tab / Ctrl+h-l without the host special-casing it.
+fn grid_modifiers(m: winit::keyboard::ModifiersState) -> heca_grid_ui::Modifiers {
+    heca_grid_ui::Modifiers {
+        ctrl: m.control_key(),
+        alt: m.alt_key(),
+        shift: m.shift_key(),
+        meta: m.super_key(),
     }
 }

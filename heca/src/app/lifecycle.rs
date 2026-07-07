@@ -123,6 +123,13 @@ pub(crate) fn handle_about_to_wait(event_loop: &ActiveEventLoop, state: &mut App
         chrome_animating |= widgets.badge.tick(dt);
         chrome_animating |= widgets.scrollbar.tick(dt);
     }
+    // Tick every dynamically-registered layer (overlay dialogs, plugin panels) the same way,
+    // so a widget inside a layer — e.g. a modal button's tooltip reveal / hover flash — advances
+    // and keeps requesting frames instead of only updating when some other event forces a redraw.
+    // The layer system ticks all its layers; a new layer animates for free, no per-layer wiring.
+    for root in state.layers.visible_roots_mut() {
+        chrome_animating |= root.tick(dt);
+    }
 
     let backend_poll = poll_backends(state);
     let chrome_runtime_changed = crate::chrome::sync_chrome_state(state);

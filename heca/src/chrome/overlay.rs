@@ -33,18 +33,17 @@ use crate::input::WmAction;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct OverlayId(pub(crate) LayerId);
 
-/// One bottom action button of a modal. The author supplies only id/label/danger/shortcut;
-/// the [`OverlayHost`] injects the overlay id when it builds the button.
+/// One bottom action button of a modal. The author supplies only id/label/danger; the
+/// [`OverlayHost`] wires the rest through the same centralized path as every chrome button —
+/// a KeyHint target + a tooltip resolved from the action, never a hand-picked shortcut string.
+/// `id` doubles as the action name the tooltip resolves its shortcut from (`action_tooltip`).
 #[derive(Clone, Debug)]
 pub struct ModalAction {
-    /// Comes back in [`ModalResult::Action`] — a button id or a plugin action id.
+    /// Comes back in [`ModalResult::Action`]; also the action name for the tooltip's shortcut.
     pub id: String,
     pub label: String,
     /// Tint with the danger hue (destructive action).
     pub danger: bool,
-    /// Optional letter that fires this action from the keyboard (e.g. `y` / `n`), resolved by
-    /// the overlay input path against the top modal's actions.
-    pub shortcut: Option<char>,
 }
 
 impl ModalAction {
@@ -54,17 +53,11 @@ impl ModalAction {
             id: id.into(),
             label: label.into(),
             danger: false,
-            shortcut: None,
         }
     }
     /// Tint with the danger hue (destructive primary action).
     pub fn danger(mut self, on: bool) -> Self {
         self.danger = on;
-        self
-    }
-    /// A letter shortcut that fires this action from the keyboard.
-    pub fn shortcut(mut self, c: char) -> Self {
-        self.shortcut = Some(c);
         self
     }
 }
@@ -131,33 +124,13 @@ type OverlayCompletion = Box<dyn FnOnce(&mut AppState, &ActionRegistry, ModalRes
 #[derive(Default)]
 pub struct OverlayHost {
     completions: HashMap<OverlayId, OverlayCompletion>,
-    /// Action metadata per open overlay (id + shortcut), so the overlay input path can resolve
-    /// a letter key to an action and Esc to dismissal. Mirrors the layer stack's lifetime.
-    actions: HashMap<OverlayId, Vec<ModalAction>>,
-}
-
-impl OverlayHost {
-    /// The action metadata for an open overlay (for the keyboard input path).
-    pub(crate) fn actions_for(&self, overlay: OverlayId) -> Option<&[ModalAction]> {
-        self.actions.get(&overlay).map(|v| v.as_slice())
-    }
 }
 
 /// The front-most open **modal** overlay — the one capturing input — if any. The input path
-/// routes keyboard/pointer to it and swallows everything else while it's up.
+/// routes keyboard/pointer to its layer root (a self-contained [`Dialog`](heca_grid_ui::Dialog))
+/// and swallows everything else while it's up.
 pub(crate) fn top_modal(state: &AppState) -> Option<OverlayId> {
     state.layers.top_modal_id().map(OverlayId)
-}
-
-/// The action id whose letter shortcut is `c` in overlay `overlay`, if any — the keyboard
-/// letter path (e.g. `y`/`n`) resolves a key to the action id it fires via `SubmitOverlay`.
-pub(crate) fn shortcut_action(state: &AppState, overlay: OverlayId, c: char) -> Option<String> {
-    state
-        .overlays
-        .actions_for(overlay)?
-        .iter()
-        .find(|a| a.shortcut.is_some_and(|s| s.eq_ignore_ascii_case(&c)))
-        .map(|a| a.id.clone())
 }
 
 /// Open a modal: realize its body + inject id-carrying action buttons, push it as a
@@ -182,9 +155,7 @@ pub(crate) fn open_modal(
         });
     });
 
-    let actions = spec.actions.clone();
-    let dismissible = spec.dismissible;
-    let root = build_modal_root(&spec, id, &emit, &mut state.hint_targets);
+    let root = build_modal_root(&spec, id, &emit, &mut state.hint_targets, &state.action_shortcuts);
     state.layers.insert(
         id.0,
         LayerBand::Modal,
@@ -193,20 +164,21 @@ pub(crate) fn open_modal(
         root,
     );
     state.overlays.completions.insert(id, Box::new(completion));
-    state.overlays.actions.insert(id, actions);
-    let _ = dismissible;
     state.needs_redraw = true;
     id
 }
 
-/// Build the realized `Dialog` tree for a modal (pure: no `AppState`, so it's unit-testable).
-/// Each action becomes a real `Button` carrying `SubmitOverlay { overlay: id, action: id }`
-/// as both its click intent and its hint target — one intent, both input paths.
+/// Build the realized `Dialog` tree for a modal. Each action becomes a real `Button` wired the
+/// SAME centralized way as every chrome button (AGENTS.md "Chrome buttons → action, tooltip,
+/// KeyHint — do NOT hand-roll"): a KeyHint target + `on_click` both carry `SubmitOverlay`, and
+/// the button is wrapped in [`action_tooltip`](super::action_tooltip) so its tip + shortcut come
+/// from the action, never a hand-picked string. The `Dialog` itself owns focus/nav/activation.
 fn build_modal_root(
     spec: &ModalSpec,
     id: OverlayId,
     emit: &ChromeIntentEmitter,
     hints: &mut super::HintTargetRegistry,
+    shortcuts: &super::ActionShortcuts,
 ) -> Box<dyn Component> {
     let body = super::realize(&spec.body, emit, hints);
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
@@ -226,7 +198,8 @@ fn build_modal_root(
             .variant(variant)
             .hint_target(hid)
             .on_click(move || emit(carrier.clone()));
-        dialog = dialog.action(button);
+        // Tooltip + live shortcut from the action id — the one centralized path.
+        dialog = dialog.action(super::action_tooltip(button, &action.id, &action.label, shortcuts));
     }
     // Esc / scrim dismissal flows through the same emitter as the buttons: a `CloseOverlay`
     // for this overlay, resolved to `ModalResult::Dismissed` in `dispatch_intent`.
@@ -251,7 +224,6 @@ pub(crate) fn resolve(
     result: ModalResult,
 ) {
     let completion = state.overlays.completions.remove(&overlay);
-    state.overlays.actions.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
     if let Some(comp) = completion {
@@ -282,13 +254,14 @@ mod tests {
     #[test]
     fn build_registers_one_submit_intent_per_action() {
         let spec = ModalSpec::message("Delete pane?", "Gone forever.")
-            .action(ModalAction::new("cancel", "Cancel").shortcut('n'))
-            .action(ModalAction::new("confirm", "Delete").danger(true).shortcut('y'))
+            .action(ModalAction::new("cancel", "Cancel"))
+            .action(ModalAction::new("confirm", "Delete").danger(true))
             .dismissible(false);
         let id = OverlayId(super::super::LayerRegistry::default().reserve_id());
         let mut hints = super::super::HintTargetRegistry::default();
+        let shortcuts = super::super::ActionShortcuts::default();
         let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints);
+        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts);
 
         // Two actions → two hint targets, each a SubmitOverlay for this overlay.
         assert_eq!(hints.checkpoint() - before, 2);
