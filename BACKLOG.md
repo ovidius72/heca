@@ -1528,6 +1528,38 @@ Source: `pluggable-chrome-plugin-plan.md` §3.5 (rows 3–10)
   The plugin-facing container body is a `ViewNode` tree (`plugin-ui`); built-in Rust providers may still build `Component`s directly.
   Files: `heca/src/host.rs`
 
+### [ ] Phase: Declarative action interaction (confirm + response buttons) · `action-interaction`
+Actions declare, **as data**, whether they need a prompt (confirm / choice) and which response
+buttons + outcomes. One central gate at the dispatch chokepoint reads it and drives
+`OverlayHost::open_modal`; built-ins **and plugins** declare it the same way, so no surface
+re-implements confirmation (the guard lives on the action, not the call site). Full design +
+decisions + phases: **`action-interaction-plan.md`** (design locked with the user 2026-07-07).
+
+> **Decisions (locked):** (1) native `Outcome::Callback` included now, native-only, documented
+> meticulously; (2) **runtime** action registry now (replace the `const ALL` catalog); (3) generic
+> `[confirm].<action>` config table; (4) dedicated pure-data `ConfirmSpec` (→ converted to
+> `ModalSpec`). Prerequisite already landed: the central destructive gate (`maybe_confirm_destructive`
+> in `interaction.rs`/`handlers.rs`) — this phase generalizes it from 4 hardcoded variants to data.
+
+- [ ] **action-task-A — Runtime registry foundation.** Convert `ActionRegistry` (`heca/src/actions.rs`)
+  to hold `ActionEntry` (metadata + dispatch) at runtime; move built-in descriptors out of
+  `const ALL` into `register_builtins()`; keep `icon/label/find/by_category/count` working; choose the
+  crate for the shared `ActionMeta`/`ConfirmSpec` types. No behavior change; registry-parity tests.
+- [ ] **action-task-B — `ConfirmSpec` + generic gate.** Add `ConfirmSpec`/`ResponseButton`/`Outcome`/
+  `ButtonRole`; attach specs to `close`/`delete_column`/`delete_workspace`; generalize the gate to
+  `maybe_confirm` (reads the spec + `[confirm]` config); `ConfirmSpec→ModalSpec` conversion;
+  `run_outcome` (`Proceed`=`registry.execute`, `Cancel`, `Dispatch`, `Callback`). Remove the hardcoded
+  gate + fold `request_destructive`/`run_destructive_now`/`begin_confirm_delete`. Migrate
+  `[settings] confirm_*` → `[confirm]` + `config.default.toml`. Tests + docs.
+- [ ] **action-task-C — Plugin/dev API + docs.** `register(ActionSpec)` for native (with `Callback`);
+  the plugin/WASM declarative path + host adapter (declarative outcomes only); RPC introspection of
+  action metadata; **meticulous `Callback` docs** (native-only, opaque across WASM/RPC). Update
+  `AGENTS.md` "Adding New Actions", `README` (`[confirm]`), `docs/`.
+
+> **Relation to the context-menu → OverlayHost migration** (still open): once this lands, context
+> menus / dropdowns just **dispatch the plain action** and the central gate confirms — no per-menu
+> destructive special-case. Do the menu migration after (or alongside) action-task-B.
+
 ### [ ] Phase: Declarative widget-tree UI model (`ViewNode`) · `plugin-ui`
 The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node
 holds a vector of child widgets — plus the host mapper that realizes it into the retained
