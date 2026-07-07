@@ -269,7 +269,7 @@ caller.
 Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
 default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
-`font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`,
+`font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`, `focus_ring`,
 `glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
 `active_wash_alpha`, `card_background_alpha`.
 
@@ -277,7 +277,8 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 |-------|------|--------|
 | `radius` | `f32` | Base corner radius. Boxes use it directly; small controls use `control_radius()` (= `radius × 0.5`); pills (Badge/Toggle/ProgressBar) round at `radius × 2` clamped to their capsule. `0` ⇒ square. |
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
-| `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus ring (`corner_brackets`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
+| `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring` / `corner_brackets`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
+| `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (used by `Button`). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
@@ -352,7 +353,8 @@ stay DRY):
 | `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
 | `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Modal` to lift off the scrim. |
-| `.corner_brackets(rect, color)` | L-shaped corner reticle (focus ring / decoration). |
+| `.focus_ring(rect, color, radius)` | **Keyboard focus outline** — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. Used by `Button` (the shared focus cue widget-wide is being migrated onto this from `corner_brackets`). |
+| `.corner_brackets(rect, color)` | L-shaped corner reticle — the focus/selection cue for widgets not yet migrated to `.focus_ring`, and decoration. |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
@@ -615,6 +617,12 @@ let sig = status.text_signal();
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
 press flash. Focusable; Space/Enter activate like a click.
 
+- **Focus indicator**: unlike the other widgets (which use the `corner_brackets` reticle), Button
+  draws the newer `PaintCx::focus_ring` — a thin accent-toned **outline just outside** the button
+  (so it shows even on borderless `Ghost`/`Link`), tinted by the theme's `focus_ring` token /
+  `effective_focus_ring()` for accent variants and `focus_ring_tone(danger)` for `Destructive`. It
+  is shown whenever the button is `focused` (not keyboard-only). This is the intended shared focus
+  style; the remaining widgets are being migrated onto it.
 - **Construct**: `Button::new(label)` (= primary) or `Button::{primary,secondary,destructive,outline,ghost,link}(label)`.
 - **Builders**: `.variant(ButtonVariant)`, `.size(ButtonSize)` (`Small`/`Medium`/`Large` — a
   font multiplier on the base font + padding), `.font_size(f32)` (pin an explicit size),

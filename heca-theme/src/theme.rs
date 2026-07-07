@@ -158,6 +158,12 @@ impl Default for Shadow {
 /// Small controls (inputs, selects, checkboxes, chips) round at this fraction of
 /// the base [`Theme::radius`], so one global radius scales every widget together.
 const CONTROL_RADIUS_FRAC: f32 = 0.5;
+/// How far the derived focus-outline color is shifted from a tone toward the theme's
+/// `foreground` when `focus_ring` is unset. Because `foreground` is light on dark themes and dark
+/// on light themes, this brightens the ring on dark themes and darkens it on light ones — so it
+/// separates from the widget's own accent border either way (no hardcoded light/dark, no fixed
+/// white/black).
+const FOCUS_RING_CONTRAST_FACTOR: f32 = 0.35;
 const SIDEBAR_BG_DARKEN_FACTOR: f32 = 0.05;
 const TOP_BOTTOM_PANE_BG_DARKEN_FACTOR: f32 = 0.10;
 /// How much the derived z=0 gradient *bottom* color darkens
@@ -232,6 +238,15 @@ pub struct Theme {
     pub intensity: Intensity,
     #[serde(default = "default_true")]
     pub show_focus_border: bool,
+    /// Optional color of the keyboard **focus outline** — the thin ring drawn just *outside* a
+    /// focused widget (see [`effective_focus_ring`](Self::effective_focus_ring) /
+    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html)). `None` → the accent shifted
+    /// toward `foreground` for contrast, which stays legible on both dark and light themes. Set it
+    /// in a theme (`focus_ring = "#rrggbb"`) to override the default/accent focus color; tonal
+    /// rings that aren't the accent (e.g. a destructive button's `danger` ring) always derive via
+    /// [`focus_ring_tone`](Self::focus_ring_tone) and are not overridden by this token.
+    #[serde(default)]
+    pub focus_ring: Option<Color>,
     #[serde(default = "default_icon_secondary_alpha")]
     pub icon_secondary_alpha: f32,
     /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
@@ -570,6 +585,26 @@ impl Theme {
             .unwrap_or_else(|| self.derived_darker_background(GRADIENT_BOTTOM_DARKEN_FACTOR))
     }
 
+    /// The keyboard **focus-outline color** for the default (accent) tone — what
+    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html) draws on a focused Button and
+    /// (in future) every focusable widget. Returns the theme's `focus_ring` token when set, else
+    /// the accent shifted toward `foreground` (see [`focus_ring_tone`](Self::focus_ring_tone)) so
+    /// the ring reads distinct from an accent border on both dark and light themes.
+    pub fn effective_focus_ring(&self) -> Color {
+        self.focus_ring.unwrap_or_else(|| self.focus_ring_tone(self.accent))
+    }
+
+    /// Derive a focus-outline color from any semantic tone (`accent`, `danger`, …) by shifting it
+    /// toward the theme's `foreground`. `foreground` is the theme's high-contrast-against-background
+    /// color — light on dark themes, dark on light themes — so this brightens the ring on dark
+    /// themes and darkens it on light ones, keeping it separate from the tone's own border in both.
+    /// Theme-driven, no hardcoded light/dark (same idiom as [`on`](Self::on)). Use this for tonal
+    /// focus rings that aren't the default accent (e.g. a destructive button's `danger` ring); the
+    /// `focus_ring` token overrides only the default/accent case via [`effective_focus_ring`](Self::effective_focus_ring).
+    pub fn focus_ring_tone(&self, base: Color) -> Color {
+        base.lerp(self.foreground, FOCUS_RING_CONTRAST_FACTOR)
+    }
+
     /// The default dark, cyan-accented Tron theme.
     ///
     /// Sourced from the bundled `themes/grid_tron.toml` (embedded at compile
@@ -597,6 +632,34 @@ mod tests {
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
         assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn focus_ring_is_theme_aware_and_respects_override() {
+        // Dark theme (grid_tron): the derived ring is *lighter* than the accent (shifted toward the
+        // light foreground) so it separates from the accent border.
+        let mut dark = Theme::grid_tron();
+        dark.focus_ring = None;
+        let d = dark.effective_focus_ring();
+        assert_ne!(d, dark.accent);
+        assert!(d.luminance() > dark.accent.luminance(), "dark theme: ring brighter than accent");
+
+        // Light theme (latte): the SAME logic derives a *darker* ring (shifted toward the dark
+        // foreground) — the direction flips automatically, no hardcoded light/dark.
+        let light: Theme = toml::from_str(include_str!("themes/latte.toml"))
+            .expect("bundled latte.toml must parse into Theme");
+        let l = light.effective_focus_ring();
+        assert!(l.luminance() < light.accent.luminance(), "light theme: ring darker than accent");
+
+        // Any tone derives via the same helper (this is how the destructive/danger ring is built).
+        assert_eq!(
+            dark.focus_ring_tone(dark.danger),
+            dark.danger.lerp(dark.foreground, FOCUS_RING_CONTRAST_FACTOR)
+        );
+
+        // The `focus_ring` token overrides only the default/accent case, verbatim.
+        dark.focus_ring = Some(Color::rgb(10, 20, 30));
+        assert_eq!(dark.effective_focus_ring(), Color::rgb(10, 20, 30));
     }
 
     #[test]

@@ -593,6 +593,12 @@ sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
 intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
 
+# Keyboard focus outline
+show_focus_border = true   # draw the focus ring at all
+# focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`
+                           # (auto-brightens on dark themes, darkens on light themes). The
+                           # destructive/danger focus ring always derives the same way.
+
 # Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
 active_wash_alpha = 0.11          # Accent wash over the active workspace
 card_background_alpha = 0.02      # Resting background tint of each pane card

@@ -1363,6 +1363,25 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     but the broader `sidebar-fu-12` (documented "intent ⇒ hintable" picker over *arbitrary* plugin
     widgets) and `sidebar-fu-13` Stage 3 (KeyHint over an open dialog's widget tree) remain — both
     can now reuse the shared-allocator + multi-tree-walk machinery this task introduced.
+  - [~] **Focus-ring restyle: CSS-style outline + theme-aware color token (2026-07-07).** Replaces
+    the corner-bracket focus reticle with a thin accent **outline drawn just outside** the widget
+    (CSS `outline` + offset gap), so it's visible on borderless variants (Ghost/Link) and never
+    merges into the widget's own border — the two problems brackets had. New `PaintCx::focus_ring
+    (rect, color, radius)` (`heca-grid-ui/src/component.rs`); width = `focus_border_width`, halo
+    via `scaled_glow` (vanishes at `glow_size = none`). New **theme token `focus_ring: Option<Color>`**
+    (`heca-theme`, `#[serde(default)]`): unset ⇒ derived per-tone by `effective_focus_ring()` /
+    `focus_ring_tone(base)` = the tone shifted **toward `foreground`** (the `on()` idiom) so it
+    **auto-brightens on dark themes and darkens on light themes** — no hardcoded light/dark, no fixed
+    white/black (the user flagged the light-theme case). **One-token** design: `focus_ring` overrides
+    only the default/accent case; the destructive `danger` ring always derives. Shown whenever the
+    widget is `focused` (not keyboard-only). **DONE for `Button`** (accent variants + Destructive);
+    documented in `docs/widgets.md` (Button + Theme token table + PaintCx method), `README.md`,
+    grid_tron.toml. Theme test `focus_ring_is_theme_aware_and_respects_override`. theme 25 + grid-ui
+    58+127+1 green, clippy clean, heca builds.
+    **PENDING (awaiting user OK):** migrate the other ~11 widgets (icon_button, badge_button, tabs,
+    rail_cell, toggle, checkbox, select, item, row, toast, input, scroll_region) from
+    `corner_brackets` → `focus_ring` so the whole library shares the outline style. Trialed on Button
+    first per the user; keep `corner_brackets` for decorative bracket use either way.
 
 - [x] **sidebar-fu-10 — DONE (branch `feat/sidebar-followups`): sidebar header collapse toggle
   (interim; final both-states version → `app-task-21`).** After GUI feedback (2026-07-03):
