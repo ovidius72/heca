@@ -147,6 +147,9 @@ pub struct Config {
     pub programs: ProgramsConfig,
     #[serde(default)]
     pub keys: KeysConfig,
+    /// `[confirm]` — per-action confirmation toggles (generic, keyed by action name).
+    #[serde(default)]
+    pub confirm: crate::confirm::ConfirmConfig,
 }
 
 impl Default for Config {

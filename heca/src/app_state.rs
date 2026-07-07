@@ -773,13 +773,11 @@ pub struct AppState {
     /// false the status bar collapses to zero height (see
     /// [`AppState::status_bar_height`]).
     pub show_bottom_bar: bool,
-    /// Confirm before closing a pane (`[settings] confirm_close_pane`). Read by the
-    /// centralized `request_destructive` chokepoint.
-    pub confirm_close_pane: bool,
-    /// Confirm before deleting a column (`[settings] confirm_delete_column`).
-    pub confirm_delete_column: bool,
-    /// Confirm before deleting a workspace (`[settings] confirm_delete_workspace`).
-    pub confirm_delete_workspace: bool,
+    /// The `[confirm]` table — per-action confirmation toggles (keyed by action name:
+    /// `close` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
+    /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
+    /// which falls back to the action's `ConfirmSpec::default_enabled` when unset.
+    pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

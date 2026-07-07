@@ -1586,16 +1586,11 @@ fn run_outcome(
     }
 }
 
-/// Whether the confirm prompt for `config_name` is enabled. Phase B reads the existing
-/// `[settings] confirm_*` flags for the three built-ins; unknown names (plugin actions, the future
-/// generic `[confirm]` table — Phase B2) fall back to the spec's `default_enabled`.
+/// Whether the confirm prompt for `config_name` is enabled: the user's `[confirm].<name>` value
+/// when set, else the action's declared `default_enabled`. Generic — a plugin action is
+/// configurable by name automatically, no dedicated settings field.
 fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -> bool {
-    match config_name {
-        "close" => state.confirm_close_pane,
-        "delete_column" => state.confirm_delete_column,
-        "delete_workspace" => state.confirm_delete_workspace,
-        _ => default_enabled,
-    }
+    state.confirm.enabled(config_name, default_enabled)
 }
 
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).

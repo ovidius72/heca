@@ -152,10 +152,7 @@ impl HecaApp {
             state.show_right_sidebar = self.app_config.config.settings.show_right_sidebar;
             state.show_top_bar = self.app_config.config.settings.show_top_bar;
             state.show_bottom_bar = self.app_config.config.settings.show_bottom_bar;
-            state.confirm_close_pane = self.app_config.config.settings.confirm_close_pane;
-            state.confirm_delete_column = self.app_config.config.settings.confirm_delete_column;
-            state.confirm_delete_workspace =
-                self.app_config.config.settings.confirm_delete_workspace;
+            state.confirm = self.app_config.config.confirm.clone();
             let link_detection = self.app_config.config.appearance.terminal.link_detection;
             let palette_defaults = terminal_palette_defaults(&state.theme);
             for backend in state.backends.values_mut() {

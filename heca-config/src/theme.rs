@@ -45,6 +45,7 @@ mod tests {
         assert_eq!(theme.warning, Color::new(223, 142, 29, 255));
         assert_eq!(theme.glow_size, heca_theme::GlowLevel::None);
         assert_eq!(theme.intensity, heca_theme::Intensity::Off);
-        assert!(!theme.show_focus_border);
+        // Focus outline is on (the thin `focus_ring` reads fine on light themes; only glow is off).
+        assert!(theme.show_focus_border);
     }
 }
