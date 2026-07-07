@@ -691,10 +691,12 @@ pub fn handle_close_pane(state: &mut AppState, _action: &WmAction) {
     let Some(pane_id) = focused_pane_id(state) else {
         return;
     };
-    // Centralized: confirm (per `[settings] confirm_close_pane`) or close now. The raw
-    // close is `ClosePaneById` (handles tiled + floating + empty-workspace cleanup), so
-    // both the direct and the dialog-confirmed paths run identical close logic.
-    request_destructive(state, WmAction::ClosePaneById { pane_id }, false);
+    // Raw close on the focused pane (`ClosePaneById` handles tiled + floating + empty-workspace
+    // cleanup). Confirmation is owned by the **central destructive gate** at the dispatch
+    // chokepoint (`maybe_confirm_destructive`), which intercepts `ClosePane` before it reaches
+    // this handler; so this runs only for direct handler-to-handler execution and must NOT
+    // re-gate (that would double-confirm).
+    handle_close_pane_by_id(state, &WmAction::ClosePaneById { pane_id });
 }
 
 /// Destroy the active workspace if it's empty and other workspaces exist.
@@ -1543,21 +1545,18 @@ pub(crate) fn begin_confirm_delete(
         // Destructive → forced decision: an outside/scrim click or Esc is swallowed; the user
         // must choose Cancel or Delete.
         .dismissible(false);
-    crate::chrome::open_modal(state, spec, move |state, registry, result| {
+    crate::chrome::open_modal(state, spec, move |state, _registry, result| {
         state.input_mode = if resume_sidebar {
             InputMode::SidebarNav
         } else {
             InputMode::Normal
         };
         // Only the "confirm" action runs the destructive command; cancel / dismiss just
-        // restore the mode.
+        // restore the mode. Run the raw action **directly** (not via `dispatch_action`) so it
+        // does NOT re-enter the central destructive gate that raised this dialog (no loop) —
+        // `action` is always a raw variant (`ClosePaneById`/`DeleteColumn`/`DeleteWorkspace`).
         if matches!(&result, crate::chrome::ModalResult::Action { id, .. } if id == "confirm") {
-            crate::app::interaction::dispatch_action(
-                state,
-                registry,
-                crate::app::interaction::InteractionSource::Keyboard,
-                &action,
-            );
+            run_destructive_now(state, &action);
         }
         state.needs_redraw = true;
     });
@@ -1631,6 +1630,36 @@ pub(crate) fn request_destructive(
     } else {
         run_destructive_now(state, &raw_action);
     }
+}
+
+/// The **central destructive-action gate**, called once at the dispatch chokepoint
+/// ([`dispatch_intent`](crate::app::interaction::dispatch_intent)) before any action executes.
+///
+/// If `action` is a destructive command (close pane / delete column / delete workspace) it is
+/// routed through the confirm chokepoint [`request_destructive`] (per the matching
+/// `[settings] confirm_*` toggle) and this returns `true` — meaning **handled**, the caller must
+/// NOT run the action normally. For every other action it returns `false` (run it as usual).
+///
+/// This is why the guard lives on the **action**, not the call site: every surface that dispatches
+/// a destructive action — keyboard, the pane-header close button, a context menu / dropdown, RPC —
+/// funnels through the one dispatch chokepoint and gets identical confirm behaviour for free. The
+/// confirm dialog runs the raw action directly ([`run_destructive_now`]), so it never re-enters
+/// this gate (no loop). `ClosePane` (focused) is normalized to the raw `ClosePaneById`.
+pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction) -> bool {
+    // Return to sidebar-nav after a deletion started there; otherwise Normal.
+    let resume_sidebar = matches!(state.input_mode, InputMode::SidebarNav);
+    let raw = match action {
+        WmAction::ClosePane => match focused_pane_id(state) {
+            Some(pane_id) => WmAction::ClosePaneById { pane_id },
+            None => return true, // nothing focused → nothing to close, but still "handled"
+        },
+        WmAction::ClosePaneById { .. }
+        | WmAction::DeleteColumn { .. }
+        | WmAction::DeleteWorkspace { .. } => action.clone(),
+        _ => return false,
+    };
+    request_destructive(state, raw, resume_sidebar);
+    true
 }
 
 pub fn handle_sidebar_delete_selected(state: &mut AppState, _action: &WmAction) {

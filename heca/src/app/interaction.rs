@@ -679,7 +679,15 @@ pub(crate) fn dispatch_intent(
 
     match decision {
         RouteDecision::Allow(InteractionIntent::ActivateAction(act)) => {
-            registry.execute(&act, state);
+            // Central destructive-action gate: close-pane / delete-column / delete-workspace go
+            // through the confirm chokepoint FIRST, so the confirm guard lives on the action and
+            // every surface (keyboard, pane-header close button, context menu / dropdown, RPC)
+            // confirms identically — never per call site. Returns true when it handled (confirmed
+            // or ran) the action; the confirm dialog runs the raw action directly, never re-entering
+            // this gate.
+            if !crate::handlers::maybe_confirm_destructive(state, &act) {
+                registry.execute(&act, state);
+            }
         }
         // Expanded to FocusPane + the action above (before routing), so this is
         // unreachable in practice; handle it defensively as focus-then-act.

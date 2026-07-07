@@ -416,19 +416,10 @@ fn settle_context_menu(
 ) {
     let action = state.context_menu_action.borrow_mut().take();
     if let Some(action) = action {
-        // Destructive menu picks go through the centralized confirm chokepoint (so a
-        // right-click delete honours the same `confirm_*` config as the keyboard);
-        // everything else dispatches normally.
-        if matches!(
-            action,
-            WmAction::ClosePaneById { .. }
-                | WmAction::DeleteColumn { .. }
-                | WmAction::DeleteWorkspace { .. }
-        ) {
-            crate::handlers::request_destructive(state, action, false);
-        } else {
-            dispatch_action(state, registry, source, &action);
-        }
+        // Just dispatch the action — the central destructive gate at the dispatch chokepoint
+        // confirms close/delete picks per `[settings] confirm_*`, identically to every other
+        // surface. No per-surface destructive special-case here.
+        dispatch_action(state, registry, source, &action);
     }
     let closed = state
         .context_menu
