@@ -1289,11 +1289,14 @@ let dialog = Dialog::new("Delete pane?")
     .open(true);
 ```
 
-> Host wiring mirrors `Modal`: while `focus.overlay_active(root)`, route pointer **and** keys to
-> the overlay; `Dialog::event` maps Tab / ←→ / Enter / Space / Esc and swallows the rest.
-> Dismissal + activation both flow out as callbacks — in `heca` the buttons emit `SubmitOverlay`
-> and `on_dismiss` emits `CloseOverlay` (both via the chrome emitter), so one intent path resolves
-> the overlay for click, KeyHint pick, and RPC alike.
+> **Self-contained** — the host does nothing modal-specific. While a `Dialog` is up the host
+> just forwards pointer + key + `ModifiersChanged` events to it (the same generic overlay
+> routing every widget uses); `Dialog::event` owns **Tab / Shift+Tab / ← → / Ctrl+h·l / Enter /
+> Space / Esc** itself (reading the tracked modifiers for Shift+Tab and Ctrl+h·l), and swallows
+> the rest. Dismissal + activation flow out as callbacks — in `heca` the buttons emit
+> `SubmitOverlay` and `on_dismiss` emits `CloseOverlay`, so one intent path resolves the overlay
+> for click, KeyHint pick, and RPC alike. The developer only lists buttons; nav, tooltips, and
+> KeyHint targets come from the widget + the centralized button path.
 
 ### CommandPalette
 

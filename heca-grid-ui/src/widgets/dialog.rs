@@ -22,7 +22,7 @@
 //! every descendant gets true bounds (which the hint picker and pointer hit-testing need).
 
 use crate::builders::{LayoutExt, Parent};
-use crate::component::{paint_child, Base, Component, Event, GridKey, Handled, PaintCx};
+use crate::component::{paint_child, Base, Component, Event, GridKey, Handled, Modifiers, PaintCx};
 use crate::focus::FocusManager;
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::Shadow;
@@ -60,6 +60,10 @@ pub struct Dialog {
     /// Fired when Esc or a scrim click requests dismissal (only if `dismissible`). The host
     /// points this at its overlay-close path (e.g. emit `CloseOverlay`).
     on_dismiss: Option<Box<dyn Fn()>>,
+    /// Live modifier state, tracked from [`Event::ModifiersChanged`] (broadcast to the tree by
+    /// the host) — a key event carries no modifiers, so the widget needs this to distinguish
+    /// Shift+Tab and Ctrl+h/l itself, without any host special-casing.
+    mods: Modifiers,
     /// Whether an action row exists yet (created lazily on the first [`action`](Dialog::action)).
     has_actions: bool,
     /// Last-seen viewport, cached during paint for the scrim rect.
@@ -91,6 +95,7 @@ impl Dialog {
             dismissible: true,
             focus: FocusManager::new(),
             on_dismiss: None,
+            mods: Modifiers::default(),
             has_actions: false,
             viewport: Cell::new(Size::new(f64::INFINITY, f64::INFINITY)),
         }
@@ -160,9 +165,31 @@ impl Dialog {
         self.open
     }
 
-    /// Fire the dismiss callback if one is set (Esc / scrim, respecting `dismissible`).
+    // ── Self-contained keyboard: the widget owns focus traversal + activation + dismissal.
+    //    Modifier-aware (Shift+Tab, Ctrl+h/l) via the tracked `mods`, so the host never drives
+    //    the modal — it only forwards keys + `ModifiersChanged`, like any other overlay. ──
+
+    /// Move keyboard focus to the next focusable descendant (wraps).
+    fn focus_next(&mut self) {
+        let panel = self.base.children[0].as_mut();
+        self.focus.advance(panel, true);
+    }
+
+    /// Move keyboard focus to the previous focusable descendant (wraps).
+    fn focus_prev(&mut self) {
+        let panel = self.base.children[0].as_mut();
+        self.focus.advance(panel, false);
+    }
+
+    /// Activate the focused descendant (Enter / Space → its `on_click`).
+    fn activate_focused(&mut self) {
+        let panel = self.base.children[0].as_mut();
+        self.focus.deliver_key(panel, GridKey::Enter);
+    }
+
+    /// Fire the dismiss callback (Esc / scrim), respecting [`dismissible`](Dialog::dismissible).
     fn request_dismiss(&self) {
-        if let Some(f) = &self.on_dismiss {
+        if self.dismissible && let Some(f) = &self.on_dismiss {
             f();
         }
     }
@@ -265,8 +292,8 @@ impl Component for Dialog {
                     // carries the overlay-control action).
                     let panel = self.base.children[0].as_mut();
                     self.focus.dispatch(panel, ev);
-                } else if self.dismissible {
-                    // Scrim click = dismiss request (host resolves it).
+                } else {
+                    // Scrim click = dismiss request (no-op if non-dismissible; host resolves it).
                     self.request_dismiss();
                 }
                 // Always swallow while open (modal).
@@ -277,25 +304,44 @@ impl Component for Dialog {
                 let _ = panel.event(ev); // button hover
                 Handled::Yes
             }
+            // Track modifier state (broadcast by the host) so Shift+Tab / Ctrl+h/l work without
+            // the host special-casing the modal. Not consumed — it's a broadcast.
+            Event::ModifiersChanged(m) => {
+                self.mods = *m;
+                Handled::No
+            }
             Event::Key { key: GridKey::Escape, pressed: true } => {
-                if self.dismissible {
-                    self.request_dismiss();
-                }
+                self.request_dismiss();
                 Handled::Yes
             }
             Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
-                let panel = self.base.children[0].as_mut();
-                self.focus.deliver_key(panel, GridKey::Enter);
+                self.activate_focused();
                 Handled::Yes
             }
-            Event::Key { key: GridKey::Tab | GridKey::ArrowRight, pressed: true } => {
-                let panel = self.base.children[0].as_mut();
-                self.focus.advance(panel, true);
+            // Tab moves focus — backward with Shift (the widget reads the tracked modifiers).
+            Event::Key { key: GridKey::Tab, pressed: true } => {
+                if self.mods.shift {
+                    self.focus_prev();
+                } else {
+                    self.focus_next();
+                }
+                Handled::Yes
+            }
+            Event::Key { key: GridKey::ArrowRight, pressed: true } => {
+                self.focus_next();
                 Handled::Yes
             }
             Event::Key { key: GridKey::ArrowLeft, pressed: true } => {
-                let panel = self.base.children[0].as_mut();
-                self.focus.advance(panel, false);
+                self.focus_prev();
+                Handled::Yes
+            }
+            // Vim-style focus motion: Ctrl+h / Ctrl+l.
+            Event::Key { key: GridKey::Char('h'), pressed: true } if self.mods.ctrl => {
+                self.focus_prev();
+                Handled::Yes
+            }
+            Event::Key { key: GridKey::Char('l'), pressed: true } if self.mods.ctrl => {
+                self.focus_next();
                 Handled::Yes
             }
             // Swallow every other key + scroll while the dialog owns input (modal).

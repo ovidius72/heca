@@ -35,6 +35,13 @@ pub struct Scene {
     to_overlay: bool,
     /// Start index in `overlay` of the currently open segment.
     seg_start: usize,
+    /// Nesting depth of open [`begin_overlay`](Scene::begin_overlay) pairs. An overlay widget
+    /// (a `Tooltip`, a `Select` dropdown) painted **inside** another overlay's paint (a
+    /// `Dialog`) nests `with_overlay`; without tracking depth the inner `end_overlay` would
+    /// clear `to_overlay` mid-parent and drop the parent's segment (its scrim/panel would never
+    /// be recorded → not drawn). Depth lets nesting close each segment in order and only leave
+    /// overlay mode at depth 0.
+    overlay_depth: usize,
 }
 
 impl Scene {
@@ -55,19 +62,34 @@ impl Scene {
 
     /// Route subsequent pushes to the overlay layer (drawn on top), starting a new
     /// overlay segment. Each segment becomes a self-contained occluding unit (see
-    /// [`overlay_segments`](Scene::overlay_segments)).
+    /// [`overlay_segments`](Scene::overlay_segments)). **Re-entrant**: called inside another
+    /// open overlay (a `Tooltip` painted within a `Dialog`), it first closes the parent's
+    /// open segment, then opens a nested one — so the deeper overlay draws on top as its own
+    /// segment and the parent's earlier draws are preserved.
     pub fn begin_overlay(&mut self) {
-        self.to_overlay = true;
-        self.seg_start = self.overlay.len();
-    }
-
-    /// Stop routing to the overlay layer, closing the current segment (recorded
-    /// only if it produced any commands).
-    pub fn end_overlay(&mut self) {
+        // Descending into a nested overlay: bank the parent's segment so far.
         if self.to_overlay && self.overlay.len() > self.seg_start {
             self.overlay_segs.push((self.seg_start, self.overlay.len()));
         }
-        self.to_overlay = false;
+        self.to_overlay = true;
+        self.seg_start = self.overlay.len();
+        self.overlay_depth += 1;
+    }
+
+    /// Stop routing to the overlay layer for this level, closing the current segment (recorded
+    /// only if it produced any commands). While still nested inside a parent overlay, routing
+    /// stays on the overlay layer and a fresh segment opens for the parent's remaining draws;
+    /// overlay mode ends only when the outermost pair closes.
+    pub fn end_overlay(&mut self) {
+        if self.overlay.len() > self.seg_start {
+            self.overlay_segs.push((self.seg_start, self.overlay.len()));
+        }
+        self.overlay_depth = self.overlay_depth.saturating_sub(1);
+        // A new segment begins here for whatever the parent overlay draws next.
+        self.seg_start = self.overlay.len();
+        if self.overlay_depth == 0 {
+            self.to_overlay = false;
+        }
     }
 
     /// Clear all commands (reuse the allocation across frames).
@@ -77,6 +99,7 @@ impl Scene {
         self.overlay_segs.clear();
         self.to_overlay = false;
         self.seg_start = 0;
+        self.overlay_depth = 0;
     }
 
     /// Total number of queued commands (base + overlay).
@@ -318,6 +341,58 @@ mod tests {
             s.base_layer().iter().cloned().collect::<Vec<_>>(),
             vec![clip(0.0)],
             "base layer should hold only base commands, not overlay ones"
+        );
+    }
+
+    #[test]
+    fn nested_overlay_keeps_parent_segment() {
+        // A `Dialog` paints its panel inside `with_overlay`; a child `Tooltip` paints inside its
+        // own `with_overlay` — nested. The bug: the inner `end_overlay` dropped the parent's
+        // segment, so the modal's scrim/panel vanished when the tooltip showed. Nesting must
+        // yield three ordered segments: parent-before, the nested child, parent-after.
+        let mut s = Scene::new();
+        s.begin_overlay(); // outer (Dialog panel)
+        s.push(clip(1.0)); // panel, before the nested overlay
+        s.begin_overlay(); // inner (Tooltip)
+        s.push(clip(2.0)); // tooltip
+        s.end_overlay(); // close inner — must NOT drop the outer
+        s.push(clip(3.0)); // outer continues (a sibling drawn after the tooltip)
+        s.end_overlay(); // close outer
+
+        let segs: Vec<Scene> = s.overlay_segments().collect();
+        assert_eq!(segs.len(), 3, "parent segment must survive the nested child");
+        assert_eq!(
+            segs[0].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(1.0)],
+            "segment 0 = parent content before the nest"
+        );
+        assert_eq!(
+            segs[1].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(2.0)],
+            "segment 1 = the nested (tooltip) overlay, on top"
+        );
+        assert_eq!(
+            segs[2].iter().cloned().collect::<Vec<_>>(),
+            vec![clip(3.0)],
+            "segment 2 = parent content after the nest"
+        );
+    }
+
+    #[test]
+    fn nested_overlay_stays_in_overlay_until_outermost_close() {
+        // Only the OUTERMOST `end_overlay` returns to the base layer. A push between the inner
+        // close and the outer close must land in the overlay layer, never leak to base.
+        let mut s = Scene::new();
+        s.begin_overlay();
+        s.begin_overlay();
+        s.end_overlay(); // inner closed, but still inside the outer overlay
+        s.push(clip(9.0)); // still overlay-targeted
+        s.end_overlay(); // outer closed → back to base
+        s.push(clip(8.0)); // base
+        assert_eq!(
+            s.base_layer().iter().cloned().collect::<Vec<_>>(),
+            vec![clip(8.0)],
+            "the mid-nest push must not leak to base; only post-outer-close pushes are base"
         );
     }
 }
