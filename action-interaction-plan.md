@@ -248,6 +248,31 @@ On `ModalResult::Action{id}` find the `ResponseButton` by id and run its `Outcom
   (`[confirm]`), `docs/`. Tests: a declarative plugin-style action with a `ConfirmSpec` confirms; a
   `Callback` action fires its closure.
 
+## 8b. Phase A — precise execution notes (scoped 2026-07-07)
+
+Concrete scope discovered by grep (start here):
+- **New type `ActionCatalog`** (`heca/src/actions.rs`): runtime metadata store. Phase A holds
+  **`&'static ActionDescriptor`** entries seeded from the existing `ActionRegistry::ALL` const
+  (zero-copy; owned/`String` plugin entries are deferred to task-C to avoid a `&'static str`→`String`
+  ripple now). Methods mirror today's statics: `find/icon/label/by_category/count`, **same `&'static`
+  returns** so no caller type changes.
+  ```
+  ActionCatalog { by_name: HashMap<&'static str, &'static ActionDescriptor>, order: Vec<&'static ActionDescriptor> }
+  ::with_builtins() -> seed from ActionRegistry::ALL
+  ```
+- **`AppState.action_catalog: ActionCatalog`** built in startup (`heca/src/app/startup.rs`).
+- **Migrate the 6 static-metadata call sites** off `ActionRegistry::{icon,label,find}` → the catalog:
+  - has `state`: `heca/src/app_state.rs:~239` (`self.action_catalog.find`), `heca/src/mouse.rs` ×3
+    (`state.action_catalog.icon`).
+  - **stateless helpers → thread `&ActionCatalog`**: `heca/src/chrome/mod.rs` `pane_action_spec`
+    (icon lookup, callers `mod.rs:559,602` + tests `4149-4171`) and `action_tooltip` (label lookup,
+    callers `overlay.rs:202`, `mod.rs:747,1884`). Pass the catalog down from where the chrome tree is
+    built (it has `&AppState`).
+- **Remove** the static `ActionRegistry::{find,icon,label,by_category,count}` methods once all callers
+  use the catalog; keep `ActionRegistry::ALL` as the **built-in seed** (private-ish). Move the
+  metadata unit tests to exercise `ActionCatalog`.
+- **No behavior change**; gate: `heca` tests green (currently 311) + clippy clean.
+
 ## 9. Open details to settle during execution
 
 - Which crate hosts the shared `ActionMeta`/`ConfirmSpec` types (new `heca-actions` vs `heca-config`).
