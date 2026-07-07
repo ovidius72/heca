@@ -1264,7 +1264,7 @@ fn builtin_confirm_specs() -> HashMap<&'static str, ConfirmSpec> {
         default_enabled: true,
     };
     HashMap::from([
-        ("close", mk("close", "Close")),
+        ("delete_pane", mk("delete_pane", "Close")),
         ("delete_column", mk("delete_column", "Delete")),
         ("delete_workspace", mk("delete_workspace", "Delete")),
     ])
@@ -1402,7 +1402,7 @@ mod tests {
     fn builtin_confirm_specs_are_declared_for_the_destructive_actions() {
         let catalog = ActionCatalog::with_builtins();
         // The three destructive actions each carry a forced [Cancel] [<danger Proceed>] prompt.
-        for name in ["close", "delete_column", "delete_workspace"] {
+        for name in ["delete_pane", "delete_column", "delete_workspace"] {
             let spec = catalog
                 .confirm_spec(name)
                 .unwrap_or_else(|| panic!("missing confirm spec for {name}"));

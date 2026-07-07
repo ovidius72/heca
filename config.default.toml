@@ -98,7 +98,7 @@ show_bottom_bar = true # the status bar
 # Cancel / <action> modal before running; `false` performs the action
 # immediately. Generic: any action (built-in or plugin) is configurable by name;
 # an unlisted action uses its own declared default.
-close = true            # closing a pane
+delete_pane = true      # closing a pane
 delete_column = true    # deleting a column (and its panes)
 delete_workspace = true # deleting a workspace (and its contents)
 

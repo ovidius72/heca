@@ -773,8 +773,8 @@ pub struct AppState {
     /// false the status bar collapses to zero height (see
     /// [`AppState::status_bar_height`]).
     pub show_bottom_bar: bool,
-    /// The `[confirm]` table — per-action confirmation toggles (keyed by action name:
-    /// `close` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
+    /// The `[confirm]` table — per-action confirmation toggles (keyed by confirm name:
+    /// `delete_pane` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
     /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
     /// which falls back to the action's `ConfirmSpec::default_enabled` when unset.
     pub confirm: heca_config::confirm::ConfirmConfig,

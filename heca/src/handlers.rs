@@ -1596,7 +1596,7 @@ fn confirm_enabled(state: &AppState, config_name: &str, default_enabled: bool) -
 /// The confirm config name for a raw destructive action (`None` if it isn't confirmable).
 fn confirm_config_name(action: &WmAction) -> Option<&'static str> {
     match action {
-        WmAction::ClosePaneById { .. } => Some("close"),
+        WmAction::ClosePaneById { .. } => Some("delete_pane"),
         WmAction::DeleteColumn { .. } => Some("delete_column"),
         WmAction::DeleteWorkspace { .. } => Some("delete_workspace"),
         _ => None,
@@ -1684,10 +1684,10 @@ pub(crate) fn maybe_confirm_destructive(state: &mut AppState, action: &WmAction)
     // `Proceed` (`ClosePane` → the focused pane's `ClosePaneById`, pinned now).
     let (name, resolved) = match action {
         WmAction::ClosePane => match focused_pane_id(state) {
-            Some(pane_id) => ("close", WmAction::ClosePaneById { pane_id }),
+            Some(pane_id) => ("delete_pane", WmAction::ClosePaneById { pane_id }),
             None => return false, // nothing focused → let the normal path no-op
         },
-        WmAction::ClosePaneById { .. } => ("close", action.clone()),
+        WmAction::ClosePaneById { .. } => ("delete_pane", action.clone()),
         WmAction::DeleteColumn { .. } => ("delete_column", action.clone()),
         WmAction::DeleteWorkspace { .. } => ("delete_workspace", action.clone()),
         _ => return false,

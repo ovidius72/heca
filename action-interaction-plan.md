@@ -120,8 +120,9 @@ Dispatch =
   introspection consume it).
 - **Confirm lookup:** `registry.confirm_spec(action) -> Option<&ConfirmSpec>` by discriminant/name.
 
-> Note (name↔variant): `close` maps to both `ClosePane` and `ClosePaneById`. Both discriminants
-> reference the **same** `ConfirmSpec` (config key `close`), so either dispatch confirms identically.
+> Note (name↔variant): the pane-close action (`ClosePane` + `ClosePaneById`) maps to the **same**
+> `ConfirmSpec` under the confirm key `delete_pane` (distinct from the action's own descriptor name
+> `close`), so either dispatch confirms identically.
 
 ### 5.2 The generic gate
 
@@ -168,7 +169,7 @@ On `ModalResult::Action{id}` find the `ResponseButton` by id and run its `Outcom
 
 ### 5.5 Config (decision B)
 
-- New `[confirm]` table: `[confirm] close = true`, `delete_column = true`, `delete_workspace = true`,
+- New `[confirm]` table: `[confirm] delete_pane = true`, `delete_column = true`, `delete_workspace = true`,
   `<plugin_action> = false`, … Keyed by `ConfirmSpec.config_name`. Absent → `default_enabled`.
 - **Migrate** `confirm_close_pane` / `confirm_delete_column` / `confirm_delete_workspace` out of
   `[settings]` into `[confirm]` (`close`/`delete_column`/`delete_workspace`). Document the move;

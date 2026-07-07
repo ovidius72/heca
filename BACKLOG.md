@@ -1568,7 +1568,7 @@ decisions + phases: **`action-interaction-plan.md`** (design locked with the use
   replacing the three `[settings] confirm_*` fields (removed from `SettingsConfig`). `AppState.confirm`
   holds it (built at startup + `prefix+Shift+r` reload); `confirm_enabled()` reads
   `state.confirm.enabled(name, spec.default_enabled)`. `config.default.toml` gains `[confirm]`
-  (`close`/`delete_column`/`delete_workspace = true`). A plugin action becomes configurable by name
+  (`delete_pane`/`delete_column`/`delete_workspace = true`). A plugin action becomes configurable by name
   automatically. Also fixed a stale `heca-config` test (`bundled_latte_is_a_light_theme` asserted the
   old `show_focus_border=false`, changed by the focus-ring commit `8548b92`). Whole workspace green
   (heca 313, heca-config 78, heca-theme 25, grid-ui 58+127+1), clippy clean.
