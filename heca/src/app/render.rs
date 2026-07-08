@@ -205,11 +205,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     let w = phys_size.width as f32 / scale;
     let h = phys_size.height as f32 / scale;
 
-    // Lay out the right-click context menu now, before the scene-texture borrow, so
-    // its paint pass (below) can take a shared `&AppState`. terminal-task-18.
-    crate::chrome::layout_context_menu(state, w, h);
-    // Generic dynamic-layer layout (overlay dialogs incl. the destructive-confirm prompt,
-    // plugin panels).
+    // Generic dynamic-layer layout, before the scene-texture borrow so paint can take a shared
+    // `&AppState` (overlay dialogs incl. the destructive-confirm prompt + the right-click context
+    // menu, plugin panels).
     crate::chrome::layout_layers(state, w, h);
 
     let glow_alpha_scale =
@@ -1218,10 +1216,8 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // painted into the chrome scene so they sit above pane content. terminal-task-18.
     crate::chrome::paint_link_hints(state, &mut chrome_scene, w, h, &chrome_theme);
     crate::chrome::paint_hint_targets(state, &mut chrome_scene, w, h, &chrome_theme);
-    // Right-click context menu overlay, on top of everything. terminal-task-18.
-    crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
-    // Generic dynamic-layer paint (overlay dialogs incl. the confirm prompt, plugin panels),
-    // back→front by band.
+    // Generic dynamic-layer paint (overlay dialogs incl. the confirm prompt + the right-click
+    // context menu, plugin panels), back→front by band, on top of everything.
     crate::chrome::paint_layers(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);

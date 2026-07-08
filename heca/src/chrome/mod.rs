@@ -2208,17 +2208,8 @@ pub(crate) fn active_hint_targets(
 
     let mut layers: Vec<HintLayer> = Vec::new();
 
-    // 1. Overlays (front, modal): the context menu captures the picker — only its own
-    //    buttons are eligible, everything beneath is suppressed. (The destructive-confirm
-    //    dialog is now a dynamically-registered Modal-band layer, collected in step 4.)
-    if let Some(menu) = state.context_menu.as_ref() {
-        layers.push(HintLayer {
-            band: LayerBand::Modal,
-            targets: heca_grid_ui::collect_hint_targets(menu),
-            occluders: Vec::new(),
-            modal: true,
-        });
-    }
+    // (Overlays — the context menu + the destructive-confirm dialog — are now
+    //  dynamically-registered overlay-band layers, collected in step 4.)
 
     // 2. Chrome (top bar + sidebars), drawn on top of all pane content. Its own targets
     //    are eligible; the chrome frame AROUND the content (bars + sidebars) occludes pane
@@ -2309,9 +2300,6 @@ pub(crate) fn paint_hint_targets(
     for header in state.pane_headers.values() {
         bounds_by_id.extend(heca_grid_ui::collect_hint_targets(&header.root));
     }
-    if let Some(menu) = state.context_menu.as_ref() {
-        bounds_by_id.extend(heca_grid_ui::collect_hint_targets(menu));
-    }
     // Dynamically-registered layers (overlay dialogs incl. the confirm prompt, plugin panels):
     // collect their targets
     // too, so an overlay's buttons show keycaps like any other surface.
@@ -2355,36 +2343,6 @@ pub(crate) fn paint_hint_targets(
         let cap = Rectangle::new(Point::new(x, y), size);
         heca_grid_ui::paint_keycap(&mut cx, cap, &text, font, None);
     }
-}
-
-/// Lay out the open right-click context menu (sets the widget's resolved font, used
-/// by its panel sizing). Mutable pass, run **before** the scene-texture borrow so
-/// [`paint_context_menu`] can take a shared `&AppState`. No-op when none is open.
-pub(crate) fn layout_context_menu(state: &mut crate::app_state::AppState, w: f32, h: f32) {
-    let font = chrome_gui_theme(state).font_size;
-    if let Some(menu) = state.context_menu.as_mut() {
-        LayoutEngine::new()
-            .base_font(font)
-            .compute(menu, Size::new(w as f64, h as f64));
-    }
-}
-
-/// Paint the open right-click context menu — the app's first stateful overlay —
-/// into the chrome scene, on top of everything, at its anchored viewport-clamped
-/// panel rect. Run [`layout_context_menu`] first (it sets the font). No-op when no
-/// menu is open. terminal-task-18 / app-task-33.
-pub(crate) fn paint_context_menu(
-    state: &crate::app_state::AppState,
-    scene: &mut Scene,
-    w: f32,
-    h: f32,
-    theme: &GuiTheme,
-) {
-    let Some(menu) = state.context_menu.as_ref() else {
-        return;
-    };
-    let mut cx = PaintCx::new(scene, theme).with_viewport(Size::new(w as f64, h as f64));
-    menu.paint(&mut cx);
 }
 
 /// Lay out every visible dynamically-registered layer (an overlay dialog, a plugin panel)

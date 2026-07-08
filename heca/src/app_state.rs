@@ -715,17 +715,8 @@ pub struct AppState {
     /// Active scrollback search (`None` = none). Drives the query overlay, match
     /// highlights, and `n`/`N` navigation. terminal-task-19.
     pub search: Option<SearchState>,
-    /// Open right-click context menu (`None` when closed). The app's first
-    /// stateful overlay: the host owns the widget so it is laid out/painted each
-    /// frame and fed pointer/key events while open. terminal-task-18 / app-task-33.
-    pub context_menu: Option<heca_grid_ui::widgets::ContextMenu>,
-    /// Action chosen from `context_menu`. Each entry's `on_select` writes here;
-    /// the event loop drains and dispatches it through the registry after feeding
-    /// an event into the menu (grid-ui widgets cannot dispatch `WmAction`s
-    /// directly — the closure → action sink bridges that).
-    pub context_menu_action: std::rc::Rc<std::cell::RefCell<Option<WmAction>>>,
-    // (The destructive-confirm prompt is now a host-owned overlay [`Dialog`] layer in
-    // `chrome::overlay` — see `handlers::begin_confirm_delete` — not a bespoke field here.)
+    // (The right-click context menu + the destructive-confirm prompt are now host-owned overlay
+    // layers in `chrome::overlay` — `open_dropdown` / `open_modal` — not bespoke fields here.)
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
