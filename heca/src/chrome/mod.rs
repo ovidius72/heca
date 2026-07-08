@@ -29,8 +29,8 @@ pub(crate) use realize::{realize, FormBindings};
 pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
-    collect_form as collect_overlay_form, open_modal, resolve as resolve_overlay, top_modal,
-    ModalAction, ModalResult, ModalSpec, OverlayHost,
+    collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
+    top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
 };
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
