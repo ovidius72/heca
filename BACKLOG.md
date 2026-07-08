@@ -1689,6 +1689,81 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
   - Run this **last** in the plugin arc — once the widget/`realize`/overlay surface is settled, so
     the iconset is filled against the final set of consumers.
 
+### [ ] Phase: Contextual menu → OverlayHost + plugin-declarable · `context-menu`
+Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (**Option B** —
+entries are serializable `Intent`s, not native closures), so a context menu is **declarable from
+code AND from a plugin**, KeyHint/keyboard-reachable, and consistent with the modal path. Design
+locked with the user 2026-07-08. This is the *contextual* menu; the top-bar **Menu** is a separate,
+similar activity (see the stub phase below) — build the shared pieces here reusable.
+
+> **Why (not just cleanup):** today entries are `MenuEntry::new(label, Fn())` — **native closures**,
+> so a **plugin cannot declare or contribute entries** (not serializable). Entries-as-intents is the
+> precondition for the whole plugin menu story. (Icons already resolve from the action registry —
+> keep that; the misleading hardcoded `prefix+X` labels go — see below.)
+
+**Locked decisions:**
+- **Entries are data + `Intent`** (id, label, action-name, `danger`, `enabled`, optional args),
+  serializable → plugin-declarable. On select the host dispatches the intent through the **central
+  gate** (destructive confirm applies automatically). No closures.
+- **Icon from the action registry** (`ActionCatalog::icon(action_name)`) — already the pattern in
+  `mouse.rs`; **keep it, never hardcode a glyph per entry**. Label/tooltip likewise derive from the
+  action (the centralized chrome-button rule).
+- **Remove the `prefix+[key]` shortcut labels on entries.** They mislead: the leader does **not**
+  work while the menu is open, but the label implies it does. (Currently hardcoded strings like
+  `.shortcut("prefix+v")` in `mouse.rs` — delete them.)
+- **Keyboard model:**
+  - **Open via a keybinding** — a context-aware `OpenContextMenu` action (focused pane in tiled;
+    focused item in sidebar-nav). Reachable from mouse (right-click) + keybinding + RPC.
+  - **Navigate** with the **shared list/menu-nav bindings** (see `menu-nav` requirement below):
+    Up/Down + Ctrl+j/k, Enter activate, Esc dismiss.
+  - **Single-letter direct quick-pick** (host-assigned letters, keycap on the entry) that **works
+    while the menu is open** — the good replacement for the removed `prefix+X` (it actually fires).
+    Letters assigned by the host, never hardcoded.
+- **Preserve the current visuals** (theme-driven): the **focused entry's left border**, the
+  **theme glow**, and the **icon**. In Option B these move onto the realized entry widget — the
+  `Item` (or a dedicated menu-item) must render focused-left-border + glow + icon from theme tokens
+  (grid-ui change → showcase + `docs/widgets.md`).
+
+**Tasks:**
+- [ ] **context-menu-1 — `DropdownSpec` + `OverlayHost::open_dropdown`** (mirror `open_modal`).
+  Real `DropdownSpec { anchor, entries: Vec<MenuEntrySpec> }` replacing the `OverlaySpec::Dropdown`
+  placeholder (`chrome/contribution.rs`). Each `MenuEntrySpec { id, label, action, danger, enabled,
+  quick_key? }`; the host realizes entries, injects the `SubmitOverlay{overlay, id}` intent + the
+  action-registry icon + a KeyHint target, and pushes it as an **Overlay-band `modal=true` layer**
+  (reuse `top_modal` paint + input routing; verify `top_modal_id` picks up a modal Overlay-band
+  layer). Dismiss → `CloseOverlay`.
+- [ ] **context-menu-2 — grid-ui: entry widget + `ContextMenu::on_dismiss`.** Preserve
+  focused-left-border + theme glow + icon on the realized entry; add `on_dismiss` (mirrors
+  `Dialog::on_dismiss`). Showcase + `docs/widgets.md`.
+- [ ] **context-menu-3 — `OpenContextMenu` action** (context-aware) + default keybinding; reachable
+  mouse/keyboard/RPC. Full action checklist + interaction-policy classification.
+- [ ] **context-menu-4 — migrate `open_context_menu`/`open_sidebar_context_menu`** (`mouse.rs`) onto
+  `open_dropdown`; **remove the bespoke path**: `AppState.context_menu` + `context_menu_action`
+  sink, `settle_context_menu` + the `events.rs` branches, and the dedicated rendering in
+  `chrome/mod.rs`. Verify: anchor/positioning, dismiss-on-outside-click, damage, keyboard.
+- [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`.** A new `Contribution`
+  variant so a plugin registers entries for a **named context** (`pane`, `sidebar_item`, …); the
+  host **merges** built-in + contributed entries when opening that context's menu. (Depends on the
+  WASM/plugin runtime for the cross-boundary case; the native contribution path can land first.)
+
+### [ ] Requirement: Shared list/menu navigation keybindings · `menu-nav`
+A **single, configurable** binding set for list/menu navigation, **reflected everywhere**: sidebar
+nav, contextual menu, and the future top-bar menu — one source of truth (asked by the user
+2026-07-08). Defaults: **Up/Down** + **Ctrl+j / Ctrl+k**, **Enter** activate, **Esc** dismiss (and
+the single-letter quick-pick where entries carry one). Migrate the existing **sidebar-nav** keys
+onto this shared set (they stop being a separate mapping). Config lives in one place (e.g. a
+`[keys.menu]` section / a shared nav mode); document in README + `keybindings.default.toml`.
+- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire sidebar nav +
+  contextual menu to it; remove the duplicated per-surface nav keys.
+
+### [ ] Phase: Top-bar Menu (menubar) · `topbar-menu` — STUB (separate but similar)
+A top-bar **Menu**/menubar is a **separate activity**, similar to the contextual menu. Not scoped
+yet — recorded so the **shared infrastructure** built for `context-menu` is made reusable, not
+forked: the **dropdown overlay layer** (`open_dropdown`/`DropdownSpec`), **entries-as-intents**,
+the **shared `menu-nav` keys**, the action-registry icon/label/tooltip resolution, and the
+**`Contribution`** model (a `Contribution::Menu` sibling of `ContextMenu`). Flesh out when it
+becomes active work.
+
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
 Source: `pluggable-chrome-plugin-plan.md` Phase 8.1
@@ -2097,17 +2172,20 @@ observable by plugins.
   Files: `heca/src/{app_state,handlers,actions,host}.rs`, `heca/src/app/{input,selection,render}.rs`,
   `heca/src/chrome/{mod,state,events}.rs`, `heca-grid-ui/src/{color,widgets/key_hint,widgets/dock_frame}.rs`
 
-### [ ] Phase: Right-click context menu · `app-11`
+### [~] Phase: Right-click context menu · `app-11`
 Mouse-driven action menu — the pointer counterpart to the keyboard pick/rename actions.
 
-- [ ] **app-task-32** — Right-click contextual menu for chrome actions. A new `ContextMenu` widget in
-  `heca-grid-ui` (a floating, keyboard-navigable list of action entries, reusing `Surface`/`Item`/the
-  overlay/scissor plumbing), opened on right-click hit-test over a sidebar pane / column / workspace (and
-  later a content pane). Entries route through the existing `ActionRegistry` (rename, move-to-workspace,
-  move-to-column, close, delete, …) so mouse + keyboard + RPC stay one code path. Needs: the widget +
-  showcase + `docs/widgets.md`; right-click hit-testing in `heca/src/mouse/`; an open/close `InputMode` or
-  overlay state; per-target entry sets. Design first (scope the widget + menu model) before building.
-  Files: `heca-grid-ui/src/widgets/` (new), `heca/src/mouse/`, `heca/src/chrome/`
+> **The feature exists; the architecture/plugin work moved to `context-menu`.** The `ContextMenu`
+> widget + right-click menus (pane + sidebar) are built (`mouse.rs`, entries routed through the
+> action registry). The **migration to `OverlayHost` + plugin-declarable entries + the locked
+> keyboard/visual model** (Option B) is now the dedicated **`context-menu`** phase above — do the
+> menu work there, not here.
+
+- [x] **app-task-32 — DONE (widget + right-click menu exist).** The `heca-grid-ui::ContextMenu`
+  widget is built (floating, keyboard-navigable, `Surface`/`Item`/overlay plumbing); right-click on a
+  sidebar pane/column/workspace and on a pane opens it; entries route through the `ActionRegistry`
+  (icon from `ActionCatalog::icon`). Its rework onto the host overlay stack + plugin contributions is
+  the `context-menu` phase.
 
 - [ ] **app-task-33** — Right-click context menu on the **terminal content pane** — the capstone of the
   terminal arc, done LAST (user request 2026-06-29). Reuses the `ContextMenu` widget from `app-task-32`.
