@@ -1305,6 +1305,59 @@ let dialog = Dialog::new("Delete pane?")
 > for click, KeyHint pick, and RPC alike. The developer only lists buttons; nav, tooltips, and
 > KeyHint targets come from the widget + the centralized button path.
 
+#### Declaring a modal from data — host code **and** plugins
+
+App/agent code and plugins don't build the `Dialog` widget by hand — they **describe** a modal as
+data and let the host own it. Both submit a `ModalSpec { title, body: ViewNode, actions }` to
+`OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`); the host `realize`s the `ViewNode` body,
+injects the action buttons + KeyHint targets, shows it as a `Modal`-band layer, and returns the
+outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
+
+The **body is any `ViewNode` tree** (labels, inputs, rows, cards…), so a modal can carry a form.
+A value node opts into the returned `data` with a **`"name"` prop** — on submit the host collects
+its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`).
+
+**Internal code** (a native handler; behaviour via a Rust completion closure):
+```rust
+open_modal(
+    state,
+    ModalSpec {
+        title: "Rename pane".into(),
+        body: ViewNode::new(WidgetKind::Column)
+            .prop("gap", PropValue::Int(8))
+            .child(ViewNode::new(WidgetKind::Label).text("New name"))
+            .child(
+                ViewNode::new(WidgetKind::Input)
+                    .text(current_name)
+                    .prop("name", PropValue::Text("name".into())), // collected into `data`
+            ),
+        actions: vec![
+            ModalAction::new("cancel", "Cancel"),
+            ModalAction::new("ok", "Rename"),
+        ],
+        danger: false,
+        dismissible: true,
+    },
+    |state, registry, result| {
+        if let ModalResult::Action { id, data } = result {
+            if id == "ok" {
+                if let Some(name) = data.get("name").and_then(PropValue::as_text) {
+                    /* dispatch the rename with `name` */
+                }
+            }
+        }
+    },
+);
+// A plain confirm is the same shape: `ModalSpec::message(title, msg).action(...).danger(true)`.
+```
+
+**Plugin** (declarative + serializable): the **same `ModalSpec`/`ViewNode`**, authored as data —
+no Rust closures. Behaviour is carried by `Intent`s and the plugin receives the `ModalResult`
+(`id` + the named-field `data`) back over the boundary. Because it's the identical model, a modal
+authored by a plugin is realized, hinted (`prefix+/`), keyboard-driven, and confirm-gated exactly
+like a native one. (A first-class typed builder — `Column::new().gap(8).child(…)` — is
+`plugin-task-ui-2`; today author the nodes with `ViewNode::new(kind).prop(…).child(…)`.)
+
 ### CommandPalette
 
 A fuzzy **command launcher** overlay (same input-capturing contract as `Modal`): a query line
