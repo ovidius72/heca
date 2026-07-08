@@ -1459,6 +1459,81 @@ let stack = ToastStack::new(toasts)
 
 ---
 
+## Declarative UI model (`ViewNode`)
+
+`ViewNode` (`heca/src/chrome/view.rs`) is the **serializable UI description** that both native code
+and plugins author, and that the host mapper `realize()` turns into a retained tree of the widgets
+above. It's the SwiftUI/Flutter-style layer: you *describe* the UI as data; the host builds it. This
+is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic native path too.
+
+### The model — a node is four things, all its own
+
+| Part | What it is |
+|------|-----------|
+| `kind` | which widget (`WidgetKind`: `Column`/`Row`/`Label`/`Button`/`Input`/…) |
+| `props` | this node's **own** values (`name → PropValue`) — **per node, not inherited** |
+| `events` | this node's **own** `event → Intent` bindings (`press` / `change`) — an action **id**, never a closure (keeps it serializable) |
+| `children` | a **`Vec<ViewNode>`**, each a full node with its *own* props/events/children |
+
+**Props are per-node.** `.prop("gap", …)` on a `Column` styles *the column*, not its children — the
+props sitting next to `.child(…)` calls belong to the node you called `.prop` on (the container). A
+child is styled by putting props on *that child*. The builder chains for ergonomics but children are
+a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
+≡ `Column().children([a,b])`.
+
+### Props & events by kind (what `realize` reads today)
+
+Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input.
+
+| Kind | Props it reads | Events |
+|------|----------------|--------|
+| `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+| `Card` | `text` (title) + children | — |
+| `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+| `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+| `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
+| `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
+| `Input` | `text` (value), `name` | `change` |
+| `Toggle` | `on` (Bool), `name` | `change` |
+| `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
+| `Gauge` | `value` (Float) | — |
+| `Item` | `text` (label) | `press` |
+
+`PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
+· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
+widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
+from data*). Not realized yet (need structured/list props — `plugin-task-ui-9`): `Select`, `Tabs`,
+`Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast`.
+
+### Declaring a tree — internal code and plugins (same model)
+
+```rust
+// A labelled input + a primary button. Each node carries ITS OWN props/events.
+ViewNode::new(WidgetKind::Column)
+    .prop("gap", PropValue::Int(8))                                  // ← the COLUMN's prop
+    .child(ViewNode::new(WidgetKind::Label).text("New name"))
+    .child(
+        ViewNode::new(WidgetKind::Input)
+            .text("current")
+            .prop("name", PropValue::Text("name".into())),          // ← the INPUT's props (form field)
+    )
+    .child(
+        ViewNode::new(WidgetKind::Button)
+            .text("Rename")
+            .prop("variant", PropValue::Variant(ViewVariant::Primary)) // ← the BUTTON's prop
+            .on_press(Intent::new("rename")),                          // ← the BUTTON's event → action id
+    );
+```
+
+- **Internal code** authors this directly (as above) and hands it to `realize` / `open_modal`.
+- **Plugins** author the *same* nodes and ship them serialized (JSON); behaviour is the `Intent`
+  action ids, so no closures cross the boundary. A typed SwiftUI-style builder
+  (`Column::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
+- **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
+  `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
+
+---
+
 ## Patterns
 
 ### Handling change events
