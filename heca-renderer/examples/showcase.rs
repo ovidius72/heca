@@ -271,7 +271,10 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
         .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
         .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(display_shortcut("prefix+x")));
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(display_shortcut("prefix+x")))
+        // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
+        // to its overlay-close path (in `heca`, emit `CloseOverlay`).
+        .on_dismiss(|| println!("[showcase] menu dismissed"));
     let menu_open = menu.open_signal();
     let menu_anchor = menu.anchor_signal();
     // Initial positions for the control selects, read from the current control

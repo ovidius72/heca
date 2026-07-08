@@ -114,6 +114,10 @@ pub struct ContextMenu {
     viewport: Cell<Size>,
     /// Panel rect cached at paint, so overlay damage targets just the menu.
     panel: Cell<Rectangle>,
+    /// Fired when the menu is **dismissed** (Esc / outside-click) — not when an entry is
+    /// selected. The host points this at its overlay-close path (e.g. emit `CloseOverlay`),
+    /// mirroring [`Dialog::on_dismiss`](super::Dialog).
+    on_dismiss: Option<Box<dyn Fn()>>,
 }
 
 impl ContextMenu {
@@ -127,6 +131,7 @@ impl ContextMenu {
             anchor: signal(Point::new(0.0, 0.0)),
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
+            on_dismiss: None,
         }
     }
 
@@ -227,6 +232,22 @@ impl ContextMenu {
             && e.enabled
         {
             (e.on_select)();
+        }
+        self.close();
+    }
+
+    /// Set the callback fired when the menu is **dismissed** (Esc / outside-click). The host
+    /// wires this to its overlay-close path (mirrors [`Dialog::on_dismiss`](super::Dialog)).
+    pub fn on_dismiss(mut self, f: impl Fn() + 'static) -> Self {
+        self.on_dismiss = Some(Box::new(f));
+        self
+    }
+
+    /// Dismiss (Esc / outside-click): fire [`on_dismiss`](Self::on_dismiss), then close. Distinct
+    /// from [`run_selected`](Self::run_selected), which is a *choice*, not a dismissal.
+    fn fire_dismiss(&mut self) {
+        if let Some(f) = &self.on_dismiss {
+            f();
         }
         self.close();
     }
@@ -430,7 +451,7 @@ impl Component for ContextMenu {
         match ev {
             Event::Key { key, pressed: true } => {
                 match key {
-                    GridKey::Escape => self.close(),
+                    GridKey::Escape => self.fire_dismiss(),
                     GridKey::Enter => self.run_selected(),
                     GridKey::ArrowDown => self.select_next(),
                     GridKey::ArrowUp => self.select_prev(),
@@ -472,7 +493,7 @@ impl Component for ContextMenu {
                 }
                 // A click outside the panel (or on a disabled row) dismisses.
                 if !ran && !panel.contains(*pos) {
-                    self.close();
+                    self.fire_dismiss();
                 }
                 Handled::Yes
             }
@@ -493,3 +514,36 @@ impl Component for ContextMenu {
 }
 
 impl LayoutExt for ContextMenu {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::component::{Event, GridKey};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    /// Esc and outside-click fire `on_dismiss` (the host's overlay-close path); selecting an
+    /// entry runs it and closes but is **not** a dismissal.
+    #[test]
+    fn dismiss_fires_on_esc_and_outside_click_not_on_select() {
+        let dismissed = Rc::new(Cell::new(0u32));
+        let ran = Rc::new(Cell::new(0u32));
+        let (d, r) = (dismissed.clone(), ran.clone());
+        let mut m = ContextMenu::new()
+            .entry(MenuEntry::new("Rename", move || r.set(r.get() + 1)).key('r'))
+            .open(true)
+            .on_dismiss(move || d.set(d.get() + 1));
+
+        // Esc → dismiss (fires callback, closes), no entry run.
+        m.event(&Event::Key { key: GridKey::Escape, pressed: true });
+        assert_eq!(dismissed.get(), 1, "Esc fired on_dismiss");
+        assert_eq!(ran.get(), 0);
+        assert!(!m.is_open(), "closed after dismiss");
+
+        // Reopen; a quick-key selection runs the entry and does NOT fire dismiss.
+        m.open.set(true);
+        m.event(&Event::Key { key: GridKey::Char('r'), pressed: true });
+        assert_eq!(ran.get(), 1, "entry ran on quick-key");
+        assert_eq!(dismissed.get(), 1, "a selection is not a dismissal");
+    }
+}

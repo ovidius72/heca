@@ -1398,8 +1398,11 @@ cursor and flips `open`. The panel sizes to its content and flips/clamps to stay
 - **Construct**: `ContextMenu::new()`; add entries with `.entry(MenuEntry::new(label, on_select)
   .icon(Glyph)?.key('x')?.shortcut("prefix+x")?.danger(bool)?.enabled(bool)?)`; `.open(bool)`, `.anchor(Point)`.
 - **Accessors**: `.open_signal() -> Signal<bool>`, `.anchor_signal() -> Signal<Point>`.
+- **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
+  not a selection; selecting an entry runs its `on_select` instead). The host points this at its
+  overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
 - **Nav (built-in)**: ↑/↓ move (skipping disabled), **Enter** runs, a **quick-pick key** runs its
-  entry directly, **Esc** / outside-click close. Hover highlights; click runs. Also `select_next()`,
+  entry directly, **Esc** / outside-click dismiss. Hover highlights; click runs. Also `select_next()`,
   `select_prev()`, `run_selected()`.
 
 ```rust
@@ -1412,6 +1415,15 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 
 > Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
 > (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
+
+> **Declaring from data — host + plugins (in progress).** As with the modal (`open_modal`), the
+> plugin-facing path is a **data spec** the host owns, not hand-built entries: `OverlayHost::
+> open_dropdown(DropdownSpec { anchor, items })` where each item is `{ id, label, action, danger,
+> enabled }` — entries carry an **`Intent`** (not a closure) and their **icon resolves from the
+> action registry** (`ActionCatalog::icon`), so a menu is declarable from native code **and** from a
+> plugin, and selecting an entry dispatches its action through the central confirm gate. Tracked as
+> the `context-menu` phase; `on_dismiss` above is the widget hook `open_dropdown` wires to
+> `CloseOverlay`.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
 > `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
