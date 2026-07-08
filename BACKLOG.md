@@ -1654,6 +1654,38 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
   - Files: `heca-grid-ui/src/widgets/*`, `heca/src/chrome/realize.rs`, `heca/src/chrome/view.rs`.
   - Supersedes the incremental "fill `realize` arms as needed" assumption in `plugin-task-ui-4`.
 
+- [ ] **plugin-task-ui-9 — Complete `realize` for the structured widgets (deferred from the scalar fill).**
+  The scalar `realize` pass (`plugin-task-ui-3`) maps the clean container/leaf kinds; the following
+  still realize to an **empty container** (the `deferred-kinds` match arm in
+  `heca/src/chrome/realize.rs`) because the scalar `ViewNode` model can't express their structured
+  data yet — tracked here so they don't get lost:
+  - `Grid` — track config (columns/rows/areas).
+  - `ItemGroup` — a labeled list of `Item`s.
+  - `DockFrame` — titled, collapsible frame with a body.
+  - `MarkerGroup` — the column/pane marker bar (markers list).
+  - `Tabs` — parallel labels + panels.
+  - `Select` — an options list + selected index (+ `change` intent).
+  - `ScrollBar` / `Toast` — host-driven (content/viewport/offset; severity/dismiss).
+  Needs a model addition (a `PropValue::List` / a structured-children convention), likely **folded
+  into the composition-first pass** (`plugin-task-ui-7`). Each newly-mapped arm must **render
+  correctly (verify), not just compile**. Update the deferred-kinds match in `realize.rs` + tests.
+
+- [ ] **plugin-task-ui-8 (FINAL plugin task) — Complete app iconset + name↔`Glyph` mapping.**
+  The `ViewNode` model references icons **by name** (`PropValue::Glyph(name)`), resolved by
+  `glyph_from_name` (`heca/src/chrome/realize.rs`) against grid-ui's `Glyph` enum. Today both are a
+  **curated stopgap of ~35 icons** (added with the scalar `realize` in `plugin-task-ui-3`). This
+  task defines the **full intended app iconset** so any app/plugin UI can name any icon we ship.
+  - Expand `Glyph` (`heca-grid-ui/src/widgets/icon.rs`) to the complete curated Phosphor set the app
+    wants (icon variants + secondary codepoints).
+  - **Avoid drift:** generate the name↔`Glyph` mapping from a single source (build script / macro /
+    generated table) so the enum and `glyph_from_name` can't diverge — a hand-maintained 1:1 match of
+    hundreds of icons is a bug farm.
+  - Document the available icon **names** for authors (`docs/widgets.md` icon table +
+    `docs/plugin-authoring.md`) and update the showcase icon gallery.
+  - Files: `heca-grid-ui/src/widgets/icon.rs`, `heca/src/chrome/realize.rs`, docs, showcase.
+  - Run this **last** in the plugin arc — once the widget/`realize`/overlay surface is settled, so
+    the iconset is filled against the final set of consumers.
+
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
 Source: `pluggable-chrome-plugin-plan.md` Phase 8.1
