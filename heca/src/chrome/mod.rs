@@ -23,14 +23,14 @@ pub(crate) use view::{
 // Host mapper (plugin-task-ui-3): `ViewNode` → retained grid-ui `Component`. Consumed by the
 // OverlayHost/Modal body (ui-4) and plugin panels — not yet referenced in-binary.
 #[allow(unused_imports)]
-pub(crate) use realize::realize;
+pub(crate) use realize::{realize, FormBindings};
 // Host-owned overlay stack (plugin-task-ui-4, §2.7.1/§2.7.2), built on `LayerRegistry`.
 // `OverlayId` is pub (carried by `WmAction`); the rest is crate-internal.
 pub use overlay::OverlayId;
 #[allow(unused_imports)]
 pub(crate) use overlay::{
-    open_modal, resolve as resolve_overlay, top_modal, ModalAction, ModalResult, ModalSpec,
-    OverlayHost,
+    collect_form as collect_overlay_form, open_modal, resolve as resolve_overlay, top_modal,
+    ModalAction, ModalResult, ModalSpec, OverlayHost,
 };
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};

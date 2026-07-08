@@ -20,7 +20,7 @@ use std::rc::Rc;
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt};
 
 use super::view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
 use crate::app::interaction::{InteractionIntent, InteractionSource};
@@ -124,6 +124,9 @@ type OverlayCompletion = Box<dyn FnOnce(&mut AppState, &ActionRegistry, ModalRes
 #[derive(Default)]
 pub struct OverlayHost {
     completions: HashMap<OverlayId, OverlayCompletion>,
+    /// Per-overlay form bindings — the named value widgets in the modal body, read into
+    /// [`ModalResult::Action`]'s `data` when the overlay is submitted.
+    forms: HashMap<OverlayId, FormBindings>,
 }
 
 /// The front-most open **modal** overlay — the one capturing input — if any. The input path
@@ -155,7 +158,15 @@ pub(crate) fn open_modal(
         });
     });
 
-    let root = build_modal_root(&spec, id, &emit, &mut state.hint_targets, &state.action_shortcuts);
+    let mut forms = FormBindings::default();
+    let root = build_modal_root(
+        &spec,
+        id,
+        &emit,
+        &mut state.hint_targets,
+        &state.action_shortcuts,
+        &mut forms,
+    );
     state.layers.insert(
         id.0,
         LayerBand::Modal,
@@ -164,8 +175,21 @@ pub(crate) fn open_modal(
         root,
     );
     state.overlays.completions.insert(id, Box::new(completion));
+    state.overlays.forms.insert(id, forms);
     state.needs_redraw = true;
     id
+}
+
+/// Read the current values of an overlay's named body fields into a [`PropMap`] — the `data`
+/// handed back in [`ModalResult::Action`]. Empty if the overlay has no form (e.g. a plain
+/// confirm) or is already gone.
+pub(crate) fn collect_form(state: &AppState, overlay: OverlayId) -> PropMap {
+    state
+        .overlays
+        .forms
+        .get(&overlay)
+        .map(FormBindings::collect)
+        .unwrap_or_default()
 }
 
 /// Build the realized `Dialog` tree for a modal. Each action becomes a real `Button` wired the
@@ -179,8 +203,9 @@ fn build_modal_root(
     emit: &ChromeIntentEmitter,
     hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
+    forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let body = super::realize(&spec.body, emit, hints);
+    let body = super::realize(&spec.body, emit, hints, forms);
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
         let variant = if action.danger {
@@ -224,6 +249,7 @@ pub(crate) fn resolve(
     result: ModalResult,
 ) {
     let completion = state.overlays.completions.remove(&overlay);
+    state.overlays.forms.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
     if let Some(comp) = completion {
@@ -261,7 +287,7 @@ mod tests {
         let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
         let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts);
+        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
 
         // Two actions → two hint targets, each a SubmitOverlay for this overlay.
         assert_eq!(hints.checkpoint() - before, 2);
