@@ -231,8 +231,10 @@ impl Component for Tabs {
         if disabled {
             cx.dim(b, 0.0);
         }
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            let r = cx.theme().colors.control_radius();
+            cx.focus_ring(b, ring, r);
         }
     }
 

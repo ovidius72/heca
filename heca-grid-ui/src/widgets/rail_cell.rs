@@ -23,13 +23,6 @@ use crate::widgets::Icon;
 
 /// Default square cell extent (logical px).
 const DEFAULT_CELL: f32 = 40.0;
-/// Active-cell fill alpha (accent tint under the icon).
-const ACTIVE_FILL_ALPHA: u8 = 34;
-/// Hover-cell fill alpha.
-const HOVER_FILL_ALPHA: u8 = 18;
-/// Alpha of the crisp accent border around the active cell — the main "selected"
-/// cue, distinct from a merely tinted/hovered cell.
-const ACTIVE_BORDER_ALPHA: u8 = 190;
 /// Glow radius/intensity of the active cell (scaled by the theme's `glow_size`).
 const ACTIVE_GLOW_RADIUS: f32 = 9.0;
 const ACTIVE_GLOW_INTENSITY: f32 = 0.22;
@@ -145,13 +138,13 @@ impl Component for RailCell {
         if active {
             cx.rect(
                 b,
-                accent.with_alpha(ACTIVE_FILL_ALPHA),
-                Some(Border { color: accent.with_alpha(ACTIVE_BORDER_ALPHA), width: sel_border_w }),
+                accent.with_alpha(cx.theme().colors.interaction.row_active_fill),
+                Some(Border { color: accent.with_alpha(cx.theme().colors.interaction.row_active_border), width: sel_border_w }),
                 cell_radius,
                 Some(Glow { color: glow_c, radius: ACTIVE_GLOW_RADIUS, intensity: ACTIVE_GLOW_INTENSITY }),
             );
         } else if self.hovered.get_untracked() {
-            cx.rect(b, foreground.with_alpha(HOVER_FILL_ALPHA), None, cell_radius, None);
+            cx.rect(b, foreground.with_alpha(cx.theme().colors.interaction.row_hover_fill), None, cell_radius, None);
         }
 
         // The icon (carries its own status color).
@@ -167,10 +160,11 @@ impl Component for RailCell {
         }
         if self.interactive()
             && !disabled
-            && self.base.focus_visible.get_untracked()
+            && self.base.focused.get_untracked()
             && cx.theme().colors.show_focus_border
         {
-            cx.corner_brackets(b, accent);
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(b, ring, cell_radius);
         }
     }
 

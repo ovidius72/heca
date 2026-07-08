@@ -36,8 +36,6 @@ const ANIM_DURATION: f32 = 0.10;
 const GLOW_RADIUS: f32 = 14.0;
 /// Checked-state glow peak intensity.
 const GLOW_INTENSITY: f32 = 0.09;
-/// Border alpha at rest; firms to solid as the box is checked.
-const REST_BORDER_ALPHA: f32 = 150.0;
 
 /// Which side of the box the [`Checkbox`] label sits on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -207,7 +205,7 @@ impl Component for Checkbox {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (surface, accent, glow_c, muted, foreground, radius, bw) = {
+        let (surface, accent, glow_c, muted, foreground, radius, bw, ia) = {
             let t = cx.theme();
             (
                 t.colors.surface,
@@ -217,6 +215,7 @@ impl Component for Checkbox {
                 t.colors.foreground,
                 t.colors.control_radius(),
                 t.colors.border_width,
+                t.colors.interaction,
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -224,7 +223,8 @@ impl Component for Checkbox {
 
         // Box: dark fill, border firms muted → accent. Radius + border width from
         // the theme so the global settings scale this proportionally.
-        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let rest_border = ia.control_rest_border as f32;
+        let border_a = rest_border + (255.0 - rest_border) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
@@ -271,9 +271,10 @@ impl Component for Checkbox {
             cx.dim(self.base.bounds, 0.0);
         }
 
-        // Focus-visible ring around the whole control (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(self.base.bounds, accent);
+        // Focus ring around the whole control — shown whenever focused (theme-aware color).
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(self.base.bounds, ring, radius);
         }
     }
 

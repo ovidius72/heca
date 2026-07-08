@@ -90,13 +90,6 @@ fn default_show_chrome_region() -> bool {
     true
 }
 
-/// Destructive actions (close pane / delete column / delete workspace) ask for
-/// confirmation by default; a `confirm_*` toggle set to `false` performs the action
-/// immediately without the dialog.
-fn default_confirm_destructive() -> bool {
-    true
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SettingsConfig
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -213,19 +206,8 @@ pub struct SettingsConfig {
     /// Show the bottom bar (status bar). `false` fully hides it (zero height).
     #[serde(default = "default_show_chrome_region", alias = "show-bottom-bar")]
     pub show_bottom_bar: bool,
-
-    /// Ask for confirmation (a dialog) before closing a pane. `false` closes
-    /// immediately.
-    #[serde(default = "default_confirm_destructive", alias = "confirm-close-pane")]
-    pub confirm_close_pane: bool,
-    /// Ask for confirmation before deleting a column (and its panes). `false`
-    /// deletes immediately.
-    #[serde(default = "default_confirm_destructive", alias = "confirm-delete-column")]
-    pub confirm_delete_column: bool,
-    /// Ask for confirmation before deleting a workspace (and its contents). `false`
-    /// deletes immediately.
-    #[serde(default = "default_confirm_destructive", alias = "confirm-delete-workspace")]
-    pub confirm_delete_workspace: bool,
+    // Destructive-action confirmation moved to the generic `[confirm]` table
+    // (`ConfirmConfig`, keyed by action name: `close` / `delete_column` / `delete_workspace`).
 }
 
 impl Default for SettingsConfig {
@@ -258,9 +240,6 @@ impl Default for SettingsConfig {
             show_right_sidebar: default_show_chrome_region(),
             show_top_bar: default_show_chrome_region(),
             show_bottom_bar: default_show_chrome_region(),
-            confirm_close_pane: default_confirm_destructive(),
-            confirm_delete_column: default_confirm_destructive(),
-            confirm_delete_workspace: default_confirm_destructive(),
         }
     }
 }
@@ -298,23 +277,7 @@ mod tests {
         assert!(s.show_right_sidebar);
         assert!(s.show_top_bar);
         assert!(s.show_bottom_bar);
-        // Destructive actions confirm by default.
-        assert!(s.confirm_close_pane);
-        assert!(s.confirm_delete_column);
-        assert!(s.confirm_delete_workspace);
-    }
-
-    #[test]
-    fn test_confirm_destructive_toggles_parse() {
-        let s: SettingsConfig = toml::from_str(
-            "confirm_close_pane = false\n\
-             confirm_delete_column = false\n\
-             confirm_delete_workspace = false\n",
-        )
-        .expect("confirm toggles should parse");
-        assert!(!s.confirm_close_pane);
-        assert!(!s.confirm_delete_column);
-        assert!(!s.confirm_delete_workspace);
+        // Destructive-action confirmation now lives in the `[confirm]` table (see confirm.rs).
     }
 
     #[test]

@@ -1207,6 +1207,8 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "pollster",
  "raw-window-handle",
+ "serde",
+ "serde_json",
  "wgpu",
  "window-vibrancy",
  "winit",

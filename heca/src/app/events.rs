@@ -115,47 +115,6 @@ pub(crate) fn handle_window_event(
                 return;
             }
 
-            // The confirm dialog owns the keyboard while open: drive the Modal's
-            // focus/activation directly — the host has the winit modifier state the
-            // widget can't see (Shift+Tab, Ctrl+h/l). A button callback writes a bool
-            // into `confirm_dialog_result`; we drain it through the same resolver as the
-            // pointer path. Replaces the old `InputMode::ConfirmDelete` key handler.
-            if state.confirm_dialog.is_some() {
-                use winit::keyboard::{Key, NamedKey};
-                let is_ctrl = state.modifiers.control_key();
-                let is_shift = state.modifiers.shift_key();
-                if let Some(dialog) = state.confirm_dialog.as_mut() {
-                    match &event.logical_key {
-                        Key::Named(NamedKey::Tab) if is_shift => dialog.focus_prev(),
-                        Key::Named(NamedKey::Tab) => dialog.focus_next(),
-                        Key::Named(NamedKey::ArrowRight) => dialog.focus_next(),
-                        Key::Named(NamedKey::ArrowLeft) => dialog.focus_prev(),
-                        Key::Named(NamedKey::Enter | NamedKey::Space) => dialog.activate_focused(),
-                        Key::Named(NamedKey::Escape) => dialog.request_cancel(),
-                        Key::Character(s) => match s.as_str() {
-                            // Vim-style focus motion (Ctrl+h/l); a bare letter fires a
-                            // button shortcut (e.g. y / n).
-                            "h" if is_ctrl => dialog.focus_prev(),
-                            "l" if is_ctrl => dialog.focus_next(),
-                            _ if !is_ctrl => {
-                                if let Some(c) = s.chars().next() {
-                                    dialog.activate_shortcut(c);
-                                }
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    }
-                }
-                // A button callback may have written a bool result; resolve it (same
-                // drain as the pointer path).
-                let result = state.confirm_dialog_result.borrow_mut().take();
-                if let Some(confirmed) = result {
-                    crate::handlers::resolve_confirm_delete(state, registry, confirmed);
-                }
-                return;
-            }
-
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
             let log_key = &event.logical_key;
@@ -167,6 +126,28 @@ pub(crate) fn handle_window_event(
                 state.modifiers,
             );
             let is_prefix = is_prefix_match(&event_combo, &state.prefix_combo, log_key, &key_text);
+
+            // A visible modal **layer** (overlay dialog) owns the keyboard — EXCEPT the universal
+            // hint picker, which must still reach the modal's buttons (they're collected as hint
+            // targets by the layer system). So the prefix trigger and any in-flight prefix /
+            // hint-pick sequence fall through to the keymap machinery below; every other key is
+            // just forwarded to the modal's root, which self-handles focus/activation/dismiss
+            // (a `Dialog` tracks its own modifier state from the broadcast `ModifiersChanged`).
+            let picker_seq = is_prefix
+                || matches!(
+                    state.input_mode,
+                    crate::app_state::InputMode::Prefix
+                        | crate::app_state::InputMode::HintPick { .. }
+                );
+            if !picker_seq && crate::chrome::top_modal(state).is_some() {
+                if let Some(gk) = winit_key_to_grid_key(&event.logical_key)
+                    && let Some(root) = state.layers.top_modal_root_mut()
+                {
+                    let _ = root.event(&Event::Key { key: gk, pressed: true });
+                }
+                state.mark_full_redraw();
+                return;
+            }
 
             handle_keyboard_input(
                 registry,
@@ -188,6 +169,14 @@ pub(crate) fn handle_window_event(
         WindowEvent::ModifiersChanged(new_mods) => {
             state.modifiers = new_mods.state();
             mouse::on_modifiers_changed(state);
+            // Broadcast to an open modal overlay so a self-contained widget (a `Dialog`) can do
+            // Shift+Tab / Ctrl+h-l itself — its `Event::Key` carries no modifiers.
+            if crate::chrome::top_modal(state).is_some() {
+                let mods = grid_modifiers(state.modifiers);
+                if let Some(root) = state.layers.top_modal_root_mut() {
+                    let _ = root.event(&Event::ModifiersChanged(mods));
+                }
+            }
             // Refresh the cursor affordance: pressing/releasing Cmd over a link
             // toggles the pointer cue even without pointer movement.
             mouse::update_cursor(state, state.mouse.pos);
@@ -210,10 +199,10 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // The confirm dialog owns the pointer while open (hover on OK/Cancel).
-            if state.confirm_dialog.is_some() {
-                if let Some(dialog) = state.confirm_dialog.as_mut() {
-                    let _ = dialog.event(&Event::PointerMoved {
+            // A visible modal layer owns the pointer while open (hover on its buttons).
+            if crate::chrome::top_modal(state).is_some() {
+                if let Some(root) = state.layers.top_modal_root_mut() {
+                    let _ = root.event(&Event::PointerMoved {
                         pos: Point::new(pos.0 as f64, pos.1 as f64),
                     });
                 }
@@ -266,21 +255,16 @@ pub(crate) fn handle_window_event(
                 state.mark_full_redraw();
                 return;
             }
-            // The confirm dialog swallows all button input while open: a press on OK /
-            // Cancel (or the scrim) resolves it; anything else is consumed so clicks
-            // don't leak to panes behind the dialog.
-            if state.confirm_dialog.is_some() {
+            // A visible modal layer swallows all button input: a press on a button (its
+            // `on_click` emits `SubmitOverlay`) or the scrim (`Dialog::on_dismiss` emits
+            // `CloseOverlay`) resolves it; anything else is consumed so clicks don't leak.
+            if crate::chrome::top_modal(state).is_some() {
                 if button_state == ElementState::Pressed {
                     let pos = state.mouse.pos;
-                    if let Some(dialog) = state.confirm_dialog.as_mut() {
-                        let _ = dialog.event(&Event::PointerPressed {
+                    if let Some(root) = state.layers.top_modal_root_mut() {
+                        let _ = root.event(&Event::PointerPressed {
                             pos: Point::new(pos.0 as f64, pos.1 as f64),
                         });
-                    }
-                    // The Modal's OK/Cancel callbacks wrote a bool result; resolve it.
-                    let result = state.confirm_dialog_result.borrow_mut().take();
-                    if let Some(confirmed) = result {
-                        crate::handlers::resolve_confirm_delete(state, registry, confirmed);
                     }
                 }
                 state.mark_full_redraw();
@@ -432,19 +416,10 @@ fn settle_context_menu(
 ) {
     let action = state.context_menu_action.borrow_mut().take();
     if let Some(action) = action {
-        // Destructive menu picks go through the centralized confirm chokepoint (so a
-        // right-click delete honours the same `confirm_*` config as the keyboard);
-        // everything else dispatches normally.
-        if matches!(
-            action,
-            WmAction::ClosePaneById { .. }
-                | WmAction::DeleteColumn { .. }
-                | WmAction::DeleteWorkspace { .. }
-        ) {
-            crate::handlers::request_destructive(state, action, false);
-        } else {
-            dispatch_action(state, registry, source, &action);
-        }
+        // Just dispatch the action — the central destructive gate at the dispatch chokepoint
+        // confirms close/delete picks per `[settings] confirm_*`, identically to every other
+        // surface. No per-surface destructive special-case here.
+        dispatch_action(state, registry, source, &action);
     }
     let closed = state
         .context_menu
@@ -456,16 +431,38 @@ fn settle_context_menu(
     state.mark_full_redraw();
 }
 
-/// Map a winit key to the grid-ui [`GridKey`] the menu understands. Returns `None`
-/// for keys the menu ignores (still swallowed while it is open).
+/// Map a winit key to the grid-ui [`GridKey`] an overlay widget understands (context menu,
+/// modal `Dialog`, …). Returns `None` for keys with no grid equivalent (still swallowed while
+/// the overlay is open). The overlay widget self-handles them (focus/activation/dismiss);
+/// modifiers reach it via the broadcast `Event::ModifiersChanged`.
 fn winit_key_to_grid_key(key: &winit::keyboard::Key) -> Option<GridKey> {
     use winit::keyboard::{Key, NamedKey};
     match key {
         Key::Named(NamedKey::Escape) => Some(GridKey::Escape),
         Key::Named(NamedKey::Enter) => Some(GridKey::Enter),
+        Key::Named(NamedKey::Space) => Some(GridKey::Space),
+        Key::Named(NamedKey::Tab) => Some(GridKey::Tab),
+        Key::Named(NamedKey::Backspace) => Some(GridKey::Backspace),
+        Key::Named(NamedKey::Delete) => Some(GridKey::Delete),
         Key::Named(NamedKey::ArrowUp) => Some(GridKey::ArrowUp),
         Key::Named(NamedKey::ArrowDown) => Some(GridKey::ArrowDown),
+        Key::Named(NamedKey::ArrowLeft) => Some(GridKey::ArrowLeft),
+        Key::Named(NamedKey::ArrowRight) => Some(GridKey::ArrowRight),
+        Key::Named(NamedKey::Home) => Some(GridKey::Home),
+        Key::Named(NamedKey::End) => Some(GridKey::End),
         Key::Character(s) => s.chars().next().map(GridKey::Char),
         _ => None,
+    }
+}
+
+/// The grid-ui [`Modifiers`](heca_grid_ui::Modifiers) mirror of the current winit modifier state
+/// — broadcast to an open overlay so a self-contained widget (e.g. a modal `Dialog`) can do
+/// Shift+Tab / Ctrl+h-l without the host special-casing it.
+fn grid_modifiers(m: winit::keyboard::ModifiersState) -> heca_grid_ui::Modifiers {
+    heca_grid_ui::Modifiers {
+        ctrl: m.control_key(),
+        alt: m.alt_key(),
+        shift: m.shift_key(),
+        meta: m.super_key(),
     }
 }

@@ -100,8 +100,13 @@ const INTENSITY_OPTS: [Intensity; 4] = [
     Intensity::Heavy,
 ];
 
-/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`).
-const SIZE_OPTS: [WidgetSize; 3] = [WidgetSize::Normal, WidgetSize::Small, WidgetSize::Large];
+/// Size-select options, in dropdown order (`NORMAL`, `SMALL`, `LARGE`, `HEADER`).
+const SIZE_OPTS: [WidgetSize; 4] = [
+    WidgetSize::Normal,
+    WidgetSize::Small,
+    WidgetSize::Large,
+    WidgetSize::Header,
+];
 
 /// UI zoom as a **continuous** level in `[ZOOM_MIN, ZOOM_MAX]` (the 0–5 dial). The
 /// factor is geometric — `ZOOM_RATIO^(level - ZOOM_DEFAULT)` — so level 2 == `1.0×`
@@ -605,7 +610,7 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Label::new("SIZE").color(theme.colors.muted).font_scale(0.85))
                 .child(
-                    Select::new(["NORMAL", "SMALL", "LARGE"])
+                    Select::new(["NORMAL", "SMALL", "LARGE", "HEADER"])
                         .selected(size_idx)
                         .on_change(move |a| {
                             if let SignalData::Usize(i) = a.data {
@@ -745,6 +750,16 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                     .on_click(|| println!("[showcase] unzoom")),
                     "Zoom (active)",
                 ))
+                // `WidgetSize::Header`: the emphasized variant for pane/info-bar action
+                // buttons — the glyph out-sizes the body text and the button self-sizes
+                // from the variant (no explicit icon px), so the whole cluster scales
+                // with the bar font. This is exactly what the in-pane header buttons use.
+                .child(Tooltip::new(
+                    IconButton::new(Icon::new(Glyph::Plus).color(theme.colors.foreground))
+                        .size(WidgetSize::Header)
+                        .on_click(|| println!("[showcase] header add")),
+                    "Header size",
+                ))
                 .child(
                     Tooltip::new(
                         IconButton::new(Icon::new(Glyph::Close).color(theme.colors.danger).size(20.0))
@@ -782,6 +797,38 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                 .align(Align::Center)
                 .child(Button::destructive("DELETE PANE…").on_click(move || open.set(true)))
                 .child(modal)
+        })
+        // Dialog: the container counterpart to Modal — a centered panel over a scrim
+        // that holds REAL child components (the body + real action `Button`s), so its
+        // buttons are hint targets + focus-traversed as components (unlike Modal, which
+        // draws its buttons manually). Tab / ←→ move focus, Enter/Space activate. The
+        // buttons close it via the open signal; Esc / scrim fire `on_dismiss` (here it
+        // closes the demo; in `heca` the host points it at a `CloseOverlay` action).
+        // Renders nothing until opened.
+        .child({
+            let dialog = Dialog::new("Delete pane?");
+            let open = dialog.open_signal();
+            let (cancel_open, delete_open, dismiss_open) = (open, open, open);
+            let dialog = dialog
+                .body(Label::new("This action cannot be undone."))
+                .action(
+                    Button::secondary("Cancel").on_click(move || {
+                        println!("[showcase] dialog cancelled");
+                        cancel_open.set(false);
+                    }),
+                )
+                .action(
+                    Button::destructive("Delete").on_click(move || {
+                        println!("[showcase] dialog: pane deleted");
+                        delete_open.set(false);
+                    }),
+                )
+                .on_dismiss(move || dismiss_open.set(false));
+            Flex::row()
+                .gap(12.0)
+                .align(Align::Center)
+                .child(Button::destructive("DELETE PANE (DIALOG)…").on_click(move || open.set(true)))
+                .child(dialog)
         })
         // Pane frame variants: three Panes side-by-side showing None, Bordered,
         // and Bracketed modes. Each has a background + border so the decoration

@@ -34,10 +34,6 @@ const ROW_H_RATIO: f64 = 2.0;
 const PANEL_PAD: f64 = 4.0;
 /// Gap between the trigger and the panel.
 const PANEL_GAP: f64 = 4.0;
-/// Border alpha at rest; firms to solid when focused/open.
-const REST_BORDER_ALPHA: f32 = 150.0;
-/// Highlighted-row fill alpha.
-const HILITE_ALPHA: u8 = 48;
 /// Panel glow.
 const GLOW_RADIUS: f32 = 16.0;
 const GLOW_INTENSITY: f32 = 0.1;
@@ -295,7 +291,7 @@ impl Component for Select {
         self.viewport_h.set(cx.viewport().h);
         let disabled = self.base.disabled.get_untracked();
         let active = self.open || self.base.focused.get_untracked();
-        let (surface, accent, glow_c, muted, foreground, radius, bw) = {
+        let (surface, accent, glow_c, muted, foreground, radius, bw, ia) = {
             let t = cx.theme();
             (
                 t.colors.surface,
@@ -305,6 +301,7 @@ impl Component for Select {
                 t.colors.foreground,
                 t.colors.control_radius(),
                 t.colors.border_width,
+                t.colors.interaction,
             )
         };
         let b = self.base.bounds;
@@ -313,7 +310,8 @@ impl Component for Select {
         // Trigger box: border firms muted → accent when focused/open. Radius +
         // border width come from the theme so global settings scale them.
         let p = if active { 1.0 } else { 0.0 };
-        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let rest_border = ia.control_rest_border as f32;
+        let border_a = rest_border + (255.0 - rest_border) * p;
         let border = Border {
             color: muted.lerp(accent, p).with_alpha(border_a.round() as u8),
             width: bw,
@@ -357,8 +355,9 @@ impl Component for Select {
         if disabled {
             cx.dim(b, radius);
         }
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(b, ring, radius);
         }
 
         // Open option list — painted in the overlay layer (on top of everything).
@@ -387,7 +386,7 @@ impl Component for Select {
                     let i = self.scroll + slot;
                     let row = self.slot_rect(slot);
                     if i == self.highlight {
-                        cx.rect(row, accent.with_alpha(HILITE_ALPHA), None, 2.0, None);
+                        cx.rect(row, accent.with_alpha(cx.theme().colors.interaction.hilite), None, 2.0, None);
                     }
                     // Leave room for the scrollbar on the right when present.
                     let pad_h = self.pad_h();

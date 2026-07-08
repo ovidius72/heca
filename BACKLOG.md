@@ -1221,7 +1221,17 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     done: `ModalButton` exported at crate + prelude level, showcase demo switched to the new
     API, `docs/widgets.md` Modal section rewritten. heca 301 + grid-ui 52+127+1 tests green,
     clippy clean.
-  - **Stage 3 (KeyHint over the dialog) — DEFERRED (2026-07-03).** As specced it collides with
+  - **Stage 3 (KeyHint over the dialog) — ✅ DONE (2026-07-07).** The confirm dialog is now an
+    `OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`) — a Modal-band **`Dialog` layer**
+    with a realized `ViewNode` body + **real `Button` components carrying `.hint_target(...)`**,
+    so `prefix+/` reaches them and click/KeyHint/RPC all emit the same `SubmitOverlay` intent.
+    Blocker (a) fixed: the modal keyboard block in `events.rs` lets the prefix trigger + an active
+    `InputMode::Prefix`/`HintPick` sequence fall through (prefix-first precedence); (b) moot (the
+    dialog is a Modal-band layer painted in the overlay top band); (c) gone (`AppState.confirm_dialog`
+    + `InputMode::ConfirmDelete{action}` removed — the action lives in the overlay completion).
+    Committed `5f80a10`/`fa6e3eb`/`e9f174c`. User-verified. The original deferral notes below are
+    kept for history.
+  - **Stage 3 (KeyHint over the dialog) — DEFERRED (2026-07-03) [historical].** As specced it collides with
     Stage 2's "modal owns the keyboard": (a) `prefix+/` can't reach the picker — the
     `confirm_dialog.is_some()` block in `events.rs` swallows every key before the prefix state
     machine runs, so supporting it means teaching that block to cooperate with the prefix chord;
@@ -1233,6 +1243,18 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
     a vector of arbitrary widgets, `plugin-task-ui-4`): once a modal hosts N arbitrary widgets,
     hinting them becomes worthwhile and the (a)/(b)/(c) surgery is justified — do Stage 3 THEN,
     against the `ViewNode` body, not against the 2-button dialog.
+    - **UPDATE 2026-07-06 — approach superseded by the surface compositor.** The old plan
+      "make `paint_hint_targets`/`collect_hint_targets` additionally walk the open dialog tree"
+      is **no longer how this is done**. With the surface compositor (`docs/surface-compositor.md`),
+      an open overlay is a **modal layer** in `active_hint_targets` — it already suppresses the
+      chrome/pane hints and (b) render-order concern is moot. The remaining work is: migrate the
+      confirm dialog to an `OverlayHost::open_modal` with a **realized `ViewNode` body + real
+      button components carrying `.hint_target(...)`** (the `Modal` widget draws its buttons
+      manually today, so there is nothing to hint). Blocker (a) becomes "let `prefix+/` through
+      while a modal layer is active"; (c) is handled by the overlay's own state, not `InputMode`.
+      The `ViewNode` model now **exists** (`plugin-task-ui-1` DONE). So Stage 3 = the plugin-ui
+      confirm-dialog-as-layer work (see the `plugin-ui execution` entry + `§2.7.2`), not the old
+      tree-walk hack.
 
 - [ ] **sidebar-fu-9 — restyle the bottom (status) bar: badges + tabs + agreed style.**
   The status bar is already a grid-ui component (`theming-task-28` done); rebuild its
@@ -1280,17 +1302,22 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   *"una libreria UI deve fornire le proprietà per un design consistente senza dover ogni volta fare
   calcoli su spazi, padding, font"*). Three concrete library gaps, do as a **dedicated grid-ui
   branch** (design tokens first, then migrate; update showcase + `docs/widgets.md`):
-  1. **Interaction-alpha theme tokens.** Every widget bakes its own hover/border/active alphas
-     (`IconButton` `HOVER_FILL_ALPHA`/`ACTIVE_*`, `Button` per-variant, `Modal` `26/180/200/235`,
-     `Tag`, `RailCell`…). Add theme tokens (e.g. `hover_fill_alpha`, `border_rest/hover_alpha`,
-     `active_fill_alpha`, `disabled_alpha`) + migrate all widgets. (Memory:
-     `grid-ui-widgets-not-fully-theme-driven`.)
-  2. **`WidgetSize` must cover the chrome/header size.** Variants scale the font 0.8/0.9/1.0 (all
-     ≤ font), but chrome header buttons want `header_icon_size = (font*1.25).max(15)` (bigger than
-     body font) — so the pane-header buttons hand-calc px + `.cell(...)` instead of
-     `.size(WidgetSize)`. Add a bigger variant / map variants to absolute control sizes, then
-     MIGRATE the legacy callers (pane-header action buttons `chrome/mod.rs:721`; any other
-     `header_icon_size`/`header_button_cell` user) to `.size(WidgetSize)`.
+  1. **Interaction-alpha theme tokens — DONE (2026-07-06, branch `feat/gridui-styling-foundation`).**
+     Added `Theme.colors.interaction: InteractionAlphas` (`heca-theme/src/theme.rs`, `#[serde(default)]`
+     so presets inherit it) — ~32 `u8` tokens grouped controls/rows/nav/tonal/text/overlays/scrollbar.
+     Migrated ~24 widgets off their const alphas to `cx.theme().colors.interaction.*` (IconButton,
+     Button, Modal, Tag, RailCell, Toggle, Checkbox, Select, Input, ContextMenu, CommandPalette,
+     KeyHint, Tooltip, …). Exact duplicates unified; near-identical values harmonized per family.
+     (Memory: `grid-ui-widgets-not-fully-theme-driven`.)
+  2. **`WidgetSize` must cover the chrome/header size — DONE (2026-07-06).** Added
+     `WidgetSize::Header` (`font_scale 1.25`, `pad_scale 0.4` — emphasized glyph, snug cluster
+     padding) in `heca-grid-ui/src/style.rs`. Migrated the pane-header action buttons
+     (`build_pane_header`, `chrome/mod.rs`) off the hand-calc `header_icon_size`/`header_button_cell`/
+     `.cell(...)` (all three helpers **deleted**) to `IconButton::new(Icon…).size(WidgetSize::Header)`
+     — no explicit icon px, self-sizing squares. The bar's truncation budget now comes from a
+     measure pass on the button cluster (`LayoutEngine…compute`) instead of the deleted width helper.
+     Showcase (SIZE select + toolbar demo) + `docs/widgets.md` (new "Size variants" table +
+     IconButton `Header` note) updated. heca 300 + grid-ui 52+127 + theme 24 green, clippy clean.
   3. **Theme spacing tokens + container padding from the theme — DONE (2026-07-04).** Added
      `Spacing` (None/Xs/Sm/Md/Lg, font-relative `scale()`) in `style.rs` + `Style.pad_spacing_x/y`,
      resolved to px at layout (`layout.rs`, after `base.font`), + `LayoutExt::pad_all`/`pad_x`/`pad_y`
@@ -1300,9 +1327,90 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   - **DONE (2026-07-04) — readable text on tonal fills.** `Color::luminance()` + `heca_theme::Theme::on(fill)`
      (picks background/foreground by luminance contrast) → wired into `Modal` + `Button` (Primary/Destructive)
      so the **danger (red) button label is now light/legible**, accent stays dark. Theme-driven, no hardcoded.
-  Still open in this task: (1) interaction-alpha tokens, (2) `WidgetSize` header-size coverage + migrate
-  pane-header buttons off `header_icon_size`/`.cell`. See memory
+  Sub-items (1) interaction-alpha tokens and (2) `WidgetSize` header-size coverage + pane-header
+  migration are **both DONE (2026-07-06)**; sub-item (3) theme spacing tokens was done 2026-07-04.
+  The three core library gaps of this task are now closed. See memory
   `think-widget-design-before-writing-not-after-correction`.
+
+  **Follow-ups arising (2026-07-06):**
+  - [x] **Centralized button tooltips from the action registry — DONE (2026-07-06).** Every chrome
+    button now reads its shortcut(s) from the keybinding registry by the **action it emits** (never
+    hardcoded, never caller-picked). `shortcut.rs::shortcut_for_action` prefers the user's binding
+    over defaults, shows **all** bindings joined by `/`, and formats the leader with the
+    `PREFIX_SYMBOL` (λ) constant — omitting it when the binding has no `prefix+`. `chrome::ActionShortcuts`
+    (built once via `from_config`) + `action_tooltip(...)` compose the tooltip; `pane_action_name()`
+    bridges emitted→bound action names. The sidebar expand/collapse toggles now carry tooltips too.
+    Documented in `AGENTS.md` (Pane Info Bar → "Chrome buttons → action, tooltip, KeyHint") and
+    `docs/widgets.md` ("Action buttons — tooltip + KeyHint from the action").
+  - [x] **KeyHint on pane-header buttons — DONE (2026-07-06). Shared hint allocator across
+    trees.** Was: `collect_hint_targets`/`paint_hint_targets` walked **only** the chrome tree, and
+    the pane-header buttons (separate per-pane trees `state.pane_headers`) were not hintable.
+    Closed by making `HintTargetRegistry` a **shared monotonic allocator + map on `AppState`**
+    (`state.hint_targets`): ids are globally unique (never reused), so the chrome tree and each
+    header tree — which rebuild on independent cadences — can register into one map without
+    collision; each tree records its contiguous id **range** and `remove_range`s it on
+    rebuild/prune (`render.rs` for chrome, `sync_pane_headers` for headers). `build_chrome_root`
+    and `build_pane_header` both take `&mut HintTargetRegistry`; `handle_hint_pick` +
+    `paint_hint_targets` now walk the chrome tree AND every `state.pane_headers` tree; the pick
+    lookup reads the shared map. Active-targeted buttons (zoom/float) register the new reusable
+    `InteractionIntent::FocusPaneThenAction { pane_id, action }` (dispatch_intent expands it to
+    focus-then-act) so the hint focuses the pane first, exactly like the click. Buttons are built
+    from a **dynamic descriptor vector** `pane_header_buttons() -> Vec<PaneHeaderButton>` (config
+    today, documented **plugin seam** to append later) — the render loop reads only descriptor
+    fields, so config-added/hidden and future plugin buttons are hinted automatically, nothing
+    hardcoded. Docs: AGENTS.md + `docs/widgets.md`. heca 300 green, workspace clippy clean.
+  - [ ] **Global KeyHint picker follow-ups (still open).** The pane-header trees are now walked,
+    but the broader `sidebar-fu-12` (documented "intent ⇒ hintable" picker over *arbitrary* plugin
+    widgets) and `sidebar-fu-13` Stage 3 (KeyHint over an open dialog's widget tree) remain — both
+    can now reuse the shared-allocator + multi-tree-walk machinery this task introduced.
+  - [x] **Focus-ring restyle: CSS-style outline + theme-aware color token — DONE (2026-07-07).**
+    Replaces the corner-bracket focus reticle with a thin accent **outline drawn just outside** the
+    widget (CSS `outline` + offset gap), so it's visible on borderless variants (Ghost/Link) and
+    never merges into the widget's own border — the two problems brackets had. New
+    `PaintCx::focus_ring(rect, color, radius)` (`heca-grid-ui/src/component.rs`); width =
+    `focus_border_width`, halo via `scaled_glow` (vanishes at `glow_size = none`). New **theme token
+    `focus_ring: Option<Color>`** (`heca-theme`, `#[serde(default)]`): unset ⇒ derived per-tone by
+    `effective_focus_ring()` / `focus_ring_tone(base)` = the tone shifted **toward `foreground`** (the
+    `on()` idiom) so it **auto-brightens on dark themes and darkens on light themes** — no hardcoded
+    light/dark, no fixed white/black (the user flagged the light-theme case). **One-token** design:
+    `focus_ring` overrides only the default/accent case; the destructive `danger` ring always
+    derives. Shown whenever the widget is `focused` (not keyboard-only).
+    - **Button** committed + pushed first (`bc8779d`), user-verified on dark + light (fixed
+      `latte` which had `show_focus_border = false`).
+    - **All 12 remaining widgets migrated** `corner_brackets` → `focus_ring`: icon_button,
+      badge_button, scroll_region, tabs, rail_cell, toggle, checkbox, select, item, row, toast
+      (uses `focus_ring_tone(tone)`), input. `focus_ring` is now the universal focus cue; the glowing
+      `PaintCx::corner_brackets` was **removed**. Docs updated across `docs/widgets.md` (PaintCx table,
+      Base props, Button, ScrollRegion, widget-building example), theme docs.
+    - theme 25 + grid-ui 58+127+1 green, clippy clean, heca + showcase build.
+    - **Modal focus-ring consistency — DONE (2026-07-08).** The `Modal` widget drew its focused
+      button's ring **manually** with hardcoded `accent` (blue) regardless of `danger` → its danger
+      button rang blue while the `Dialog`/`Button` path (the app's confirm) tone-follows (danger →
+      danger). Fixed `modal.rs` to use the shared `cx.focus_ring` + tone-following (`focus_ring_tone
+      (danger)` for the danger button, `effective_focus_ring()` otherwise) + `show_focus_border`
+      gate — identical to `Button`. (The two showcase demos — `Modal` vs `Dialog` — now match.)
+    - **[x] DONE (2026-07-08) — overlay click clears button focus (Dialog).** Clicking the modal
+      **body** (not a button) cleared the focused button's ring: `Dialog`'s panel press ran
+      `FocusManager::dispatch` → `focus_at`, which **clears** focus on a click that misses every
+      focusable. Fix is **generic** in `FocusManager` (`focus.rs`): factored the hit-test scan into
+      `hit_test()`, kept `focus_at` (page-level "click empty space to blur"), and added a
+      **trapped-focus** pair — `focus_at_trapped()` / `dispatch_trapped()` — that keeps focus on a
+      miss. `Dialog` now uses `dispatch_trapped` (focus is trapped inside a modal). Regression test
+      `clicking_panel_body_keeps_button_focus`. **`modal.rs` was NOT affected** — `Modal` tracks a
+      plain `focused: usize` index that a body click never clears (verified). Gate: grid-ui
+      59+127+1 green, clippy clean, `heca` compiles.
+    - **[ ] OPEN — `Modal` vs `Dialog` render buttons differently (showcase).** The two confirm
+      demos look different: `Modal` **draws its buttons manually** (`modal.rs` paint) while `Dialog`
+      uses **real `Button`** widgets → different fill/border look (focus is now consistent after
+      `8dae1d1`). `Modal` is legacy — the app's confirm uses `Dialog` (`OverlayHost::open_modal`).
+      Decide: (a) make `Modal` render real `Button`s, or (b) deprecate the `Modal` widget + its
+      showcase demo in favour of `Dialog`.
+    **Dead-code cleanup (done in same change):** the three now-unused `PaintCx` convenience wrappers
+    (`corner_brackets`, `corner_brackets_plain`, `corner_brackets_len`) were **removed**. The
+    lower-level `DrawCommand::Brackets` / `BracketCmd` **primitive is kept** — it is still live: the
+    showcase draws decorative card brackets with it directly (`showcase.rs`) and a Pane test asserts
+    against it (`phase_a.rs`). (Earlier note that "the whole Brackets path is unreachable" was wrong —
+    only the wrapper methods were dead; verified by workspace grep.)
 
 - [x] **sidebar-fu-10 — DONE (branch `feat/sidebar-followups`): sidebar header collapse toggle
   (interim; final both-states version → `app-task-21`).** After GUI feedback (2026-07-03):
@@ -1332,6 +1440,9 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
   ACTION: don't create a parallel task — fold this into `plugin-ui`/`plugin-task-ui-4`; the
   app-side rich confirm dialog is just a consumer. `sidebar-fu-7` ships on the 2-button
   `Modal` first; N-button / rich-body dialogs wait for `plugin-task-ui-4`.
+  **UPDATE 2026-07-06:** the `ViewNode` model now **exists** (`plugin-task-ui-1` DONE,
+  `heca/src/chrome/view.rs`); remaining deps are `realize` (`plugin-task-ui-3`) + Modal `body`
+  (`plugin-task-ui-4`) + `OverlayHost::open_modal` — all now designed in `§2.7.2`.
   **REVIVES `sidebar-fu-13` Stage 3 (KeyHint over the dialog, deferred 2026-07-03):** once the
   `Modal` hosts a `ViewNode` body + a vector of arbitrary widgets, hinting them is worthwhile —
   so this task must ALSO do the deferred Stage 3 surgery (let the prefix chord through the modal
@@ -1439,6 +1550,59 @@ Source: `pluggable-chrome-plugin-plan.md` §3.5 (rows 3–10)
   The plugin-facing container body is a `ViewNode` tree (`plugin-ui`); built-in Rust providers may still build `Component`s directly.
   Files: `heca/src/host.rs`
 
+### [ ] Phase: Declarative action interaction (confirm + response buttons) · `action-interaction`
+Actions declare, **as data**, whether they need a prompt (confirm / choice) and which response
+buttons + outcomes. One central gate at the dispatch chokepoint reads it and drives
+`OverlayHost::open_modal`; built-ins **and plugins** declare it the same way, so no surface
+re-implements confirmation (the guard lives on the action, not the call site). Full design +
+decisions + phases: **`action-interaction-plan.md`** (design locked with the user 2026-07-07).
+
+> **Decisions (locked):** (1) native `Outcome::Callback` included now, native-only, documented
+> meticulously; (2) **runtime** action registry now (replace the `const ALL` catalog); (3) generic
+> `[confirm].<action>` config table; (4) dedicated pure-data `ConfirmSpec` (→ converted to
+> `ModalSpec`). Prerequisite already landed: the central destructive gate (`maybe_confirm_destructive`
+> in `interaction.rs`/`handlers.rs`) — this phase generalizes it from 4 hardcoded variants to data.
+
+- [x] **action-task-A — Runtime registry foundation. DONE (2026-07-07).** Added
+  `ActionCatalog` (`heca/src/actions.rs`) — a runtime metadata store seeded from the built-in
+  `ActionRegistry::ALL` descriptors (`&'static` for now; owned plugin entries land in task-C) — on
+  `AppState.action_catalog`. Migrated every metadata lookup off the `ActionRegistry::{find,icon,label}`
+  **statics** (removed) to the catalog: `mouse.rs` context-menu builders (`entry` takes `&ActionCatalog`),
+  `InputMode::pending_pick(&catalog)` + `render::status_mode_parts(_, &catalog)`, and the two stateless
+  chrome helpers `pane_action_spec`/`sidebar_toggle_button` (threaded `&ActionCatalog` via
+  `PaneHeaderContent.catalog`, alongside the existing `shortcuts`). `by_category`/`count`/`category`/
+  `default_binding` kept (command-palette/RPC introspection). No behavior change; heca 311 tests green,
+  clippy clean. Next: task-B (`ConfirmSpec` + generic gate).
+- [x] **action-task-B — `ConfirmSpec` + generic gate + `[confirm]` config. DONE (2026-07-08).**
+  Added `ConfirmSpec`/`ResponseButton`/`Outcome`/`ButtonRole`/`ConfirmCallback` (`heca/src/actions.rs`,
+  pure data + the native `Callback` documented meticulously per decision 1). The 3 destructive actions
+  are declared specs (`ActionCatalog.confirm`, `confirm_spec(name)`). The central gate
+  `maybe_confirm_destructive` now **reads the catalog spec** (resolves `ClosePane`→`ClosePaneById`,
+  looks up the spec, checks enablement) and raises `open_confirm`, which converts `ConfirmSpec→ModalSpec`
+  and runs the chosen button's `Outcome` via `run_outcome` (`Proceed`=`registry.execute` [gate-bypass,
+  no loop], `Cancel`, `Dispatch`=`dispatch_action`, `Callback`=native closure). Removed
+  `begin_confirm_delete`; `request_destructive` + `run_destructive_now` reimplemented on the spec path;
+  `destructive_message`→`confirm_title` (dynamic title stays code, target-specific). heca 313 tests
+  (2 new: builtin specs + outcome composition), clippy clean. **Behavior preserved** (same forced
+  `[Cancel] [Delete]` modal) — worth an in-app re-check (right-click delete + header close).
+  **B2 DONE (2026-07-08):** generic `[confirm]` table (`heca-config::confirm::ConfirmConfig`, a
+  `HashMap<String,bool>` keyed by action name with `enabled(name, default)`) on `Config.confirm`,
+  replacing the three `[settings] confirm_*` fields (removed from `SettingsConfig`). `AppState.confirm`
+  holds it (built at startup + `prefix+Shift+r` reload); `confirm_enabled()` reads
+  `state.confirm.enabled(name, spec.default_enabled)`. `config.default.toml` gains `[confirm]`
+  (`delete_pane`/`delete_column`/`delete_workspace = true`). A plugin action becomes configurable by name
+  automatically. Also fixed a stale `heca-config` test (`bundled_latte_is_a_light_theme` asserted the
+  old `show_focus_border=false`, changed by the focus-ring commit `8548b92`). Whole workspace green
+  (heca 313, heca-config 78, heca-theme 25, grid-ui 58+127+1), clippy clean.
+- [ ] **action-task-C — Plugin/dev API + docs.** `register(ActionSpec)` for native (with `Callback`);
+  the plugin/WASM declarative path + host adapter (declarative outcomes only); RPC introspection of
+  action metadata; **meticulous `Callback` docs** (native-only, opaque across WASM/RPC). Update
+  `AGENTS.md` "Adding New Actions", `README` (`[confirm]`), `docs/`.
+
+> **Relation to the context-menu → OverlayHost migration** (still open): once this lands, context
+> menus / dropdowns just **dispatch the plain action** and the central gate confirms — no per-menu
+> destructive special-case. Do the menu migration after (or alongside) action-task-B.
+
 ### [ ] Phase: Declarative widget-tree UI model (`ViewNode`) · `plugin-ui`
 The serializable widget tree plugins author, SwiftUI/Flutter-style — a container node
 holds a vector of child widgets — plus the host mapper that realizes it into the retained
@@ -1447,17 +1611,48 @@ config-plugin render (`plugin-task-21`), and the WASM contribution description
 (`plugin-task-26`) all build on this. Do it before the overlay `body` and WASM work.
 Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
 
-- [ ] **plugin-task-ui-1** — Define `ViewNode { kind, props, events, children }`: the closed `WidgetKind` vocabulary (containers `Column`/`Row`/`Grid`/`Card`/`Scroll`/`Panel`; leaves `Label`/`Button`/`Badge`/`Icon`/`Input`/`Toggle`/`StatusDot`/…), `PropMap` (serializable scalars + semantic enums like `Variant`/`WidgetSize`), and `Intent` (action id + args). Must be serializable (WASM-ready). Files: new `heca/src/chrome/view.rs` (or a shared crate for reuse by the WASM SDK).
+- [x] **plugin-task-ui-1 — DONE (2026-07-06, `heca/src/chrome/view.rs`).** `ViewNode { kind, props, events, children }` (events `press`/`change`, aligned to plan §2.6.2) + `PropValue` (scalars + semantic enums `ViewSize`/`ViewVariant`/`ViewAlign`, colors/glyphs as names) + `Intent(action id + args)`, all serde-serializable (JSON round-trip test = WASM-ready). **Scope widened per the user (2026-07-06): the model is app-wide and `WidgetKind` covers the WHOLE grid-ui vocabulary** (containers + `ItemGroup`/`DockFrame`/`MarkerGroup`/`Tabs` + all leaves incl. `IconButton`/`Tag`/`Select`/`Checkbox`/`StatusDot`/`Gauge`/`ScrollBar`/`Alert`/`Toast`/`RailCell`/`Item`), not the original 13-widget subset. **Behaviour is Intent-only** (no closures) so it stays serializable for native AND plugin/WASM; a native escape is deferred until a widget proves inexpressible. This is the first task of executing plugin-ui as the conformant path for the confirm-dialog-as-layer / KeyHint-on-modal work (surface-compositor step 2/A). 3 tests green.
+
+- [x] **Surface compositor + `LayerRegistry` (step 1) — DONE (2026-07-06).** New `docs/surface-compositor.md` = the layered-surface architecture that decides KeyHint visibility (one rule: active-context + geometric occlusion, **no hardcoded z**). `active_hint_targets` (`chrome/mod.rs`) builds the on-screen surface stack (overlays → chrome → panes) and resolves it; replaced the three interim geometric filters. `LayerRegistry` (`chrome/layers.rs`) holds dynamically-added layers (band/kind/modal). Committed: `3809b3c` (compositor) + `14ac690` (registry + ViewNode). Referenced from AGENTS.md + README.md.
+- [x] **plugin-ui execution — ✅ core DONE (2026-07-07).** Design §2.7.2 executed end to end: (1) `InteractionIntent::View` + router/dispatch arm + `dispatch_view_intent` (`interaction.rs`) — DONE `bebb141`; (2) `realize` (`chrome/realize.rs`, `plugin-task-ui-3`) — DONE; (3) `WmAction::SubmitOverlay`/`CloseOverlay` + `OverlayHost::open_modal`/`resolve` (`chrome/overlay.rs`, built on `LayerRegistry`) — DONE `5f80a10`; (4) confirm dialog migrated to a `Dialog` layer with hintable buttons — DONE, **closes `sidebar-fu-13` Stage 3**. Overlay-control actions carry `overlay: OverlayId` (=`LayerId`), injected by the host, intercepted in `dispatch_intent`. Follow-ups: `plugin-task-ui-2` (builder SDK), rich `ViewNode` bodies + data marshalling (`plugin-task-ui-4` remainder), `plugin-task-15` (plugin-facing async `open_modal`/`open_dropdown`), context-menu migration onto `OverlayHost`.
 
 - [ ] **plugin-task-ui-2** — Typed, SwiftUI-style **builder SDK** that emits `ViewNode` (`Column::new().gap(8).child(...)`). Ergonomic authoring layer over the uniform node; the WASM SDK re-exports it.
 
-- [ ] **plugin-task-ui-3** — Host **mapper** `realize(&ViewNode) -> Box<dyn heca_grid_ui::Component>`: recursive walk — instantiate the grid-ui widget per `kind`, resolve `props` against the `Theme`, wire `events` to intent routing, recurse on `children` via `.child(...)`. Translation only — no new layout/paint. Files: `heca/src/chrome/`.
+- [x] **plugin-task-ui-3 — ✅ DONE (2026-07-07, `heca/src/chrome/realize.rs`, committed `bebb141`).** `realize(&ViewNode, emit, hints) -> Box<dyn Component>` — recursive; Column/Row→`Flex`, Label, Button (+ empty-container fallback for kinds filled in incrementally), props resolved, actionable node → `hint_target` + `on_click→emit(View intent)`. **Verify-first resolved: `Box<dyn Component>` is NOT `Component`** → realized children pushed onto `base_mut().children` (or `Dialog::body_boxed`), not `.child(box)`. Prop readers total (untrusted input). 3 tests.
 
-- [ ] **plugin-task-ui-4** — Extend the shipped `Modal` widget (grid-ui) to host a **`body` child subtree** (today it draws title+message only — "there is no child"), so a modal can contain a realized `ViewNode` (table/form/list). `OverlayHost::open_modal` then takes `body: ViewNode` + `actions`. Update the showcase demo + `docs/widgets.md`.
+- [~] **plugin-task-ui-4 — LARGELY DONE for the modal case (2026-07-07).** Instead of extending the manual-draw `Modal`, we added a proper container widget **`heca-grid-ui::Dialog`** (holds a real `body` + real action `Button` children; scrim/centering/focus-trap; self-contained keyboard). `OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`) takes `ModalSpec { title, body: ViewNode, actions }`, realizes the body via `realize`, and builds it into a `Dialog` layer. Showcase demo + `docs/widgets.md` § `Dialog` added. REMAINING: rich bodies with N arbitrary widgets marshalling data back into `ModalResult::Action{data}` (only text bodies today); a `Table` widget (`plugin-task-ui-5`) when a real consumer needs it.
 
 - [ ] **plugin-task-ui-5** — (on demand) Add a first-class `Table` widget to `heca-grid-ui` (columns/header/row-selection/sort) + showcase + `docs/widgets.md` + a mapper arm. Until a real consumer needs it, a table is composed from `Grid`/`Row`/`Label`.
 
 - [ ] **plugin-task-ui-6** — Author docs: a `docs/plugin-authoring.md` with detailed `ViewNode` examples (panel, complex table, modal with a form) + a short "Plugins (upcoming)" pointer in `README.md`. Must be clearly marked **design / target Phase 9 — not yet available** until the WASM runtime (`plugin-08`) ships.
+
+- [ ] **plugin-task-ui-7 — Composition-first widgets: EVERY widget must be able to receive a
+  `ViewNode` (arbitrary child subtree) as its content.** This is the real SwiftUI/Flutter model
+  (plan §2.6.2) — a widget's content is *another widget tree*, e.g. `Label`/`Button` holding
+  `Row[Icon, Text]`, not just a scalar string. **Direction locked with the user (2026-07-08).**
+  - **Why (current gap):** the model is *named but not built*. grid-ui leaves take scalars
+    (`Label::new(String)`, `Button::new(String)`), so you can't put an Icon + Text inside a Label
+    today; and `realize()` (`heca/src/chrome/realize.rs`) implements only **4 of ~30** `WidgetKind`
+    arms (Column/Row/Label/Button) — every other kind falls to an **empty placeholder**. So neither
+    "any widget renders" nor "any widget accepts a child subtree" is true yet.
+  - **Scope:**
+    1. Make grid-ui widgets **composition-first** — accept an arbitrary child `Component`/subtree as
+       content (Flutter's `child: Widget`), not only scalar props. Start with the leaves that most
+       need it (`Label`, `Button`, `IconButton`, `Badge`, `Tag`), then generalize.
+    2. **Complete `realize` coverage** so every `WidgetKind` maps to its widget (no empty fallback);
+       actionable nodes keep getting a `hint_target` for free.
+    3. Result: any `ViewNode` renders, and any widget can host any widget — native and plugin alike.
+  - **Related direction — overlay widget hierarchy (2026-07-08 discussion, not yet a task):**
+    rename the overlay panel to a base **`Overlay`** widget with **`Modal`** (blocking, large,
+    scrollable, `ViewNode` body) and **`Dialog`** (prompt/confirm) as **specializations** of it
+    (composition, not inheritance); "blocking" stays a **layer** property (compositor `modal` flag),
+    not a widget flag. Also fold in the overlay **sizing** (`.panel_size` — `Pct` of viewport / fixed)
+    and **scrollable body** (`ScrollRegion`) gaps raised the same day. Formalize as its own
+    phase before touching the overlay widgets.
+  - **Per the grid-ui rules:** update the showcase + `docs/widgets.md` in the same change; read all
+    styling from the theme; keep the vocabulary host-owned (plugins never invent a `WidgetKind`).
+  - Files: `heca-grid-ui/src/widgets/*`, `heca/src/chrome/realize.rs`, `heca/src/chrome/view.rs`.
+  - Supersedes the incremental "fill `realize` arms as needed" assumption in `plugin-task-ui-4`.
 
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.

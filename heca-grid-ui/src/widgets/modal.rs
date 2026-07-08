@@ -25,12 +25,10 @@ use crate::builders::LayoutExt;
 use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
-use crate::scene::{Border, Glow, Shadow, TextAlign};
+use crate::scene::{Glow, Shadow, TextAlign};
 use std::cell::Cell;
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Scrim (backdrop) alpha over the rest of the UI.
-const SCRIM_ALPHA: u8 = 150;
 /// Panel inner padding.
 const PAD: f64 = 18.0;
 /// Gap between title, message, and the action row.
@@ -359,7 +357,7 @@ impl Component for Modal {
             } else {
                 r.panel
             };
-            cx.rect(scrim, background.with_alpha(SCRIM_ALPHA), None, 0.0, None);
+            cx.rect(scrim, background.with_alpha(cx.theme().colors.interaction.scrim), None, 0.0, None);
 
             // Lift the dialog off the scrim with a soft drop shadow (drawn behind
             // the panel). Independent of the glow/border tokens, so the modal stays
@@ -399,15 +397,16 @@ impl Component for Modal {
                     let on_tone = if b.danger { on_danger } else { on_accent };
                     cx.text(*rect, &b.display(), on_tone, self.base.font, TextAlign::Center, true);
                 }
-                // Focus ring (accent border + soft glow) over whichever is focused.
-                if is_focused {
-                    cx.rect(
-                        *rect,
-                        accent.with_alpha(0),
-                        Some(Border { color: accent, width: 2.0 }),
-                        ctrl_radius,
-                        Some(Glow { color: accent, radius: 6.0, intensity: 0.35 }),
-                    );
+                // Focus ring — the SAME shared `focus_ring` primitive + tone-following as `Button`,
+                // so a Modal's danger button rings in `danger` (not accent), consistent with the
+                // `Dialog`/`Button` path the app actually uses.
+                if is_focused && cx.theme().colors.show_focus_border {
+                    let ring = if b.danger {
+                        cx.theme().colors.focus_ring_tone(danger)
+                    } else {
+                        cx.theme().colors.effective_focus_ring()
+                    };
+                    cx.focus_ring(*rect, ring, ctrl_radius);
                 }
             }
         });

@@ -24,8 +24,6 @@ use crate::scene::{Border, Glow, TextAlign};
 use crate::style::Length;
 use heca_core::layout::{Point, Rectangle, Size};
 
-/// Border alpha at rest (semi-opaque); firms to fully solid on hover.
-const REST_BORDER_ALPHA: f32 = 150.0;
 /// Seconds for a full hover transition.
 const HOVER_DURATION: f32 = 0.10;
 /// Hover glow spread radius (px) — how far the halo reaches (bigger = wider).
@@ -160,11 +158,11 @@ impl Button {
     /// Border that eases from semi-opaque (rest) to solid (hover) by `p`. The
     /// stroke `width` is the theme's `border_width` (so `border_width == 0` means
     /// no border, like every other surface).
-    fn animated_border(&self, c: Color, p: f32, width: f32) -> Option<Border> {
+    fn animated_border(&self, c: Color, p: f32, width: f32, rest_border: f32) -> Option<Border> {
         if !self.show_border || width <= 0.0 {
             return None;
         }
-        let a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p.clamp(0.0, 1.0);
+        let a = rest_border + (255.0 - rest_border) * p.clamp(0.0, 1.0);
         Some(Border {
             color: c.with_alpha(a.round() as u8),
             width,
@@ -258,6 +256,7 @@ impl Component for Button {
             radius,
             on_accent,
             on_danger,
+            ia,
         ) = {
             let t = cx.theme();
             (
@@ -272,6 +271,7 @@ impl Component for Button {
                 t.colors.control_radius(),
                 t.colors.on(t.colors.accent),
                 t.colors.on(t.colors.danger),
+                t.colors.interaction,
             )
         };
         let p = self.progress.clamp(0.0, 1.0);
@@ -282,7 +282,7 @@ impl Component for Button {
                 cx.rect(
                     b,
                     surface,
-                    self.animated_border(accent, p, border_width),
+                    self.animated_border(accent, p, border_width, ia.control_rest_border as f32),
                     radius,
                     None,
                 );
@@ -295,7 +295,7 @@ impl Component for Button {
                 cx.rect(
                     b,
                     surface,
-                    self.animated_border(danger, p, border_width),
+                    self.animated_border(danger, p, border_width, ia.control_rest_border as f32),
                     radius,
                     None,
                 );
@@ -315,7 +315,7 @@ impl Component for Button {
                 cx.rect(
                     b,
                     surface,
-                    self.animated_border(bc, p, border_width),
+                    self.animated_border(bc, p, border_width, ia.control_rest_border as f32),
                     radius,
                     None,
                 );
@@ -332,7 +332,7 @@ impl Component for Button {
                 cx.rect(
                     b,
                     fill,
-                    self.animated_border(muted.lerp(accent, p), p, border_width),
+                    self.animated_border(muted.lerp(accent, p), p, border_width, ia.control_rest_border as f32),
                     radius,
                     g,
                 );
@@ -374,9 +374,19 @@ impl Component for Button {
             cx.dim(b, radius);
         }
 
-        // Focus ring — only for keyboard focus (focus-visible) and when enabled.
-        if self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, accent);
+        // Focus ring — shown whenever the button is focused (not keyboard-only) and enabled. It
+        // follows the button's own tone (a destructive button rings in `danger`, not `accent`) so
+        // the focus cue matches the widget's border colour instead of clashing with it.
+        if self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            // Focus-outline tone (theme-driven, light/dark-aware): the accent case uses the
+            // theme's `focus_ring` token or the accent shifted toward `foreground`; a destructive
+            // button derives the same shift from its own `danger` tone. Both stay distinct from the
+            // widget's border on dark AND light themes.
+            let ring = match self.variant {
+                ButtonVariant::Destructive => cx.theme().colors.focus_ring_tone(danger),
+                _ => cx.theme().colors.effective_focus_ring(),
+            };
+            cx.focus_ring(b, ring, radius);
         }
     }
 

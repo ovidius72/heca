@@ -58,13 +58,10 @@ impl ActionCategory {
     }
 }
 
-/// Static descriptor for a window-manager action.
+/// Static descriptor for a window-manager action. The built-in set lives in
+/// [`ActionRegistry::ALL`]; [`ActionCatalog`] loads them into the runtime, plugin-extensible
+/// metadata surface every UI reads from.
 #[derive(Debug, Clone, Copy)]
-// Preserved for the command palette and RPC introspection (not yet implemented).
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "descriptor fields are preserved for command-palette and RPC metadata")
-)]
 pub struct ActionDescriptor {
     /// Config key name (e.g. "focus_left").
     pub name: &'static str,
@@ -75,6 +72,8 @@ pub struct ActionDescriptor {
     /// Category for grouping.
     pub category: ActionCategory,
     /// Default keybinding string (e.g. "h,ArrowLeft").
+    // Preserved for the command palette + RPC introspection (read in tests only for now).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub default_binding: &'static str,
     /// Centralized action icon. The single source of an action's [`Glyph`] —
     /// every surface that renders this action (pane-action bar, context menu,
@@ -143,14 +142,12 @@ impl ActionRegistry {
     }
 }
 
-// ── Static metadata catalog for command palette and RPC introspection ──
-// Not yet consumed by runtime UI; preserved for planned features.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "metadata catalog is preserved for planned command-palette and RPC introspection")
-)]
+// ── Built-in action metadata seed ──
+// The compile-time catalog of built-in actions. `ActionCatalog::with_builtins()` loads this into
+// the runtime, plugin-extensible catalog owned by `AppState`; every UI surface resolves metadata
+// through that catalog, not this const directly.
 impl ActionRegistry {
-    /// All registered actions in a stable order.
+    /// The built-in action descriptors, in a stable order. Seed for [`ActionCatalog`].
     pub const ALL: &[ActionDescriptor] = &[
         // ── Navigation ──
         ActionDescriptor {
@@ -1050,30 +1047,227 @@ impl ActionRegistry {
         },
     ];
 
+}
+
+/// Runtime catalog of action metadata, owned by [`AppState`](crate::app_state::AppState).
+///
+/// Seeded from the built-in [`ActionRegistry::ALL`] descriptors at startup and (plugin action API)
+/// extended by plugins. The single runtime home every UI surface resolves action metadata through —
+/// replacing the old `ActionRegistry::find/icon/label/...` statics, so the set of actions (and their
+/// icons/labels/confirmation) is a runtime, extensible surface rather than a compile-time constant.
+///
+/// Phase A holds built-ins as `&'static ActionDescriptor` (zero-copy). Owned plugin entries (with
+/// `String` metadata) arrive with the plugin action API.
+pub struct ActionCatalog {
+    by_name: HashMap<&'static str, &'static ActionDescriptor>,
+    order: Vec<&'static ActionDescriptor>,
+    /// Declarative confirmation requirement per action **config name** (see [`ConfirmSpec`]). The
+    /// central gate reads this to decide whether an action needs a confirm/response prompt — the
+    /// guard lives on the action, not the call site. Seeded with the built-in destructive actions;
+    /// plugins register their own with the plugin action API.
+    confirm: HashMap<&'static str, ConfirmSpec>,
+}
+
+impl ActionCatalog {
+    /// Build the catalog seeded from the built-in [`ActionRegistry::ALL`] descriptors.
+    pub fn with_builtins() -> Self {
+        let order: Vec<&'static ActionDescriptor> = ActionRegistry::ALL.iter().collect();
+        let by_name = order.iter().map(|d| (d.name, *d)).collect();
+        Self {
+            by_name,
+            order,
+            confirm: builtin_confirm_specs(),
+        }
+    }
+
+    /// The declarative confirmation spec for an action **config name**, if it needs confirmation.
+    pub fn confirm_spec(&self, name: &str) -> Option<&ConfirmSpec> {
+        self.confirm.get(name)
+    }
+
     /// Look up an action descriptor by its config name.
-    pub fn find(name: &str) -> Option<&'static ActionDescriptor> {
-        Self::ALL.iter().find(|d| d.name == name)
+    pub fn find(&self, name: &str) -> Option<&'static ActionDescriptor> {
+        self.by_name.get(name).copied()
     }
 
-    /// The icon [`Glyph`] for an action, by config name — read straight from the
-    /// action's [`ActionDescriptor::icon`]. The single registry-level source of
-    /// action iconography: every surface (pane-action bar, context menu, command
-    /// palette) resolves icons through here, so none invents its own.
-    pub fn icon(name: &str) -> Option<Glyph> {
-        Self::find(name).and_then(|d| d.icon)
+    /// The icon [`Glyph`] for an action, by config name — the single source of action iconography
+    /// (pane-action bar, context menu, command palette all resolve through here).
+    pub fn icon(&self, name: &str) -> Option<Glyph> {
+        self.find(name).and_then(|d| d.icon)
     }
 
-    /// Return all actions in a given category.
+    /// The human-readable label for an action, by config name — so a caller names the action
+    /// rather than re-spelling the label.
+    pub fn label(&self, name: &str) -> Option<&'static str> {
+        self.find(name).map(|d| d.label)
+    }
+
+    /// All actions in a given category, in stable order.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+    )]
     pub fn by_category(
+        &self,
         category: ActionCategory,
-    ) -> impl Iterator<Item = &'static ActionDescriptor> {
-        Self::ALL.iter().filter(move |d| d.category == category)
+    ) -> impl Iterator<Item = &'static ActionDescriptor> + '_ {
+        self.order.iter().copied().filter(move |d| d.category == category)
     }
 
-    /// Total number of registered actions.
-    pub fn count() -> usize {
-        Self::ALL.len()
+    /// Total number of catalogued actions.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "preserved for the command palette + RPC introspection")
+    )]
+    pub fn count(&self) -> usize {
+        self.order.len()
     }
+}
+
+impl Default for ActionCatalog {
+    fn default() -> Self {
+        Self::with_builtins()
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Declarative action confirmation / response (action-interaction plan, Phase B)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A **native** outcome callback (see [`Outcome::Callback`]). Runs once when its response button is
+/// chosen, receiving the live [`AppState`](crate::app_state::AppState) + [`ActionRegistry`].
+///
+/// **NATIVE-ONLY — read before using.** A closure is not serializable, so it can never cross the
+/// WASM or RPC boundary; the plugin-facing builder does **not** expose it, and when an action's
+/// metadata is serialized (RPC/introspection) a `Callback` outcome is rendered **opaquely**
+/// (e.g. `"native"`), never silently dropped. **Prefer [`Outcome::Dispatch`]** (portable, testable,
+/// RPC-drivable): reach for `Callback` only when the logic genuinely cannot be a named action — and
+/// first ask whether a small native action + `Dispatch` is cleaner. It runs *after* the user chose,
+/// so it executes directly and does not re-enter interaction policy; do not use it to smuggle
+/// un-gated destructive work (compose `Dispatch`/`Proceed` for that). Captured state must be
+/// `'static` (the `Rc`), like every [`open_modal`](crate::chrome::open_modal) completion.
+pub type ConfirmCallback = std::rc::Rc<dyn Fn(&mut crate::app_state::AppState, &ActionRegistry)>;
+
+/// The role of a confirmation response button — drives initial focus (Default/Cancel), the danger
+/// tint (Danger), and which button Esc / scrim maps to (Cancel).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonRole {
+    /// The safe default — takes initial focus so Enter activates it.
+    Default,
+    /// The cancel choice — Esc / scrim (when dismissible) resolve to this button's outcome.
+    Cancel,
+    /// A destructive choice — rendered with the danger tint.
+    Danger,
+}
+
+/// What choosing a response button does. Declarative variants (`Proceed`/`Cancel`/`Dispatch`) are
+/// serializable and plugin/RPC-safe; [`Callback`](Outcome::Callback) is a native-only escape hatch.
+#[derive(Clone)]
+pub enum Outcome {
+    /// Run the **original gated action** (the "yes, do it"). Executed via `registry.execute`, which
+    /// bypasses the dispatch gate that raised the prompt (no loop).
+    Proceed,
+    /// Do nothing.
+    Cancel,
+    /// Dispatch **another** action (declarative — plugin/RPC-safe); it is policy-routed normally.
+    // Used by plugin-declared confirmations (Phase C) + tests; the built-in specs use Proceed/Cancel.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Dispatch(crate::input::WmAction),
+    /// Run a native closure. **Native-only** — see [`ConfirmCallback`].
+    #[cfg_attr(not(test), allow(dead_code))]
+    Callback(ConfirmCallback),
+}
+
+/// One response button of a [`ConfirmSpec`].
+#[derive(Clone)]
+pub struct ResponseButton {
+    /// Comes back in [`ModalResult::Action`](crate::chrome::ModalResult); also the tooltip action id.
+    pub id: String,
+    pub label: String,
+    pub role: ButtonRole,
+    pub outcome: Outcome,
+}
+
+impl ResponseButton {
+    /// A `Cancel`-role button that does nothing (the safe default choice).
+    pub fn cancel(id: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            role: ButtonRole::Cancel,
+            outcome: Outcome::Cancel,
+        }
+    }
+
+    /// A button that runs the original action ([`Outcome::Proceed`]); `danger` gives it the
+    /// destructive tint + `Danger` role, otherwise the `Default` role.
+    pub fn proceed(id: impl Into<String>, label: impl Into<String>, danger: bool) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            role: if danger { ButtonRole::Danger } else { ButtonRole::Default },
+            outcome: Outcome::Proceed,
+        }
+    }
+
+    /// A fully-specified button.
+    // Used by plugin-declared confirmations (Phase C) + tests; the built-in specs use the
+    // `cancel`/`proceed` constructors.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn new(
+        id: impl Into<String>,
+        label: impl Into<String>,
+        role: ButtonRole,
+        outcome: Outcome,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            role,
+            outcome,
+        }
+    }
+}
+
+/// Declarative confirmation / response requirement attached to an action. Pure data (the native
+/// [`Outcome::Callback`] aside): the central gate converts it to a
+/// [`ModalSpec`](crate::chrome::ModalSpec) at open time and runs the chosen button's [`Outcome`].
+/// The action's **title** stays dynamic (computed by the gate from the concrete target); this spec
+/// owns the reusable parts — the body message, the response buttons + outcomes, whether the choice
+/// is forced, and the on/off config key.
+#[derive(Clone)]
+pub struct ConfirmSpec {
+    /// Body message under the (dynamic) title — e.g. "This action cannot be undone."
+    pub message: String,
+    /// The response buttons (2 for yes/no, 3 for yes/no/cancel, N for anything).
+    pub buttons: Vec<ResponseButton>,
+    /// `false` = forced decision (Esc / scrim swallowed) — mirrors `Dialog::dismissible`.
+    pub dismissible: bool,
+    /// Config key under `[confirm]` that toggles this prompt on/off (Phase B maps the three
+    /// built-ins to the existing `[settings] confirm_*` flags; the generic `[confirm]` table is
+    /// Phase B2). Defaults to [`default_enabled`](ConfirmSpec::default_enabled) when unset.
+    pub config_name: String,
+    pub default_enabled: bool,
+}
+
+/// The built-in confirmation specs, keyed by action config name. The three destructive actions —
+/// close pane / delete column / delete workspace — each get a `[Cancel] [<verb>]` forced prompt.
+fn builtin_confirm_specs() -> HashMap<&'static str, ConfirmSpec> {
+    let mk = |config_name: &'static str, verb: &str| ConfirmSpec {
+        message: "This action cannot be undone.".to_string(),
+        buttons: vec![
+            ResponseButton::cancel("cancel", "Cancel"),
+            ResponseButton::proceed("confirm", verb, true),
+        ],
+        dismissible: false,
+        config_name: config_name.to_string(),
+        default_enabled: true,
+    };
+    HashMap::from([
+        ("delete_pane", mk("delete_pane", "Close")),
+        ("delete_column", mk("delete_column", "Delete")),
+        ("delete_workspace", mk("delete_workspace", "Delete")),
+    ])
 }
 
 #[cfg(test)]
@@ -1094,12 +1288,16 @@ mod tests {
 
     #[test]
     fn test_registry_has_actions() {
-        assert!(ActionRegistry::count() > 0, "registry should not be empty");
+        assert!(
+            ActionCatalog::with_builtins().count() > 0,
+            "catalog should not be empty"
+        );
     }
 
     #[test]
     fn test_find_known_action() {
-        let desc = ActionRegistry::find("focus_left");
+        let catalog = ActionCatalog::with_builtins();
+        let desc = catalog.find("focus_left");
         assert!(desc.is_some(), "should find focus_left");
         let desc = desc.unwrap();
         assert_eq!(desc.label, "Focus Column Left");
@@ -1108,11 +1306,12 @@ mod tests {
 
     #[test]
     fn test_find_unknown_action() {
-        assert!(ActionRegistry::find("nonexistent").is_none());
+        assert!(ActionCatalog::with_builtins().find("nonexistent").is_none());
     }
 
     #[test]
     fn test_selection_action_descriptors_exist() {
+        let catalog = ActionCatalog::with_builtins();
         for name in [
             "enter_selection_mode",
             "selection_left",
@@ -1123,7 +1322,7 @@ mod tests {
             "copy_selection",
             "paste_clipboard",
         ] {
-            let desc = ActionRegistry::find(name);
+            let desc = catalog.find(name);
             assert!(desc.is_some(), "missing descriptor for {name}");
             let desc = desc.unwrap();
             assert!(
@@ -1140,10 +1339,11 @@ mod tests {
 
     #[test]
     fn test_by_category() {
-        let nav_count = ActionRegistry::by_category(ActionCategory::Navigation).count();
+        let catalog = ActionCatalog::with_builtins();
+        let nav_count = catalog.by_category(ActionCategory::Navigation).count();
         assert!(nav_count > 0, "should have navigation actions");
 
-        let sys_count = ActionRegistry::by_category(ActionCategory::System).count();
+        let sys_count = catalog.by_category(ActionCategory::System).count();
         assert!(sys_count > 0, "should have system actions");
     }
 
@@ -1199,8 +1399,64 @@ mod tests {
     }
 
     #[test]
+    fn builtin_confirm_specs_are_declared_for_the_destructive_actions() {
+        let catalog = ActionCatalog::with_builtins();
+        // The three destructive actions each carry a forced [Cancel] [<danger Proceed>] prompt.
+        for name in ["delete_pane", "delete_column", "delete_workspace"] {
+            let spec = catalog
+                .confirm_spec(name)
+                .unwrap_or_else(|| panic!("missing confirm spec for {name}"));
+            assert!(!spec.dismissible, "{name} is a forced decision");
+            assert!(spec.default_enabled);
+            assert_eq!(spec.config_name, name);
+            assert_eq!(spec.buttons.len(), 2, "{name}: cancel + confirm");
+            assert_eq!(spec.buttons[0].role, ButtonRole::Cancel);
+            assert_eq!(spec.buttons[1].role, ButtonRole::Danger);
+            assert!(matches!(spec.buttons[1].outcome, Outcome::Proceed));
+        }
+        // Non-destructive actions carry no confirm spec.
+        assert!(catalog.confirm_spec("focus_left").is_none());
+    }
+
+    #[test]
+    fn outcome_variants_compose() {
+        // All four outcomes construct (the declarative three + the native Callback). This also
+        // exercises the ResponseButton constructors + `new`.
+        let fired = std::rc::Rc::new(std::cell::Cell::new(0u32));
+        let f = fired.clone();
+        let buttons = [
+            ResponseButton::cancel("cancel", "Cancel"),
+            ResponseButton::proceed("ok", "OK", false),
+            ResponseButton::new(
+                "other",
+                "Discard",
+                ButtonRole::Default,
+                Outcome::Dispatch(crate::input::WmAction::ReloadConfig),
+            ),
+            ResponseButton::new(
+                "cb",
+                "Run",
+                ButtonRole::Default,
+                Outcome::Callback(std::rc::Rc::new(move |_state, _reg| f.set(f.get() + 1))),
+            ),
+        ];
+        assert_eq!(buttons.len(), 4);
+        // The callback is a stored `Rc<dyn Fn>` — invoking it (as `run_outcome` would) runs once.
+        if let Outcome::Callback(cb) = &buttons[3].outcome {
+            // Can't build a full AppState/registry here, so just confirm the closure is wired;
+            // end-to-end firing is covered by in-app verification + the gate's existing tests.
+            let _ = cb; // callback is present and typed correctly
+        } else {
+            panic!("expected a Callback outcome");
+        }
+        assert_eq!(fired.get(), 0, "constructing does not fire the callback");
+    }
+
+    #[test]
     fn test_session_category_exists() {
-        let count = ActionRegistry::by_category(ActionCategory::Session).count();
+        let count = ActionCatalog::with_builtins()
+            .by_category(ActionCategory::Session)
+            .count();
         assert_eq!(
             count, 0,
             "no actions in Session category yet, but variant is reserved"

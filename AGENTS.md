@@ -12,6 +12,7 @@ These are made over and over. **Violating either = redo.**
 ### 1. UI work → use the existing `heca-grid-ui` widgets. They exist. There is a showcase.
 - **Before building ANY UI**, look at what already exists:
   - **Widget catalog + recipes:** [`docs/widgets.md`](docs/widgets.md) (every widget + a "Drag and drop" section + patterns).
+  - **Layering / overlays / KeyHint visibility:** [`docs/surface-compositor.md`](docs/surface-compositor.md) — the surface-tree model that decides which layers/buttons are interactive. **Required reading before adding any layer, surface, overlay/modal, exposé, or a button on a new surface.**
   - **The living reference:** run the showcase — `cargo run -p heca-renderer --example showcase` —
     it exercises **every** widget + chrome recipes. Look at it before hand-rolling anything.
   - Widgets available today (non-exhaustive): `Flex`, `Surface`, `Row`, `Item`, `ItemGroup`,
@@ -43,6 +44,15 @@ These are made over and over. **Violating either = redo.**
 - **Every keybinding goes through `KeymapRegistry`** (`heca/src/keymap.rs`) and is **configurable in
   `config.toml`** — never hardcode a key→behavior mapping in handlers. heca is tmux-like: bindings
   go through the prefix (see § Keybinding Style).
+- **EVERY setting → `config.default.toml`, EVERY keybound action → `keybindings.default.toml`.**
+  These embedded files are the **single source of truth** for defaults. Adding a `SettingsConfig`
+  field (`heca-config/src/settings.rs`) or a bound `WmAction` but **not** writing it into the
+  matching default file is a **bug** — the default then lives only in code (`#[serde(default=…)]`),
+  invisible and undiscoverable to the user. Whenever you add/rename a setting, add it (with a
+  comment) under the right `[section]` in `config.default.toml`; whenever you add a keybound action,
+  add its default in `keybindings.default.toml`. Parameterized, non-config-bindable actions (e.g.
+  `SubmitOverlay`) are the only exception to the keybinding file. When in doubt, **audit** that every
+  `SettingsConfig` field appears in `config.default.toml` and every default binding is present.
 - Adding an action? Follow the **"Adding New Actions" checklist** (§ below) end to end — `WmAction`
   variant → `action_from_name` → priority → handler → `build_registry` → default binding → descriptor.
 - Rule: a capability must be reachable from **mouse + keybinding/action + RPC**, never one surface only.
@@ -407,14 +417,77 @@ Both are typed enums in `heca-config/src/appearance.rs`, `#[serde(rename_all = "
 **To add a new action kind:**
 1. Add the variant to `PaneAction` (`heca-config/src/appearance.rs`).
 2. Map it in `pane_action_spec()` (`heca/src/chrome/mod.rs`) → `(Glyph icon,
-   WmAction, label)`. Reuse an **existing** `WmAction` (e.g. `Float` → `WmAction::Float`,
-   `zoom` → `WmAction::ZoomColumn`); do not invent a parallel code path. Tooltips
-   pick up the real keybinding automatically via `PaneActionHints`/`format_binding`
-   — no new keymap entry needed if the action already has a binding.
+   WmAction, label, needs_focus)`, and give it a config **name** in
+   `pane_action_name()` (same file). Reuse an **existing** `WmAction` (e.g. `Float`
+   → `WmAction::Float`, `zoom` → `WmAction::ZoomColumn`); do not invent a parallel
+   code path. The tooltip (and its keybind) is then automatic — see **§ Chrome
+   buttons** below. No new keymap entry needed if the action already has a binding.
 3. Per the action checklist, the action must already be reachable from keyboard +
    RPC; the button just adds the mouse/UI path.
 4. Update the showcase pane-header demo + `docs/widgets.md` (grid-ui rule),
    `README.md` (supported-actions table), and `config.default.toml`.
+
+### Chrome buttons → action, tooltip, KeyHint (centralized — do NOT hand-roll)
+
+Every clickable chrome button is tied to the **`WmAction` it triggers**, and both
+its tooltip and its `prefix+/` hint are derived **from that action** — a caller (or
+plugin) never picks a shortcut string, hardcodes the leader symbol, or hand-builds a
+tip. This is the one pattern; follow it for any new button.
+
+> **Which hints are actually shown** is decided by the layered **surface compositor**, not
+> per-feature: a button inherits its layer from the surface it lives in, and one uniform
+> rule (context activation + geometric occlusion, no hardcoded z) picks the visible set.
+> **Read [`docs/surface-compositor.md`](docs/surface-compositor.md) before adding any new
+> layer, surface, overlay/modal, or a button on a new surface.** Never add a bespoke
+> visibility filter — model the surface instead.
+
+**1. Tooltip with the live keybinding — `action_tooltip(...)`** (`heca/src/chrome/mod.rs`):
+```rust
+row = row.child(action_tooltip(button, action_name, label, &state.action_shortcuts));
+```
+- `action_name` is the action's **config name** (`"close"`, `"sidebar_left"`, …) — the
+  canonical identity. The emitted `WmAction` may be a button-only variant
+  (`ClosePaneById`, `AddPaneToColumn`) that isn't itself bound, so the *name* is the key.
+- `ActionShortcuts` (on `AppState`, built at load **and** reload from
+  `ActionShortcuts::from_config`) resolves the shortcut once per config via
+  `shortcut::shortcut_for_action(name, user, defaults)`. That reads the **user's real
+  binding when overridden** (falling back to the bundled default only when the user
+  hasn't rebound it), supports **multiple** bindings (joined ` / `), and renders the
+  leader through `shortcut::PREFIX_SYMBOL` (`λ`) — **never** a literal symbol, never
+  the macOS `⌃⌥⇧⌘` form. Rebinding in `config.toml` + reload updates every tooltip.
+- Result: `tip = "<label>  <shortcut(s)>"`, or the label alone when unbound.
+
+**2. KeyHint (vimium-style `prefix+/` pick)** — register the **same intent** the click
+sends and attach it to the widget so the picker can target it by letter:
+```rust
+let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
+let button = IconButton::new(icon).hint_target(hint_id).on_click(move || {
+    emit(InteractionIntent::ActivateAction(action.clone()));
+});
+```
+`hints` is a `&mut HintTargetRegistry` — the **shared** allocator that lives on
+`AppState` and spans **every** retained tree that carries hint targets. It is threaded
+through `build_chrome_root` **and** `build_pane_header`. Ids are **monotonic** (never
+reused), so targets from trees that rebuild on different cadences (the chrome tree vs.
+each per-pane header tree) never collide; each tree records the contiguous id **range**
+it registered and calls `hint_targets.remove_range(range)` when it is rebuilt or pruned
+(see `render.rs` for the chrome tree, `sync_pane_headers` for the headers). The pick
+path (`handle_hint_pick` + `paint_hint_targets`) walks the chrome tree **and** all
+`state.pane_headers` trees; resolution reads the one shared map. See
+`sidebar_toggle_button` for a complete example (tooltip + hint together).
+
+- **Active-targeted buttons must focus first.** A pane button whose action acts on the
+  *focused* pane (zoom/float — no pane id in the `WmAction`) registers
+  `InteractionIntent::FocusPaneThenAction { pane_id, action }`, which `dispatch_intent`
+  expands into a `FocusPane` then the action — mirroring what the click does across two
+  events. Pane-parameterized actions (close/move/split carry the pane) just use
+  `ActivateAction`.
+- **The button set is a dynamic vector, never a hardcoded switch.** Pane-header buttons
+  come from `pane_header_buttons(content, ctx) -> Vec<PaneHeaderButton>` (config's
+  `[pane] title_actions` today; the documented **plugin seam** appends there later). The
+  build loop only reads the descriptor fields (glyph / action name / `WmAction` / focus),
+  so config-added, config-hidden, and future plugin-added buttons are tooltip'd + hinted
+  automatically. Do **not** re-introduce a per-action `match` in the render loop.
 
 ### Planned parameterized binding contract
 

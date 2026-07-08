@@ -54,9 +54,6 @@ const TOP_INSET: f64 = 2.0;
 const RIGHT_INSET: f64 = 6.0;
 /// Per-glyph advance estimate (fraction of font) for sizing the keycap to its text.
 const GLYPH_ADVANCE_FRAC: f32 = 0.62;
-/// Keycap fill alpha — slightly translucent so it reads as an overlay, not a
-/// solid bright block over the target.
-const KEYCAP_ALPHA: u8 = 200;
 /// Keycap glow intensity (scaled by the theme `glow_size`) — soft, not blazing.
 const KEYCAP_GLOW: f32 = 0.45;
 
@@ -91,11 +88,13 @@ pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, col
     let keycap_c = color.unwrap_or(accent);
     let keycap_glow = color.unwrap_or(glow_c);
     let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
-    // Softly-glowing, slightly translucent keycap; dark bold glyph on top for
-    // contrast on dark.
+    // Opaque base (carrying the glow) so the chip never lets underlying content bleed
+    // through — a keycap stamped over an icon/glyph (e.g. a drag handle or toolbar icon)
+    // must stay legible, not show a ghost of what's beneath it. Over a dark surface this
+    // matches the old translucent look; over content it hides it.
     cx.rect(
         cap,
-        keycap_c.with_alpha(KEYCAP_ALPHA),
+        background,
         None,
         radius,
         Some(Glow {
@@ -103,6 +102,14 @@ pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, col
             radius: 6.0,
             intensity: KEYCAP_GLOW,
         }),
+    );
+    // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
+    cx.rect(
+        cap,
+        keycap_c.with_alpha(cx.theme().colors.interaction.keycap),
+        None,
+        radius,
+        None,
     );
     cx.text(cap, text, background, font, TextAlign::Center, true);
 }

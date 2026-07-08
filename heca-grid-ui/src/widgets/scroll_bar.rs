@@ -20,10 +20,6 @@ const THUMB_W: f64 = 3.0;
 const THUMB_RIGHT_INSET: f64 = 1.5;
 /// Minimum thumb height so long histories stay grabbable.
 const MIN_THUMB: f64 = 24.0;
-/// Resting thumb alpha.
-const THUMB_REST_ALPHA: u8 = 90;
-/// Hover/drag thumb alpha.
-const THUMB_HOVER_ALPHA: u8 = 200;
 /// Glow intensity at rest.
 const GLOW_REST_INTENSITY: f32 = 0.015;
 /// Glow intensity while hovered/dragging.
@@ -191,9 +187,9 @@ impl Component for ScrollBar {
         cx.rect(
             thumb,
             accent.with_alpha(if active {
-                THUMB_HOVER_ALPHA
+                cx.theme().colors.interaction.thumb_hover
             } else {
-                THUMB_REST_ALPHA
+                cx.theme().colors.interaction.thumb_rest
             }),
             None,
             cx.theme().colors.control_radius(),

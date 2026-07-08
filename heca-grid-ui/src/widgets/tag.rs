@@ -28,10 +28,6 @@ const SEG_GAP: f32 = 12.0;
 const SLOT_GAP: f32 = 6.0;
 /// Chip text size relative to the base font.
 const FONT_SCALE: f32 = 0.8;
-/// Translucent fill alpha for the chip background.
-const FILL_ALPHA: u8 = 22;
-/// Alpha of the border + segment dividers, in the chip hue.
-const BORDER_ALPHA: u8 = 130;
 /// Vertical inset of a segment divider as a fraction of the chip height.
 const DIVIDER_INSET_FRAC: f64 = 0.18;
 /// `Theme.radius` multiplier for the chip corners, clamped to a capsule — so the
@@ -128,9 +124,9 @@ impl Component for Tag {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (muted, radius_tok, border_w) = {
+        let (muted, radius_tok, border_w, ia) = {
             let t = cx.theme();
-            (t.colors.muted, t.colors.border_radius, t.colors.border_width)
+            (t.colors.muted, t.colors.border_radius, t.colors.border_width, t.colors.interaction)
         };
         let c = self.color.unwrap_or(muted);
         let pill = self.base.bounds;
@@ -138,9 +134,9 @@ impl Component for Tag {
         let radius = (radius_tok * RADIUS_MUL).min((pill.size.h / 2.0) as f32);
         cx.rect(
             pill,
-            c.with_alpha(FILL_ALPHA),
+            c.with_alpha(ia.tag_fill),
             Some(Border {
-                color: c.with_alpha(BORDER_ALPHA),
+                color: c.with_alpha(ia.tag_border),
                 width: border_w,
             }),
             radius,
@@ -148,7 +144,7 @@ impl Component for Tag {
         );
 
         // Thin dividers in the gap between consecutive segments.
-        let divider = c.with_alpha(BORDER_ALPHA);
+        let divider = c.with_alpha(ia.tag_border);
         let inset = pill.size.h * DIVIDER_INSET_FRAC;
         for i in 1..self.base.children.len() {
             let prev = self.base.children[i - 1].base().bounds;

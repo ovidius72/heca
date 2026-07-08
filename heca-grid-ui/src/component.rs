@@ -9,7 +9,7 @@
 use crate::color::Color;
 use crate::drag::{DragItemId, DropSide};
 use crate::reactive::{Signal, SignalGet, SignalUpdate, signal};
-use crate::scene::{Border, BracketCmd, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
+use crate::scene::{Border, DrawCommand, FontRole, Glow, RectCmd, Scene, Shadow, TextAlign, TextCmd};
 use crate::style::Style;
 use crate::theme::Theme;
 use heca_core::layout::{Point, Rectangle, Size};
@@ -579,46 +579,44 @@ impl<'a> PaintCx<'a> {
         (w > 0.0).then_some(Border { color, width: w })
     }
 
-    /// Queue **flat** L-shaped corner brackets framing `rect` — prominent angles
-    /// with no glow (for container/pane chrome, vs the glowing focus ring).
-    pub fn corner_brackets_plain(&mut self, rect: Rectangle, color: Color) {
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
+    /// Queue the **thin-outline focus indicator**: an accent-toned outline drawn *just outside*
+    /// `rect` (a CSS-style `outline` with an offset gap), with a restrained halo. An alternative to
+    /// the corner-bracket reticle ([`corner_brackets`](Self::corner_brackets)).
+    ///
+    /// This is **the** keyboard focus indicator for the whole widget set (Button, IconButton,
+    /// Toggle, Checkbox, Input, Select, Tabs, Item, Row, RailCell, Toast, BadgeButton, ScrollRegion,
+    /// …). Because it sits **outside** the widget box rather than on its edge, it is visible whether
+    /// or not the widget draws its own border — borderless variants (e.g. Ghost/Link buttons) get
+    /// the same clear ring — and it never merges into the widget's own border. It is purely drawn
+    /// (it does not affect layout), so it can overlap neighbouring padding like a real focus outline.
+    /// `radius` is the widget's own corner radius; the outline widens it by the offset to stay
+    /// concentric. Width uses the [`focus_border_width`](crate::theme::Theme::focus_border_width)
+    /// token (its own width, so it stays visible even when decorative borders are off), and the halo
+    /// is scaled by `glow_size` inside [`rect`](Self::rect) — dropping to nothing when glow is
+    /// `none`. The glow is kept low so it reads as a focus cue, not an alarm. Pair with the theme's
+    /// [`effective_focus_ring`](crate::theme::Theme::effective_focus_ring) /
+    /// [`focus_ring_tone`](crate::theme::Theme::focus_ring_tone) for the color. (The decorative
+    /// corner-bracket reticle is a different primitive — [`bracket_frame`](Self::bracket_frame).)
+    pub fn focus_ring(&mut self, rect: Rectangle, color: Color, radius: f32) {
+        // Offset gap (logical px) between the widget edge and the outline — like CSS `outline-offset`.
+        const OFFSET: f32 = 2.0;
+        let o = OFFSET as f64;
+        let outset = Rectangle::new(
+            Point::new(rect.loc.x - o, rect.loc.y - o),
+            Size::new(rect.size.w + 2.0 * o, rect.size.h + 2.0 * o),
+        );
+        let border = Border {
             color,
-            len: 16.0,
-            thickness: 1.5,
-            glow: None,
-        }));
-    }
-
-    /// Flat corner brackets with a custom arm length. Use `len = radius` so the
-    /// bracket arms end exactly where a rounded border's arc begins.
-    pub fn corner_brackets_len(&mut self, rect: Rectangle, color: Color, len: f32) {
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
+            width: self.theme.focus_border_width,
+        };
+        // `rect` runs the glow through `scaled_glow`, so this halo tracks `glow_size`
+        // (and vanishes at `none`) exactly like every other glow in the library.
+        let glow = Some(Glow {
             color,
-            len,
-            thickness: 1.5,
-            glow: None,
-        }));
-    }
-
-    /// Queue L-shaped corner brackets framing `rect` (a Tron reticle).
-    pub fn corner_brackets(&mut self, rect: Rectangle, color: Color) {
-        let glow = self.scaled_glow(Some(Glow {
-            color,
-            radius: 6.0,
-            intensity: 1.0,
-        }));
-        self.scene.push(DrawCommand::Brackets(BracketCmd {
-            rect,
-            color,
-            len: 12.0,
-            // Affordance outline width (focus ring) — its own theme token, so it
-            // stays visible even when decorative borders are off (`border_width == 0`).
-            thickness: self.theme.focus_border_width,
-            glow,
-        }));
+            radius: 3.0,
+            intensity: 0.3,
+        });
+        self.rect(outset, Color::TRANSPARENT, Some(border), radius + OFFSET, glow);
     }
 
     /// Queue a text run within `rect` at an explicit logical `size`. The renderer

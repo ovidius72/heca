@@ -158,6 +158,12 @@ impl Default for Shadow {
 /// Small controls (inputs, selects, checkboxes, chips) round at this fraction of
 /// the base [`Theme::radius`], so one global radius scales every widget together.
 const CONTROL_RADIUS_FRAC: f32 = 0.5;
+/// How far the derived focus-outline color is shifted from a tone toward the theme's
+/// `foreground` when `focus_ring` is unset. Because `foreground` is light on dark themes and dark
+/// on light themes, this brightens the ring on dark themes and darkens it on light ones — so it
+/// separates from the widget's own accent border either way (no hardcoded light/dark, no fixed
+/// white/black).
+const FOCUS_RING_CONTRAST_FACTOR: f32 = 0.35;
 const SIDEBAR_BG_DARKEN_FACTOR: f32 = 0.05;
 const TOP_BOTTOM_PANE_BG_DARKEN_FACTOR: f32 = 0.10;
 /// How much the derived z=0 gradient *bottom* color darkens
@@ -232,6 +238,15 @@ pub struct Theme {
     pub intensity: Intensity,
     #[serde(default = "default_true")]
     pub show_focus_border: bool,
+    /// Optional color of the keyboard **focus outline** — the thin ring drawn just *outside* a
+    /// focused widget (see [`effective_focus_ring`](Self::effective_focus_ring) /
+    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html)). `None` → the accent shifted
+    /// toward `foreground` for contrast, which stays legible on both dark and light themes. Set it
+    /// in a theme (`focus_ring = "#rrggbb"`) to override the default/accent focus color; tonal
+    /// rings that aren't the accent (e.g. a destructive button's `danger` ring) always derive via
+    /// [`focus_ring_tone`](Self::focus_ring_tone) and are not overridden by this token.
+    #[serde(default)]
+    pub focus_ring: Option<Color>,
     #[serde(default = "default_icon_secondary_alpha")]
     pub icon_secondary_alpha: f32,
     /// Opacity (`0.0..=1.0`) of the **active-region wash** — the faint accent
@@ -245,6 +260,13 @@ pub struct Theme {
     /// surface rather than a filled block. Theme/config-driven.
     #[serde(default = "default_card_background_alpha")]
     pub card_background_alpha: f32,
+
+    /// Interaction-state alpha tokens (hover / active / border / tonal-fill /
+    /// scrim …). Theme-owned so the whole UI's interaction feel is tuned in one
+    /// place, not per-widget constants. `#[serde(default)]` → existing theme TOMLs
+    /// (which don't list them) inherit [`InteractionAlphas::default`].
+    #[serde(default)]
+    pub interaction: InteractionAlphas,
 
     // ── Float pane colors ──
     #[serde(default = "default_float_bg")]
@@ -298,6 +320,135 @@ pub struct Theme {
     pub terminal_ansi: Option<[Color; 8]>,
     #[serde(default)]
     pub terminal_brights: Option<[Color; 8]>,
+}
+
+/// Interaction-state alpha tokens — raw `0..=255` alpha bytes a widget lays over a
+/// base hue (accent / foreground / danger …) for its hover, active/selected, border,
+/// tonal-fill, scrim and overlay states. Grouped on [`Theme::interaction`] so the
+/// interaction feel is a single theme-tuned surface instead of scattered per-widget
+/// `const … _ALPHA` values. Values default to the historical per-widget constants;
+/// where several widgets shared a role the value is unified (see field docs).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InteractionAlphas {
+    // ── Controls (buttons / toggles / inputs / selects) ──
+    /// Toggle track fill at full-on (~50% accent wash).
+    pub toggle_on_fill: u8,
+    /// Hover fill over a control's tone (icon button).
+    pub control_hover_fill: u8,
+    /// Hover border over a control's tone (icon button).
+    pub control_hover_border: u8,
+    /// Held-on (toggled) fill (icon button).
+    pub control_active_fill: u8,
+    /// Held-on (toggled) border (icon button).
+    pub control_active_border: u8,
+    /// Resting border of a control — unifies button/input/toggle/checkbox/select (was `150` in each).
+    pub control_rest_border: u8,
+
+    // ── List rows / sidebar cells ──
+    /// Hover fill of a list row / sidebar cell — unifies row/item/rail (16/16/18 → 16).
+    pub row_hover_fill: u8,
+    /// Selected fill of a list row / sidebar cell — unifies row/item/rail (30/30/34 → 30).
+    pub row_active_fill: u8,
+    /// Selected border of a list row / sidebar cell — unifies row/rail (180/190 → 185).
+    pub row_active_border: u8,
+    /// Selected-state highlight tint (row).
+    pub row_active_tint: u8,
+    /// Hover-state highlight tint (row).
+    pub row_hover_tint: u8,
+
+    // ── Nav cursor (keyboard-nav highlight on rows / docks) ──
+    /// Nav-cursor outline — unifies row/dock (220/235 → 225).
+    pub nav_outline: u8,
+    /// Nav-cursor wash fill (dock).
+    pub nav_wash: u8,
+
+    // ── Tonal fills (badges / tags / alerts / toasts) ──
+    /// Badge fill — unifies badge/badge_button (both `38`).
+    pub badge_fill: u8,
+    /// Tag / alert tonal fill — unifies tag/alert (both `22`).
+    pub tag_fill: u8,
+    /// Tag border / divider.
+    pub tag_border: u8,
+    /// Toast background tint.
+    pub toast_tint: u8,
+    /// Badge-button outline, resting.
+    pub outline_rest: u8,
+    /// Badge-button outline, hovered.
+    pub outline_hover: u8,
+
+    // ── Text selection / list hilite ──
+    /// Text-selection fill (input).
+    pub selection: u8,
+    /// Dropdown row hilite (select).
+    pub hilite: u8,
+
+    // ── Overlays (modal / palette / context menu) ──
+    /// Backdrop scrim behind a modal/palette — unifies modal/palette (150/140 → 150).
+    pub scrim: u8,
+    /// Keycap background — unifies context_menu/key_hint (both `200`).
+    pub keycap: u8,
+    /// Overlay panel border (palette / context menu).
+    pub panel_border: u8,
+    /// Overlay panel selected-row border.
+    pub panel_row_border: u8,
+    /// Overlay panel selected-row fill.
+    pub panel_row_fill: u8,
+    /// Tooltip border, in the accent hue.
+    pub tooltip_border: u8,
+    /// Context-menu shortcut/hint text.
+    pub menu_shortcut: u8,
+    /// Context-menu shortcut/hint text, dimmed (disabled row).
+    pub menu_shortcut_dim: u8,
+
+    // ── Scrollbar thumb ──
+    /// Scrollbar thumb, resting — unifies scroll_bar/scroll_region (both `90`).
+    pub thumb_rest: u8,
+    /// Scrollbar thumb, hovered — unifies scroll_bar/scroll_region (both `200`).
+    pub thumb_hover: u8,
+
+    // ── Dim / unlit ──
+    /// Unlit / dimmed element (gauge).
+    pub unlit: u8,
+}
+
+impl Default for InteractionAlphas {
+    fn default() -> Self {
+        Self {
+            toggle_on_fill: 128,
+            control_hover_fill: 28,
+            control_hover_border: 190,
+            control_active_fill: 64,
+            control_active_border: 215,
+            control_rest_border: 150,
+            row_hover_fill: 16,
+            row_active_fill: 30,
+            row_active_border: 185,
+            row_active_tint: 90,
+            row_hover_tint: 40,
+            nav_outline: 225,
+            nav_wash: 30,
+            badge_fill: 38,
+            tag_fill: 22,
+            tag_border: 130,
+            toast_tint: 16,
+            outline_rest: 150,
+            outline_hover: 235,
+            selection: 70,
+            hilite: 48,
+            scrim: 150,
+            keycap: 200,
+            panel_border: 200,
+            panel_row_border: 150,
+            panel_row_fill: 30,
+            tooltip_border: 180,
+            menu_shortcut: 180,
+            menu_shortcut_dim: 120,
+            thumb_rest: 90,
+            thumb_hover: 200,
+            unlit: 40,
+        }
+    }
 }
 
 // ── Serde default helpers ──
@@ -434,6 +585,26 @@ impl Theme {
             .unwrap_or_else(|| self.derived_darker_background(GRADIENT_BOTTOM_DARKEN_FACTOR))
     }
 
+    /// The keyboard **focus-outline color** for the default (accent) tone — what
+    /// [`PaintCx::focus_ring`](../heca_grid_ui/struct.PaintCx.html) draws on every focused widget.
+    /// Returns the theme's `focus_ring` token when set, else the accent shifted toward `foreground`
+    /// (see [`focus_ring_tone`](Self::focus_ring_tone)) so the ring reads distinct from an accent
+    /// border on both dark and light themes.
+    pub fn effective_focus_ring(&self) -> Color {
+        self.focus_ring.unwrap_or_else(|| self.focus_ring_tone(self.accent))
+    }
+
+    /// Derive a focus-outline color from any semantic tone (`accent`, `danger`, …) by shifting it
+    /// toward the theme's `foreground`. `foreground` is the theme's high-contrast-against-background
+    /// color — light on dark themes, dark on light themes — so this brightens the ring on dark
+    /// themes and darkens it on light ones, keeping it separate from the tone's own border in both.
+    /// Theme-driven, no hardcoded light/dark (same idiom as [`on`](Self::on)). Use this for tonal
+    /// focus rings that aren't the default accent (e.g. a destructive button's `danger` ring); the
+    /// `focus_ring` token overrides only the default/accent case via [`effective_focus_ring`](Self::effective_focus_ring).
+    pub fn focus_ring_tone(&self, base: Color) -> Color {
+        base.lerp(self.foreground, FOCUS_RING_CONTRAST_FACTOR)
+    }
+
     /// The default dark, cyan-accented Tron theme.
     ///
     /// Sourced from the bundled `themes/grid_tron.toml` (embedded at compile
@@ -461,6 +632,34 @@ mod tests {
     fn control_radius_is_half_of_radius() {
         let theme = Theme::grid_tron();
         assert!((theme.control_radius() - 2.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn focus_ring_is_theme_aware_and_respects_override() {
+        // Dark theme (grid_tron): the derived ring is *lighter* than the accent (shifted toward the
+        // light foreground) so it separates from the accent border.
+        let mut dark = Theme::grid_tron();
+        dark.focus_ring = None;
+        let d = dark.effective_focus_ring();
+        assert_ne!(d, dark.accent);
+        assert!(d.luminance() > dark.accent.luminance(), "dark theme: ring brighter than accent");
+
+        // Light theme (latte): the SAME logic derives a *darker* ring (shifted toward the dark
+        // foreground) — the direction flips automatically, no hardcoded light/dark.
+        let light: Theme = toml::from_str(include_str!("themes/latte.toml"))
+            .expect("bundled latte.toml must parse into Theme");
+        let l = light.effective_focus_ring();
+        assert!(l.luminance() < light.accent.luminance(), "light theme: ring darker than accent");
+
+        // Any tone derives via the same helper (this is how the destructive/danger ring is built).
+        assert_eq!(
+            dark.focus_ring_tone(dark.danger),
+            dark.danger.lerp(dark.foreground, FOCUS_RING_CONTRAST_FACTOR)
+        );
+
+        // The `focus_ring` token overrides only the default/accent case, verbatim.
+        dark.focus_ring = Some(Color::rgb(10, 20, 30));
+        assert_eq!(dark.effective_focus_ring(), Color::rgb(10, 20, 30));
     }
 
     #[test]

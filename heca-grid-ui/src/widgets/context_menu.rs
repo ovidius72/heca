@@ -97,7 +97,6 @@ const MAX_W: f64 = 380.0;
 /// Inset of the anchor from the cursor so the menu doesn't sit directly under it.
 const ANCHOR_INSET: f64 = 2.0;
 /// Quick-pick keycap metrics (mirror [`KeyHint`](super::KeyHint)).
-const KEYCAP_ALPHA: u8 = 200;
 const KEYCAP_PAD_X: f64 = 0.42; // fraction of font
 const KEYCAP_PAD_Y: f64 = 0.20;
 const GLYPH_ADV_FRAC: f64 = 0.62; // per-glyph advance estimate, fraction of font
@@ -339,7 +338,7 @@ impl Component for ContextMenu {
         cx.with_overlay(|cx| {
             // Panel — a glowing accent-bordered surface (no scrim: context menus
             // dismiss on outside-click rather than darkening the whole view).
-            let panel_border = cx.border(accent.with_alpha(200));
+            let panel_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_border));
             cx.rect(
                 panel,
                 surface,
@@ -354,8 +353,8 @@ impl Component for ContextMenu {
                 let row = self.row_rect(panel, i);
                 let is_sel = i == self.selected && e.enabled;
                 if is_sel {
-                    let row_border = cx.border(accent.with_alpha(150));
-                    cx.rect(row, accent.with_alpha(30), row_border, ctrl_radius, None);
+                    let row_border = cx.border(accent.with_alpha(cx.theme().colors.interaction.panel_row_border));
+                    cx.rect(row, accent.with_alpha(cx.theme().colors.interaction.panel_row_fill), row_border, ctrl_radius, None);
                     cx.rect(
                         Rectangle::new(
                             Point::new(row.loc.x, row.loc.y + row.size.h * 0.2),
@@ -370,7 +369,7 @@ impl Component for ContextMenu {
                 // Base text color: danger entries read red; disabled ones dim.
                 let base_color: Color = if e.danger { danger } else { foreground };
                 let text_color = if !e.enabled {
-                    muted.with_alpha(120)
+                    muted.with_alpha(cx.theme().colors.interaction.menu_shortcut_dim)
                 } else if is_sel {
                     base_color
                 } else {
@@ -404,7 +403,7 @@ impl Component for ContextMenu {
                     let cap_color = if e.enabled { accent } else { muted };
                     cx.rect(
                         cap,
-                        cap_color.with_alpha(KEYCAP_ALPHA),
+                        cap_color.with_alpha(cx.theme().colors.interaction.keycap),
                         None,
                         cap_radius,
                         Some(Glow { color: glow_c, radius: 5.0, intensity: 0.4 }),
@@ -418,7 +417,7 @@ impl Component for ContextMenu {
                         Point::new(row.loc.x, row.loc.y),
                         Size::new((right_edge - row.loc.x).max(0.0), row.size.h),
                     );
-                    cx.text(srect, s, muted.with_alpha(180), font, TextAlign::End, false);
+                    cx.text(srect, s, muted.with_alpha(cx.theme().colors.interaction.menu_shortcut), font, TextAlign::End, false);
                 }
             }
         });

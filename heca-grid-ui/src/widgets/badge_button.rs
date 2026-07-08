@@ -21,14 +21,8 @@ const PAD_H: f32 = 9.0;
 const PAD_V: f32 = 4.0;
 /// Badge font multiplier — small chip text relative to the base font.
 const BADGE_FONT_SCALE: f32 = 0.73;
-/// Resting fill alpha for colored variants.
-const FILL_ALPHA: u8 = 38;
 /// Extra fill alpha while hovered/focused.
 const HOVER_FILL_EXTRA: u8 = 22;
-/// Resting border alpha for the quiet outline variant.
-const OUTLINE_ALPHA: u8 = 150;
-/// Hover border alpha for the quiet outline variant.
-const OUTLINE_HOVER_ALPHA: u8 = 235;
 /// Glow spread radius (px).
 const GLOW_RADIUS: f32 = 10.0;
 /// Resting glow intensity.
@@ -150,12 +144,12 @@ impl Component for BadgeButton {
 
         let (fill, border_c, text_c, glow) = if self.variant == BadgeVariant::Outline {
             let border_c = if hovered {
-                cx.theme().colors.accent.with_alpha(OUTLINE_HOVER_ALPHA)
+                cx.theme().colors.accent.with_alpha(cx.theme().colors.interaction.outline_hover)
             } else {
-                muted.with_alpha(OUTLINE_ALPHA)
+                muted.with_alpha(cx.theme().colors.interaction.outline_rest)
             };
             let fill = if hovered {
-                cx.theme().colors.accent.with_alpha(FILL_ALPHA / 2)
+                cx.theme().colors.accent.with_alpha(cx.theme().colors.interaction.badge_fill / 2)
             } else {
                 Color::TRANSPARENT
             };
@@ -174,7 +168,7 @@ impl Component for BadgeButton {
                 BadgeVariant::Danger => danger,
                 BadgeVariant::Outline => unreachable!(),
             };
-            let fill_alpha = FILL_ALPHA.saturating_add(if hovered { HOVER_FILL_EXTRA } else { 0 });
+            let fill_alpha = cx.theme().colors.interaction.badge_fill.saturating_add(if hovered { HOVER_FILL_EXTRA } else { 0 });
             let glow = Some(Glow {
                 color: c,
                 radius: GLOW_RADIUS,
@@ -209,8 +203,9 @@ impl Component for BadgeButton {
             TextAlign::Center,
             true,
         );
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(pill, cx.theme().colors.accent);
+        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(pill, ring, radius);
         }
     }
 

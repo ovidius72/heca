@@ -85,15 +85,12 @@ pub enum InputMode {
     /// clears the selection and returns to `Normal`; Enter confirms the
     /// selection and returns to `Normal`. Other keys are ignored.
     Selection,
-    /// Confirmation prompt for destructive operations.
-    /// `y` executes the stored action, `n` or `Esc` cancels.
-    /// When `resume_sidebar` is true, the prompt returns to `SidebarNav`
-    /// instead of `Normal` after confirm/cancel.
-    ConfirmDelete {
-        message: String,
-        action: Box<WmAction>,
-        resume_sidebar: bool,
-    },
+    /// Status-bar marker while a destructive-confirm modal is up. The prompt itself is a
+    /// host-owned overlay [`Dialog`](heca_grid_ui::Dialog) layer (see
+    /// [`handlers::begin_confirm_delete`](crate::handlers::begin_confirm_delete)) which owns
+    /// input and carries the action/resume in its completion — this variant just drives the
+    /// "CONFIRM" status word.
+    ConfirmDelete,
     /// Take-pane letter selection mode.
     /// User picks a pane which gets moved to the active column bottom.
     PaneTake {
@@ -205,9 +202,9 @@ impl InputMode {
     /// a structured description of the pending action. Mirrored into the reactive chrome
     /// store (and emitted as `PendingPickChanged`) so any component or plugin can react
     /// to it (e.g. render its own prompt overlay). `None` when no pick is active.
-    pub fn pending_pick(&self) -> Option<PendingPick> {
+    pub fn pending_pick(&self, catalog: &crate::actions::ActionCatalog) -> Option<PendingPick> {
         // Map the active pick mode to its enter-mode action; the human prompt + label
-        // come from that action's `ActionDescriptor` (the registry is the single source
+        // come from that action's `ActionDescriptor` (the catalog is the single source
         // of truth for action text — no duplicated strings here).
         let (kind, action_name) = match self {
             InputMode::PaneSelect { .. } => (PickKind::SelectPane, "pane_select"),
@@ -239,7 +236,7 @@ impl InputMode {
             }
             _ => return None,
         };
-        let desc = crate::actions::ActionRegistry::find(action_name)?;
+        let desc = catalog.find(action_name)?;
         Some(PendingPick {
             kind,
             action_name,
@@ -668,13 +665,37 @@ pub struct AppState {
     /// keyed by pane. Built/positioned each frame by `chrome::sync_pane_headers`,
     /// painted read-only in `terminal_render`, dispatched pointer events in `mouse`.
     pub pane_headers: HashMap<PaneId, crate::chrome::RetainedPaneHeader>,
+    /// Shared allocator + map for the universal KeyHint picker (`prefix+/`), spanning
+    /// EVERY retained tree that carries hint targets — the chrome tree and each pane's
+    /// header tree — which rebuild on independent cadences. Ids are monotonic (never
+    /// reused), so targets from different trees never collide; each tree removes its id
+    /// range on rebuild/prune. See [`crate::chrome::HintTargetRegistry`].
+    pub hint_targets: crate::chrome::HintTargetRegistry,
+    /// Dynamically registered overlay/panel layers (an on-demand exposé, a plugin panel).
+    /// The built-in surfaces (panes, sidebar, current overlays) are derived from their own
+    /// trees; this holds runtime-added layers that join the same surface stack. See
+    /// [`crate::chrome::LayerRegistry`] and `docs/surface-compositor.md` §9.
+    pub layers: crate::chrome::LayerRegistry,
+    /// Host-owned overlay stack: pending modal completions + action metadata keyed by
+    /// [`OverlayId`](crate::chrome::OverlayId). The overlays' *visual* trees live in
+    /// [`layers`](AppState::layers) (Modal band); this holds only the result callbacks the
+    /// overlay-control actions (`SubmitOverlay`/`CloseOverlay`) resolve. See `chrome::overlay`
+    /// and `pluggable-chrome-plugin-plan.md` §2.7.1/§2.7.2.
+    pub overlays: crate::chrome::OverlayHost,
     /// Retained per-pane terminal viewport widgets (scrollbar + scrolled-up badge),
     /// keyed by pane. Built once per visible pane, updated/repositioned each frame,
     /// painted read-only in `terminal_render`, dispatched pointer events in `events`.
     pub pane_viewport_widgets: HashMap<PaneId, crate::chrome::RetainedPaneViewportWidgets>,
-    /// Tooltip keybind hints for the pane-action buttons, resolved from config at
-    /// load/reload (so the tooltips show the user's real, rebindable keys).
-    pub pane_action_hints: crate::chrome::PaneActionHints,
+    /// Display shortcuts for every bound action, keyed by config name, resolved from
+    /// config at load/reload (so tooltips/hints show the user's real, rebindable
+    /// keys — never the defaults when overridden). Any chrome button looks its own
+    /// shortcut up by the action it triggers; see [`crate::chrome::ActionShortcuts`].
+    pub action_shortcuts: crate::chrome::ActionShortcuts,
+    /// Runtime catalog of action metadata (labels/icons/…; later confirmation specs), seeded from
+    /// the built-in descriptors and — with the plugin action API — extended by plugins. The single
+    /// runtime home every UI surface resolves action metadata through (see
+    /// [`crate::actions::ActionCatalog`]).
+    pub action_catalog: crate::actions::ActionCatalog,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.
@@ -703,16 +724,8 @@ pub struct AppState {
     /// an event into the menu (grid-ui widgets cannot dispatch `WmAction`s
     /// directly — the closure → action sink bridges that).
     pub context_menu_action: std::rc::Rc<std::cell::RefCell<Option<WmAction>>>,
-    /// The confirm dialog shown while [`InputMode::ConfirmDelete`] is active — a
-    /// host-owned [`Modal`](heca_grid_ui::widgets::Modal) overlay (scrim + OK/Cancel),
-    /// laid out/painted each frame and fed pointer events so a destructive action can
-    /// be confirmed by click as well as by keyboard (y/Enter/n/Esc). `None` when no
-    /// confirm is pending.
-    pub confirm_dialog: Option<heca_grid_ui::widgets::Modal>,
-    /// The dialog's click result: its Confirm button writes `Some(true)`, Cancel /
-    /// scrim / Esc write `Some(false)`. Drained by the event loop, which then resolves
-    /// the pending `ConfirmDelete` (dispatch-or-cancel) exactly like the keyboard path.
-    pub confirm_dialog_result: std::rc::Rc<std::cell::RefCell<Option<bool>>>,
+    // (The destructive-confirm prompt is now a host-owned overlay [`Dialog`] layer in
+    // `chrome::overlay` — see `handlers::begin_confirm_delete` — not a bespoke field here.)
     /// Most recently focused pane (for "go back" behavior).
     pub last_focused: Option<PaneId>,
     /// The last visited workspace index (for dim highlight in sidebar).
@@ -760,13 +773,11 @@ pub struct AppState {
     /// false the status bar collapses to zero height (see
     /// [`AppState::status_bar_height`]).
     pub show_bottom_bar: bool,
-    /// Confirm before closing a pane (`[settings] confirm_close_pane`). Read by the
-    /// centralized `request_destructive` chokepoint.
-    pub confirm_close_pane: bool,
-    /// Confirm before deleting a column (`[settings] confirm_delete_column`).
-    pub confirm_delete_column: bool,
-    /// Confirm before deleting a workspace (`[settings] confirm_delete_workspace`).
-    pub confirm_delete_workspace: bool,
+    /// The `[confirm]` table — per-action confirmation toggles (keyed by confirm name:
+    /// `delete_pane` / `delete_column` / `delete_workspace`, or any plugin action). Read by the central
+    /// confirm gate via [`ConfirmConfig::enabled`](heca_config::confirm::ConfirmConfig::enabled),
+    /// which falls back to the action's `ConfirmSpec::default_enabled` when unset.
+    pub confirm: heca_config::confirm::ConfirmConfig,
     /// Modifier key for interactive pane drag.
     pub interactive_move_modifier: heca_config::theme::ModifierKey,
     /// When the user entered Prefix mode (for auto-timeout).

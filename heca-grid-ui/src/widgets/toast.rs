@@ -42,8 +42,6 @@ const ACTION_PAD_X: f64 = 12.0;
 const DISMISS_SCALE: f32 = 1.4;
 /// Default card width.
 const DEFAULT_WIDTH: f32 = 320.0;
-/// Translucent fill alpha for the severity tint behind the surface.
-const TINT_ALPHA: u8 = 16;
 
 /// Severity of a [`Toast`], mapped to theme tokens at paint time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -311,9 +309,9 @@ impl Component for Toast {
         if !self.base.visible.get_untracked() {
             return;
         }
-        let (surface, foreground, muted, radius, card_radius) = {
+        let (surface, foreground, muted, radius, card_radius, toast_tint) = {
             let t = cx.theme();
-            (t.colors.surface, t.colors.foreground, t.colors.muted, t.colors.control_radius(), t.colors.border_radius)
+            (t.colors.surface, t.colors.foreground, t.colors.muted, t.colors.control_radius(), t.colors.border_radius, t.colors.interaction.toast_tint)
         };
         let tone = match self.severity {
             ToastSeverity::Info => cx.theme().colors.accent,
@@ -328,7 +326,7 @@ impl Component for Toast {
 
         // Surface: severity-tinted fill + the shared Pane/DockFrame corner-bracket
         // reticle frame (GridCN fidelity — same as the Modal panel, #79).
-        cx.rect(b, surface.lerp(tone, TINT_ALPHA as f32 / 255.0), None, card_radius, None);
+        cx.rect(b, surface.lerp(tone, toast_tint as f32 / 255.0), None, card_radius, None);
         cx.bracket_frame(b);
 
         // Leading severity icon (single-layer, toned).
@@ -376,9 +374,10 @@ impl Component for Toast {
                 cx.flash(fr, self.flash.amount() * 0.4, frad);
             }
         }
-        // Focus ring when clickable + focused.
-        if self.focusable() && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(b, tone);
+        // Focus ring when clickable + focused (theme-aware shift of the toast tone).
+        if self.focusable() && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.focus_ring_tone(tone);
+            cx.focus_ring(b, ring, card_radius);
         }
     }
 

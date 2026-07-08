@@ -34,10 +34,6 @@ const ANIM_DURATION: f32 = 0.12;
 const GLOW_RADIUS: f32 = 16.0;
 /// On-state glow peak intensity.
 const GLOW_INTENSITY: f32 = 0.09;
-/// Border alpha at rest; firms to solid as the toggle turns on.
-const REST_BORDER_ALPHA: f32 = 150.0;
-/// Track fill alpha at full-on — a translucent (~50%) accent wash, not a solid.
-const ON_FILL_ALPHA: u8 = 128;
 
 /// A sliding on/off switch. Emits `toggle-change` with the new [`bool`] when
 /// flipped (pointer press or Space/Enter while focused).
@@ -132,9 +128,9 @@ impl Component for Toggle {
             return;
         }
         let disabled = self.base.disabled.get_untracked();
-        let (surface, accent, glow_c, muted, foreground, theme_radius) = {
+        let (surface, accent, glow_c, muted, foreground, theme_radius, ia) = {
             let t = cx.theme();
-            (t.colors.surface, t.colors.accent, t.colors.glow, t.colors.muted, t.colors.foreground, t.colors.border_radius)
+            (t.colors.surface, t.colors.accent, t.colors.glow, t.colors.muted, t.colors.foreground, t.colors.border_radius, t.colors.interaction)
         };
         let p = self.progress.clamp(0.0, 1.0);
         let track = self.base.bounds;
@@ -142,7 +138,8 @@ impl Component for Toggle {
         // Track: dark (off) → translucent accent wash (on). The border firms
         // muted → solid accent (active border stays 100% opaque, unlike the
         // fill); a glow rises as it turns on.
-        let border_a = REST_BORDER_ALPHA + (255.0 - REST_BORDER_ALPHA) * p;
+        let rest_border = ia.control_rest_border as f32;
+        let border_a = rest_border + (255.0 - rest_border) * p;
         let border = cx.border(muted.lerp(accent, p).with_alpha(border_a.round() as u8));
         let track_glow = (!disabled && p > 0.0).then_some(Glow {
             color: glow_c,
@@ -152,7 +149,7 @@ impl Component for Toggle {
         // Track radius follows the theme but rounds harder (pill widget), clamped
         // to the pill max — so at a moderate theme radius it reads as a capsule.
         let radius = (theme_radius * PILL_RADIUS_MUL).min((track.size.h / 2.0) as f32);
-        let fill = surface.lerp(accent.with_alpha(ON_FILL_ALPHA), p);
+        let fill = surface.lerp(accent.with_alpha(ia.toggle_on_fill), p);
         cx.rect(track, fill, border, radius, track_glow);
 
         // Knob: muted gray (off) → light (on) so it reads against the accent
@@ -191,9 +188,10 @@ impl Component for Toggle {
             cx.dim(track, radius);
         }
 
-        // Focus-visible ring (keyboard focus only).
-        if !disabled && self.base.focus_visible.get_untracked() && cx.theme().colors.show_focus_border {
-            cx.corner_brackets(track, accent);
+        // Focus ring — shown whenever focused (theme-aware color, outside the track).
+        if !disabled && self.base.focused.get_untracked() && cx.theme().colors.show_focus_border {
+            let ring = cx.theme().colors.effective_focus_ring();
+            cx.focus_ring(track, ring, radius);
         }
     }
 

@@ -37,6 +37,7 @@
 
 use crate::actions::ActionRegistry;
 use crate::app_state::AppState;
+use crate::chrome::Intent as ViewIntent;
 use crate::input::WmAction;
 use heca_core::layout::{FocusDomain, PaneId};
 
@@ -86,6 +87,16 @@ pub(crate) enum InteractionSource {
 pub(crate) enum InteractionIntent {
     /// A keyboard shortcut resolved to a WM action.
     ActivateAction(WmAction),
+    /// Focus a specific pane, then run an action on it — the single-intent form of
+    /// what an **active-targeted** pane button does on click (focus first so the
+    /// action lands on the clicked pane, not whatever was active). Used by the pane
+    /// header's KeyHint targets for `zoom`/`float`, whose `WmAction` acts on the
+    /// focused pane and carries no pane id of its own. `dispatch_intent` expands it
+    /// into a `FocusPane` then the action, each policy-routed on its own.
+    FocusPaneThenAction {
+        pane_id: PaneId,
+        action: Box<WmAction>,
+    },
     /// Focus a specific pane (from sidebar click, content click, or RPC).
     ///
     /// Dispatched to `WmAction::FocusPane` in `dispatch_action`.
@@ -111,6 +122,12 @@ pub(crate) enum InteractionIntent {
     StartSidebarDrag {
         pane_id: PaneId,
     },
+    /// A declarative [`ViewNode`](crate::chrome::ViewNode) intent — the universal
+    /// invocation currency for click / KeyHint / RPC / plugin (plan §2.7.2, "everything
+    /// is an action"). Carries a `view::Intent { action, args }`; `dispatch_intent`
+    /// resolves it via [`dispatch_view_intent`] (name → `WmAction` → policy-routed
+    /// dispatch). Constructed by [`realize`](crate::chrome::realize) for actionable nodes.
+    View(ViewIntent),
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -316,6 +333,10 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         WmAction::MoveContainerToRegion { .. }
         | WmAction::ReorderContainerBefore { .. }
         | WmAction::SetRegionVisible { .. } => ActionPolicy::Global,
+        // Overlay control (§2.7.2): classified Global for match completeness, but never
+        // actually consulted — `dispatch_intent` intercepts these before routing (they carry
+        // an overlay id and resolve the `OverlayHost`, not a focus-domain-sensitive action).
+        WmAction::SubmitOverlay { .. } | WmAction::CloseOverlay { .. } => ActionPolicy::Global,
         // Chrome shell region show/hide (sidebar-fu-6): acts on chrome geometry,
         // independent of the pane tiled/floating domain — reachable from any focus.
         WmAction::ShowLeftSidebar
@@ -388,6 +409,12 @@ pub(crate) fn route_interaction_for_session(
 ) -> RouteDecision {
     match &intent {
         InteractionIntent::ActivateAction(action) => route_action(session, source, action),
+        // Defensive: `dispatch_intent` expands this into FocusPane + the action before
+        // routing, so the router should not normally see it. If it does, route by the
+        // inner action's policy (the focus half is always benign).
+        InteractionIntent::FocusPaneThenAction { action, .. } => {
+            route_action(session, source, action)
+        }
         InteractionIntent::FocusPane { .. } => {
             // FocusPane from mouse content/sidebar: blocked when floating.
             // Only the active floating pane can receive focus in floating domain.
@@ -428,6 +455,10 @@ pub(crate) fn route_interaction_for_session(
                 RouteDecision::Allow(intent)
             }
         }
+        // A View intent is a pass-through here: it carries only an action *name*, so its
+        // real focus-domain policy is applied when `dispatch_view_intent` resolves it to a
+        // `WmAction` and re-dispatches through `dispatch_action` (which routes it).
+        InteractionIntent::View(_) => RouteDecision::Allow(intent),
     }
 }
 
@@ -607,11 +638,62 @@ pub(crate) fn dispatch_intent(
     source: InteractionSource,
     intent: InteractionIntent,
 ) {
+    // Overlay control (§2.7.2): `SubmitOverlay`/`CloseOverlay` are resolved here — not via the
+    // `ActionRegistry` — because resolving an overlay runs its completion, which needs the
+    // registry to dispatch a follow-up action (a handler gets no registry). Intercepted before
+    // routing, like the `FocusPaneThenAction` composite below. Always allowed (overlay control
+    // has no focus-domain policy; the follow-up action it dispatches is routed on its own).
+    if let InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action }) = &intent
+    {
+        let (overlay, action) = (*overlay, action.clone());
+        crate::chrome::resolve_overlay(
+            state,
+            registry,
+            overlay,
+            crate::chrome::ModalResult::Action {
+                id: action,
+                data: Default::default(),
+            },
+        );
+        return;
+    }
+    if let InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay }) = &intent {
+        let overlay = *overlay;
+        crate::chrome::resolve_overlay(state, registry, overlay, crate::chrome::ModalResult::Dismissed);
+        return;
+    }
+
+    // Composite: focus the pane, then run the action — each half policy-routed on its
+    // own (mirrors what an active-targeted pane button does across two events on click).
+    if let InteractionIntent::FocusPaneThenAction { pane_id, action } = intent {
+        dispatch_intent(state, registry, source, InteractionIntent::FocusPane { pane_id });
+        dispatch_intent(
+            state,
+            registry,
+            source,
+            InteractionIntent::ActivateAction(*action),
+        );
+        return;
+    }
     let decision = route_interaction(state, source, intent);
 
     match decision {
         RouteDecision::Allow(InteractionIntent::ActivateAction(act)) => {
-            registry.execute(&act, state);
+            // Central destructive-action gate: close-pane / delete-column / delete-workspace go
+            // through the confirm chokepoint FIRST, so the confirm guard lives on the action and
+            // every surface (keyboard, pane-header close button, context menu / dropdown, RPC)
+            // confirms identically — never per call site. Returns true when it handled (confirmed
+            // or ran) the action; the confirm dialog runs the raw action directly, never re-entering
+            // this gate.
+            if !crate::handlers::maybe_confirm_destructive(state, &act) {
+                registry.execute(&act, state);
+            }
+        }
+        // Expanded to FocusPane + the action above (before routing), so this is
+        // unreachable in practice; handle it defensively as focus-then-act.
+        RouteDecision::Allow(InteractionIntent::FocusPaneThenAction { pane_id, action }) => {
+            registry.execute(&WmAction::FocusPane { pane_id }, state);
+            registry.execute(&action, state);
         }
         RouteDecision::Allow(InteractionIntent::FocusPane { pane_id }) => {
             registry.execute(&WmAction::FocusPane { pane_id }, state);
@@ -630,6 +712,9 @@ pub(crate) fn dispatch_intent(
             eprintln!(
                 "[heca] interaction: StartSidebarDrag intent allowed but not dispatched (drag initiated in mouse layer)"
             );
+        }
+        RouteDecision::Allow(InteractionIntent::View(vi)) => {
+            dispatch_view_intent(state, registry, source, &vi);
         }
         RouteDecision::Block => {
             #[cfg(debug_assertions)]
@@ -650,6 +735,33 @@ pub(crate) fn dispatch_action(
         source,
         InteractionIntent::ActivateAction(action.clone()),
     );
+}
+
+/// Resolve and dispatch a declarative [`ViewNode`](crate::chrome::ViewNode) intent.
+///
+/// A `view::Intent` carries an action *name* (the same identifier config keys and RPC use)
+/// plus optional args. We map the name to its [`WmAction`] via
+/// [`action_from_name`](crate::input::action_from_name) and re-dispatch through
+/// [`dispatch_action`] so the resolved action is policy-routed exactly like any other
+/// interaction — this is the single convergence point for click / KeyHint / RPC / plugin
+/// (plan §2.7.2). `args` are ignored for now; only unit `WmAction`s are reachable from a
+/// name, and parameterized/overlay-control actions arrive in a later step.
+fn dispatch_view_intent(
+    state: &mut AppState,
+    registry: &ActionRegistry,
+    source: InteractionSource,
+    intent: &ViewIntent,
+) {
+    match crate::input::action_from_name(&intent.action) {
+        Some(action) => dispatch_action(state, registry, source, &action),
+        None => {
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "[heca] interaction: view intent '{}' did not resolve to a known action",
+                intent.action
+            );
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -699,6 +811,24 @@ mod tests {
                 decision,
             );
         }
+    }
+
+    /// A View intent is a pass-through at the router: it carries only an action name, so
+    /// the router always allows it and real policy is applied when it resolves to a
+    /// `WmAction` and re-dispatches. Also exercises constructing the `View` variant.
+    #[test]
+    fn view_intent_passes_through_router() {
+        let session = test_session();
+        let decision = route_interaction_for_session(
+            &session,
+            InteractionSource::Keyboard,
+            InteractionIntent::View(ViewIntent::new("focus_left")),
+        );
+        assert!(
+            matches!(decision, RouteDecision::Allow(InteractionIntent::View(_))),
+            "router should pass a View intent through, got {:?}",
+            decision,
+        );
     }
 
     /// In Tiled domain, FocusedPaneLocal actions are allowed.

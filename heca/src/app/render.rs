@@ -52,12 +52,15 @@ fn hyperlink_decor_from(style: heca_config::appearance::HyperlinkStyle) -> Hyper
 }
 
 /// Human-readable status mode label and suffix for the status bar.
-pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String) {
+pub(crate) fn status_mode_parts(
+    input_mode: &InputMode,
+    catalog: &crate::actions::ActionCatalog,
+) -> (&'static str, String) {
     // For pick modes the prompt suffix is sourced from the action's `ActionDescriptor`
-    // (via `pending_pick`) so the text lives in one place — the action registry.
+    // (via `pending_pick`) so the text lives in one place — the action catalog.
     let pick_suffix = || {
         input_mode
-            .pending_pick()
+            .pending_pick(catalog)
             .map(|p| format!(" — {}", p.prompt))
             .unwrap_or_default()
     };
@@ -85,7 +88,7 @@ pub(crate) fn status_mode_parts(input_mode: &InputMode) -> (&'static str, String
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
         // The confirm now lives entirely in the Modal dialog; the status bar only
         // shows the mode word, no duplicated prompt.
-        InputMode::ConfirmDelete { .. } => ("CONFIRM", String::new()),
+        InputMode::ConfirmDelete => ("CONFIRM", String::new()),
         InputMode::PaneTake { focus_after, .. } => {
             (if *focus_after { "TAKE+" } else { "TAKE" }, pick_suffix())
         }
@@ -113,6 +116,10 @@ struct ChromePassOpts {
     glow_alpha_scale: f32,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "GPU flush pass threads renderers + queue + view + encoder + scene + overlay sink explicitly"
+)]
 fn render_chrome(
     grid: &mut GridRenderer,
     text: &mut TextRenderer,
@@ -121,6 +128,12 @@ fn render_chrome(
     opts: ChromePassOpts,
     view: &wgpu::TextureView,
     encoder: &mut wgpu::CommandEncoder,
+    // Overlay content (a button's hover Tooltip, a popover) is NOT flushed with this surface —
+    // it is collected here and flushed once, above every surface, by `render_overlay_band` at
+    // the end of the frame. This makes overlays a real **top band** (the surface-compositor
+    // paint-z-order model, docs/surface-compositor.md), so e.g. a pane-header tooltip is no
+    // longer occluded by a neighbouring pane or the sidebar that flush after it.
+    overlay_sink: &mut Vec<heca_grid_ui::Scene>,
 ) {
     // NOTE: `begin_frame()` is called once at the top of `render_frame`, not here.
     // Calling it per `render_chrome` reset the persistent vertex-buffer write
@@ -146,8 +159,30 @@ fn render_chrome(
     heca_renderer::scene::enqueue_scene(grid, text, &scene.base_layer(), opts.glow_alpha_scale);
     grid.render(queue, view, encoder);
     text.render(queue, view, encoder, None);
-    for overlay in scene.overlay_segments() {
-        heca_renderer::scene::enqueue_scene(grid, text, &overlay, opts.glow_alpha_scale);
+    // Defer overlay segments to the frame-final top band (see the param doc + `render_overlay_band`).
+    overlay_sink.extend(scene.overlay_segments());
+}
+
+/// Flush the collected overlay segments from every surface, in accumulation order (panes →
+/// floats → chrome, so higher surfaces' overlays sit on top), **above all surface bases**.
+/// This is the overlay **top band** of the surface compositor's paint z-order: a tooltip /
+/// popover always paints over every pane, float, and the chrome/sidebars, never occluded by a
+/// surface that flushed after its own. Full repaint (no damage/clip); the segments already
+/// carry their own geometry.
+fn render_overlay_band(
+    grid: &mut GridRenderer,
+    text: &mut TextRenderer,
+    queue: &wgpu::Queue,
+    view: &wgpu::TextureView,
+    encoder: &mut wgpu::CommandEncoder,
+    overlays: &[heca_grid_ui::Scene],
+    glow_alpha_scale: f32,
+) {
+    grid.set_damage(None);
+    grid.set_clip(None);
+    text.set_damage(None);
+    for seg in overlays {
+        heca_renderer::scene::enqueue_scene(grid, text, seg, glow_alpha_scale);
         grid.render(queue, view, encoder);
         text.render(queue, view, encoder, None);
     }
@@ -173,7 +208,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // Lay out the right-click context menu now, before the scene-texture borrow, so
     // its paint pass (below) can take a shared `&AppState`. terminal-task-18.
     crate::chrome::layout_context_menu(state, w, h);
-    crate::chrome::layout_confirm_dialog(state, w, h);
+    // Generic dynamic-layer layout (overlay dialogs incl. the destructive-confirm prompt,
+    // plugin panels).
+    crate::chrome::layout_layers(state, w, h);
 
     let glow_alpha_scale =
         heca_renderer::scene::glow_alpha_scale_for_background(state.theme.background.to_f32x4());
@@ -627,6 +664,11 @@ pub(crate) fn render_frame(state: &mut AppState) {
         Some(stencil_view),
     );
 
+    // Overlay content (hover tooltips, popovers) from every surface — panes, floats, chrome —
+    // is collected here and flushed once at the very end, above all bases (the surface-compositor
+    // top band). Declared before the first surface flush; consumed after the last.
+    let mut overlay_sink: Vec<heca_grid_ui::Scene> = Vec::new();
+
     // ── Pass 3: Pane chrome overlay (on top of terminal content) ──
     //
     // The terminal content is a rectangular raster path; drawing the shell after
@@ -677,6 +719,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
             },
             scene_view,
             &mut encoder,
+            &mut overlay_sink,
         );
     }
 
@@ -885,6 +928,7 @@ pub(crate) fn render_frame(state: &mut AppState) {
                 },
                 scene_view,
                 &mut encoder,
+                &mut overlay_sink,
             );
         }
     }
@@ -1121,14 +1165,25 @@ pub(crate) fn render_frame(state: &mut AppState) {
     // and a live tree to dispatch events into in F4.2).
     let chrome_sig = crate::chrome::chrome_signature(state, chrome);
     if state.chrome_tree.as_ref().map(|t| t.sig) != Some(chrome_sig) {
-        let (root, signals, drag_items, hint_targets) =
-            crate::chrome::build_chrome_root(state, chrome);
+        // Drop the previous chrome tree's hint ids, then register the new tree's targets
+        // into the shared allocator (spans the chrome + pane-header trees), recording the
+        // contiguous id range this tree used so it can be removed on the next rebuild.
+        if let Some(old) = state.chrome_tree.as_ref() {
+            let old_range = old.hint_range.clone();
+            state.hint_targets.remove_range(old_range);
+        }
+        let mut hint_targets = std::mem::take(&mut state.hint_targets);
+        let start = hint_targets.checkpoint();
+        let (root, signals, drag_items) =
+            crate::chrome::build_chrome_root(state, chrome, &mut hint_targets);
+        let hint_range = start..hint_targets.checkpoint();
+        state.hint_targets = hint_targets;
         state.chrome_tree = Some(crate::chrome::RetainedChrome {
             root,
             sig: chrome_sig,
             signals,
             drag_items,
-            hint_targets,
+            hint_range,
         });
     }
     // Push value-state (selection + status) into the retained tree's bound signals so
@@ -1165,7 +1220,9 @@ pub(crate) fn render_frame(state: &mut AppState) {
     crate::chrome::paint_hint_targets(state, &mut chrome_scene, w, h, &chrome_theme);
     // Right-click context menu overlay, on top of everything. terminal-task-18.
     crate::chrome::paint_context_menu(state, &mut chrome_scene, w, h, &chrome_theme);
-    crate::chrome::paint_confirm_dialog(state, &mut chrome_scene, w, h, &chrome_theme);
+    // Generic dynamic-layer paint (overlay dialogs incl. the confirm prompt, plugin panels),
+    // back→front by band.
+    crate::chrome::paint_layers(state, &mut chrome_scene, w, h, &chrome_theme);
     // Visual-bell flash over the content area (fades out). terminal-task-17.
     crate::chrome::paint_bell_flash(state, &mut chrome_scene, pane_area, w, h, &chrome_theme);
     // Scrollback-search match highlights + query bar. terminal-task-19.
@@ -1189,6 +1246,18 @@ pub(crate) fn render_frame(state: &mut AppState) {
         },
         scene_view,
         &mut encoder,
+        &mut overlay_sink,
+    );
+
+    // Top band: every surface's overlay content (tooltips, popovers), above all bases.
+    render_overlay_band(
+        &mut state.grid_renderer,
+        &mut state.text_renderer,
+        &state.queue,
+        scene_view,
+        &mut encoder,
+        &overlay_sink,
+        glow_alpha_scale,
     );
 
     state.compositor.blit(&view, &mut encoder);
@@ -1216,25 +1285,32 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::status_mode_parts;
+    use crate::actions::ActionCatalog;
     use crate::app_state::{InputMode, RenameTarget};
-    use crate::input::WmAction;
     use heca_core::layout::PaneId;
 
     #[test]
     fn status_mode_parts_formats_rename_and_take() {
+        let catalog = ActionCatalog::with_builtins();
         assert_eq!(
-            status_mode_parts(&InputMode::Rename {
-                target: RenameTarget::Pane(PaneId(7)),
-                buffer: "term".to_string(),
-            }),
+            status_mode_parts(
+                &InputMode::Rename {
+                    target: RenameTarget::Pane(PaneId(7)),
+                    buffer: "term".to_string(),
+                },
+                &catalog
+            ),
             ("RENAME", ": term_".to_string())
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::PaneTake {
-                candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
-                focus_after: true,
-            }),
+            status_mode_parts(
+                &InputMode::PaneTake {
+                    candidates: vec![("a".chars().next().expect("candidate label"), PaneId(1))],
+                    focus_after: true,
+                },
+                &catalog
+            ),
             (
                 "TAKE+",
                 " — Select a pane to pull into the active column, then focus it.".to_string()
@@ -1242,11 +1318,7 @@ mod tests {
         );
 
         assert_eq!(
-            status_mode_parts(&InputMode::ConfirmDelete {
-                message: "Delete pane?".to_string(),
-                action: Box::new(WmAction::ClosePane),
-                resume_sidebar: false,
-            }),
+            status_mode_parts(&InputMode::ConfirmDelete, &catalog),
             ("CONFIRM", String::new()),
             "the prompt lives in the Modal now — the status bar shows only the mode word"
         );

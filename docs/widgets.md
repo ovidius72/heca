@@ -24,7 +24,7 @@ list of `DrawCommand`s) which `heca-renderer` rasterizes. It is **signal-driven*
   - Interactive: [`Button`](#button), [`IconButton`](#iconbutton), [`Toggle`](#toggle), [`Checkbox`](#checkbox), [`Input`](#input), [`Tabs`](#tabs), [`Select`](#select), [`Item`](#item), [`Row`](#row), [`BadgeButton`](#badgebutton)
   - Display: [`Badge`](#badge), [`StatusDot`](#statusdot), [`Separator`](#separator), [`Spinner`](#spinner), [`Alert`](#alert), [`Toast`](#toast), [`ProgressBar`](#progressbar), [`Gauge`](#gauge), [`Icon`](#icon), [`Tag`](#tag)
   - Chrome (sidebars/docks): [`ItemGroup`](#itemgroup), [`MarkerGroup`](#markergroup), [`DockFrame`](#dockframe), [`ChromeRegion`](#chromeregion), [`RailCell`](#railcell), [`KeyHint`](#keyhint)
-  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
+  - Overlays: [`Tooltip`](#tooltip), [`Modal`](#modal), [`Dialog`](#dialog), [`CommandPalette`](#commandpalette), [`ToastStack`](#toaststack)
 - [Patterns](#patterns) — change events, reactive binding, focus, disabled, custom widgets
 
 ---
@@ -159,7 +159,7 @@ Embedded by every widget; holds shared state. Access via `component.base()` /
 | `visible` | `Signal<bool>` | Whether the component renders. |
 | `disabled` | `Signal<bool>` | Dimmed + inert + skipped by focus. Set via `LayoutExt::disabled`. |
 | `focused` | `Signal<bool>` | Holds keyboard focus. |
-| `focus_visible` | `Signal<bool>` | Show the focus ring (keyboard focus only). |
+| `focus_visible` | `Signal<bool>` | Keyboard-vs-mouse focus flag (set by `FocusManager`). Widgets now draw their `focus_ring` whenever `focused`, so the ring shows for both; this flag is retained for widgets that still want a keyboard-only distinction. |
 | `tab_index` | `Option<i32>` | Explicit Tab order (HTML-like). Set via `LayoutExt::tab_index`. |
 | `children` | `Vec<Box<dyn Component>>` | Child components. |
 | `font` | `f32` | **Resolved** font size in logical px, written by the layout pass (see [Font sizing](#font-sizing)). Widgets read **this** for text + measurement, not `style.font_size`. |
@@ -243,12 +243,33 @@ Result: changing `theme.font_size` (and re-running layout) reflows the entire tr
 no tree rebuild, no per-widget `.font_size(...)` calls. Set `.font_scale(x)` for semantic
 hierarchy, or `.font_size(x)` to pin a specific size.
 
+### Size variants
+
+`WidgetSize` is the **discrete size step** a control picks with `LayoutExt::size` — it scales
+the inherited font **and** the widget's intrinsic padding / fixed dimensions together, so the
+whole affordance grows or shrinks as one. The caller picks a *variant*, never pixels; the
+widget owns the resulting geometry.
+
+| Variant | `font_scale` | `pad_scale` | Use |
+|---------|-------------|------------|-----|
+| `Small` | `0.8` | `0.5` | Compact controls (sidebar, dense toolbars). |
+| `Normal` *(default)* | `0.9` | `0.9` | The compact baseline for most controls. |
+| `Large` | `1.0` | `1.0` | Roomy controls at the full base font — the historical un-sized look. |
+| `Header` | `1.25` | `0.4` | Emphasized header / info-bar action buttons: glyph out-sizes the body text while a snug padding keeps the button cluster tight. |
+
+`font_scale` multiplies the inherited base font (applied centrally in layout); `pad_scale`
+multiplies the widget's intrinsic padding in its `remeasure`. `Header`'s padding is
+deliberately *below* `Small` so an emphasized icon stays large without turning the cluster
+into a row of chunky boxes — this is what the in-pane header action buttons use. Set it per
+widget with `.size(WidgetSize::Header)`; **never** hand-compute the icon/cell size in the
+caller.
+
 ### `Theme`, `GlowLevel` & `Intensity`
 
 Token struct consumed by `PaintCx`. Presets: **`Theme::grid_tron()`** (cyan, dark — the
 default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surface`,
 `foreground`, `muted`, `border`, `accent`, `glow`, `danger`, `success`, `warning`,
-`font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`,
+`font_family`, `font_size`, `radius`, `border_width`, `focus_border_width`, `focus_ring`,
 `glow_size` (`GlowLevel`), `intensity`, `show_focus_border`, `icon_secondary_alpha`,
 `active_wash_alpha`, `card_background_alpha`.
 
@@ -256,7 +277,8 @@ default) and **`Theme::grid_ares()`** (alternate). Tokens: `background`, `surfac
 |-------|------|--------|
 | `radius` | `f32` | Base corner radius. Boxes use it directly; small controls use `control_radius()` (= `radius × 0.5`); pills (Badge/Toggle/ProgressBar) round at `radius × 2` clamped to their capsule. `0` ⇒ square. |
 | `border_width` | `f32` | Decorative border stroke width for every box/pill widget **and** the `Pane`/`bracket_frame` reticle. `0` ⇒ no border anywhere. (App config: global `[appearance] border_width`.) |
-| `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus ring (`corner_brackets`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
+| `focus_border_width` | `f32` | Width of the **affordance** outlines — the keyboard focus indicator (`focus_ring`) and selected-item highlight. Independent of `border_width`, so focus/selection stay visible even with borders off. Default `1.5`. (App config: `[appearance] focus_border_width`.) |
+| `focus_ring` | `Option<Color>` | Color of the keyboard **focus outline** drawn by `PaintCx::focus_ring` (every widget). Unset ⇒ derived per-tone by `effective_focus_ring()` / `focus_ring_tone()`: the tone (accent, or `danger` for a destructive button) shifted toward `foreground`, which brightens the ring on dark themes and darkens it on light themes so it stays distinct from the widget's own border. Set it to pin the default/accent focus color; the `danger` ring always derives. |
 | `glow_size` | `GlowLevel` | The **sole** owner of glow — scales every glow's halo radius. `None` removes glow entirely. |
 | `intensity` | `Intensity` | The **CRT scanline overlay** only (no longer touches glow). |
 | `font_size` | `f32` | Base font every widget inherits (see [Font sizing](#font-sizing)). |
@@ -331,7 +353,8 @@ stay DRY):
 | `.viewport() -> Size` | Visible window size (set by the host via `.with_viewport(size)`); overlay widgets use it to flip/cap their popup. Defaults to "infinite" for headless callers. |
 | `.rect(rect, fill, Option<Border>, radius, Option<Glow>)` | Rounded rect + optional border + glow. |
 | `.drop_shadow(rect, radius, Shadow)` | Soft **drop shadow** behind a shape (dark, blurred, offset). Darkens the background (reads on dark themes, unlike the additive glow) and is independent of the glow/border tokens. Call before the shape's fill. Used by `Modal` to lift off the scrim. |
-| `.corner_brackets(rect, color)` | L-shaped corner reticle (focus ring / decoration). |
+| `.focus_ring(rect, color, radius)` | **The** keyboard focus outline for every widget — a thin accent-toned ring drawn *just outside* `rect` (CSS-`outline` style, offset gap), corner radius widened to stay concentric. Visible whether or not the widget has its own border (works on borderless Ghost/Link buttons). Width = `focus_border_width`; halo tracks `glow_size`. Pair with the theme's `focus_ring`/`effective_focus_ring()`/`focus_ring_tone()` for the color. |
+| `.bracket_frame(rect)` | Decorative L-shaped corner-bracket reticle (Pane/DockFrame/Modal/Dialog chrome) — **decoration, not focus** (focus uses `.focus_ring`). |
 | `.text(rect, &str, color, size, TextAlign, bold)` | Text centered in `rect` (per `align` horizontally, vertically centered). |
 | `.flash(rect, amount, radius)` | Brightening press-flash overlay (see `Flash`). |
 | `.dim(rect, radius)` | Background scrim — the standard disabled look. |
@@ -531,8 +554,8 @@ at natural) and re-applies it from scratch — no compounding across relayouts.
   only** (`FocusManager`), so the gate is simply `focused` — no broadcast-key
   ambiguity. When focused: `ArrowUp`/`ArrowDown` and `j`/`k` (with or without
   `Ctrl`) move by one step (~10% of the viewport, matching the wheel), `Home`/
-  `End` jump to top/bottom. A focus ring (corner brackets, `theme.accent`, gated
-  by `focus_visible` + `show_focus_border`) shows which region receives the keys.
+  `End` jump to top/bottom. A `focus_ring` (theme-derived accent outline, gated
+  by `focused` + `show_focus_border`) shows which region receives the keys.
   A focused **child** (e.g. an `Input`) receives its keys directly via its own
   `event` and never has them stolen. PageUp/PageDown are future work (`GridKey`
   has no page keys yet).
@@ -594,6 +617,11 @@ let sig = status.text_signal();
 Interactive surface; look driven by variant × size, with animated per-variant hover and a
 press flash. Focusable; Space/Enter activate like a click.
 
+- **Focus indicator**: like every widget, Button draws `PaintCx::focus_ring` — a thin accent-toned
+  **outline just outside** the button (so it shows even on borderless `Ghost`/`Link`), tinted by the
+  theme's `focus_ring` token / `effective_focus_ring()` for accent variants and
+  `focus_ring_tone(danger)` for `Destructive`. Shown whenever the button is `focused` (not
+  keyboard-only).
 - **Construct**: `Button::new(label)` (= primary) or `Button::{primary,secondary,destructive,outline,ghost,link}(label)`.
 - **Builders**: `.variant(ButtonVariant)`, `.size(ButtonSize)` (`Small`/`Medium`/`Large` — a
   font multiplier on the base font + padding), `.font_size(f32)` (pin an explicit size),
@@ -612,11 +640,18 @@ Button::destructive("DEREZ")
 The icon-only cousin of `Button` — a compact, clickable icon affordance for toolbars/headers.
 Ghost at rest (just the icon); an animated tone-tinted hover frame (+ optional glow) fades in,
 with a press flash and keyboard focus ring. Hugs its icon + padding by default; pin a square
-with `.size(px)`. Focusable once `.on_click(...)` is set.
+with `.cell(px)`. Focusable once `.on_click(...)` is set.
 
 - **Construct**: `IconButton::new(Icon)`.
-- **Builders**: `.size(px)` (pin a square), `.tone(Color)` (hover/press hue, default accent),
+- **Builders**: `.cell(px)` (pin a square), `.size(WidgetSize)` (size variant — see
+  [Size variants](#size-variants); `Header` is the emphasized one for info-bar / pane-header
+  buttons), `.tone(Color)` (hover/press hue, default accent),
   `.glow(bool)`, `.active(bool)`, `.on_click(impl Fn() + 'static)`.
+- **Header buttons**: for an emphasized icon in a pane/info-bar header, use
+  `IconButton::new(Icon::new(g).color(c)).size(WidgetSize::Header)` — **no** explicit icon px
+  and **no** `.cell(...)`. The button self-sizes from the variant (glyph `1.25×` the bar font
+  + a snug cluster padding) so the whole cluster scales with the bar font. Never hand-compute
+  the icon/cell size in the caller.
 - **`.active(true)`**: held-on (toggled) status — a persistent tone-tinted fill + firm border
   (the held version of the hover frame, matching the `Toggle` on-state), so the button reads as
   an active *status* not a passive icon. Hover/press still layer on top. Used by the in-pane
@@ -1146,6 +1181,43 @@ Tooltip::new(
 ).side(TooltipSide::Bottom);
 ```
 
+> The raw `Tooltip::new(button, "Close")` above hardcodes the text. **In the heca app,
+> do not do this for an action button** — see the next section: the tip (and its
+> keybinding) is derived from the action, centrally.
+
+### Action buttons — tooltip + KeyHint from the action (heca app pattern)
+
+Any chrome button that triggers a `WmAction` gets its **tooltip** and its `prefix+/`
+**KeyHint** from that action, automatically — the caller names the action, never a
+shortcut string, the leader symbol, or a hand-built tip. This keeps every button
+uniform and rebind-aware. The grid-ui primitives involved are **`IconButton`**,
+**`Tooltip`**, and **`hint_target`** ([`KeyHint`](#keyhint) framework); the resolution
+seam is app-side.
+
+```rust
+// heca/src/chrome/mod.rs — one call composes label + the live keybind(s):
+let hint_id = hints.register(InteractionIntent::ActivateAction(action.clone()));
+let button = IconButton::new(icon)
+    .hint_target(hint_id)                       // prefix+/ can pick it (same intent as click)
+    .on_click(move || emit(InteractionIntent::ActivateAction(action.clone())));
+row.child(action_tooltip(button, "close", "Close", &state.action_shortcuts));
+//                               ▲ action config name  ▲ label
+```
+
+- **Tooltip text is resolved by action name.** `ActionShortcuts` (on `AppState`, rebuilt
+  at config load/reload) maps each action's config name → its display shortcut via
+  `shortcut::shortcut_for_action`, which reads the **user's real binding when they've
+  rebound it** (defaults only as fallback), supports **multiple** bindings (joined
+  ` / `), and renders the leader through the `PREFIX_SYMBOL` constant — never a literal
+  `λ`, never `⌃⌥⇧⌘`. So a rebind in `config.toml` updates the tip with no code change.
+- **The name is the canonical key**, because the emitted `WmAction` may be a button-only
+  variant that isn't itself bound (`ClosePaneById`, `AddPaneToColumn`).
+- **KeyHint** = register the click's intent in the **shared** `HintTargetRegistry` (on
+  `AppState`, a monotonic id allocator spanning the chrome tree **and** every per-pane
+  header tree) and `.hint_target` it. Active-targeted buttons (zoom/float) register a
+  `FocusPaneThenAction` intent so the hint focuses the pane first, exactly like the click.
+  Full app-side rules are in **AGENTS.md → "Chrome buttons → action, tooltip, KeyHint"**.
+
 ### Modal
 
 A centered **confirm / alert dialog** over a dimming scrim. Like `Select`, it captures input
@@ -1186,6 +1258,52 @@ let open = modal.open_signal();
 > maps Tab / ←→ / Enter / Space / Char / Esc; a host with modifier state can additionally call
 > `focus_prev()` for **Shift+Tab** and `focus_next/prev()` for **Ctrl+l / Ctrl+h** (as `heca` does
 > in `events.rs`).
+
+### Dialog
+
+A centered overlay **panel that holds real child components** — the container counterpart to
+[`Modal`](#modal). Where `Modal` draws its title/message/buttons **manually** (no child subtree,
+so its buttons can't be hint targets or focus-traversed as components), `Dialog` lays out a
+padded panel of `[title, body, action-row]` where the `body` is an arbitrary component and each
+action is a real [`Button`](#button). Because the buttons are real children, they get the
+universal hint picker (`prefix+/`), standard focus traversal, and pointer routing **for free** —
+this is what makes an overlay's buttons hintable.
+
+Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
+routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree —
+Tab / ← / → move focus among the buttons, **Enter/Space** activate the focused one (firing its
+`on_click`), and **Esc** or a **scrim** click fire the `on_dismiss` callback. Unlike `Modal`,
+`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal is a
+callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
+
+Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
++ `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
+
+- **Construct**: `Dialog::new(title)`, then `.body(impl Component)` and `.action(impl Component)`
+  (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
+- **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — Esc/scrim
+  swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on Esc/scrim), `.open(bool)`
+  (focuses the first focusable — order `[Cancel, …]` for a safe default), plus `.body_boxed(Box<dyn Component>)`
+  for a body from a mapper (e.g. `realize`).
+- **Accessor**: `.open_signal() -> Signal<bool>`.
+
+```rust
+let dialog = Dialog::new("Delete pane?")
+    .body(Label::new("This action cannot be undone."))
+    .action(Button::secondary("Cancel").hint_target(cancel_id).on_click(move || emit(submit_cancel)))
+    .action(Button::destructive("Delete").hint_target(del_id).on_click(move || emit(submit_delete)))
+    .on_dismiss(move || emit(close))
+    .open(true);
+```
+
+> **Self-contained** — the host does nothing modal-specific. While a `Dialog` is up the host
+> just forwards pointer + key + `ModifiersChanged` events to it (the same generic overlay
+> routing every widget uses); `Dialog::event` owns **Tab / Shift+Tab / ← → / Ctrl+h·l / Enter /
+> Space / Esc** itself (reading the tracked modifiers for Shift+Tab and Ctrl+h·l), and swallows
+> the rest. Dismissal + activation flow out as callbacks — in `heca` the buttons emit
+> `SubmitOverlay` and `on_dismiss` emits `CloseOverlay`, so one intent path resolves the overlay
+> for click, KeyHint pick, and RPC alike. The developer only lists buttons; nav, tooltips, and
+> KeyHint targets come from the widget + the centralized button path.
 
 ### CommandPalette
 
@@ -1305,8 +1423,8 @@ from `on_change`.
 ### Focus & accessibility
 
 Interactive widgets are `focusable()` (unless disabled). Use one `FocusManager`: `advance`
-on Tab/Shift+Tab, `focus_at` on click, `deliver_key` for everything else. The focus-visible
-ring (corner brackets) shows only for keyboard focus and only when `theme.show_focus_border`.
+on Tab/Shift+Tab, `focus_at` on click, `deliver_key` for everything else. The `focus_ring`
+outline shows whenever a widget is `focused` and `theme.show_focus_border` is on.
 Order follows `tab_index` (ascending) then tree position.
 
 ### Disabled
@@ -1380,7 +1498,8 @@ impl Component for Reticle {
     fn base(&self) -> &Base { &self.base }
     fn base_mut(&mut self) -> &mut Base { &mut self.base }
     fn paint(&self, cx: &mut PaintCx) {
-        cx.corner_brackets(self.base.bounds, cx.theme().accent);
+        let ring = cx.theme().colors.effective_focus_ring();
+        cx.focus_ring(self.base.bounds, ring, cx.theme().colors.control_radius());
     }
 }
 impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
@@ -1388,7 +1507,7 @@ impl LayoutExt for Reticle {}   // opt into .width/.height/.padding/… for free
 
 Embed `Base`, implement `Component` (override `paint`/`event`/`tick` as needed, plus
 `remeasure` if the widget's size depends on the font — read `self.base.font`), and opt into
-builder traits. Reuse `PaintCx` helpers (`rect`, `corner_brackets`, `text`, `flash`, `dim`)
+builder traits. Reuse `PaintCx` helpers (`rect`, `focus_ring`, `bracket_frame`, `text`, `flash`, `dim`)
 and theme tokens (`radius`/`border_width`/`glow_size`) so the Tron look stays consistent and DRY.
 
 ### Drag and drop

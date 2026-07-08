@@ -593,6 +593,12 @@ sidebar_button_font_size = 11.0   # [+w] [+c] [+p] [-] buttons
 glow_size = "medium"   # none | thin | medium | large — glow presence + halo radius + strength
 intensity = "medium"   # off | low | medium | heavy — scanline/CRT overlay opacity only (NOT glow)
 
+# Keyboard focus outline
+show_focus_border = true   # draw the focus ring at all
+# focus_ring = "#7fd3ff"   # focus-outline color; unset = the accent shifted toward `foreground`
+                           # (auto-brightens on dark themes, darkens on light themes). The
+                           # destructive/danger focus ring always derives the same way.
+
 # Sidebar highlight alphas (0.0–1.0; optional, shown with their defaults)
 active_wash_alpha = 0.11          # Accent wash over the active workspace
 card_background_alpha = 0.02      # Resting background tint of each pane card
@@ -686,6 +692,29 @@ terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding t
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
 ```
+
+### Confirmation prompts
+
+Destructive actions can pop a **confirm dialog** before running. This is declared
+**per action** and configured in the generic `[confirm]` table, keyed by action
+name — `true` prompts (Cancel / \<action\>), `false` runs immediately:
+
+```toml
+[confirm]
+delete_pane = true      # confirm before closing a pane
+delete_column = true    # confirm before deleting a column (and its panes)
+delete_workspace = true # confirm before deleting a workspace (and its contents)
+```
+
+The guard lives on the **action**, so *every* surface that triggers it — a
+keybinding, the pane-header close button, a right-click menu, or RPC — confirms
+identically. Any action (including a plugin's) is configurable by name here; an
+action not listed uses its own declared default. Changes apply on
+`prefix+Shift+r`.
+
+> Replaces the old `[settings] confirm_close_pane` / `confirm_delete_column` /
+> `confirm_delete_workspace` flags — move any you had set into `[confirm]` as
+> `delete_pane` / `delete_column` / `delete_workspace`.
 
 ### Fonts
 
@@ -1280,6 +1309,7 @@ The agreed behavior for float toggling is:
 - **PaneBackend trait**: All content sources (terminal, Neovim, browser) implement the same interface.
 - **Sidebar shell vs container**: the long-term design separates the sidebar shell from the mounted content container. The current workspace tree should evolve into a built-in `WorkspacesContainer`, not remain the definition of the sidebar itself.
 - **Action reachability**: important actions should be reachable from mouse/UI, keybindings, and RPC when meaningful on those surfaces.
+- **Surface compositor (layering)**: on-screen surfaces (background, panes, sidebar, floating panes, overlays/modals, future exposé) form a **tree** whose position defines z-order — no hardcoded levels. One uniform rule (context activation + geometric occlusion) decides what is interactive, starting with the universal KeyHint picker (`prefix+/`). See [`docs/surface-compositor.md`](docs/surface-compositor.md) — the contract for adding any new layer, surface, overlay, or button.
 
 ---
 
