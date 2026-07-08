@@ -178,17 +178,37 @@ impl FocusManager {
         self.apply(root, None, false);
     }
 
-    /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
-    /// click); clears focus if the click misses every focusable.
-    pub fn focus_at(&mut self, root: &mut dyn Component, pos: Point) {
+    /// Index of the top-most focusable component containing `pos` (last match
+    /// wins = top-most in z-order), or `None` if the point misses every focusable.
+    fn hit_test(root: &mut dyn Component, pos: Point) -> Option<usize> {
         let mut hit = None;
         let mut idx = 0;
         for_each_focusable(root, &mut idx, &mut |i, c| {
             if c.base().bounds.contains(pos) {
-                hit = Some(i); // last match wins = top-most in z-order
+                hit = Some(i);
             }
         });
+        hit
+    }
+
+    /// Focus the top-most focusable component containing `pos` (e.g. on a mouse
+    /// click); **clears** focus if the click misses every focusable. This is the
+    /// page-level "click empty space to blur" semantics.
+    pub fn focus_at(&mut self, root: &mut dyn Component, pos: Point) {
+        let hit = Self::hit_test(root, pos);
         self.apply(root, hit, false); // mouse focus → no ring (focus-visible)
+    }
+
+    /// Trapped-focus variant of [`focus_at`](Self::focus_at): a click that hits a
+    /// focusable moves focus to it, but a click that **misses** every focusable is
+    /// a **no-op for focus** — the current focus is kept, not cleared. Use this
+    /// where focus is trapped inside an overlay panel (a modal / dropdown): clicking
+    /// the panel *body* (not a control) must not blur the focused control.
+    pub fn focus_at_trapped(&mut self, root: &mut dyn Component, pos: Point) {
+        if let Some(hit) = Self::hit_test(root, pos) {
+            self.apply(root, Some(hit), false); // mouse focus → no ring (focus-visible)
+        }
+        // Miss inside a trapped panel → keep the current focus.
     }
 
     /// Route a **pointer/scroll** event through the tree with overlay-first dibs
@@ -207,12 +227,29 @@ impl FocusManager {
     /// own bindings and uses [`offer_to_overlay`](Self::offer_to_overlay) +
     /// [`deliver_key`](Self::deliver_key) for the leftovers.
     pub fn dispatch(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
+        self.dispatch_inner(root, ev, false)
+    }
+
+    /// Trapped-focus variant of [`dispatch`](Self::dispatch): identical routing, but
+    /// a [`PointerPressed`](crate::component::Event::PointerPressed) that misses every
+    /// focusable **keeps** the current focus instead of clearing it (see
+    /// [`focus_at_trapped`](Self::focus_at_trapped)). For modal/overlay panels that
+    /// trap focus — clicking the panel body must not blur the focused control.
+    pub fn dispatch_trapped(&mut self, root: &mut dyn Component, ev: &Event) -> Handled {
+        self.dispatch_inner(root, ev, true)
+    }
+
+    fn dispatch_inner(&mut self, root: &mut dyn Component, ev: &Event, trapped: bool) -> Handled {
         if self.offer_to_overlay(root, ev) == Handled::Yes {
             return Handled::Yes;
         }
         match ev {
             Event::PointerPressed { pos } => {
-                self.focus_at(root, *pos);
+                if trapped {
+                    self.focus_at_trapped(root, *pos);
+                } else {
+                    self.focus_at(root, *pos);
+                }
                 root.event(ev)
             }
             _ => root.event(ev),

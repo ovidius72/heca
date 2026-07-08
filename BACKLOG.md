@@ -1389,12 +1389,16 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
       danger). Fixed `modal.rs` to use the shared `cx.focus_ring` + tone-following (`focus_ring_tone
       (danger)` for the danger button, `effective_focus_ring()` otherwise) + `show_focus_border`
       gate — identical to `Button`. (The two showcase demos — `Modal` vs `Dialog` — now match.)
-    - **[ ] OPEN — overlay click clears button focus (Modal + Dialog).** Clicking the modal **body**
-      (not a button) clears the focused button's ring — the overlay panel isn't focusable and a
-      background click shouldn't defocus. Likely the pointer path calls `FocusManager::focus_at`,
-      which clears focus when the click misses every focusable. Fix: a click inside the panel that
-      hits no button should be a **no-op for focus** (keep the current focus), not a clear. Check
-      both `dialog.rs` (app-used) and `modal.rs` pointer handling. Not started (context budget).
+    - **[x] DONE (2026-07-08) — overlay click clears button focus (Dialog).** Clicking the modal
+      **body** (not a button) cleared the focused button's ring: `Dialog`'s panel press ran
+      `FocusManager::dispatch` → `focus_at`, which **clears** focus on a click that misses every
+      focusable. Fix is **generic** in `FocusManager` (`focus.rs`): factored the hit-test scan into
+      `hit_test()`, kept `focus_at` (page-level "click empty space to blur"), and added a
+      **trapped-focus** pair — `focus_at_trapped()` / `dispatch_trapped()` — that keeps focus on a
+      miss. `Dialog` now uses `dispatch_trapped` (focus is trapped inside a modal). Regression test
+      `clicking_panel_body_keeps_button_focus`. **`modal.rs` was NOT affected** — `Modal` tracks a
+      plain `focused: usize` index that a body click never clears (verified). Gate: grid-ui
+      59+127+1 green, clippy clean, `heca` compiles.
     - **[ ] OPEN — `Modal` vs `Dialog` render buttons differently (showcase).** The two confirm
       demos look different: `Modal` **draws its buttons manually** (`modal.rs` paint) while `Dialog`
       uses **real `Button`** widgets → different fill/border look (focus is now consistent after

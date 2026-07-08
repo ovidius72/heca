@@ -294,9 +294,11 @@ impl Component for Dialog {
             Event::PointerPressed { pos } => {
                 if panel_bounds.contains(*pos) {
                     // Focus + deliver the press to the button under the cursor (its on_click
-                    // carries the overlay-control action).
+                    // carries the overlay-control action). Trapped dispatch: a press on the
+                    // panel *body* (no button under the cursor) keeps the focused button's
+                    // ring instead of clearing it — focus is trapped inside the modal.
                     let panel = self.base.children[0].as_mut();
-                    self.focus.dispatch(panel, ev);
+                    self.focus.dispatch_trapped(panel, ev);
                 } else if self.dismissible {
                     // Scrim / outside click dismisses only when dismissible.
                     self.fire_dismiss();
@@ -414,6 +416,45 @@ mod tests {
             Handled::Yes,
         );
         assert!(flag.get(), "Esc fired the dismiss callback");
+    }
+
+    /// Buttons in the action row that currently hold focus (drives the focus ring).
+    fn focused_buttons(d: &Dialog) -> Vec<usize> {
+        use crate::reactive::SignalGet;
+        let panel = &d.base().children[0];
+        let row = &panel.base().children[2];
+        row.base()
+            .children
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.base().focused.get_untracked())
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    #[test]
+    fn clicking_panel_body_keeps_button_focus() {
+        // Regression: a press on the panel *body* (not a button) must NOT clear the
+        // focused button's ring — focus is trapped inside the modal. Previously the
+        // panel dispatch cleared focus on any click that missed every focusable.
+        let mut d = open_dialog();
+        crate::LayoutEngine::new().compute(&mut d, Size::new(600.0, 400.0));
+        // Move focus by keyboard so a button shows the focus ring.
+        let _ = d.event(&Event::Key { key: GridKey::Tab, pressed: true });
+        let before = focused_buttons(&d);
+        assert!(!before.is_empty(), "a button is focused after Tab");
+
+        // Click the panel body: inside the panel bounds but on the title band (no button).
+        let panel = d.panel_bounds();
+        let body = Point::new(panel.loc.x + panel.size.w * 0.5, panel.loc.y + 2.0);
+        assert!(panel.contains(body), "test point is inside the panel body");
+        let _ = d.event(&Event::PointerPressed { pos: body });
+
+        assert_eq!(
+            focused_buttons(&d),
+            before,
+            "clicking the panel body keeps the focused button (trapped focus)",
+        );
     }
 
     #[test]
