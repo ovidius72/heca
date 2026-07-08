@@ -1383,6 +1383,18 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
       `PaintCx::corner_brackets` was **removed**. Docs updated across `docs/widgets.md` (PaintCx table,
       Base props, Button, ScrollRegion, widget-building example), theme docs.
     - theme 25 + grid-ui 58+127+1 green, clippy clean, heca + showcase build.
+    - **Modal focus-ring consistency — DONE (2026-07-08).** The `Modal` widget drew its focused
+      button's ring **manually** with hardcoded `accent` (blue) regardless of `danger` → its danger
+      button rang blue while the `Dialog`/`Button` path (the app's confirm) tone-follows (danger →
+      danger). Fixed `modal.rs` to use the shared `cx.focus_ring` + tone-following (`focus_ring_tone
+      (danger)` for the danger button, `effective_focus_ring()` otherwise) + `show_focus_border`
+      gate — identical to `Button`. (The two showcase demos — `Modal` vs `Dialog` — now match.)
+    - **[ ] OPEN — overlay click clears button focus (Modal + Dialog).** Clicking the modal **body**
+      (not a button) clears the focused button's ring — the overlay panel isn't focusable and a
+      background click shouldn't defocus. Likely the pointer path calls `FocusManager::focus_at`,
+      which clears focus when the click misses every focusable. Fix: a click inside the panel that
+      hits no button should be a **no-op for focus** (keep the current focus), not a clear. Check
+      both `dialog.rs` (app-used) and `modal.rs` pointer handling. Not started (context budget).
     **Dead-code cleanup (done in same change):** the three now-unused `PaintCx` convenience wrappers
     (`corner_brackets`, `corner_brackets_plain`, `corner_brackets_len`) were **removed**. The
     lower-level `DrawCommand::Brackets` / `BracketCmd` **primitive is kept** — it is still live: the
