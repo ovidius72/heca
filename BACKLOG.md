@@ -1395,6 +1395,12 @@ Source: `pluggable-chrome-plugin-plan.md` Phases 4–5
       which clears focus when the click misses every focusable. Fix: a click inside the panel that
       hits no button should be a **no-op for focus** (keep the current focus), not a clear. Check
       both `dialog.rs` (app-used) and `modal.rs` pointer handling. Not started (context budget).
+    - **[ ] OPEN — `Modal` vs `Dialog` render buttons differently (showcase).** The two confirm
+      demos look different: `Modal` **draws its buttons manually** (`modal.rs` paint) while `Dialog`
+      uses **real `Button`** widgets → different fill/border look (focus is now consistent after
+      `8dae1d1`). `Modal` is legacy — the app's confirm uses `Dialog` (`OverlayHost::open_modal`).
+      Decide: (a) make `Modal` render real `Button`s, or (b) deprecate the `Modal` widget + its
+      showcase demo in favour of `Dialog`.
     **Dead-code cleanup (done in same change):** the three now-unused `PaintCx` convenience wrappers
     (`corner_brackets`, `corner_brackets_plain`, `corner_brackets_len`) were **removed**. The
     lower-level `DrawCommand::Brackets` / `BracketCmd` **primitive is kept** — it is still live: the

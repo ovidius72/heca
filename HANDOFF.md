@@ -1,87 +1,172 @@
-# HANDOFF — Overlay pipeline + Dialog + surface-compositor overlays
+# HANDOFF — action-interaction architecture + focus-ring polish
 
 > **How to resume:** a fresh session starts in the MAIN checkout `/Users/antonio/projects/myvim`.
-> This work is in a **sibling worktree**. Say *"read HANDOFF.md in the worktree and resume."*
-> Auto-loaded memory: `surface-compositor-viewnode-arc`, `every-setting-and-keybinding-in-default-files`.
+> This work is in a **sibling worktree** `/Users/antonio/projects/myvim-gridui-styling` — operate
+> there (`git -C …`, abs paths). Say *"read HANDOFF.md in the worktree and resume."*
+> **Branch:** `feat/gridui-styling-foundation`.
 
-## 0. Orientation (read FIRST)
-- **Worktree:** `/Users/antonio/projects/myvim-gridui-styling` — operate here (`git -C … `, abs paths).
-- **Branch:** `feat/gridui-styling-foundation`.
-- **MANDATORY context to read before touching code** (the user enforces this — I got burned repeatedly this session by NOT reading them):
-  - `AGENTS.md` — esp. the top **"⛔ STOP"** section: (1) use existing grid-ui widgets, (2) actions/keys through the registries + **EVERY setting → `config.default.toml`, EVERY keybound action → `keybindings.default.toml`**, (3) no "for now" fixes; **§ "Chrome buttons → action, tooltip, KeyHint (do NOT hand-roll)"** (line ~421); **§ "Creating new widgets"** (line ~704); **§ "Adding New Actions"** checklist.
-  - `docs/surface-compositor.md` — the layered-surface model (bands, occlusion, **paint z-order = the "Later" phase**, overlays are a top band). Read before adding any layer/surface/overlay.
-  - `docs/widgets.md` — every widget + the `Dialog` section (updated this session).
-  - `pluggable-chrome-plugin-plan.md` — §2.6.2 (ViewNode), §2.7.1 (OverlayHost/ModalSpec/ModalResult), **§2.7.2** (intent/dispatch/overlay-control decisions).
-  - `docs/overlay-design.md` — the older `with_overlay` infra proposal (context for the Scene overlay layer).
-  - `BACKLOG.md` — the plugin arc: `plugin-ui` phase (`plugin-task-ui-*`), `sidebar-fu-13`, `sidebar-fu-11`, `plugin-task-15`. **This backlog is mine to keep consistent** (memory `plugin-gridui-backlog-is-mine-keep-it-consistent`). NEEDS UPDATING — see §6.
-- **Never run `cargo fmt`** (rustfmt 1.9 churns unrelated files). Fix all warnings (even pre-existing). `cargo build -p heca` can exceed a 2-min tool timeout → use long timeouts.
+## 0. Orientation — read FIRST
+- **MANDATORY before touching code** (enforced): `AGENTS.md` (esp. the ⛔ STOP section: use existing
+  grid-ui widgets; actions/keys through registries + **EVERY setting → `config.default.toml`, EVERY
+  keybound action → `keybindings.default.toml`**; no "for now" fixes; the FUNDAMENTAL styling/layout
+  contract), `docs/widgets.md` (widget catalog + focus primitives), `docs/surface-compositor.md`
+  (layers/overlays), `action-interaction-plan.md` (the architecture this session executed).
+- **Never run `cargo fmt`** (rustfmt 1.9 churns unrelated files). **Fix all warnings** (even
+  pre-existing). `cargo build -p heca` can exceed a 2-min tool timeout → use long timeouts.
+- **No commit/push/PR/merge without explicit user OK** (this session's commits were all OK'd).
 
-## 1. ⏸ EXACT POINT WE ARE DISCUSSING NOW (resume here)
-**DONE this turn (committed):**
-- **Esc = default modal cancel** (`dialog.rs`). Esc **always** fires `on_dismiss` (universal cancel); `dismissible` gates ONLY the scrim/outside-click. A blocking modal simply sets no `on_dismiss` → Esc no-ops. USER RULE: **this is the default behaviour for all non-blocking modals.** The destructive confirm keeps `dismissible(false)` (scrim guarded) but Esc cancels it.
-- **Focus-ring glow/size tuning** (`component.rs corner_brackets`): shorter arms `len 12→7` + subtler glow `radius 6→3`/`intensity 1.0→0.3`, still respects `glow=none`.
-- Variant-coloured ring **restored** (`button.rs:378`, Destructive→`danger`, else `accent`).
-- Keyboard-only focus was tried (`FocusManager::focus_first_quiet` + `Dialog::open` used it) — **the user then reversed it** (see below).
+## 1. Git state
+- **Pushed:** up to `8548b92` (`focus_ring` is the universal focus indicator — all grid-ui widgets).
+- **Local, UNPUSHED** (9 commits, oldest→newest) — the whole action-interaction arc + fixes:
+  - `d918b4d` fix: **central destructive-confirm guard** at the dispatch chokepoint (bug: header
+    close button bypassed confirm) — verified in-app by the user.
+  - `a4fe71c` docs: action-interaction **plan** (`action-interaction-plan.md`) + backlog phase.
+  - `ba9f938` docs: precise Phase A execution notes.
+  - `b0d13ce` refactor: **Phase A** — runtime `ActionCatalog` on `AppState`.
+  - `ae5b6dc` feat: **Phase B** — declarative `ConfirmSpec` + generic confirm gate.
+  - `e8d60a3` feat: **B2** — generic `[confirm]` config table replaces `[settings] confirm_*`.
+  - `a92ebdd` docs: README `[confirm]` section.
+  - `7519fa7` refactor: rename confirm key `close` → **`delete_pane`**.
+  - `8dae1d1` fix: **Modal focus ring** tone-follows like Button/Dialog.
+- **Whole workspace green** at HEAD: heca **313**, heca-config **78**, heca-theme **25**,
+  grid-ui **58+127+1**. Clippy clean (only the unrelated upstream `block v0.1.6` note).
+- **When ready:** the user may ask to **push** these 9 commits.
 
-**⏸ NEXT / PENDING — FOCUS-STYLE REWORK (not started; the exact resume point):** the user wants the focus indicator to **show always** (not keyboard-only) and to look different:
-1. `button.rs:378` — key the indicator off **`self.base.focused`** (not `focus_visible`) so it shows always; **replace `cx.corner_brackets(...)`** with a *"slightly different accent when focused"* — a subtle accent-tone treatment (thin full outline OR a faint tint), following the button tone (Destructive→`danger`, else `accent`). NO brackets.
-2. **Revert the keyboard-only bits:** `Dialog::open()` back to `focus.advance(panel, true)`; **remove `FocusManager::focus_first_quiet`** (`focus.rs`) — becomes unused.
-3. `corner_brackets` is the SHARED focus primitive (badge_button/tabs/icon_button/toggle/item/rail_cell/select/row/toast/input/checkbox all use it) — decide whether they adopt the new non-bracket style too, or only Button changes. (Ask the user.)
-Then commit + visually verify in the showcase.
+## 2. THE BIG ARC — Declarative action interaction (confirm + response buttons)
+Goal: an action declares **as data** whether it needs a prompt (confirm/choice) and which response
+buttons + outcomes; ONE central gate reads it; built-ins **and plugins** declare it the same way, so
+no surface re-implements confirmation (the guard is on the **action**, not the call site). Full
+design: **`action-interaction-plan.md`**.
 
-**I offered 3 options; the user has NOT chosen yet:**
-1. **Full thin outline ring** *(I recommended)* — replace brackets with a full rounded-rect accent border + soft glow (no fill). Conventional focus ring; reads distinctly from heca's decorative bracket reticles (Pane/DockFrame/Dialog panel use brackets for *decoration*, so focus ≠ decoration is good).
-2. **Soft glow only** — no brackets, just an accent halo.
-3. **Toned-down brackets** — shorter + thinner + no glow (e.g. `len 12→6`, drop glow).
+### Locked decisions (do NOT relitigate)
+1. **Native `Outcome::Callback` included now** — native-only, documented meticulously. Not
+   serializable (never crosses WASM/RPC); plugins use declarative outcomes only.
+2. **Runtime action registry now** (`ActionCatalog`), replacing the static `ALL` lookup path.
+3. **Generic `[confirm].<action>` config table** (not per-scope settings fields).
+4. **Dedicated pure-data `ConfirmSpec`** (decoupled from chrome/overlay), converted to `ModalSpec`
+   at open time — NOT reusing `ModalSpec` directly.
 
-**NEXT ACTION:** get the user's choice, then make it a **theme-driven** change in that one `if` block (use theme tokens, no hardcoded sizes — the corner_brackets already reads `focus_border_width`). Update the showcase note + `docs/widgets.md` if the focus-ring description changes. This is a grid-ui-wide visual change → verify in the showcase (`cargo run -p heca-renderer --example showcase`).
+### Phase A — runtime `ActionCatalog` (commit `b0d13ce`)
+- `heca/src/actions.rs`: new `ActionCatalog { by_name, order, confirm }`, `with_builtins()` seeds
+  from the built-in `ActionRegistry::ALL` (`&'static ActionDescriptor`; owned plugin entries deferred
+  to Phase C). Methods `find/icon/label/by_category/count` (instance) replaced the **removed** static
+  `ActionRegistry::{find,icon,label,by_category,count}`.
+- `AppState.action_catalog` (`app_state.rs`), built in `startup.rs`.
+- Migrated the 6 metadata call sites: `mouse.rs` context-menu builders (`entry` takes
+  `&ActionCatalog`), `InputMode::pending_pick(&catalog)` + `render::status_mode_parts(_, &catalog)`,
+  and the stateless chrome helpers `pane_action_spec` / `sidebar_toggle_button` (threaded
+  `&ActionCatalog` via `PaneHeaderContent.catalog`, alongside the existing `shortcuts`).
+- **No behavior change.** `by_category`/`count`/`category`/`default_binding` kept for the command
+  palette + RPC introspection (some `allow(dead_code)` — the `expect(dead_code)`↔liveness interaction
+  is finicky; use `allow` for those).
 
-## 2. WHAT SHIPPED THIS SESSION (all committed, on the branch, user-verified)
-Commits (newest first): `e27ac58` (settings+rule docs) · `e9f174c` (overlay top band + layer tick + centralized modal buttons) · `fa6e3eb` (self-contained Dialog keyboard + re-entrant Scene overlay) · `5f80a10` (OverlayHost pipeline; confirm dialog = hintable overlay layer) · `47f1d4c` (Dialog on_dismiss + body_boxed) · `434c2b6` (docs §2.7.2) · `bebb141` (InteractionIntent::View + realize) · `fe18771` (Dialog widget).
+### Phase B — `ConfirmSpec` + generic gate (commit `ae5b6dc`)
+- `heca/src/actions.rs`: `ConfirmSpec { message, buttons, dismissible, config_name, default_enabled }`,
+  `ResponseButton { id, label, role, outcome }` (+ `cancel`/`proceed`/`new` ctors), `ButtonRole
+  {Default,Cancel,Danger}`, `Outcome {Proceed, Cancel, Dispatch(WmAction), Callback(ConfirmCallback)}`,
+  `ConfirmCallback = Rc<dyn Fn(&mut AppState, &ActionRegistry)>` (native-only, meticulously documented
+  on the type + variant). `builtin_confirm_specs()` declares the 3 destructive specs.
+- `heca/src/handlers.rs`: the central gate `maybe_confirm_destructive(state, action) -> bool` now
+  **reads the catalog spec** (resolves `ClosePane`→`ClosePaneById{focused}` pinned at prompt time,
+  looks up `confirm_config_name(action)` → `catalog.confirm_spec(name)`, checks `confirm_enabled`),
+  then `open_confirm` converts `ConfirmSpec→ModalSpec` and runs the chosen button's `Outcome` via
+  `run_outcome`: **Proceed = `registry.execute(resolved)`** (bypasses the gate → NO loop), Cancel =
+  nothing, Dispatch = `dispatch_action`, Callback = the native closure. Dismiss (Esc/scrim) → the
+  `Cancel`-role button's outcome.
+- **Folded/removed:** `begin_confirm_delete` (gone); `request_destructive` + `run_destructive_now`
+  reimplemented on the spec path (`request_destructive` still exists for the sidebar/keyboard
+  resolvers that compute a target); `destructive_message` → `confirm_title` (the dynamic,
+  target-specific title stays code — a static spec can't hold the pane/ws name).
+- Gate lives at `interaction.rs` `dispatch_intent`'s `Allow(ActivateAction)` arm:
+  `if !maybe_confirm_destructive(state, &act) { registry.execute(&act, state); }`.
 
-**The full overlay pipeline (was step 3 of the arc) is DONE.** The destructive-confirm prompt is now a **`Dialog` layer** in the `LayerRegistry` (`Modal` band), so its buttons are **real components** → hint targets + focus-traversable. **This CLOSES `sidebar-fu-13` Stage 3** (KeyHint over a dialog). User verified live: both bugs fixed (modal no longer vanishes when a tooltip shows; pane-header tooltip floats above neighbours/sidebar).
+### B2 — generic `[confirm]` config (commit `e8d60a3`)
+- `heca-config/src/confirm.rs`: `ConfirmConfig { actions: HashMap<String,bool> }` (`#[serde(flatten)]`)
+  + `enabled(name, default)`. On `Config.confirm` (`loader.rs`). Removed
+  `confirm_close_pane/column/workspace` from `SettingsConfig`.
+- `AppState.confirm` holds it (built at `startup.rs` + reload in `main.rs`); `handlers::confirm_enabled`
+  → `state.confirm.enabled(name, spec.default_enabled)`. `config.default.toml` gains `[confirm]`.
+  README documents it (`### Confirmation prompts`).
+- **BREAKING config change:** old `[settings] confirm_*` keys are gone → users move them to
+  `[confirm]` as `delete_pane` / `delete_column` / `delete_workspace` (documented).
+- Also fixed a stale `heca-config` test (`bundled_latte_is_a_light_theme` asserted the old
+  `show_focus_border=false`, flipped by the focus-ring commit `8548b92`).
 
-Concretely:
-- **grid-ui `Dialog`** (`heca-grid-ui/src/widgets/dialog.rs`) — centered panel over a scrim holding real children (`Modal`'s counterpart). **Self-contained keyboard**: Tab/Shift+Tab/←→/Ctrl+h·l/Enter/Space/Esc, tracking `Event::ModifiersChanged` itself (focus methods private). `on_dismiss` callback (Esc/scrim). `body_boxed()` for a `realize()`-produced body. Registered in `widgets/mod.rs` + `lib.rs`.
-- **`realize()`** (`heca/src/chrome/realize.rs`, `plugin-task-ui-3`) — `&ViewNode → Box<dyn Component>`; actionable node → hint_target + `on_click→emit(View intent)`.
-- **`InteractionIntent::View`** + `dispatch_view_intent` (`heca/src/app/interaction.rs`).
-- **`OverlayHost`** (`heca/src/chrome/overlay.rs`) — `OverlayId`(=LayerId, pub), `ModalSpec`/`ModalAction`/`ModalResult`. `open_modal(state, spec, completion) -> OverlayId`: realizes body + builds one `Button` per action via the **centralized path** (`hints.register(SubmitOverlay)` + `action_tooltip(button, id, label, &state.action_shortcuts)`), wraps in a `Dialog`, inserts a Modal-band layer, stores the completion. `resolve()` pops the layer + runs the completion. `top_modal()`.
-- **Actions** `WmAction::SubmitOverlay{overlay,action}` / `CloseOverlay{overlay}` (`input.rs`, parameterized) — intercepted in `dispatch_intent` (has the registry the completion needs), like `FocusPaneThenAction`. Classified in `action_policy` + `action_priority` for match completeness (never actually consulted).
-- **Confirm dialog migration** (`heca/src/handlers.rs` `begin_confirm_delete`) — calls `open_modal` with a completion that dispatches the confirmed action; `dismissible(false)` (forced choice). Removed `AppState::confirm_dialog`/`confirm_dialog_result`, `resolve_confirm_delete`, the 4 bespoke paths; `InputMode::ConfirmDelete` is now a fieldless status marker.
-- **Render** (`heca/src/app/render.rs`) — **overlay top band**: `render_chrome` collects each surface's overlay segments into an `overlay_sink` flushed once by `render_overlay_band` after ALL bases (panes→floats→chrome), so tooltips/popovers float above everything (surface-compositor paint z-order). Generic `layout_layers`/`paint_layers` (`chrome/mod.rs`) for dynamic layers.
-- **`Scene::begin/end_overlay` re-entrant** (`heca-grid-ui/src/scene.rs`, depth counter) — nested `with_overlay` (Tooltip inside Dialog) no longer drops the parent's segment. +2 tests.
-- **Layer tick** (`heca/src/app/lifecycle.rs`) — `state.layers.visible_roots_mut()` ticked each frame so widgets in a layer (tooltip reveal, hover flash) animate + request frames.
-- **Config/docs** — 7 settings added to `config.default.toml` (`confirm_close_pane/column/workspace`, `show_left/right_sidebar`, `show_top/bottom_bar`). AGENTS.md ⛔STOP cardinal rule added. Memory `every-setting-and-keybinding-in-default-files`.
+### Rename (commit `7519fa7`)
+- Confirm key **`close` → `delete_pane`** (was too generic; now consistent with
+  `delete_column`/`delete_workspace`). The confirm key is **decoupled** from the action's descriptor
+  name (which stays `close` for keybinding/tooltip/icon). Changed in `builtin_confirm_specs`,
+  `confirm_config_name`, `config.default.toml`, README, plan/backlog/app_state docs.
 
-**Verification:** heca **311** tests, grid-ui **58+127+1**, clippy clean, showcase builds. User confirmed the two visual bugs are fixed.
+### How a dev/plugin declares a confirm now
+```rust
+ConfirmSpec {
+    message: "This action cannot be undone.".into(),
+    buttons: vec![
+        ResponseButton::cancel("cancel", "Cancel"),
+        ResponseButton::proceed("confirm", "Delete", /*danger*/ true),
+        // ResponseButton::new("discard", "Discard", Default, Outcome::Dispatch(some_action)),
+        // Outcome::Callback(rc_closure)  // native-only
+    ],
+    dismissible: false, config_name: "delete_pane".into(), default_enabled: true,
+}
+```
 
-## 3. KEY DECISIONS (with WHY — do not relitigate)
-- **Modal buttons go through the ONE centralized path** (`action_tooltip` + `hints.register`), NEVER hand-rolled. WHY: AGENTS.md § "Chrome buttons → action, tooltip, KeyHint — do NOT hand-roll". The developer only declares `ModalAction{id,label,danger}`; tooltip + KeyHint + click intent come for free.
-- **NO y/n (per-button) shortcuts on modals.** WHY: overlay-control actions are **parameterized** (carry the overlay id) → not config-bindable by design; `action_tooltip` resolves shortcuts from `config.keys.bindings`, so there's nothing to show. KeyHint (`prefix+/`) covers discoverability. The `id` doubles as the tooltip's action-name — if a modal button confirms a *config-bound* action, pass that action's name as the id and its keybinding shows for free.
-- **Everything is an action (RPC works):** clicking a modal button emits `SubmitOverlay{overlay,action}`; Esc/scrim emits `CloseOverlay{overlay}`. RPC drives the SAME actions with the `OverlayId` returned from `open_modal` (or, normal flow, awaits `ModalResult`). The RPC *bridge* is Phase-8/9 (not built); the action shape that enables it is done.
-- **Dialog is self-contained** (owns its keyboard, tracks `ModifiersChanged`); the host just forwards events. WHY: the widget should provide next/prev/keyhint/activation itself — the developer/host must not wire it. Rejected the host-side `handle_modal_key` + `Component::as_any_mut` downcast (removed).
-- **Overlays are a top band** (`render_overlay_band`), not flushed per-surface. WHY: a pane-header tooltip was occluded by later-flushing surfaces (adjacent panes, sidebar); the surface-compositor's paint z-order says overlays paint above all bases.
-- **`Scene` overlay layer must nest** (depth counter). WHY: a `Dialog` (overlay) containing a `Tooltip` (overlay) nests `with_overlay`; the non-re-entrant version dropped the Dialog's segment → modal vanished when the tooltip showed.
-- **Destructive confirm = `dismissible(false)`** (forced choice) — user's call.
-- **EVERY setting → `config.default.toml`, EVERY keybound action → `keybindings.default.toml`** (cardinal, now in AGENTS.md ⛔STOP + memory). Defaults living only in code are invisible/undiscoverable.
-- **I did NOT create sidebar-toggle actions.** `Show/Hide/Toggle{Left,Right}Sidebar`, `*TopBar`, `*BottomBar` are pre-existing (`833c214`, sidebar-fu-6). The mounted-gate `show/hide/toggle_*` are **intentionally unbound + documented** in `keybindings.default.toml` (lines 97-107); `rename_column` intentionally unbound (line 121-122, `prefix+Shift+c` reused); `rename_pane` = `prefix+$`. My earlier "5 missing keybindings" was a bad read of the file — there are NONE missing.
+## 3. Focus-ring work (this session + yesterday)
+- **Yesterday (pushed, `bc8779d`→`8548b92`):** replaced the corner-bracket focus reticle with
+  `PaintCx::focus_ring` — a **CSS-style thin accent outline drawn just OUTSIDE** the widget (visible
+  on borderless Ghost/Link), shown whenever `focused`. Color is **theme-aware** (shifted toward
+  `foreground`, so light/dark-correct) via `heca_theme::Theme::effective_focus_ring()` /
+  `focus_ring_tone(base)`, plus the optional `focus_ring` theme token. **Tone-following:** a
+  `Destructive` button rings in `danger`, else `accent` (`button.rs:385`). Migrated all 12 other
+  widgets onto `focus_ring`; removed the glowing `corner_brackets`. `latte.toml` `show_focus_border`
+  flipped to `true`.
+- **This session (`8dae1d1`):** the `Modal` widget drew its focused button's ring **manually** with
+  hardcoded `accent` regardless of `danger` → its danger button rang blue while `Dialog`/`Button`
+  tone-follow. **Fixed** `modal.rs` to use the shared `cx.focus_ring` + tone-following +
+  `show_focus_border` gate — identical to `Button`. **User confirmed focus now looks OK in both
+  light and dark themes.**
 
-## 4. WHAT TO DO NEXT (in order, after the focus ring)
-1. **Focus ring** — §1 above (get choice → theme-driven change at `button.rs:378`).
-2. **Migrate the context menu onto `OverlayHost`** — the LAST bespoke overlay. Today `AppState.context_menu` + `context_menu_action` sink + `layout_context_menu`/`paint_context_menu` (`chrome/mod.rs`) + dedicated input blocks in `events.rs`. Convert it to an `OverlayHost` overlay (dropdown-style) the same way the confirm dialog was migrated → removes the last parallel overlay path. (BACKLOG: relates to `plugin-task-ui-4` / dropdown.)
-3. **Hint overflow > 52 labels** — a–z then A–Z is 52 max; overflow is NOT handled. Planned: reserved prefix `=` then `=a`,`=b`… Still queued.
-4. **plugin-ui continuation** (`BACKLOG.md` `plugin-ui`): `plugin-task-ui-2` (SwiftUI-style ViewNode builder SDK), `plugin-task-ui-4` (rich `Modal`/overlay `body: ViewNode` with N arbitrary widgets — `open_modal` already realizes a `ViewNode` body, so this is mostly done for the modal case), `plugin-task-15` (`app.overlay.open_modal/open_dropdown` async plugin-facing API, Phase 8), OverlayHost dropdown + `OverlayFuture`.
+## 4. OPEN / NEXT STEPS (in priority order)
+1. **[BUG] Overlay click clears button focus (Dialog + Modal).** Clicking the modal **body** (not a
+   button) clears the focused button's ring. The overlay panel isn't focusable — a background click
+   should be a **no-op for focus** (keep current focus), not a clear. Likely the pointer path calls
+   `FocusManager::focus_at`, which clears when the click misses every focusable. Fix in
+   `heca-grid-ui/src/widgets/dialog.rs` (app-used) + `modal.rs`. Tracked in `BACKLOG.md` under the
+   focus-ring entry. **Not started (context budget).**
+2. **[polish] The 2 showcase confirm demos render buttons differently.** The `Modal` widget draws its
+   buttons **manually** (`modal.rs` paint) while `Dialog` uses **real `Button`** widgets → different
+   button *look* (fill/border), even though focus is now consistent. `Modal` is legacy (the app's
+   confirm uses `Dialog` via `OverlayHost::open_modal`). Options: (a) make `Modal` render real
+   `Button`s, or (b) deprecate the `Modal` widget + its showcase demo in favour of `Dialog`. Decide
+   with the user.
+3. **Phase C** (`action-interaction`): native `register(ActionSpec)` API + plugin/WASM declarative
+   path + host adapter + RPC introspection of action metadata; update AGENTS.md "Adding New Actions"
+   to include the confirm spec. The `Callback` meticulous doc already lives in the code.
+4. **Context-menu → OverlayHost migration** (the LAST bespoke overlay, `mouse.rs`
+   `open_context_menu`/`open_sidebar_context_menu` + `AppState.context_menu` + `settle_context_menu`).
+   Now trivial: menus just **dispatch the plain action** and the central gate confirms — no per-menu
+   destructive special-case (already removed). Add `OverlayHost::open_dropdown` mirroring `open_modal`
+   (design in `action-interaction-plan.md` context + the earlier discussion) + an `on_dismiss` on the
+   `ContextMenu` widget.
+5. **Push** the 9 local commits when the user OKs.
 
-## 5. GOTCHAS / hard-won facts (don't rediscover)
-- Fresh session starts in MAIN checkout, not the worktree (§0). See main-checkout `WORKTREES.md` router.
-- The confirm dialog is a **Modal-band `Dialog` layer** now — NOT `AppState.confirm_dialog` (removed). Its buttons emit `SubmitOverlay`; Esc/scrim emit `CloseOverlay`; both resolve in `dispatch_intent` → `overlay::resolve`.
-- Overlay content (tooltips/popovers) is flushed in the **top band** (`render_overlay_band` at end of `render_frame`), NOT with its surface. Any new per-surface overlay just works via `with_overlay`.
-- Dynamic layers are ticked in `lifecycle.rs` (add nothing per-layer).
-- `Box<dyn Component>` is NOT itself `Component` → can't `.child(box)`; push onto `base_mut().children` or use `Dialog::body_boxed`.
-- Overlay-control actions are intercepted BEFORE the registry (they need the registry to run their completion). Don't register them as `ActionHandler`s.
+## 5. KEY DECISIONS (with WHY — do not relitigate)
+- **Confirm guard on the ACTION, at the dispatch chokepoint** (`interaction.rs`), not per call site —
+  so every surface (keyboard, header button, menu, RPC) confirms identically. `Proceed` runs via
+  `registry.execute` (bypasses the gate) → loop-safe.
+- **`ConfirmSpec` is pure data + dedicated** (not `ModalSpec`); the gate converts it → keeps the
+  action-metadata layer decoupled from chrome and serializable for plugins (Phase C).
+- **Confirm key `delete_pane`** ≠ the action descriptor name `close` (decoupled).
+- **`[confirm]` is a generic name-keyed table** so plugin actions are configurable without new fields.
+- **Focus ring tone-follows** (danger→danger, else accent), theme-aware (shift toward `foreground`),
+  drawn OUTSIDE the widget. The user explicitly wants the danger button's focus near `danger`, NOT
+  accent — the Modal manual-draw was the only violator (now fixed).
+- **`ActionCatalog` holds built-ins as `&'static`** for Phase A (owned plugin entries = Phase C) to
+  avoid a premature `&'static str`→`String` ripple.
 
-## 6. BACKLOG UPDATES STILL OWED (do these — memory `update-backlog-before-pr` / `plugin-gridui-backlog-is-mine`)
-Mark in `BACKLOG.md`: `plugin-task-ui-3` (realize) **DONE**; `OverlayHost::open_modal` slice **DONE**; **`sidebar-fu-13` Stage 3 DONE** (confirm dialog = hintable Dialog layer); `Dialog` widget **DONE** (grid-ui catalog + `docs/widgets.md`); note `plugin-task-ui-4` largely delivered for the modal case (`open_modal` realizes a `ViewNode` body). Flip the actual checkboxes, not just prose.
-
-## 7. STANDING RULES
-No commit/push/PR/merge without explicit user OK (the user OK'd the commits in §2). Never `cargo fmt`. Use library widgets + only library-provided values (widget owns styling; caller picks variant). **Always generic, never patch the narrow problem.** Read AGENTS.md + docs BEFORE writing code. When marking a task DONE, grep the WHOLE backlog+plans for cross-references and flip the actual checkboxes in ONE pass.
+## 6. STANDING RULES
+No `cargo fmt`. Fix all warnings. Library widgets + only library-provided values (widget owns
+styling; caller picks variant). Always generic, never patch the narrow problem. Read AGENTS.md + docs
+before writing code. When marking a task DONE, grep the whole backlog for cross-refs and flip the
+actual checkboxes in one pass. No commit/push/PR/merge without explicit user OK.
