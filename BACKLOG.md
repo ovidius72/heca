@@ -1712,8 +1712,13 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   work while the menu is open, but the label implies it does. (Currently hardcoded strings like
   `.shortcut("prefix+v")` in `mouse.rs` — delete them.)
 - **Keyboard model:**
-  - **Open via a keybinding** — a context-aware `OpenContextMenu` action (focused pane in tiled;
-    focused item in sidebar-nav). Reachable from mouse (right-click) + keybinding + RPC.
+  - **Open via a BUTTON, not a bespoke keyboard action** (reuse-first — 2026-07-08). A pane-header
+    (and sidebar-item) **"more actions" button** (kebab, `DotsThreeVertical`) opens the menu,
+    following the existing pane-action-button pattern. The button's **laid-out bounds are the anchor**
+    (nothing to compute), it dispatches via the centralized chrome-button path, and it's
+    **keyboard-reachable for free via the KeyHint picker** (`prefix+/`). So NO bespoke
+    `OpenContextMenu` keyboard action and NO focused-pane-rect computation. (Right-click still opens
+    it at the cursor as today.)
   - **Navigate** with the **shared list/menu-nav bindings** (see `menu-nav` requirement below):
     Up/Down + Ctrl+j/k, Enter activate, Esc dismiss.
   - **Single-letter direct quick-pick** (host-assigned letters, keycap on the entry) that **works
@@ -1735,12 +1740,23 @@ similar activity (see the stub phase below) — build the shared pieces here reu
 - [ ] **context-menu-2 — grid-ui: entry widget + `ContextMenu::on_dismiss`.** Preserve
   focused-left-border + theme glow + icon on the realized entry; add `on_dismiss` (mirrors
   `Dialog::on_dismiss`). Showcase + `docs/widgets.md`.
-- [ ] **context-menu-3 — `OpenContextMenu` action** (context-aware) + default keybinding; reachable
-  mouse/keyboard/RPC. Full action checklist + interaction-policy classification.
-- [ ] **context-menu-4 — migrate `open_context_menu`/`open_sidebar_context_menu`** (`mouse.rs`) onto
-  `open_dropdown`; **remove the bespoke path**: `AppState.context_menu` + `context_menu_action`
-  sink, `settle_context_menu` + the `events.rs` branches, and the dedicated rendering in
-  `chrome/mod.rs`. Verify: anchor/positioning, dismiss-on-outside-click, damage, keyboard.
+- [ ] **context-menu-3 — pane-header (+ sidebar-item) "more actions" button** (kebab,
+  `DotsThreeVertical`) that opens the menu, reusing the existing pane-action-button + KeyHint path.
+  The button's laid-out **bounds are the anchor** (no rect computation), and KeyHint (`prefix+/`)
+  gives keyboard access for free — **no bespoke `OpenContextMenu` keyboard action**. Follow the
+  `PaneAction` pattern (`config.default.toml` `[pane] title_actions`); the button's `on_click` calls
+  `open_dropdown` anchored at its bounds. Update showcase + `docs/widgets.md` + README pane-actions.
+- [x] **context-menu-4 — DONE (2026-07-08, pending in-app GUI verification), commit `7d031c5`.**
+  Both `open_context_menu`/`open_sidebar_context_menu` (`mouse.rs`) build a `DropdownSpec` + open via
+  `OverlayHost::open_dropdown` (host-owned Overlay-band modal layer). **Removed the whole bespoke
+  path**: `AppState.context_menu` + `context_menu_action` sink (+ startup init), the 3 `events.rs`
+  input branches + `context_menu_open`/`settle_context_menu` (the adjacent `top_modal` branches
+  replace them; the open-gate now checks `top_modal`), and `chrome/mod.rs`
+  `layout_context_menu`/`paint_context_menu` + the two hint-collection blocks + the `render.rs` calls
+  (`layout_layers`/`paint_layers` are the generic replacement). Drops the misleading `prefix+X`
+  labels; adds host-assigned letter quick-picks; destructive still confirms via the central gate.
+  Gate: heca 318, clippy clean. Runtime GUI check outstanding (right-click pane + sidebar, select,
+  dismiss, keyboard nav, letter quick-pick).
 - [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`.** A new `Contribution`
   variant so a plugin registers entries for a **named context** (`pane`, `sidebar_item`, …); the
   host **merges** built-in + contributed entries when opening that context's menu. (Depends on the
