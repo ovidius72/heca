@@ -1626,6 +1626,34 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
 
 - [ ] **plugin-task-ui-6** — Author docs: a `docs/plugin-authoring.md` with detailed `ViewNode` examples (panel, complex table, modal with a form) + a short "Plugins (upcoming)" pointer in `README.md`. Must be clearly marked **design / target Phase 9 — not yet available** until the WASM runtime (`plugin-08`) ships.
 
+- [ ] **plugin-task-ui-7 — Composition-first widgets: EVERY widget must be able to receive a
+  `ViewNode` (arbitrary child subtree) as its content.** This is the real SwiftUI/Flutter model
+  (plan §2.6.2) — a widget's content is *another widget tree*, e.g. `Label`/`Button` holding
+  `Row[Icon, Text]`, not just a scalar string. **Direction locked with the user (2026-07-08).**
+  - **Why (current gap):** the model is *named but not built*. grid-ui leaves take scalars
+    (`Label::new(String)`, `Button::new(String)`), so you can't put an Icon + Text inside a Label
+    today; and `realize()` (`heca/src/chrome/realize.rs`) implements only **4 of ~30** `WidgetKind`
+    arms (Column/Row/Label/Button) — every other kind falls to an **empty placeholder**. So neither
+    "any widget renders" nor "any widget accepts a child subtree" is true yet.
+  - **Scope:**
+    1. Make grid-ui widgets **composition-first** — accept an arbitrary child `Component`/subtree as
+       content (Flutter's `child: Widget`), not only scalar props. Start with the leaves that most
+       need it (`Label`, `Button`, `IconButton`, `Badge`, `Tag`), then generalize.
+    2. **Complete `realize` coverage** so every `WidgetKind` maps to its widget (no empty fallback);
+       actionable nodes keep getting a `hint_target` for free.
+    3. Result: any `ViewNode` renders, and any widget can host any widget — native and plugin alike.
+  - **Related direction — overlay widget hierarchy (2026-07-08 discussion, not yet a task):**
+    rename the overlay panel to a base **`Overlay`** widget with **`Modal`** (blocking, large,
+    scrollable, `ViewNode` body) and **`Dialog`** (prompt/confirm) as **specializations** of it
+    (composition, not inheritance); "blocking" stays a **layer** property (compositor `modal` flag),
+    not a widget flag. Also fold in the overlay **sizing** (`.panel_size` — `Pct` of viewport / fixed)
+    and **scrollable body** (`ScrollRegion`) gaps raised the same day. Formalize as its own
+    phase before touching the overlay widgets.
+  - **Per the grid-ui rules:** update the showcase + `docs/widgets.md` in the same change; read all
+    styling from the theme; keep the vocabulary host-owned (plugins never invent a `WidgetKind`).
+  - Files: `heca-grid-ui/src/widgets/*`, `heca/src/chrome/realize.rs`, `heca/src/chrome/view.rs`.
+  - Supersedes the incremental "fill `realize` arms as needed" assumption in `plugin-task-ui-4`.
+
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
 Source: `pluggable-chrome-plugin-plan.md` Phase 8.1
