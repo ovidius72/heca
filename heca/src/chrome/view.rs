@@ -170,15 +170,84 @@ impl Intent {
 /// node can bind several.
 pub type Events = BTreeMap<String, Intent>;
 
-/// A declarative widget node: a [`kind`](WidgetKind), its `props`, its `events`, and its
-/// `children`. Fully serializable; realized to a retained `Component` by `realize`.
+/// A declarative widget node — one element of the serializable UI tree that both native code and
+/// plugins author, and that [`realize`](super::realize) turns into a retained grid-ui
+/// [`Component`](heca_grid_ui::Component).
+///
+/// # The model (SwiftUI/Flutter-style)
+/// A node is **four things, all owned by *this* node**:
+/// - [`kind`](Self::kind) — which widget it is ([`WidgetKind`]).
+/// - [`props`](Self::props) — its **own** styling/content values ([`PropMap`] = `name → PropValue`).
+///   Props are **per node**: `.prop("gap", …)` on a `Column` styles *the column*, not its children.
+///   (That's why the props next to `.child(…)` calls look like "sibling" props — they belong to the
+///   node you called `.prop` on, i.e. the container.)
+/// - [`events`](Self::events) — its **own** event → [`Intent`] bindings. Behaviour is an action
+///   **id** (+ args), never a Rust closure, so the tree stays serializable across the plugin boundary.
+/// - [`children`](Self::children) — a plain **`Vec<ViewNode>`**, each a full node with its *own*
+///   props / events / children. Composition is recursive: a child is styled exactly like its parent,
+///   by putting props on *that child*.
+///
+/// The builder just chains for ergonomics; the children are a vector underneath — `.child(n)` appends
+/// one, `.children([a, b])` appends many, so `Column().child(a).child(b)` ≡ `Column().children([a,b])`.
+///
+/// ```ignore
+/// ViewNode::new(WidgetKind::Column)
+///     .prop("gap", PropValue::Int(8))                       // ← the COLUMN's prop
+///     .child(ViewNode::new(WidgetKind::Label).text("New name"))
+///     .child(
+///         ViewNode::new(WidgetKind::Input)
+///             .text("current")
+///             .prop("name", PropValue::Text("name".into())),  // ← the INPUT's props
+///     )
+///     .child(
+///         ViewNode::new(WidgetKind::Button)
+///             .text("Rename")
+///             .prop("variant", PropValue::Variant(ViewVariant::Primary)) // ← the BUTTON's prop
+///             .on_press(Intent::new("rename")),                          // ← the BUTTON's event
+///     );
+/// ```
+///
+/// # Props & events by kind (what `realize` reads today)
+/// Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input,
+/// so `realize` is total. A node reads only the props relevant to its `kind`:
+///
+/// | Kind | Props it reads | Events |
+/// |------|----------------|--------|
+/// | `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+/// | `Card` | `text` (title) + children | — |
+/// | `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+/// | `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+/// | `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
+/// | `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
+/// | `Input` | `text` (value), `name` | `change` |
+/// | `Toggle` | `on` (Bool), `name` | `change` |
+/// | `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
+/// | `Gauge` | `value` (Float) | — |
+/// | `StatusDot` | — | — |
+/// | `Item` | `text` (label) | `press` |
+///
+/// A **`"name"` prop** on a value widget (`Input`/`Toggle`/`Checkbox`) opts it into a submitted
+/// modal's returned data (`ModalResult::Action { data }`, see `OverlayHost::open_modal`). The
+/// structured kinds `Select` / `Tabs` / `Grid` / `ItemGroup` / `DockFrame` / `MarkerGroup` /
+/// `ScrollBar` / `Toast` are **not realized yet** (they need list/structured props — `plugin-task-ui-9`).
+///
+/// > Human-facing catalog version: `docs/widgets.md` → "Declarative UI model (`ViewNode`)". Keep
+/// > both this rustdoc and that section in sync when adding a `WidgetKind` or a `realize` arm.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ViewNode {
+    /// Which widget this node is — selects the `realize` arm + the props it reads.
     pub kind: WidgetKind,
+    /// This node's **own** styling/content values (`name → PropValue`), ordered for deterministic
+    /// (de)serialisation. Per-node: never inherited by children. See the "Props & events by kind"
+    /// table above for what each `kind` reads.
     #[serde(default, skip_serializing_if = "PropMap::is_empty")]
     pub props: PropMap,
+    /// This node's **own** event → [`Intent`] bindings (`"press"` = activate, `"change"` = value
+    /// changed). The *only* way a node carries behaviour — an action id, not a closure.
     #[serde(default, skip_serializing_if = "Events::is_empty")]
     pub events: Events,
+    /// Child nodes, in order. A **vector**, not a fixed slot: containers (`Column`/`Row`/`Card`/…)
+    /// render them; leaves leave it empty. Each child is a full `ViewNode` with its own props/events.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<ViewNode>,
 }
@@ -195,7 +264,9 @@ impl ViewNode {
         }
     }
 
-    /// Set a property.
+    /// Set a property **on this node** (per-node — not inherited by children). Which keys a node
+    /// reads depends on its [`kind`](Self::kind); see the "Props & events by kind" table on
+    /// [`ViewNode`]. Setting an irrelevant key is harmless (ignored at realize time).
     pub fn prop(mut self, key: impl Into<String>, value: PropValue) -> Self {
         self.props.insert(key.into(), value);
         self
@@ -217,13 +288,14 @@ impl ViewNode {
         self.on("press", intent)
     }
 
-    /// Append a child.
+    /// Append a child node to the [`children`](Self::children) vec. The child is a full `ViewNode`
+    /// with its own props/events — style it by putting props on *it*, not on the parent.
     pub fn child(mut self, child: ViewNode) -> Self {
         self.children.push(child);
         self
     }
 
-    /// Append several children.
+    /// Append several children at once — `Column().children([a, b])` ≡ `.child(a).child(b)`.
     pub fn children(mut self, children: impl IntoIterator<Item = ViewNode>) -> Self {
         self.children.extend(children);
         self

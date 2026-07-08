@@ -646,14 +646,14 @@ pub(crate) fn dispatch_intent(
     if let InteractionIntent::ActivateAction(WmAction::SubmitOverlay { overlay, action }) = &intent
     {
         let (overlay, action) = (*overlay, action.clone());
+        // Marshal the modal body's named value fields (input/toggle/checkbox) into the result
+        // `data` before the overlay is popped (plugin-task-ui-4).
+        let data = crate::chrome::collect_overlay_form(state, overlay);
         crate::chrome::resolve_overlay(
             state,
             registry,
             overlay,
-            crate::chrome::ModalResult::Action {
-                id: action,
-                data: Default::default(),
-            },
+            crate::chrome::ModalResult::Action { id: action, data },
         );
         return;
     }
