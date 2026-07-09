@@ -1042,11 +1042,6 @@ This phase is interactive — cannot be done without the user running the app.
 
 - [ ] **compositor-task-22** — User resizes the window; confirms z=0 recomputes cleanly with no stale-resolution artifact.
 
-### [x] Phase: Ship review finale · `compositor-06`
-Final quality gates and sign-off for the z=0 frost pipeline (compositor-01→04c). Deferred review finale — quality gates and final sign-off remain outside the current active work; the pipeline itself shipped.
-
-- [x] **compositor-task-23** — Final review: rust-skill review, clippy clean, tests green across the workspace.
-
 ---
 
 ## Pluggable Chrome / Plugin
@@ -1056,7 +1051,7 @@ Final quality gates and sign-off for the z=0 frost pipeline (compositor-01→04c
 > grid-ui widget vocabulary, shell compositing primitives, modal/dropdown overlays.
 > Remaining: the architectural core — ChromeHost, providers, dynamic actions, WASM runtime.
 
-### [x] Phase: Formal architecture contracts · `plugin-01` — **DONE 2026-07-02**
+### [ ] Phase: Formal architecture contracts · `plugin-01`
 Write and ratify the formal chrome-host + provider + plugin contracts before any implementation.
 Source: `pluggable-chrome-plugin-plan.md` Phase 1
 
@@ -1735,14 +1730,14 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   (grid-ui change → showcase + `docs/widgets.md`).
 
 **Tasks:**
-- [ ] **context-menu-1 — `DropdownSpec` + `OverlayHost::open_dropdown`** (mirror `open_modal`).
+- [x] **context-menu-1 — DONE (2026-07-08, merged #225/#226).** `DropdownSpec` + `OverlayHost::open_dropdown` (mirror `open_modal`).
   Real `DropdownSpec { anchor, entries: Vec<MenuEntrySpec> }` replacing the `OverlaySpec::Dropdown`
   placeholder (`chrome/contribution.rs`). Each `MenuEntrySpec { id, label, action, danger, enabled,
   quick_key? }`; the host realizes entries, injects the `SubmitOverlay{overlay, id}` intent + the
   action-registry icon + a KeyHint target, and pushes it as an **Overlay-band `modal=true` layer**
   (reuse `top_modal` paint + input routing; verify `top_modal_id` picks up a modal Overlay-band
   layer). Dismiss → `CloseOverlay`.
-- [ ] **context-menu-2 — grid-ui: entry widget + `ContextMenu::on_dismiss`.** Preserve
+- [x] **context-menu-2 — DONE (2026-07-08, merged #225/#226).** grid-ui entry widget + `ContextMenu::on_dismiss`. Preserve
   focused-left-border + theme glow + icon on the realized entry; add `on_dismiss` (mirrors
   `Dialog::on_dismiss`). Showcase + `docs/widgets.md`.
 - [~] **context-menu-3 — `OpenContextMenu` keyboard/RPC action + item polish.** (The earlier
@@ -1778,28 +1773,74 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   labels; adds host-assigned letter quick-picks; destructive still confirms via the central gate.
   Gate: heca 318, clippy clean. Runtime GUI check outstanding (right-click pane + sidebar, select,
   dismiss, keyboard nav, letter quick-pick).
-- [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`.** A new `Contribution`
-  variant so a plugin registers entries for a **named context** (`pane`, `sidebar_item`, …); the
-  host **merges** built-in + contributed entries when opening that context's menu. (Depends on the
-  WASM/plugin runtime for the cross-boundary case; the native contribution path can land first.)
+- [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`** (full design locked
+  2026-07-09). A new `Contribution` variant so a plugin/native provider registers entries for a
+  **named context**; the host **merges** built-in + contributed entries.
+  - **Context = dotted path, fine-grained:** `pane`, `sidebar.workspace`, `sidebar.column`,
+    `sidebar.pane`, `sidebar.floating_pane`. Host resolves the context string from the click/open
+    target; a registry `HashMap<context, Vec<Contributor>>` maps context → contributors. Plugins
+    can invent new contexts.
+  - **Merge = `weight: Vec<i64>` per `MenuEntrySpec` (Dewey/fractional indexing):** entries sort
+    lexicographically by weight vector. A plugin inserts *between* `[10]` and `[20]` via `[15]`, or
+    between `[10,1]` and `[20]` via `[10,1,1]`. Tie-break: equal vectors → registration order
+    (built-in first, then plugins). Separators: `MenuEntrySpec::Separator` with its own weight.
+  - **Full design now (native + WASM contract):** native `Contribution::ContextMenu { context,
+    build: Fn(&ChromeCtx) -> Vec<MenuEntrySpec> }` lands now; WASM later (`plugin-08`) just
+    deserializes `Vec<MenuEntrySpec>` — same shape, no API change, since `MenuEntrySpec` is already
+    serializable data (Option B, no closures).
 
 ### [ ] Requirement: Shared list/menu navigation keybindings · `menu-nav`
-A **single, configurable** binding set for list/menu navigation, **reflected everywhere**: sidebar
-nav, contextual menu, and the future top-bar menu — one source of truth (asked by the user
-2026-07-08). Defaults: **Up/Down** + **Ctrl+j / Ctrl+k**, **Enter** activate, **Esc** dismiss (and
-the single-letter quick-pick where entries carry one). Migrate the existing **sidebar-nav** keys
-onto this shared set (they stop being a separate mapping). Config lives in one place (e.g. a
-`[keys.menu]` section / a shared nav mode); document in README + `keybindings.default.toml`.
-- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire sidebar nav +
-  contextual menu to it; remove the duplicated per-surface nav keys.
+A **single, configurable** binding set for list/menu navigation on **overlay-layer navigable
+surfaces**: the contextual menu, the command palette, and the future top-bar menu — one source of
+truth (asked by the user 2026-07-08, refined 2026-07-09). Flat `[keys]` bindings: `menu_up`
+(ArrowUp + Ctrl+k), `menu_down` (ArrowDown + Ctrl+j), `menu_activate` (Enter), `menu_dismiss`
+(Esc), plus the single-letter quick-pick where entries carry one. The widgets (`ContextMenu`,
+`CommandPalette`) become **intent-only** for nav: remove the hardcoded arrow/Ctrl+j/k from the
+widget `event()`; the host resolves via the configurable keymap and dispatches nav actions.
 
-### [ ] Phase: Top-bar Menu (menubar) · `topbar-menu` — STUB (separate but similar)
-A top-bar **Menu**/menubar is a **separate activity**, similar to the contextual menu. Not scoped
-yet — recorded so the **shared infrastructure** built for `context-menu` is made reusable, not
-forked: the **dropdown overlay layer** (`open_dropdown`/`DropdownSpec`), **entries-as-intents**,
-the **shared `menu-nav` keys**, the action-registry icon/label/tooltip resolution, and the
-**`Contribution`** model (a `Contribution::Menu` sibling of `ContextMenu`). Flesh out when it
-becomes active work.
+> **Sidebar is OUT of scope** — it already has its own configurable `[keys.mode] name = "sidebar"`
+> (`sidebar_up`/`sidebar_down` + tree-nav `h`/`l` + mutation keys). The earlier "migrate sidebar-nav
+> onto this shared set" text is **superseded** (2026-07-09): the sidebar keeps its own mode and does
+> **not** migrate onto `menu-nav`.
+
+Config lives in one place (`[keys] menu_up`/`menu_down`/`menu_activate`/`menu_dismiss`);
+document in README + `keybindings.default.toml`.
+- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire the contextual menu
+  + command palette to it (widgets go intent-only); remove the duplicated per-surface nav keys.
+  Sidebar nav is untouched.
+
+### [ ] Phase: Top/Bottom Bar Widget System + mainmenu · `topbar-menu` — STUB (vision holder)
+TopBar and BottomBar become **generic, pluggable widget containers** (specular in functioning,
+each with independent widgets — like the VSCode bottom bar: icons, buttons, text, often from
+plugins). Today the TopBar hosts only 2 sidebar-toggle buttons and is misnamed "tab bar". The
+**mainmenu** (renamed from "menubar") is the application-menu widget, the first citizen of the
+TopBar container. Vision registered 2026-07-09 under Pluggable Chrome (where it is born: reuses
+`open_dropdown`, `Contribution`, `OverlayHost`); **split into separate phases in a later review**.
+
+- **A. Bar containers** — flesh out the placeholder `Contribution::ToolbarGroup` /
+  `Contribution::StatusSegment` (`chrome/contribution.rs`) with real `build` hooks like
+  `ContainerContribution::build`, OR introduce a generic `Contribution::BarWidget { region,
+  build, weight }`. Each bar hosts an ordered list of widgets.
+- **B. mainmenu widget** — built-in, mounted in the TopBar. Minimal now (e.g. a **Close** entry
+  that confirms via the central gate, following the standard action architecture: ActionRegistry +
+  KeyBindingRegistry + RPC). Future: conventional File/Edit/View/... top-level groups. Reuses (do
+  NOT fork) `open_dropdown`/`DropdownSpec`, entries-as-intents, `ActionCatalog` icon/label/tooltip,
+  `menu-nav` (extended with **left/right** to move between top-level menus), and
+  `Contribution::MainMenu` (sibling of `Contribution::ContextMenu`, reusing the context-menu-5
+  dotted-context + `weight: Vec<i64>` Dewey merge design).
+- **C. Plugin bar-widget contribution** — plugins add buttons/widgets that execute **existing**
+  actions (icon+label from `ActionCatalog`). Plugins/developers get an easy path to register new
+  actions into `ActionRegistry` + `KeyBindingRegistry` from code (relates to `plugin-04` dynamic
+  action registry).
+- **D. Topbar enrichment** — built-in widgets for operations on the current pane/column/workspace.
+- **Config-driven widget add/remove** — users add/remove bar widgets from `config.toml` by listing
+  widget kinds in order, analogous to `[appearance.pane] title_actions = ["split","close"]`
+  (`Vec<PaneAction>` enum, `[]` hides). E.g. `[appearance.bar] top_widgets = [...]`.
+- **Token/placeholder integration** (`plugin-06`) — tmux-style tokens (`#{pane}`, `#{fg:...}`) let
+  users build small widgets or alter labels, like tmux statusline replacement.
+
+- [ ] **topbar-menu-1** — STUB. Scope the mainmenu widget + bar-container refactor; split A/B/C/D
+  into separate phases when the work becomes active.
 
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.
@@ -2259,68 +2300,6 @@ Per-pane structured `AgentStatus` sourced from each AI agent's lifecycle hooks, 
 
 ---
 
-## Neovim GUI Pane
-
-> Source: `neovim-plan.md`
-> Embed Neovim as a first-class GPU-rendered pane backend (alongside the terminal), via `nvim --embed` + msgpack-RPC. Goal: a native Neovide-class editor pane inside heca — sharp fonts, ligatures, multi-grid, images, markdown preview — all in the same GPU frame.
-> Status: all phases planned — not started. Track: planner feature 🖋️ Neovim GUI Pane (6 phases, 18 tasks).
-
-### [ ] Phase: Embed nvim + RPC + render single grid · `nvim-01`
-Spawn `nvim --embed`, establish the msgpack-RPC channel, `nvim_ui_attach`, and render a single grid. The first vertical slice proving a nvim pane renders inside heca.
-
-### [ ] Phase: Editor-pane integration · `nvim-02`
-Multi-instance support, pane lifecycle, focus and input forwarding to the embedded nvim. Integrates the nvim backend into the existing pane/column model.
-
-### [ ] Phase: ext_multigrid · `nvim-03`
-Multi-grid / multi-window support: grid geometry, viewport tracking, and z-ordering for floating nvim windows.
-
-### [ ] Phase: Input routing · `nvim-04`
-Key/modifier encoding, mouse forwarding, and coexistence with heca's prefix mode (the prefix key must not be swallowed by the editor pane).
-
-### [ ] Phase: Image layer · `nvim-05`
-Dedicated RPC channel for inline images, reusing heca's `ImageRenderer`. Brings nvim image support (e.g. kitty graphics protocol via nvim) into the GPU pipeline.
-
-### [ ] Phase: Markdown layer · `nvim-06`
-Read buffers via RPC and render native/rich markdown preview as a heca pane. Editor ↔ preview linkage.
-
----
-
-## Notification System
-
-> Source: `notification-system-plane.md`
-> A unified, app-owned notification system: typed toasts rendered in the chrome, with routing, producers (app events, config reload, OS), action dispatch via the ActionRegistry, and an optional OS-notification backend.
-> Design: pure-data `ToastSpec`, app-owned store (queue/dedup/expiry/timer), in-app `ToastStack` mounted in the retained chrome tree, action buttons dispatched through the central action policy path.
-> Status: all phases planned — not started. Track: planner feature 🔔 Notification System (9 phases, 59 tasks).
-
-### [ ] Phase: Model + Config · `notification-01`
-Core notification types, `ToastSpec` mapping, and the `notification_system` config schema.
-
-### [ ] Phase: Store + Lifecycle · `notification-02`
-App-owned store: queue, dedup, expiry, and timer scheduling.
-
-### [ ] Phase: In-App Toast Rendering · `notification-03`
-Mount a `ToastStack` in the chrome retained tree using app-owned signals.
-
-### [ ] Phase: Toast Action Dispatch · `notification-04`
-Toast action buttons dispatched through the ActionRegistry / interaction-policy path (no bypass).
-
-### [ ] Phase: Reload Config Producer · `notification-05`
-First real producer: reload-config success/failure toasts with a Retry action.
-
-### [ ] Phase: Routing + Additional Producers · `notification-06`
-Central `notify` choke point, routing (app/system/none), and additional producers.
-
-### [ ] Phase: OS/System Notification Backend · `notification-07`
-OS-level system notification backend (deferred — platform-specific).
-
-### [ ] Phase: Toast Keyboard Hint Integration · `notification-08`
-Integration with the global prefix+`/` hint system (deferred).
-
-### [ ] Phase: Tests + Documentation · `notification-09`
-Test coverage and user/planner documentation.
-
----
-
 ## Dependency order summary
 
 ```
@@ -2349,11 +2328,4 @@ app-07        (do LAST — high risk, do after app is stable)
 app-10        (independent — F4.4/F4.5 leftovers; app-task-29 done, 30/31 open)
 
 agents-01     (gated on plugin-01 through plugin-05)
-
-nvim-01 → nvim-02 → nvim-03 → nvim-04      (nvim-05/nvim-06 branch off nvim-02)
-notification-01 → notification-02 → notification-03 → notification-04 → notification-06 → notification-09
-notification-05, notification-07, notification-08   (branch off the core store)
-
-action-interaction  (generalizes the destructive gate; prerequisite already landed)
-plugin-ui           (gate for plugin-task-15 / plugin-task-21 / plugin-task-26; do before overlay body + WASM)
 ```

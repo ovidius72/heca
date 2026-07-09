@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-08T11:47:41.153Z
+**Last updated:** 2026-07-09T10:01:28.651Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -98,6 +98,9 @@ Status: 🚧 `in-progress`
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (2/3 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
+- 🚧 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (3/5 tasks)
+- 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
+- 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 
 ### ⏸️ cd083ad1-8310-4368-981b-d14c73c20d96 — F004 — 📐 Grid-UI Widget Library
 
@@ -582,7 +585,7 @@ Status: 📋 `planned`
 
 ### 🚧 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
 
-Provider trait e migrazione del workspace tree in WorkspacesContainerProvider.
+Migrare la sidebar attuale (façade hardcoded in sidebar/model.rs) nel primo provider built-in (WorkspacesContainerProvider) montato via ChromeHost + ContainerContribution, implementando il render seam build_contribution. Prova che l'architettura pluggable chrome ospita un container reale, non solo un TestProvider.
 
 Status: 🚧 `in-progress`
 
@@ -643,6 +646,30 @@ The serializable widget tree plugins author, SwiftUI/Flutter-style — a contain
 Status: 📋 `planned`
 
 **Tasks:** 4/9
+
+### 🚧 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
+
+Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (Option B — entries are serializable Intents, not native closures), so a context menu is declarable from code AND from a plugin, keyboard-reachable, consistent with the modal path. Design locked 2026-07-08.
+
+Status: 🚧 `in-progress`
+
+**Tasks:** 3/5
+
+### 📋 05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9 — P013 — menu-nav: Shared list/menu navigation keybindings
+
+Single configurable binding set for list/menu navigation on overlay-layer navigable surfaces: contextual menu, command palette, future top-bar menu. Sidebar is OUT — it has its own configurable [keys.mode] name="sidebar" and does NOT migrate.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/1
+
+### 📋 7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4 — P014 — topbar-menu: Top-bar Menu (menubar) — STUB
+
+STUB. A top-bar Menu/menubar is a separate activity, similar to the contextual menu. Not scoped yet — recorded so the shared infrastructure built for context-menu is made reusable, not forked.
+
+Status: 📋 `planned`
+
+**Tasks:** 0/1
 
 ### ⏸️ f5251ab1-db02-4c74-a1f3-97380b5909f5 — P001 — agents-01: Agent status tracking and sounds
 
