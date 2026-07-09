@@ -300,7 +300,7 @@ impl ActionRegistry {
             label: "Open Context Menu",
             description: "Open the focused pane's context menu at the cursor.",
             category: ActionCategory::Layout,
-            default_binding: ".",
+            default_binding: ">",
             icon: Some(Glyph::DotsThreeVertical),
         },
         ActionDescriptor {

@@ -8,8 +8,8 @@
   "discussedAt": "",
   "contextReady": false,
   "contextReadyReason": "",
-  "summary": "Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (Option B — entries are serializable Intents, not native closures), so a context menu is declarable from code AND from a plugin, keyboard-reachable, consistent with the modal path. Design locked 2026-07-08.",
-  "description": "Entries are data + Intent (id, label, action-name, danger, enabled, quick_key), serializable → plugin-declarable. On select the host dispatches the intent through the central confirm gate. Icon from ActionCatalog::icon(action_name); no hardcoded glyphs. Remove the misleading prefix+X shortcut labels; keep only host-assigned single-letter quick-pick (bordered keycap). Keyboard model: OpenContextMenu action (Menu key / Shift+F10 style), keyboard-open anchors at CENTER of focused widget (pane/sidebar item), mouse-open at cursor. Navigate via shared menu-nav bindings. Preserve visuals (focused left border, theme glow, icon) on realized entry widget. context-menu-1/2/4 DONE (merged #225/#226 + 7d031c5); context-menu-3 partial; context-menu-5 (plugin contribution) to design fully now.",
+  "summary": "Context menus as a host-owned, context-resolved overlay. Foundation: ContextPath (dotted) + ContextMenuRegistry (built-in providers + plugin Contribution::ContextMenu) + resolve_active_context (keyboard implicit) + unified open_context_menu_for + overlay_origin_mode (mode-restore after close). Keyboard prefix+> works everywhere via prefix arm in SidebarNav; after close the user returns to the origin mode (e.g. stays in sidebar). Mouse right-click refactored to the same unified path (parity preserved, Open-link via target hyperlink). Plugin menus attach by context_path and appear when that context is active/clicked.",
+  "description": "Context menus become a host-owned, context-resolved overlay (not hardcoded pane-vs-sidebar branches in the handler). The keyboard-open (`OpenContextMenu` / `prefix+>`) and the mouse right-click both resolve to a `(ContextPath, target)` pair and go through one unified `open_context_menu_for` that looks up registered providers (built-in + plugin `Contribution::ContextMenu`) merged by weight.\n\nArchitecture (locked 2026-07-09):\n- **ContextPath**: dotted string (`pane`, `sidebar.pane`, `sidebar.column`, `sidebar.workspace`, `floating_pane`, future plugin paths). Target is opaque data (pane_id / ws_idx / …) passed to the provider's `build(ctx, target)`.\n- **ContextMenuRegistry**: built-in providers for the 4 paths (migrated from `mouse::open_context_menu` / `open_sidebar_context_menu` item-build) + plugin `Contribution::ContextMenu { context_path, weight: Vec<i64>, build }` (context-menu-5, C1/C2/C3). Lookup collects all matching providers, merges by weight (Dewey), opens one dropdown.\n- **resolve_active_context(state)**: keyboard implicit resolver — `InputMode::SidebarNav`+current item → `sidebar.<kind>`; `Normal`+focused pane → `pane`; future modes plug in.\n- **pending_context**: `Option<(ContextPath, Target, Option<InputMode>)>` — captured in the sidebar prefix arm BEFORE transitioning to Prefix (because `handle_prefix_mode` sets Normal before dispatch, input.rs:277). `handle_open_context_menu` reads `pending_context.take()` as an override of `resolve_active_context`.\n- **open_context_menu_for(state, path, target, anchor, source, origin)**: unified open. Mouse passes `origin=None` (capture current if restorable); keyboard-from-mode passes the explicit origin.\n- **overlay_origin_mode: Option<InputMode>**: restorable mode. On open: capture current if restorable (SidebarNav whitelist) or use explicit origin; don't overwrite if already set (stack). On `resolve()` close (chrome/overlay.rs:362): if no overlay remains AND origin set → `input_mode = origin.take()`. Satisfies: open menu from sidebar → close → stay in sidebar. Modal owns keys while open (events.rs:125), so mode is frozen during.\n- **Prefix arm**: `handle_sidebar_nav_mode` gets `else if ctx.is_prefix` (mirrors `handle_selection_mode`, app/input.rs:738) → `InputMode::Prefix` + arm timeout + capture pending_context. So `prefix+>` resolves via `handle_prefix_mode` → `keymap.resolve(\"normal\", prefix+>)` → `OpenContextMenu`.\n\nMouse consequences: refactored to produce `(path, target)` and call `open_context_menu_for`; parity preserved for built-in menus; \"Open link\" (mouse-only) preserved via `PaneTarget { pane_id, hyperlink: Option<String> }` (keyboard target has `None` → no link entry). Plugin menus appear on right-click once registered (new capability, no regression for built-in).\n\nPlugin contract: declares `context_path` + `weight` + `build(target)`; does NOT pass mode/origin (host-internal). Host includes the plugin menu when the context is active (keyboard) or clicked (mouse).\n\nCode refs: overlay.rs (open_dropdown:253, resolve:360, DropdownSpec:233, DropdownItem), mouse.rs (open_context_menu:115, open_sidebar_context_menu:166, right-click dispatch:441/452), handlers.rs:190 handle_open_context_menu, app/input.rs (handle_sidebar_nav_mode:601, handle_selection_mode:694, handle_prefix_mode:234), app/events.rs:125 (modal owns keys), interaction.rs:265 (OpenContextMenu policy FocusedPaneLocal), actions.rs:299 descriptor.\n\nEdge case (noted): if the menu deletes the selected item (e.g. \"delete workspace\"), the sidebar cursor points to a gone item; the tree rebuilds each frame so the cursor is clamped/reset — no crash, at worst no visible selection.",
   "notes": "",
   "goals": [],
   "nonGoals": [],
@@ -18,14 +18,65 @@
   "risks": [],
   "openQuestions": [],
   "decisions": [],
-  "acceptedDecisions": [],
+  "acceptedDecisions": [
+    {
+      "id": "cm-d1",
+      "title": "ContextPath dotted + target opaco",
+      "decision": "ContextPath è una dotted string (es. \"pane\", \"sidebar.workspace\", \"docker.container\"); target è un dato opaco (pane_id/ws_idx/...). Lookup del registry per path.",
+      "rationale": "Plugin-friendly (stringa in config/Contribution), type-safe lato host.",
+      "implementationNotes": "ContextPath: String; target: enum/opaque struct passato al provider build(ctx, target).",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    },
+    {
+      "id": "cm-d2",
+      "title": "Binding prefix+> ovunque (non tasto diretto in sidebar)",
+      "decision": "prefix+> ovunque via prefix arm in handle_sidebar_nav_mode (speculare a handle_selection_mode). Non tasto diretto in sidebar mode (scelta controversa scartata).",
+      "rationale": "Stesso binding ovunque, zero sorprese, coerente col pattern selection-mode.",
+      "implementationNotes": "else if ctx.is_prefix arm: InputMode::Prefix + arm timeout + cattura pending_context(path,target,origin=SidebarNav).",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    },
+    {
+      "id": "cm-d3",
+      "title": "Mode-restore via overlay_origin_mode",
+      "decision": "overlay_origin_mode: Option<InputMode> catturato all'apertura (se restorable: SidebarNav whitelist; Normal non catturato → no-op) o via origin esplicito (keyboard da mode). Ripristinato quando l'ULTIMO overlay si chiude in resolve(). Stacked overlay: origin settato una volta, non sovrascritto.",
+      "rationale": "L'utente vuole: apri menu dalla sidebar → chiudi → rimani in sidebar. Modal possiede i tasti mentre aperto (events.rs:125), il mode è irrilevante durante; il restore serve solo alla chiusura.",
+      "implementationNotes": "Campo su AppState/overlay state; capture in open_context_menu_for; restore in chrome::overlay::resolve() quando layers vuoto.",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    },
+    {
+      "id": "cm-d4",
+      "title": "pending_context preserva il target attraverso la dispatch",
+      "decision": "Keyboard da sidebar cattura pending_context=(path,target,origin=SidebarNav) nel prefix arm PRIMA di transizionare a Prefix. handle_open_context_menu legge pending_context.take() (override di resolve_active_context); altrimenti resolve_active_context(state) computa da InputMode+focus/selection. Mouse: hit-test produce (path,target) direttamente.",
+      "rationale": "handle_prefix_mode setta Normal prima della dispatch (input.rs:277), quindi l'handler non può leggere InputMode::SidebarNav. Segnale esplicito disaccoppia dal mode.",
+      "implementationNotes": "pending_context: Option<(ContextPath, Target, Option<InputMode>)> su AppState.",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    },
+    {
+      "id": "cm-d5",
+      "title": "Mouse refattorizzato al path unified (parità + Open link via target)",
+      "decision": "ContextMenuRegistry: provider built-in registrati per pane/sidebar.pane/sidebar.column/sidebar.workspace (migrazione di open_context_menu + open_sidebar_context_menu item-build). Mouse right-click refattorizzato a produrre (path,target) e chiamare open_context_menu_for. Parità comportamentale per built-in; 'Open link' (mouse-only) preservato via target che porta Option<hyperlink_uri> (keyboard None → niente voce).",
+      "rationale": "Unifica mouse+keyboard nel path; nessun regresso visibile per built-in; abilita plugin su right-click.",
+      "implementationNotes": "open_context_menu(state,pane_id,pos) e open_sidebar_context_menu(state,item,pos) rimpiazzati da open_context_menu_for. PaneTarget { pane_id, hyperlink: Option<String> }.",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    },
+    {
+      "id": "cm-d6",
+      "title": "Plugin: passa context_path+build, non mode/origin",
+      "decision": "Il plugin dichiara context_path+weight+build(target); NON passa mode/origin (host-internal). L'host include il menu del plugin quando il context è attivo (keyboard resolve_active_context) o cliccato (mouse hit-test). Costruisce su context-menu-5.",
+      "rationale": "Plugin non decide 'quando'; dichiara 'dove'. L'host triggera.",
+      "implementationNotes": "Contribution::ContextMenu { context_path, weight: Vec<i64>, build } (C1/C2/C3 già locked in context-menu-5).",
+      "acceptedAt": "2026-07-09T16:00:00Z"
+    }
+  ],
   "completionCriteria": [],
   "taskIds": [
     "6da5a4c5-1796-4287-9f20-6c78ff8843cc",
     "a7226c35-9876-4bad-8775-01cd9bbc3204",
     "63d4e696-bacc-4556-8d7c-a074816097cc",
     "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
-    "3724e701-8519-4dfc-bed2-7aa978b96979"
+    "3724e701-8519-4dfc-bed2-7aa978b96979",
+    "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
+    "a721d49b-827e-4dce-bffb-2e4270c08c5d"
   ],
   "tasks": [
     {
@@ -75,25 +126,30 @@
       "shortName": "context-menu-3",
       "title": "context-menu-3: OpenContextMenu keyboard/RPC action + item polish",
       "status": "in-progress",
-      "description": "OpenContextMenu action (Menu key / Shift+F10 style) — full checklist done (input.rs variant+action_from_name+priority, interaction.rs action_policy TiledOnly, handlers.rs handle_open_context_menu, registry.rs, rpc.rs open-context-menu, actions.rs descriptor, keybindings.default.toml). Menu items now show only single-letter quick-pick (removed misleading prefix+X global-binding label). REMAINING: 3.1 bordered keycap via shared paint_keycap (add bordered variant in key_hint.rs; NOT hand-drawn in ContextMenu::paint ~L95-113); 3.2 keyboard-open anchor → CENTER of focused widget (pane/sidebar item) — replace mouse.pos stopgap with content_rect/stable_tiled_content_rect; 3.3 default binding prefix+. → prefix+> (verified free).",
+      "description": "OpenContextMenu keyboard/RPC action + item polish. NOTE 2026-07-09: the keyboard-open context-awareness (sidebar vs pane, mode-restore) and the unified open path moved to context-menu-6 (registry + open_context_menu_for) and context-menu-7 (resolve_active_context + prefix arm + pending_context + mode-restore). This task keeps the already-done items below and the remaining bordered-keycap polish.\n\nDone this session (verified in code):\n- 3.2 anchor: keyboard-open anchors at center of app window (window_center_logical in mouse.rs; DropdownSpec.centered + ContextMenu::centered() builder in heca-grid-ui context_menu.rs layout centers panel on anchor; open_dropdown passes it; keyboard centered=true, mouse false). Unit test centered_places_panel_center_on_asserts panel center==anchor.\n- 3.3 binding: default binding prefix+. → prefix+> (keybindings.default.toml:39, actions.rs:303 default_binding=\">\") — resolved a live conflict with sidebar_right (also prefix+.).\n- Policy: OpenContextMenu reclassified TiledOnly → FocusedPaneLocal (interaction.rs:265-269) so it shows with a floating pane active. Spot-check assertion + routing test.\n\nRemaining:\n- 3.1 bordered keycap via shared paint_keycap: the keycap in ContextMenu::paint (context_menu.rs ~L95-113) is hand-drawn with cx.rect + cx.text. Replace with a shared `paint_keycap` bordered variant added to heca-grid-ui/src/widgets/key_hint.rs (paint_keycap/keycap_size exist at :64/:80, only filled-glowing chip today — add a bordered variant). Caller picks variant; widget owns styling. No hardcode.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
       "acceptedDecisions": [],
       "checklist": [
         {
-          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-001-bordered-keycap-via-shared-paint-keycap-add-bordered-variant-in-key-hint-rs-not-hand-drawn-in-contextmenu-paint-l95-113-showcase-docs-widgets-md-rustdoc",
-          "title": "Bordered keycap via shared paint_keycap (add bordered variant in key_hint.rs; NOT hand-drawn in ContextMenu::paint ~L95-113) + showcase + docs/widgets.md + rustdoc",
+          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-001-bordered-keycap-via-shared-paint-keycap-add-bordered-variant-in-key-hint-rs",
+          "title": "Bordered keycap via shared paint_keycap (add bordered variant in key_hint.rs)",
           "checked": false
         },
         {
-          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-002-keyboard-open-anchor-center-of-focused-widget-pane-sidebar-item-replace-mouse-pos-stopgap-with-content-rect-stable-tiled-content-rect-app-render-rs-mouse-open-stays-at-cursor",
-          "title": "Keyboard-open anchor → CENTER of focused widget (pane/sidebar item) — replace mouse.pos stopgap with content_rect/stable_tiled_content_rect (app/render.rs); mouse-open stays at cursor",
+          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-002-done-keyboard-open-anchor-center-of-app-window-implemented-window-center-logical-in-mouse-rs-anchor-window-center-dropdownspec-centered-flag-contextmenu-centered-builder-heca-grid-ui-context-menu-rs-layout-centers-panel-on-anchor-when-set-open-dropdown-passes-it-keyboard-path-sets-centered-true-mouse-path-false-unit-test-centered-places-panel-center-on-asserts-panel-center-anchor-backlog-updated",
+          "title": "DONE: Keyboard-open anchor -> center of app window. Implemented: window_center_logical in mouse.rs (anchor=window center), DropdownSpec.centered flag + ContextMenu::centered() builder (heca-grid-ui context_menu.rs layout centers panel on anchor when set), open_dropdown passes it, keyboard path sets centered=true, mouse path false. Unit test centered_places_panel_center_on_asserts panel center==anchor. Backlog updated.",
           "checked": false
         },
         {
-          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-003-default-binding-prefix-prefix-verified-free-in-keybindings-default-toml-actions-rs-default-binding",
-          "title": "Default binding prefix+. → prefix+> (verified free) in keybindings.default.toml + actions.rs default_binding",
+          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-003-done-default-binding-prefix-prefix-resolved-live-conflict-with-sidebar-right",
+          "title": "DONE: default binding prefix+. -> prefix+> (resolved live conflict with sidebar_right)",
+          "checked": false
+        },
+        {
+          "id": "63d4e696-bacc-4556-8d7c-a074816097cc-check-004-done-opencontextmenu-reclassified-tiledonly-focusedpanelocal-shows-with-floating-pane-active-spot-check-assertion-routing-test-added",
+          "title": "DONE: OpenContextMenu reclassified TiledOnly -> FocusedPaneLocal (shows with floating pane active). Spot-check assertion + routing test added.",
           "checked": false
         }
       ],
@@ -102,7 +158,7 @@
       "startedAt": "2026-07-09T09:25:14.679Z",
       "completedAt": "",
       "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-09T09:25:25.129Z"
+      "updatedAt": "2026-07-09T13:43:22.858Z"
     },
     {
       "id": "0af2be02-ddb1-4bdf-b534-e2f4d3836fc6",
@@ -131,7 +187,7 @@
       "shortName": "context-menu-5",
       "title": "context-menu-5: plugin Contribution::ContextMenu (full design now)",
       "status": "planned",
-      "description": "New Contribution::ContextMenu variant so a plugin/native provider registers entries for a named context; host merges built-in + contributed entries. DESIGN (locked 2026-07-09): (C1) Context = dotted path, fine-grained: \"pane\", \"sidebar.workspace\", \"sidebar.column\", \"sidebar.pane\", \"sidebar.floating_pane\". Host resolves context string from click/open target; registry HashMap<context, Vec<Contributor>>. Plugins can invent new contexts. (C2) Merge = weight Vec<i64> per MenuEntrySpec, Dewey/fractional indexing: entries sort lexicographically by weight vector; a plugin inserts between [10] and [20] via [15] or between [10,1] and [20] via [10,1,1]. Tie-break: equal vectors → registration order (built-in first, then plugins). Separators: MenuEntrySpec::Separator with own weight. (C3) Full design now: native Contribution::ContextMenu { context, build: Fn(&ChromeCtx)->Vec<MenuEntrySpec> } now; WASM later (plugin-08) just deserializes Vec<MenuEntrySpec> — same shape, no API change, since MenuEntrySpec is already serializable data (Option B, no closures).",
+      "description": "Plugin context-menu contribution. Builds on the ContextMenuRegistry + open_context_menu_for from context-menu-6: the plugin does NOT pass mode/origin (host-internal); it declares context_path + weight + build(target), and the host includes its items when the context is active (keyboard resolve_active_context) or clicked (mouse hit-test). Merge by weight (Dewey Vec<i64>, C2).\n\nLocked design (C1/C2/C3, 2026-07-09):\n- C1 context granularity: dotted context path (e.g. \"sidebar,workspace\" — study the exact dotted form during implementation). The ContextMenuRegistry (context-menu-6) keys providers by ContextPath; the plugin's Contribution::ContextMenu carries its context_path.\n- C2 weight: Vec<i64> Dewey/fractional-index ordering + separators + tie-break. Built-in providers have stable weights; a plugin inserts [1,1,1] between [1,1] and [1,2].\n- C3 native + WASM: full design now (simplifies the contract). Contribution::ContextMenu { context_path: String, weight: Vec<i64>, build: ... } (native closure now; WASM marshalling deferred to plugin-08).\n\nOriginal BACKLOG tasks (context-menu-1..5) superseded by the locked design + the foundation in context-menu-6/7.",
       "notes": "",
       "statusLog": [],
       "decisions": [],
@@ -142,9 +198,49 @@
       "startedAt": "",
       "completedAt": "",
       "createdAt": "2026-07-09T09:25:14.679Z",
-      "updatedAt": "2026-07-09T09:25:14.679Z"
+      "updatedAt": "2026-07-09T13:43:32.181Z"
+    },
+    {
+      "id": "4f505d9d-b873-4107-8b2a-39ae76cc29b2",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 6,
+      "shortName": "unified-open-registry",
+      "title": "context-menu-6: ContextMenuRegistry + open_context_menu_for (unified open) + mouse refactor",
+      "status": "done",
+      "description": "DONE 2026-07-09. Built the unified context-menu open path + ContextMenuRegistry with 4 built-in providers + overlay_origin_mode (mode-restore field/hook). Behavior-preserving: mouse right-click + keyboard pane path route through the unified path with parity.\n\nImplemented:\n- `heca/src/chrome/context_menu.rs` (NEW): `ContextPath` (dotted string, consts PANE/SIDEBAR_PANE/SIDEBAR_COLUMN/SIDEBAR_WORKSPACE), `ContextTarget` enum (Pane{pane_id,hyperlink} / SidebarPane / SidebarColumn / SidebarWorkspace), `ContextMenuProvider` {weight: Vec<i64>, build: fn}, `ContextMenuRegistry::with_builtins()` (4 providers) + `register` + `items_for` + `ordered_providers`, `open_context_menu_for(state, path, target, anchor, source, origin)` (registry lookup → merge by weight → open_dropdown; centered derived from source=Keyboard; captures overlay_origin_mode when None), `restorable_mode` (SidebarNav whitelist). 5 unit tests.\n- `heca/src/chrome/mod.rs`: `mod context_menu;` + pub(crate) exports (open_context_menu_for, ContextMenuProvider, ContextMenuRegistry, ContextPath, ContextTarget).\n- `heca/src/app_state.rs`: fields `overlay_origin_mode: Option<InputMode>` (:664) + `context_menu_registry: ContextMenuRegistry` (:709).\n- `heca/src/app/startup.rs`: init both fields (:368/:378, registry via with_builtins()).\n- `heca/src/chrome/overlay.rs`: `resolve()` (:362) restores input_mode when the last overlay closes and overlay_origin_mode is Some — BEFORE running the completion (so a follow-up confirm opens with origin already restored; origin consumed before completion may push a new overlay). No-op when origin None (Normal).\n- `heca/src/mouse.rs`: `open_context_menu` (mouse pane) → open_context_menu_for(PANE, PaneTarget{pane_id,hyperlink resolved from click}, MouseContent, None); `open_focused_context_menu` (keyboard pane) → open_context_menu_for(PANE, PaneTarget{focused, None}, window_center, Keyboard, None); `open_sidebar_context_menu` → maps ChromeDragItem→(path,target) → open_context_menu_for(...,MouseLeftSidebar,None). `pane_action_items` moved into context_menu.rs (pane provider).\n\nVerify: cargo check clean (no project warnings); cargo clippy --workspace --all-targets --all-features clean; cargo test -p heca context_menu 5/5 pass; full heca suite green. heca-core flaky terminal test fails only under full-workspace concurrent load (preexisting, not touched by this slice — passes in isolation 88/88).\n\nDependencies: none (foundation). context-menu-7 depends on this.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-09T13:44:29.545Z",
+      "completedAt": "2026-07-09T13:57:46.719Z",
+      "createdAt": "2026-07-09T13:43:02.741Z",
+      "updatedAt": "2026-07-09T13:57:46.719Z"
+    },
+    {
+      "id": "a721d49b-827e-4dce-bffb-2e4270c08c5d",
+      "phaseId": "8f760a9b-3ce8-4932-8286-67d742397f2e",
+      "number": 7,
+      "shortName": "keyboard-context-aware",
+      "title": "context-menu-7: resolve_active_context + prefix arm + pending_context + mode-restore (keyboard context-aware)",
+      "status": "in-progress",
+      "description": "Make the keyboard `OpenContextMenu` (`prefix+>`) context-aware and work everywhere, with mode-restore so opening from sidebar returns to sidebar after close. Depends on context-menu-6 (registry + open_context_menu_for + overlay_origin_mode).\n\nScope:\n1. **`resolve_active_context(state) -> Option<(ContextPath, Target)>`**: keyboard implicit resolver. `InputMode::SidebarNav` + `state.sidebar_tree.current_item()` → map SidebarItem→(path,target) (Pane→sidebar.pane, Column→sidebar.column, Workspace→sidebar.workspace, FloatingPane→pane with that pane_id). `InputMode::Normal` + `state.focused_pane` → (\"pane\", PaneTarget{focused, hyperlink=None}). Future modes plug in here.\n2. **`pending_context: Option<(ContextPath, Target, Option<InputMode>)>`** on AppState. Captured in the sidebar prefix arm BEFORE the Prefix transition (because handle_prefix_mode sets Normal before dispatch, input.rs:277, so the handler can't read InputMode::SidebarNav).\n3. **Prefix arm in `handle_sidebar_nav_mode`** (app/input.rs:601): `else if ctx.is_prefix` mirroring `handle_selection_mode` (:738) → `InputMode::Prefix` + arm `prefix_entered_at` + set `pending_context = resolve_active_context(state).map(|(p,t)| (p,t,Some(InputMode::SidebarNav)))`. So `prefix+>` resolves via handle_prefix_mode → keymap.resolve(\"normal\",\"prefix+>\") → OpenContextMenu.\n4. **`handle_open_context_menu`** (handlers.rs:190): if `state.pending_context.take()` is Some → use it (path,target,origin); else `resolve_active_context(state)` (path,target,origin=None). → `open_context_menu_for(state, path, target, anchor=window_center, Keyboard, origin)`.\n5. **Mode-restore wiring**: open_context_menu_for stores origin into overlay_origin_mode (from context-menu-6). On `resolve()` close (no overlay remains) → restore. Verify: open from sidebar → Esc/item → back in SidebarNav.\n6. **FloatingPane mapping**: sidebar FloatingPane → (\"pane\", PaneTarget{pane_id, hyperlink=None}) so the keyboard path shows the pane menu (the mouse path today produces an empty menu for FloatingPane — latent gap; keyboard gives a useful menu; note it).\n\nVerify: cargo test + clippy clean; manual: prefix+> from Normal → pane menu centered; enter sidebar (prefix+e), select a workspace row, prefix+> → workspace menu centered, Esc → back in sidebar nav (NOT Normal); select item → action runs → close; right-click still works (context-menu-6). Edge: delete-workspace from sidebar menu → cursor stale but no crash.\n\nTests: unit test SidebarItem→(path,target) mapping; resolve_active_context for Normal/SidebarNav; mode-restore after close (open from sidebar, close, assert InputMode::SidebarNav); pending_context override.\n\nDependencies: context-menu-6 (registry + open_context_menu_for + overlay_origin_mode).",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "2026-07-09T14:23:11.329Z",
+      "completedAt": "",
+      "createdAt": "2026-07-09T13:43:10.939Z",
+      "updatedAt": "2026-07-09T14:23:11.329Z"
     }
   ],
   "createdAt": "2026-07-09T09:24:46.628Z",
-  "updatedAt": "2026-07-09T09:25:25.129Z"
+  "updatedAt": "2026-07-09T14:23:11.329Z"
 }

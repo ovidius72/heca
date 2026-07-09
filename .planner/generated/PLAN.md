@@ -4,7 +4,7 @@
 
 Compositore di workspace GPU-native per sviluppatori, ispirato al layout a colonne scrollabili di Niri, che unifica terminali, editor e strumenti in una singola finestra accelerata via GPU. Think tmux meets Niri meets Neovide: terminali, editor e futuri container/plugin convivono nello stesso frame con animazioni fluide, testo nitido e chrome renderizzato via GPU.
 
-**Last updated:** 2026-07-09T10:01:28.651Z
+**Last updated:** 2026-07-09T14:23:11.418Z
 **Version:** 1
 **Project ID:** `4fa9f09d-ec66-47a9-a37b-b6bf459ef747`
 
@@ -90,7 +90,7 @@ Status: 🚧 `in-progress`
 - 📋 **09bcb3cf-f8ea-454a-913e-ea377c53d37e** P001 — plugin-08: WASM plugin runtime (0/5 tasks)
 - 📋 **099e2eb5-30be-4f3c-ab57-a4f111cdc44c** P002 — plugin-06: Placeholder token system (0/3 tasks)
 - 📋 **88b87a32-ff00-4044-9a32-c575e3ed5401** P003 — plugin-04: Dynamic action registry (0/3 tasks)
-- 🚧 **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (1/3 tasks)
+- 📋 **73c320aa-b8b7-4fb3-9421-5c741b1771ff** P004 — plugin-03: Built-in provider + WorkspacesContainer migration (3/6 tasks)
 - ✅ **9ec31d60-7dfa-4dcc-9797-b265a4d30562** P005 — plugin-01: Formal architecture contracts (4/4 tasks)
 - ✅ **7b50f8c3-bfe6-4e2f-869e-06c1ad9a946c** P006 — plugin-02: ChromeHost and region hosts (4/4 tasks)
 - 📋 **f94d6da1-43b0-4b6a-a954-b404164126bd** P007 — plugin-09: Multi-region proof + config integration (0/3 tasks)
@@ -98,7 +98,7 @@ Status: 🚧 `in-progress`
 - 📋 **cec2ead0-bd28-4ac6-87f7-e3bcdf799ddc** P009 — plugin-07: Simple config.toml plugins (0/3 tasks)
 - 📋 **3e04a8f5-3c51-4f2d-8fab-d51b392e80bc** P010 — action-interaction: Declarative action interaction (confirm + response buttons) (2/3 tasks)
 - 📋 **99d19246-1ba9-4720-9895-e70c66acf144** P011 — plugin-ui: Declarative widget-tree UI model (ViewNode) (4/9 tasks)
-- 🚧 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (3/5 tasks)
+- 🚧 **8f760a9b-3ce8-4932-8286-67d742397f2e** P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable (4/7 tasks)
 - 📋 **05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9** P013 — menu-nav: Shared list/menu navigation keybindings (0/1 tasks)
 - 📋 **7a3c634c-5aba-4de1-a01a-5c07f4ee4cb4** P014 — topbar-menu: Top-bar Menu (menubar) — STUB (0/1 tasks)
 
@@ -191,6 +191,19 @@ Status: 📋 `planned`
 - 📋 **941d82d3-2770-4e6f-b42f-76b36e160c37** P008 — notification-07: OS/System Notification Backend (0/5 tasks)
 - 📋 **949d48a4-6001-42b2-a12c-25ba69a95c24** P009 — notification-08: Toast Keyboard Hint Integration (0/4 tasks)
 
+### 📋 2272d270-40ae-47fe-bc64-a173b51a097c — F010 — Improvements
+
+Quality-of-life improvements track, separate from the full Notification System feature. Small, focused enhancements that surface app feedback to the user: notifications for blocked keybindings (policy) and config-reload outcomes. Each improvement is self-contained and ships a visible user-facing signal.
+
+Scope starts with a Notification phase (toast surface + two hooks). May grow with other improvement slices over time. Kept distinct from the planned Notification System feature (fc19894f, 9 phases) which is the full notification architecture — Improvements delivers lightweight, immediate feedback first.
+
+Status: 📋 `planned`
+
+**Phases:**
+- 📋 **dcf9ff70-cf6e-416e-8e46-8cc36b4ec233** P001 — Notification (0/2 tasks)
+- 📋 **6d582a8a-3b10-4157-8009-2b2db2825e29** P002 — Actions/Keybindings (0/4 tasks)
+- 📄 **13be12b1-e912-4117-88bb-6ac85e230bcf** P003 — WhichKey Like Modal (0/0 tasks)
+
 ---
 ## Requirements
 
@@ -254,6 +267,24 @@ Multi-istanza, lifecycle dei pane, focus/input forwarding.
 Status: 📋 `planned`
 
 **Tasks:** 0/3
+
+### 📋 dcf9ff70-cf6e-416e-8e46-8cc36b4ec233 — P001 — Notification
+
+Status: 📋 `planned`
+
+**Tasks:** 0/2
+
+### 📋 6d582a8a-3b10-4157-8009-2b2db2825e29 — P002 — Actions/Keybindings
+
+Status: 📋 `planned`
+
+**Tasks:** 0/4
+
+### 📄 13be12b1-e912-4117-88bb-6ac85e230bcf — P003 — WhichKey Like Modal
+
+Implement a neovim emacs wich-key feature like.
+
+Status: 📄 `draft`
 
 ### 📋 f6476b06-0938-4fa1-88ab-23e0283036fa — P001 — app-02: Split render.rs into render folder
 
@@ -583,13 +614,13 @@ Status: 📋 `planned`
 
 **Tasks:** 0/3
 
-### 🚧 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
+### 📋 73c320aa-b8b7-4fb3-9421-5c741b1771ff — P004 — plugin-03: Built-in provider + WorkspacesContainer migration
 
 Migrare la sidebar attuale (façade hardcoded in sidebar/model.rs) nel primo provider built-in (WorkspacesContainerProvider) montato via ChromeHost + ContainerContribution, implementando il render seam build_contribution. Prova che l'architettura pluggable chrome ospita un container reale, non solo un TestProvider.
 
-Status: 🚧 `in-progress`
+Status: 📋 `planned`
 
-**Tasks:** 1/3
+**Tasks:** 3/6
 
 ### ✅ 9ec31d60-7dfa-4dcc-9797-b265a4d30562 — P005 — plugin-01: Formal architecture contracts
 
@@ -649,11 +680,43 @@ Status: 📋 `planned`
 
 ### 🚧 8f760a9b-3ce8-4932-8286-67d742397f2e — P012 — context-menu: Contextual menu → OverlayHost + plugin-declarable
 
-Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (Option B — entries are serializable Intents, not native closures), so a context menu is declarable from code AND from a plugin, keyboard-reachable, consistent with the modal path. Design locked 2026-07-08.
+Context menus as a host-owned, context-resolved overlay. Foundation: ContextPath (dotted) + ContextMenuRegistry (built-in providers + plugin Contribution::ContextMenu) + resolve_active_context (keyboard implicit) + unified open_context_menu_for + overlay_origin_mode (mode-restore after close). Keyboard prefix+> works everywhere via prefix arm in SidebarNav; after close the user returns to the origin mode (e.g. stays in sidebar). Mouse right-click refactored to the same unified path (parity preserved, Open-link via target hyperlink). Plugin menus attach by context_path and appear when that context is active/clicked.
 
 Status: 🚧 `in-progress`
 
-**Tasks:** 3/5
+**Accepted decisions:**
+- **ContextPath dotted + target opaco**
+  - Decision: ContextPath è una dotted string (es. "pane", "sidebar.workspace", "docker.container"); target è un dato opaco (pane_id/ws_idx/...). Lookup del registry per path.
+  - Rationale: Plugin-friendly (stringa in config/Contribution), type-safe lato host.
+  - Implementation: ContextPath: String; target: enum/opaque struct passato al provider build(ctx, target).
+  - Accepted at: 2026-07-09T16:00:00Z
+- **Binding prefix+> ovunque (non tasto diretto in sidebar)**
+  - Decision: prefix+> ovunque via prefix arm in handle_sidebar_nav_mode (speculare a handle_selection_mode). Non tasto diretto in sidebar mode (scelta controversa scartata).
+  - Rationale: Stesso binding ovunque, zero sorprese, coerente col pattern selection-mode.
+  - Implementation: else if ctx.is_prefix arm: InputMode::Prefix + arm timeout + cattura pending_context(path,target,origin=SidebarNav).
+  - Accepted at: 2026-07-09T16:00:00Z
+- **Mode-restore via overlay_origin_mode**
+  - Decision: overlay_origin_mode: Option<InputMode> catturato all'apertura (se restorable: SidebarNav whitelist; Normal non catturato → no-op) o via origin esplicito (keyboard da mode). Ripristinato quando l'ULTIMO overlay si chiude in resolve(). Stacked overlay: origin settato una volta, non sovrascritto.
+  - Rationale: L'utente vuole: apri menu dalla sidebar → chiudi → rimani in sidebar. Modal possiede i tasti mentre aperto (events.rs:125), il mode è irrilevante durante; il restore serve solo alla chiusura.
+  - Implementation: Campo su AppState/overlay state; capture in open_context_menu_for; restore in chrome::overlay::resolve() quando layers vuoto.
+  - Accepted at: 2026-07-09T16:00:00Z
+- **pending_context preserva il target attraverso la dispatch**
+  - Decision: Keyboard da sidebar cattura pending_context=(path,target,origin=SidebarNav) nel prefix arm PRIMA di transizionare a Prefix. handle_open_context_menu legge pending_context.take() (override di resolve_active_context); altrimenti resolve_active_context(state) computa da InputMode+focus/selection. Mouse: hit-test produce (path,target) direttamente.
+  - Rationale: handle_prefix_mode setta Normal prima della dispatch (input.rs:277), quindi l'handler non può leggere InputMode::SidebarNav. Segnale esplicito disaccoppia dal mode.
+  - Implementation: pending_context: Option<(ContextPath, Target, Option<InputMode>)> su AppState.
+  - Accepted at: 2026-07-09T16:00:00Z
+- **Mouse refattorizzato al path unified (parità + Open link via target)**
+  - Decision: ContextMenuRegistry: provider built-in registrati per pane/sidebar.pane/sidebar.column/sidebar.workspace (migrazione di open_context_menu + open_sidebar_context_menu item-build). Mouse right-click refattorizzato a produrre (path,target) e chiamare open_context_menu_for. Parità comportamentale per built-in; 'Open link' (mouse-only) preservato via target che porta Option<hyperlink_uri> (keyboard None → niente voce).
+  - Rationale: Unifica mouse+keyboard nel path; nessun regresso visibile per built-in; abilita plugin su right-click.
+  - Implementation: open_context_menu(state,pane_id,pos) e open_sidebar_context_menu(state,item,pos) rimpiazzati da open_context_menu_for. PaneTarget { pane_id, hyperlink: Option<String> }.
+  - Accepted at: 2026-07-09T16:00:00Z
+- **Plugin: passa context_path+build, non mode/origin**
+  - Decision: Il plugin dichiara context_path+weight+build(target); NON passa mode/origin (host-internal). L'host include il menu del plugin quando il context è attivo (keyboard resolve_active_context) o cliccato (mouse hit-test). Costruisce su context-menu-5.
+  - Rationale: Plugin non decide 'quando'; dichiara 'dove'. L'host triggera.
+  - Implementation: Contribution::ContextMenu { context_path, weight: Vec<i64>, build } (C1/C2/C3 già locked in context-menu-5).
+  - Accepted at: 2026-07-09T16:00:00Z
+
+**Tasks:** 4/7
 
 ### 📋 05c9295a-0ab7-48a0-97a5-c2a5bbf2c5d9 — P013 — menu-nav: Shared list/menu navigation keybindings
 

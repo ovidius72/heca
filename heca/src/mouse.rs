@@ -84,47 +84,53 @@ fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
             })
 }
 
-/// Open the right-click context menu for `pane_id` at `pos`: an **Open link**
-/// entry when the click cell is a hyperlink, plus the common pane actions. Built as
-/// a data-driven [`DropdownSpec`] and pushed via [`open_dropdown`](crate::chrome::open_dropdown)
-/// as a host-owned overlay layer — icons come from the action registry, the chosen action is
-/// dispatched through the central confirm gate, and each entry gets a host-assigned single-letter
-/// quick-pick (no misleading `prefix+X` labels). terminal-task-18 / app-task-33 / context-menu-4.
+/// Logical-pixel center of the app window — the anchor for keyboard/RPC-opened menus so a menu
+/// opened with no pointer stays centered on screen instead of at a stale cursor position.
+fn window_center_logical(state: &AppState) -> (f32, f32) {
+    let phys = state.window.inner_size();
+    let s = state.scale_factor as f32;
+    (phys.width as f32 / s / 2.0, phys.height as f32 / s / 2.0)
+}
+
+/// Open the right-click context menu for `pane_id` at `pos`: an **Open link** entry when the
+/// click cell is a hyperlink, plus the common pane actions. Routes through the unified
+/// [`crate::chrome::open_context_menu_for`] — the pane provider builds the items, including the
+/// optional Open link from the resolved hyperlink target. terminal-task-18 / app-task-33 /
+/// context-menu-4 / context-menu-6.
 fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
     use crate::app::interaction::InteractionSource;
-    use crate::chrome::{DropdownItem, DropdownSpec};
-
-    let mut items = Vec::new();
-    // "Open link" first, only when the click cell carries a hyperlink (OSC 8 or
-    // auto-detected) — same lookup as Cmd+click.
-    if let Some(url) = crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos) {
-        items.push(DropdownItem::new("open_link", "Open link", WmAction::OpenLink { url }));
-    }
-    // Pane actions target the focused pane (the right-press focuses the clicked one). The item id
-    // doubles as the action name the icon resolves from (`ActionCatalog::icon`).
-    items.push(DropdownItem::new("split_horizontal", "New column", WmAction::SplitHorizontal));
-    items.push(DropdownItem::new("split_vertical", "Split down", WmAction::SplitVertical));
-    items.push(DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn));
-    items.push(DropdownItem::new("float", "Float / unfloat", WmAction::Float));
-    items.push(DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true));
-
-    crate::chrome::open_dropdown(
+    use crate::chrome::{ContextPath, ContextTarget};
+    // Mouse-open only: a keyboard-opened menu has no target cell, so no hyperlink.
+    let hyperlink = crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos);
+    crate::chrome::open_context_menu_for(
         state,
-        DropdownSpec {
-            anchor: heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
-            items,
-            source: InteractionSource::MouseContent,
-        },
+        ContextPath::PANE,
+        ContextTarget::Pane { pane_id, hyperlink },
+        heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
+        InteractionSource::MouseContent,
+        None,
     );
 }
 
-/// Open the pane context menu for the **focused** pane, anchored at the last cursor position —
-/// the keyboard / RPC entry point (`OpenContextMenu`). Reuses [`open_context_menu`]; the mouse
-/// right-click path calls that directly with the click position. No-op when no pane is focused.
+/// Open the pane context menu for the **focused** pane — the keyboard / RPC entry point
+/// (`OpenContextMenu` / `prefix+>`). Anchored at the **center of the app window** (not the
+/// cursor): a keyboard-opened menu has no pointer target, so it stays centered on screen. No
+/// "Open link" entry (no target cell). No-op when no pane is focused.
+/// context-menu-3 item 3.2 (anchor decision locked 2026-07-09: center of app window, superseding
+/// the earlier "center of focused widget" draft).
 pub(crate) fn open_focused_context_menu(state: &mut AppState) {
+    use crate::app::interaction::InteractionSource;
+    use crate::chrome::{ContextPath, ContextTarget};
     if let Some(pane_id) = crate::app::interaction::focused_pane_id(state) {
-        let pos = state.mouse.pos;
-        open_context_menu(state, pane_id, pos);
+        let (cx, cy) = window_center_logical(state);
+        crate::chrome::open_context_menu_for(
+            state,
+            ContextPath::PANE,
+            ContextTarget::Pane { pane_id, hyperlink: None },
+            heca_core::layout::Point::new(cx as f64, cy as f64),
+            InteractionSource::Keyboard,
+            None,
+        );
     }
 }
 
@@ -140,69 +146,27 @@ fn open_sidebar_context_menu(
     pos: (f32, f32),
 ) {
     use crate::app::interaction::InteractionSource;
-    use crate::chrome::{DropdownItem, DropdownSpec};
-
-    // Each item's id doubles as the action name its icon resolves from (`ActionCatalog::icon`).
-    let mut items = Vec::new();
-    match item {
+    use crate::chrome::{ContextPath, ContextTarget};
+    // Map the sidebar drag-item (from the chrome hit-test) to its context-menu `(path, target)`;
+    // the sidebar provider for each path builds the add/delete entries acting on that target.
+    let (path, target) = match item {
         crate::chrome::ChromeDragItem::Pane(pane_id) => {
-            if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id) {
-                items.push(DropdownItem::new(
-                    "split_vertical",
-                    "New pane",
-                    WmAction::AddPaneToColumn { ws_idx, col_idx },
-                ));
-            }
-            items.push(
-                DropdownItem::new("close", "Delete pane", WmAction::ClosePaneById { pane_id })
-                    .danger(true),
-            );
+            (ContextPath::SIDEBAR_PANE, ContextTarget::SidebarPane { pane_id })
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
-            items.push(DropdownItem::new(
-                "split_vertical",
-                "New pane",
-                WmAction::AddPaneToColumn { ws_idx: ws, col_idx: col },
-            ));
-            items.push(DropdownItem::new(
-                "split_horizontal",
-                "New column",
-                WmAction::AddColumnToWorkspace { ws_idx: ws },
-            ));
-            items.push(
-                DropdownItem::new(
-                    "close",
-                    "Delete column",
-                    WmAction::DeleteColumn { ws_idx: ws, col_idx: col },
-                )
-                .danger(true),
-            );
+            (ContextPath::SIDEBAR_COLUMN, ContextTarget::SidebarColumn { ws_idx: ws, col_idx: col })
         }
         crate::chrome::ChromeDragItem::Workspace { ws } => {
-            items.push(DropdownItem::new(
-                "split_horizontal",
-                "New column",
-                WmAction::AddColumnToWorkspace { ws_idx: ws },
-            ));
-            items.push(DropdownItem::new(
-                "create_workspace",
-                "New workspace",
-                WmAction::CreateWorkspace,
-            ));
-            items.push(
-                DropdownItem::new("close", "Delete workspace", WmAction::DeleteWorkspace { ws_idx: ws })
-                    .danger(true),
-            );
+            (ContextPath::SIDEBAR_WORKSPACE, ContextTarget::SidebarWorkspace { ws_idx: ws })
         }
-    }
-
-    crate::chrome::open_dropdown(
+    };
+    crate::chrome::open_context_menu_for(
         state,
-        DropdownSpec {
-            anchor: heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
-            items,
-            source: InteractionSource::MouseLeftSidebar,
-        },
+        path,
+        target,
+        heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
+        InteractionSource::MouseLeftSidebar,
+        None,
     );
 }
 

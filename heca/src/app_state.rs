@@ -656,6 +656,12 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
+    /// Mode to restore when the last overlay closes (context-menu mode-restore). Set by
+    /// `chrome::context_menu::open_context_menu_for` when a context menu opens from a
+    /// non-Normal mode (e.g. `SidebarNav`); restored by `chrome::overlay::resolve` when no
+    /// overlay remains. `None` for menus opened from Normal (no-op). See
+    /// `chrome::context_menu` for the full contract.
+    pub overlay_origin_mode: Option<InputMode>,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
@@ -696,6 +702,11 @@ pub struct AppState {
     /// runtime home every UI surface resolves action metadata through (see
     /// [`crate::actions::ActionCatalog`]).
     pub action_catalog: crate::actions::ActionCatalog,
+    /// Context-menu registry: built-in providers (pane + sidebar.pane/column/workspace) seeded
+    /// at startup; plugins attach via `Contribution::ContextMenu` (context-menu-5). Both the
+    /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
+    /// `chrome::context_menu::open_context_menu_for`.
+    pub context_menu_registry: crate::chrome::ContextMenuRegistry,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.

@@ -1756,9 +1756,11 @@ similar activity (see the stub phase below) — build the shared pieces here reu
     1. **Bordered keycap via the shared `paint_keycap`/`KeyHint` primitive** (add a bordered variant
        there; make `ContextMenu` use it) — **NOT hand-drawn** in `ContextMenu::paint`. Showcase +
        `docs/widgets.md` + rustdoc. (User: "never hardcode; create/extend reusable widgets.")
-    2. **Keyboard-open anchor → CENTER of the focused widget** (pane; sidebar item; active
-       layer/`current_index` later). Today `mouse::open_focused_context_menu` uses `mouse.pos`
-       (stopgap); reuse `content_rect`/`stable_tiled_content_rect` (`app/render.rs`).
+    2. **Keyboard-open anchor → CENTER of the app window** (decision locked 2026-07-09, superseding
+       the earlier "center of focused widget" draft — the user: a keyboard-opened menu has no
+       pointer target, so it stays centered on screen). Implemented in `mouse::open_focused_context_menu`
+       via `window_center_logical(state)` = `inner_size / scale_factor / 2`; `source: Keyboard`;
+       no "Open link" entry (no target cell). Mouse-open path unchanged (click pos + hyperlink lookup).
     3. **Default binding → `prefix+>`** (if unbound) instead of `prefix+.` (`keybindings.default.toml`
        + `actions.rs` `default_binding`).
   See `HANDOFF-context-menu.md` for full detail + widget references.

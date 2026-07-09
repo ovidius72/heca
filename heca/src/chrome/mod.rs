@@ -4,6 +4,7 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod contribution;
+mod context_menu;
 mod events;
 mod host;
 mod layers;
@@ -31,6 +32,13 @@ pub use overlay::OverlayId;
 pub(crate) use overlay::{
     collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
     top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
+};
+// Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
+// `open_context_menu_for`. Built-in providers seeded at startup; plugins attach via
+// `Contribution::ContextMenu` (context-menu-5).
+#[allow(unused_imports)]
+pub(crate) use context_menu::{
+    open_context_menu_for, ContextMenuProvider, ContextMenuRegistry, ContextPath, ContextTarget,
 };
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};

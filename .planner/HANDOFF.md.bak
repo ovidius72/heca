@@ -1,33 +1,37 @@
 # Handoff
 
-Created at: 2026-07-03T15:56:33.220Z
-Updated at: 2026-07-04T08:34:23.557Z
-Reason: session shutdown (quit)
+Created at: 2026-07-09T11:14:16.899Z
+Updated at: 2026-07-09T14:38:39.165Z
+Reason: Session paused mid-implementation of context-menu-7; context-menu-6 completed; user requested handoff before session end.
 
 ## Progress snapshot
-- Features: 2/9 done, 1 active
-- Phases: 22/65 done, 1 active/discovery
-- Tasks: 71/242 done, 1 active
+- Features: 2/10 done, 1 active
+- Phases: 22/73 done, 1 active/discovery
+- Tasks: 83/272 done, 2 active
 
 ## Current focus
 - Feature: `ebb9ceb0-ea12-4374-af6e-12aa4256bcc3` — 🧩 Pluggable Chrome Architecture (in-progress)
-- Phase: `73c320aa-b8b7-4fb3-9421-5c741b1771ff` — plugin-03: Built-in provider + WorkspacesContainer migration (in-progress)
-- Task: `c992d27c-dfe3-4fef-a7af-58cc4f026db0` — Implement WorkspacesContainerProvider (in-progress)
+- Phase: `8f760a9b-3ce8-4932-8286-67d742397f2e` — context-menu: Contextual menu → OverlayHost + plugin-declarable (in-progress)
+- Task: `63d4e696-bacc-4556-8d7c-a074816097cc` — context-menu-3: OpenContextMenu keyboard/RPC action + item polish (in-progress)
 
 ## What was being done
-No additional execution notes were captured.
+Implementing context-menu-7 (keyboard context-aware menus). context-menu-6 was completed earlier in this session: built the unified ContextMenuRegistry + open_context_menu_for path with 4 built-in providers (pane, sidebar.pane, sidebar.column, sidebar.workspace), overlay_origin_mode field on AppState with mode-restore in overlay::resolve(), and refactored mouse.rs (open_context_menu, open_focused_context_menu, open_sidebar_context_menu) to route through open_context_menu_for. 5 unit tests pass, clippy clean. The remaining work (context-menu-7) is: resolve_active_context() keyboard impl, pending_context field on AppState to carry sidebar selection through Prefix→Normal dispatch, prefix arm handler in handle_sidebar_nav_mode (mirroring selection mode pattern), and wiring handle_open_context_menu to consume pending_context.
 
 ## How to resume
-1. Open task c992d27c-dfe3-4fef-a7af-58cc4f026db0 (Implement WorkspacesContainerProvider).
-2. Read `.planner/HANDOFF.md` and compare it with the latest planner data.
-3. Confirm whether the current task is already in-progress before doing implementation work.
-4. Continue with the next activity: Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
+1. Re-read `.planner/HANDOFF.md` and compare with latest planner data via plan_get / phase_get / task_list.
+2. Confirm context-menu-7 (a721d49b) is in-progress. If not, task_start it.
+3. Open `heca/src/app/input.rs` (`handle_sidebar_nav_mode` at ~L601) — add the is_prefix arm that transitions to Prefix mode and captures pending_context.
+4. Open `heca/src/app_state.rs` — add the pending_context: Option<PendingContext> field.
+5. Open `heca/src/app/startup.rs` — init pending_context to None.
+6. Open `heca/src/handlers.rs` (~L190 handle_open_context_menu) — consume pending_context if present.
+7. Open `heca/src/chrome/context_menu.rs` — implement resolve_active_context() for InputMode::SidebarNav mapping.
+8. Run `cargo check`, then `cargo clippy --workspace --all-targets --all-features`, then `cargo test --workspace`.
+9. Manual verify: prefix+e (sidebar nav), j/k to select, prefix+> opens context menu centered, Esc returns to SidebarNav (not Normal).
 
 ## Files to inspect first
 - .planner/project.json
 - .planner/features.json
-- .planner/phases/73c320aa-b8b7-4fb3-9421-5c741b1771ff.json
-- .planner/phases/227d7422-e493-41ff-b786-8e659bf2f88c.json
+- .planner/phases/8f760a9b-3ce8-4932-8286-67d742397f2e.json
 - .planner/resume.json
 - .planner/HANDOFF.md
 - .planner/generated/PLAN.md
@@ -39,9 +43,9 @@ No additional execution notes were captured.
 - Continue with plugin-03: Built-in provider system and WorkspacesContainer migration
 
 ## Recent activity
-- Latest feature update: 🔔 Notification System (planned) at 2026-07-03T22:50:20.126Z
-- Latest phase update: notification-03 (draft) at 2026-07-04T07:05:14.792Z
-- Latest task update: Store lifecycle unit tests (planned) at 2026-07-04T07:02:06.289Z
+- Latest feature update: Improvements (planned) at 2026-07-09T13:15:09.863Z
+- Latest phase update: context-menu: Contextual menu → OverlayHost + plugin-declarable (in-progress) at 2026-07-09T14:23:11.329Z
+- Latest task update: context-menu-7: resolve_active_context + prefix arm + pending_context + mode-restore (keyboard context-aware) (in-progress) at 2026-07-09T14:23:11.329Z
 
 ## Reminder
 - When work is fully resumed and this handoff is no longer needed, delete `.planner/HANDOFF.md`.

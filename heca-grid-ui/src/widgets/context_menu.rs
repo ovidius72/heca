@@ -111,6 +111,10 @@ pub struct ContextMenu {
     open: Signal<bool>,
     /// Host-owned anchor (top-left preferred position; clamped to the viewport).
     anchor: Signal<Point>,
+    /// When true the panel is **centered on the anchor** (anchor = desired center) instead of
+    /// placed down-right of it (anchor = top-left). Used by keyboard/RPC-opened menus so they
+    /// stay centered on screen rather than offset to the bottom-right of the window center.
+    centered: bool,
     viewport: Cell<Size>,
     /// Panel rect cached at paint, so overlay damage targets just the menu.
     panel: Cell<Rectangle>,
@@ -129,6 +133,7 @@ impl ContextMenu {
             selected: 0,
             open: signal(false),
             anchor: signal(Point::new(0.0, 0.0)),
+            centered: false,
             viewport: Cell::new(Size::new(f64::MAX, f64::MAX)),
             panel: Cell::new(Rectangle::from_size(Size::new(0.0, 0.0))),
             on_dismiss: None,
@@ -150,6 +155,13 @@ impl ContextMenu {
     /// Set the initial anchor (top-left preferred position).
     pub fn anchor(self, at: Point) -> Self {
         self.anchor.set(at);
+        self
+    }
+
+    /// Center the panel on the anchor (anchor = desired center) instead of placing the
+    /// top-left at the anchor. For keyboard/RPC-opened menus with no pointer target.
+    pub fn centered(mut self, on: bool) -> Self {
+        self.centered = on;
         self
     }
 
@@ -287,16 +299,22 @@ impl ContextMenu {
 
         let a = self.anchor.get();
         let (vw, vh) = if vp.w.is_finite() { (vp.w, vp.h) } else { (panel_w, panel_h) };
-        // Prefer down-right of the anchor; flip/clamp to keep the panel on-screen.
-        let mut x = a.x + ANCHOR_INSET;
-        if x + panel_w > vw {
-            x = (a.x - panel_w - ANCHOR_INSET).max(0.0);
-        }
+        let (mut x, mut y) = if self.centered {
+            // Anchor = desired panel center: place the panel centered on it (no inset), then clamp.
+            (a.x - panel_w / 2.0, a.y - panel_h / 2.0)
+        } else {
+            // Prefer down-right of the anchor; flip/clamp to keep the panel on-screen.
+            let mut x = a.x + ANCHOR_INSET;
+            if x + panel_w > vw {
+                x = (a.x - panel_w - ANCHOR_INSET).max(0.0);
+            }
+            let mut y = a.y + ANCHOR_INSET;
+            if y + panel_h > vh {
+                y = (a.y - panel_h - ANCHOR_INSET).max(0.0);
+            }
+            (x, y)
+        };
         x = x.clamp(0.0, (vw - panel_w).max(0.0));
-        let mut y = a.y + ANCHOR_INSET;
-        if y + panel_h > vh {
-            y = (a.y - panel_h - ANCHOR_INSET).max(0.0);
-        }
         y = y.clamp(0.0, (vh - panel_h).max(0.0));
 
         Rectangle::new(Point::new(x, y), Size::new(panel_w, panel_h))
@@ -545,5 +563,38 @@ mod tests {
         m.event(&Event::Key { key: GridKey::Char('r'), pressed: true });
         assert_eq!(ran.get(), 1, "entry ran on quick-key");
         assert_eq!(dismissed.get(), 1, "a selection is not a dismissal");
+    }
+
+    /// `centered: true` places the **panel center** on the anchor (so a keyboard-opened menu is
+    /// centered on screen), not the top-left. `centered: false` keeps the down-right cursor
+    /// placement. Both still clamp to the viewport.
+    #[test]
+    fn centered_places_panel_center_on_anchor() {
+        let vp = Size::new(2000.0, 2000.0);
+        let anchor = Point::new(1000.0, 1000.0);
+
+        // Centered: panel center == anchor (no clamping at this viewport/anchor).
+        let m = ContextMenu::new()
+            .anchor(anchor)
+            .centered(true)
+            .entry(MenuEntry::new("Split", || {}).key('s'))
+            .entry(MenuEntry::new("Close", || {}).key('c'))
+            .open(true);
+        m.viewport.set(vp);
+        let p = m.layout();
+        assert!((p.loc.x + p.size.w / 2.0 - anchor.x).abs() < 1e-9, "centered x center != anchor");
+        assert!((p.loc.y + p.size.h / 2.0 - anchor.y).abs() < 1e-9, "centered y center != anchor");
+
+        // Non-centered (cursor mode): top-left is down-right of the anchor by ANCHOR_INSET.
+        let m2 = ContextMenu::new()
+            .anchor(anchor)
+            .centered(false)
+            .entry(MenuEntry::new("Split", || {}).key('s'))
+            .entry(MenuEntry::new("Close", || {}).key('c'))
+            .open(true);
+        m2.viewport.set(vp);
+        let p2 = m2.layout();
+        assert!((p2.loc.x - (anchor.x + ANCHOR_INSET)).abs() < 1e-9, "cursor x != anchor+inset");
+        assert!((p2.loc.y - (anchor.y + ANCHOR_INSET)).abs() < 1e-9, "cursor y != anchor+inset");
     }
 }

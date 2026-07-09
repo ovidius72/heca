@@ -324,7 +324,13 @@ pub(crate) async fn init_state(
         app_config.config.appearance.effective_sidebar_width(),
         true,
     );
-    let chrome_host = crate::chrome::ChromeHost::new(chrome_state.events());
+    let mut chrome_host = crate::chrome::ChromeHost::new(chrome_state.events());
+    // plugin-03 t004: register the first built-in provider. Wiring-only — the
+    // render path still builds the sidebar bespoke (`build_sidebar_shell`) until
+    // the cutover in t006; this just seats the container in `LeftSidebar` so the
+    // host runtime exercises a real first-party provider (replacing the
+    // `TestProvider` stand-in) with no visible behavior change.
+    chrome_host.register(Box::new(crate::providers::WorkspacesContainerProvider::new()));
 
     Box::new(AppState {
         window,
@@ -359,6 +365,7 @@ pub(crate) async fn init_state(
         needs_redraw: true,
         focused_pane: Some(pane_id),
         input_mode: InputMode::Normal,
+        overlay_origin_mode: None,
         sidebar_tree,
         chrome_tree: None,
         pane_headers: std::collections::HashMap::new(),
@@ -368,6 +375,7 @@ pub(crate) async fn init_state(
         pane_viewport_widgets: std::collections::HashMap::new(),
         action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
+        context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state,
         chrome_host,

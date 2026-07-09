@@ -235,6 +235,19 @@ pub struct DropdownSpec {
     pub items: Vec<DropdownItem>,
     /// Attribution for the dispatched action (which surface opened the menu).
     pub source: InteractionSource,
+    /// When true the menu is **centered on `anchor`** (anchor = desired center) instead of
+    /// placed down-right of it. Set by the keyboard/RPC-open path; the mouse path leaves it
+    /// `false` (anchor = click point).
+    pub centered: bool,
+}
+
+impl DropdownSpec {
+    /// Mark the anchor as the desired **panel center** (keyboard/RPC-opened menus) rather than
+    /// the top-left. The mouse-open path keeps the default `false`.
+    pub fn centered(mut self, on: bool) -> Self {
+        self.centered = on;
+        self
+    }
 }
 
 /// Open a context menu: build a [`ContextMenu`] from the spec (entries emit `SubmitOverlay`, dismiss
@@ -250,7 +263,7 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
     });
 
-    let mut menu = ContextMenu::new().anchor(spec.anchor);
+    let mut menu = ContextMenu::new().anchor(spec.anchor).centered(spec.centered);
     let mut letters = 'a'..='z';
     for item in &spec.items {
         let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
@@ -356,6 +369,17 @@ pub(crate) fn resolve(
     state.overlays.forms.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
+    // Context-menu mode-restore (context-menu-6): if this was the last overlay and a mode was
+    // recorded as the origin (e.g. a menu opened from `SidebarNav`), return to it. Done BEFORE
+    // the completion runs so a follow-up overlay (e.g. a destructive-confirm prompt) opens with
+    // the origin already restored, and so the origin is consumed before the completion might
+    // push a new overlay. `None` origin (menu opened from Normal) is a no-op — unchanged.
+    if top_modal(state).is_none()
+        && let Some(mode) = state.overlay_origin_mode.take()
+    {
+        state.input_mode = mode;
+    }
+
     if let Some(comp) = completion {
         comp(state, registry, result);
     }

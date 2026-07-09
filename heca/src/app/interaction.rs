@@ -191,7 +191,6 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::SplitHorizontal
         | WmAction::SplitVertical
         | WmAction::ZoomColumn
-        | WmAction::OpenContextMenu
         | WmAction::ScrollViewLeft
         | WmAction::ScrollViewRight
         | WmAction::ResizeIncrease
@@ -263,6 +262,11 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
         | WmAction::RenameTarget { .. }
+        // OpenContextMenu operates on the focused pane (mouse: the clicked one; keyboard:
+        // the focused one) and is allowed in both tiled and floating domains — a floating pane
+        // still has a context menu. Individual menu entries (Split/Zoom/etc.) keep their own
+        // policy when chosen; opening the menu is pane-local.
+        | WmAction::OpenContextMenu
         // Scrollback operates on the focused pane and is allowed in both
         // tiled and floating domains.
         | WmAction::ScrollbackPageUp
@@ -914,7 +918,7 @@ mod tests {
         let mut session = test_session();
         session.active_workspace_mut().unwrap().focus_domain = FocusDomain::Floating;
 
-        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane];
+        let actions = [WmAction::Float, WmAction::ClosePane, WmAction::RenamePane, WmAction::OpenContextMenu];
         for action in &actions {
             let decision = route_interaction_for_session(
                 &session,
@@ -1154,6 +1158,10 @@ mod tests {
         );
         assert_eq!(
             action_policy(&WmAction::ClosePane),
+            ActionPolicy::FocusedPaneLocal
+        );
+        assert_eq!(
+            action_policy(&WmAction::OpenContextMenu),
             ActionPolicy::FocusedPaneLocal
         );
         assert_eq!(

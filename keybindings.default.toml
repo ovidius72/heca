@@ -36,7 +36,7 @@ focus_down  = ["prefix+j", "prefix+ArrowDown"]
 split_horizontal = "prefix+Enter"   # New column to the right
 split_vertical   = "prefix+v"       # New pane in current column
 zoom_column      = "prefix+z"       # Toggle active column full-width
-open_context_menu = "prefix+."      # Open the focused pane's context menu (at the cursor)
+open_context_menu = "prefix+>"     # Open the focused pane's context menu (at the cursor)
 
 # ── Horizontal view scroll (pan to reach off-screen / overflowing columns) ──
 scroll_view_left  = "prefix+Shift+ArrowLeft"
