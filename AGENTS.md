@@ -722,6 +722,20 @@ A new widget **MUST**:
 - **Drive state styling from the theme**: active/inactive border + color, border width, radius, hover/press/focus — all from theme tokens, so behaviour is consistent across the library.
 - **Be planned + integrated**: export in `widgets/mod.rs`, add to the catalog in this file + `docs/widgets.md`, and add unit tests. No one-off escape hatches bolted on under deadline — if a variant is needed, design it as a proper, documented, theme-driven widget option.
 
+#### Documentation is MANDATORY — update **both**, in the same change
+
+Whenever you fix, create, update, or extend a widget **or the declarative UI model** (`ViewNode`,
+props, `Intent`s), you MUST update **both** of these (not one or the other):
+
+1. **Rustdoc — mandatory and complete.** Full in-code doc comments on the type / fields / methods.
+   This is the authoritative in-code reference; **never reduce it to a bare pointer.**
+2. **`docs/widgets.md` — supplementary human documentation.** The reader-friendly catalog entry.
+
+Both must show how to **create, declare, use, or extend** the thing for **BOTH audiences**:
+**internal code** (native Rust builder API) **AND plugins** (declarative `ViewNode` — `WidgetKind`
++ props + `Intent`s). Keep the two in sync (cross-reference them). This is in addition to the
+showcase-demo requirement above.
+
 The app side (`heca/src/chrome.rs`, sidebar) must **only compose existing widgets and project app state into them** — it must not invent visual primitives or hardcode styling inline.
 
 **Why this is non-negotiable (a real mistake made 2026-06-15):** the sidebar column "marker bar" + pane cards were built as inline `Flex`/`Surface` composition in `heca/src/chrome.rs` with hardcoded widths/alphas/colors (e.g. `Surface::new().width(Length::Px(3.0))…with_alpha(90)`, `theme.accent.with_alpha(28)`). Result: they do **not** inherit `Base` props, do **not** read font/theme/colors from config, **ignore** the `[appearance]` transparency, and have **no** consistent active/inactive border/width/radius — silently breaking theming, font changes, and transparency, and bloating the codebase with un-reusable, untested one-offs. Always build the widget properly in `heca-grid-ui` instead. The ad-hoc `.frameless()` added to `DockFrame` is the kind of unplanned escape-hatch to avoid; widget options must be deliberate + theme-driven.

@@ -85,163 +85,125 @@ fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
 }
 
 /// Open the right-click context menu for `pane_id` at `pos`: an **Open link**
-/// entry when the click cell is a hyperlink, plus the common pane actions. Each
-/// entry writes its [`WmAction`] into the shared sink (`state.context_menu_action`),
-/// which the event loop drains and dispatches after feeding an event into the
-/// menu. terminal-task-18 (context-menu open surface) / app-task-33.
+/// entry when the click cell is a hyperlink, plus the common pane actions. Built as
+/// a data-driven [`DropdownSpec`] and pushed via [`open_dropdown`](crate::chrome::open_dropdown)
+/// as a host-owned overlay layer — icons come from the action registry, the chosen action is
+/// dispatched through the central confirm gate, and each entry gets a host-assigned single-letter
+/// quick-pick (no misleading `prefix+X` labels). terminal-task-18 / app-task-33 / context-menu-4.
 fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
-    use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+    use crate::app::interaction::InteractionSource;
+    use crate::chrome::{DropdownItem, DropdownSpec};
 
-    let sink = state.context_menu_action.clone();
-    let mut menu = ContextMenu::new();
-
-    // Each entry's icon comes from the action registry (one source of action
-    // iconography, shared with the future command palette); the label + shortcut
-    // hint stay menu-local. No quick-pick keycap — the real binding is shown.
-    let entry = |catalog: &crate::actions::ActionCatalog,
-                 label: &str,
-                 icon_action: &str,
-                 action: WmAction|
-     -> MenuEntry {
-        let s = sink.clone();
-        let mut e = MenuEntry::new(label, move || {
-            *s.borrow_mut() = Some(action.clone());
-        });
-        if let Some(glyph) = catalog.icon(icon_action) {
-            e = e.icon(glyph);
-        }
-        e
-    };
-
+    let mut items = Vec::new();
     // "Open link" first, only when the click cell carries a hyperlink (OSC 8 or
     // auto-detected) — same lookup as Cmd+click.
     if let Some(url) = crate::app::terminal_host::hyperlink_uri_at_position(state, pane_id, pos) {
-        let s = sink.clone();
-        let mut e = MenuEntry::new("Open link", move || {
-            *s.borrow_mut() = Some(WmAction::OpenLink { url: url.clone() });
-        });
-        if let Some(glyph) = state.action_catalog.icon("open_link") {
-            e = e.icon(glyph);
-        }
-        menu = menu.entry(e);
+        items.push(DropdownItem::new("open_link", "Open link", WmAction::OpenLink { url }));
     }
+    // Pane actions target the focused pane (the right-press focuses the clicked one). The item id
+    // doubles as the action name the icon resolves from (`ActionCatalog::icon`).
+    items.push(DropdownItem::new("split_horizontal", "New column", WmAction::SplitHorizontal));
+    items.push(DropdownItem::new("split_vertical", "Split down", WmAction::SplitVertical));
+    items.push(DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn));
+    items.push(DropdownItem::new("float", "Float / unfloat", WmAction::Float));
+    items.push(DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true));
 
-    // Pane actions target the focused pane (the right-press focuses the clicked one).
-    menu = menu.entry(
-        entry(&state.action_catalog, "New column", "split_horizontal", WmAction::SplitHorizontal).shortcut("prefix+Enter"),
+    crate::chrome::open_dropdown(
+        state,
+        DropdownSpec {
+            anchor: heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
+            items,
+            source: InteractionSource::MouseContent,
+        },
     );
-    menu = menu
-        .entry(entry(&state.action_catalog, "Split down", "split_vertical", WmAction::SplitVertical).shortcut("prefix+v"));
-    menu = menu
-        .entry(entry(&state.action_catalog, "Zoom / unzoom", "zoom_column", WmAction::ZoomColumn).shortcut("prefix+z"));
-    menu = menu.entry(entry(&state.action_catalog, "Float / unfloat", "float", WmAction::Float).shortcut("prefix+f"));
-    menu = menu
-        .entry(entry(&state.action_catalog, "Close pane", "close", WmAction::ClosePane).shortcut("prefix+x").danger(true));
-
-    menu = menu
-        .anchor(heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64))
-        .open(true);
-    state.context_menu = Some(menu);
-    state.needs_redraw = true;
 }
 
-/// Open the right-click context menu for a sidebar `item` (pane / column /
-/// workspace) at `pos`: textual **add / remove** entries acting on that explicit
-/// target. Each entry writes its [`WmAction`] into the shared sink
-/// (`state.context_menu_action`), drained + dispatched by the event loop — the same
-/// path as the content-pane menu. Delete entries dispatch directly (styled
-/// `danger`), matching the content menu's "Close pane" convention. Resolves against
-/// the expanded grid sidebar only (see [`crate::chrome::sidebar_item_at`]).
+/// Open the pane context menu for the **focused** pane, anchored at the last cursor position —
+/// the keyboard / RPC entry point (`OpenContextMenu`). Reuses [`open_context_menu`]; the mouse
+/// right-click path calls that directly with the click position. No-op when no pane is focused.
+pub(crate) fn open_focused_context_menu(state: &mut AppState) {
+    if let Some(pane_id) = crate::app::interaction::focused_pane_id(state) {
+        let pos = state.mouse.pos;
+        open_context_menu(state, pane_id, pos);
+    }
+}
+
+/// Open the right-click context menu for a sidebar `item` (pane / column / workspace) at `pos`:
+/// **add / remove** entries acting on that explicit target, built as a [`DropdownSpec`] and pushed
+/// via [`open_dropdown`](crate::chrome::open_dropdown) (same host-owned overlay path as the
+/// content-pane menu — icons from the action registry, dispatch through the central confirm gate).
+/// Delete entries are styled `danger`. Resolves against the expanded grid sidebar only (see
+/// [`crate::chrome::sidebar_item_at`]).
 fn open_sidebar_context_menu(
     state: &mut AppState,
     item: crate::chrome::ChromeDragItem,
     pos: (f32, f32),
 ) {
-    use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+    use crate::app::interaction::InteractionSource;
+    use crate::chrome::{DropdownItem, DropdownSpec};
 
-    let sink = state.context_menu_action.clone();
-    let entry = |catalog: &crate::actions::ActionCatalog,
-                 label: &str,
-                 icon_action: &str,
-                 action: WmAction|
-     -> MenuEntry {
-        let s = sink.clone();
-        let mut e = MenuEntry::new(label, move || {
-            *s.borrow_mut() = Some(action.clone());
-        });
-        if let Some(glyph) = catalog.icon(icon_action) {
-            e = e.icon(glyph);
-        }
-        e
-    };
-
-    let mut menu = ContextMenu::new();
+    // Each item's id doubles as the action name its icon resolves from (`ActionCatalog::icon`).
+    let mut items = Vec::new();
     match item {
         crate::chrome::ChromeDragItem::Pane(pane_id) => {
             if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, pane_id) {
-                menu = menu.entry(entry(&state.action_catalog,
-                    "New pane",
+                items.push(DropdownItem::new(
                     "split_vertical",
+                    "New pane",
                     WmAction::AddPaneToColumn { ws_idx, col_idx },
                 ));
             }
-            menu = menu.entry(
-                entry(&state.action_catalog, "Delete pane", "close", WmAction::ClosePaneById { pane_id }).danger(true),
+            items.push(
+                DropdownItem::new("close", "Delete pane", WmAction::ClosePaneById { pane_id })
+                    .danger(true),
             );
         }
         crate::chrome::ChromeDragItem::Column { ws, col } => {
-            menu = menu.entry(entry(&state.action_catalog,
-                "New pane",
+            items.push(DropdownItem::new(
                 "split_vertical",
-                WmAction::AddPaneToColumn {
-                    ws_idx: ws,
-                    col_idx: col,
-                },
+                "New pane",
+                WmAction::AddPaneToColumn { ws_idx: ws, col_idx: col },
             ));
-            menu = menu.entry(entry(&state.action_catalog,
-                "New column",
+            items.push(DropdownItem::new(
                 "split_horizontal",
+                "New column",
                 WmAction::AddColumnToWorkspace { ws_idx: ws },
             ));
-            menu = menu.entry(
-                entry(&state.action_catalog,
-                    "Delete column",
+            items.push(
+                DropdownItem::new(
                     "close",
-                    WmAction::DeleteColumn {
-                        ws_idx: ws,
-                        col_idx: col,
-                    },
+                    "Delete column",
+                    WmAction::DeleteColumn { ws_idx: ws, col_idx: col },
                 )
                 .danger(true),
             );
         }
         crate::chrome::ChromeDragItem::Workspace { ws } => {
-            menu = menu.entry(entry(&state.action_catalog,
-                "New column",
+            items.push(DropdownItem::new(
                 "split_horizontal",
+                "New column",
                 WmAction::AddColumnToWorkspace { ws_idx: ws },
             ));
-            menu = menu.entry(entry(&state.action_catalog,
-                "New workspace",
+            items.push(DropdownItem::new(
                 "create_workspace",
+                "New workspace",
                 WmAction::CreateWorkspace,
             ));
-            menu = menu.entry(
-                entry(&state.action_catalog,
-                    "Delete workspace",
-                    "close",
-                    WmAction::DeleteWorkspace { ws_idx: ws },
-                )
-                .danger(true),
+            items.push(
+                DropdownItem::new("close", "Delete workspace", WmAction::DeleteWorkspace { ws_idx: ws })
+                    .danger(true),
             );
         }
     }
 
-    menu = menu
-        .anchor(heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64))
-        .open(true);
-    state.context_menu = Some(menu);
-    state.needs_redraw = true;
+    crate::chrome::open_dropdown(
+        state,
+        DropdownSpec {
+            anchor: heca_core::layout::Point::new(pos.0 as f64, pos.1 as f64),
+            items,
+            source: InteractionSource::MouseLeftSidebar,
+        },
+    );
 }
 
 /// Sync the current drag mode with modifier state changes.

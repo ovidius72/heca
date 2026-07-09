@@ -17,13 +17,14 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt};
+use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
+use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
 
 use super::view::{PropMap, ViewNode, WidgetKind};
-use super::{ChromeIntentEmitter, LayerBand, LayerId, LayerKind};
+use super::{ChromeIntentEmitter, FormBindings, LayerBand, LayerId, LayerKind};
 use crate::actions::ActionRegistry;
 use crate::app::events::AppEvent;
-use crate::app::interaction::{InteractionIntent, InteractionSource};
+use crate::app::interaction::{dispatch_action, InteractionIntent, InteractionSource};
 use crate::app_state::AppState;
 use crate::input::WmAction;
 
@@ -124,6 +125,9 @@ type OverlayCompletion = Box<dyn FnOnce(&mut AppState, &ActionRegistry, ModalRes
 #[derive(Default)]
 pub struct OverlayHost {
     completions: HashMap<OverlayId, OverlayCompletion>,
+    /// Per-overlay form bindings — the named value widgets in the modal body, read into
+    /// [`ModalResult::Action`]'s `data` when the overlay is submitted.
+    forms: HashMap<OverlayId, FormBindings>,
 }
 
 /// The front-most open **modal** overlay — the one capturing input — if any. The input path
@@ -155,7 +159,15 @@ pub(crate) fn open_modal(
         });
     });
 
-    let root = build_modal_root(&spec, id, &emit, &mut state.hint_targets, &state.action_shortcuts);
+    let mut forms = FormBindings::default();
+    let root = build_modal_root(
+        &spec,
+        id,
+        &emit,
+        &mut state.hint_targets,
+        &state.action_shortcuts,
+        &mut forms,
+    );
     state.layers.insert(
         id.0,
         LayerBand::Modal,
@@ -164,6 +176,122 @@ pub(crate) fn open_modal(
         root,
     );
     state.overlays.completions.insert(id, Box::new(completion));
+    state.overlays.forms.insert(id, forms);
+    state.needs_redraw = true;
+    id
+}
+
+/// Read the current values of an overlay's named body fields into a [`PropMap`] — the `data`
+/// handed back in [`ModalResult::Action`]. Empty if the overlay has no form (e.g. a plain
+/// confirm) or is already gone.
+pub(crate) fn collect_form(state: &AppState, overlay: OverlayId) -> PropMap {
+    state
+        .overlays
+        .forms
+        .get(&overlay)
+        .map(FormBindings::collect)
+        .unwrap_or_default()
+}
+
+/// One entry of a dropdown / context menu. The author supplies id/label/action; the host resolves
+/// the icon from the action registry (`ActionCatalog::icon`) and wires the intent + quick-pick —
+/// the same centralized path as [`ModalAction`], with **no hand-picked glyph and no `prefix+X`
+/// label** (the leader doesn't work while the menu is open; a host-assigned single-letter quick-pick
+/// that *does* work replaces it).
+#[derive(Clone)]
+pub struct DropdownItem {
+    /// Stable id returned in [`ModalResult::Action`]; also the **action name** the icon resolves
+    /// from — the canonical identity (e.g. `"close"`).
+    pub id: String,
+    pub label: String,
+    /// The action dispatched **through the central gate** when chosen (may be a button-only
+    /// parameterized variant, e.g. `ClosePaneById`, whose name is still `id`).
+    pub action: WmAction,
+    pub danger: bool,
+    pub enabled: bool,
+}
+
+impl DropdownItem {
+    /// An enabled, non-destructive entry.
+    pub fn new(id: impl Into<String>, label: impl Into<String>, action: WmAction) -> Self {
+        Self { id: id.into(), label: label.into(), action, danger: false, enabled: true }
+    }
+    /// Tint destructive (red) — the confirm gate still applies on dispatch.
+    pub fn danger(mut self, on: bool) -> Self {
+        self.danger = on;
+        self
+    }
+    /// Enable/disable (a disabled entry is dimmed + unselectable).
+    pub fn enabled(mut self, on: bool) -> Self {
+        self.enabled = on;
+        self
+    }
+}
+
+/// A cursor-anchored dropdown / context menu spec — the pointer / `OpenContextMenu` counterpart to
+/// [`ModalSpec`]. A data description a native handler **or** a plugin submits to [`open_dropdown`].
+pub struct DropdownSpec {
+    pub anchor: Point,
+    pub items: Vec<DropdownItem>,
+    /// Attribution for the dispatched action (which surface opened the menu).
+    pub source: InteractionSource,
+}
+
+/// Open a context menu: build a [`ContextMenu`] from the spec (entries emit `SubmitOverlay`, dismiss
+/// emits `CloseOverlay`, icons from the action registry, host-assigned quick-pick letters), push it
+/// as an Overlay-band **modal** layer (so `top_modal` routes input + `paint_layers` paints it), and
+/// register a completion that dispatches the chosen item's action through the central confirm gate.
+pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> OverlayId {
+    let id = OverlayId(state.layers.reserve_id());
+    let source = spec.source;
+
+    let event_proxy = state.event_proxy.clone();
+    let emit: ChromeIntentEmitter = Rc::new(move |intent| {
+        let _ = event_proxy.send_event(AppEvent::ChromeIntent { source, intent });
+    });
+
+    let mut menu = ContextMenu::new().anchor(spec.anchor);
+    let mut letters = 'a'..='z';
+    for item in &spec.items {
+        let carrier = InteractionIntent::ActivateAction(WmAction::SubmitOverlay {
+            overlay: id,
+            action: item.id.clone(),
+        });
+        let emit_e = emit.clone();
+        let mut entry = MenuEntry::new(item.label.clone(), move || emit_e(carrier.clone()))
+            .danger(item.danger)
+            .enabled(item.enabled);
+        if let Some(glyph) = state.action_catalog.icon(&item.id) {
+            entry = entry.icon(glyph);
+        }
+        // Host-assigned single-letter quick-pick (works while open), rendered as a bordered
+        // keycap — the only accelerator shown on the row (no separate global-binding label).
+        if item.enabled
+            && let Some(k) = letters.next()
+        {
+            entry = entry.key(k);
+        }
+        menu = menu.entry(entry);
+    }
+    let emit_dismiss = emit.clone();
+    let close = InteractionIntent::ActivateAction(WmAction::CloseOverlay { overlay: id });
+    let menu = menu.on_dismiss(move || emit_dismiss(close.clone())).open(true);
+
+    state
+        .layers
+        .insert(id.0, LayerBand::Overlay, LayerKind::OnDemand, true, Box::new(menu));
+
+    let items = spec.items;
+    state.overlays.completions.insert(
+        id,
+        Box::new(move |state, registry, result| {
+            if let ModalResult::Action { id: chosen, .. } = result
+                && let Some(item) = items.iter().find(|i| i.id == chosen)
+            {
+                dispatch_action(state, registry, source, &item.action);
+            }
+        }),
+    );
     state.needs_redraw = true;
     id
 }
@@ -179,8 +307,9 @@ fn build_modal_root(
     emit: &ChromeIntentEmitter,
     hints: &mut super::HintTargetRegistry,
     shortcuts: &super::ActionShortcuts,
+    forms: &mut FormBindings,
 ) -> Box<dyn Component> {
-    let body = super::realize(&spec.body, emit, hints);
+    let body = super::realize(&spec.body, emit, hints, forms);
     let mut dialog = Dialog::new(spec.title.clone()).body_boxed(body);
     for action in &spec.actions {
         let variant = if action.danger {
@@ -224,6 +353,7 @@ pub(crate) fn resolve(
     result: ModalResult,
 ) {
     let completion = state.overlays.completions.remove(&overlay);
+    state.overlays.forms.remove(&overlay);
     state.layers.remove(overlay.0);
     state.needs_redraw = true;
     if let Some(comp) = completion {
@@ -238,6 +368,17 @@ mod tests {
 
     fn noop_emit() -> ChromeIntentEmitter {
         Rc::new(|_| {})
+    }
+
+    #[test]
+    fn dropdown_item_builders() {
+        let close = DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true);
+        assert_eq!(close.id, "close");
+        assert_eq!(close.label, "Close pane");
+        assert!(close.danger && close.enabled, "danger set, enabled by default");
+
+        let disabled = DropdownItem::new("dup", "Duplicate", WmAction::ClosePane).enabled(false);
+        assert!(!disabled.enabled && !disabled.danger);
     }
 
     #[test]
@@ -261,7 +402,7 @@ mod tests {
         let mut hints = super::super::HintTargetRegistry::default();
         let shortcuts = super::super::ActionShortcuts::default();
         let before = hints.checkpoint();
-        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts);
+        let root = build_modal_root(&spec, id, &noop_emit(), &mut hints, &shortcuts, &mut FormBindings::default());
 
         // Two actions → two hint targets, each a SubmitOverlay for this overlay.
         assert_eq!(hints.checkpoint() - before, 2);

@@ -113,6 +113,9 @@ pub enum WmAction {
     SplitHorizontal,
     SplitVertical,
     ZoomColumn,
+    /// Open the pane context menu for the focused pane (keyboard/RPC entry; the mouse right-click
+    /// opens it directly). Anchored at the last cursor position.
+    OpenContextMenu,
     ResizeIncrease,
     ResizeDecrease,
     PaneHeightIncrease,
@@ -481,6 +484,7 @@ pub fn action_from_name(name: &str) -> Option<WmAction> {
         "split_horizontal" => Some(WmAction::SplitHorizontal),
         "split_vertical" => Some(WmAction::SplitVertical),
         "zoom_column" => Some(WmAction::ZoomColumn),
+        "open_context_menu" => Some(WmAction::OpenContextMenu),
         "scroll_view_left" => Some(WmAction::ScrollViewLeft),
         "scroll_view_right" => Some(WmAction::ScrollViewRight),
         "float" => Some(WmAction::Float),
@@ -863,6 +867,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         WmAction::SplitHorizontal
         | WmAction::SplitVertical
         | WmAction::ZoomColumn
+        | WmAction::OpenContextMenu
         | WmAction::ScrollViewLeft
         | WmAction::ScrollViewRight
         | WmAction::Float

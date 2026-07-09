@@ -18,8 +18,7 @@ use crate::input::{FontZoomStep, WmAction};
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use crate::mouse;
 use heca_core::layout::Point;
-use heca_grid_ui::reactive::SignalGet;
-use heca_grid_ui::{Component, Event, GridKey};
+use heca_grid_ui::{Event, GridKey};
 use std::collections::HashMap;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -99,22 +98,6 @@ pub(crate) fn handle_window_event(
             }
             state.mark_full_redraw();
 
-            // An open context menu captures the keyboard: navigation (↑/↓/Enter/Esc)
-            // and quick-pick letters drive it; any other key is swallowed so it does
-            // not leak to the focused terminal while the menu is up.
-            if context_menu_open(state) {
-                if let Some(grid_key) = winit_key_to_grid_key(&event.logical_key) {
-                    if let Some(menu) = state.context_menu.as_mut() {
-                        let _ = menu.event(&Event::Key {
-                            key: grid_key,
-                            pressed: true,
-                        });
-                    }
-                    settle_context_menu(state, registry, InteractionSource::Keyboard);
-                }
-                return;
-            }
-
             let is_ctrl = state.modifiers.control_key();
             let is_shift = state.modifiers.shift_key();
             let log_key = &event.logical_key;
@@ -188,18 +171,7 @@ pub(crate) fn handle_window_event(
                 position.y as f32 / state.scale_factor as f32,
             );
             state.mouse.pos = pos;
-            // An open context menu owns the pointer: route moves to it (row hover)
-            // and stop here so the move does not also drive focus/drag/terminal.
-            if context_menu_open(state) {
-                if let Some(menu) = state.context_menu.as_mut() {
-                    let _ = menu.event(&Event::PointerMoved {
-                        pos: Point::new(pos.0 as f64, pos.1 as f64),
-                    });
-                }
-                state.mark_full_redraw();
-                return;
-            }
-            // A visible modal layer owns the pointer while open (hover on its buttons).
+            // A visible modal layer owns the pointer while open (hover on its buttons + menu rows).
             if crate::chrome::top_modal(state).is_some() {
                 if let Some(root) = state.layers.top_modal_root_mut() {
                     let _ = root.event(&Event::PointerMoved {
@@ -239,22 +211,6 @@ pub(crate) fn handle_window_event(
             button,
             ..
         } => {
-            // An open context menu swallows all button input: a press selects a row
-            // (or dismisses on an outside-click); the release is consumed. Routed
-            // before any normal mouse handling so clicks land on the menu, not panes.
-            if context_menu_open(state) {
-                if button_state == ElementState::Pressed {
-                    let pos = state.mouse.pos;
-                    if let Some(menu) = state.context_menu.as_mut() {
-                        let _ = menu.event(&Event::PointerPressed {
-                            pos: Point::new(pos.0 as f64, pos.1 as f64),
-                        });
-                    }
-                    settle_context_menu(state, registry, InteractionSource::MouseContent);
-                }
-                state.mark_full_redraw();
-                return;
-            }
             // A visible modal layer swallows all button input: a press on a button (its
             // `on_click` emits `SubmitOverlay`) or the scrim (`Dialog::on_dismiss` emits
             // `CloseOverlay`) resolves it; anything else is consumed so clicks don't leak.
@@ -330,9 +286,9 @@ pub(crate) fn handle_window_event(
             // the right-button fallback press, or a release) must not also reach the
             // terminal — the gesture consumed it.
             let resize_consumed = resize_before || mouse::is_resizing(state);
-            // A right-press that just opened the context menu must not also forward
-            // to the terminal (it would deliver a stray right-click to the TUI).
-            let opened_context_menu = context_menu_open(state);
+            // A right-press that just opened the context menu (now a host-owned overlay layer)
+            // must not also forward to the terminal (it would deliver a stray right-click to the TUI).
+            let opened_context_menu = crate::chrome::top_modal(state).is_some();
             if !started_interactive_move && !resize_consumed && !opened_context_menu {
                 forward_mouse_button(state, state.mouse.pos, button, button_state, registry);
             }
@@ -396,39 +352,6 @@ fn handle_wheel_font_zoom(
     };
     dispatch_action(state, registry, InteractionSource::MouseContent, &action);
     true
-}
-
-/// Whether a right-click context menu is currently open.
-fn context_menu_open(state: &AppState) -> bool {
-    state
-        .context_menu
-        .as_ref()
-        .is_some_and(|m| m.open_signal().get_untracked())
-}
-
-/// After feeding an event into the open menu: dispatch whatever action the chosen
-/// entry queued in the sink, then drop the menu if it closed itself (entry run or
-/// outside-click). One settle path shared by the mouse + keyboard routes.
-fn settle_context_menu(
-    state: &mut AppState,
-    registry: &ActionRegistry,
-    source: InteractionSource,
-) {
-    let action = state.context_menu_action.borrow_mut().take();
-    if let Some(action) = action {
-        // Just dispatch the action — the central destructive gate at the dispatch chokepoint
-        // confirms close/delete picks per `[settings] confirm_*`, identically to every other
-        // surface. No per-surface destructive special-case here.
-        dispatch_action(state, registry, source, &action);
-    }
-    let closed = state
-        .context_menu
-        .as_ref()
-        .is_none_or(|m| !m.open_signal().get_untracked());
-    if closed {
-        state.context_menu = None;
-    }
-    state.mark_full_redraw();
 }
 
 /// Map a winit key to the grid-ui [`GridKey`] an overlay widget understands (context menu,

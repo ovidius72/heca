@@ -376,8 +376,6 @@ pub(crate) async fn init_state(
         selection: app_state::SelectionState::new(),
         bell_flash_until: None,
         search: None,
-        context_menu: None,
-        context_menu_action: std::rc::Rc::new(std::cell::RefCell::new(None)),
         last_focused: None,
         last_visited_ws_idx: None,
         last_visited_pane_per_ws: vec![None; ws_count],

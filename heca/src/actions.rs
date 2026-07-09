@@ -296,6 +296,14 @@ impl ActionRegistry {
             icon: Some(Glyph::FrameCorners),
         },
         ActionDescriptor {
+            name: "open_context_menu",
+            label: "Open Context Menu",
+            description: "Open the focused pane's context menu at the cursor.",
+            category: ActionCategory::Layout,
+            default_binding: ".",
+            icon: Some(Glyph::DotsThreeVertical),
+        },
+        ActionDescriptor {
             name: "scroll_view_left",
             label: "Scroll View Left",
             description: "Pan the horizontal view left to reach off-screen / overflowing columns.",

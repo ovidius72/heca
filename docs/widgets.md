@@ -1305,6 +1305,59 @@ let dialog = Dialog::new("Delete pane?")
 > for click, KeyHint pick, and RPC alike. The developer only lists buttons; nav, tooltips, and
 > KeyHint targets come from the widget + the centralized button path.
 
+#### Declaring a modal from data — host code **and** plugins
+
+App/agent code and plugins don't build the `Dialog` widget by hand — they **describe** a modal as
+data and let the host own it. Both submit a `ModalSpec { title, body: ViewNode, actions }` to
+`OverlayHost::open_modal` (`heca/src/chrome/overlay.rs`); the host `realize`s the `ViewNode` body,
+injects the action buttons + KeyHint targets, shows it as a `Modal`-band layer, and returns the
+outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
+
+The **body is any `ViewNode` tree** (labels, inputs, rows, cards…), so a modal can carry a form.
+A value node opts into the returned `data` with a **`"name"` prop** — on submit the host collects
+its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`).
+
+**Internal code** (a native handler; behaviour via a Rust completion closure):
+```rust
+open_modal(
+    state,
+    ModalSpec {
+        title: "Rename pane".into(),
+        body: ViewNode::new(WidgetKind::Column)
+            .prop("gap", PropValue::Int(8))
+            .child(ViewNode::new(WidgetKind::Label).text("New name"))
+            .child(
+                ViewNode::new(WidgetKind::Input)
+                    .text(current_name)
+                    .prop("name", PropValue::Text("name".into())), // collected into `data`
+            ),
+        actions: vec![
+            ModalAction::new("cancel", "Cancel"),
+            ModalAction::new("ok", "Rename"),
+        ],
+        danger: false,
+        dismissible: true,
+    },
+    |state, registry, result| {
+        if let ModalResult::Action { id, data } = result {
+            if id == "ok" {
+                if let Some(name) = data.get("name").and_then(PropValue::as_text) {
+                    /* dispatch the rename with `name` */
+                }
+            }
+        }
+    },
+);
+// A plain confirm is the same shape: `ModalSpec::message(title, msg).action(...).danger(true)`.
+```
+
+**Plugin** (declarative + serializable): the **same `ModalSpec`/`ViewNode`**, authored as data —
+no Rust closures. Behaviour is carried by `Intent`s and the plugin receives the `ModalResult`
+(`id` + the named-field `data`) back over the boundary. Because it's the identical model, a modal
+authored by a plugin is realized, hinted (`prefix+/`), keyboard-driven, and confirm-gated exactly
+like a native one. (A first-class typed builder — `Column::new().gap(8).child(…)` — is
+`plugin-task-ui-2`; today author the nodes with `ViewNode::new(kind).prop(…).child(…)`.)
+
 ### CommandPalette
 
 A fuzzy **command launcher** overlay (same input-capturing contract as `Modal`): a query line
@@ -1345,8 +1398,11 @@ cursor and flips `open`. The panel sizes to its content and flips/clamps to stay
 - **Construct**: `ContextMenu::new()`; add entries with `.entry(MenuEntry::new(label, on_select)
   .icon(Glyph)?.key('x')?.shortcut("prefix+x")?.danger(bool)?.enabled(bool)?)`; `.open(bool)`, `.anchor(Point)`.
 - **Accessors**: `.open_signal() -> Signal<bool>`, `.anchor_signal() -> Signal<Point>`.
+- **Dismiss callback**: `.on_dismiss(impl Fn())` — fired on **Esc / outside-click** (a *dismissal*,
+  not a selection; selecting an entry runs its `on_select` instead). The host points this at its
+  overlay-close path (in `heca`, emit `CloseOverlay`), mirroring [`Dialog::on_dismiss`](#dialog).
 - **Nav (built-in)**: ↑/↓ move (skipping disabled), **Enter** runs, a **quick-pick key** runs its
-  entry directly, **Esc** / outside-click close. Hover highlights; click runs. Also `select_next()`,
+  entry directly, **Esc** / outside-click dismiss. Hover highlights; click runs. Also `select_next()`,
   `select_prev()`, `run_selected()`.
 
 ```rust
@@ -1359,6 +1415,15 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 
 > Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
 > (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
+
+> **Declaring from data — host + plugins (in progress).** As with the modal (`open_modal`), the
+> plugin-facing path is a **data spec** the host owns, not hand-built entries: `OverlayHost::
+> open_dropdown(DropdownSpec { anchor, items })` where each item is `{ id, label, action, danger,
+> enabled }` — entries carry an **`Intent`** (not a closure) and their **icon resolves from the
+> action registry** (`ActionCatalog::icon`), so a menu is declarable from native code **and** from a
+> plugin, and selecting an entry dispatches its action through the central confirm gate. Tracked as
+> the `context-menu` phase; `on_dismiss` above is the widget hook `open_dropdown` wires to
+> `CloseOverlay`.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
 > `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper
@@ -1391,6 +1456,81 @@ let stack = ToastStack::new(toasts)
 
 > Same host wiring as `Modal` (route pointer to the overlay first). Auto-dismiss/timers live in the
 > app: run a timer, then remove the id from `items`.
+
+---
+
+## Declarative UI model (`ViewNode`)
+
+`ViewNode` (`heca/src/chrome/view.rs`) is the **serializable UI description** that both native code
+and plugins author, and that the host mapper `realize()` turns into a retained tree of the widgets
+above. It's the SwiftUI/Flutter-style layer: you *describe* the UI as data; the host builds it. This
+is how a plugin declares UI (it can't ship Rust widgets), and the ergonomic native path too.
+
+### The model — a node is four things, all its own
+
+| Part | What it is |
+|------|-----------|
+| `kind` | which widget (`WidgetKind`: `Column`/`Row`/`Label`/`Button`/`Input`/…) |
+| `props` | this node's **own** values (`name → PropValue`) — **per node, not inherited** |
+| `events` | this node's **own** `event → Intent` bindings (`press` / `change`) — an action **id**, never a closure (keeps it serializable) |
+| `children` | a **`Vec<ViewNode>`**, each a full node with its *own* props/events/children |
+
+**Props are per-node.** `.prop("gap", …)` on a `Column` styles *the column*, not its children — the
+props sitting next to `.child(…)` calls belong to the node you called `.prop` on (the container). A
+child is styled by putting props on *that child*. The builder chains for ergonomics but children are
+a plain vector: `.child(n)` appends one, `.children([a,b])` appends many — `Column().child(a).child(b)`
+≡ `Column().children([a,b])`.
+
+### Props & events by kind (what `realize` reads today)
+
+Missing/mistyped props are ignored (the widget keeps its default) — the model is untrusted input.
+
+| Kind | Props it reads | Events |
+|------|----------------|--------|
+| `Column` / `Row` | `gap` (Int/Float), `align` (Align) | — |
+| `Card` | `text` (title) + children | — |
+| `Surface` / `Panel` / `Scroll` | (container — children only) | — |
+| `Label` / `Badge` / `Tag` / `Alert` | `text` | — |
+| `Button` / `BadgeButton` | `text`, `variant`, `size` | `press` |
+| `Icon` / `IconButton` / `RailCell` | `icon` (Glyph **name**), `size` | `press` (button/rail) |
+| `Input` | `text` (value), `name` | `change` |
+| `Toggle` | `on` (Bool), `name` | `change` |
+| `Checkbox` | `checked` (Bool), `text` (label), `name` | `change` |
+| `Gauge` | `value` (Float) | — |
+| `Item` | `text` (label) | `press` |
+
+`PropValue` variants: `Bool` · `Int` · `Float` · `Text` · `Size`(`ViewSize`) · `Variant`(`ViewVariant`)
+· `Align`(`ViewAlign`) · `Color`(name/`#rrggbb`) · `Glyph`(name). A **`"name"` prop** on a value
+widget opts it into a submitted modal's returned `data` (see [Dialog](#dialog) → *Declaring a modal
+from data*). Not realized yet (need structured/list props — `plugin-task-ui-9`): `Select`, `Tabs`,
+`Grid`, `ItemGroup`, `DockFrame`, `MarkerGroup`, `ScrollBar`, `Toast`.
+
+### Declaring a tree — internal code and plugins (same model)
+
+```rust
+// A labelled input + a primary button. Each node carries ITS OWN props/events.
+ViewNode::new(WidgetKind::Column)
+    .prop("gap", PropValue::Int(8))                                  // ← the COLUMN's prop
+    .child(ViewNode::new(WidgetKind::Label).text("New name"))
+    .child(
+        ViewNode::new(WidgetKind::Input)
+            .text("current")
+            .prop("name", PropValue::Text("name".into())),          // ← the INPUT's props (form field)
+    )
+    .child(
+        ViewNode::new(WidgetKind::Button)
+            .text("Rename")
+            .prop("variant", PropValue::Variant(ViewVariant::Primary)) // ← the BUTTON's prop
+            .on_press(Intent::new("rename")),                          // ← the BUTTON's event → action id
+    );
+```
+
+- **Internal code** authors this directly (as above) and hands it to `realize` / `open_modal`.
+- **Plugins** author the *same* nodes and ship them serialized (JSON); behaviour is the `Intent`
+  action ids, so no closures cross the boundary. A typed SwiftUI-style builder
+  (`Column::new().gap(8).child(…)`) is `plugin-task-ui-2`; until then use `ViewNode::new(kind)`.
+- **Extending the vocabulary is host-side** (never a plugin): add a `WidgetKind` variant + a
+  `realize` arm + the widget's showcase demo + its entry here. Plugins compose from existing kinds.
 
 ---
 

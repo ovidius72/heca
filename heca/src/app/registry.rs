@@ -272,6 +272,7 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::SplitHorizontal, handle_split_horizontal);
     registry.register(&WmAction::SplitVertical, handle_split_vertical);
     registry.register(&WmAction::ZoomColumn, handle_zoom_column);
+    registry.register(&WmAction::OpenContextMenu, handle_open_context_menu);
     registry.register(&WmAction::ScrollViewLeft, handle_scroll_view_left);
     registry.register(&WmAction::ScrollViewRight, handle_scroll_view_right);
     registry.register(&WmAction::ResizeIncrease, handle_resize_increase);
