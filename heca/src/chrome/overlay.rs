@@ -264,7 +264,8 @@ pub(crate) fn open_dropdown(state: &mut AppState, spec: DropdownSpec) -> Overlay
         if let Some(glyph) = state.action_catalog.icon(&item.id) {
             entry = entry.icon(glyph);
         }
-        // Host-assigned single-letter quick-pick (works while open) — only for enabled entries.
+        // Host-assigned single-letter quick-pick (works while open), rendered as a bordered
+        // keycap — the only accelerator shown on the row (no separate global-binding label).
         if item.enabled
             && let Some(k) = letters.next()
         {

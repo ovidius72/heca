@@ -185,6 +185,12 @@ pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
+/// Open the focused pane's context menu (keyboard / RPC entry) at the last cursor position.
+/// Reuses the mouse-side builder; the right-click path opens it directly at the click.
+pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
+    crate::mouse::open_focused_context_menu(state);
+}
+
 /// Pan the horizontal view left/right by a quarter of the viewport, to reach
 /// column overflow / content scrolled past an edge. View-only (no focus change).
 pub fn handle_scroll_view_left(state: &mut AppState, _action: &WmAction) {

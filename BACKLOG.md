@@ -1740,13 +1740,29 @@ similar activity (see the stub phase below) — build the shared pieces here reu
 - [ ] **context-menu-2 — grid-ui: entry widget + `ContextMenu::on_dismiss`.** Preserve
   focused-left-border + theme glow + icon on the realized entry; add `on_dismiss` (mirrors
   `Dialog::on_dismiss`). Showcase + `docs/widgets.md`.
-- [ ] **context-menu-3 — pane-header (+ sidebar-item) "more actions" button** (kebab,
-  `DotsThreeVertical`) that opens the menu, reusing the existing pane-action-button + KeyHint path.
-  The button's laid-out **bounds are the anchor** (no rect computation), and KeyHint (`prefix+/`)
-  gives keyboard access for free — **no bespoke `OpenContextMenu` keyboard action**. Follow the
-  `PaneAction` pattern (`config.default.toml` `[pane] title_actions`); the button's `on_click` calls
-  `open_dropdown` anchored at its bounds. Update showcase + `docs/widgets.md` + README pane-actions.
-- [x] **context-menu-4 — DONE (2026-07-08, pending in-app GUI verification), commit `7d031c5`.**
+- [~] **context-menu-3 — `OpenContextMenu` keyboard/RPC action + item polish.** (The earlier
+  "more-actions button" reframe is **superseded**: a real keyboard action *is* the standard pattern —
+  Menu key / Shift+F10 — and it's what justifies the in-menu quick-pick. Decision 2026-07-08.)
+  - **DONE (uncommitted, green: heca 318, clippy clean):** `WmAction::OpenContextMenu` — full
+    checklist across `input.rs` (variant + `action_from_name` + priority), `app/interaction.rs`
+    (`action_policy`, TiledOnly with `ZoomColumn`), `handlers.rs` (`handle_open_context_menu` →
+    `mouse::open_focused_context_menu`), `app/registry.rs`, `rpc.rs` (`open-context-menu`),
+    `actions.rs` (descriptor), `keybindings.default.toml` (`prefix+.`). Reachable mouse (right-click,
+    pre-existing) / keyboard / RPC.
+  - **DONE (uncommitted):** menu items now show **only the single-letter quick-pick** (removed the
+    `λ` global-binding label — redundant, and the leader can't fire while the menu is open;
+    user: "only the quick pick with the border").
+  - **REMAINING:**
+    1. **Bordered keycap via the shared `paint_keycap`/`KeyHint` primitive** (add a bordered variant
+       there; make `ContextMenu` use it) — **NOT hand-drawn** in `ContextMenu::paint`. Showcase +
+       `docs/widgets.md` + rustdoc. (User: "never hardcode; create/extend reusable widgets.")
+    2. **Keyboard-open anchor → CENTER of the focused widget** (pane; sidebar item; active
+       layer/`current_index` later). Today `mouse::open_focused_context_menu` uses `mouse.pos`
+       (stopgap); reuse `content_rect`/`stable_tiled_content_rect` (`app/render.rs`).
+    3. **Default binding → `prefix+>`** (if unbound) instead of `prefix+.` (`keybindings.default.toml`
+       + `actions.rs` `default_binding`).
+  See `HANDOFF-context-menu.md` for full detail + widget references.
+- [x] **context-menu-4 — DONE (2026-07-08, GUI-verified in-app by the user), commit `7d031c5`.**
   Both `open_context_menu`/`open_sidebar_context_menu` (`mouse.rs`) build a `DropdownSpec` + open via
   `OverlayHost::open_dropdown` (host-owned Overlay-band modal layer). **Removed the whole bespoke
   path**: `AppState.context_menu` + `context_menu_action` sink (+ startup init), the 3 `events.rs`

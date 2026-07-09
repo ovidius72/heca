@@ -174,6 +174,7 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
         "workspace-prev" => Ok(WmAction::WorkspacePrev),
         "split-h" | "split-horizontal" => Ok(WmAction::SplitHorizontal),
         "zoom-column" | "zoom-col" => Ok(WmAction::ZoomColumn),
+        "open-context-menu" | "context-menu" => Ok(WmAction::OpenContextMenu),
         "scroll-view-left" | "scroll-left" => Ok(WmAction::ScrollViewLeft),
         "scroll-view-right" | "scroll-right" => Ok(WmAction::ScrollViewRight),
         "split-v" | "split-vertical" => Ok(WmAction::SplitVertical),

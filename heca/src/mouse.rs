@@ -118,6 +118,16 @@ fn open_context_menu(state: &mut AppState, pane_id: PaneId, pos: (f32, f32)) {
     );
 }
 
+/// Open the pane context menu for the **focused** pane, anchored at the last cursor position —
+/// the keyboard / RPC entry point (`OpenContextMenu`). Reuses [`open_context_menu`]; the mouse
+/// right-click path calls that directly with the click position. No-op when no pane is focused.
+pub(crate) fn open_focused_context_menu(state: &mut AppState) {
+    if let Some(pane_id) = crate::app::interaction::focused_pane_id(state) {
+        let pos = state.mouse.pos;
+        open_context_menu(state, pane_id, pos);
+    }
+}
+
 /// Open the right-click context menu for a sidebar `item` (pane / column / workspace) at `pos`:
 /// **add / remove** entries acting on that explicit target, built as a [`DropdownSpec`] and pushed
 /// via [`open_dropdown`](crate::chrome::open_dropdown) (same host-owned overlay path as the
