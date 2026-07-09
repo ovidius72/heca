@@ -1042,6 +1042,11 @@ This phase is interactive — cannot be done without the user running the app.
 
 - [ ] **compositor-task-22** — User resizes the window; confirms z=0 recomputes cleanly with no stale-resolution artifact.
 
+### [x] Phase: Ship review finale · `compositor-06`
+Final quality gates and sign-off for the z=0 frost pipeline (compositor-01→04c). Deferred review finale — quality gates and final sign-off remain outside the current active work; the pipeline itself shipped.
+
+- [x] **compositor-task-23** — Final review: rust-skill review, clippy clean, tests green across the workspace.
+
 ---
 
 ## Pluggable Chrome / Plugin
@@ -1051,7 +1056,7 @@ This phase is interactive — cannot be done without the user running the app.
 > grid-ui widget vocabulary, shell compositing primitives, modal/dropdown overlays.
 > Remaining: the architectural core — ChromeHost, providers, dynamic actions, WASM runtime.
 
-### [ ] Phase: Formal architecture contracts · `plugin-01`
+### [x] Phase: Formal architecture contracts · `plugin-01` — **DONE 2026-07-02**
 Write and ratify the formal chrome-host + provider + plugin contracts before any implementation.
 Source: `pluggable-chrome-plugin-plan.md` Phase 1
 
@@ -2109,6 +2114,68 @@ Per-pane structured `AgentStatus` sourced from each AI agent's lifecycle hooks, 
 
 ---
 
+## Neovim GUI Pane
+
+> Source: `neovim-plan.md`
+> Embed Neovim as a first-class GPU-rendered pane backend (alongside the terminal), via `nvim --embed` + msgpack-RPC. Goal: a native Neovide-class editor pane inside heca — sharp fonts, ligatures, multi-grid, images, markdown preview — all in the same GPU frame.
+> Status: all phases planned — not started. Track: planner feature 🖋️ Neovim GUI Pane (6 phases, 18 tasks).
+
+### [ ] Phase: Embed nvim + RPC + render single grid · `nvim-01`
+Spawn `nvim --embed`, establish the msgpack-RPC channel, `nvim_ui_attach`, and render a single grid. The first vertical slice proving a nvim pane renders inside heca.
+
+### [ ] Phase: Editor-pane integration · `nvim-02`
+Multi-instance support, pane lifecycle, focus and input forwarding to the embedded nvim. Integrates the nvim backend into the existing pane/column model.
+
+### [ ] Phase: ext_multigrid · `nvim-03`
+Multi-grid / multi-window support: grid geometry, viewport tracking, and z-ordering for floating nvim windows.
+
+### [ ] Phase: Input routing · `nvim-04`
+Key/modifier encoding, mouse forwarding, and coexistence with heca's prefix mode (the prefix key must not be swallowed by the editor pane).
+
+### [ ] Phase: Image layer · `nvim-05`
+Dedicated RPC channel for inline images, reusing heca's `ImageRenderer`. Brings nvim image support (e.g. kitty graphics protocol via nvim) into the GPU pipeline.
+
+### [ ] Phase: Markdown layer · `nvim-06`
+Read buffers via RPC and render native/rich markdown preview as a heca pane. Editor ↔ preview linkage.
+
+---
+
+## Notification System
+
+> Source: `notification-system-plane.md`
+> A unified, app-owned notification system: typed toasts rendered in the chrome, with routing, producers (app events, config reload, OS), action dispatch via the ActionRegistry, and an optional OS-notification backend.
+> Design: pure-data `ToastSpec`, app-owned store (queue/dedup/expiry/timer), in-app `ToastStack` mounted in the retained chrome tree, action buttons dispatched through the central action policy path.
+> Status: all phases planned — not started. Track: planner feature 🔔 Notification System (9 phases, 59 tasks).
+
+### [ ] Phase: Model + Config · `notification-01`
+Core notification types, `ToastSpec` mapping, and the `notification_system` config schema.
+
+### [ ] Phase: Store + Lifecycle · `notification-02`
+App-owned store: queue, dedup, expiry, and timer scheduling.
+
+### [ ] Phase: In-App Toast Rendering · `notification-03`
+Mount a `ToastStack` in the chrome retained tree using app-owned signals.
+
+### [ ] Phase: Toast Action Dispatch · `notification-04`
+Toast action buttons dispatched through the ActionRegistry / interaction-policy path (no bypass).
+
+### [ ] Phase: Reload Config Producer · `notification-05`
+First real producer: reload-config success/failure toasts with a Retry action.
+
+### [ ] Phase: Routing + Additional Producers · `notification-06`
+Central `notify` choke point, routing (app/system/none), and additional producers.
+
+### [ ] Phase: OS/System Notification Backend · `notification-07`
+OS-level system notification backend (deferred — platform-specific).
+
+### [ ] Phase: Toast Keyboard Hint Integration · `notification-08`
+Integration with the global prefix+`/` hint system (deferred).
+
+### [ ] Phase: Tests + Documentation · `notification-09`
+Test coverage and user/planner documentation.
+
+---
+
 ## Dependency order summary
 
 ```
@@ -2137,4 +2204,11 @@ app-07        (do LAST — high risk, do after app is stable)
 app-10        (independent — F4.4/F4.5 leftovers; app-task-29 done, 30/31 open)
 
 agents-01     (gated on plugin-01 through plugin-05)
+
+nvim-01 → nvim-02 → nvim-03 → nvim-04      (nvim-05/nvim-06 branch off nvim-02)
+notification-01 → notification-02 → notification-03 → notification-04 → notification-06 → notification-09
+notification-05, notification-07, notification-08   (branch off the core store)
+
+action-interaction  (generalizes the destructive gate; prerequisite already landed)
+plugin-ui           (gate for plugin-task-15 / plugin-task-21 / plugin-task-26; do before overlay body + WASM)
 ```
