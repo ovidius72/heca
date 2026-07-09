@@ -1689,7 +1689,7 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
   - Run this **last** in the plugin arc — once the widget/`realize`/overlay surface is settled, so
     the iconset is filled against the final set of consumers.
 
-### [ ] Phase: Contextual menu → OverlayHost + plugin-declarable · `context-menu`
+### [~] Phase: Contextual menu → OverlayHost + plugin-declarable · `context-menu`
 Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (**Option B** —
 entries are serializable `Intent`s, not native closures), so a context menu is **declarable from
 code AND from a plugin**, KeyHint/keyboard-reachable, and consistent with the modal path. Design
@@ -1752,17 +1752,15 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   - **DONE (uncommitted):** menu items now show **only the single-letter quick-pick** (removed the
     `λ` global-binding label — redundant, and the leader can't fire while the menu is open;
     user: "only the quick pick with the border").
+  - **DONE 2026-07-09:** Keyboard-open anchor → CENTER of the app window (`mouse::open_focused_context_menu`
+    via `window_center_logical(state)` = `inner_size / scale_factor / 2`; `source: Keyboard`;
+    no "Open link" entry). Default binding changed to `prefix+>` (resolved live SidebarRight
+    conflict). `OpenContextMenu` reclassified `TiledOnly` → `FocusedPaneLocal` (works with floating
+    panes). `DropdownSpec.centered` flag + layout offset for keyboard-open centering.
   - **REMAINING:**
     1. **Bordered keycap via the shared `paint_keycap`/`KeyHint` primitive** (add a bordered variant
        there; make `ContextMenu` use it) — **NOT hand-drawn** in `ContextMenu::paint`. Showcase +
        `docs/widgets.md` + rustdoc. (User: "never hardcode; create/extend reusable widgets.")
-    2. **Keyboard-open anchor → CENTER of the app window** (decision locked 2026-07-09, superseding
-       the earlier "center of focused widget" draft — the user: a keyboard-opened menu has no
-       pointer target, so it stays centered on screen). Implemented in `mouse::open_focused_context_menu`
-       via `window_center_logical(state)` = `inner_size / scale_factor / 2`; `source: Keyboard`;
-       no "Open link" entry (no target cell). Mouse-open path unchanged (click pos + hyperlink lookup).
-    3. **Default binding → `prefix+>`** (if unbound) instead of `prefix+.` (`keybindings.default.toml`
-       + `actions.rs` `default_binding`).
   See `HANDOFF-context-menu.md` for full detail + widget references.
 - [x] **context-menu-4 — DONE (2026-07-08, GUI-verified in-app by the user), commit `7d031c5`.**
   Both `open_context_menu`/`open_sidebar_context_menu` (`mouse.rs`) build a `DropdownSpec` + open via
@@ -1775,6 +1773,27 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   labels; adds host-assigned letter quick-picks; destructive still confirms via the central gate.
   Gate: heca 318, clippy clean. Runtime GUI check outstanding (right-click pane + sidebar, select,
   dismiss, keyboard nav, letter quick-pick).
+- [x] **context-menu-6 — DONE (2026-07-09, commit 7a7da2d).** ContextMenuRegistry + `open_context_menu_for`
+  (unified open path) + mouse refactor. New module `heca/src/chrome/context_menu.rs`:
+  `ContextPath` (dotted string, consts `PANE`/`SIDEBAR_PANE`/`SIDEBAR_COLUMN`/`SIDEBAR_WORKSPACE`),
+  `ContextTarget` enum (Pane/SidebarPane/SidebarColumn/SidebarWorkspace), `ContextMenuRegistry`
+  with 4 built-in providers (pane, sidebar.pane, sidebar.column, sidebar.workspace),
+  `open_context_menu_for(state, path, target, anchor, source, origin)` — registry lookup → merge
+  by Dewey weight → `open_dropdown`; `centered` derived from `source == Keyboard`; captures
+  `overlay_origin_mode` when `None`. `restorable_mode()` whitelist (only `SidebarNav`).
+  `overlay_origin_mode: Option<InputMode>` on AppState — captured at overlay open, restored in
+  `overlay::resolve()` when last overlay closes (before completion). Mouse refactor: all 3 menu
+  builders (`open_context_menu`, `open_focused_context_menu`, `open_sidebar_context_menu`) route
+  through `open_context_menu_for`. 5 unit tests. Clippy clean.
+- [x] **context-menu-7 — DONE (2026-07-09, commit 7a7da2d).** Keyboard context-aware menus. `prefix+>`
+  now works everywhere: pane (Normal mode) and sidebar item (SidebarNav mode). `resolve_active_context(state)`
+  reads InputMode + sidebar cursor → (ContextPath, ContextTarget). `PendingContext` struct carries
+  (path, target, origin) through the Prefix→Normal dispatch transition. Prefix arm in
+  `handle_sidebar_nav_mode` (mirrors selection mode pattern) stashes `pending_context` BEFORE
+  the transition. `handle_open_context_menu` consumes it → `open_context_menu_for` with
+  `origin=Some(SidebarNav)` → `overlay_origin_mode` captured → `overlay::resolve()` restores
+  SidebarNav on close. Mode-restore: open from sidebar → Esc/item → back in SidebarNav (not Normal).
+  Verified: cargo check + clippy clean, tests green.
 - [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`** (full design locked
   2026-07-09). A new `Contribution` variant so a plugin/native provider registers entries for a
   **named context**; the host **merges** built-in + contributed entries.
