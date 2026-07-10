@@ -10,9 +10,8 @@ use crate::app::keyboard::{
     event_combo_matches, normalize_key_text, prefix_combo_to_literal_input, typed_candidate_char,
     winit_key_to_backend_event, winit_key_to_terminal_input,
 };
-use crate::app::mutations::after_metadata_change;
 use crate::app::selection::find_pane_location;
-use crate::app_state::{AppState, InputMode, RenameTarget, WorkspacePickTarget};
+use crate::app_state::{AppState, InputMode, WorkspacePickTarget};
 use crate::input::WmAction;
 use crate::keymap::{KeyCombo, KeymapRegistry};
 use heca_core::layout::PaneId;
@@ -38,10 +37,6 @@ pub(crate) fn handle_keyboard_input(
     state: &mut AppState,
     ctx: KeyInputContext<'_>,
 ) {
-    if handle_rename_input(state, ctx) {
-        return;
-    }
-
     let input_mode = state.input_mode.clone();
     match input_mode {
         InputMode::Normal => {
@@ -171,65 +166,6 @@ fn handle_search_mode(state: &mut AppState, ctx: KeyInputContext<'_>) {
     state.needs_redraw = true;
 }
 
-fn handle_rename_input(state: &mut AppState, ctx: KeyInputContext<'_>) -> bool {
-    let InputMode::Rename { target, buffer } = &mut state.input_mode else {
-        return false;
-    };
-
-    let is_escape = matches!(ctx.logical_key, Key::Named(NamedKey::Escape));
-    let is_enter = matches!(ctx.logical_key, Key::Named(NamedKey::Enter));
-    let is_backspace = matches!(ctx.logical_key, Key::Named(NamedKey::Backspace));
-
-    if is_escape {
-        state.input_mode = InputMode::Normal;
-    } else if is_enter {
-        let new_name = buffer.trim().to_string();
-        match target {
-            RenameTarget::Workspace(ws_idx) => {
-                if let Some(ws) = state.session.workspaces.get_mut(*ws_idx) {
-                    ws.name = if new_name.is_empty() {
-                        None
-                    } else {
-                        Some(new_name)
-                    };
-                }
-            }
-            RenameTarget::Column { ws_idx, col_idx } => {
-                if let Some(ws) = state.session.workspaces.get_mut(*ws_idx)
-                    && let Some(col) = ws.scrolling.columns.get_mut(*col_idx)
-                {
-                    col.name = if new_name.is_empty() {
-                        None
-                    } else {
-                        Some(new_name)
-                    };
-                }
-            }
-            RenameTarget::Pane(pane_id) => {
-                if let Some(ws) = state.session.active_workspace_mut()
-                    && let Some(pane) = ws.find_pane_mut(*pane_id)
-                {
-                    // Set a user override that wins over the process-derived name; an
-                    // empty entry clears it so the name tracks the process again.
-                    pane.custom_name = if new_name.is_empty() {
-                        None
-                    } else {
-                        Some(new_name)
-                    };
-                }
-            }
-        }
-        after_metadata_change(state);
-        state.input_mode = InputMode::Normal;
-    } else if is_backspace {
-        buffer.pop();
-    } else if ctx.key_text.len() == 1 && !ctx.is_ctrl {
-        buffer.push_str(ctx.key_text);
-    }
-
-    state.needs_redraw = true;
-    true
-}
 
 fn handle_prefix_mode(
     registry: &ActionRegistry,
@@ -241,6 +177,9 @@ fn handle_prefix_mode(
     if ctx.is_prefix {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
+        // Leaving Prefix without opening a menu: drop any sidebar context stashed by the
+        // SidebarNav prefix arm so a later OpenContextMenu can't pick up a stale one (context-menu-7).
+        state.pending_context = None;
         if let Some(pane_id) = state.focused_pane
             && let Some(backend) = state.backends.get_mut(pane_id)
         {
@@ -279,6 +218,8 @@ fn handle_prefix_mode(
     if let Some((mode_name, _sticky)) = entered_mode {
         state.input_mode = InputMode::Mode { name: mode_name };
         state.prefix_entered_at = None;
+        // Entering a custom mode instead of a menu — abandon any pending sidebar context.
+        state.pending_context = None;
         state.needs_redraw = true;
         return;
     }
@@ -288,9 +229,13 @@ fn handle_prefix_mode(
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
         dispatch_action(state, registry, InteractionSource::Keyboard, act);
+        // A pending sidebar context (context-menu-7) is consumed by handle_open_context_menu
+        // during dispatch; clear any leftover so a later OpenContextMenu can't read a stale one.
+        state.pending_context = None;
     } else if !ctx.key_text.is_empty() {
         state.input_mode = InputMode::Normal;
         state.prefix_entered_at = None;
+        state.pending_context = None;
     }
 }
 
@@ -646,6 +591,23 @@ fn handle_sidebar_nav_mode(
             }
             _ => {}
         }
+        state.needs_redraw = true;
+    } else if ctx.is_prefix {
+        // context-menu-7: resolve the active sidebar context BEFORE the Prefix transition
+        // (handle_prefix_mode normalises to Normal before dispatch, so the handler can't
+        // read SidebarNav). Stash the (path, target, origin) in pending_context so
+        // handle_open_context_menu can open the correct menu.
+        if let Some((path, target)) =
+            crate::chrome::resolve_active_context(state)
+        {
+            state.pending_context = Some(crate::chrome::PendingContext {
+                path,
+                target,
+                origin: Some(InputMode::SidebarNav),
+            });
+        }
+        state.input_mode = InputMode::Prefix;
+        state.prefix_entered_at = Some(std::time::Instant::now());
         state.needs_redraw = true;
     } else {
         let combo = mode_combo(ctx);

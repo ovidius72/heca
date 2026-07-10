@@ -42,6 +42,12 @@ interactive_move_modifier = "Super"
 # cwd updates. Disable to spawn a bare shell instead.
 shell_integration = true
 
+# When a pane has a custom name (set via rename), also show its process/program
+# name as a small dimmed label next to it, e.g. `MyPane (nvim)`. The process label
+# is not part of the name — it is appended for reference only and never edited by
+# rename. Set false to show just the custom name.
+pane_renamed_add_process_name = true
+
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
 # Mirrors wezterm-term's default of 3500 when unset.

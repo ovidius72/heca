@@ -376,6 +376,7 @@ pub(crate) async fn init_state(
         action_shortcuts: crate::chrome::ActionShortcuts::from_config(&app_config.config),
         action_catalog: crate::actions::ActionCatalog::with_builtins(),
         context_menu_registry: crate::chrome::ContextMenuRegistry::with_builtins(),
+        pending_context: None,
         // Region visibility/width now lives in chrome_state (was SidebarState).
         chrome_state,
         chrome_host,
@@ -390,6 +391,7 @@ pub(crate) async fn init_state(
         mouse_enabled: app_config.config.settings.mouse,
         auto_scroll_edge: app_config.config.settings.auto_scroll_edge,
         shell_integration_enabled: app_config.config.settings.shell_integration,
+        pane_renamed_add_process_name: app_config.config.settings.pane_renamed_add_process_name,
         terminal_scrollback_lines: app_config.config.settings.terminal_scrollback_lines,
         terminal_mouse_enabled: app_config.config.settings.terminal_mouse,
         terminal_wheel_scroll_lines: app_config.config.settings.terminal_wheel_scroll_lines,

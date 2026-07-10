@@ -20,6 +20,7 @@ use crate::component::{Base, Component, Event, GridKey, Handled, PaintCx};
 use crate::font::{MONO_ADVANCE_RATIO, MONO_LINE_RATIO};
 use crate::reactive::{signal, Signal, SignalGet, SignalUpdate};
 use crate::scene::{Glow, TextAlign};
+use crate::widgets::key_hint::{keycap_size, paint_keycap, KeycapVariant};
 use crate::widgets::Glyph;
 use heca_core::layout::{Point, Rectangle, Size};
 use std::cell::Cell;
@@ -96,12 +97,13 @@ const MIN_W: f64 = 160.0;
 const MAX_W: f64 = 380.0;
 /// Inset of the anchor from the cursor so the menu doesn't sit directly under it.
 const ANCHOR_INSET: f64 = 2.0;
-/// Quick-pick keycap metrics (mirror [`KeyHint`](super::KeyHint)).
-const KEYCAP_PAD_X: f64 = 0.42; // fraction of font
-const KEYCAP_PAD_Y: f64 = 0.20;
-const GLYPH_ADV_FRAC: f64 = 0.62; // per-glyph advance estimate, fraction of font
-/// Inset of the keycap from the row's right edge.
+/// Inset of the quick-pick keycap from the row's right edge. The keycap chip itself
+/// is drawn by the shared [`paint_keycap`] primitive (sized via [`keycap_size`]) — the
+/// menu never re-derives the chip metrics.
 const KEYCAP_INSET: f64 = 8.0;
+/// Quick-pick keycap font as a fraction of the menu font — a compact chip, smaller than the
+/// row label (mirrors the sub-font scale the `Tag` chip uses).
+const KEYCAP_FONT_SCALE: f32 = 0.72;
 
 /// A cursor-anchored action menu.
 pub struct ContextMenu {
@@ -187,13 +189,16 @@ impl ContextMenu {
         self.line_h() + 2.0 * ROW_PAD_Y
     }
 
-    /// Size of a single-char quick-pick keycap at the current font.
-    fn keycap_size(&self) -> Size {
-        let font = self.base.font as f64;
-        Size::new(
-            font * GLYPH_ADV_FRAC + 2.0 * font * KEYCAP_PAD_X,
-            font + 2.0 * font * KEYCAP_PAD_Y,
-        )
+    /// Compact keycap font (a fraction of the menu font) — shared by sizing + glyph so the chip
+    /// and its letter stay in proportion.
+    fn keycap_font(&self) -> f32 {
+        self.base.font * KEYCAP_FONT_SCALE
+    }
+
+    /// Size of a quick-pick keycap for `key`, via the shared [`keycap_size`] metric (single
+    /// source with [`KeyHint`](super::KeyHint)) at the compact keycap font.
+    fn keycap_size(&self, key: char) -> Size {
+        keycap_size(self.keycap_font(), &key.to_string())
     }
 
     /// Index of the first enabled entry at or after `from`, wrapping search forward
@@ -278,7 +283,6 @@ impl ContextMenu {
         let row_h = self.row_h();
 
         // Content width = widest row.
-        let keycap_w = self.keycap_size().w;
         let mut content_w: f64 = 0.0;
         for e in &self.entries {
             let mut w = 2.0 * ROW_PAD_X;
@@ -289,8 +293,8 @@ impl ContextMenu {
             if let Some(s) = &e.shortcut {
                 w += SHORTCUT_GAP + s.chars().count() as f64 * adv;
             }
-            if e.key.is_some() {
-                w += SHORTCUT_GAP + keycap_w + KEYCAP_INSET;
+            if let Some(k) = e.key {
+                w += SHORTCUT_GAP + self.keycap_size(k).w + KEYCAP_INSET;
             }
             content_w = content_w.max(w);
         }
@@ -356,10 +360,9 @@ impl Component for ContextMenu {
             return;
         }
         self.viewport.set(cx.viewport());
-        let (background, surface, accent, glow_c, foreground, muted, danger, ctrl_radius, radius) = {
+        let (surface, accent, glow_c, foreground, muted, danger, ctrl_radius, radius) = {
             let t = cx.theme();
             (
-                t.colors.background,
                 t.colors.surface,
                 t.colors.accent,
                 t.colors.glow,
@@ -429,25 +432,17 @@ impl Component for ContextMenu {
                     Rectangle::new(Point::new(text_x, row.loc.y), Size::new(row.size.w, row.size.h));
                 cx.text(lbl_rect, &e.label, text_color, font, TextAlign::Start, false);
 
-                // Quick-pick keycap (rightmost) — KeyHint-style accent cap with a dark
-                // bold glyph; pressing the key activates the entry.
+                // Quick-pick keycap (rightmost) — the shared bordered keycap primitive
+                // (never hand-drawn); pressing the key activates the entry.
                 let mut right_edge = row.loc.x + row.size.w - KEYCAP_INSET;
                 if let Some(k) = e.key {
-                    let ks = self.keycap_size();
+                    let ks = self.keycap_size(k);
                     let cap = Rectangle::new(
                         Point::new(right_edge - ks.w, row.loc.y + (row.size.h - ks.h) / 2.0),
                         ks,
                     );
-                    let cap_radius = ctrl_radius.min((ks.h / 2.0) as f32);
                     let cap_color = if e.enabled { accent } else { muted };
-                    cx.rect(
-                        cap,
-                        cap_color.with_alpha(cx.theme().colors.interaction.keycap),
-                        None,
-                        cap_radius,
-                        Some(Glow { color: glow_c, radius: 5.0, intensity: 0.4 }),
-                    );
-                    cx.text(cap, &k.to_string(), background, font, TextAlign::Center, true);
+                    paint_keycap(cx, cap, &k.to_string(), self.keycap_font(), Some(cap_color), KeycapVariant::Bordered);
                     right_edge = cap.loc.x - SHORTCUT_GAP;
                 }
                 // Textual shortcut hint, right-aligned left of the keycap.

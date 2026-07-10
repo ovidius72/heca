@@ -69,6 +69,33 @@ pub enum ContextTarget {
     },
 }
 
+impl ContextTarget {
+    /// The pane this target refers to, if any (a content/sidebar pane). `None` for column
+    /// and workspace targets. Used to retarget pane actions (rename/close) to the item the
+    /// menu / sidebar cursor is on.
+    pub(crate) fn pane_id(&self) -> Option<PaneId> {
+        match self {
+            ContextTarget::Pane { pane_id, .. } | ContextTarget::SidebarPane { pane_id } => {
+                Some(*pane_id)
+            }
+            _ => None,
+        }
+    }
+
+    /// The workspace index this target belongs to, if resolvable. Direct for workspace/column
+    /// targets; for a pane target it is resolved from the pane's location in `state`. Used to
+    /// retarget workspace actions (rename) to the item the sidebar cursor is on.
+    pub(crate) fn ws_idx(&self, state: &AppState) -> Option<usize> {
+        match self {
+            ContextTarget::SidebarWorkspace { ws_idx }
+            | ContextTarget::SidebarColumn { ws_idx, .. } => Some(*ws_idx),
+            ContextTarget::Pane { pane_id, .. } | ContextTarget::SidebarPane { pane_id } => {
+                crate::find_pane_location(&state.session, *pane_id).map(|(ws, _, _)| ws)
+            }
+        }
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 //  Registry
 // ──────────────────────────────────────────────────────────────────────────────
@@ -196,6 +223,76 @@ fn restorable_mode(mode: InputMode) -> Option<InputMode> {
     }
 }
 
+/// Resolve the active context for a keyboard-opened context menu (`OpenContextMenu` /
+/// `prefix+>`). Reads the current [`InputMode`] and the sidebar cursor / focused pane to
+/// produce a `(path, target)` pair that [`open_context_menu_for`] can route to the right
+/// provider.
+///
+/// - `SidebarNav`: maps [`crate::sidebar::SidebarItem`] at the cursor to its context path
+///   (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
+///   floating-pane→`pane`).
+/// - `Normal` (and any other mode): resolves to the focused content pane (`"pane"`).
+/// - Returns `None` when there is no active target (no focused pane, no sidebar cursor).
+pub(crate) fn resolve_active_context(state: &AppState) -> Option<(ContextPath, ContextTarget)> {
+    resolve_context_for(
+        &state.input_mode,
+        state.sidebar_tree.current_item(),
+        crate::app::interaction::focused_pane_id(state),
+    )
+}
+
+/// Pure mapping behind [`resolve_active_context`]: input mode + the active sidebar item +
+/// the focused pane → menu `(path, target)`. Split out from the `AppState` reads so the
+/// mapping is unit-testable without a full app. In `SidebarNav` the sidebar cursor decides
+/// the context (pane→`sidebar.pane`, column→`sidebar.column`, workspace→`sidebar.workspace`,
+/// floating-pane→`pane`); in any other mode the focused content pane does. Returns `None`
+/// when there is nothing to target (no sidebar cursor / no focused pane).
+fn resolve_context_for(
+    input_mode: &InputMode,
+    sidebar_item: Option<&crate::sidebar::SidebarItem>,
+    focused_pane: Option<PaneId>,
+) -> Option<(ContextPath, ContextTarget)> {
+    match input_mode {
+        InputMode::SidebarNav => Some(match sidebar_item? {
+            crate::sidebar::SidebarItem::Pane { pane_id } => (
+                ContextPath(ContextPath::SIDEBAR_PANE.to_string()),
+                ContextTarget::SidebarPane { pane_id: *pane_id },
+            ),
+            crate::sidebar::SidebarItem::FloatingPane { pane_id, .. } => (
+                ContextPath(ContextPath::PANE.to_string()),
+                ContextTarget::Pane { pane_id: *pane_id, hyperlink: None },
+            ),
+            crate::sidebar::SidebarItem::Column { ws_idx, col_idx } => (
+                ContextPath(ContextPath::SIDEBAR_COLUMN.to_string()),
+                ContextTarget::SidebarColumn { ws_idx: *ws_idx, col_idx: *col_idx },
+            ),
+            crate::sidebar::SidebarItem::Workspace { ws_idx } => (
+                ContextPath(ContextPath::SIDEBAR_WORKSPACE.to_string()),
+                ContextTarget::SidebarWorkspace { ws_idx: *ws_idx },
+            ),
+        }),
+        _ => Some((
+            ContextPath(ContextPath::PANE.to_string()),
+            ContextTarget::Pane { pane_id: focused_pane?, hyperlink: None },
+        )),
+    }
+}
+
+/// Carries a context-menu target through the `Prefix` → `Normal` dispatch transition.
+///
+/// When the user presses `prefix+>` in `SidebarNav`, the prefix arm in
+/// `handle_sidebar_nav_mode` resolves the active context and stashes it here *before*
+/// transitioning to `Prefix` mode. `handle_prefix_mode` then normalises the input mode to
+/// `Normal` before dispatching `OpenContextMenu`, so the handler cannot read `SidebarNav`.
+/// `PendingContext` bridges that gap: the handler consumes it and opens the correct menu.
+#[derive(Clone, Debug)]
+pub(crate) struct PendingContext {
+    pub path: ContextPath,
+    pub target: ContextTarget,
+    /// The mode to restore after the menu closes (e.g. `Some(SidebarNav)`).
+    pub origin: Option<InputMode>,
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 //  Built-in providers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -209,6 +306,8 @@ fn pane_action_items() -> Vec<DropdownItem> {
         DropdownItem::new("split_vertical", "Split down", WmAction::SplitVertical),
         DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn),
         DropdownItem::new("float", "Float / unfloat", WmAction::Float),
+        DropdownItem::new("rename_pane", "Rename", WmAction::RenamePane),
+        DropdownItem::new("rename_workspace", "Rename workspace", WmAction::RenameWorkspace),
         DropdownItem::new("close", "Close pane", WmAction::ClosePane).danger(true),
     ]
 }
@@ -240,6 +339,11 @@ fn build_sidebar_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<Drop
             WmAction::AddPaneToColumn { ws_idx, col_idx },
         ));
     }
+    items.push(DropdownItem::new(
+        "rename_pane",
+        "Rename pane",
+        WmAction::RenamePaneById { pane_id: *pane_id },
+    ));
     items.push(
         DropdownItem::new("close", "Delete pane", WmAction::ClosePaneById { pane_id: *pane_id })
             .danger(true),
@@ -253,7 +357,12 @@ fn build_sidebar_column_menu(_state: &AppState, target: &ContextTarget) -> Vec<D
     let ContextTarget::SidebarColumn { ws_idx, col_idx } = target else {
         return Vec::new();
     };
-    let (ws_idx, col_idx) = (*ws_idx, *col_idx);
+    sidebar_column_items(*ws_idx, *col_idx)
+}
+
+/// Menu items for a sidebar **column** row (state-free, so unit-testable): new pane in the
+/// column, new column, delete column (danger).
+fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
         DropdownItem::new(
             "split_vertical",
@@ -280,7 +389,12 @@ fn build_sidebar_workspace_menu(_state: &AppState, target: &ContextTarget) -> Ve
     let ContextTarget::SidebarWorkspace { ws_idx } = target else {
         return Vec::new();
     };
-    let ws_idx = *ws_idx;
+    sidebar_workspace_items(*ws_idx)
+}
+
+/// Menu items for a sidebar **workspace** row (state-free, so unit-testable): new column,
+/// new workspace, delete workspace (danger).
+fn sidebar_workspace_items(ws_idx: usize) -> Vec<DropdownItem> {
     vec![
         DropdownItem::new(
             "split_horizontal",
@@ -288,6 +402,11 @@ fn build_sidebar_workspace_menu(_state: &AppState, target: &ContextTarget) -> Ve
             WmAction::AddColumnToWorkspace { ws_idx },
         ),
         DropdownItem::new("create_workspace", "New workspace", WmAction::CreateWorkspace),
+        DropdownItem::new(
+            "rename_workspace",
+            "Rename workspace",
+            WmAction::RenameWorkspaceByIdx { ws_idx },
+        ),
         DropdownItem::new(
             "close",
             "Delete workspace",
@@ -317,12 +436,17 @@ mod tests {
     }
 
     #[test]
-    fn pane_action_items_has_five_entries() {
+    fn pane_action_items_include_rename_and_end_in_close() {
         let items = pane_action_items();
-        assert_eq!(items.len(), 5);
         assert_eq!(items[0].id, "split_horizontal");
-        assert_eq!(items[4].id, "close");
-        assert!(items[4].danger, "close is danger-styled");
+        assert!(items.iter().any(|i| i.id == "rename_pane"), "has Rename");
+        assert!(
+            items.iter().any(|i| i.id == "rename_workspace"),
+            "has Rename workspace"
+        );
+        let last = items.last().unwrap();
+        assert_eq!(last.id, "close");
+        assert!(last.danger, "close is danger-styled");
     }
 
     #[test]
@@ -350,5 +474,78 @@ mod tests {
         assert!(matches!(restorable_mode(InputMode::SidebarNav), Some(InputMode::SidebarNav)));
         assert!(restorable_mode(InputMode::Normal).is_none());
         assert!(restorable_mode(InputMode::Prefix).is_none());
+    }
+
+    use crate::sidebar::SidebarItem;
+
+    #[test]
+    fn resolve_context_sidebar_items_map_to_distinct_paths() {
+        // Each sidebar cursor item resolves to its own context path + target, so the menu
+        // content differs by where it was opened.
+        let pane = SidebarItem::Pane { pane_id: PaneId(7) };
+        let (path, target) =
+            resolve_context_for(&InputMode::SidebarNav, Some(&pane), None).unwrap();
+        assert_eq!(path.0, ContextPath::SIDEBAR_PANE);
+        assert!(matches!(target, ContextTarget::SidebarPane { pane_id: PaneId(7) }));
+
+        let col = SidebarItem::Column { ws_idx: 1, col_idx: 2 };
+        let (path, target) =
+            resolve_context_for(&InputMode::SidebarNav, Some(&col), None).unwrap();
+        assert_eq!(path.0, ContextPath::SIDEBAR_COLUMN);
+        assert!(matches!(target, ContextTarget::SidebarColumn { ws_idx: 1, col_idx: 2 }));
+
+        let ws = SidebarItem::Workspace { ws_idx: 3 };
+        let (path, target) =
+            resolve_context_for(&InputMode::SidebarNav, Some(&ws), None).unwrap();
+        assert_eq!(path.0, ContextPath::SIDEBAR_WORKSPACE);
+        assert!(matches!(target, ContextTarget::SidebarWorkspace { ws_idx: 3 }));
+
+        // A floating pane in the sidebar resolves to the generic pane menu.
+        let float = SidebarItem::FloatingPane { pane_id: PaneId(9), ws_idx: 0 };
+        let (path, target) =
+            resolve_context_for(&InputMode::SidebarNav, Some(&float), None).unwrap();
+        assert_eq!(path.0, ContextPath::PANE);
+        assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(9), hyperlink: None }));
+    }
+
+    #[test]
+    fn resolve_context_non_sidebar_uses_focused_pane() {
+        // Any non-sidebar mode → the focused content pane.
+        let (path, target) =
+            resolve_context_for(&InputMode::Normal, None, Some(PaneId(4))).unwrap();
+        assert_eq!(path.0, ContextPath::PANE);
+        assert!(matches!(target, ContextTarget::Pane { pane_id: PaneId(4), hyperlink: None }));
+    }
+
+    #[test]
+    fn resolve_context_none_when_no_target() {
+        // SidebarNav with no cursor item, and Normal with no focused pane, both resolve to None.
+        assert!(resolve_context_for(&InputMode::SidebarNav, None, Some(PaneId(1))).is_none());
+        assert!(resolve_context_for(&InputMode::Normal, None, None).is_none());
+    }
+
+    #[test]
+    fn context_menus_differ_by_where_opened() {
+        // The content each context produces is distinct — proving the menu adapts to where
+        // it is opened (pane vs sidebar column vs sidebar workspace).
+        let pane = pane_action_items();
+        let col = sidebar_column_items(0, 0);
+        let ws = sidebar_workspace_items(0);
+        let labels = |v: &[DropdownItem]| v.iter().map(|i| i.label.clone()).collect::<Vec<_>>();
+        let has = |v: &[DropdownItem], s: &str| v.iter().any(|i| i.label == s);
+
+        // Distinct label sets — no two contexts produce the same menu.
+        assert_ne!(labels(&pane), labels(&col));
+        assert_ne!(labels(&col), labels(&ws));
+        assert_ne!(labels(&pane), labels(&ws));
+
+        // Signature entries unique to each context.
+        assert!(has(&pane, "Zoom / unzoom") && has(&pane, "Float / unfloat"));
+        assert!(has(&col, "Delete column"));
+        assert!(has(&ws, "New workspace") && has(&ws, "Delete workspace"));
+        // Each sidebar context still ends in a danger `close`-id action (delete) for its own scope.
+        assert_eq!(col.last().map(|i| i.id.as_str()), Some("close"));
+        assert!(col.last().map(|i| i.danger).unwrap_or(false));
+        assert_eq!(ws.last().map(|i| i.id.as_str()), Some("close"));
     }
 }

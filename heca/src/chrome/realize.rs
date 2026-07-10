@@ -23,7 +23,7 @@
 //! `#![allow(dead_code)]` like the sibling chrome seam modules until those consumers land.
 #![allow(dead_code)]
 
-use heca_grid_ui::reactive::SignalGet;
+use heca_grid_ui::reactive::{Signal, SignalGet};
 use heca_grid_ui::{
     Action, Alert, Align, Badge, BadgeButton, Button, ButtonVariant, Card, Checkbox, Component,
     Flex, Gauge, Glyph, HintExt, HintTargetId, Icon, IconButton, Input, Item, Label, LayoutExt,
@@ -45,11 +45,29 @@ type FieldReader = Box<dyn Fn() -> PropValue>;
 #[derive(Default)]
 pub(crate) struct FormBindings {
     fields: Vec<(String, FieldReader)>,
+    /// Live value signals of named **text** fields (`Input`s), for reactive validation — e.g.
+    /// disabling a submit button while a required field is empty. Populated alongside `fields`.
+    text_signals: Vec<(String, Signal<String>)>,
 }
 
 impl FormBindings {
     fn bind(&mut self, name: String, reader: FieldReader) {
         self.fields.push((name, reader));
+    }
+
+    /// Record a named text field's live value signal (for validation-driven UI like a disabled
+    /// submit button). Only `Input` nodes register here.
+    fn bind_text_signal(&mut self, name: String, sig: Signal<String>) {
+        self.text_signals.push((name, sig));
+    }
+
+    /// The live value signal of a named text field, if it is an `Input`. `None` for non-text
+    /// fields or unknown names.
+    pub(crate) fn text_signal(&self, name: &str) -> Option<Signal<String>> {
+        self.text_signals
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, s)| *s)
     }
 
     /// Read every bound field's current value into a name→value map.
@@ -107,7 +125,9 @@ pub(crate) fn realize(
             let mut input = Input::new().value(text_of(node));
             if let Some(name) = name_prop(node) {
                 let sig = input.text();
-                forms.bind(name, Box::new(move || PropValue::Text(sig.get_untracked())));
+                forms.bind(name.clone(), Box::new(move || PropValue::Text(sig.get_untracked())));
+                // Also expose the live signal for reactive validation (disabled submit button).
+                forms.bind_text_signal(name, sig);
             }
             if let Some(carrier) = change_intent(node) {
                 let emit = emit.clone();
@@ -597,5 +617,29 @@ mod tests {
         assert_eq!(data.len(), 2, "only the two named widgets are collected");
         assert_eq!(data.get("q").and_then(PropValue::as_text), Some("hello"));
         assert_eq!(data.get("agree").and_then(PropValue::as_bool), Some(true));
+    }
+
+    /// A named text `Input` exposes its **live value signal** for reactive validation (used to
+    /// disable a submit button while empty). Only text inputs register; other kinds / unnamed
+    /// inputs do not.
+    #[test]
+    fn named_input_exposes_live_text_signal() {
+        use heca_grid_ui::reactive::SignalUpdate;
+        let mut hints = HintTargetRegistry::default();
+        let mut forms = FormBindings::default();
+        let node = ViewNode::new(WidgetKind::Input)
+            .text("term")
+            .prop("name", PropValue::Text("name".into()));
+        let _ = realize(&node, &noop_emitter(), &mut hints, &mut forms);
+
+        let sig = forms.text_signal("name").expect("named input exposes its signal");
+        assert_eq!(sig.get_untracked(), "term", "signal reflects the initial value");
+        // The signal is live: updating it is what `collect()` / validation later read.
+        sig.set("renamed".to_string());
+        assert_eq!(
+            forms.collect().get("name").and_then(PropValue::as_text),
+            Some("renamed"),
+        );
+        assert!(forms.text_signal("missing").is_none());
     }
 }

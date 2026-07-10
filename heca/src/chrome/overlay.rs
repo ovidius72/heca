@@ -17,6 +17,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use heca_grid_ui::reactive::{create_effect, SignalGet, SignalUpdate};
 use heca_grid_ui::widgets::{ContextMenu, MenuEntry};
 use heca_grid_ui::{Button, ButtonVariant, Component, Dialog, HintExt, Point};
 
@@ -45,6 +46,10 @@ pub struct ModalAction {
     pub label: String,
     /// Tint with the danger hue (destructive action).
     pub danger: bool,
+    /// If `Some(field)`, this button is **disabled while the named form field is empty** (trimmed)
+    /// — used to block submission until a required [`Input`](heca_grid_ui::Input) has content (e.g.
+    /// a rename dialog's OK). The host binds the button's disabled state to the field's live value.
+    pub disable_when_empty: Option<String>,
 }
 
 impl ModalAction {
@@ -54,11 +59,17 @@ impl ModalAction {
             id: id.into(),
             label: label.into(),
             danger: false,
+            disable_when_empty: None,
         }
     }
     /// Tint with the danger hue (destructive primary action).
     pub fn danger(mut self, on: bool) -> Self {
         self.danger = on;
+        self
+    }
+    /// Disable this button while the named form field is empty (blocks blank submission).
+    pub fn disabled_when_empty(mut self, field: impl Into<String>) -> Self {
+        self.disable_when_empty = Some(field.into());
         self
     }
 }
@@ -340,6 +351,14 @@ fn build_modal_root(
             .variant(variant)
             .hint_target(hid)
             .on_click(move || emit(carrier.clone()));
+        // Reactive validation: disable this button while a required form field is empty (blocks
+        // blank submission). Binds the button's `disabled` signal to the field's live value.
+        if let Some(field) = &action.disable_when_empty
+            && let Some(sig) = forms.text_signal(field)
+        {
+            let disabled = button.base().disabled;
+            create_effect(move |_| disabled.set(sig.get().trim().is_empty()));
+        }
         // Tooltip + live shortcut from the action id — the one centralized path.
         dialog = dialog.action(super::action_tooltip(button, &action.id, &action.label, shortcuts));
     }

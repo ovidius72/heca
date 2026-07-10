@@ -11,8 +11,10 @@
 //! It uses the same overlay contract as `Modal`/[`Select`](super::Select): it reports
 //! [`overlay_active`](Component::overlay_active) + [`focusable`](Component::focusable) while
 //! open, so the host routes input here first. Keyboard is handled by an embedded
-//! [`FocusManager`](crate::focus::FocusManager) over the panel subtree: Tab / ← / →  move
-//! focus among the buttons, Enter / Space activate the focused one (firing its `on_click`),
+//! [`FocusManager`](crate::focus::FocusManager) over the panel subtree with the **universal
+//! focus-nav set**: Tab / Shift+Tab, the arrow keys (→/↓ next, ←/↑ prev), and Ctrl+h/k (prev)
+//! / Ctrl+l/j (next) all move focus among the body field(s) and buttons; Enter / Space
+//! activate the focused one (firing its `on_click`),
 //! and Esc or a scrim click fire the [`on_dismiss`](Dialog::on_dismiss) callback (there are no
 //! result closures baked in; a button's own `on_click` carries the action, and dismissal is a
 //! callback the host points at its own overlay-close path).
@@ -168,8 +170,12 @@ impl Dialog {
     }
 
     // ── Self-contained keyboard: the widget owns focus traversal + activation + dismissal.
-    //    Modifier-aware (Shift+Tab, Ctrl+h/l) via the tracked `mods`, so the host never drives
-    //    the modal — it only forwards keys + `ModifiersChanged`, like any other overlay. ──
+    //    Modifier-aware (Shift+Tab, Ctrl+h/j/k/l) via the tracked `mods`, so the host never
+    //    drives the modal — it only forwards keys + `ModifiersChanged`. Keys are routed
+    //    **field-first**: Esc/Tab/Ctrl-motion are owned by the dialog; every other key is handed
+    //    to the focused descendant first (so a text `Input` body types + moves its caret), and
+    //    only an *unconsumed* key falls back to container behaviour (Enter → primary action,
+    //    arrows → focus motion). ──
 
     /// Move keyboard focus to the next focusable descendant (wraps).
     fn focus_next(&mut self) {
@@ -183,10 +189,22 @@ impl Dialog {
         self.focus.advance(panel, false);
     }
 
-    /// Activate the focused descendant (Enter / Space → its `on_click`).
-    fn activate_focused(&mut self) {
-        let panel = self.base.children[0].as_mut();
-        self.focus.deliver_key(panel, GridKey::Enter);
+    /// Fire the **primary** (first) action button — used when Enter is pressed from a field
+    /// that didn't consume it (e.g. a focused text input), so Enter submits like clicking OK.
+    /// When a button itself is focused, Enter is delivered straight to it (it consumes it), so
+    /// this only runs for the non-button-focused case.
+    fn activate_primary(&mut self) {
+        if !self.has_actions {
+            return;
+        }
+        let panel = self.base.children[0].base_mut();
+        // Panel layout is `[title, body?, action-row]`; the action row is the last child, and
+        // its first child is the primary (leftmost) button.
+        if let Some(row) = panel.children.last_mut()
+            && let Some(primary) = row.base_mut().children.first_mut()
+        {
+            let _ = primary.event(&Event::Key { key: GridKey::Enter, pressed: true });
+        }
     }
 
     /// Fire the dismiss callback. **Esc** always calls this (a universal modal cancel); the
@@ -311,49 +329,54 @@ impl Component for Dialog {
                 let _ = panel.event(ev); // button hover
                 Handled::Yes
             }
-            // Track modifier state (broadcast by the host) so Shift+Tab / Ctrl+h/l work without
-            // the host special-casing the modal. Not consumed — it's a broadcast.
+            // Track modifier state (broadcast by the host) and forward it to the panel so a
+            // focused field's own modifier-aware editing sees it too. Not consumed — a broadcast.
             Event::ModifiersChanged(m) => {
                 self.mods = *m;
+                let panel = self.base.children[0].as_mut();
+                let _ = panel.event(ev);
                 Handled::No
             }
-            Event::Key { key: GridKey::Escape, pressed: true } => {
-                // Esc is a universal modal cancel — always dismisses (even when not dismissible).
-                self.fire_dismiss();
-                Handled::Yes
-            }
-            Event::Key { key: GridKey::Enter | GridKey::Space, pressed: true } => {
-                self.activate_focused();
-                Handled::Yes
-            }
-            // Tab moves focus — backward with Shift (the widget reads the tracked modifiers).
-            Event::Key { key: GridKey::Tab, pressed: true } => {
-                if self.mods.shift {
-                    self.focus_prev();
-                } else {
-                    self.focus_next();
+            Event::Key { key, pressed: true } => {
+                // The dialog owns only Esc (cancel) and Tab (focus traversal) — keys that no text
+                // field needs. Everything else is field-first (below).
+                if matches!(key, GridKey::Escape) {
+                    self.fire_dismiss();
+                    return Handled::Yes;
                 }
-                Handled::Yes
+                if matches!(key, GridKey::Tab) {
+                    if self.mods.shift {
+                        self.focus_prev();
+                    } else {
+                        self.focus_next();
+                    }
+                    return Handled::Yes;
+                }
+                // **Field-first**: hand every other key to the focused widget so it keeps ALL its
+                // native behaviour — an `Input`'s typing, Ctrl+h delete, Ctrl/Cmd+A select-all,
+                // caret motion, word/line select — with zero re-declaration here. The widget reads
+                // its own modifiers from the broadcast `ModifiersChanged`. If it consumes the key,
+                // we're done.
+                let panel = self.base.children[0].as_mut();
+                if self.focus.deliver_key(panel, *key) == Handled::Yes {
+                    return Handled::Yes;
+                }
+                // Only keys the focused widget ignored fall back to container focus-nav: a button
+                // ignores Enter-vs-arrows the way we want, and a text field ignores Ctrl+j/k (so
+                // those still navigate) but consumes Ctrl+h (so that stays "delete"). Enter from a
+                // non-consuming field submits the primary action (like clicking OK).
+                match key {
+                    GridKey::Enter => self.activate_primary(),
+                    GridKey::ArrowRight | GridKey::ArrowDown => self.focus_next(),
+                    GridKey::ArrowLeft | GridKey::ArrowUp => self.focus_prev(),
+                    GridKey::Char('l' | 'j') if self.mods.ctrl => self.focus_next(),
+                    GridKey::Char('h' | 'k') if self.mods.ctrl => self.focus_prev(),
+                    _ => {}
+                }
+                Handled::Yes // swallow — the dialog is modal
             }
-            Event::Key { key: GridKey::ArrowRight, pressed: true } => {
-                self.focus_next();
-                Handled::Yes
-            }
-            Event::Key { key: GridKey::ArrowLeft, pressed: true } => {
-                self.focus_prev();
-                Handled::Yes
-            }
-            // Vim-style focus motion: Ctrl+h / Ctrl+l.
-            Event::Key { key: GridKey::Char('h'), pressed: true } if self.mods.ctrl => {
-                self.focus_prev();
-                Handled::Yes
-            }
-            Event::Key { key: GridKey::Char('l'), pressed: true } if self.mods.ctrl => {
-                self.focus_next();
-                Handled::Yes
-            }
-            // Swallow every other key + scroll while the dialog owns input (modal).
-            Event::Key { .. } | Event::Scroll { .. } => Handled::Yes,
+            // Swallow scroll while the dialog owns input (modal).
+            Event::Scroll { .. } => Handled::Yes,
             _ => Handled::No,
         }
     }
@@ -474,5 +497,70 @@ mod tests {
         flag.set(false);
         let _ = d.event(&Event::PointerPressed { pos: Point::new(-100.0, -100.0) });
         assert!(!flag.get(), "forced dialog ignores the scrim/outside click");
+    }
+
+    #[test]
+    fn universal_focus_nav_keys_move_focus() {
+        // Arrow keys and Ctrl+vim keys move focus among the buttons, like Tab — the universal
+        // focus-nav set. Each is handled (consumed) and lands focus on a button.
+        for key in [GridKey::ArrowDown, GridKey::ArrowUp, GridKey::ArrowLeft, GridKey::ArrowRight] {
+            let mut d = open_dialog();
+            assert_eq!(d.event(&Event::Key { key, pressed: true }), Handled::Yes);
+            assert!(!focused_buttons(&d).is_empty(), "{key:?} focuses a button");
+        }
+        // Ctrl+h/j/k/l require the host to have broadcast the Ctrl modifier first.
+        for key in ['h', 'j', 'k', 'l'] {
+            let mut d = open_dialog();
+            let _ = d.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+            assert_eq!(
+                d.event(&Event::Key { key: GridKey::Char(key), pressed: true }),
+                Handled::Yes,
+                "Ctrl+{key} moves focus",
+            );
+            assert!(!focused_buttons(&d).is_empty(), "Ctrl+{key} focuses a button");
+        }
+    }
+
+    #[test]
+    fn text_input_body_types_and_enter_submits_primary() {
+        use crate::widgets::Input;
+        let fired = Rc::new(Cell::new(false));
+        let f = fired.clone();
+        // A form dialog: an Input body + OK (primary) / Cancel. `open` focuses the Input first.
+        let mut d = Dialog::new("Rename pane")
+            .body(Input::new().value("term"))
+            .action(Button::new("OK").on_click(move || f.set(true)))
+            .action(Button::new("Cancel"))
+            .open(true);
+        // A typed character is forwarded to (and consumed by) the focused input — not swallowed.
+        assert_eq!(
+            d.event(&Event::Key { key: GridKey::Char('x'), pressed: true }),
+            Handled::Yes,
+            "the focused input receives typed characters",
+        );
+        // Enter from the focused input submits the PRIMARY action (OK), not Cancel.
+        assert!(!fired.get());
+        let _ = d.event(&Event::Key { key: GridKey::Enter, pressed: true });
+        assert!(fired.get(), "Enter from the input fires the primary action (OK)");
+    }
+
+    #[test]
+    fn field_first_ctrl_h_edits_input_ctrl_j_navigates() {
+        use crate::widgets::Input;
+        // Field-first: a focused input keeps its OWN Ctrl-keys; only keys it ignores fall back
+        // to dialog focus-nav. The input starts focused (body precedes the buttons).
+        let mut d = Dialog::new("Rename")
+            .body(Input::new().value("ab"))
+            .action(Button::new("OK"))
+            .action(Button::new("Cancel"))
+            .open(true);
+        let _ = d.event(&Event::ModifiersChanged(Modifiers { ctrl: true, ..Default::default() }));
+        // Ctrl+h is the input's delete-backward → consumed by the input; focus stays on it (no
+        // button focused), i.e. the dialog does NOT steal it for nav.
+        let _ = d.event(&Event::Key { key: GridKey::Char('h'), pressed: true });
+        assert!(focused_buttons(&d).is_empty(), "Ctrl+h stays in the input");
+        // Ctrl+j is not an input editing key → falls back to dialog focus-nav (moves to a button).
+        let _ = d.event(&Event::Key { key: GridKey::Char('j'), pressed: true });
+        assert!(!focused_buttons(&d).is_empty(), "Ctrl+j navigates to a button");
     }
 }

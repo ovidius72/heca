@@ -53,6 +53,12 @@ fn default_shell_integration() -> bool {
     true
 }
 
+/// Default for appending the process/program name next to a renamed pane's custom name
+/// (e.g. `MyPane (nvim)`). On by default so the running program stays visible after a rename.
+fn default_pane_renamed_add_process_name() -> bool {
+    true
+}
+
 /// Default host terminal scrollback capacity in rows.
 ///
 /// Mirrors `wezterm-term`'s `TerminalConfiguration::scrollback_size()` default
@@ -148,6 +154,15 @@ pub struct SettingsConfig {
     /// Auto-inject shell integration snippets for OSC 133/OSC 7 pane runtime signals.
     #[serde(default = "default_shell_integration")]
     pub shell_integration: bool,
+    /// When a pane has a **custom name** (set via rename), also show its process/program name as
+    /// a small dimmed label next to it (e.g. `MyPane (nvim)`). The process label is *not* part of
+    /// the name — it is appended for reference only and never edited by rename. Set `false` to
+    /// show just the custom name.
+    #[serde(
+        default = "default_pane_renamed_add_process_name",
+        alias = "pane-renamed-add-process-name"
+    )]
+    pub pane_renamed_add_process_name: bool,
     /// Host terminal scrollback capacity in rows.
     ///
     /// This is the number of history rows the terminal engine retains above the
@@ -230,6 +245,7 @@ impl Default for SettingsConfig {
             interactive_move_modifier: ModifierKey::default(),
             always_center_single_column: default_always_center_single_column(),
             shell_integration: default_shell_integration(),
+            pane_renamed_add_process_name: default_pane_renamed_add_process_name(),
             terminal_scrollback_lines: default_terminal_scrollback_lines(),
             terminal_mouse: default_terminal_mouse(),
             terminal_wheel_scroll_lines: default_terminal_wheel_scroll_lines(),

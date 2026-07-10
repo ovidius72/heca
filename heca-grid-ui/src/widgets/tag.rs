@@ -86,6 +86,16 @@ impl Tag {
         self
     }
 
+    /// Append a component **inside** the segment at `idx` (no new segment, no divider), so it sits
+    /// right next to that segment's existing content — e.g. a small dimmed suffix after a label.
+    /// Out-of-range `idx` is a no-op.
+    pub fn append_to_segment(mut self, idx: usize, c: impl Component + 'static) -> Self {
+        if let Some(seg) = self.base.children.get_mut(idx) {
+            seg.base_mut().children.push(Box::new(c));
+        }
+        self
+    }
+
     /// Append a `label` segment with an optional leading icon — a convenience over
     /// [`segment`](Tag::segment) for the common icon-plus-text section.
     pub fn segment_text(

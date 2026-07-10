@@ -261,6 +261,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ClosePane
         | WmAction::ClosePaneById { .. }
         | WmAction::RenamePane
+        | WmAction::RenamePaneById { .. }
         | WmAction::RenameTarget { .. }
         // OpenContextMenu operates on the focused pane (mouse: the clicked one; keyboard:
         // the focused one) and is allowed in both tiled and floating domains — a floating pane
@@ -310,6 +311,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::FocusWorkspace { .. }
         | WmAction::CreateWorkspace
         | WmAction::RenameWorkspace
+        | WmAction::RenameWorkspaceByIdx { .. }
         | WmAction::DeleteWorkspace { .. } => ActionPolicy::WorkspaceLevel,
 
         // ── Always-allowed: work regardless of domain (but blocked when Floating) ──

@@ -117,8 +117,8 @@ focus_toggle_global = "prefix+Shift+l"  # Toggle last pane (cross-workspace)
 
 # ── Workspace / naming ──
 create_workspace = "prefix+w"        # Create new workspace + pane
-rename_workspace = "prefix+Shift+w"  # Rename current workspace
-rename_pane      = "prefix+$"        # Rename current pane/tab
+rename_workspace = "prefix+Shift+w"  # Rename workspace (active, or the sidebar cursor's in sidebar mode)
+rename_pane      = "prefix+$"        # Rename pane (focused, or the sidebar cursor's in sidebar mode)
 # `rename_column` has no default binding (prefix+Shift+c is reused for
 # move-pane-to-column); the action stays available to bind manually.
 

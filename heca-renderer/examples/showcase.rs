@@ -266,6 +266,8 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // Right-click context menu: the pointer counterpart to the keyboard picks.
     // Right-click anywhere to open it at the cursor. Entries carry an icon and a
     // quick-pick keycap (press the letter to run); ↑/↓ + Enter and click also work.
+    // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
+    // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
     let menu = ContextMenu::new()
         .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(display_shortcut("prefix+$")))
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))

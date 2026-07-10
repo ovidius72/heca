@@ -86,7 +86,7 @@ fn link_hover(state: &AppState, pos: (f32, f32)) -> bool {
 
 /// Logical-pixel center of the app window — the anchor for keyboard/RPC-opened menus so a menu
 /// opened with no pointer stays centered on screen instead of at a stale cursor position.
-fn window_center_logical(state: &AppState) -> (f32, f32) {
+pub(crate) fn window_center_logical(state: &AppState) -> (f32, f32) {
     let phys = state.window.inner_size();
     let s = state.scale_factor as f32;
     (phys.width as f32 / s / 2.0, phys.height as f32 / s / 2.0)
