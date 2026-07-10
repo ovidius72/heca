@@ -48,6 +48,11 @@ shell_integration = true
 # rename. Set false to show just the custom name.
 pane_renamed_add_process_name = true
 
+# Show each pane's working directory as its own row (folder icon + home-relative
+# path) in the sidebar pane card, between the name row and the git-status row.
+# Off by default; the cwd is also available as the info-bar `location` segment.
+pane_show_cwd = false
+
 # Host terminal scrollback capacity in rows (history retained above the
 # visible viewport). The host scrollback viewport scrolls within this range.
 # Mirrors wezterm-term's default of 3500 when unset.

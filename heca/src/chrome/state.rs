@@ -177,6 +177,10 @@ pub struct WorkspacesContainerState {
     /// Carried here (rather than threaded through every card signature) so the flag
     /// reaches the card via the `ws_state` it already receives.
     pub(crate) pane_renamed_add_process_name: Signal<bool>,
+    /// Whether the sidebar pane card shows a working-directory row. Mirrors
+    /// `[settings] pane_show_cwd`; projected in `sync_chrome_state`, read by `pane_card`.
+    /// Carried here for the same reason as `pane_renamed_add_process_name`.
+    pub(crate) pane_show_cwd: Signal<bool>,
 }
 
 impl WorkspacesContainerState {
@@ -195,6 +199,8 @@ impl WorkspacesContainerState {
             // Matches the `[settings] pane_renamed_add_process_name` default (`true`);
             // `sync_chrome_state` sets the real value each sync.
             pane_renamed_add_process_name: signal(true),
+            // Matches the `[settings] pane_show_cwd` default (`false`).
+            pane_show_cwd: signal(false),
         }
     }
 
@@ -211,6 +217,11 @@ impl WorkspacesContainerState {
     /// a reactive paint closure.
     pub fn pane_renamed_add_process_name(&self) -> bool {
         self.pane_renamed_add_process_name.get_untracked()
+    }
+    /// Whether the sidebar pane card shows a cwd row. Read untracked — consumed by
+    /// `pane_card` at tree-build time.
+    pub fn pane_show_cwd(&self) -> bool {
+        self.pane_show_cwd.get_untracked()
     }
     #[cfg_attr(
         not(test),
@@ -328,6 +339,15 @@ impl WorkspacesContainerState {
             return;
         }
         self.pane_renamed_add_process_name.set(on);
+    }
+    /// Project the `[settings] pane_show_cwd` flag into the store. Idempotent; emits no
+    /// `ChromeEvent` (pure display-config flag read at card build — a reload rebuilds the
+    /// sidebar anyway).
+    pub fn set_pane_show_cwd(&self, on: bool) {
+        if self.pane_show_cwd.get_untracked() == on {
+            return;
+        }
+        self.pane_show_cwd.set(on);
     }
     #[cfg_attr(
         not(test),
@@ -883,6 +903,17 @@ mod tests {
         // Idempotent re-set is a no-op (guarded setter).
         s.workspaces.set_pane_renamed_add_process_name(false);
         assert!(!s.workspaces.pane_renamed_add_process_name());
+    }
+
+    #[test]
+    fn pane_show_cwd_defaults_off_then_projects() {
+        let s = state();
+        // Defaults to the `[settings]` default (`false`).
+        assert!(!s.workspaces.pane_show_cwd());
+        s.workspaces.set_pane_show_cwd(true);
+        assert!(s.workspaces.pane_show_cwd());
+        s.workspaces.set_pane_show_cwd(true);
+        assert!(s.workspaces.pane_show_cwd());
     }
 
     #[test]

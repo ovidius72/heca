@@ -747,6 +747,10 @@ pub struct AppState {
     /// (`[settings] pane_renamed_add_process_name`). Threaded here so `sync_pane_headers` reads
     /// it each frame and a reload rebuilds the headers.
     pub pane_renamed_add_process_name: bool,
+    /// Show each pane's working directory as its own row in the sidebar pane card
+    /// (`[settings] pane_show_cwd`). Projected into the chrome store each sync so the card
+    /// reads it via `ws_state`; a reload updates it live.
+    pub pane_show_cwd: bool,
     /// Host terminal scrollback capacity (rows) threaded from
     /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
     /// backends so the engine retains the configured amount of history.

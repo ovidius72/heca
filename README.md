@@ -689,6 +689,7 @@ auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
 pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
+pane_show_cwd = false         # Show each pane's cwd as a row in the sidebar card (folder icon + path)
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
