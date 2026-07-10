@@ -1955,6 +1955,25 @@ not z=0 frost compositing).
   terminal + dark nvim colorscheme; check whether heca's default bg overrides nvim's OSC-set bg, and
   whether the UI theme *should* map to terminal defaults when no explicit `terminal_*` override exists).
 
+### [ ] Requirement: Chrome interaction bugs · `chrome-bugs` (found 2026-07-10)
+UI/interaction bugs found during the pane-naming session. Not diagnosed yet — capture + repro first.
+- [ ] **chrome-bug-collapsed-sidebar-picks** — BUG: with the sidebar **collapsed** (rail mode), the
+  quick-pick **letter labels** for workspaces and panes behave wrong: clicking a letter focuses the
+  **wrong pane**, sometimes opens the **delete dialog**, and the **highlight** is wrong. Likely the
+  collapsed rail projects pick candidates / hit-targets with the wrong id mapping (or reuses the
+  expanded-sidebar coordinates), and/or a click falls through to a delete affordance. Investigate the
+  collapsed-rail render + hit-test path (`app/render.rs` collapsed rail, the pick-candidate projection
+  in `sync_chrome_state`/`sync_chrome_signals`, and `handle_hint_pick`). Get exact repro (which
+  letters, collapsed vs expanded) before fixing.
+- [ ] **chrome-bug-titlebar-doubleclick-fullscreen** — BUG (macOS): double-clicking the top-bar
+  sidebar-toggle button enters OS full screen. No app fullscreen/titlebar code exists — the window uses
+  `Window::default_attributes()` (native macOS titlebar) and the vibrancy path doesn't touch the style
+  mask, so this is macOS's native "double-click title bar to zoom/fill/full screen" firing because the
+  top-bar interactive regions sit in the OS titlebar's draggable band (button eats the first click, the
+  OS titlebar gets the second). Fix is macOS-specific: exclude the top-bar buttons from the drag/titlebar
+  region (`mouseDownCanMoveWindow = NO` on those NSViews) or disable titlebar double-click zoom for the
+  window. Files: `heca/src/app/startup.rs` (window/NSWindow setup). Needs on-machine repro.
+
 ### [ ] Phase: Top/Bottom Bar Widget System + mainmenu · `topbar-menu` — STUB (vision holder)
 TopBar and BottomBar become **generic, pluggable widget containers** (specular in functioning,
 each with independent widgets — like the VSCode bottom bar: icons, buttons, text, often from
