@@ -192,6 +192,11 @@ pub(crate) struct PaneInfoSignals {
     title_inactive: Signal<String>,
     title_active_visible: Signal<bool>,
     title_inactive_visible: Signal<bool>,
+    /// The dimmed `(process)` suffix text beside a renamed pane's name (e.g. `(nvim)`),
+    /// or empty when hidden. Signal-driven so a rename toggles it live without a tree
+    /// rebuild (renames update signals, they don't rebuild the sidebar card).
+    process_hint: Signal<String>,
+    process_hint_visible: Signal<bool>,
     status_idle_visible: Signal<bool>,
     status_running_visible: Signal<bool>,
     status_success_visible: Signal<bool>,
@@ -311,11 +316,12 @@ pub(crate) fn build_pane_info_bar(
     theme: &GuiTheme,
     max_width: f32,
     font: f32,
-    add_process_name: bool,
 ) -> Option<Tag> {
     use heca_config::appearance::PaneSegment;
 
-    let view = pane_info_view(programs, fallback_name, custom_name, runtime, add_process_name);
+    // The info bar never renders the `(process)` suffix — that's a sidebar-card affordance
+    // (see `pane_card`) — so it always projects the view without the hint.
+    let view = pane_info_view(programs, fallback_name, custom_name, runtime, false);
     let git = runtime.and_then(|pane| pane.git.as_ref());
 
     // Collect the produced (icon, text) segments, noting the location (the long,
@@ -403,6 +409,10 @@ const HEADER_MARGIN: f32 = 6.0;
 /// Gap between adjacent action buttons (logical px) — tight, so the cluster reads
 /// as one control group.
 const HEADER_BUTTON_GAP: f32 = 1.0;
+
+/// Font multiplier for the dimmed `(process)` suffix beside a renamed pane's name in
+/// the sidebar card — smaller than the name so it reads as secondary metadata.
+const PROCESS_HINT_FONT_SCALE: f32 = 0.8;
 
 /// Per-pane context the header buttons need to build their (parameterized) actions
 /// and emit them through the app event loop.
@@ -568,9 +578,6 @@ pub(crate) struct PaneHeaderContent<'a> {
     pub(crate) fallback_name: &'a str,
     /// User-set override name (wins over the process-derived title), if any.
     pub(crate) custom_name: Option<&'a str>,
-    /// Append the process/program name as a small dimmed label next to a custom name
-    /// (`[settings] pane_renamed_add_process_name`).
-    pub(crate) add_process_name: bool,
     pub(crate) runtime: Option<&'a PaneRuntime>,
     pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
     pub(crate) actions: &'a [heca_config::appearance::PaneAction],
@@ -677,7 +684,8 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         content.fallback_name,
         content.custom_name,
         content.runtime,
-        content.add_process_name,
+        // The info bar never shows the process suffix, so it plays no part in the key.
+        false,
     );
     let cwd = content
         .runtime
@@ -693,10 +701,9 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or(""))
         .collect();
     format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
+        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
         view.icon,
         view.title,
-        view.process_hint,
         view.status,
         view.git_branch,
         view.git_added,
@@ -818,7 +825,6 @@ pub(crate) fn build_pane_header(
         theme,
         bar_max,
         font,
-        content.add_process_name,
     );
 
     let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
@@ -1086,7 +1092,6 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             programs: &state.programs,
             fallback_name: &input.name,
             custom_name: input.custom_name.as_deref(),
-            add_process_name: state.pane_renamed_add_process_name,
             runtime: input.runtime.as_ref(),
             segments: &segments,
             actions: &actions,
@@ -1379,8 +1384,9 @@ fn pane_card(
         &pane.name,
         pane.custom_name.as_deref(),
         runtime.as_ref(),
-        // Sidebar cards show just the name; the process hint is an in-pane info-bar affordance.
-        false,
+        // A renamed pane shows a dimmed `(process)` suffix here when the setting is on,
+        // so the sidebar keeps surfacing what's actually running under a custom name.
+        ws_state.pane_renamed_add_process_name(),
     );
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
     // is drawn by `Row` from its `active` signal, not baked into the background. This
@@ -1476,6 +1482,27 @@ fn pane_card(
         info.git_branch.is_some(),
     );
     let git_visible_signal = git_row.visible_signal();
+    // A renamed pane surfaces its running program as a dimmed `(process)` suffix after
+    // the name (config-gated). Appended to the shared title area so it renders the same
+    // in both the git and no-git card layouts. Like the title, it is **signal-driven**
+    // (text + visibility updated in `sync_chrome_signals`) so renaming toggles it live —
+    // a rename updates signals, it does not rebuild the sidebar card tree.
+    let process_hint_text = info
+        .process_hint
+        .as_ref()
+        .map(|program| format!("({program})"))
+        .unwrap_or_default();
+    let process_hint_label = Label::new(process_hint_text)
+        .color(theme.colors.muted)
+        .font_scale(PROCESS_HINT_FONT_SCALE);
+    let process_hint_signal = process_hint_label.text_signal();
+    let process_hint = Visibility::new(process_hint_label, info.process_hint.is_some());
+    let process_hint_visible = process_hint.visible_signal();
+    let title_area = Flex::row()
+        .align(Align::Center)
+        .gap(4.0)
+        .child(Flex::column().child(active_title).child(inactive_title))
+        .child(process_hint);
     let emit = emit_intent.clone();
     let content = if info.git_branch.is_some() {
         Flex::column()
@@ -1495,11 +1522,7 @@ fn pane_card(
                             .child(error_dot),
                     )
                     .child(Flex::row().align(Align::Center).child(icon_widget))
-                    .child(
-                        Flex::row()
-                            .align(Align::Center)
-                            .child(Flex::column().child(active_title).child(inactive_title)),
-                    ),
+                    .child(title_area),
             )
             .child(
                 Flex::row()
@@ -1521,11 +1544,7 @@ fn pane_card(
                     .child(error_dot),
             )
             .child(Flex::row().align(Align::Center).child(icon_widget))
-            .child(
-                Flex::row()
-                    .align(Align::Center)
-                    .child(Flex::column().child(active_title).child(inactive_title)),
-            )
+            .child(title_area)
     };
     let card = Row::new()
         .background(
@@ -1567,6 +1586,8 @@ fn pane_card(
             title_inactive: inactive_title_signal,
             title_active_visible: active_title_visible,
             title_inactive_visible: inactive_title_visible,
+            process_hint: process_hint_signal,
+            process_hint_visible,
             status_idle_visible: idle_dot_visible,
             status_running_visible: running_dot_visible,
             status_success_visible: success_dot_visible,
@@ -3004,6 +3025,10 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
+    state
+        .chrome_state
+        .workspaces
+        .set_pane_renamed_add_process_name(state.pane_renamed_add_process_name);
     // Project the sidebar-nav cursor selection into the store — while actually
     // navigating (`SidebarNav`) *or* while a context menu opened from the sidebar is up
     // (`sidebar_nav_active`), so the nav-cursor highlight shows during navigation, stays
@@ -3175,8 +3200,13 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             pane_fallback_name(&state.sidebar_tree, *pid),
             pane_custom_name(&state.sidebar_tree, *pid),
             runtime.as_ref(),
-            // These signals drive icon/title/status only; the process hint renders in the header.
-            false,
+            // Drive the sidebar card's `(process)` suffix live: compute the hint with the
+            // real flag so a rename toggles it without a tree rebuild. Only `process_hint`
+            // depends on this; icon/title/status/git are unaffected.
+            state
+                .chrome_state
+                .workspaces
+                .pane_renamed_add_process_name(),
         );
         let pane_active = active == Some(*pid);
         if sigs.icon.get_untracked() != next.icon {
@@ -3189,6 +3219,20 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
         }
         if sigs.title_inactive.get_untracked() != next.title {
             sigs.title_inactive.set(next.title.clone());
+            changed = true;
+        }
+        let hint_text = next
+            .process_hint
+            .as_deref()
+            .map(|program| format!("({program})"))
+            .unwrap_or_default();
+        if sigs.process_hint.get_untracked() != hint_text {
+            sigs.process_hint.set(hint_text);
+            changed = true;
+        }
+        let hint_visible = next.process_hint.is_some();
+        if sigs.process_hint_visible.get_untracked() != hint_visible {
+            sigs.process_hint_visible.set(hint_visible);
             changed = true;
         }
         for (signal, visible) in [
@@ -4200,7 +4244,6 @@ mod tests {
             &theme,
             400.0,
             13.0,
-            false,
         );
         assert!(bar.is_some());
 
@@ -4214,7 +4257,6 @@ mod tests {
             &theme,
             400.0,
             13.0,
-            false,
         );
         assert!(bar.is_some());
     }
@@ -4300,7 +4342,6 @@ mod tests {
                 programs,
                 fallback_name: "shell",
                 custom_name: None,
-                add_process_name: false,
                 runtime: Some(rt),
                 segments,
                 actions,

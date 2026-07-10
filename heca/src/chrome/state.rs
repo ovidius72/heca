@@ -171,6 +171,12 @@ pub struct WorkspacesContainerState {
     /// the expanded sidebar's nav-cursor highlight, kept **distinct** from
     /// `active_pane` (the real session focus).
     pub(crate) nav_selection: Signal<Option<SidebarSelection>>,
+    /// Whether a renamed pane's sidebar card shows a small dimmed `(process)` suffix
+    /// after its name. Mirrors `[settings] pane_renamed_add_process_name`; projected
+    /// from `AppState` in `sync_chrome_state`, read by `pane_card` at tree-build time.
+    /// Carried here (rather than threaded through every card signature) so the flag
+    /// reaches the card via the `ws_state` it already receives.
+    pub(crate) pane_renamed_add_process_name: Signal<bool>,
 }
 
 impl WorkspacesContainerState {
@@ -186,6 +192,9 @@ impl WorkspacesContainerState {
             panes: signal(HashMap::new()),
             scroll: signal(0.0),
             nav_selection: signal(None),
+            // Matches the `[settings] pane_renamed_add_process_name` default (`true`);
+            // `sync_chrome_state` sets the real value each sync.
+            pane_renamed_add_process_name: signal(true),
         }
     }
 
@@ -196,6 +205,12 @@ impl WorkspacesContainerState {
     /// The current sidebar-nav cursor selection (`None` when not navigating).
     pub fn nav_selection(&self) -> Option<SidebarSelection> {
         self.nav_selection.get()
+    }
+    /// Whether renamed panes show the `(process)` suffix in their sidebar card. Read
+    /// untracked — consumed by `pane_card` while building the retained tree, not inside
+    /// a reactive paint closure.
+    pub fn pane_renamed_add_process_name(&self) -> bool {
+        self.pane_renamed_add_process_name.get_untracked()
     }
     #[cfg_attr(
         not(test),
@@ -304,6 +319,15 @@ impl WorkspacesContainerState {
         self.nav_selection.set(selection);
         self.events
             .emit(ChromeEvent::SidebarSelectionChanged { selection });
+    }
+    /// Project the `[settings] pane_renamed_add_process_name` flag into the store.
+    /// Idempotent (no-op when unchanged). A pure display-config flag read at card build,
+    /// so it emits no `ChromeEvent` — a config reload rebuilds the sidebar anyway.
+    pub fn set_pane_renamed_add_process_name(&self, on: bool) {
+        if self.pane_renamed_add_process_name.get_untracked() == on {
+            return;
+        }
+        self.pane_renamed_add_process_name.set(on);
     }
     #[cfg_attr(
         not(test),
@@ -847,6 +871,18 @@ mod tests {
         assert_eq!(s.workspaces.active_pane(), None);
         s.workspaces.set_active_pane(Some(PaneId(7)));
         assert_eq!(s.workspaces.active_pane(), Some(PaneId(7)));
+    }
+
+    #[test]
+    fn pane_renamed_add_process_name_defaults_on_then_projects() {
+        let s = state();
+        // Defaults to the `[settings]` default so the first frame matches config.
+        assert!(s.workspaces.pane_renamed_add_process_name());
+        s.workspaces.set_pane_renamed_add_process_name(false);
+        assert!(!s.workspaces.pane_renamed_add_process_name());
+        // Idempotent re-set is a no-op (guarded setter).
+        s.workspaces.set_pane_renamed_add_process_name(false);
+        assert!(!s.workspaces.pane_renamed_add_process_name());
     }
 
     #[test]

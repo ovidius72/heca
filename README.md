@@ -838,10 +838,12 @@ under `[appearance.pane]` as ordered lists — order in the list is the order sh
 (left → right). An empty list hides that side; if **both** are empty the bar (and
 its reserved space) disappears entirely.
 
-When a pane is **renamed** (given a custom name), the `AppName` segment shows the
-custom name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)`.
-The process label is not part of the name (it's never edited by rename); toggle it with
-`[settings] pane_renamed_add_process_name` (default `true`).
+When a pane is **renamed** (given a custom name), its **sidebar card** shows the custom
+name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)` — so the
+sidebar keeps surfacing what's actually running. The process label is not part of the name
+(it's never edited by rename); toggle it with `[settings] pane_renamed_add_process_name`
+(default `true`). In the pane **info bar**, the `app_name` segment always shows the program
+name regardless of a rename; add the `pane_name` segment to show the custom name there.
 
 ```toml
 [appearance.pane]
