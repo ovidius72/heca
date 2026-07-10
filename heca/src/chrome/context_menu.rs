@@ -303,7 +303,10 @@ pub(crate) struct PendingContext {
 fn pane_action_items() -> Vec<DropdownItem> {
     vec![
         DropdownItem::new("split_horizontal", "New column", WmAction::SplitHorizontal),
-        DropdownItem::new("split_vertical", "Split down", WmAction::SplitVertical),
+        // "Add a pane" reads consistently everywhere: same label + FolderSimplePlus icon
+        // (via the `add_pane_to_column` id) as the sidebar "New pane" and the pane-header
+        // "+" button. Still emits SplitVertical (adds a pane to the active column; `v`).
+        DropdownItem::new("add_pane_to_column", "New pane", WmAction::SplitVertical),
         DropdownItem::new("zoom_column", "Zoom / unzoom", WmAction::ZoomColumn),
         DropdownItem::new("float", "Float / unfloat", WmAction::Float),
         DropdownItem::new("rename_pane", "Rename", WmAction::RenamePane),
@@ -334,7 +337,7 @@ fn build_sidebar_pane_menu(state: &AppState, target: &ContextTarget) -> Vec<Drop
     let mut items = Vec::new();
     if let Some((ws_idx, col_idx, _)) = crate::find_pane_location(&state.session, *pane_id) {
         items.push(DropdownItem::new(
-            "split_vertical",
+            "add_pane_to_column",
             "New pane",
             WmAction::AddPaneToColumn { ws_idx, col_idx },
         ));
@@ -365,7 +368,7 @@ fn build_sidebar_column_menu(_state: &AppState, target: &ContextTarget) -> Vec<D
 fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
     vec![
         DropdownItem::new(
-            "split_vertical",
+            "add_pane_to_column",
             "New pane",
             WmAction::AddPaneToColumn { ws_idx, col_idx },
         ),
@@ -380,7 +383,7 @@ fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
         // handler) for when columns surface a name; re-add the entry then. See `col_idx`
         // still threaded below for the delete action.
         DropdownItem::new(
-            "close",
+            "delete_column",
             "Delete column",
             WmAction::DeleteColumn { ws_idx, col_idx },
         )
@@ -413,7 +416,7 @@ fn sidebar_workspace_items(ws_idx: usize) -> Vec<DropdownItem> {
             WmAction::RenameWorkspaceByIdx { ws_idx },
         ),
         DropdownItem::new(
-            "close",
+            "delete_workspace",
             "Delete workspace",
             WmAction::DeleteWorkspace { ws_idx },
         )
@@ -548,9 +551,11 @@ mod tests {
         assert!(has(&pane, "Zoom / unzoom") && has(&pane, "Float / unfloat"));
         assert!(has(&col, "Delete column"));
         assert!(has(&ws, "New workspace") && has(&ws, "Delete workspace"));
-        // Each sidebar context still ends in a danger `close`-id action (delete) for its own scope.
-        assert_eq!(col.last().map(|i| i.id.as_str()), Some("close"));
+        // Each sidebar context ends in a danger delete action, keyed by its own action
+        // name so it shows that action's icon (Trash / StackMinus), not the pane `close` one.
+        assert_eq!(col.last().map(|i| i.id.as_str()), Some("delete_column"));
         assert!(col.last().map(|i| i.danger).unwrap_or(false));
-        assert_eq!(ws.last().map(|i| i.id.as_str()), Some("close"));
+        assert_eq!(ws.last().map(|i| i.id.as_str()), Some("delete_workspace"));
+        assert!(ws.last().map(|i| i.danger).unwrap_or(false));
     }
 }

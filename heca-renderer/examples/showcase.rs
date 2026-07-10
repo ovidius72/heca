@@ -269,11 +269,11 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
     // The keycap is the shared `paint_keycap` primitive in its `Bordered` variant —
     // the same chip the KeyHint overlays draw `Filled` — so the menu never hand-draws it.
     let menu = ContextMenu::new()
-        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::FileCode).key('r').shortcut(display_shortcut("prefix+$")))
+        .entry(MenuEntry::new("Rename", || println!("[showcase] rename")).icon(Glyph::NotePencil).key('r').shortcut(display_shortcut("prefix+$")))
         .entry(MenuEntry::new("Move to workspace", || println!("[showcase] → workspace")).icon(Glyph::ArrowRight).key('w'))
         .entry(MenuEntry::new("Move to column", || println!("[showcase] → column")).icon(Glyph::SquareSplitVertical).key('c'))
         .entry(MenuEntry::new("Duplicate", || println!("[showcase] duplicate")).icon(Glyph::Cards).key('d').enabled(false))
-        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::XSquare).key('x').danger(true).shortcut(display_shortcut("prefix+x")))
+        .entry(MenuEntry::new("Close", || println!("[showcase] close")).icon(Glyph::FolderSimpleMinus).key('x').danger(true).shortcut(display_shortcut("prefix+x")))
         // Fired only on Esc / outside-click (a dismissal, not a selection) — the host wires this
         // to its overlay-close path (in `heca`, emit `CloseOverlay`).
         .on_dismiss(|| println!("[showcase] menu dismissed"));
@@ -679,48 +679,38 @@ fn build_ui(theme: &Theme, ctl: ThemeCtl) -> BuiltUi {
                         .trailing(Label::new(">").color(theme.colors.muted)),
                 )
         })
-        // Duotone icons (G2): a strip of Phosphor glyphs from the icon font. Each
-        // is two stacked layers — a dimmed secondary wash + a full primary on top,
-        // same hue (secondary = primary at the theme's icon_secondary_alpha).
-        .child(
-            Flex::row()
-                .gap(20.0)
-                .align(Align::Center)
-                .child(Icon::new(Glyph::Folder).color(theme.colors.accent).size(34.0))
-                .child(Icon::new(Glyph::FileCode).color(theme.colors.accent).size(34.0))
-                .child(Icon::new(Glyph::GitBranch).color(theme.colors.success).size(34.0))
-                .child(
-                    Icon::new(Glyph::Terminal)
-                        .color(theme.colors.foreground)
-                        .size(34.0),
-                )
-                .child(Icon::new(Glyph::Gear).color(theme.colors.accent).size(34.0))
-                .child(Icon::new(Glyph::Lightning).color(theme.colors.accent).size(34.0))
-                .child(Icon::new(Glyph::Warning).color(theme.colors.warning).size(34.0))
-                // Pane-action glyphs (the in-pane info bar buttons).
-                .child(
-                    Icon::new(Glyph::SquareSplitVertical)
-                        .color(theme.colors.foreground)
-                        .size(34.0),
-                )
-                .child(
-                    Icon::new(Glyph::ArrowLineLeft)
-                        .color(theme.colors.foreground)
-                        .size(34.0),
-                )
-                .child(
-                    Icon::new(Glyph::ArrowLineRight)
-                        .color(theme.colors.foreground)
-                        .size(34.0),
-                )
-                .child(
-                    Icon::new(Glyph::FrameCorners)
-                        .color(theme.colors.foreground)
-                        .size(34.0),
-                )
-                .child(Icon::new(Glyph::Cards).color(theme.colors.foreground).size(34.0))
-                .child(Icon::new(Glyph::XSquare).color(theme.colors.danger).size(34.0)),
-        )
+        // Duotone icons (G2): the FULL icon set, iterated from `Glyph::ALL` (the single
+        // source) so every glyph — including newly added ones — appears here with no
+        // hand-maintained list. Each is two stacked layers: a dimmed secondary wash + a
+        // full primary on top, same hue (secondary = primary at the theme's
+        // icon_secondary_alpha). Wraps across rows so the whole set stays visible.
+        .child({
+            const PER_ROW: usize = 8;
+            // One labelled cell per glyph: the icon over its `Glyph` enum name (via Debug,
+            // so no extra method). Fixed-width cells make the rows line up as a grid.
+            let cell = |glyph: Glyph| {
+                Flex::column()
+                    .gap(6.0)
+                    .align(Align::Center)
+                    .width(Length::Px(124.0))
+                    .child(Icon::new(glyph).color(theme.colors.foreground).size(26.0))
+                    .child(
+                        Label::new(format!("{glyph:?}"))
+                            .font_scale(0.62)
+                            .color(theme.colors.muted),
+                    )
+            };
+            let mut grid = Flex::column().gap(18.0);
+            let mut row = Flex::row().gap(8.0).align(Align::Start);
+            for (i, &glyph) in Glyph::ALL.iter().enumerate() {
+                if i > 0 && i % PER_ROW == 0 {
+                    grid = grid.child(row);
+                    row = Flex::row().gap(8.0).align(Align::Start);
+                }
+                row = row.child(cell(glyph));
+            }
+            grid.child(row)
+        })
         // IconButton + Tooltip: a toolbar of compact, clickable icon affordances —
         // ghost at rest, tinted hover frame + press flash + focus ring — each
         // wrapped in a hover-revealed Tooltip label. The danger one uses `.tone()`.

@@ -539,9 +539,11 @@ fn pane_action_spec(
     let icon = |name: &str, fallback: Glyph| catalog.icon(name).unwrap_or(fallback);
     match action {
         PaneAction::Split => (
-            icon("split_vertical", Glyph::SquareSplitVertical),
+            // Icon = the add-pane identity (FolderSimplePlus); the shortcut/tooltip name
+            // stays `split_vertical` (see `pane_action_name`) so the button still hints `v`.
+            icon("add_pane_to_column", Glyph::FolderSimplePlus),
             WmAction::AddPaneToColumn { ws_idx, col_idx },
-            "Add pane",
+            "New pane",
             false,
         ),
         PaneAction::MoveLeft => (
@@ -561,7 +563,7 @@ fn pane_action_spec(
             false,
         ),
         PaneAction::Close => (
-            icon("close", Glyph::XSquare),
+            icon("close", Glyph::FolderSimpleMinus),
             WmAction::ClosePaneById { pane_id },
             "Close",
             false,
@@ -4313,14 +4315,16 @@ mod tests {
         let pid = PaneId(7);
         let catalog = crate::actions::ActionCatalog::with_builtins();
 
-        // Pane-parameterized actions carry the pane/column and don't need focus.
+        // Pane-parameterized actions carry the pane/column and don't need focus. Icons
+        // resolve from the action catalog (close = FolderSimpleMinus; add-pane = the
+        // add_pane_to_column identity → FolderSimplePlus).
         let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Close, pid, 2, 3);
-        assert_eq!(g, Glyph::XSquare);
+        assert_eq!(g, Glyph::FolderSimpleMinus);
         assert_eq!(a, WmAction::ClosePaneById { pane_id: pid });
         assert!(!focus);
 
         let (g, a, _, focus) = super::pane_action_spec(&catalog, PaneAction::Split, pid, 2, 3);
-        assert_eq!(g, Glyph::SquareSplitVertical);
+        assert_eq!(g, Glyph::FolderSimplePlus);
         assert_eq!(
             a,
             WmAction::AddPaneToColumn {

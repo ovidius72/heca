@@ -23,8 +23,8 @@ use crate::style::Length;
 const PRIMARY_OFFSET: u32 = 1;
 
 /// A curated set of Phosphor icons, by name. Each value is the **secondary**
-/// (`:before`) codepoint; the primary layer is `secondary + 1`. Use
-/// [`Icon::from_codepoint`] for any glyph outside this set.
+/// (`:before`) codepoint; the primary layer is `secondary + 1`. Iterate
+/// [`Glyph::ALL`] for the whole set (e.g. to render an icon gallery).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Glyph {
     Folder,
@@ -62,9 +62,48 @@ pub enum Glyph {
     XSquare,
     FrameCorners,
     Cards,
+    // Action-menu / pane-header glyphs (Phosphor names differ from these enum names;
+    // see `secondary()` for the mapping). Added for the context-menu + button action icons.
+    Pencil,
+    NotePencil,
+    Backspace,
+    Trash,
+    XCircle,
+    PlusCircle,
+    FolderSimpleMinus,
+    FolderSimplePlus,
+    PlusSquare,
+    StackPlus,
+    StackMinus,
+    ColumnsPlusLeft,
+    ColumnsPlusRight,
+    SquareHalf,
+    SquareSplitHorizontal,
+    SquareHalfBottom,
 }
 
 impl Glyph {
+    /// Every curated glyph, in enum order — the single enumerable source of the icon
+    /// set. Rust can't iterate enum variants without a macro/dependency, so this list
+    /// is the one place they're collected (a unit test asserts it stays complete). Use
+    /// it to render a full gallery or document the set; `secondary()` gives each one's
+    /// codepoint.
+    pub const ALL: &'static [Glyph] = &[
+        Glyph::Folder, Glyph::FolderOpen, Glyph::File, Glyph::FileCode,
+        Glyph::GitBranch, Glyph::GitCommit, Glyph::GitMerge, Glyph::GitPullRequest,
+        Glyph::Terminal, Glyph::Gear, Glyph::Search, Glyph::Close,
+        Glyph::Check, Glyph::CaretRight, Glyph::CaretDown, Glyph::Play,
+        Glyph::Pause, Glyph::Stop, Glyph::Warning, Glyph::WarningCircle,
+        Glyph::Info, Glyph::Circle, Glyph::Lightning, Glyph::List,
+        Glyph::Sidebar, Glyph::DotsThreeVertical, Glyph::ArrowRight, Glyph::ArrowLineLeft,
+        Glyph::ArrowLineRight, Glyph::Plus, Glyph::Minus, Glyph::SquareSplitVertical,
+        Glyph::XSquare, Glyph::FrameCorners, Glyph::Cards, Glyph::Pencil,
+        Glyph::NotePencil, Glyph::Backspace, Glyph::Trash, Glyph::XCircle,
+        Glyph::PlusCircle, Glyph::FolderSimpleMinus, Glyph::FolderSimplePlus, Glyph::PlusSquare,
+        Glyph::StackPlus, Glyph::StackMinus, Glyph::ColumnsPlusLeft, Glyph::ColumnsPlusRight,
+        Glyph::SquareHalf, Glyph::SquareSplitHorizontal, Glyph::SquareHalfBottom,
+    ];
+
     /// The secondary-layer (`:before`) codepoint; the primary layer is this `+ 1`.
     const fn secondary(self) -> u32 {
         match self {
@@ -103,6 +142,23 @@ impl Glyph {
             Glyph::XSquare => 0xe4fa,
             Glyph::FrameCorners => 0xe626,
             Glyph::Cards => 0xe0f8,
+            // Phosphor Duotone v2.1 `:before` codepoints (verified against the embedded font).
+            Glyph::Pencil => 0xe3ae,                 // pencil
+            Glyph::NotePencil => 0xe34c,             // note-pencil (the "edit" icon)
+            Glyph::Backspace => 0xe0ae,              // backspace
+            Glyph::Trash => 0xe4a6,                  // trash
+            Glyph::XCircle => 0xe4f8,                // x-circle
+            Glyph::PlusCircle => 0xe3d6,             // plus-circle
+            Glyph::FolderSimpleMinus => 0xe25c,      // folder-simple-minus
+            Glyph::FolderSimplePlus => 0xe25e,       // folder-simple-plus
+            Glyph::PlusSquare => 0xed4a,             // plus-square
+            Glyph::StackPlus => 0xedf6,              // stack-plus
+            Glyph::StackMinus => 0xedf4,             // stack-minus
+            Glyph::ColumnsPlusLeft => 0xe544,        // columns-plus-left
+            Glyph::ColumnsPlusRight => 0xe542,       // columns-plus-right
+            Glyph::SquareHalf => 0xe462,             // square-half
+            Glyph::SquareSplitHorizontal => 0xe870,  // square-split-horizontal
+            Glyph::SquareHalfBottom => 0xeb16,       // square-half-bottom
         }
     }
 
@@ -142,12 +198,6 @@ impl Icon {
         };
         icon.remeasure();
         icon
-    }
-
-    /// A new icon from a raw **secondary** (`:before`) codepoint — for glyphs
-    /// outside the [`Glyph`] set. The primary layer is `secondary_cp + 1`.
-    pub fn from_codepoint(secondary_cp: u32) -> Self {
-        Self::new(Glyph::from_secondary(secondary_cp))
     }
 
     /// Handle to the icon's glyph signal so hosts can update it live.
@@ -234,46 +284,24 @@ impl Component for Icon {
     }
 }
 
-impl Glyph {
-    /// Convert a raw Phosphor secondary codepoint into the matching [`Glyph`].
-    pub fn from_secondary(secondary_cp: u32) -> Self {
-        match secondary_cp {
-            0xe24a => Glyph::Folder,
-            0xe256 => Glyph::FolderOpen,
-            0xe230 => Glyph::File,
-            0xe914 => Glyph::FileCode,
-            0xe278 => Glyph::GitBranch,
-            0xe27a => Glyph::GitCommit,
-            0xe280 => Glyph::GitMerge,
-            0xe282 => Glyph::GitPullRequest,
-            0xeae8 => Glyph::Terminal,
-            0xe272 => Glyph::Gear,
-            0xe30c => Glyph::Search,
-            0xe4f6 => Glyph::Close,
-            0xe182 => Glyph::Check,
-            0xe13a => Glyph::CaretRight,
-            0xe136 => Glyph::CaretDown,
-            0xe3d0 => Glyph::Play,
-            0xe39e => Glyph::Pause,
-            0xe46c => Glyph::Stop,
-            0xe4e0 => Glyph::Warning,
-            0xe4e2 => Glyph::WarningCircle,
-            0xe2ce => Glyph::Info,
-            0xe18a => Glyph::Circle,
-            0xe2de => Glyph::Lightning,
-            0xe2f0 => Glyph::List,
-            0xec24 => Glyph::Sidebar,
-            0xe208 => Glyph::DotsThreeVertical,
-            0xe06c => Glyph::ArrowRight,
-            0xe3d4 => Glyph::Plus,
-            0xe32a => Glyph::Minus,
-            0xe874 => Glyph::SquareSplitVertical,
-            0xe4fa => Glyph::XSquare,
-            0xe626 => Glyph::FrameCorners,
-            0xe0f8 => Glyph::Cards,
-            // Unknown Phosphor codepoints fall back to the generic terminal glyph so
-            // callers still get a stable icon instead of a missing-glyph square.
-            _ => Glyph::Terminal,
+#[cfg(test)]
+mod tests {
+    use super::Glyph;
+
+    /// `Glyph::ALL` must list **every** variant exactly once — it's the hand-kept list
+    /// the compiler can't verify. Guard it by codepoint: each glyph's `secondary()` is
+    /// unique, so a missing/duplicated entry shows up as a count or uniqueness failure.
+    #[test]
+    fn all_glyphs_have_unique_codepoints() {
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        for &g in Glyph::ALL {
+            let cp = g.secondary();
+            assert!(
+                seen.insert(cp),
+                "duplicate secondary codepoint {cp:#06x} for {g:?}"
+            );
         }
+        assert_eq!(seen.len(), Glyph::ALL.len());
     }
 }
