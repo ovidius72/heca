@@ -217,6 +217,7 @@ fn action_policy(action: &WmAction) -> ActionPolicy {
         | WmAction::ResizePaneHeightBy { .. }
         | WmAction::ResizeTo { .. }
         | WmAction::RenameColumn
+        | WmAction::RenameColumnByIdx { .. }
         | WmAction::DeleteColumn { .. }
         | WmAction::DeleteCurrentColumn
         | WmAction::AddPaneToColumn { .. }
@@ -1122,6 +1123,10 @@ mod tests {
                 pane_id: PaneId(0),
                 name: String::new(),
             },
+            WmAction::RenameColumnByIdx {
+                ws_idx: 0,
+                col_idx: 0,
+            },
             WmAction::SpawnCommand {
                 command: String::new(),
                 kind: crate::input::SpawnKind::Terminal,
@@ -1154,6 +1159,18 @@ mod tests {
 
         // Spot-check specific classifications
         assert_eq!(action_policy(&WmAction::FocusLeft), ActionPolicy::TiledOnly);
+        // Column rename (active or by-idx) is a tiled-layout op → TiledOnly, like RenameColumn.
+        assert_eq!(
+            action_policy(&WmAction::RenameColumn),
+            ActionPolicy::TiledOnly
+        );
+        assert_eq!(
+            action_policy(&WmAction::RenameColumnByIdx {
+                ws_idx: 0,
+                col_idx: 0
+            }),
+            ActionPolicy::TiledOnly
+        );
         assert_eq!(
             action_policy(&WmAction::Float),
             ActionPolicy::FocusedPaneLocal

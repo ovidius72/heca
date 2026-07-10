@@ -452,6 +452,13 @@ pub fn build_registry() -> ActionRegistry {
     registry.register(&WmAction::RenamePane, handle_rename_pane);
     registry.register(&WmAction::RenameColumn, handle_rename_column);
     registry.register(
+        &WmAction::RenameColumnByIdx {
+            ws_idx: 0,
+            col_idx: 0,
+        },
+        handle_rename_column_by_idx,
+    );
+    registry.register(
         &WmAction::FloatAt {
             pane_id: PaneId(0),
             x: 0.0,

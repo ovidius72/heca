@@ -994,22 +994,45 @@ pub fn handle_rename_pane_by_id(state: &mut AppState, action: &WmAction) {
     enter_pane_rename(state, *pane_id);
 }
 
+/// Open the rename dialog for column `col_idx` in workspace `ws_idx`, pre-filled with its
+/// current name. Shared by the active-column (`RenameColumn`) and by-index
+/// (`RenameColumnByIdx`) entry points. Like a workspace, a column's shown label is its
+/// explicit `name` if set, else the computed default `Column N` (not stored — `col.name`
+/// stays `None` until renamed), so that computed label is what you edit.
+fn enter_column_rename(state: &mut AppState, ws_idx: usize, col_idx: usize) {
+    let current_name = state
+        .session
+        .workspaces
+        .get(ws_idx)
+        .and_then(|ws| ws.scrolling.columns.get(col_idx))
+        .map(|col| {
+            col.name
+                .clone()
+                .unwrap_or_else(|| format!("Column {}", col_idx + 1))
+        })
+        .unwrap_or_default();
+    open_rename_dialog(state, RenameTarget::Column { ws_idx, col_idx }, current_name);
+}
+
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
     let ws_idx = state.session.active_workspace_idx;
-    if let Some(ws) = state.session.active_workspace() {
-        let col_idx = ws.scrolling.active_column_idx;
-        let current_name = ws
-            .scrolling
-            .columns
-            .get(col_idx)
-            .map(|col| {
-                col.name
-                    .clone()
-                    .unwrap_or_else(|| format!("Column {}", col_idx + 1))
-            })
-            .unwrap_or_default();
-        open_rename_dialog(state, RenameTarget::Column { ws_idx, col_idx }, current_name);
-    }
+    let Some(col_idx) = state
+        .session
+        .active_workspace()
+        .map(|ws| ws.scrolling.active_column_idx)
+    else {
+        return;
+    };
+    enter_column_rename(state, ws_idx, col_idx);
+}
+
+/// Enter rename mode for a specific column by index — the context-menu / RPC entry point
+/// (`RenameColumnByIdx`), which carries its target explicitly rather than using the active one.
+pub fn handle_rename_column_by_idx(state: &mut AppState, action: &WmAction) {
+    let WmAction::RenameColumnByIdx { ws_idx, col_idx } = action else {
+        return;
+    };
+    enter_column_rename(state, *ws_idx, *col_idx);
 }
 
 pub fn handle_float_at(state: &mut AppState, action: &WmAction) {

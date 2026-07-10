@@ -363,6 +363,13 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             Ok(WmAction::RenamePaneById { pane_id })
         }
         "rename-column" => Ok(WmAction::RenameColumn),
+        "rename-column-idx" => {
+            let ws_arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(ws_arg, "ws_idx");
+            let col_arg = expect_arg!("col_idx");
+            let col_idx = parse_usize!(col_arg, "col_idx");
+            Ok(WmAction::RenameColumnByIdx { ws_idx, col_idx })
+        }
         "rename-workspace" => Ok(WmAction::RenameWorkspace),
         "rename-workspace-idx" => {
             let arg = expect_arg!("ws_idx");
@@ -674,6 +681,13 @@ mod tests {
         assert_eq!(
             parse_rpc_command("rename-column"),
             Ok(WmAction::RenameColumn)
+        );
+        assert_eq!(
+            parse_rpc_command("rename-column-idx 1 2"),
+            Ok(WmAction::RenameColumnByIdx {
+                ws_idx: 1,
+                col_idx: 2
+            })
         );
     }
 

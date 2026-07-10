@@ -375,6 +375,11 @@ fn sidebar_column_items(ws_idx: usize, col_idx: usize) -> Vec<DropdownItem> {
             WmAction::AddColumnToWorkspace { ws_idx },
         ),
         DropdownItem::new(
+            "rename_column",
+            "Rename column",
+            WmAction::RenameColumnByIdx { ws_idx, col_idx },
+        ),
+        DropdownItem::new(
             "close",
             "Delete column",
             WmAction::DeleteColumn { ws_idx, col_idx },

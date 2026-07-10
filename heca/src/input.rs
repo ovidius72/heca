@@ -279,6 +279,13 @@ pub enum WmAction {
     RenameWorkspaceByIdx {
         ws_idx: usize,
     },
+    /// Enter rename mode for a specific column by index (context menu / RPC / sidebar
+    /// target), as opposed to [`RenameColumn`](WmAction::RenameColumn) which renames the
+    /// active column.
+    RenameColumnByIdx {
+        ws_idx: usize,
+        col_idx: usize,
+    },
 
     // ── Quick take (unit) ──
     PaneTake,
@@ -781,6 +788,10 @@ pub fn build_action(
         "rename_workspace_by_idx" => Some(WmAction::RenameWorkspaceByIdx {
             ws_idx: get_usize(args, "ws_idx")?,
         }),
+        "rename_column_by_idx" => Some(WmAction::RenameColumnByIdx {
+            ws_idx: get_usize(args, "ws_idx")?,
+            col_idx: get_usize(args, "col_idx")?,
+        }),
         "take_pane" => Some(WmAction::TakePane {
             pane_id: PaneId(get_u64(args, "pane_id")?),
             focus_after: args
@@ -978,6 +989,7 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::RenameTarget { .. }
         | WmAction::RenamePaneById { .. }
         | WmAction::RenameWorkspaceByIdx { .. }
+        | WmAction::RenameColumnByIdx { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
@@ -1052,6 +1064,11 @@ mod tests {
         assert_eq!(
             action_from_name("rename_column"),
             Some(WmAction::RenameColumn)
+        );
+        assert_eq!(
+            action_from_name("rename_column_by_idx"),
+            None,
+            "by-idx variants are menu/RPC-only and carry args, so they are not resolvable by bare name"
         );
         assert_eq!(action_from_name("close"), Some(WmAction::ClosePane));
         assert_eq!(
@@ -1589,6 +1606,26 @@ mod tests {
         assert_eq!(
             build_action("scroll_to_offset", &args),
             Some(WmAction::ScrollToOffset { rows: 42 })
+        );
+    }
+
+    #[test]
+    fn test_build_rename_column_by_idx() {
+        let args = std::collections::HashMap::from([
+            ("ws_idx".to_string(), "1".to_string()),
+            ("col_idx".to_string(), "2".to_string()),
+        ]);
+        assert_eq!(
+            build_action("rename_column_by_idx", &args),
+            Some(WmAction::RenameColumnByIdx {
+                ws_idx: 1,
+                col_idx: 2
+            })
+        );
+        // Missing args → not built (both indices are required).
+        assert_eq!(
+            build_action("rename_column_by_idx", &std::collections::HashMap::new()),
+            None
         );
     }
 }
