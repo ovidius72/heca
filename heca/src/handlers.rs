@@ -185,10 +185,26 @@ pub fn handle_zoom_column(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
-/// Open the focused pane's context menu (keyboard / RPC entry) at the last cursor position.
-/// Reuses the mouse-side builder; the right-click path opens it directly at the click.
+/// Open the context menu for the active context (keyboard / RPC entry, `prefix+>`).
+///
+/// When a `pending_context` was stashed by the sidebar prefix arm (context-menu-7), it is
+/// consumed here — the menu opens for the sidebar item that was selected when the prefix was
+/// pressed, and `overlay_origin_mode` is set so the user returns to `SidebarNav` after close.
+/// Otherwise falls back to the focused content pane (Normal mode).
 pub fn handle_open_context_menu(state: &mut AppState, _action: &WmAction) {
-    crate::mouse::open_focused_context_menu(state);
+    if let Some(pending) = state.pending_context.take() {
+        let (cx, cy) = crate::mouse::window_center_logical(state);
+        crate::chrome::open_context_menu_for(
+            state,
+            &pending.path.0,
+            pending.target,
+            heca_core::layout::Point::new(cx as f64, cy as f64),
+            crate::app::interaction::InteractionSource::Keyboard,
+            pending.origin,
+        );
+    } else {
+        crate::mouse::open_focused_context_menu(state);
+    }
 }
 
 /// Pan the horizontal view left/right by a quarter of the viewport, to reach
@@ -849,22 +865,133 @@ pub fn handle_move_pane_to_column_pick(state: &mut AppState, _action: &WmAction)
     }
 }
 
-pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
-    if let Some(pane_id) = focused_pane_id(state) {
-        // Seed with the existing custom name (so editing a rename keeps it); empty when
-        // the pane is still tracking the process name.
-        let current_name = state
-            .session
-            .active_workspace()
-            .and_then(|ws| ws.find_pane(pane_id))
-            .and_then(|p| p.custom_name.clone())
-            .unwrap_or_default();
-        state.input_mode = InputMode::Rename {
-            target: RenameTarget::Pane(pane_id),
-            buffer: current_name,
-        };
-        state.needs_redraw = true;
+/// Apply a rename to `target`: an empty `new_name` clears the custom override (the item goes
+/// back to its default / process-tracked name). Searches all workspaces so a by-id pane rename
+/// works regardless of the active workspace.
+fn apply_rename(state: &mut AppState, target: RenameTarget, new_name: String) {
+    let name = (!new_name.is_empty()).then_some(new_name);
+    match target {
+        RenameTarget::Workspace(ws_idx) => {
+            if let Some(ws) = state.session.workspaces.get_mut(ws_idx) {
+                ws.name = name;
+            }
+        }
+        RenameTarget::Column { ws_idx, col_idx } => {
+            if let Some(col) = state
+                .session
+                .workspaces
+                .get_mut(ws_idx)
+                .and_then(|ws| ws.scrolling.columns.get_mut(col_idx))
+            {
+                col.name = name;
+            }
+        }
+        RenameTarget::Pane(pane_id) => {
+            if let Some(pane) = state
+                .session
+                .workspaces
+                .iter_mut()
+                .find_map(|ws| ws.find_pane_mut(pane_id))
+            {
+                pane.custom_name = name;
+            }
+        }
     }
+    after_metadata_change(state);
+    state.needs_redraw = true;
+}
+
+/// Open the rename dialog for `target`, pre-filled with `current_name`. A host-owned modal
+/// (`OverlayHost::open_modal`) with a single `Input` field (bound to the `"name"` form field)
+/// and **OK / Cancel** buttons; the `Dialog` owns focus/keyboard (Tab / Shift+Tab between the
+/// field and buttons, Enter submits, Esc cancels). On OK the new name is applied via
+/// [`apply_rename`]; Cancel / Esc leaves the item unchanged. Replaces the old bottom-bar
+/// `InputMode::Rename` flow.
+fn open_rename_dialog(state: &mut AppState, target: RenameTarget, current_name: String) {
+    use crate::chrome::{PropValue, ViewNode, WidgetKind};
+    // Restore the originating mode (e.g. SidebarNav) after the dialog closes: capture it here
+    // (unless a caller — the keyboard path — already stashed it from the pending context) so the
+    // rename dialog participates in the same mode-restore as the context menu.
+    if state.overlay_origin_mode.is_none() && matches!(state.input_mode, InputMode::SidebarNav) {
+        state.overlay_origin_mode = Some(InputMode::SidebarNav);
+    }
+    let title = match target {
+        RenameTarget::Pane(_) => "Rename pane",
+        RenameTarget::Column { .. } => "Rename column",
+        RenameTarget::Workspace(_) => "Rename workspace",
+    };
+    let body = ViewNode::new(WidgetKind::Input)
+        .text(current_name)
+        .prop("name", PropValue::Text("name".into()));
+    let spec = crate::chrome::ModalSpec {
+        title: title.to_string(),
+        body,
+        actions: vec![
+            // OK is disabled while the name field is blank — submission cannot be blank.
+            crate::chrome::ModalAction::new("ok", "OK").disabled_when_empty("name"),
+            crate::chrome::ModalAction::new("cancel", "Cancel"),
+        ],
+        danger: false,
+        dismissible: true,
+    };
+    crate::chrome::open_modal(state, spec, move |state, _registry, result| {
+        if let crate::chrome::ModalResult::Action { id, data } = result
+            && id == "ok"
+        {
+            let name = data
+                .get("name")
+                .and_then(PropValue::as_text)
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            // Submission cannot be blank — a blank OK leaves the item's name unchanged.
+            if !name.is_empty() {
+                apply_rename(state, target, name);
+            }
+        }
+    });
+}
+
+/// Open the rename dialog for a pane, pre-filled with its current custom name (empty when it
+/// is still tracking the process name). Shared by the focused-pane, by-id, and sidebar-targeted
+/// rename entry points.
+fn enter_pane_rename(state: &mut AppState, pane_id: PaneId) {
+    // Prefill with the pane's **custom** name only — a pane that merely tracks its process name
+    // renames from *blank* (the process name is not the pane's name; it's shown as a separate
+    // label). Editing an existing custom name keeps it.
+    let current_name = state
+        .session
+        .workspaces
+        .iter()
+        .find_map(|ws| ws.find_pane(pane_id))
+        .and_then(|p| p.custom_name.clone())
+        .unwrap_or_default();
+    open_rename_dialog(state, RenameTarget::Pane(pane_id), current_name);
+}
+
+pub fn handle_rename_pane(state: &mut AppState, _action: &WmAction) {
+    // Sidebar-aware: a `prefix+$` pressed while navigating the sidebar stashes the cursor
+    // context (context-menu-7); rename that pane. Otherwise rename the focused pane.
+    let pending = state.pending_context.take();
+    // Preserve the originating mode (SidebarNav) so the rename dialog restores it on close.
+    if let Some(origin) = pending.as_ref().and_then(|p| p.origin.clone()) {
+        state.overlay_origin_mode = Some(origin);
+    }
+    let pane_id = pending
+        .and_then(|p| p.target.pane_id())
+        .or_else(|| focused_pane_id(state));
+    if let Some(pane_id) = pane_id {
+        enter_pane_rename(state, pane_id);
+    }
+}
+
+/// Enter rename mode for a specific pane by id — the context-menu / RPC entry point
+/// (`RenamePaneById`), which carries its target explicitly rather than using the focused pane.
+pub fn handle_rename_pane_by_id(state: &mut AppState, action: &WmAction) {
+    let WmAction::RenamePaneById { pane_id } = action else {
+        return;
+    };
+    enter_pane_rename(state, *pane_id);
 }
 
 pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
@@ -875,13 +1002,13 @@ pub fn handle_rename_column(state: &mut AppState, _action: &WmAction) {
             .scrolling
             .columns
             .get(col_idx)
-            .and_then(|col| col.name.clone())
+            .map(|col| {
+                col.name
+                    .clone()
+                    .unwrap_or_else(|| format!("Column {}", col_idx + 1))
+            })
             .unwrap_or_default();
-        state.input_mode = InputMode::Rename {
-            target: RenameTarget::Column { ws_idx, col_idx },
-            buffer: current_name,
-        };
-        state.needs_redraw = true;
+        open_rename_dialog(state, RenameTarget::Column { ws_idx, col_idx }, current_name);
     }
 }
 
@@ -1260,18 +1387,47 @@ pub fn handle_create_workspace(state: &mut AppState, _action: &WmAction) {
     after_layout_change(state);
 }
 
-pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
-    let ws_idx = state.session.active_workspace_idx;
+/// Open the rename dialog for workspace `ws_idx`, pre-filled with its current name. Shared by
+/// the active-workspace, by-index, and sidebar-targeted rename entry points.
+fn enter_workspace_rename(state: &mut AppState, ws_idx: usize) {
+    // Prefill with the workspace's **displayed** label — its explicit `name` if set, otherwise the
+    // computed default `Workspace N` (there is no separate "process" concept for a workspace, so the
+    // shown label is what you edit). NB: the default label is not stored in `AppState`; `ws.name`
+    // stays `None` until you rename, which is why prefilling only `ws.name` would show blank.
     let current_name = state
         .session
-        .active_workspace()
-        .and_then(|ws| ws.name.clone())
+        .workspaces
+        .get(ws_idx)
+        .map(|ws| {
+            ws.name
+                .clone()
+                .unwrap_or_else(|| format!("Workspace {}", ws_idx + 1))
+        })
         .unwrap_or_default();
-    state.input_mode = InputMode::Rename {
-        target: RenameTarget::Workspace(ws_idx),
-        buffer: current_name,
+    open_rename_dialog(state, RenameTarget::Workspace(ws_idx), current_name);
+}
+
+pub fn handle_rename_workspace(state: &mut AppState, _action: &WmAction) {
+    // Sidebar-aware: `prefix+Shift+w` while navigating the sidebar renames the cursor's
+    // workspace; otherwise the active workspace.
+    let pending = state.pending_context.take();
+    // Preserve the originating mode (SidebarNav) so the rename dialog restores it on close.
+    if let Some(origin) = pending.as_ref().and_then(|p| p.origin.clone()) {
+        state.overlay_origin_mode = Some(origin);
+    }
+    let ws_idx = pending
+        .and_then(|p| p.target.ws_idx(state))
+        .unwrap_or(state.session.active_workspace_idx);
+    enter_workspace_rename(state, ws_idx);
+}
+
+/// Enter rename mode for a specific workspace by index — the context-menu / RPC entry point
+/// (`RenameWorkspaceByIdx`), which carries its target explicitly rather than using the active one.
+pub fn handle_rename_workspace_by_idx(state: &mut AppState, action: &WmAction) {
+    let WmAction::RenameWorkspaceByIdx { ws_idx } = action else {
+        return;
     };
-    state.needs_redraw = true;
+    enter_workspace_rename(state, *ws_idx);
 }
 
 // ── Sidebar / Chrome ──

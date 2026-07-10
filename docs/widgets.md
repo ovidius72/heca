@@ -704,10 +704,17 @@ mouse/keyboard selection + editing model. Focusable.
 
 - **Construct**: `Input::new()`.
 - **Builders**: `.value(text)` (initial), `.placeholder(text)`, `.font_size(f32)` (else inherits;
-  field height tracks the font), `.on_change(impl Fn(Action))`.
-- **Accessors**: `.text() -> Signal<String>`, `.value_str() -> String`,
-  `.selection() -> Option<(usize,usize)>`, `.selected_text() -> Option<String>`.
+  field height tracks the font), `.on_change(impl Fn(Action))`. Plus the shared `LayoutExt`:
+  `.disabled(bool)` (dims + inert + unfocusable), `.tab_index(i32)`, `.width/.height`.
+- **Accessors / mutators**: `.text() -> Signal<String>`, `.value_str() -> String`,
+  `.set_value(text)` (replace the content imperatively), `.selection() -> Option<(usize,usize)>`,
+  `.selected_text() -> Option<String>`.
 - **Emits**: `"input-change"` / `SignalData::String` (the full new text) on every edit.
+
+> **Focus + keys come from the container.** The Input consumes keys **only when focused** and the
+> host delivers them (e.g. a [`FocusManager`](#), or a [`Dialog`](#dialog) which routes keys
+> **field-first**). It reads modifiers from the broadcast `Event::ModifiersChanged`, so put an Input
+> in a Dialog body and it types + selects with the full model below — **no re-declaration**.
 
 **Keyboard model** (modifier = Ctrl on Win/Linux, Option/Alt or Cmd on macOS, as noted):
 
@@ -728,6 +735,23 @@ mouse/keyboard selection + editing model. Focusable.
 ```rust
 let name = Input::new().placeholder("CALLSIGN")
     .on_change(|a| { if let SignalData::String(s) = a.data { store(s); } });
+```
+
+**From a plugin (`ViewNode`).** Declare an input in a modal / panel body; the host `realize`s it to
+this widget and owns styling + the whole keyboard model above. Supported props / events:
+
+| Prop / event | Meaning |
+|---|---|
+| `.text(s)` (`"text"` prop) | initial value |
+| `.prop("name", PropValue::Text("field".into()))` | opts the field into **form submission** — its live value is returned in `ModalResult::Action.data["field"]` when the overlay is submitted |
+| `.on("change", Intent)` | intent dispatched (with the new text) on every edit |
+
+```rust
+// A rename field inside a modal body — pre-filled + submitted under "name".
+ViewNode::new(WidgetKind::Input)
+    .text(current_name)
+    .prop("name", PropValue::Text("name".into()))
+    .on("change", Intent::new("plugin.rename.changed"));
 ```
 
 ### Tabs
@@ -1002,7 +1026,10 @@ A bordered metadata chip — git branch / path / filter, hue-configurable and do
 
 - **Construct**: `Tag::new(label)`.
 - **Builders**: `.leading(impl Component)` (e.g. an `Icon`), `.segment(impl Component)` /
-  `.segment_text(label, Option<leading>)` (add a divided segment), `.color(Color)` (hue).
+  `.segment_text(label, Option<leading>)` (add a divided segment), `.append_to_segment(idx, impl
+  Component)` (append **inside** an existing segment — no new segment, no divider — e.g. a small
+  dimmed suffix next to a label, as the pane info bar does for a renamed pane's `(process)` label),
+  `.color(Color)` (hue).
 
 ```rust
 Tag::new("main").leading(Icon::new(Glyph::GitBranch).size(13.0))
@@ -1161,6 +1188,36 @@ let cell = KeyHint::new(RailCell::new(icon).on_activate(/* … */))
 // during a pick the host sets pick.set(Some("a".into())); clears it on exit
 ```
 
+#### Standalone keycap — `paint_keycap` / `keycap_size` / `KeycapVariant`
+
+The keycap chip is factored out of `KeyHint` so it can be stamped directly into a
+scene over targets that are **not** widgets (terminal hyperlink spans, via the host's
+overlay pass) or reused by other overlays (the **context-menu** quick-pick). This is the
+**single source** for the chip metric + visual — never re-derive keycap padding/sizing.
+
+- `keycap_size(font: f32, text: &str) -> Size` — the exact chip size `KeyHint` uses.
+- `paint_keycap(cx, cap, text, font, color: Option<Color>, variant: KeycapVariant)` —
+  paints the chip: opaque glowing base + accent tint + centered dark glyph. `color`
+  overrides the theme `accent` (fill + glow); the caller picks a **variant**, the
+  primitive owns all styling (theme tokens only, no hardcoded values):
+  - `KeycapVariant::Filled` — solid glowing chip. The default hint/pick look stamped
+    over arbitrary content, where it must stay legible against whatever is beneath it.
+  - `KeycapVariant::Bordered` — an **outline-only** chip: **no fill** (empty interior) + a
+    **full-strength accent border** (the `color`/`accent` at full alpha, so it reads as the theme
+    accent, not a washed tint), **no glow**, accent glyph. Matches the showcase KeyHint (which has
+    no background). For keycaps on an already-dark, host-owned surface (e.g. the
+    [ContextMenu](#contextmenu) quick-pick inside the menu panel). The [ContextMenu](#contextmenu)
+    draws its letter at a **sub-font scale** so the chip stays compact.
+
+```rust
+let cap = Rectangle::new(Point::new(x, y), keycap_size(font, "a"));
+paint_keycap(cx, cap, "a", font, None, KeycapVariant::Filled);   // over content
+paint_keycap(cx, cap, "a", font, Some(accent), KeycapVariant::Bordered); // on a panel
+```
+
+**Plugins** never call this directly — a plugin widget with an `on_press` intent is
+auto-hintable and the host stamps the keycap for it.
+
 ### Tooltip
 
 A transparent wrapper that reveals a floating label when the pointer rests over its child past a
@@ -1270,11 +1327,22 @@ universal hint picker (`prefix+/`), standard focus traversal, and pointer routin
 this is what makes an overlay's buttons hintable.
 
 Same overlay contract as `Modal`: `overlay_active` + `focusable` only while open, so the host
-routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree —
-Tab / ← / → move focus among the buttons, **Enter/Space** activate the focused one (firing its
-`on_click`), and **Esc** or a **scrim** click fire the `on_dismiss` callback. Unlike `Modal`,
-`Dialog` carries no result closures: a button's own `on_click` is the action, and dismissal is a
-callback the host points at its overlay-close path (e.g. emit `CloseOverlay`).
+routes input here first. Keyboard is an embedded [`FocusManager`](#) over the panel subtree with
+the **universal focus-nav set** — **Tab / Shift+Tab**, the **arrow keys** (`→`/`↓` next, `←`/`↑`
+prev), and **Ctrl+h/k** (prev) **/ Ctrl+l/j** (next) all move focus among the body field(s) and
+buttons; **Enter/Space** activate the focused one (firing its `on_click`), and **Esc** or a
+**scrim** click fire the `on_dismiss` callback. (Modifiers are read from host-broadcast state, so
+Shift+Tab / Ctrl-motion work without any host special-casing.) Unlike `Modal`, `Dialog` carries no
+result closures: a button's own `on_click` is the action, and dismissal is a callback the host
+points at its overlay-close path (e.g. emit `CloseOverlay`).
+
+**Form bodies (text input).** Keys are routed **field-first**: Esc, Tab/Shift+Tab and Ctrl-motion
+are owned by the dialog, but every other key is handed to the **focused descendant first** — so a
+[`Input`](#input) body (or a `realize`d `ViewNode` form) receives typed characters and caret motion
+normally. Only a key the field *doesn't* consume falls back to container behaviour: **Enter** from a
+text field submits the **primary** (first) action button — so Enter = OK / confirm even while typing
+— and the arrow keys move focus between the field and the buttons. This is what makes the host-owned
+rename / prompt dialogs (an `Input` + OK/Cancel) work.
 
 Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with `Justify::Center`
 + `Align::Center`, so every descendant gets true bounds (which the hint picker + hit-testing need).
@@ -1283,8 +1351,9 @@ Centering is real taffy layout: the root fills the viewport (`Pct(1.0)`²) with 
   (a wired `Button`), in that order. Buttons sit in a right-aligned row in call order.
 - **Builders**: `.dismissible(bool)` (default `true`; `false` = forced-decision — Esc/scrim
   swallowed without dismissing), `.on_dismiss(impl Fn())` (fired on Esc/scrim), `.open(bool)`
-  (focuses the first focusable — order `[Cancel, …]` for a safe default), plus `.body_boxed(Box<dyn Component>)`
-  for a body from a mapper (e.g. `realize`).
+  (focuses the first focusable — a text field body if present, so the user types immediately;
+  otherwise the first button as a safe default), plus `.body_boxed(Box<dyn Component>)` for a body
+  from a mapper (e.g. `realize`).
 - **Accessor**: `.open_signal() -> Signal<bool>`.
 
 ```rust
@@ -1296,14 +1365,16 @@ let dialog = Dialog::new("Delete pane?")
     .open(true);
 ```
 
-> **Self-contained** — the host does nothing modal-specific. While a `Dialog` is up the host
-> just forwards pointer + key + `ModifiersChanged` events to it (the same generic overlay
-> routing every widget uses); `Dialog::event` owns **Tab / Shift+Tab / ← → / Ctrl+h·l / Enter /
-> Space / Esc** itself (reading the tracked modifiers for Shift+Tab and Ctrl+h·l), and swallows
-> the rest. Dismissal + activation flow out as callbacks — in `heca` the buttons emit
-> `SubmitOverlay` and `on_dismiss` emits `CloseOverlay`, so one intent path resolves the overlay
-> for click, KeyHint pick, and RPC alike. The developer only lists buttons; nav, tooltips, and
-> KeyHint targets come from the widget + the centralized button path.
+> **Self-contained** — the host does nothing modal-specific. While a `Dialog` is up the host just
+> forwards pointer + key + `ModifiersChanged` events to it (the same generic overlay routing every
+> widget uses). `Dialog::event` owns only **Esc** (cancel) and **Tab / Shift+Tab** (focus); every
+> other key is routed **field-first** to the focused descendant, and only keys it doesn't consume
+> fall back to container nav (**Enter** → primary action, **↑ ↓ ← →** move focus, **Ctrl+h/j/k/l**
+> move focus). So a focused `Input` body keeps its entire keyboard model (typing, Ctrl+h delete,
+> Cmd/Ctrl+A select-all, caret motion) untouched — no re-declaration. Dismissal + activation flow out
+> as callbacks — in `heca` the buttons emit `SubmitOverlay` and `on_dismiss` emits `CloseOverlay`, so
+> one intent path resolves the overlay for click, KeyHint pick, and RPC alike. The developer only
+> lists buttons; nav, tooltips, and KeyHint targets come from the widget + the centralized button path.
 
 #### Declaring a modal from data — host code **and** plugins
 
@@ -1316,6 +1387,11 @@ outcome as `ModalResult::Action { id, data }` (or `Dismissed`).
 The **body is any `ViewNode` tree** (labels, inputs, rows, cards…), so a modal can carry a form.
 A value node opts into the returned `data` with a **`"name"` prop** — on submit the host collects
 its current value under that name (`Input` → `Text`, `Toggle`/`Checkbox` → `Bool`).
+
+**Validation — disable submit until a field is filled.** A `ModalAction` can be
+`.disabled_when_empty("field")`: the host binds that button's `disabled` state to the named text
+field's live value, so it greys out (and Enter / click do nothing) while the field is empty
+(trimmed). This is how the rename dialog blocks a blank name — no per-modal validation code.
 
 **Internal code** (a native handler; behaviour via a Rust completion closure):
 ```rust
@@ -1333,7 +1409,7 @@ open_modal(
             ),
         actions: vec![
             ModalAction::new("cancel", "Cancel"),
-            ModalAction::new("ok", "Rename"),
+            ModalAction::new("ok", "Rename").disabled_when_empty("name"), // OK greys out while blank
         ],
         danger: false,
         dismissible: true,
@@ -1389,8 +1465,10 @@ let open = palette.open_signal();
 
 A **cursor-anchored action menu** overlay — the pointer counterpart to the keyboard pick flows
 (same input-capturing contract as `CommandPalette`/`Modal`). A floating list of entries, each with
-an optional **icon**, an optional **quick-pick keycap** (a `KeyHint`-style cap; press the letter to
-run), an optional textual shortcut hint, a `danger` flag (destructive entries render red), and an
+an optional **icon**, an optional **quick-pick keycap** (the shared
+[`paint_keycap`](#standalone-keycap--paint_keycap--keycap_size--keycapvariant) primitive in its
+`Bordered` variant — press the letter to run; never hand-drawn), an optional textual shortcut hint,
+a `danger` flag (destructive entries render red), and an
 `enabled` flag. Open/close **and the anchor point** are host-owned signals — right-click detection
 lives at the app level (grid-ui pointer events carry no button), so the host sets the anchor to the
 cursor and flips `open`. The panel sizes to its content and flips/clamps to stay on-screen.
@@ -1416,14 +1494,29 @@ let (open, anchor) = (menu.open_signal(), menu.anchor_signal());
 > Same host wiring as `Modal`/`CommandPalette` (route keys to the overlay). The app decides *when*
 > (right-click) and *where* (cursor) to open it; the widget renders + captures input while open.
 
-> **Declaring from data — host + plugins (in progress).** As with the modal (`open_modal`), the
-> plugin-facing path is a **data spec** the host owns, not hand-built entries: `OverlayHost::
-> open_dropdown(DropdownSpec { anchor, items })` where each item is `{ id, label, action, danger,
-> enabled }` — entries carry an **`Intent`** (not a closure) and their **icon resolves from the
-> action registry** (`ActionCatalog::icon`), so a menu is declarable from native code **and** from a
-> plugin, and selecting an entry dispatches its action through the central confirm gate. Tracked as
-> the `context-menu` phase; `on_dismiss` above is the widget hook `open_dropdown` wires to
-> `CloseOverlay`.
+> **Declaring from data — host + plugins (shipped, `context-menu` phase).** The preferred path is a
+> **data spec** the host owns, not hand-built closures: `OverlayHost::open_dropdown(DropdownSpec {
+> anchor, entries, centered })`, where each `MenuEntrySpec { id, label, action, danger, enabled }`
+> carries an **`Intent`/`WmAction`** (not a closure) and its **icon resolves from the action
+> registry** (`ActionCatalog::icon`). The host realizes the entries into this widget, injects the
+> `SubmitOverlay{overlay,id}` intent + a KeyHint target + the host-assigned quick-pick letter, pushes
+> it as an Overlay-band **modal layer**, and on select dispatches the action **through the central
+> confirm gate**. `centered = true` centers the panel on the anchor (keyboard-opened menus). Dismiss →
+> `CloseOverlay` (the `on_dismiss` hook above).
+
+> **Context-aware content (`ContextMenuRegistry`).** Which entries appear is resolved from **where**
+> the menu is opened: a dotted **`ContextPath`** (`"pane"`, `"sidebar.pane"`, `"sidebar.column"`,
+> `"sidebar.workspace"`, plugin paths) + an opaque **`ContextTarget"`**. The host resolves the path
+> from the click / keyboard focus (`resolve_active_context`), looks up all providers registered for
+> it, and **merges** them ordered by a Dewey `weight: Vec<i64>` — so a plugin inserts entries between
+> built-ins. Same menu widget; different content per context.
+>
+> **From a plugin.** A plugin never draws the menu — it either attaches entries declaratively on a
+> `ViewNode` (`.on_context([ item("restart","Restart"), … ])`), or registers a
+> `Contribution::ContextMenu { context_path, weight, build(target) -> Vec<MenuEntrySpec> }`. On
+> right-click / keyboard-open the host opens the (merged) menu, owns z-order / focus / Esc /
+> click-outside, and returns the chosen entry as an **intent**. See
+> **[plugin-authoring.md](plugin-authoring.md) → "Context menus & KeyHint"**.
 
 > **Shortcut text (`.shortcut(...)`):** don't hand-format keybindings. The app renders the tmux-style
 > `prefix` as a symbol (`λ`) while keeping `prefix` as the config/parse token, via the single helper

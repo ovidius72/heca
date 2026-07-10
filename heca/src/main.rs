@@ -137,6 +137,8 @@ impl HecaApp {
             state.mouse_enabled = self.app_config.config.settings.mouse;
             state.auto_scroll_edge = self.app_config.config.settings.auto_scroll_edge;
             state.shell_integration_enabled = self.app_config.config.settings.shell_integration;
+            state.pane_renamed_add_process_name =
+                self.app_config.config.settings.pane_renamed_add_process_name;
             state.terminal_scrollback_lines =
                 self.app_config.config.settings.terminal_scrollback_lines;
             state.terminal_mouse_enabled = self.app_config.config.settings.terminal_mouse;

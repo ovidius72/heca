@@ -472,10 +472,18 @@ pub fn build_registry() -> ActionRegistry {
         },
         handle_rename_target,
     );
+    registry.register(
+        &WmAction::RenamePaneById { pane_id: PaneId(0) },
+        handle_rename_pane_by_id,
+    );
 
     // ── Workspace ──
     registry.register(&WmAction::CreateWorkspace, handle_create_workspace);
     registry.register(&WmAction::RenameWorkspace, handle_rename_workspace);
+    registry.register(
+        &WmAction::RenameWorkspaceByIdx { ws_idx: 0 },
+        handle_rename_workspace_by_idx,
+    );
 
     // ── Sidebar / Chrome ──
     registry.register(&WmAction::SidebarLeft, handle_sidebar_left);

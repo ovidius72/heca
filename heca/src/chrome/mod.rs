@@ -4,6 +4,7 @@
 //! that were previously scattered as magic numbers across the codebase.
 
 mod contribution;
+mod context_menu;
 mod events;
 mod host;
 mod layers;
@@ -31,6 +32,14 @@ pub use overlay::OverlayId;
 pub(crate) use overlay::{
     collect_form as collect_overlay_form, open_dropdown, open_modal, resolve as resolve_overlay,
     top_modal, DropdownItem, DropdownSpec, ModalAction, ModalResult, ModalSpec, OverlayHost,
+};
+// Context-menu resolution: ContextPath + ContextTarget + ContextMenuRegistry + the unified
+// `open_context_menu_for`. Built-in providers seeded at startup; plugins attach via
+// `Contribution::ContextMenu` (context-menu-5).
+#[allow(unused_imports)]
+pub(crate) use context_menu::{
+    open_context_menu_for, resolve_active_context, ContextMenuProvider, ContextMenuRegistry,
+    ContextPath, ContextTarget, PendingContext,
 };
 pub use contribution::{Contribution, RegionSet};
 pub use events::{ChromeEvent, ChromeEventBus, ChromeSubscription, RegionId, SidebarSelection};
@@ -160,7 +169,15 @@ use std::rc::Rc;
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PaneInfoView {
     icon: Glyph,
+    /// Custom name if set, else the program name — the sidebar card's label.
     title: String,
+    /// The program/application name (always the process, never the rename) — the info-bar
+    /// `AppName` segment shows this, so renaming a pane doesn't hide what's running in it.
+    app_name: String,
+    /// The process/program name shown as a small dimmed label *next to* a custom name (e.g.
+    /// `(nvim)`). `Some` only when the pane has a custom name and `pane_renamed_add_process_name`
+    /// is on — a pane that merely tracks its process has the process name *as* its title already.
+    process_hint: Option<String>,
     status: ProcessStatus,
     git_branch: Option<String>,
     git_added: Option<String>,
@@ -207,6 +224,7 @@ fn pane_info_view(
     fallback_name: &str,
     custom_name: Option<&str>,
     runtime: Option<&PaneRuntime>,
+    add_process_name: bool,
 ) -> PaneInfoView {
     let raw = runtime
         .and_then(|pane| pane.program.as_deref())
@@ -214,15 +232,22 @@ fn pane_info_view(
         .unwrap_or(fallback_name);
     let program = programs.resolve(raw);
     let git = runtime.and_then(|pane| pane.git.as_ref());
-    // A user-set custom name wins over the process-derived program name; the icon
-    // still tracks the running program.
-    let title = match custom_name {
-        Some(name) if !name.is_empty() => name.to_string(),
-        _ => program.name.into_owned(),
+    let program_name = program.name.to_string();
+    // A user-set custom name wins over the process-derived program name; the icon still tracks
+    // the running program. When the pane has a custom name (and the setting is on), the program
+    // name is surfaced separately as `process_hint` (a small dimmed label next to the name).
+    let has_custom = custom_name.is_some_and(|name| !name.is_empty());
+    let title = if has_custom {
+        custom_name.unwrap_or_default().to_string()
+    } else {
+        program_name.clone()
     };
+    let process_hint = (has_custom && add_process_name).then(|| program_name.clone());
     PaneInfoView {
         icon: program_glyph(program.icon),
         title,
+        app_name: program_name,
+        process_hint,
         status: runtime
             .map(|pane| pane.status.clone())
             .unwrap_or(ProcessStatus::Idle),
@@ -286,10 +311,11 @@ pub(crate) fn build_pane_info_bar(
     theme: &GuiTheme,
     max_width: f32,
     font: f32,
+    add_process_name: bool,
 ) -> Option<Tag> {
     use heca_config::appearance::PaneSegment;
 
-    let view = pane_info_view(programs, fallback_name, custom_name, runtime);
+    let view = pane_info_view(programs, fallback_name, custom_name, runtime, add_process_name);
     let git = runtime.and_then(|pane| pane.git.as_ref());
 
     // Collect the produced (icon, text) segments, noting the location (the long,
@@ -305,7 +331,7 @@ pub(crate) fn build_pane_info_bar(
                 }
                 None => continue,
             },
-            PaneSegment::AppName => (view.icon, view.title.clone()),
+            PaneSegment::AppName => (view.icon, view.app_name.clone()),
             PaneSegment::GitBranch => match git.and_then(|info| info.branch.clone()) {
                 Some(branch) => (Glyph::GitBranch, branch),
                 None => continue,
@@ -536,6 +562,9 @@ pub(crate) struct PaneHeaderContent<'a> {
     pub(crate) fallback_name: &'a str,
     /// User-set override name (wins over the process-derived title), if any.
     pub(crate) custom_name: Option<&'a str>,
+    /// Append the process/program name as a small dimmed label next to a custom name
+    /// (`[settings] pane_renamed_add_process_name`).
+    pub(crate) add_process_name: bool,
     pub(crate) runtime: Option<&'a PaneRuntime>,
     pub(crate) segments: &'a [heca_config::appearance::PaneSegment],
     pub(crate) actions: &'a [heca_config::appearance::PaneAction],
@@ -642,6 +671,7 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         content.fallback_name,
         content.custom_name,
         content.runtime,
+        content.add_process_name,
     );
     let cwd = content
         .runtime
@@ -657,9 +687,10 @@ pub(crate) fn pane_header_key(content: &PaneHeaderContent, font: f32, avail_w: f
         .map(|&a| content.shortcuts.get(pane_action_name(a)).unwrap_or(""))
         .collect();
     format!(
-        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
+        "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{}|{}|{}|{:?}",
         view.icon,
         view.title,
+        view.process_hint,
         view.status,
         view.git_branch,
         view.git_added,
@@ -781,6 +812,7 @@ pub(crate) fn build_pane_header(
         theme,
         bar_max,
         font,
+        content.add_process_name,
     );
 
     let root = Flex::row().width(Length::Px(avail_w)).align(Align::Center);
@@ -1048,6 +1080,7 @@ pub(crate) fn sync_pane_headers(state: &mut crate::app_state::AppState) {
             programs: &state.programs,
             fallback_name: &input.name,
             custom_name: input.custom_name.as_deref(),
+            add_process_name: state.pane_renamed_add_process_name,
             runtime: input.runtime.as_ref(),
             segments: &segments,
             actions: &actions,
@@ -1340,6 +1373,8 @@ fn pane_card(
         &pane.name,
         pane.custom_name.as_deref(),
         runtime.as_ref(),
+        // Sidebar cards show just the name; the process hint is an in-pane info-bar affordance.
+        false,
     );
     // A constant theme-driven card; the *selected* look (accent pill + border + bar)
     // is drawn by `Row` from its `active` signal, not baked into the background. This
@@ -2131,7 +2166,14 @@ pub(crate) fn paint_link_hints(
         let size = heca_grid_ui::keycap_size(LINK_HINT_FONT, &label);
         // Anchor the keycap's top-left at the link's first cell.
         let cap = Rectangle::new(Point::new(x as f64, y as f64), size);
-        heca_grid_ui::paint_keycap(&mut cx, cap, &label, LINK_HINT_FONT, None);
+        heca_grid_ui::paint_keycap(
+            &mut cx,
+            cap,
+            &label,
+            LINK_HINT_FONT,
+            None,
+            heca_grid_ui::KeycapVariant::Filled,
+        );
     }
 }
 
@@ -2341,7 +2383,14 @@ pub(crate) fn paint_hint_targets(
             (bounds.loc.x + HINT_INSET_X, bounds.loc.y + (band - size.h) / 2.0)
         };
         let cap = Rectangle::new(Point::new(x, y), size);
-        heca_grid_ui::paint_keycap(&mut cx, cap, &text, font, None);
+        heca_grid_ui::paint_keycap(
+            &mut cx,
+            cap,
+            &text,
+            font,
+            None,
+            heca_grid_ui::KeycapVariant::Filled,
+        );
     }
 }
 
@@ -2949,15 +2998,14 @@ pub(crate) fn sync_chrome_state(state: &mut crate::app_state::AppState) -> bool 
         .chrome_state
         .workspaces
         .set_active_pane(state.focused_pane);
-    // Project the sidebar-nav cursor selection into the store — but only while
-    // actually navigating (`SidebarNav`), so the nav-cursor highlight shows during
-    // navigation and clears on exit. Selection-driven: this does NOT move the real
-    // focus (`active_pane`); the expanded sidebar renders both, distinctly. The
-    // setter is a change-guarded chokepoint, so calling it every frame is cheap.
-    let nav_selection = if matches!(
-        state.input_mode,
-        crate::app_state::InputMode::SidebarNav
-    ) {
+    // Project the sidebar-nav cursor selection into the store — while actually
+    // navigating (`SidebarNav`) *or* while a context menu opened from the sidebar is up
+    // (`sidebar_nav_active`), so the nav-cursor highlight shows during navigation, stays
+    // on the target row while its menu is open, and clears on exit. Selection-driven:
+    // this does NOT move the real focus (`active_pane`); the expanded sidebar renders
+    // both, distinctly. The setter is a change-guarded chokepoint, so calling it every
+    // frame is cheap.
+    let nav_selection = if state.sidebar_nav_active() {
         sidebar_selection_from_item(state.sidebar_tree.current_item())
     } else {
         None
@@ -3121,6 +3169,8 @@ pub(crate) fn sync_chrome_signals(state: &crate::app_state::AppState) -> bool {
             pane_fallback_name(&state.sidebar_tree, *pid),
             pane_custom_name(&state.sidebar_tree, *pid),
             runtime.as_ref(),
+            // These signals drive icon/title/status only; the process hint renders in the header.
+            false,
         );
         let pane_active = active == Some(*pid);
         if sigs.icon.get_untracked() != next.icon {
@@ -4077,7 +4127,21 @@ mod tests {
             kind: ContentKind::Terminal,
         };
 
-        let view = pane_info_view(&programs, "shell", None, Some(&runtime));
+        // No custom name → title is the program name, no process hint (the title IS the process).
+        let view = pane_info_view(&programs, "shell", None, Some(&runtime), true);
+        assert_eq!(view.title, "Neovim");
+        assert_eq!(view.process_hint, None);
+
+        // Custom name + setting on → title is the custom name, hint carries the program name.
+        let view = pane_info_view(&programs, "shell", Some("Editor"), Some(&runtime), true);
+        assert_eq!(view.title, "Editor");
+        assert_eq!(view.process_hint.as_deref(), Some("Neovim"));
+        // Custom name + setting off → no hint.
+        let view = pane_info_view(&programs, "shell", Some("Editor"), Some(&runtime), false);
+        assert_eq!(view.title, "Editor");
+        assert_eq!(view.process_hint, None);
+
+        let view = pane_info_view(&programs, "shell", None, Some(&runtime), false);
 
         assert_eq!(view.icon, Glyph::FileCode);
         assert_eq!(view.title, "Neovim");
@@ -4097,7 +4161,7 @@ mod tests {
             ..PaneRuntime::default()
         };
 
-        let view = pane_info_view(&programs, "pane", None, Some(&runtime));
+        let view = pane_info_view(&programs, "pane", None, Some(&runtime), false);
 
         assert_eq!(view.icon, Glyph::Terminal);
         assert_eq!(view.title, "zsh");
@@ -4189,6 +4253,7 @@ mod tests {
                 programs,
                 fallback_name: "shell",
                 custom_name: None,
+                add_process_name: false,
                 runtime: Some(rt),
                 segments,
                 actions,

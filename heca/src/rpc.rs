@@ -357,8 +357,18 @@ pub fn parse_rpc_command(input: &str) -> Result<WmAction, RpcError> {
             })
         }
         "rename-pane" => Ok(WmAction::RenamePane),
+        "rename-pane-id" => {
+            let arg = expect_arg!("pane_id");
+            let pane_id = PaneId(parse_u64!(arg, "pane_id"));
+            Ok(WmAction::RenamePaneById { pane_id })
+        }
         "rename-column" => Ok(WmAction::RenameColumn),
         "rename-workspace" => Ok(WmAction::RenameWorkspace),
+        "rename-workspace-idx" => {
+            let arg = expect_arg!("ws_idx");
+            let ws_idx = parse_usize!(arg, "ws_idx");
+            Ok(WmAction::RenameWorkspaceByIdx { ws_idx })
+        }
         "sidebar-left" => Ok(WmAction::SidebarLeft),
         "sidebar-right" => Ok(WmAction::SidebarRight),
         // Chrome container placement (plugin-02, §2.9) — RPC parity for the moves.

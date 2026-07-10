@@ -83,7 +83,6 @@ pub(crate) fn status_mode_parts(
             pick_suffix(),
         ),
         InputMode::SidebarNav => ("SIDEBAR", String::new()),
-        InputMode::Rename { buffer, .. } => ("RENAME", format!(": {}_", buffer)),
         InputMode::Chord { sequence } => ("CHORD", format!(" w→{}", sequence.join("→"))),
         InputMode::Mode { name } => ("MODE", format!(" {} → ?", name)),
         // The confirm now lives entirely in the Modal dialog; the status bar only
@@ -985,13 +984,14 @@ pub(crate) fn render_frame(state: &mut AppState) {
             .and_then(|s| s.source_item);
         let drag_source_bg = theme.drag_source_bg.to_f32x4();
         let drag_source_border = theme.drag_source_border.to_f32x4();
+        let sidebar_nav_active = state.sidebar_nav_active();
         sidebar::render_sidebar_collapsed(
             &mut state.sidebar_tree,
             rail_x,
             rail_y,
             rail_w,
             rail_h,
-            matches!(state.input_mode, InputMode::SidebarNav),
+            sidebar_nav_active,
             theme.accent.to_f32x4(),
             theme.foreground.to_f32x4(),
             [
@@ -1282,23 +1282,12 @@ pub(crate) fn update_session_viewport(state: &mut AppState) {
 mod tests {
     use super::status_mode_parts;
     use crate::actions::ActionCatalog;
-    use crate::app_state::{InputMode, RenameTarget};
+    use crate::app_state::InputMode;
     use heca_core::layout::PaneId;
 
     #[test]
-    fn status_mode_parts_formats_rename_and_take() {
+    fn status_mode_parts_formats_take_and_confirm() {
         let catalog = ActionCatalog::with_builtins();
-        assert_eq!(
-            status_mode_parts(
-                &InputMode::Rename {
-                    target: RenameTarget::Pane(PaneId(7)),
-                    buffer: "term".to_string(),
-                },
-                &catalog
-            ),
-            ("RENAME", ": term_".to_string())
-        );
-
         assert_eq!(
             status_mode_parts(
                 &InputMode::PaneTake {

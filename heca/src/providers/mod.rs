@@ -18,8 +18,12 @@
 //! it). The first real implementation — `WorkspacesContainerProvider` — and the
 //! app-side registration land in plugin-03.
 
+mod workspaces;
+
 use crate::chrome::{ChromeEvent, ChromeSubscription, Contribution, RegionId, RegionSet};
 use crate::host::{App, StateView};
+
+pub use workspaces::WorkspacesContainerProvider;
 
 /// A built-in (later WASM-backed) contributor of chrome content.
 pub trait Provider {

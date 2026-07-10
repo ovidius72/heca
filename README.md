@@ -688,6 +688,7 @@ focus_follows_mouse = true    # Focus pane on hover
 auto_scroll_edge = true       # Auto-scroll near edges
 interactive_move_modifier = "Super"  # Modifier for drag-and-drop
 shell_integration = true      # Auto-inject OSC 133/OSC 7 shell hooks for runtime status + cwd
+pane_renamed_add_process_name = true  # Renamed pane shows its process name small, e.g. `MyPane (nvim)`
 terminal_mouse = true         # Enable host scrollback on wheel (vs forwarding to terminal)
 terminal_wheel_scroll_lines = 3  # Rows per wheel notch when scrolling host viewport
 terminal_scroll_animations = true  # Smooth animated terminal viewport jumps
@@ -836,6 +837,11 @@ left (what the pane is) and **action buttons** on the right. Both are configured
 under `[appearance.pane]` as ordered lists — order in the list is the order shown
 (left → right). An empty list hides that side; if **both** are empty the bar (and
 its reserved space) disappears entirely.
+
+When a pane is **renamed** (given a custom name), the `AppName` segment shows the
+custom name followed by the process name in a small dimmed label — e.g. `MyPane (nvim)`.
+The process label is not part of the name (it's never edited by rename); toggle it with
+`[settings] pane_renamed_add_process_name` (default `true`).
 
 ```toml
 [appearance.pane]

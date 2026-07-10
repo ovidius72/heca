@@ -33,7 +33,7 @@ pub enum SidebarItemState {
     None,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RenameTarget {
     Workspace(usize),
     Column { ws_idx: usize, col_idx: usize },
@@ -56,11 +56,6 @@ pub enum InputMode {
     },
     /// Sidebar navigation: keyboard navigation within the sidebar tree.
     SidebarNav,
-    /// Text input mode for renaming workspaces / panes.
-    Rename {
-        target: RenameTarget,
-        buffer: String,
-    },
     /// Chord sequence: multi-key binding (e.g. prefix → w → 1).
     /// `sequence` holds the keys pressed so far (after prefix).
     ///
@@ -656,6 +651,12 @@ pub struct AppState {
     pub needs_redraw: bool,
     pub focused_pane: Option<PaneId>,
     pub input_mode: InputMode,
+    /// Mode to restore when the last overlay closes (context-menu mode-restore). Set by
+    /// `chrome::context_menu::open_context_menu_for` when a context menu opens from a
+    /// non-Normal mode (e.g. `SidebarNav`); restored by `chrome::overlay::resolve` when no
+    /// overlay remains. `None` for menus opened from Normal (no-op). See
+    /// `chrome::context_menu` for the full contract.
+    pub overlay_origin_mode: Option<InputMode>,
     /// The sidebar tree model for workspace/pane tree navigation.
     pub sidebar_tree: SidebarTree,
     /// Retained grid-ui chrome tree (sidebar shell + status bar), rebuilt only when
@@ -696,6 +697,19 @@ pub struct AppState {
     /// runtime home every UI surface resolves action metadata through (see
     /// [`crate::actions::ActionCatalog`]).
     pub action_catalog: crate::actions::ActionCatalog,
+    /// Context-menu registry: built-in providers (pane + sidebar.pane/column/workspace) seeded
+    /// at startup; plugins attach via `Contribution::ContextMenu` (context-menu-5). Both the
+    /// mouse right-click and the keyboard `OpenContextMenu` resolve through it via
+    /// `chrome::context_menu::open_context_menu_for`.
+    pub context_menu_registry: crate::chrome::ContextMenuRegistry,
+    /// Carries the active sidebar target through the `Prefix` → `Normal` dispatch transition
+    /// (context-menu-7). Set by the sidebar prefix arm in `handle_sidebar_nav_mode` before the
+    /// mode transition (which normalises to `Normal`, losing `SidebarNav`); the next dispatched
+    /// action consumes it to act on the sidebar cursor item instead of the focused pane:
+    /// `handle_open_context_menu` (open the menu for it), `handle_rename_pane` /
+    /// `handle_rename_workspace` (rename it). `None` outside the sidebar; cleared on any
+    /// non-consuming prefix exit so it can never go stale.
+    pub pending_context: Option<crate::chrome::PendingContext>,
     /// Shared, signal-backed chrome/UI state (read-via-signals / write-via-actions).
     /// Owns region visibility/width (migrated from the old `SidebarState`); collapse,
     /// selection, targeting candidates, and scroll migrate onto it next.
@@ -729,6 +743,10 @@ pub struct AppState {
     pub auto_scroll_edge: bool,
     /// Whether newly spawned terminal panes should auto-inject shell integration.
     pub shell_integration_enabled: bool,
+    /// Append the process/program name (small, dimmed) next to a renamed pane's custom name
+    /// (`[settings] pane_renamed_add_process_name`). Threaded here so `sync_pane_headers` reads
+    /// it each frame and a reload rebuilds the headers.
+    pub pane_renamed_add_process_name: bool,
     /// Host terminal scrollback capacity (rows) threaded from
     /// `SettingsConfig::terminal_scrollback_lines`; used when spawning terminal
     /// backends so the engine retains the configured amount of history.
@@ -789,6 +807,15 @@ pub struct AppState {
 impl AppState {
     pub fn mark_full_redraw(&mut self) {
         self.needs_redraw = true;
+    }
+
+    /// Whether the sidebar nav cursor should be shown. True while actively navigating
+    /// (`SidebarNav`) **and** while a context menu opened *from* the sidebar is still up —
+    /// so the target row stays highlighted for the duration of the menu instead of losing
+    /// its highlight the moment the overlay takes over the input mode (context-menu-3).
+    pub fn sidebar_nav_active(&self) -> bool {
+        matches!(self.input_mode, InputMode::SidebarNav)
+            || matches!(self.overlay_origin_mode, Some(InputMode::SidebarNav))
     }
 
     /// Effective tab-bar (top bar) height: the default when shown, `0.0` when
@@ -959,9 +986,9 @@ mod tests {
     }
 
     #[test]
-    fn test_rename_target_clone() {
+    fn test_rename_target_copy() {
         let t = RenameTarget::Workspace(3);
-        let cloned = t.clone();
-        assert_eq!(t, cloned);
+        let copied = t; // RenameTarget is Copy — `t` stays usable below.
+        assert_eq!(t, copied);
     }
 }

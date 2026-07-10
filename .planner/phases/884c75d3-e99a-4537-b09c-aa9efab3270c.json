@@ -1,0 +1,50 @@
+{
+  "id": "884c75d3-e99a-4537-b09c-aa9efab3270c",
+  "featureId": "2809a7a4-6d53-4a58-b776-bac164bb5d03",
+  "number": 10,
+  "slug": "app-08-fix-nswindow-vibrancy-warning",
+  "title": "app-08: Fix NSWindow vibrancy warning",
+  "status": "planned",
+  "discussedAt": "",
+  "contextReady": false,
+  "contextReadyReason": "",
+  "summary": "Silenziare il warning macOS legato alla vibrancy.",
+  "description": "",
+  "notes": "",
+  "goals": [],
+  "nonGoals": [],
+  "dependencies": [],
+  "dependsOn": [],
+  "risks": [],
+  "openQuestions": [],
+  "decisions": [],
+  "acceptedDecisions": [],
+  "completionCriteria": [],
+  "taskIds": [
+    "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc"
+  ],
+  "tasks": [
+    {
+      "id": "2d3d768a-8fa7-4a05-9fdb-f666439f4bcc",
+      "phaseId": "884c75d3-e99a-4537-b09c-aa9efab3270c",
+      "number": 1,
+      "shortName": "fix-vibrancy-warning",
+      "title": "Fix NSWindow vibrancy console warning",
+      "status": "planned",
+      "description": "Silenziare il warning macOS sulla vibrancy.",
+      "notes": "",
+      "statusLog": [],
+      "decisions": [],
+      "acceptedDecisions": [],
+      "checklist": [],
+      "subtasks": [],
+      "dependsOn": [],
+      "startedAt": "",
+      "completedAt": "",
+      "createdAt": "2026-07-01T18:14:56.477Z",
+      "updatedAt": "2026-07-01T18:14:56.477Z"
+    }
+  ],
+  "createdAt": "2026-07-01T18:09:59.861Z",
+  "updatedAt": "2026-07-01T18:14:56.477Z"
+}

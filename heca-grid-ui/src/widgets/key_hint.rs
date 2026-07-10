@@ -72,46 +72,85 @@ pub fn keycap_size(font: f32, text: &str) -> Size {
     Size::new(w, h)
 }
 
-/// Paint a standalone keycap — translucent glowing chip with a centered dark
-/// glyph — at `cap` with `text`. The shared hint visual, factored out of
-/// [`KeyHint`] so it can be stamped directly into a scene over targets that are
-/// not widgets (e.g. terminal hyperlink spans, via the host's overlay pass).
-/// `color` overrides the default theme `accent` for both fill and glow.
-pub fn paint_keycap(cx: &mut PaintCx, cap: Rectangle, text: &str, font: f32, color: Option<Color>) {
+/// Visual style of a keycap chip painted by [`paint_keycap`]. The caller picks a
+/// semantic variant; [`paint_keycap`] owns the styling (all values from the theme).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KeycapVariant {
+    /// Solid glowing chip — opaque base + accent tint + dark glyph. The default
+    /// hint/pick look, stamped over arbitrary content (terminal hyperlink spans,
+    /// pick targets), where the chip must stay legible against whatever is beneath
+    /// it.
+    #[default]
+    Filled,
+    /// A quiet [`Tag`](super::Tag)-style chip: subtle fill + accent border, **no glow**,
+    /// accent glyph. For keycaps shown on an already dark, host-owned surface (e.g. the
+    /// context-menu quick-pick inside the menu panel) where a glowing halo would be too
+    /// heavy and a crisp outline reads better.
+    Bordered,
+}
+
+/// Paint a standalone keycap — a glowing chip with a centered dark glyph — at `cap`
+/// with `text`. The shared hint visual, factored out of [`KeyHint`] so it can be
+/// stamped directly into a scene over targets that are not widgets (e.g. terminal
+/// hyperlink spans, via the host's overlay pass) or reused by other overlays (the
+/// context-menu quick-pick). `color` overrides the default theme `accent` for both
+/// fill and glow; `variant` picks [`KeycapVariant::Filled`] (content overlays) or
+/// [`KeycapVariant::Bordered`] (keycaps on an owned menu/panel surface).
+pub fn paint_keycap(
+    cx: &mut PaintCx,
+    cap: Rectangle,
+    text: &str,
+    font: f32,
+    color: Option<Color>,
+    variant: KeycapVariant,
+) {
     if text.is_empty() {
         return;
     }
-    let (accent, glow_c, background, ctrl_radius) = {
+    let (accent, glow_c, background, ctrl_radius, keycap_alpha) = {
         let t = cx.theme();
-        (t.colors.accent, t.colors.glow, t.colors.background, t.colors.control_radius())
+        (
+            t.colors.accent,
+            t.colors.glow,
+            t.colors.background,
+            t.colors.control_radius(),
+            t.colors.interaction.keycap,
+        )
     };
     let keycap_c = color.unwrap_or(accent);
-    let keycap_glow = color.unwrap_or(glow_c);
     let radius = ctrl_radius.min((cap.size.h / 2.0) as f32);
-    // Opaque base (carrying the glow) so the chip never lets underlying content bleed
-    // through — a keycap stamped over an icon/glyph (e.g. a drag handle or toolbar icon)
-    // must stay legible, not show a ghost of what's beneath it. Over a dark surface this
-    // matches the old translucent look; over content it hides it.
-    cx.rect(
-        cap,
-        background,
-        None,
-        radius,
-        Some(Glow {
-            color: keycap_glow,
-            radius: 6.0,
-            intensity: KEYCAP_GLOW,
-        }),
-    );
-    // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
-    cx.rect(
-        cap,
-        keycap_c.with_alpha(cx.theme().colors.interaction.keycap),
-        None,
-        radius,
-        None,
-    );
-    cx.text(cap, text, background, font, TextAlign::Center, true);
+    match variant {
+        KeycapVariant::Filled => {
+            let keycap_glow = color.unwrap_or(glow_c);
+            // Opaque base (carrying the glow) so the chip never lets underlying content bleed
+            // through — a keycap stamped over an icon/glyph (e.g. a drag handle or toolbar icon)
+            // must stay legible, not show a ghost of what's beneath it. Over a dark surface this
+            // matches the old translucent look; over content it hides it.
+            cx.rect(
+                cap,
+                background,
+                None,
+                radius,
+                Some(Glow {
+                    color: keycap_glow,
+                    radius: 6.0,
+                    intensity: KEYCAP_GLOW,
+                }),
+            );
+            // Accent tint on top of the opaque base, then the dark bold glyph for contrast.
+            cx.rect(cap, keycap_c.with_alpha(keycap_alpha), None, radius, None);
+            cx.text(cap, text, background, font, TextAlign::Center, true);
+        }
+        KeycapVariant::Bordered => {
+            // Outline-only chip: **no fill** (empty interior) + a full-strength **accent** border
+            // (the `keycap_c` colour at full alpha, so it reads as the theme accent — not a washed
+            // tint), no glow, accent glyph. Matches the showcase KeyHint (no background). For
+            // keycaps on an already-dark owned surface (a menu panel).
+            let border = cx.border(keycap_c);
+            cx.rect(cap, Color::TRANSPARENT, border, radius, None);
+            cx.text(cap, text, keycap_c, font, TextAlign::Center, true);
+        }
+    }
 }
 
 /// A transparent wrapper that overlays a glowing key letter on its child while a
@@ -244,7 +283,7 @@ impl Component for KeyHint {
         // An explicit `.color()` overrides the default theme accent (fill + glow)
         // so a host can tint a different kind of target distinctly.
         let cap = self.keycap_rect(self.base.bounds, &text);
-        paint_keycap(cx, cap, &text, self.hint_font(), self.color);
+        paint_keycap(cx, cap, &text, self.hint_font(), self.color, KeycapVariant::Filled);
     }
 }
 

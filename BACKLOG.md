@@ -1689,7 +1689,7 @@ Source: `pluggable-chrome-plugin-plan.md` §2.6.1–2.6.2
   - Run this **last** in the plugin arc — once the widget/`realize`/overlay surface is settled, so
     the iconset is filled against the final set of consumers.
 
-### [ ] Phase: Contextual menu → OverlayHost + plugin-declarable · `context-menu`
+### [~] Phase: Contextual menu → OverlayHost + plugin-declarable · `context-menu`
 Migrate the bespoke right-click menu onto the host-owned overlay/layer stack (**Option B** —
 entries are serializable `Intent`s, not native closures), so a context menu is **declarable from
 code AND from a plugin**, KeyHint/keyboard-reachable, and consistent with the modal path. Design
@@ -1730,17 +1730,19 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   (grid-ui change → showcase + `docs/widgets.md`).
 
 **Tasks:**
-- [ ] **context-menu-1 — `DropdownSpec` + `OverlayHost::open_dropdown`** (mirror `open_modal`).
+- [x] **context-menu-1 — DONE (2026-07-08, merged #225/#226).** `DropdownSpec` + `OverlayHost::open_dropdown` (mirror `open_modal`).
   Real `DropdownSpec { anchor, entries: Vec<MenuEntrySpec> }` replacing the `OverlaySpec::Dropdown`
   placeholder (`chrome/contribution.rs`). Each `MenuEntrySpec { id, label, action, danger, enabled,
   quick_key? }`; the host realizes entries, injects the `SubmitOverlay{overlay, id}` intent + the
   action-registry icon + a KeyHint target, and pushes it as an **Overlay-band `modal=true` layer**
   (reuse `top_modal` paint + input routing; verify `top_modal_id` picks up a modal Overlay-band
   layer). Dismiss → `CloseOverlay`.
-- [ ] **context-menu-2 — grid-ui: entry widget + `ContextMenu::on_dismiss`.** Preserve
+- [x] **context-menu-2 — DONE (2026-07-08, merged #225/#226).** grid-ui entry widget + `ContextMenu::on_dismiss`. Preserve
   focused-left-border + theme glow + icon on the realized entry; add `on_dismiss` (mirrors
   `Dialog::on_dismiss`). Showcase + `docs/widgets.md`.
-- [~] **context-menu-3 — `OpenContextMenu` keyboard/RPC action + item polish.** (The earlier
+- [x] **context-menu-3 — DONE (2026-07-10, uncommitted on `feat/planner-backlog-sync`; green: heca
+  331, clippy 0).** `OpenContextMenu` keyboard/RPC action + item polish. The final REMAINING item
+  (bordered keycap) is now done — see below. (The earlier
   "more-actions button" reframe is **superseded**: a real keyboard action *is* the standard pattern —
   Menu key / Shift+F10 — and it's what justifies the in-menu quick-pick. Decision 2026-07-08.)
   - **DONE (uncommitted, green: heca 318, clippy clean):** `WmAction::OpenContextMenu` — full
@@ -1752,16 +1754,16 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   - **DONE (uncommitted):** menu items now show **only the single-letter quick-pick** (removed the
     `λ` global-binding label — redundant, and the leader can't fire while the menu is open;
     user: "only the quick pick with the border").
-  - **REMAINING:**
-    1. **Bordered keycap via the shared `paint_keycap`/`KeyHint` primitive** (add a bordered variant
-       there; make `ContextMenu` use it) — **NOT hand-drawn** in `ContextMenu::paint`. Showcase +
-       `docs/widgets.md` + rustdoc. (User: "never hardcode; create/extend reusable widgets.")
-    2. **Keyboard-open anchor → CENTER of the focused widget** (pane; sidebar item; active
-       layer/`current_index` later). Today `mouse::open_focused_context_menu` uses `mouse.pos`
-       (stopgap); reuse `content_rect`/`stable_tiled_content_rect` (`app/render.rs`).
-    3. **Default binding → `prefix+>`** (if unbound) instead of `prefix+.` (`keybindings.default.toml`
-       + `actions.rs` `default_binding`).
-  See `HANDOFF-context-menu.md` for full detail + widget references.
+  - **DONE 2026-07-09:** Keyboard-open anchor → CENTER of the app window (`mouse::open_focused_context_menu`
+    via `window_center_logical(state)` = `inner_size / scale_factor / 2`; `source: Keyboard`;
+    no "Open link" entry). Default binding changed to `prefix+>` (resolved live SidebarRight
+    conflict). `OpenContextMenu` reclassified `TiledOnly` → `FocusedPaneLocal` (works with floating
+    panes). `DropdownSpec.centered` flag + layout offset for keyboard-open centering.
+  - **DONE 2026-07-10 (bordered keycap):** `KeycapVariant::{Filled,Bordered}` added to the shared
+    `paint_keycap` (`heca-grid-ui/src/widgets/key_hint.rs`); `ContextMenu` uses `Bordered` (outline,
+    no fill, full-accent border, small `KEYCAP_FONT_SCALE`) — NOT hand-drawn. Showcase + `docs/widgets.md`
+    + rustdoc updated.
+  See `HANDOFF-context-menu.md` + `HANDOFF-pane-rename-naming.md` for full detail.
 - [x] **context-menu-4 — DONE (2026-07-08, GUI-verified in-app by the user), commit `7d031c5`.**
   Both `open_context_menu`/`open_sidebar_context_menu` (`mouse.rs`) build a `DropdownSpec` + open via
   `OverlayHost::open_dropdown` (host-owned Overlay-band modal layer). **Removed the whole bespoke
@@ -1773,28 +1775,177 @@ similar activity (see the stub phase below) — build the shared pieces here reu
   labels; adds host-assigned letter quick-picks; destructive still confirms via the central gate.
   Gate: heca 318, clippy clean. Runtime GUI check outstanding (right-click pane + sidebar, select,
   dismiss, keyboard nav, letter quick-pick).
-- [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`.** A new `Contribution`
-  variant so a plugin registers entries for a **named context** (`pane`, `sidebar_item`, …); the
-  host **merges** built-in + contributed entries when opening that context's menu. (Depends on the
-  WASM/plugin runtime for the cross-boundary case; the native contribution path can land first.)
+- [x] **context-menu-6 — DONE (2026-07-09, commit 7a7da2d).** ContextMenuRegistry + `open_context_menu_for`
+  (unified open path) + mouse refactor. New module `heca/src/chrome/context_menu.rs`:
+  `ContextPath` (dotted string, consts `PANE`/`SIDEBAR_PANE`/`SIDEBAR_COLUMN`/`SIDEBAR_WORKSPACE`),
+  `ContextTarget` enum (Pane/SidebarPane/SidebarColumn/SidebarWorkspace), `ContextMenuRegistry`
+  with 4 built-in providers (pane, sidebar.pane, sidebar.column, sidebar.workspace),
+  `open_context_menu_for(state, path, target, anchor, source, origin)` — registry lookup → merge
+  by Dewey weight → `open_dropdown`; `centered` derived from `source == Keyboard`; captures
+  `overlay_origin_mode` when `None`. `restorable_mode()` whitelist (only `SidebarNav`).
+  `overlay_origin_mode: Option<InputMode>` on AppState — captured at overlay open, restored in
+  `overlay::resolve()` when last overlay closes (before completion). Mouse refactor: all 3 menu
+  builders (`open_context_menu`, `open_focused_context_menu`, `open_sidebar_context_menu`) route
+  through `open_context_menu_for`. 5 unit tests. Clippy clean.
+- [x] **context-menu-7 — DONE (2026-07-09, commit 7a7da2d).** Keyboard context-aware menus. `prefix+>`
+  now works everywhere: pane (Normal mode) and sidebar item (SidebarNav mode). `resolve_active_context(state)`
+  reads InputMode + sidebar cursor → (ContextPath, ContextTarget). `PendingContext` struct carries
+  (path, target, origin) through the Prefix→Normal dispatch transition. Prefix arm in
+  `handle_sidebar_nav_mode` (mirrors selection mode pattern) stashes `pending_context` BEFORE
+  the transition. `handle_open_context_menu` consumes it → `open_context_menu_for` with
+  `origin=Some(SidebarNav)` → `overlay_origin_mode` captured → `overlay::resolve()` restores
+  SidebarNav on close. Mode-restore: open from sidebar → Esc/item → back in SidebarNav (not Normal).
+  Verified: cargo check + clippy clean, tests green.
+- [ ] **context-menu-5 — plugin contribution: `Contribution::ContextMenu`** (full design locked
+  2026-07-09). A new `Contribution` variant so a plugin/native provider registers entries for a
+  **named context**; the host **merges** built-in + contributed entries.
+  - **Context = dotted path, fine-grained:** `pane`, `sidebar.workspace`, `sidebar.column`,
+    `sidebar.pane`, `sidebar.floating_pane`. Host resolves the context string from the click/open
+    target; a registry `HashMap<context, Vec<Contributor>>` maps context → contributors. Plugins
+    can invent new contexts.
+  - **Merge = `weight: Vec<i64>` per `MenuEntrySpec` (Dewey/fractional indexing):** entries sort
+    lexicographically by weight vector. A plugin inserts *between* `[10]` and `[20]` via `[15]`, or
+    between `[10,1]` and `[20]` via `[10,1,1]`. Tie-break: equal vectors → registration order
+    (built-in first, then plugins). Separators: `MenuEntrySpec::Separator` with its own weight.
+  - **Full design now (native + WASM contract):** native `Contribution::ContextMenu { context,
+    build: Fn(&ChromeCtx) -> Vec<MenuEntrySpec> }` lands now; WASM later (`plugin-08`) just
+    deserializes `Vec<MenuEntrySpec>` — same shape, no API change, since `MenuEntrySpec` is already
+    serializable data (Option B, no closures).
 
 ### [ ] Requirement: Shared list/menu navigation keybindings · `menu-nav`
-A **single, configurable** binding set for list/menu navigation, **reflected everywhere**: sidebar
-nav, contextual menu, and the future top-bar menu — one source of truth (asked by the user
-2026-07-08). Defaults: **Up/Down** + **Ctrl+j / Ctrl+k**, **Enter** activate, **Esc** dismiss (and
-the single-letter quick-pick where entries carry one). Migrate the existing **sidebar-nav** keys
-onto this shared set (they stop being a separate mapping). Config lives in one place (e.g. a
-`[keys.menu]` section / a shared nav mode); document in README + `keybindings.default.toml`.
-- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire sidebar nav +
-  contextual menu to it; remove the duplicated per-surface nav keys.
+A **single, configurable** binding set for list/menu navigation on **overlay-layer navigable
+surfaces**: the contextual menu, the command palette, and the future top-bar menu — one source of
+truth (asked by the user 2026-07-08, refined 2026-07-09). Flat `[keys]` bindings: `menu_up`
+(ArrowUp + Ctrl+k), `menu_down` (ArrowDown + Ctrl+j), `menu_activate` (Enter), `menu_dismiss`
+(Esc), plus the single-letter quick-pick where entries carry one. The widgets (`ContextMenu`,
+`CommandPalette`) become **intent-only** for nav: remove the hardcoded arrow/Ctrl+j/k from the
+widget `event()`; the host resolves via the configurable keymap and dispatches nav actions.
 
-### [ ] Phase: Top-bar Menu (menubar) · `topbar-menu` — STUB (separate but similar)
-A top-bar **Menu**/menubar is a **separate activity**, similar to the contextual menu. Not scoped
-yet — recorded so the **shared infrastructure** built for `context-menu` is made reusable, not
-forked: the **dropdown overlay layer** (`open_dropdown`/`DropdownSpec`), **entries-as-intents**,
-the **shared `menu-nav` keys**, the action-registry icon/label/tooltip resolution, and the
-**`Contribution`** model (a `Contribution::Menu` sibling of `ContextMenu`). Flesh out when it
-becomes active work.
+> **Sidebar is OUT of scope** — it already has its own configurable `[keys.mode] name = "sidebar"`
+> (`sidebar_up`/`sidebar_down` + tree-nav `h`/`l` + mutation keys). The earlier "migrate sidebar-nav
+> onto this shared set" text is **superseded** (2026-07-09): the sidebar keeps its own mode and does
+> **not** migrate onto `menu-nav`.
+
+Config lives in one place (`[keys] menu_up`/`menu_down`/`menu_activate`/`menu_dismiss`);
+document in README + `keybindings.default.toml`.
+- [ ] **menu-nav-1** — define the shared nav binding set + config surface; wire the contextual menu
+  + command palette to it (widgets go intent-only); remove the duplicated per-surface nav keys.
+  Sidebar nav is untouched.
+
+### [ ] Requirement: Context-aware available-actions query · `available-actions`
+A single query that answers **"which actions are applicable right now"**, given the current
+context — so a surface (first consumer: the **command palette**; also future context-aware help /
+which-key) can list exactly the actions the user can take at this moment (asked by the user
+2026-07-09, while the context-menu context system was being built). This is the *general* form of
+what the context menu already does per-target: the context menu maps a `ContextPath`/`ContextTarget`
+to a curated entry list; this maps the **whole live context** (focus domain, `InputMode`, focused
+pane / sidebar cursor, floating-vs-tiled) to the **full set of currently-available `WmAction`s**.
+
+Build on the pieces already in place — do NOT invent a parallel system:
+- **`action_policy()`** (`app/interaction.rs`) already classifies every `WmAction` by where it is
+  allowed (Tiled/Floating/Workspace/etc.); the availability filter is the same predicate the
+  interaction router uses (`route_action`), so "available" == "the router would Allow it now".
+- **`ContextPath`/`ContextTarget` + `resolve_active_context`** (`chrome/context_menu.rs`) already
+  resolve the active context; extend that resolution to also drive action availability.
+- **`ActionRegistry::ALL` + `ActionCatalog`** (`actions.rs`) is the enumerable action set with
+  names/icons/descriptions the palette renders.
+
+Target shape (subject to design): `available_actions(state) -> Vec<ActionAvailability { action_name,
+allowed: bool, reason }>` (or an iterator of allowed actions), computed from `action_policy` +
+current focus domain + `InputMode` + context, reachable from keyboard/RPC and consumed by the
+command palette. Unit-testable as a pure mapping (mirror `resolve_context_for`). Defer the palette
+UI itself; this requirement is the **query/infrastructure** it will read.
+- [ ] **available-actions-1** — design + implement the context→available-actions query on top of
+  `action_policy`/`resolve_active_context`/`ActionCatalog`; pure + unit-tested; RPC-introspectable.
+  (Feeds the command palette — a later phase.)
+
+### [ ] Requirement: In-widget keys should be customizable · `widget-keys-config`
+Today several `heca-grid-ui` widgets **hardcode their internal keys** in the widget `event()`:
+`Dialog` focus-nav (Tab/Shift+Tab, arrows, Ctrl+h/j/k/l, Enter=submit-primary, Esc=cancel),
+`Input` editing (Ctrl+h delete, Ctrl+u clear, Ctrl/Cmd+A select-all, arrow caret motion),
+`Select`/`Tabs`/`ContextMenu`/`CommandPalette` list-nav. This is consistent with the current
+widget model (self-contained keyboard) but violates the project rule that **keys pass through
+config**. Review and make these **customizable** — one source of truth, not literals baked into
+`event()`. Requested by the user 2026-07-09.
+
+Design directions to weigh (pick in the review):
+- **Widget-level intents + a host-provided keymap** — widgets emit nav *intents* (`FocusNext`,
+  `DeleteBackward`, `SelectAll`, …) resolved by a configurable `[keys.widget]` / per-widget keymap
+  the host injects, instead of matching literal `GridKey`s. Mirrors the app's `KeymapRegistry`.
+- **Converge with `menu-nav`** (`ContextMenu`/`CommandPalette` list-nav) and the app keymap so
+  there is a single configurable nav vocabulary across app + widgets.
+- Keep sensible built-in defaults (in `keybindings.default.toml`, the single source) so nothing
+  breaks when unconfigured.
+Cross-refs: [`menu-nav`](#requirement-shared-listmenu-navigation-keybindings--menu-nav),
+`available-actions`. Scope + phasing decided in the review.
+- [ ] **widget-keys-config-1** — audit every `heca-grid-ui` widget that matches literal keys in
+  `event()`; propose the configurable model (intents + injected keymap); wire `Dialog` + `Input`
+  first as the reference, then the list-nav widgets (folds in `menu-nav`).
+
+### [ ] Requirement: Pane naming + sidebar pane rows · `pane-naming`
+Follow-ups from the rename-dialog session (2026-07-10). **Full detail + resume steps in the repo-root
+`HANDOFF-pane-rename-naming.md`** (§1). Done this session (uncommitted on `feat/planner-backlog-sync`):
+rename→modal dialog, by-id rename actions, sidebar-mode rename bindings, `AppName` segment shows the
+program name (not the rename), prefill fixes, sidebar-rename mode-restore, `pane_renamed_add_process_name`
+config (rendering not yet wired). Remaining:
+- [ ] **pane-naming-1** — new `[appearance.pane] title_segments` value **`pane_name`** (shows
+  `view.title` = original/renamed name; NOT default). `PaneSegment::PaneName` in
+  `heca-config/src/appearance.rs` + `build_pane_info_bar` arm + README/config.default.toml.
+- [ ] **pane-naming-2** — sidebar pane card: append the small dimmed **`(process)`** suffix when the
+  pane has a custom name + `pane_renamed_add_process_name`. Carry the flag on
+  `WorkspacesContainerState` (signal, set in `sync_chrome_state`) — read in `pane_card`; then remove
+  the now-dead info-bar `add_process_name` plumbing.
+- [ ] **pane-naming-3** — new `[settings] pane_show_cwd: bool` + a **cwd row** (folder icon +
+  `home_relative_path(cwd)`) between the name row and the git row in the sidebar pane card.
+- [ ] **pane-naming-4** — column rename is unreachable (no binding, no menu entry): add *Rename column*
+  to the `sidebar.column` menu + a `RenameColumnByIdx { ws_idx, col_idx }` action (mirror
+  `RenameWorkspaceByIdx`).
+- [ ] **pane-naming-5** — declare **icons on EVERY action** used in menus/buttons, in its
+  `ActionDescriptor` (`actions.rs` `ActionRegistry::ALL`) — not just rename. Audit all entries built by
+  `chrome/context_menu.rs` (pane + sidebar.pane/column/workspace) and any button: `split_horizontal`
+  (New column), `split_vertical` (New pane / Split down), `zoom_column`, `float`, `close`,
+  `create_workspace` (New workspace), `add_pane_to_column`, `add_column_to_workspace`, `delete_column`,
+  `delete_workspace`, `rename_pane`/`rename_workspace`/`rename_column`, `open_link`, … Each gets
+  `icon: Some(Glyph::…)`. Add any missing glyphs (e.g. `Pencil` for rename) to the **central** `Glyph`
+  enum + icon-font mapping + `docs/widgets.md`. Every menu/button then shows the icon **for free via
+  the action name** — never a hardcoded per-entry glyph. (The mechanism is already centralized:
+  `DropdownItem` id = action name → `ActionCatalog::icon` + `ActionShortcuts` tooltip; only the
+  descriptors' `icon` fields are currently `None`.)
+- [ ] **pane-naming-6** — BUG (needs repro): renaming from the sidebar renames the wrong pane
+  (hypothesis: `pending_context` cursor on a non-pane row → falls back to focused pane).
+
+### [ ] Phase: Top/Bottom Bar Widget System + mainmenu · `topbar-menu` — STUB (vision holder)
+TopBar and BottomBar become **generic, pluggable widget containers** (specular in functioning,
+each with independent widgets — like the VSCode bottom bar: icons, buttons, text, often from
+plugins). Today the TopBar hosts only 2 sidebar-toggle buttons and is misnamed "tab bar". The
+**mainmenu** (renamed from "menubar") is the application-menu widget, the first citizen of the
+TopBar container. Vision registered 2026-07-09 under Pluggable Chrome (where it is born: reuses
+`open_dropdown`, `Contribution`, `OverlayHost`); **split into separate phases in a later review**.
+
+- **A. Bar containers** — flesh out the placeholder `Contribution::ToolbarGroup` /
+  `Contribution::StatusSegment` (`chrome/contribution.rs`) with real `build` hooks like
+  `ContainerContribution::build`, OR introduce a generic `Contribution::BarWidget { region,
+  build, weight }`. Each bar hosts an ordered list of widgets.
+- **B. mainmenu widget** — built-in, mounted in the TopBar. Minimal now (e.g. a **Close** entry
+  that confirms via the central gate, following the standard action architecture: ActionRegistry +
+  KeyBindingRegistry + RPC). Future: conventional File/Edit/View/... top-level groups. Reuses (do
+  NOT fork) `open_dropdown`/`DropdownSpec`, entries-as-intents, `ActionCatalog` icon/label/tooltip,
+  `menu-nav` (extended with **left/right** to move between top-level menus), and
+  `Contribution::MainMenu` (sibling of `Contribution::ContextMenu`, reusing the context-menu-5
+  dotted-context + `weight: Vec<i64>` Dewey merge design).
+- **C. Plugin bar-widget contribution** — plugins add buttons/widgets that execute **existing**
+  actions (icon+label from `ActionCatalog`). Plugins/developers get an easy path to register new
+  actions into `ActionRegistry` + `KeyBindingRegistry` from code (relates to `plugin-04` dynamic
+  action registry).
+- **D. Topbar enrichment** — built-in widgets for operations on the current pane/column/workspace.
+- **Config-driven widget add/remove** — users add/remove bar widgets from `config.toml` by listing
+  widget kinds in order, analogous to `[appearance.pane] title_actions = ["split","close"]`
+  (`Vec<PaneAction>` enum, `[]` hides). E.g. `[appearance.bar] top_widgets = [...]`.
+- **Token/placeholder integration** (`plugin-06`) — tmux-style tokens (`#{pane}`, `#{fg:...}`) let
+  users build small widgets or alter labels, like tmux statusline replacement.
+
+- [ ] **topbar-menu-1** — STUB. Scope the mainmenu widget + bar-container refactor; split A/B/C/D
+  into separate phases when the work becomes active.
 
 ### [ ] Phase: Placeholder token system · `plugin-06`
 tmux-style `${var}` tokens for use in config values, keybinding labels, and simple plugins.

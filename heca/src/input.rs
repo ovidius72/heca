@@ -268,6 +268,17 @@ pub enum WmAction {
         pane_id: PaneId,
         name: String,
     },
+    /// Enter rename mode for a specific pane by id (context menu / RPC / sidebar target),
+    /// as opposed to [`RenamePane`](WmAction::RenamePane) which renames the focused pane.
+    RenamePaneById {
+        pane_id: PaneId,
+    },
+    /// Enter rename mode for a specific workspace by index (context menu / RPC / sidebar
+    /// target), as opposed to [`RenameWorkspace`](WmAction::RenameWorkspace) which renames
+    /// the active workspace.
+    RenameWorkspaceByIdx {
+        ws_idx: usize,
+    },
 
     // ── Quick take (unit) ──
     PaneTake,
@@ -764,6 +775,12 @@ pub fn build_action(
             pane_id: PaneId(get_u64(args, "pane_id")?),
             name: get_string(args, "name")?,
         }),
+        "rename_pane_by_id" => Some(WmAction::RenamePaneById {
+            pane_id: PaneId(get_u64(args, "pane_id")?),
+        }),
+        "rename_workspace_by_idx" => Some(WmAction::RenameWorkspaceByIdx {
+            ws_idx: get_usize(args, "ws_idx")?,
+        }),
         "take_pane" => Some(WmAction::TakePane {
             pane_id: PaneId(get_u64(args, "pane_id")?),
             focus_after: args
@@ -959,6 +976,8 @@ pub(crate) fn action_priority(action: &WmAction) -> u8 {
         | WmAction::FloatAt { .. }
         | WmAction::ClosePaneById { .. }
         | WmAction::RenameTarget { .. }
+        | WmAction::RenamePaneById { .. }
+        | WmAction::RenameWorkspaceByIdx { .. }
         | WmAction::SpawnCommand { .. }
         | WmAction::EnterMode { .. }
         | WmAction::ReloadConfig
